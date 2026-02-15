@@ -86,13 +86,19 @@ export function calculateNetBalances(
   // Process expenses
   for (const expense of expenses) {
     for (const payer of expense.paidBy) {
-      const userId = typeof payer.user === "string" ? payer.user : String(payer.user);
+      const userId =
+        typeof payer.user === "string" ? payer.user : String(payer.user);
       balanceMap.set(userId, (balanceMap.get(userId) ?? 0) + payer.amount);
     }
     for (const participant of expense.splitBetween) {
       const userId =
-        typeof participant.user === "string" ? participant.user : String(participant.user);
-      balanceMap.set(userId, (balanceMap.get(userId) ?? 0) - participant.amount);
+        typeof participant.user === "string"
+          ? participant.user
+          : String(participant.user);
+      balanceMap.set(
+        userId,
+        (balanceMap.get(userId) ?? 0) - participant.amount
+      );
     }
   }
 
@@ -100,9 +106,13 @@ export function calculateNetBalances(
   // paidTo is the person receiving the payment (balance goes down).
   for (const settlement of settlements) {
     const payerId =
-      typeof settlement.paidBy === "string" ? settlement.paidBy : String(settlement.paidBy);
+      typeof settlement.paidBy === "string"
+        ? settlement.paidBy
+        : String(settlement.paidBy);
     const payeeId =
-      typeof settlement.paidTo === "string" ? settlement.paidTo : String(settlement.paidTo);
+      typeof settlement.paidTo === "string"
+        ? settlement.paidTo
+        : String(settlement.paidTo);
     balanceMap.set(payerId, (balanceMap.get(payerId) ?? 0) + settlement.amount);
     balanceMap.set(payeeId, (balanceMap.get(payeeId) ?? 0) - settlement.amount);
   }
@@ -112,4 +122,3 @@ export function calculateNetBalances(
     amount: round(amount),
   }));
 }
-
