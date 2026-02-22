@@ -1,0 +1,59 @@
+---
+description: MUI-only styling conventions for all React components
+globs: "**/*.tsx"
+alwaysApply: false
+---
+
+# MUI Styling System
+
+This project uses Material UI v7 exclusively for styling. Tailwind CSS has been fully removed.
+
+## Core Rules
+
+- NEVER use `className` with utility classes. The only exception is `className` for Next.js font variables on `<body>`.
+- ALWAYS use MUI `sx` prop for styling. Never use inline `style` props.
+- Use MUI theme tokens (e.g. `"text.primary"`, `"error.main"`, `"divider"`) instead of hardcoded hex colors. The primary color is `#6C63FF` — reference it as `"primary.main"`.
+- Use responsive breakpoint objects: `sx={{ p: { xs: 2, sm: 3, lg: 4 } }}`. MUI breakpoints: `xs=0`, `sm=600`, `md=900`, `lg=1200`, `xl=1536`.
+
+## Layout Components
+
+| Need                                | Use                                                                               |
+| ----------------------------------- | --------------------------------------------------------------------------------- |
+| Generic container                   | `Box` with `sx`                                                                   |
+| Vertical stack with spacing         | `Stack spacing={N}`                                                               |
+| Horizontal row with spacing         | `Stack direction="row" spacing={N}`                                               |
+| Page-level max-width wrapper        | `Container maxWidth="sm"\|"md"\|"lg"`                                             |
+| Card / panel with border            | `Paper variant="outlined"`                                                        |
+| All text (headings, body, captions) | `Typography` with `variant` prop                                                  |
+| Responsive grid                     | `Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}` |
+| Loading placeholder                 | MUI `Skeleton` component (never `animate-pulse`)                                  |
+
+## Common Patterns
+
+```tsx
+// Responsive hiding
+sx={{ display: { xs: "none", lg: "flex" } }}
+
+// Hover effects
+sx={{ "&:hover": { boxShadow: 2, bgcolor: "action.hover" } }}
+
+// Conditional colors
+sx={{ color: isNegative ? "error.main" : "success.main" }}
+
+// Thin scrollbar on overflow containers
+sx={{
+  overflowX: "auto",
+  "&::-webkit-scrollbar": { height: 4 },
+  "&::-webkit-scrollbar-thumb": { bgcolor: "grey.300", borderRadius: 2 },
+  scrollbarWidth: "thin",
+}}
+```
+
+## Theme Tokens (defined in ThemeProvider.tsx)
+
+- Primary: `"primary.main"` (#6C63FF)
+- Text: `"text.primary"`, `"text.secondary"`, `"text.disabled"`
+- Background: `"background.default"` (#F5F5F5), `"background.paper"` (#FFFFFF)
+- Borders: `"divider"`
+- Status: `"error.main"`, `"success.main"`, `"warning.main"`
+- Greys: `"grey.50"` through `"grey.900"`

@@ -47,7 +47,8 @@ export default function LandingPage() {
     <Box
       sx={{
         minHeight: "100vh",
-        background: "linear-gradient(to bottom, #FFFFFF, #F5F5F5)",
+        background: (theme) =>
+          `linear-gradient(to bottom, ${theme.palette.background.paper}, ${theme.palette.background.default})`,
       }}
     >
       {/* Navbar */}
@@ -105,7 +106,8 @@ export default function LandingPage() {
             onClick={() => signIn("google", { callbackUrl: "/dashboard" })}
             sx={{
               fontSize: "1.1rem",
-              padding: "12px 32px",
+              py: 1.5,
+              px: 4,
             }}
           >
             Sign in with Google

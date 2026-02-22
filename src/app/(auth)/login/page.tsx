@@ -64,7 +64,8 @@ function LoginForm() {
           onClick={() => signIn("google", { callbackUrl })}
           sx={{
             fontSize: "1rem",
-            padding: "12px 24px",
+            py: 1.5,
+            px: 3,
             maxWidth: 320,
           }}
         >

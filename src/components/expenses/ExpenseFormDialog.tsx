@@ -532,7 +532,7 @@ export default function ExpenseFormDialog({
               sx={{
                 textTransform: "none",
                 fontSize: 12,
-                color: hasNonDefaultSplit ? "#6C63FF" : "text.secondary",
+                color: hasNonDefaultSplit ? "primary.main" : "text.secondary",
                 fontWeight: hasNonDefaultSplit ? 600 : 400,
                 minWidth: "auto",
                 ml: 1,
@@ -566,7 +566,7 @@ export default function ExpenseFormDialog({
                     <Button
                       size="small"
                       onClick={() => setMultiPayerMode(true)}
-                      sx={{ textTransform: "none", fontSize: 12, color: "#6C63FF" }}
+                      sx={{ textTransform: "none", fontSize: 12, color: "primary.main" }}
                       startIcon={<AddIcon sx={{ fontSize: 14 }} />}
                     >
                       Split payment between multiple people
@@ -618,7 +618,7 @@ export default function ExpenseFormDialog({
                         size="small"
                         onClick={addPayer}
                         disabled={payers.length >= members.length}
-                        sx={{ textTransform: "none", fontSize: 12, color: "#6C63FF" }}
+                        sx={{ textTransform: "none", fontSize: 12, color: "primary.main" }}
                         startIcon={<AddIcon sx={{ fontSize: 14 }} />}
                       >
                         Add payer
@@ -814,7 +814,7 @@ export default function ExpenseFormDialog({
             sx={{
               textTransform: "none",
               fontSize: 12,
-              color: hasNonDefaultMore ? "#6C63FF" : "text.secondary",
+              color: hasNonDefaultMore ? "primary.main" : "text.secondary",
               fontWeight: hasNonDefaultMore ? 600 : 400,
               px: 0,
             }}
@@ -874,7 +874,7 @@ export default function ExpenseFormDialog({
           onClick={handleSubmit}
           variant="contained"
           disabled={loading || !description.trim() || !amount || !tag}
-          sx={{ backgroundColor: "#6C63FF", "&:hover": { backgroundColor: "#5A52D5" } }}
+          sx={{ bgcolor: "primary.main", "&:hover": { bgcolor: "primary.dark" } }}
         >
           {loading ? <CircularProgress size={20} /> : isEditMode ? "Save Changes" : "Save Expense"}
         </Button>

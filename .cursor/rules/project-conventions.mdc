@@ -1,0 +1,41 @@
+---
+description: Project architecture and coding conventions for the SplitWise app
+alwaysApply: true
+---
+
+# SplitWise Project Conventions
+
+## Tech Stack
+
+- Next.js 16 (App Router) + TypeScript + React 19
+- MUI v7 (Material UI) + Emotion — sole styling system, no Tailwind
+- MongoDB + Mongoose v9 — database
+- Auth.js v5 (NextAuth) — Google OAuth, JWT sessions
+- SWR — client-side data fetching (used directly in components, no custom hooks layer)
+- Zod v4 — request validation
+
+## Architecture
+
+- **API routes**: RESTful, nested under group — `/api/groups/[id]/expenses`
+- **Services**: Business logic in `src/lib/services/`, never in route handlers
+- **Models**: Mongoose models in `src/lib/models/`
+- **Validators**: Zod schemas in `src/lib/validators/`
+- **Components**: Feature-scoped in `src/components/{feature}/`
+- **Types**: Shared interfaces in `src/types/index.ts`
+- **Path alias**: `@/*` maps to `src/*`
+
+## Data Model Notes
+
+- Expense uses `tag` (singular string, required) — not an array
+- Group has embedded `tags` subdocument array (group-scoped tag management)
+- Expenses use soft delete (`isDeleted` flag) — never hard delete
+- Dates stored as UTC, displayed in user's timezone
+
+## API Pattern
+
+Every API route handler follows: auth check → Zod validation → service call → JSON response.
+Response format: `{ data: T }` on success, `{ error: string }` on failure.
+
+## Navbar
+
+The navbar uses `position: "fixed"` with a 56px spacer below it in the main layout. The sidebar starts at `top: 56`. Keep these values in sync when modifying layout.
