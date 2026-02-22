@@ -69,37 +69,42 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <TextField
-          label="Name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          fullWidth
-          slotProps={{ htmlInput: { maxLength: 100 } }}
-        />
+        <div className="flex flex-col gap-4">
+          <TextField
+            label="Name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            fullWidth
+            slotProps={{ htmlInput: { maxLength: 100 } }}
+          />
 
-        <TextField
-          select
-          label="Preferred Currency"
-          value={preferredCurrency}
-          onChange={(e) => setPreferredCurrency(e.target.value)}
-          fullWidth
-          helperText="Used as default when creating new groups"
-        >
-          {CURRENCIES.map((c) => (
-            <MenuItem key={c.code} value={c.code}>
-              {c.flag} {c.code} — {c.name}
-            </MenuItem>
-          ))}
-        </TextField>
+          <TextField
+            select
+            label="Preferred Currency"
+            value={preferredCurrency}
+            onChange={(e) => setPreferredCurrency(e.target.value)}
+            fullWidth
+            helperText="Used as default when creating new groups"
+          >
+            {CURRENCIES.map((c) => (
+              <MenuItem key={c.code} value={c.code}>
+                {c.flag} {c.code} — {c.name}
+              </MenuItem>
+            ))}
+          </TextField>
 
-        <Button
-          variant="contained"
-          onClick={handleSave}
-          disabled={loading}
-          sx={{ backgroundColor: "#6C63FF", "&:hover": { backgroundColor: "#5A52D5" } }}
-        >
-          {loading ? <CircularProgress size={20} /> : "Save Changes"}
-        </Button>
+          <Button
+            variant="contained"
+            onClick={handleSave}
+            disabled={loading}
+            sx={{
+              backgroundColor: "#6C63FF",
+              "&:hover": { backgroundColor: "#5A52D5" },
+            }}
+          >
+            {loading ? <CircularProgress size={20} /> : "Save Changes"}
+          </Button>
+        </div>
       </div>
 
       {/* Account */}
@@ -131,4 +136,3 @@ export default function SettingsPage() {
     </div>
   );
 }
-

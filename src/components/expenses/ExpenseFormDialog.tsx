@@ -15,6 +15,8 @@ import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
 import Collapse from "@mui/material/Collapse";
+import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
 import CloseIcon from "@mui/icons-material/Close";
 import AddIcon from "@mui/icons-material/Add";
 import RemoveCircleOutlineIcon from "@mui/icons-material/RemoveCircleOutline";
@@ -420,27 +422,49 @@ export default function ExpenseFormDialog({
       </DialogTitle>
 
       <DialogContent dividers>
-        <div className="space-y-4 pt-2">
+        <Stack spacing={2.5} sx={{ pt: 1 }}>
           {error && (
-            <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm">{error}</div>
+            <Box sx={{ bgcolor: "error.lighter", color: "error.main", px: 2, py: 1.5, borderRadius: 2, fontSize: 14 }}>
+              {error}
+            </Box>
           )}
 
           {/* ─── Quick Pick ─────────────────────────── */}
           {!isEditMode && (
-            <div>
-              <div className="flex gap-1.5 overflow-x-auto pb-1">
-                {PREDEFINED_ITEMS.slice(0, 8).map((item) => (
-                  <Chip
-                    key={item.id}
-                    label={`${item.icon} ${item.label}`}
-                    variant="outlined"
-                    size="small"
-                    onClick={() => handlePredefinedItem(item.id)}
-                    sx={{ flexShrink: 0, fontSize: 12 }}
-                  />
-                ))}
-              </div>
-            </div>
+            <Box
+              sx={{
+                display: "flex",
+                gap: 1,
+                overflowX: "auto",
+                pb: 0.5,
+                "&::-webkit-scrollbar": {
+                  height: 4,
+                },
+                "&::-webkit-scrollbar-track": {
+                  bgcolor: "transparent",
+                },
+                "&::-webkit-scrollbar-thumb": {
+                  bgcolor: "grey.300",
+                  borderRadius: 2,
+                },
+                "&::-webkit-scrollbar-thumb:hover": {
+                  bgcolor: "grey.400",
+                },
+                scrollbarWidth: "thin",
+                scrollbarColor: (theme) => `${theme.palette.grey[300]} transparent`,
+              }}
+            >
+              {PREDEFINED_ITEMS.slice(0, 8).map((item) => (
+                <Chip
+                  key={item.id}
+                  label={`${item.icon} ${item.label}`}
+                  variant="outlined"
+                  size="small"
+                  onClick={() => handlePredefinedItem(item.id)}
+                  sx={{ flexShrink: 0, fontSize: 12 }}
+                />
+              ))}
+            </Box>
           )}
 
           {/* ─── Description ────────────────────────── */}
@@ -455,7 +479,7 @@ export default function ExpenseFormDialog({
           />
 
           {/* ─── Amount + Currency ──────────────────── */}
-          <div className="flex gap-3">
+          <Stack direction="row" spacing={1.5}>
             <TextField
               label="Amount"
               value={amount}
@@ -472,7 +496,7 @@ export default function ExpenseFormDialog({
               value={currency}
               onChange={(e) => setCurrency(e.target.value)}
               size="small"
-              sx={{ width: 110 }}
+              sx={{ width: 120 }}
             >
               {currencies.map((c) => (
                 <MenuItem key={c.code} value={c.code}>
@@ -480,17 +504,27 @@ export default function ExpenseFormDialog({
                 </MenuItem>
               ))}
             </TextField>
-          </div>
+          </Stack>
 
           {/* ─── Summary Line + Change Button ────────── */}
-          <div className="bg-gray-50 rounded-lg px-3 py-2.5 flex items-center justify-between">
-            <p className="text-sm text-gray-700">
-              <span className="font-medium">{payerSummary}</span>
+          <Box
+            sx={{
+              bgcolor: "grey.50",
+              borderRadius: 2,
+              px: 2,
+              py: 1.5,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <Box component="p" sx={{ fontSize: 14, color: "text.secondary", m: 0 }}>
+              <Box component="span" sx={{ fontWeight: 600 }}>{payerSummary}</Box>
               {" · "}
               <span>{splitMethodLabel[splitMethod] || "Split"}</span>
               {" · "}
               <span>{memberSummary}</span>
-            </p>
+            </Box>
             <Button
               size="small"
               onClick={() => setShowSplitOptions(!showSplitOptions)}
@@ -506,16 +540,16 @@ export default function ExpenseFormDialog({
             >
               {showSplitOptions ? "Less" : "Change"}
             </Button>
-          </div>
+          </Box>
 
           {/* ─── TIER 2: Split Options ─────────────── */}
           <Collapse in={showSplitOptions}>
-            <div className="space-y-4 border border-gray-100 rounded-xl p-4 bg-white">
+            <Stack spacing={2.5} sx={{ border: 1, borderColor: "divider", borderRadius: 3, p: 2.5, bgcolor: "background.paper" }}>
               {/* Paid By */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-2">Paid by</label>
+              <Box>
+                <Box component="label" sx={{ display: "block", fontSize: 12, fontWeight: 500, color: "text.secondary", mb: 1 }}>Paid by</Box>
                 {!multiPayerMode ? (
-                  <div className="space-y-2">
+                  <Stack spacing={1}>
                     <TextField
                       select
                       value={payers[0]?.user || userId}
@@ -537,11 +571,11 @@ export default function ExpenseFormDialog({
                     >
                       Split payment between multiple people
                     </Button>
-                  </div>
+                  </Stack>
                 ) : (
-                  <div className="space-y-2">
+                  <Stack spacing={1.5}>
                     {payers.map((payer, i) => (
-                      <div key={i} className="flex gap-2 items-center">
+                      <Stack key={i} direction="row" spacing={1} alignItems="center">
                         <TextField
                           select
                           value={payer.user}
@@ -569,17 +603,17 @@ export default function ExpenseFormDialog({
                           onClick={() => removePayer(i)}
                           disabled={payers.length <= 1}
                         >
-                          <RemoveCircleOutlineIcon fontSize="small" sx={{ color: payers.length <= 1 ? "gray" : "red" }} />
+                          <RemoveCircleOutlineIcon fontSize="small" sx={{ color: payers.length <= 1 ? "grey.400" : "error.main" }} />
                         </IconButton>
-                      </div>
+                      </Stack>
                     ))}
                     {parsedAmount > 0 && (
-                      <p className={`text-xs ${Math.abs(payerTotal - parsedAmount) > 0.01 ? "text-red-500" : "text-green-600"}`}>
+                      <Box sx={{ fontSize: 12, color: Math.abs(payerTotal - parsedAmount) > 0.01 ? "error.main" : "success.main" }}>
                         Total: {formatCurrency(payerTotal, currency)} / {formatCurrency(parsedAmount, currency)}
                         {Math.abs(payerTotal - parsedAmount) <= 0.01 && " ✓"}
-                      </p>
+                      </Box>
                     )}
-                    <div className="flex gap-2">
+                    <Stack direction="row" spacing={1}>
                       <Button
                         size="small"
                         onClick={addPayer}
@@ -600,14 +634,14 @@ export default function ExpenseFormDialog({
                       >
                         Single payer
                       </Button>
-                    </div>
-                  </div>
+                    </Stack>
+                  </Stack>
                 )}
-              </div>
+              </Box>
 
               {/* Split Method */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-2">Split method</label>
+              <Box>
+                <Box component="label" sx={{ display: "block", fontSize: 12, fontWeight: 500, color: "text.secondary", mb: 1 }}>Split method</Box>
                 <ToggleButtonGroup
                   value={splitMethod}
                   exclusive
@@ -628,31 +662,31 @@ export default function ExpenseFormDialog({
                     Shares
                   </ToggleButton>
                 </ToggleButtonGroup>
-              </div>
+              </Box>
 
               {/* Split Between */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-2">Split between</label>
-                <div className="space-y-2">
+              <Box>
+                <Box component="label" sx={{ display: "block", fontSize: 12, fontWeight: 500, color: "text.secondary", mb: 1 }}>Split between</Box>
+                <Stack spacing={1}>
                   {members.map((m) => {
                     const id = m.user._id;
                     const isSelected = selectedMembers.includes(id);
 
                     return (
-                      <div key={id} className="flex items-center gap-2">
+                      <Stack key={id} direction="row" alignItems="center" spacing={1}>
                         <Checkbox
                           checked={isSelected}
                           onChange={(e) => handleMemberToggle(id, e.target.checked)}
                           size="small"
                         />
-                        <span className="text-sm flex-1 min-w-0 truncate">
+                        <Box sx={{ fontSize: 14, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                           {memberName(id)}
-                        </span>
+                        </Box>
 
                         {splitMethod === "equal" && isSelected && parsedAmount > 0 && (
-                          <span className="text-xs text-gray-400 shrink-0">
+                          <Box sx={{ fontSize: 12, color: "text.disabled", flexShrink: 0 }}>
                             {formatCurrency(equalPerPerson, currency)}
-                          </span>
+                          </Box>
                         )}
 
                         {(splitMethod === "unequal" || splitMethod === "exact") && isSelected && (
@@ -670,7 +704,7 @@ export default function ExpenseFormDialog({
                         )}
 
                         {splitMethod === "percentage" && isSelected && (
-                          <div className="flex items-center gap-1 shrink-0">
+                          <Stack direction="row" alignItems="center" spacing={0.5} sx={{ flexShrink: 0 }}>
                             <TextField
                               value={customPercentages[id] || ""}
                               onChange={(e) =>
@@ -682,17 +716,17 @@ export default function ExpenseFormDialog({
                               sx={{ width: 70 }}
                               slotProps={{ htmlInput: { min: 0, max: 100, step: 0.1 } }}
                             />
-                            <span className="text-xs text-gray-400">%</span>
+                            <Box sx={{ fontSize: 12, color: "text.disabled" }}>%</Box>
                             {parsedAmount > 0 && (customPercentages[id] || 0) && (
-                              <span className="text-xs text-gray-400 ml-1">
+                              <Box sx={{ fontSize: 12, color: "text.disabled" }}>
                                 = {formatCurrency(((parseFloat(customPercentages[id]) || 0) / 100) * parsedAmount, currency)}
-                              </span>
+                              </Box>
                             )}
-                          </div>
+                          </Stack>
                         )}
 
                         {splitMethod === "shares" && isSelected && (
-                          <div className="flex items-center gap-1 shrink-0">
+                          <Stack direction="row" alignItems="center" spacing={0.5} sx={{ flexShrink: 0 }}>
                             <TextField
                               value={customShares[id] || ""}
                               onChange={(e) =>
@@ -704,43 +738,43 @@ export default function ExpenseFormDialog({
                               sx={{ width: 70 }}
                               slotProps={{ htmlInput: { min: 1, step: 1 } }}
                             />
-                            <span className="text-xs text-gray-400">shares</span>
+                            <Box sx={{ fontSize: 12, color: "text.disabled" }}>shares</Box>
                             {parsedAmount > 0 && sharesTotal > 0 && (
-                              <span className="text-xs text-gray-400 ml-1">
+                              <Box sx={{ fontSize: 12, color: "text.disabled" }}>
                                 = {formatCurrency((parseInt(customShares[id]) || 0) * perShareAmount, currency)}
-                              </span>
+                              </Box>
                             )}
-                          </div>
+                          </Stack>
                         )}
-                      </div>
+                      </Stack>
                     );
                   })}
-                </div>
+                </Stack>
 
                 {/* Split totals / validation feedback */}
                 {parsedAmount > 0 && (
-                  <div className="mt-2">
+                  <Box sx={{ mt: 1 }}>
                     {(splitMethod === "unequal" || splitMethod === "exact") && (
-                      <p className={`text-xs ${Math.abs(unequalTotal - parsedAmount) > 0.01 ? "text-red-500" : "text-green-600"}`}>
+                      <Box sx={{ fontSize: 12, color: Math.abs(unequalTotal - parsedAmount) > 0.01 ? "error.main" : "success.main" }}>
                         Total: {formatCurrency(unequalTotal, currency)} / {formatCurrency(parsedAmount, currency)}
                         {Math.abs(unequalTotal - parsedAmount) <= 0.01 && " ✓"}
-                      </p>
+                      </Box>
                     )}
                     {splitMethod === "percentage" && (
-                      <p className={`text-xs ${Math.abs(percentageTotal - 100) > 0.01 ? "text-red-500" : "text-green-600"}`}>
+                      <Box sx={{ fontSize: 12, color: Math.abs(percentageTotal - 100) > 0.01 ? "error.main" : "success.main" }}>
                         Total: {percentageTotal.toFixed(1)}% / 100%
                         {Math.abs(percentageTotal - 100) <= 0.01 && " ✓"}
-                      </p>
+                      </Box>
                     )}
                     {splitMethod === "shares" && sharesTotal > 0 && (
-                      <p className="text-xs text-gray-500">
+                      <Box sx={{ fontSize: 12, color: "text.secondary" }}>
                         {sharesTotal} share{sharesTotal !== 1 ? "s" : ""} · {formatCurrency(perShareAmount, currency)}/share
-                      </p>
+                      </Box>
                     )}
-                  </div>
+                  </Box>
                 )}
-              </div>
-            </div>
+              </Box>
+            </Stack>
           </Collapse>
 
           {/* ─── Tag (mandatory) ──────────────────── */}
@@ -791,14 +825,15 @@ export default function ExpenseFormDialog({
 
           {/* ─── TIER 2: More Options ──────────────── */}
           <Collapse in={showMoreOptions}>
-            <div className="space-y-4 border border-gray-100 rounded-xl p-4 bg-white">
-              <div className="grid grid-cols-2 gap-3">
+            <Stack spacing={2} sx={{ border: 1, borderColor: "divider", borderRadius: 3, p: 2.5, bgcolor: "background.paper" }}>
+              <Stack direction="row" spacing={1.5}>
                 <TextField
                   label="Date"
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
                   size="small"
+                  sx={{ flex: 1 }}
                   slotProps={{ inputLabel: { shrink: true } }}
                 />
                 <TextField
@@ -807,6 +842,7 @@ export default function ExpenseFormDialog({
                   value={category}
                   onChange={(e) => setCategory(e.target.value)}
                   size="small"
+                  sx={{ flex: 1 }}
                 >
                   {EXPENSE_CATEGORIES.map((c) => (
                     <MenuItem key={c.id} value={c.id}>
@@ -814,7 +850,7 @@ export default function ExpenseFormDialog({
                     </MenuItem>
                   ))}
                 </TextField>
-              </div>
+              </Stack>
 
               <TextField
                 label="Notes (optional)"
@@ -825,9 +861,9 @@ export default function ExpenseFormDialog({
                 multiline
                 rows={2}
               />
-            </div>
+            </Stack>
           </Collapse>
-        </div>
+        </Stack>
       </DialogContent>
 
       <DialogActions sx={{ p: 2 }}>

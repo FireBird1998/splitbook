@@ -1,5 +1,6 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import Box from "@mui/material/Box";
 import Sidebar from "@/components/layout/Sidebar";
 import Navbar from "@/components/layout/Navbar";
 
@@ -19,7 +20,16 @@ export default async function MainLayout({
       <Navbar user={session.user} />
       <div className="flex">
         <Sidebar />
-        <main className="flex-1 p-6 lg:ml-60">{children}</main>
+        <Box
+          component="main"
+          sx={{
+            flex: 1,
+            p: 3,
+            ml: { xs: 0, lg: "240px" },
+          }}
+        >
+          {children}
+        </Box>
       </div>
     </div>
   );

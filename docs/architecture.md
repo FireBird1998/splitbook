@@ -2,17 +2,17 @@
 
 ## Tech Stack Detail
 
-| Component       | Choice                | Why                                                        |
-| --------------- | --------------------- | ---------------------------------------------------------- |
-| Next.js 16      | App Router            | Server components, API routes, middleware, SSR              |
-| TypeScript      | Strict mode           | Type safety across frontend + backend                      |
-| Tailwind CSS    | v4                    | Utility-first, fast iteration                              |
-| Material UI     | v6                    | Pre-built components (dialogs, inputs, tables, snackbars)  |
-| MongoDB         | Atlas (cloud)         | Flexible schema, good for nested expense data              |
-| Mongoose        | v8                    | Schema validation, middleware, population                  |
-| Auth.js v5      | MongoDB adapter       | Self-hosted auth, Google OAuth built-in                    |
-| Zod             | Request validation    | Type-safe validation with TS inference                     |
-| SWR or React Query | Client data fetching | Caching, revalidation, optimistic updates               |
+| Component          | Choice               | Why                                                       |
+| ------------------ | -------------------- | --------------------------------------------------------- |
+| Next.js 16         | App Router           | Server components, API routes, middleware, SSR            |
+| TypeScript         | Strict mode          | Type safety across frontend + backend                     |
+| Tailwind CSS       | v4                   | Utility-first, fast iteration                             |
+| Material UI        | v6                   | Pre-built components (dialogs, inputs, tables, snackbars) |
+| MongoDB            | Atlas (cloud)        | Flexible schema, good for nested expense data             |
+| Mongoose           | v8                   | Schema validation, middleware, population                 |
+| Auth.js v5         | MongoDB adapter      | Self-hosted auth, Google OAuth built-in                   |
+| Zod                | Request validation   | Type-safe validation with TS inference                    |
+| SWR or React Query | Client data fetching | Caching, revalidation, optimistic updates                 |
 
 ---
 
@@ -209,7 +209,10 @@ User clicks "Sign in with Google"
 
 ```typescript
 // Every API route follows this pattern:
-export async function POST(req: Request, { params }: { params: { id: string } }) {
+export async function POST(
+  req: Request,
+  { params }: { params: { id: string } },
+) {
   try {
     const session = await auth();
     if (!session?.user) return unauthorized();
@@ -273,4 +276,3 @@ CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
 ```
-

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Box from "@mui/material/Box";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import GroupIcon from "@mui/icons-material/Group";
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -16,7 +17,22 @@ export default function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden lg:flex lg:flex-col lg:w-60 lg:fixed lg:inset-y-0 lg:top-16 bg-white border-r border-gray-200 p-4 pt-6">
+    <Box
+      component="aside"
+      sx={{
+        display: { xs: "none", lg: "flex" },
+        flexDirection: "column",
+        width: 240,
+        position: "fixed",
+        top: 64,
+        bottom: 0,
+        borderRight: 1,
+        borderColor: "divider",
+        bgcolor: "background.paper",
+        p: 2,
+        pt: 3,
+      }}
+    >
       <nav className="space-y-1">
         {navItems.map((item) => {
           const isActive =
@@ -39,7 +55,7 @@ export default function Sidebar() {
           );
         })}
       </nav>
-    </aside>
+    </Box>
   );
 }
 

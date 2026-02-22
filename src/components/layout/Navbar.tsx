@@ -46,9 +46,9 @@ export default function Navbar({ user }: NavbarProps) {
           <div className="flex items-center gap-3">
             {/* Mobile menu button */}
             <IconButton
-              className="lg:hidden"
               onClick={() => setDrawerOpen(true)}
               size="small"
+              sx={{ display: { xs: "inline-flex", lg: "none" } }}
             >
               <MenuIcon />
             </IconButton>
