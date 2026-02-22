@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -59,16 +61,28 @@ export default function DeleteExpenseDialog({
       <DialogTitle>Delete Expense</DialogTitle>
       <DialogContent>
         {error && (
-          <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm mb-3">{error}</div>
+          <Box
+            sx={{
+              bgcolor: (theme) => `${theme.palette.error.main}12`,
+              color: "error.main",
+              px: 1.5,
+              py: 1,
+              borderRadius: 2,
+              fontSize: "0.875rem",
+              mb: 1.5,
+            }}
+          >
+            {error}
+          </Box>
         )}
-        <p className="text-sm text-gray-700">
+        <Typography variant="body2" color="text.primary">
           Are you sure you want to delete{" "}
           <strong>&ldquo;{expense.description as string}&rdquo;</strong>{" "}
           ({formatCurrency(expense.amount as number, expense.currency as string)})?
-        </p>
-        <p className="text-xs text-gray-500 mt-2">
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
           This can be undone shortly after deletion.
-        </p>
+        </Typography>
       </DialogContent>
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose} color="inherit" disabled={loading}>
@@ -86,4 +100,3 @@ export default function DeleteExpenseDialog({
     </Dialog>
   );
 }
-

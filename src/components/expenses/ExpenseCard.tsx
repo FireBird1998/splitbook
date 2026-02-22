@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
@@ -78,12 +82,10 @@ export default function ExpenseCard({
   }>;
   const createdBy = expense.createdBy as { _id: string; name: string; image?: string } | undefined;
 
-  // What the current user owes/is owed
   const userSplit = splitBetween.find((s) => s.user._id === userId);
   const userPaid = paidBy.find((p) => p.user._id === userId);
   const userOwes = (userSplit?.amount || 0) - (userPaid?.amount || 0);
 
-  // Who paid display
   const mainPayer = paidBy[0];
   const payerName = mainPayer?.user._id === userId ? "You" : mainPayer?.user.name;
 
@@ -119,45 +121,53 @@ export default function ExpenseCard({
   };
 
   return (
-    <div
-      className={`bg-white rounded-xl border transition-all ${isExpanded ? "border-indigo-200 shadow-sm" : "border-gray-100 hover:shadow-sm"
-        }`}
+    <Paper
+      variant="outlined"
+      sx={{
+        transition: "all 0.2s",
+        borderColor: isExpanded ? "primary.light" : "divider",
+        ...(isExpanded ? { boxShadow: 1 } : { "&:hover": { boxShadow: 1 } }),
+      }}
     >
       {/* ─── Collapsed Summary Row ────────────────── */}
-      <div
-        className="flex items-start justify-between p-4 cursor-pointer"
+      <Stack
+        direction="row"
+        alignItems="flex-start"
+        justifyContent="space-between"
+        sx={{ p: 2, cursor: "pointer" }}
         onClick={onToggleExpand}
       >
-        <div className="flex items-start gap-3 flex-1 min-w-0">
-          <span className="text-2xl mt-0.5">{icon}</span>
-          <div className="min-w-0 flex-1">
-            <h4 className="font-medium text-gray-900 text-sm truncate">
+        <Stack direction="row" alignItems="flex-start" spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
+          <Typography component="span" sx={{ fontSize: "1.5rem", mt: 0.25 }}>{icon}</Typography>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography variant="body2" fontWeight={500} color="text.primary" noWrap>
               {expense.description as string}
-            </h4>
-            <p className="text-xs text-gray-500 mt-0.5">
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25 }}>
               {payerName} paid{" "}
               {formatCurrency(expense.amount as number, expense.currency as string)}
               {paidBy.length > 1 && ` (+${paidBy.length - 1} more)`}
               {" · "}Split {splitBetween.length} way{splitBetween.length !== 1 ? "s" : ""}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-start gap-1 shrink-0">
-          <div className="text-right">
-            <p className="text-sm font-semibold text-gray-900">
+            </Typography>
+          </Box>
+        </Stack>
+        <Stack direction="row" alignItems="flex-start" spacing={0.5} sx={{ flexShrink: 0 }}>
+          <Box sx={{ textAlign: "right" }}>
+            <Typography variant="body2" fontWeight={600} color="text.primary">
               {formatCurrency(expense.amount as number, expense.currency as string)}
-            </p>
+            </Typography>
             {Math.abs(userOwes) >= 0.01 && (
-              <p
-                className={`text-xs font-medium ${userOwes > 0 ? "text-red-500" : "text-green-600"
-                  }`}
+              <Typography
+                variant="caption"
+                fontWeight={500}
+                sx={{ color: userOwes > 0 ? "error.main" : "success.main" }}
               >
                 {userOwes > 0
                   ? `You owe ${formatCurrency(userOwes, expense.currency as string)}`
                   : `You get back ${formatCurrency(-userOwes, expense.currency as string)}`}
-              </p>
+              </Typography>
             )}
-          </div>
+          </Box>
           {(onEdit || onDelete) && (
             <>
               <IconButton
@@ -203,12 +213,12 @@ export default function ExpenseCard({
               </Menu>
             </>
           )}
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
       {/* Tag (always visible in collapsed state) */}
       {!isExpanded && (tag || hasReceipt) && (
-        <div className="flex items-center gap-1.5 px-4 pb-3 flex-wrap">
+        <Stack direction="row" spacing={0.75} sx={{ px: 2, pb: 1.5 }} flexWrap="wrap">
           {tag && (
             <Chip
               label={tag}
@@ -225,16 +235,16 @@ export default function ExpenseCard({
               sx={{ fontSize: 11, height: 22 }}
             />
           )}
-        </div>
+        </Stack>
       )}
 
       {/* ─── Expanded Detail ──────────────────────── */}
       <Collapse in={isExpanded}>
-        <div className="px-4 pb-4 space-y-4">
+        <Stack spacing={2} sx={{ px: 2, pb: 2 }}>
           <Divider />
 
           {/* Metadata chips */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <Stack direction="row" spacing={1} flexWrap="wrap">
             <Chip
               label={`${CATEGORY_ICONS[category] || ""} ${category}`}
               size="small"
@@ -246,95 +256,106 @@ export default function ExpenseCard({
             {hasReceipt && (
               <Chip label="📎 Receipt" size="small" variant="outlined" sx={{ fontSize: 11 }} />
             )}
-          </div>
+          </Stack>
 
           {/* Paid By */}
-          <div>
-            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          <Box>
+            <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em", mb: 1, display: "block" }}>
               Paid by
-            </h4>
-            <div className="space-y-1.5">
+            </Typography>
+            <Stack spacing={0.75}>
               {paidBy.map((p, i) => (
-                <div key={i} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <Stack key={i} direction="row" alignItems="center" justifyContent="space-between">
+                  <Stack direction="row" alignItems="center" spacing={1}>
                     <Avatar src={p.user.image} sx={{ width: 24, height: 24, fontSize: 11 }}>
                       {p.user.name?.[0]}
                     </Avatar>
-                    <span className="text-sm text-gray-900">{memberName(p.user)}</span>
-                  </div>
-                  <span className="text-sm font-medium text-gray-900">
+                    <Typography variant="body2" color="text.primary">{memberName(p.user)}</Typography>
+                  </Stack>
+                  <Typography variant="body2" fontWeight={500} color="text.primary">
                     {formatCurrency(p.amount, expense.currency as string)}
-                  </span>
-                </div>
+                  </Typography>
+                </Stack>
               ))}
-            </div>
-          </div>
+            </Stack>
+          </Box>
 
           {/* Split */}
-          <div>
-            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          <Box>
+            <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em", mb: 1, display: "block" }}>
               Split ({SPLIT_METHOD_LABELS[expense.splitMethod as string] || (expense.splitMethod as string)})
-            </h4>
-            <div className="space-y-1.5">
+            </Typography>
+            <Stack spacing={0.75}>
               {splitBetween.map((s, i) => (
-                <div key={i} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <Stack key={i} direction="row" alignItems="center" justifyContent="space-between">
+                  <Stack direction="row" alignItems="center" spacing={1}>
                     <Avatar src={s.user.image} sx={{ width: 24, height: 24, fontSize: 11 }}>
                       {s.user.name?.[0]}
                     </Avatar>
-                    <span className="text-sm text-gray-900">{memberName(s.user)}</span>
+                    <Typography variant="body2" color="text.primary">{memberName(s.user)}</Typography>
                     {s.percentage !== undefined && (
-                      <span className="text-xs text-gray-400">({s.percentage}%)</span>
+                      <Typography variant="caption" color="text.disabled">({s.percentage}%)</Typography>
                     )}
                     {s.shares !== undefined && (
-                      <span className="text-xs text-gray-400">({s.shares} shares)</span>
+                      <Typography variant="caption" color="text.disabled">({s.shares} shares)</Typography>
                     )}
-                  </div>
-                  <span className="text-sm font-medium text-gray-900">
+                  </Stack>
+                  <Typography variant="body2" fontWeight={500} color="text.primary">
                     {formatCurrency(s.amount, expense.currency as string)}
-                  </span>
-                </div>
+                  </Typography>
+                </Stack>
               ))}
-            </div>
-          </div>
+            </Stack>
+          </Box>
 
           {/* Notes */}
           {!!expense.notes && (
-            <div>
-              <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+            <Box>
+              <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em", mb: 0.5, display: "block" }}>
                 Notes
-              </h4>
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">{expense.notes as string}</p>
-            </div>
+              </Typography>
+              <Typography variant="body2" color="text.primary" sx={{ whiteSpace: "pre-wrap" }}>
+                {expense.notes as string}
+              </Typography>
+            </Box>
           )}
 
           {/* Receipt */}
           {!!expense.receiptUrl && (
-            <div>
-              <a
+            <Box>
+              <Typography
+                component="a"
                 href={expense.receiptUrl as string}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-700"
+                variant="body2"
                 onClick={(e) => e.stopPropagation()}
+                sx={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 1,
+                  color: "primary.main",
+                  textDecoration: "none",
+                  "&:hover": { textDecoration: "underline" },
+                }}
               >
                 📎 View Receipt
-              </a>
-            </div>
+              </Typography>
+            </Box>
           )}
 
           <Divider />
 
           {/* History */}
-          <div>
+          <Box>
             {createdBy && (
-              <p className="text-xs text-gray-500">
+              <Typography variant="caption" color="text.secondary">
                 Created by <strong>{memberName(createdBy)}</strong> · {formatDateTime(expense.createdAt as string)}
-              </p>
+              </Typography>
             )}
 
             {editHistory.length > 0 && (
-              <div className="mt-2">
+              <Box sx={{ mt: 1 }}>
                 <Button
                   size="small"
                   onClick={(e) => {
@@ -342,41 +363,41 @@ export default function ExpenseCard({
                     setShowHistory(!showHistory);
                   }}
                   endIcon={showHistory ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                  sx={{ textTransform: "none", fontSize: 12, color: "#6C63FF", px: 0 }}
+                  sx={{ fontSize: 12, color: "primary.main", px: 0 }}
                 >
                   {showHistory ? "Hide" : "Show"} edit history ({editHistory.length} edit{editHistory.length !== 1 ? "s" : ""})
                 </Button>
 
                 <Collapse in={showHistory}>
-                  <div className="mt-2 space-y-3 border-l-2 border-gray-200 pl-4">
+                  <Stack spacing={1.5} sx={{ mt: 1, borderLeft: 2, borderColor: "divider", pl: 2 }}>
                     {editHistory.map((edit, i) => {
                       const editorName = typeof edit.editedBy === "string"
                         ? edit.editedBy
                         : memberName(edit.editedBy);
 
                       return (
-                        <div key={i}>
-                          <p className="text-xs text-gray-600">
+                        <Box key={i}>
+                          <Typography variant="caption" color="text.secondary">
                             ✏️ Edited by <strong>{editorName}</strong> · {formatDateTime(edit.editedAt)}
-                          </p>
-                          <ul className="mt-1 text-xs text-gray-500 list-none">
+                          </Typography>
+                          <Box component="ul" sx={{ mt: 0.5, pl: 0, listStyle: "none" }}>
                             {Object.entries(edit.changes).map(([field, { old: oldVal, new: newVal }]) => (
-                              <li key={field}>
+                              <Typography component="li" key={field} variant="caption" color="text.secondary">
                                 • {FIELD_LABELS[field] || field}: {formatValue(oldVal)} → {formatValue(newVal)}
-                              </li>
+                              </Typography>
                             ))}
-                          </ul>
-                        </div>
+                          </Box>
+                        </Box>
                       );
                     })}
-                  </div>
+                  </Stack>
                 </Collapse>
-              </div>
+              </Box>
             )}
-          </div>
+          </Box>
 
           {/* Action buttons */}
-          <div className="flex gap-2 pt-1">
+          <Stack direction="row" spacing={1} sx={{ pt: 0.5 }}>
             {onEdit && (
               <Button
                 size="small"
@@ -385,7 +406,7 @@ export default function ExpenseCard({
                   e.stopPropagation();
                   onEdit(expense);
                 }}
-                sx={{ textTransform: "none", fontSize: 13, color: "#6C63FF" }}
+                sx={{ fontSize: 13, color: "primary.main" }}
               >
                 Edit
               </Button>
@@ -399,14 +420,14 @@ export default function ExpenseCard({
                   onDelete(expense);
                 }}
                 color="error"
-                sx={{ textTransform: "none", fontSize: 13 }}
+                sx={{ fontSize: 13 }}
               >
                 Delete
               </Button>
             )}
-          </div>
-        </div>
+          </Stack>
+        </Stack>
       </Collapse>
-    </div>
+    </Paper>
   );
 }

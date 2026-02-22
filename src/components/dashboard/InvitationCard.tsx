@@ -1,6 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 
@@ -32,22 +36,30 @@ export default function InvitationCard({ invitation, onAction }: InvitationCardP
   };
 
   return (
-    <div className="bg-white rounded-xl p-4 border border-gray-100 flex items-center justify-between gap-4">
-      <div>
-        <p className="text-sm font-medium text-gray-900">
+    <Paper
+      variant="outlined"
+      sx={{
+        p: 2,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 2,
+      }}
+    >
+      <Box>
+        <Typography variant="body2" fontWeight={500} color="text.primary">
           You&apos;ve been invited to <strong>{group?.name as string}</strong>
-        </p>
-        <p className="text-xs text-gray-500">
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
           Invited by {invitedBy?.name as string}
-        </p>
-      </div>
-      <div className="flex gap-2 flex-shrink-0">
+        </Typography>
+      </Box>
+      <Stack direction="row" spacing={1} sx={{ flexShrink: 0 }}>
         <Button
           size="small"
           variant="contained"
           disabled={!!loading}
           onClick={() => handleAction("accept")}
-          sx={{ backgroundColor: "#6C63FF", "&:hover": { backgroundColor: "#5A52D5" } }}
         >
           {loading === "accept" ? <CircularProgress size={16} /> : "Accept"}
         </Button>
@@ -60,8 +72,7 @@ export default function InvitationCard({ invitation, onAction }: InvitationCardP
         >
           {loading === "decline" ? <CircularProgress size={16} /> : "Decline"}
         </Button>
-      </div>
-    </div>
+      </Stack>
+    </Paper>
   );
 }
-

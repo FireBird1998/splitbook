@@ -3,6 +3,12 @@
 import { useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
 import Link from "next/link";
+import Box from "@mui/material/Box";
+import Container from "@mui/material/Container";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Skeleton from "@mui/material/Skeleton";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import MenuItem from "@mui/material/MenuItem";
@@ -58,29 +64,24 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
 
   const group = groupData?.data;
 
-  // General info form
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("other");
   const [generalSaving, setGeneralSaving] = useState(false);
   const [generalInitialized, setGeneralInitialized] = useState(false);
 
-  // Currency form
   const [defaultCurrency, setDefaultCurrency] = useState("");
   const [alternateCurrencies, setAlternateCurrencies] = useState<string[]>([]);
   const [currencySaving, setCurrencySaving] = useState(false);
   const [currencyInitialized, setCurrencyInitialized] = useState(false);
 
-  // Member menu
   const [memberMenuAnchor, setMemberMenuAnchor] = useState<HTMLElement | null>(null);
   const [selectedMember, setSelectedMember] = useState<string | null>(null);
   const [memberLoading, setMemberLoading] = useState(false);
 
-  // Invite link
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteLinkLoading, setInviteLinkLoading] = useState(false);
 
-  // Tag management
   const [newTagName, setNewTagName] = useState("");
   const [tagLoading, setTagLoading] = useState(false);
   const [tagMenuAnchor, setTagMenuAnchor] = useState<HTMLElement | null>(null);
@@ -88,14 +89,11 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
   const [deleteTagDialogOpen, setDeleteTagDialogOpen] = useState(false);
   const [deleteTagError, setDeleteTagError] = useState("");
 
-  // Archive dialog
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveLoading, setArchiveLoading] = useState(false);
 
-  // Snackbar
   const [snackbar, setSnackbar] = useState({ open: false, message: "" });
 
-  // Initialize form values from group data
   if (group && !generalInitialized) {
     setName(group.name || "");
     setDescription(group.description || "");
@@ -111,20 +109,26 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
 
   if (isLoading) {
     return (
-      <div className="max-w-3xl mx-auto animate-pulse">
-        <div className="h-8 w-48 bg-gray-200 rounded mb-4" />
-        <div className="h-4 w-32 bg-gray-200 rounded mb-8" />
-        <div className="h-96 bg-gray-200 rounded-xl" />
-      </div>
+      <Container maxWidth="md" disableGutters>
+        <Skeleton variant="text" width={192} height={32} sx={{ mb: 2 }} />
+        <Skeleton variant="text" width={128} height={20} sx={{ mb: 4 }} />
+        <Skeleton variant="rounded" height={384} />
+      </Container>
     );
   }
 
   if (!group) {
     return (
-      <div className="max-w-3xl mx-auto text-center py-12">
-        <h2 className="text-xl font-medium text-gray-900 mb-2">Group not found</h2>
-        <p className="text-gray-500">This group may have been deleted or you don&apos;t have access.</p>
-      </div>
+      <Container maxWidth="md" disableGutters>
+        <Box sx={{ textAlign: "center", py: 6 }}>
+          <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
+            Group not found
+          </Typography>
+          <Typography color="text.secondary">
+            This group may have been deleted or you don&apos;t have access.
+          </Typography>
+        </Box>
+      </Container>
     );
   }
 
@@ -139,13 +143,19 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
 
   if (!isAdmin) {
     return (
-      <div className="max-w-3xl mx-auto text-center py-12">
-        <h2 className="text-xl font-medium text-gray-900 mb-2">Access denied</h2>
-        <p className="text-gray-500 mb-4">Only group admins can access settings.</p>
-        <Button component={Link} href={`/groups/${groupId}`} variant="outlined">
-          Back to Group
-        </Button>
-      </div>
+      <Container maxWidth="md" disableGutters>
+        <Box sx={{ textAlign: "center", py: 6 }}>
+          <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
+            Access denied
+          </Typography>
+          <Typography color="text.secondary" sx={{ mb: 2 }}>
+            Only group admins can access settings.
+          </Typography>
+          <Button component={Link} href={`/groups/${groupId}`} variant="outlined">
+            Back to Group
+          </Button>
+        </Box>
+      </Container>
     );
   }
 
@@ -154,7 +164,6 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     group.alternateCurrencies || []
   );
 
-  // Handlers
   const handleSaveGeneral = async () => {
     setGeneralSaving(true);
     try {
@@ -270,7 +279,6 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     }
   };
 
-  // ─── Tag Handlers ──────────────────────────────────
   const tags = (group.tags || []) as Array<{
     _id: string;
     name: string;
@@ -357,23 +365,29 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
   const selectedMemberData = members.find((m) => m.user._id === selectedMember);
 
   return (
-    <div className="max-w-3xl mx-auto">
+    <Container maxWidth="md" disableGutters>
       {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
+      <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 4 }}>
         <IconButton component={Link} href={`/groups/${groupId}`} size="small">
           <ArrowBackIcon />
         </IconButton>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Group Settings</h1>
-          <p className="text-sm text-gray-500">{group.name}</p>
-        </div>
-      </div>
+        <Box>
+          <Typography variant="h5" fontWeight={700} color="text.primary">
+            Group Settings
+          </Typography>
+          <Typography variant="body2" color="text.secondary">
+            {group.name}
+          </Typography>
+        </Box>
+      </Stack>
 
-      <div className="space-y-8">
+      <Stack spacing={4}>
         {/* ─── General Information ──────────────────── */}
-        <section className="bg-white rounded-xl border border-gray-100 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">General Information</h2>
-          <div className="space-y-4">
+        <Paper variant="outlined" sx={{ p: 3 }}>
+          <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 2 }}>
+            General Information
+          </Typography>
+          <Stack spacing={2}>
             <TextField
               label="Group Name"
               value={name}
@@ -404,23 +418,24 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 </MenuItem>
               ))}
             </TextField>
-            <div className="flex justify-end">
+            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
               <Button
                 variant="contained"
                 onClick={handleSaveGeneral}
                 disabled={generalSaving || !name.trim()}
-                sx={{ backgroundColor: "#6C63FF", "&:hover": { backgroundColor: "#5A52D5" }, textTransform: "none" }}
               >
                 {generalSaving ? <CircularProgress size={20} /> : "Save Changes"}
               </Button>
-            </div>
-          </div>
-        </section>
+            </Box>
+          </Stack>
+        </Paper>
 
         {/* ─── Currency Settings ───────────────────── */}
-        <section className="bg-white rounded-xl border border-gray-100 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Currency Settings</h2>
-          <div className="space-y-4">
+        <Paper variant="outlined" sx={{ p: 3 }}>
+          <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 2 }}>
+            Currency Settings
+          </Typography>
+          <Stack spacing={2}>
             <TextField
               select
               label="Default Currency"
@@ -436,11 +451,11 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
               ))}
             </TextField>
 
-            <div>
-              <label className="block text-xs font-medium text-gray-500 mb-2">
+            <Box>
+              <Typography variant="caption" fontWeight={500} color="text.secondary" sx={{ mb: 1, display: "block" }}>
                 Alternate Currencies (max 2)
-              </label>
-              <div className="flex gap-2 flex-wrap mb-2">
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 1 }}>
                 {alternateCurrencies.map((code) => {
                   const curr = CURRENCIES.find((c) => c.code === code);
                   return (
@@ -454,7 +469,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                     />
                   );
                 })}
-              </div>
+              </Stack>
               {alternateCurrencies.length < 2 && (
                 <TextField
                   select
@@ -484,30 +499,31 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                   ))}
                 </TextField>
               )}
-            </div>
+            </Box>
 
-            <div className="flex justify-end">
+            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
               <Button
                 variant="contained"
                 onClick={handleSaveCurrency}
                 disabled={currencySaving}
-                sx={{ backgroundColor: "#6C63FF", "&:hover": { backgroundColor: "#5A52D5" }, textTransform: "none" }}
               >
                 {currencySaving ? <CircularProgress size={20} /> : "Save Currency"}
               </Button>
-            </div>
-          </div>
-        </section>
+            </Box>
+          </Stack>
+        </Paper>
 
         {/* ─── Tags ─────────────────────────────────── */}
-        <section className="bg-white rounded-xl border border-gray-100 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-1">Tags</h2>
-          <p className="text-sm text-gray-500 mb-4">
+        <Paper variant="outlined" sx={{ p: 3 }}>
+          <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 0.5 }}>
+            Tags
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Every expense must have exactly one tag. Archived tags won&apos;t appear in the expense form.
-          </p>
+          </Typography>
 
           {/* Add tag */}
-          <div className="flex gap-2 mb-4">
+          <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
             <TextField
               placeholder="New tag name..."
               value={newTagName}
@@ -524,44 +540,49 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
               onClick={handleAddTag}
               disabled={tagLoading || !newTagName.trim()}
               startIcon={<AddIcon />}
-              sx={{
-                backgroundColor: "#6C63FF",
-                "&:hover": { backgroundColor: "#5A52D5" },
-                textTransform: "none",
-                minWidth: 100,
-              }}
+              sx={{ minWidth: 100 }}
             >
               Add
             </Button>
-          </div>
+          </Stack>
 
           {/* Tag list */}
           {tags.length === 0 ? (
-            <div className="text-center py-6 text-gray-400">
+            <Box sx={{ textAlign: "center", py: 3, color: "text.disabled" }}>
               <LabelIcon sx={{ fontSize: 40, mb: 1, opacity: 0.4 }} />
-              <p className="text-sm">No tags yet. Create your first tag above.</p>
-            </div>
+              <Typography variant="body2">No tags yet. Create your first tag above.</Typography>
+            </Box>
           ) : (
-            <div className="space-y-2">
+            <Stack spacing={1}>
               {tags.map((tag) => (
-                <div
+                <Stack
                   key={tag._id}
-                  className={`flex items-center justify-between py-2 px-3 rounded-lg ${
-                    tag.isArchived ? "bg-gray-50 opacity-70" : "bg-white"
-                  }`}
+                  direction="row"
+                  alignItems="center"
+                  justifyContent="space-between"
+                  sx={{
+                    py: 1,
+                    px: 1.5,
+                    borderRadius: 2,
+                    bgcolor: tag.isArchived ? "grey.50" : "background.paper",
+                    opacity: tag.isArchived ? 0.7 : 1,
+                  }}
                 >
-                  <div className="flex items-center gap-2">
+                  <Stack direction="row" alignItems="center" spacing={1}>
                     <LabelIcon
                       fontSize="small"
-                      sx={{ color: tag.isArchived ? "gray" : "#6C63FF" }}
+                      sx={{ color: tag.isArchived ? "text.disabled" : "primary.main" }}
                     />
-                    <span
-                      className={`text-sm font-medium ${
-                        tag.isArchived ? "text-gray-400 line-through" : "text-gray-900"
-                      }`}
+                    <Typography
+                      variant="body2"
+                      fontWeight={500}
+                      sx={{
+                        color: tag.isArchived ? "text.disabled" : "text.primary",
+                        textDecoration: tag.isArchived ? "line-through" : "none",
+                      }}
                     >
                       {tag.name}
-                    </span>
+                    </Typography>
                     {tag.isArchived && (
                       <Chip
                         label="Archived"
@@ -569,7 +590,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                         sx={{ fontSize: 10, height: 20, backgroundColor: "rgba(0,0,0,0.06)" }}
                       />
                     )}
-                  </div>
+                  </Stack>
                   <IconButton
                     size="small"
                     onClick={(e) => {
@@ -579,9 +600,9 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                   >
                     <MoreVertIcon fontSize="small" />
                   </IconButton>
-                </div>
+                </Stack>
               ))}
-            </div>
+            </Stack>
           )}
 
           {/* Tag action menu */}
@@ -623,7 +644,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
               <ListItemText sx={{ color: "error.main" }}>Delete</ListItemText>
             </MuiMenuItem>
           </Menu>
-        </section>
+        </Paper>
 
         {/* Delete Tag Confirmation Dialog */}
         <Dialog
@@ -637,13 +658,15 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
         >
           <DialogTitle>Delete Tag</DialogTitle>
           <DialogContent>
-            <p className="text-sm text-gray-700">
+            <Typography variant="body2" color="text.primary">
               Are you sure you want to delete the tag{" "}
               <strong>&ldquo;{selectedTagData?.name}&rdquo;</strong>?
               This is only possible if no expenses use this tag.
-            </p>
+            </Typography>
             {deleteTagError && (
-              <p className="text-sm text-red-500 mt-2">{deleteTagError}</p>
+              <Typography variant="body2" color="error.main" sx={{ mt: 1 }}>
+                {deleteTagError}
+              </Typography>
             )}
           </DialogContent>
           <DialogActions sx={{ p: 2 }}>
@@ -669,28 +692,31 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
         </Dialog>
 
         {/* ─── Members ─────────────────────────────── */}
-        <section className="bg-white rounded-xl border border-gray-100 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+        <Paper variant="outlined" sx={{ p: 3 }}>
+          <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 2 }}>
             Members ({members.length})
-          </h2>
-          <div className="space-y-3">
+          </Typography>
+          <Stack spacing={1.5}>
             {members.map((m) => (
-              <div
+              <Stack
                 key={m.user._id}
-                className="flex items-center justify-between py-2"
+                direction="row"
+                alignItems="center"
+                justifyContent="space-between"
+                sx={{ py: 1 }}
               >
-                <div className="flex items-center gap-3">
+                <Stack direction="row" alignItems="center" spacing={1.5}>
                   <Avatar
                     src={m.user.image}
                     sx={{ width: 36, height: 36, fontSize: 14 }}
                   >
                     {m.user.name?.[0]}
                   </Avatar>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-gray-900">
+                  <Box>
+                    <Stack direction="row" alignItems="center" spacing={1}>
+                      <Typography variant="body2" fontWeight={500} color="text.primary">
                         {m.user._id === userId ? "You" : m.user.name}
-                      </span>
+                      </Typography>
                       <Chip
                         label={m.role}
                         size="small"
@@ -698,16 +724,16 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                           fontSize: 10,
                           height: 20,
                           ...(m.role === "admin"
-                            ? { backgroundColor: "rgba(108,99,255,0.1)", color: "#6C63FF" }
+                            ? { backgroundColor: "rgba(108,99,255,0.1)", color: "primary.main" }
                             : {}),
                         }}
                       />
-                    </div>
-                    <p className="text-xs text-gray-400">
+                    </Stack>
+                    <Typography variant="caption" color="text.disabled">
                       {m.user.email} · Joined {formatDate(m.joinedAt)}
-                    </p>
-                  </div>
-                </div>
+                    </Typography>
+                  </Box>
+                </Stack>
 
                 {m.user._id !== userId && (
                   <IconButton
@@ -720,9 +746,9 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                     <MoreVertIcon fontSize="small" />
                   </IconButton>
                 )}
-              </div>
+              </Stack>
             ))}
-          </div>
+          </Stack>
 
           {/* Member action menu */}
           <Menu
@@ -766,26 +792,42 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
               <ListItemText sx={{ color: "error.main" }}>Remove</ListItemText>
             </MuiMenuItem>
           </Menu>
-        </section>
+        </Paper>
 
         {/* ─── Invite Link ─────────────────────────── */}
-        <section className="bg-white rounded-xl border border-gray-100 p-6">
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">Invite Link</h2>
+        <Paper variant="outlined" sx={{ p: 3 }}>
+          <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 2 }}>
+            Invite Link
+          </Typography>
           {inviteLink ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-2 bg-gray-50 rounded-lg px-3 py-2">
-                <code className="text-sm text-gray-700 flex-1 truncate">{inviteLink}</code>
+            <Stack spacing={1.5}>
+              <Stack
+                direction="row"
+                alignItems="center"
+                spacing={1}
+                sx={{ bgcolor: "grey.50", borderRadius: 2, px: 1.5, py: 1 }}
+              >
+                <Typography
+                  component="code"
+                  variant="body2"
+                  color="text.primary"
+                  sx={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                >
+                  {inviteLink}
+                </Typography>
                 <IconButton size="small" onClick={handleCopyLink}>
                   <ContentCopyIcon fontSize="small" />
                 </IconButton>
-              </div>
-              <p className="text-xs text-gray-500">Link expires in 7 days</p>
-            </div>
+              </Stack>
+              <Typography variant="caption" color="text.secondary">
+                Link expires in 7 days
+              </Typography>
+            </Stack>
           ) : (
-            <div className="space-y-3">
-              <p className="text-sm text-gray-500">
+            <Stack spacing={1.5}>
+              <Typography variant="body2" color="text.secondary">
                 Generate a shareable link that anyone can use to join this group.
-              </p>
+              </Typography>
               <Button
                 variant="outlined"
                 onClick={handleGenerateInviteLink}
@@ -797,30 +839,30 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                     <ShareIcon />
                   )
                 }
-                sx={{ textTransform: "none" }}
               >
                 Generate Invite Link
               </Button>
-            </div>
+            </Stack>
           )}
-        </section>
+        </Paper>
 
         {/* ─── Danger Zone ─────────────────────────── */}
-        <section className="bg-white rounded-xl border-2 border-red-200 p-6">
-          <h2 className="text-lg font-semibold text-red-600 mb-2">Danger Zone</h2>
-          <p className="text-sm text-gray-500 mb-4">
+        <Paper sx={{ p: 3, border: 2, borderColor: "error.light" }}>
+          <Typography variant="subtitle1" fontWeight={600} color="error.main" sx={{ mb: 1 }}>
+            Danger Zone
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Archiving a group will hide it from all members. Existing expenses and settlements will be preserved.
-          </p>
+          </Typography>
           <Button
             variant="outlined"
             color="error"
             onClick={() => setArchiveDialogOpen(true)}
-            sx={{ textTransform: "none" }}
           >
             Archive Group
           </Button>
-        </section>
-      </div>
+        </Paper>
+      </Stack>
 
       {/* Archive Confirmation Dialog */}
       <Dialog
@@ -831,10 +873,10 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
       >
         <DialogTitle>Archive Group</DialogTitle>
         <DialogContent>
-          <p className="text-sm text-gray-700">
+          <Typography variant="body2" color="text.primary">
             Are you sure you want to archive <strong>&ldquo;{group.name}&rdquo;</strong>?
             This will hide the group from all members.
-          </p>
+          </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
           <Button
@@ -862,7 +904,6 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
         onClose={() => setSnackbar({ open: false, message: "" })}
         message={snackbar.message}
       />
-    </div>
+    </Container>
   );
 }
-

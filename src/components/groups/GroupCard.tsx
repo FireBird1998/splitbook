@@ -1,6 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import Avatar from "@mui/material/Avatar";
 import AvatarGroup from "@mui/material/AvatarGroup";
 
@@ -26,23 +30,33 @@ export default function GroupCard({ group, userId }: GroupCardProps) {
   const icon = CATEGORY_ICONS[category] || "📋";
 
   return (
-    <Link
+    <Paper
+      component={Link}
       href={`/groups/${group._id}`}
-      className="block bg-white rounded-xl p-6 border border-gray-100 hover:shadow-md transition-shadow"
+      variant="outlined"
+      sx={{
+        display: "block",
+        p: 3,
+        textDecoration: "none",
+        transition: "box-shadow 0.2s",
+        "&:hover": { boxShadow: 3 },
+      }}
     >
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className="text-2xl">{icon}</span>
-          <div>
-            <h3 className="font-semibold text-gray-900 text-sm">
+      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" sx={{ mb: 1.5 }}>
+        <Stack direction="row" alignItems="center" spacing={1}>
+          <Typography component="span" sx={{ fontSize: "1.5rem" }}>{icon}</Typography>
+          <Box>
+            <Typography variant="body2" fontWeight={600} color="text.primary">
               {group.name as string}
-            </h3>
-            <span className="text-xs text-gray-500 capitalize">{category}</span>
-          </div>
-        </div>
-      </div>
+            </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ textTransform: "capitalize" }}>
+              {category}
+            </Typography>
+          </Box>
+        </Stack>
+      </Stack>
 
-      <div className="flex items-center justify-between mt-4">
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 2 }}>
         <AvatarGroup max={4} sx={{ "& .MuiAvatar-root": { width: 28, height: 28, fontSize: 12 } }}>
           {members.map((m) => (
             <Avatar
@@ -55,11 +69,10 @@ export default function GroupCard({ group, userId }: GroupCardProps) {
             </Avatar>
           ))}
         </AvatarGroup>
-        <span className="text-xs text-gray-500">
+        <Typography variant="caption" color="text.secondary">
           {members.length} member{members.length !== 1 ? "s" : ""}
-        </span>
-      </div>
-    </Link>
+        </Typography>
+      </Stack>
+    </Paper>
   );
 }
-

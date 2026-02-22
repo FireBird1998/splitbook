@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import GroupIcon from "@mui/icons-material/Group";
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -33,29 +34,49 @@ export default function Sidebar() {
         pt: 3,
       }}
     >
-      <nav className="space-y-1">
+      <Stack component="nav" spacing={0.5}>
         {navItems.map((item) => {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
 
           return (
-            <Link
+            <Box
               key={item.href}
+              component={Link}
               href={item.href}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
-                isActive
-                  ? "bg-[#6C63FF]/10 text-[#6C63FF]"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1.5,
+                px: 2,
+                py: 1.5,
+                borderRadius: 3,
+                fontSize: "0.875rem",
+                fontWeight: 500,
+                textDecoration: "none",
+                transition: "background-color 0.15s, color 0.15s",
+                ...(isActive
+                  ? {
+                      bgcolor: (theme) => `rgba(${theme.palette.primary.main}, 0.1)`,
+                      backgroundColor: "rgba(108,99,255,0.1)",
+                      color: "primary.main",
+                    }
+                  : {
+                      color: "text.secondary",
+                      "&:hover": {
+                        bgcolor: "grey.100",
+                        color: "text.primary",
+                      },
+                    }),
+              }}
             >
               <Icon fontSize="small" />
               {item.label}
-            </Link>
+            </Box>
           );
         })}
-      </nav>
+      </Stack>
     </Box>
   );
 }
-

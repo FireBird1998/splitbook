@@ -4,11 +4,14 @@ import Link from "next/link";
 import { signOut } from "next-auth/react";
 import { useState } from "react";
 import Avatar from "@mui/material/Avatar";
+import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import Divider from "@mui/material/Divider";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import LogoutIcon from "@mui/icons-material/Logout";
 import SettingsIcon from "@mui/icons-material/Settings";
 import DashboardIcon from "@mui/icons-material/Dashboard";
@@ -41,10 +44,21 @@ export default function Navbar({ user }: NavbarProps) {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 bg-white border-b border-gray-200 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            {/* Mobile menu button */}
+      <Box
+        component="nav"
+        sx={{
+          position: "sticky",
+          top: 0,
+          zIndex: 50,
+          bgcolor: "background.paper",
+          borderBottom: 1,
+          borderColor: "divider",
+          px: 2,
+          py: 1.5,
+        }}
+      >
+        <Stack direction="row" alignItems="center" justifyContent="space-between">
+          <Stack direction="row" alignItems="center" spacing={1.5}>
             <IconButton
               onClick={() => setDrawerOpen(true)}
               size="small"
@@ -53,16 +67,36 @@ export default function Navbar({ user }: NavbarProps) {
               <MenuIcon />
             </IconButton>
 
-            <Link href="/dashboard" className="flex items-center gap-2">
-              <span className="text-2xl">💰</span>
-              <span className="text-lg font-bold text-gray-900">SplitWise</span>
-            </Link>
-          </div>
+            <Box
+              component={Link}
+              href="/dashboard"
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                textDecoration: "none",
+              }}
+            >
+              <Typography component="span" sx={{ fontSize: "1.5rem" }}>💰</Typography>
+              <Typography
+                component="span"
+                sx={{ fontSize: "1.125rem", fontWeight: 700, color: "text.primary" }}
+              >
+                SplitWise
+              </Typography>
+            </Box>
+          </Stack>
 
-          <div className="flex items-center gap-2">
-            <span className="hidden sm:block text-sm text-gray-600">
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography
+              variant="body2"
+              sx={{
+                display: { xs: "none", sm: "block" },
+                color: "text.secondary",
+              }}
+            >
               {user.name}
-            </span>
+            </Typography>
             <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small">
               <Avatar
                 src={user.image || undefined}
@@ -70,9 +104,9 @@ export default function Navbar({ user }: NavbarProps) {
                 sx={{ width: 32, height: 32 }}
               />
             </IconButton>
-          </div>
-        </div>
-      </nav>
+          </Stack>
+        </Stack>
+      </Box>
 
       {/* User Menu */}
       <Menu
@@ -87,10 +121,14 @@ export default function Navbar({ user }: NavbarProps) {
           },
         }}
       >
-        <div className="px-4 py-2">
-          <p className="text-sm font-medium text-gray-900">{user.name}</p>
-          <p className="text-xs text-gray-500">{user.email}</p>
-        </div>
+        <Box sx={{ px: 2, py: 1 }}>
+          <Typography variant="body2" fontWeight={500} color="text.primary">
+            {user.name}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {user.email}
+          </Typography>
+        </Box>
         <Divider />
         <MenuItem
           component={Link}
@@ -121,11 +159,16 @@ export default function Navbar({ user }: NavbarProps) {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
       >
-        <div className="w-64 p-4">
-          <div className="flex items-center gap-2 mb-6">
-            <span className="text-2xl">💰</span>
-            <span className="text-lg font-bold text-gray-900">SplitWise</span>
-          </div>
+        <Box sx={{ width: 256, p: 2 }}>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
+            <Typography component="span" sx={{ fontSize: "1.5rem" }}>💰</Typography>
+            <Typography
+              component="span"
+              sx={{ fontSize: "1.125rem", fontWeight: 700, color: "text.primary" }}
+            >
+              SplitWise
+            </Typography>
+          </Stack>
           <List>
             {mobileNavItems.map((item) => {
               const isActive =
@@ -144,14 +187,14 @@ export default function Navbar({ user }: NavbarProps) {
                     mb: 0.5,
                     "&.Mui-selected": {
                       backgroundColor: "rgba(108,99,255,0.1)",
-                      color: "#6C63FF",
+                      color: "primary.main",
                     },
                   }}
                 >
                   <ListItemIcon sx={{ minWidth: 40 }}>
                     <Icon
                       fontSize="small"
-                      sx={{ color: isActive ? "#6C63FF" : undefined }}
+                      sx={{ color: isActive ? "primary.main" : undefined }}
                     />
                   </ListItemIcon>
                   <ListItemText primary={item.label} />
@@ -159,9 +202,8 @@ export default function Navbar({ user }: NavbarProps) {
               );
             })}
           </List>
-        </div>
+        </Box>
       </Drawer>
     </>
   );
 }
-

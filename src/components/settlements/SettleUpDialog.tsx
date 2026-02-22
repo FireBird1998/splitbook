@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -83,16 +86,27 @@ export default function SettleUpDialog({
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle>Settle Up</DialogTitle>
       <DialogContent>
-        <div className="space-y-4 pt-2">
+        <Stack spacing={2} sx={{ pt: 1 }}>
           {error && (
-            <div className="bg-red-50 text-red-600 px-3 py-2 rounded-lg text-sm">{error}</div>
+            <Box
+              sx={{
+                bgcolor: (theme) => `${theme.palette.error.main}12`,
+                color: "error.main",
+                px: 1.5,
+                py: 1,
+                borderRadius: 2,
+                fontSize: "0.875rem",
+              }}
+            >
+              {error}
+            </Box>
           )}
 
-          <p className="text-sm text-gray-600">
+          <Typography variant="body2" color="text.secondary">
             You are paying <strong>{(toUser as { name?: string })?.name || "..."}</strong>
-          </p>
+          </Typography>
 
-          <div className="grid grid-cols-2 gap-3">
+          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
             <TextField
               label="Amount"
               value={amount}
@@ -115,7 +129,7 @@ export default function SettleUpDialog({
                 </MenuItem>
               ))}
             </TextField>
-          </div>
+          </Box>
 
           <TextField
             label="Note (optional)"
@@ -125,7 +139,7 @@ export default function SettleUpDialog({
             size="small"
             placeholder="e.g. Paid via UPI"
           />
-        </div>
+        </Stack>
       </DialogContent>
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose} color="inherit">
@@ -135,7 +149,7 @@ export default function SettleUpDialog({
           onClick={handleSubmit}
           variant="contained"
           disabled={loading}
-          sx={{ backgroundColor: "#00BFA5", "&:hover": { backgroundColor: "#009688" } }}
+          sx={{ backgroundColor: "secondary.main", "&:hover": { backgroundColor: "secondary.dark" } }}
         >
           {loading ? <CircularProgress size={20} /> : "Record Payment"}
         </Button>
@@ -143,4 +157,3 @@ export default function SettleUpDialog({
     </Dialog>
   );
 }
-

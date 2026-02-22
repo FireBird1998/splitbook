@@ -3,6 +3,8 @@
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import GoogleIcon from "@mui/icons-material/Google";
 
@@ -12,22 +14,46 @@ function LoginForm() {
   const error = searchParams.get("error");
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center space-y-8 p-8">
-        <div>
-          <span className="text-5xl mb-4 block">💰</span>
-          <h1 className="text-3xl font-bold text-gray-900">SplitWise</h1>
-        </div>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        bgcolor: "background.default",
+      }}
+    >
+      <Box sx={{ textAlign: "center", p: 4 }}>
+        <Box sx={{ mb: 4 }}>
+          <Typography component="span" sx={{ fontSize: "3rem", display: "block", mb: 2 }}>
+            💰
+          </Typography>
+          <Typography variant="h4" fontWeight={700} color="text.primary">
+            SplitWise
+          </Typography>
+        </Box>
 
-        <div>
-          <h2 className="text-xl text-gray-700 mb-2">Welcome back!</h2>
-          <p className="text-gray-500">Sign in to continue.</p>
-        </div>
+        <Box sx={{ mb: 4 }}>
+          <Typography variant="h6" color="text.primary" sx={{ mb: 1 }}>
+            Welcome back!
+          </Typography>
+          <Typography color="text.secondary">Sign in to continue.</Typography>
+        </Box>
 
         {error && (
-          <div className="bg-red-50 text-red-600 px-4 py-3 rounded-lg text-sm">
+          <Box
+            sx={{
+              bgcolor: (theme) => `${theme.palette.error.main}12`,
+              color: "error.main",
+              px: 2,
+              py: 1.5,
+              borderRadius: 2,
+              fontSize: "0.875rem",
+              mb: 4,
+            }}
+          >
             Something went wrong. Please try again.
-          </div>
+          </Box>
         )}
 
         <Button
@@ -37,8 +63,6 @@ function LoginForm() {
           startIcon={<GoogleIcon />}
           onClick={() => signIn("google", { callbackUrl })}
           sx={{
-            backgroundColor: "#6C63FF",
-            "&:hover": { backgroundColor: "#5A52D5" },
             fontSize: "1rem",
             padding: "12px 24px",
             maxWidth: 320,
@@ -47,11 +71,15 @@ function LoginForm() {
           Sign in with Google
         </Button>
 
-        <p className="text-xs text-gray-400 max-w-xs mx-auto">
+        <Typography
+          variant="caption"
+          color="text.disabled"
+          sx={{ display: "block", maxWidth: 320, mx: "auto", mt: 4 }}
+        >
           By signing in, you agree to our Terms of Service and Privacy Policy.
-        </p>
-      </div>
-    </div>
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 
@@ -59,16 +87,25 @@ export default function LoginPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="text-center">
-            <span className="text-5xl mb-4 block">💰</span>
-            <p className="text-gray-500">Loading...</p>
-          </div>
-        </div>
+        <Box
+          sx={{
+            minHeight: "100vh",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            bgcolor: "background.default",
+          }}
+        >
+          <Box sx={{ textAlign: "center" }}>
+            <Typography component="span" sx={{ fontSize: "3rem", display: "block", mb: 2 }}>
+              💰
+            </Typography>
+            <Typography color="text.secondary">Loading...</Typography>
+          </Box>
+        </Box>
       }
     >
       <LoginForm />
     </Suspense>
   );
 }
-

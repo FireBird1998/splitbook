@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Skeleton from "@mui/material/Skeleton";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -103,11 +107,11 @@ export default function ExpenseDetailDialog({
     return (
       <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
         <DialogContent>
-          <div className="space-y-4 animate-pulse py-8">
-            <div className="h-6 w-48 bg-gray-200 rounded" />
-            <div className="h-4 w-32 bg-gray-200 rounded" />
-            <div className="h-20 bg-gray-200 rounded" />
-          </div>
+          <Stack spacing={2} sx={{ py: 4 }}>
+            <Skeleton variant="text" width={192} height={24} />
+            <Skeleton variant="text" width={128} height={20} />
+            <Skeleton variant="rounded" height={80} />
+          </Stack>
         </DialogContent>
       </Dialog>
     );
@@ -143,8 +147,8 @@ export default function ExpenseDetailDialog({
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", pb: 1 }}>
-        <span className="text-base font-semibold">Expense Detail</span>
-        <div className="flex gap-1">
+        <Typography variant="subtitle1" fontWeight={600}>Expense Detail</Typography>
+        <Stack direction="row" spacing={0.5}>
           <IconButton size="small" onClick={() => onEdit(expense)} title="Edit">
             <EditIcon fontSize="small" />
           </IconButton>
@@ -154,27 +158,31 @@ export default function ExpenseDetailDialog({
           <IconButton size="small" onClick={onClose}>
             <CloseIcon fontSize="small" />
           </IconButton>
-        </div>
+        </Stack>
       </DialogTitle>
 
       <DialogContent dividers>
-        <div className="space-y-5">
+        <Stack spacing={2.5}>
           {/* Header */}
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-2xl">{CATEGORY_ICONS[category] || "📋"}</span>
-              <h2 className="text-lg font-bold text-gray-900">{expense.description}</h2>
-            </div>
-            <p className="text-xl font-bold text-gray-900">
+          <Box>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+              <Typography component="span" sx={{ fontSize: "1.5rem" }}>
+                {CATEGORY_ICONS[category] || "📋"}
+              </Typography>
+              <Typography variant="subtitle1" fontWeight={700} color="text.primary">
+                {expense.description}
+              </Typography>
+            </Stack>
+            <Typography variant="h6" fontWeight={700} color="text.primary">
               {formatCurrency(expense.amount, expense.currency)}
-            </p>
-            <p className="text-sm text-gray-500 mt-0.5">
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
               {formatDateTime(expense.date)}
-            </p>
-          </div>
+            </Typography>
+          </Box>
 
           {/* Metadata */}
-          <div className="flex items-center gap-2 flex-wrap">
+          <Stack direction="row" spacing={1} flexWrap="wrap">
             <Chip
               label={`${CATEGORY_ICONS[category] || ""} ${CATEGORY_LABELS[category] || category}`}
               size="small"
@@ -183,72 +191,74 @@ export default function ExpenseDetailDialog({
             {tag && (
               <Chip label={tag} size="small" variant="outlined" sx={{ fontSize: 11 }} />
             )}
-          </div>
+          </Stack>
 
           <Divider />
 
           {/* Paid By */}
-          <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          <Box>
+            <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em", mb: 1, display: "block" }}>
               Paid by
-            </h3>
-            <div className="space-y-2">
+            </Typography>
+            <Stack spacing={1}>
               {paidBy.map((p, i) => (
-                <div key={i} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <Stack key={i} direction="row" alignItems="center" justifyContent="space-between">
+                  <Stack direction="row" alignItems="center" spacing={1}>
                     <Avatar src={p.user.image} sx={{ width: 28, height: 28, fontSize: 12 }}>
                       {p.user.name?.[0]}
                     </Avatar>
-                    <span className="text-sm text-gray-900">{memberName(p.user)}</span>
-                  </div>
-                  <span className="text-sm font-medium text-gray-900">
+                    <Typography variant="body2" color="text.primary">{memberName(p.user)}</Typography>
+                  </Stack>
+                  <Typography variant="body2" fontWeight={500} color="text.primary">
                     {formatCurrency(p.amount, expense.currency)}
-                  </span>
-                </div>
+                  </Typography>
+                </Stack>
               ))}
-            </div>
-          </div>
+            </Stack>
+          </Box>
 
           <Divider />
 
           {/* Split */}
-          <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          <Box>
+            <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em", mb: 1, display: "block" }}>
               Split ({SPLIT_METHOD_LABELS[expense.splitMethod] || expense.splitMethod})
-            </h3>
-            <div className="space-y-2">
+            </Typography>
+            <Stack spacing={1}>
               {splitBetween.map((s, i) => (
-                <div key={i} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                <Stack key={i} direction="row" alignItems="center" justifyContent="space-between">
+                  <Stack direction="row" alignItems="center" spacing={1}>
                     <Avatar src={s.user.image} sx={{ width: 28, height: 28, fontSize: 12 }}>
                       {s.user.name?.[0]}
                     </Avatar>
-                    <span className="text-sm text-gray-900">{memberName(s.user)}</span>
+                    <Typography variant="body2" color="text.primary">{memberName(s.user)}</Typography>
                     {s.percentage !== undefined && (
-                      <span className="text-xs text-gray-400">({s.percentage}%)</span>
+                      <Typography variant="caption" color="text.disabled">({s.percentage}%)</Typography>
                     )}
                     {s.shares !== undefined && (
-                      <span className="text-xs text-gray-400">({s.shares} shares)</span>
+                      <Typography variant="caption" color="text.disabled">({s.shares} shares)</Typography>
                     )}
-                  </div>
-                  <span className="text-sm font-medium text-gray-900">
+                  </Stack>
+                  <Typography variant="body2" fontWeight={500} color="text.primary">
                     {formatCurrency(s.amount, expense.currency)}
-                  </span>
-                </div>
+                  </Typography>
+                </Stack>
               ))}
-            </div>
-          </div>
+            </Stack>
+          </Box>
 
           {/* Notes */}
           {expense.notes && (
             <>
               <Divider />
-              <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              <Box>
+                <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em", mb: 1, display: "block" }}>
                   Notes
-                </h3>
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">{expense.notes}</p>
-              </div>
+                </Typography>
+                <Typography variant="body2" color="text.primary" sx={{ whiteSpace: "pre-wrap" }}>
+                  {expense.notes}
+                </Typography>
+              </Box>
             </>
           )}
 
@@ -256,76 +266,84 @@ export default function ExpenseDetailDialog({
           {expense.receiptUrl && (
             <>
               <Divider />
-              <div>
-                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+              <Box>
+                <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em", mb: 1, display: "block" }}>
                   Receipt
-                </h3>
-                <a
+                </Typography>
+                <Typography
+                  component="a"
                   href={expense.receiptUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 text-sm text-indigo-600 hover:text-indigo-700"
+                  variant="body2"
+                  sx={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 1,
+                    color: "primary.main",
+                    textDecoration: "none",
+                    "&:hover": { textDecoration: "underline" },
+                  }}
                 >
                   📎 View Receipt
-                </a>
-              </div>
+                </Typography>
+              </Box>
             </>
           )}
 
           <Divider />
 
           {/* History */}
-          <div>
-            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+          <Box>
+            <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em", mb: 1, display: "block" }}>
               History
-            </h3>
+            </Typography>
             {createdBy && (
-              <p className="text-xs text-gray-500">
+              <Typography variant="caption" color="text.secondary">
                 Created by <strong>{memberName(createdBy)}</strong> · {formatDateTime(expense.createdAt)}
-              </p>
+              </Typography>
             )}
 
             {editHistory.length > 0 && (
-              <div className="mt-2">
+              <Box sx={{ mt: 1 }}>
                 <Button
                   size="small"
                   onClick={() => setShowHistory(!showHistory)}
                   endIcon={showHistory ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                  sx={{ textTransform: "none", fontSize: 12, color: "#6C63FF" }}
+                  sx={{ fontSize: 12, color: "primary.main" }}
                 >
                   {showHistory ? "Hide" : "Show"} edit history ({editHistory.length} edit{editHistory.length !== 1 ? "s" : ""})
                 </Button>
 
                 {showHistory && (
-                  <div className="mt-2 space-y-3 border-l-2 border-gray-200 pl-4">
+                  <Stack spacing={1.5} sx={{ mt: 1, borderLeft: 2, borderColor: "divider", pl: 2 }}>
                     {editHistory.map((edit, i) => {
                       const editorName = typeof edit.editedBy === "string"
                         ? edit.editedBy
                         : memberName(edit.editedBy);
 
                       return (
-                        <div key={i}>
-                          <p className="text-xs text-gray-600">
+                        <Box key={i}>
+                          <Typography variant="caption" color="text.secondary">
                             ✏️ Edited by <strong>{editorName}</strong> · {formatDateTime(edit.editedAt)}
-                          </p>
-                          <ul className="mt-1 text-xs text-gray-500 list-none">
+                          </Typography>
+                          <Box component="ul" sx={{ mt: 0.5, pl: 0, listStyle: "none" }}>
                             {Object.entries(edit.changes).map(([field, { old: oldVal, new: newVal }]) => (
-                              <li key={field}>
+                              <Typography component="li" key={field} variant="caption" color="text.secondary">
                                 • {FIELD_LABELS[field] || field}: {formatValue(oldVal)} → {formatValue(newVal)}
-                              </li>
+                              </Typography>
                             ))}
-                          </ul>
-                        </div>
+                          </Box>
+                        </Box>
                       );
                     })}
-                  </div>
+                  </Stack>
                 )}
-              </div>
+              </Box>
             )}
-          </div>
-        </div>
+          </Box>
+        </Stack>
       </DialogContent>
     </Dialog>
   );
 }
-

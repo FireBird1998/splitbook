@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter, useParams } from "next/navigation";
 import { signIn } from "next-auth/react";
+import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
+import Typography from "@mui/material/Typography";
+import Stack from "@mui/material/Stack";
 import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import GoogleIcon from "@mui/icons-material/Google";
@@ -66,73 +70,105 @@ export default function JoinGroupPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <Box
+        sx={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          bgcolor: "background.default",
+        }}
+      >
         <CircularProgress />
-      </div>
+      </Box>
     );
   }
 
   if (error) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="text-center space-y-4">
-          <span className="text-5xl block">😕</span>
-          <h1 className="text-xl font-bold text-gray-900">Oops!</h1>
-          <p className="text-gray-600">{error}</p>
+      <Box
+        sx={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          bgcolor: "background.default",
+        }}
+      >
+        <Stack spacing={2} alignItems="center">
+          <Typography component="span" sx={{ fontSize: "3rem" }}>😕</Typography>
+          <Typography variant="h6" fontWeight={700} color="text.primary">
+            Oops!
+          </Typography>
+          <Typography color="text.secondary">{error}</Typography>
           <Button variant="outlined" onClick={() => router.push("/")}>
             Go Home
           </Button>
-        </div>
-      </div>
+        </Stack>
+      </Box>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center space-y-6 p-8 bg-white rounded-2xl shadow-sm border border-gray-100 max-w-sm mx-4">
-        <span className="text-5xl block">💰</span>
-        <div>
-          <p className="text-gray-500 mb-2">You&apos;ve been invited to join:</p>
-          <h1 className="text-xl font-bold text-gray-900 flex items-center justify-center gap-2">
-            {CATEGORY_ICONS[(group?.category as string) || "other"]}{" "}
-            {group?.name as string}
-          </h1>
-          <p className="text-sm text-gray-500 mt-1">
-            {group?.memberCount as number} member{(group?.memberCount as number) !== 1 ? "s" : ""}
-          </p>
-        </div>
+    <Box
+      sx={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        bgcolor: "background.default",
+      }}
+    >
+      <Paper
+        variant="outlined"
+        sx={{
+          textAlign: "center",
+          p: 4,
+          borderRadius: 4,
+          maxWidth: 384,
+          mx: 2,
+        }}
+      >
+        <Stack spacing={3}>
+          <Typography component="span" sx={{ fontSize: "3rem" }}>💰</Typography>
+          <Box>
+            <Typography color="text.secondary" sx={{ mb: 1 }}>
+              You&apos;ve been invited to join:
+            </Typography>
+            <Stack direction="row" spacing={1} justifyContent="center" alignItems="center">
+              <Typography variant="h6" fontWeight={700} color="text.primary">
+                {CATEGORY_ICONS[(group?.category as string) || "other"]}{" "}
+                {group?.name as string}
+              </Typography>
+            </Stack>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {group?.memberCount as number} member{(group?.memberCount as number) !== 1 ? "s" : ""}
+            </Typography>
+          </Box>
 
-        {status === "authenticated" ? (
-          <Button
-            variant="contained"
-            fullWidth
-            onClick={handleJoin}
-            disabled={joining}
-            sx={{
-              backgroundColor: "#6C63FF",
-              "&:hover": { backgroundColor: "#5A52D5" },
-              padding: "12px",
-            }}
-          >
-            {joining ? <CircularProgress size={20} /> : "Join Group"}
-          </Button>
-        ) : (
-          <Button
-            variant="contained"
-            fullWidth
-            startIcon={<GoogleIcon />}
-            onClick={() => signIn("google", { callbackUrl: `/join/${code}` })}
-            sx={{
-              backgroundColor: "#6C63FF",
-              "&:hover": { backgroundColor: "#5A52D5" },
-              padding: "12px",
-            }}
-          >
-            Sign in with Google to Join
-          </Button>
-        )}
-      </div>
-    </div>
+          {status === "authenticated" ? (
+            <Button
+              variant="contained"
+              fullWidth
+              onClick={handleJoin}
+              disabled={joining}
+              sx={{ py: 1.5 }}
+            >
+              {joining ? <CircularProgress size={20} /> : "Join Group"}
+            </Button>
+          ) : (
+            <Button
+              variant="contained"
+              fullWidth
+              startIcon={<GoogleIcon />}
+              onClick={() => signIn("google", { callbackUrl: `/join/${code}` })}
+              sx={{ py: 1.5 }}
+            >
+              Sign in with Google to Join
+            </Button>
+          )}
+        </Stack>
+      </Paper>
+    </Box>
   );
 }
-

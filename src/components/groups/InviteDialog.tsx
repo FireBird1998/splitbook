@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Box from "@mui/material/Box";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
@@ -97,21 +100,26 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
         </DialogTitle>
 
         <DialogContent>
-          <div className="space-y-4 pt-2">
+          <Stack spacing={2} sx={{ pt: 1 }}>
             {/* Email Invite */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            <Box>
+              <Typography variant="body2" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
                 Invite by email
-              </label>
+              </Typography>
               {emailError && (
-                <p className="text-red-500 text-xs mb-2">{emailError}</p>
+                <Typography variant="caption" color="error.main" sx={{ mb: 1, display: "block" }}>
+                  {emailError}
+                </Typography>
               )}
               {emailSent && (
-                <p className="text-green-600 text-xs mb-2 flex items-center gap-1">
-                  <CheckIcon fontSize="small" /> Invitation sent!
-                </p>
+                <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1 }}>
+                  <CheckIcon fontSize="small" color="success" />
+                  <Typography variant="caption" color="success.main">
+                    Invitation sent!
+                  </Typography>
+                </Stack>
               )}
-              <div className="flex gap-2">
+              <Stack direction="row" spacing={1}>
                 <TextField
                   value={email}
                   onChange={(e) => {
@@ -127,51 +135,53 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
                   variant="contained"
                   onClick={handleEmailInvite}
                   disabled={emailLoading || !email.trim()}
-                  sx={{ backgroundColor: "#6C63FF", "&:hover": { backgroundColor: "#5A52D5" }, flexShrink: 0 }}
+                  sx={{ flexShrink: 0 }}
                 >
                   {emailLoading ? <CircularProgress size={20} /> : "Send"}
                 </Button>
-              </div>
-            </div>
+              </Stack>
+            </Box>
 
             <Divider>
-              <span className="text-xs text-gray-400">OR</span>
+              <Typography variant="caption" color="text.disabled">OR</Typography>
             </Divider>
 
             {/* Invite Link */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            <Box>
+              <Typography variant="body2" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
                 Share invite link
-              </label>
+              </Typography>
               {inviteLink ? (
-                <div className="flex gap-2">
-                  <TextField
-                    value={inviteLink}
-                    size="small"
-                    fullWidth
-                    slotProps={{ input: { readOnly: true } }}
-                    sx={{ "& input": { fontSize: 12 } }}
-                  />
-                  <IconButton onClick={handleCopy} size="small" color={copied ? "success" : "default"}>
-                    {copied ? <CheckIcon /> : <ContentCopyIcon />}
-                  </IconButton>
-                </div>
+                <Stack spacing={0.5}>
+                  <Stack direction="row" spacing={1}>
+                    <TextField
+                      value={inviteLink}
+                      size="small"
+                      fullWidth
+                      slotProps={{ input: { readOnly: true } }}
+                      sx={{ "& input": { fontSize: 12 } }}
+                    />
+                    <IconButton onClick={handleCopy} size="small" color={copied ? "success" : "default"}>
+                      {copied ? <CheckIcon /> : <ContentCopyIcon />}
+                    </IconButton>
+                  </Stack>
+                  <Typography variant="caption" color="text.disabled">
+                    Expires in 7 days
+                  </Typography>
+                </Stack>
               ) : (
                 <Button
                   variant="outlined"
                   fullWidth
                   onClick={handleGenerateLink}
                   disabled={linkLoading}
-                  sx={{ borderColor: "#6C63FF", color: "#6C63FF" }}
+                  sx={{ borderColor: "primary.main", color: "primary.main" }}
                 >
                   {linkLoading ? <CircularProgress size={20} /> : "Generate Invite Link"}
                 </Button>
               )}
-              {inviteLink && (
-                <p className="text-xs text-gray-400 mt-1">Expires in 7 days</p>
-              )}
-            </div>
-          </div>
+            </Box>
+          </Stack>
         </DialogContent>
       </Dialog>
 
@@ -184,4 +194,3 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
     </>
   );
 }
-

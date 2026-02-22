@@ -2,6 +2,11 @@
 
 import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
+import Box from "@mui/material/Box";
+import Container from "@mui/material/Container";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import MenuItem from "@mui/material/MenuItem";
@@ -50,82 +55,98 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="max-w-xl mx-auto">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Settings</h1>
+    <Container maxWidth="sm" disableGutters>
+      <Typography variant="h5" fontWeight={700} color="text.primary" sx={{ mb: 3 }}>
+        Settings
+      </Typography>
 
       {/* Profile */}
-      <div className="bg-white rounded-xl p-6 border border-gray-100 space-y-6 mb-6">
-        <h2 className="text-lg font-semibold text-gray-900">Profile</h2>
+      <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
+        <Stack spacing={3}>
+          <Typography variant="subtitle1" fontWeight={600} color="text.primary">
+            Profile
+          </Typography>
 
-        <div className="flex items-center gap-4">
-          <Avatar
-            src={session?.user?.image || undefined}
-            alt={session?.user?.name || "User"}
-            sx={{ width: 64, height: 64 }}
-          />
-          <div>
-            <p className="font-medium text-gray-900">{session?.user?.name}</p>
-            <p className="text-sm text-gray-500">{session?.user?.email}</p>
-          </div>
-        </div>
+          <Stack direction="row" alignItems="center" spacing={2}>
+            <Avatar
+              src={session?.user?.image || undefined}
+              alt={session?.user?.name || "User"}
+              sx={{ width: 64, height: 64 }}
+            />
+            <Box>
+              <Typography fontWeight={500} color="text.primary">
+                {session?.user?.name}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {session?.user?.email}
+              </Typography>
+            </Box>
+          </Stack>
 
-        <div className="flex flex-col gap-4">
-          <TextField
-            label="Name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            fullWidth
-            slotProps={{ htmlInput: { maxLength: 100 } }}
-          />
+          <Stack spacing={2}>
+            <TextField
+              label="Name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              fullWidth
+              slotProps={{ htmlInput: { maxLength: 100 } }}
+            />
 
-          <TextField
-            select
-            label="Preferred Currency"
-            value={preferredCurrency}
-            onChange={(e) => setPreferredCurrency(e.target.value)}
-            fullWidth
-            helperText="Used as default when creating new groups"
-          >
-            {CURRENCIES.map((c) => (
-              <MenuItem key={c.code} value={c.code}>
-                {c.flag} {c.code} — {c.name}
-              </MenuItem>
-            ))}
-          </TextField>
+            <TextField
+              select
+              label="Preferred Currency"
+              value={preferredCurrency}
+              onChange={(e) => setPreferredCurrency(e.target.value)}
+              fullWidth
+              helperText="Used as default when creating new groups"
+            >
+              {CURRENCIES.map((c) => (
+                <MenuItem key={c.code} value={c.code}>
+                  {c.flag} {c.code} — {c.name}
+                </MenuItem>
+              ))}
+            </TextField>
 
-          <Button
-            variant="contained"
-            onClick={handleSave}
-            disabled={loading}
-            sx={{
-              backgroundColor: "#6C63FF",
-              "&:hover": { backgroundColor: "#5A52D5" },
-            }}
-          >
-            {loading ? <CircularProgress size={20} /> : "Save Changes"}
-          </Button>
-        </div>
-      </div>
+            <Button
+              variant="contained"
+              onClick={handleSave}
+              disabled={loading}
+            >
+              {loading ? <CircularProgress size={20} /> : "Save Changes"}
+            </Button>
+          </Stack>
+        </Stack>
+      </Paper>
 
       {/* Account */}
-      <div className="bg-white rounded-xl p-6 border border-gray-100 space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Account</h2>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm text-gray-600">Connected with Google</p>
-            <p className="text-xs text-gray-400">{session?.user?.email}</p>
-          </div>
-          <span className="text-green-600 text-sm">✓ Connected</span>
-        </div>
-        <Button
-          variant="outlined"
-          color="error"
-          startIcon={<LogoutIcon />}
-          onClick={() => signOut({ callbackUrl: "/" })}
-        >
-          Sign Out
-        </Button>
-      </div>
+      <Paper variant="outlined" sx={{ p: 3 }}>
+        <Stack spacing={2}>
+          <Typography variant="subtitle1" fontWeight={600} color="text.primary">
+            Account
+          </Typography>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Box>
+              <Typography variant="body2" color="text.secondary">
+                Connected with Google
+              </Typography>
+              <Typography variant="caption" color="text.disabled">
+                {session?.user?.email}
+              </Typography>
+            </Box>
+            <Typography variant="body2" color="success.main">
+              ✓ Connected
+            </Typography>
+          </Stack>
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<LogoutIcon />}
+            onClick={() => signOut({ callbackUrl: "/" })}
+          >
+            Sign Out
+          </Button>
+        </Stack>
+      </Paper>
 
       <Snackbar
         open={!!snackbar}
@@ -133,6 +154,6 @@ export default function SettingsPage() {
         onClose={() => setSnackbar("")}
         message={snackbar}
       />
-    </div>
+    </Container>
   );
 }

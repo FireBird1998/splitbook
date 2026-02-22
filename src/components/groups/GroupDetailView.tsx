@@ -3,6 +3,11 @@
 import { useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
+import Box from "@mui/material/Box";
+import Container from "@mui/material/Container";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Skeleton from "@mui/material/Skeleton";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
 import IconButton from "@mui/material/IconButton";
@@ -50,20 +55,26 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
 
   if (isLoading) {
     return (
-      <div className="max-w-5xl mx-auto animate-pulse">
-        <div className="h-8 w-48 bg-gray-200 rounded mb-4" />
-        <div className="h-4 w-32 bg-gray-200 rounded mb-8" />
-        <div className="h-96 bg-gray-200 rounded-xl" />
-      </div>
+      <Container maxWidth="lg" disableGutters>
+        <Skeleton variant="text" width={192} height={32} sx={{ mb: 2 }} />
+        <Skeleton variant="text" width={128} height={20} sx={{ mb: 4 }} />
+        <Skeleton variant="rounded" height={384} />
+      </Container>
     );
   }
 
   if (!group) {
     return (
-      <div className="max-w-5xl mx-auto text-center py-12">
-        <h2 className="text-xl font-medium text-gray-900 mb-2">Group not found</h2>
-        <p className="text-gray-500">This group may have been deleted or you don&apos;t have access.</p>
-      </div>
+      <Container maxWidth="lg" disableGutters>
+        <Box sx={{ textAlign: "center", py: 6 }}>
+          <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
+            Group not found
+          </Typography>
+          <Typography color="text.secondary">
+            This group may have been deleted or you don&apos;t have access.
+          </Typography>
+        </Box>
+      </Container>
     );
   }
 
@@ -74,19 +85,23 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
   const category = group.category as string;
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <Container maxWidth="lg" disableGutters>
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div className="flex items-center gap-3">
+      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" sx={{ mb: 3 }}>
+        <Stack direction="row" alignItems="center" spacing={1.5}>
           <IconButton component={Link} href="/groups" size="small">
             <ArrowBackIcon />
           </IconButton>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-2xl">{CATEGORY_ICONS[category] || "📋"}</span>
-              <h1 className="text-2xl font-bold text-gray-900">{group.name}</h1>
-            </div>
-            <div className="flex items-center gap-3 mt-1">
+          <Box>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Typography component="span" sx={{ fontSize: "1.5rem" }}>
+                {CATEGORY_ICONS[category] || "📋"}
+              </Typography>
+              <Typography variant="h5" fontWeight={700} color="text.primary">
+                {group.name}
+              </Typography>
+            </Stack>
+            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mt: 0.5 }}>
               <Chip label={category} size="small" variant="outlined" />
               <AvatarGroup
                 max={5}
@@ -98,21 +113,21 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
                   </Avatar>
                 ))}
               </AvatarGroup>
-              <span className="text-sm text-gray-500">
+              <Typography variant="body2" color="text.secondary">
                 {members.length} member{members.length !== 1 ? "s" : ""}
-              </span>
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-1">
+              </Typography>
+            </Stack>
+          </Box>
+        </Stack>
+        <Stack direction="row" spacing={0.5}>
           <IconButton onClick={() => setInviteDialogOpen(true)} size="small" title="Invite">
             <ShareIcon />
           </IconButton>
           <IconButton component={Link} href={`/groups/${groupId}/settings`} size="small" title="Settings">
             <SettingsIcon />
           </IconButton>
-        </div>
-      </div>
+        </Stack>
+      </Stack>
 
       {/* Tabs */}
       <Tabs
@@ -121,8 +136,8 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
         sx={{
           mb: 3,
           "& .MuiTab-root": { textTransform: "none", fontWeight: 600 },
-          "& .Mui-selected": { color: "#6C63FF" },
-          "& .MuiTabs-indicator": { backgroundColor: "#6C63FF" },
+          "& .Mui-selected": { color: "primary.main" },
+          "& .MuiTabs-indicator": { backgroundColor: "primary.main" },
         }}
       >
         <Tab label="Expenses" />
@@ -143,8 +158,6 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
           position: "fixed",
           bottom: 24,
           right: 24,
-          backgroundColor: "#6C63FF",
-          "&:hover": { backgroundColor: "#5A52D5" },
         }}
       >
         <AddIcon />
@@ -165,7 +178,6 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
         onClose={() => setInviteDialogOpen(false)}
         groupId={groupId}
       />
-    </div>
+    </Container>
   );
 }
-

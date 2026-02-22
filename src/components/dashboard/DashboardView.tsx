@@ -2,6 +2,12 @@
 
 import useSWR from "swr";
 import Link from "next/link";
+import Box from "@mui/material/Box";
+import Container from "@mui/material/Container";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Skeleton from "@mui/material/Skeleton";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import AddIcon from "@mui/icons-material/Add";
@@ -39,86 +45,98 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
   const invitations = invitationsData?.data || [];
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8">
-      {/* Greeting */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">
+    <Container maxWidth="lg" disableGutters>
+      <Stack spacing={4}>
+        {/* Greeting */}
+        <Typography variant="h5" fontWeight={700} color="text.primary">
           {getGreeting()}, {userName.split(" ")[0]}! 👋
-        </h1>
-      </div>
+        </Typography>
 
-      {/* Pending Invitations */}
-      {invitations.length > 0 && (
-        <section>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-            📩 Pending Invitations
-            <Chip label={invitations.length} size="small" color="primary" />
-          </h2>
-          <div className="space-y-3">
-            {invitations.map((inv: Record<string, unknown>) => (
-              <InvitationCard
-                key={inv._id as string}
-                invitation={inv}
-                onAction={() => mutateInvitations()}
-              />
-            ))}
-          </div>
-        </section>
-      )}
+        {/* Pending Invitations */}
+        {invitations.length > 0 && (
+          <Box component="section">
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
+              <Typography variant="subtitle1" fontWeight={600} color="text.primary">
+                📩 Pending Invitations
+              </Typography>
+              <Chip label={invitations.length} size="small" color="primary" />
+            </Stack>
+            <Stack spacing={1.5}>
+              {invitations.map((inv: Record<string, unknown>) => (
+                <InvitationCard
+                  key={inv._id as string}
+                  invitation={inv}
+                  onAction={() => mutateInvitations()}
+                />
+              ))}
+            </Stack>
+          </Box>
+        )}
 
-      {/* Groups */}
-      <section>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-gray-900">Your Groups</h2>
-          <Button
-            component={Link}
-            href="/groups/new"
-            variant="contained"
-            startIcon={<AddIcon />}
-            size="small"
-            sx={{ backgroundColor: "#6C63FF", "&:hover": { backgroundColor: "#5A52D5" } }}
-          >
-            New Group
-          </Button>
-        </div>
-
-        {groupsLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="bg-white rounded-xl p-6 animate-pulse h-36"
-              />
-            ))}
-          </div>
-        ) : groups.length === 0 ? (
-          <div className="bg-white rounded-xl p-12 text-center">
-            <span className="text-4xl mb-4 block">👥</span>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              No groups yet
-            </h3>
-            <p className="text-gray-500 mb-4">
-              Create your first group to start splitting expenses!
-            </p>
+        {/* Groups */}
+        <Box component="section">
+          <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
+            <Typography variant="subtitle1" fontWeight={600} color="text.primary">
+              Your Groups
+            </Typography>
             <Button
               component={Link}
               href="/groups/new"
               variant="contained"
               startIcon={<AddIcon />}
-              sx={{ backgroundColor: "#6C63FF", "&:hover": { backgroundColor: "#5A52D5" } }}
+              size="small"
             >
-              Create Group
+              New Group
             </Button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {groups.map((group: Record<string, unknown>) => (
-              <GroupCard key={group._id as string} group={group} userId={userId} />
-            ))}
-          </div>
-        )}
-      </section>
-    </div>
+          </Stack>
+
+          {groupsLoading ? (
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", lg: "1fr 1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} variant="rounded" height={144} />
+              ))}
+            </Box>
+          ) : groups.length === 0 ? (
+            <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
+              <Typography component="span" sx={{ fontSize: "2.5rem", display: "block", mb: 2 }}>
+                👥
+              </Typography>
+              <Typography variant="subtitle1" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
+                No groups yet
+              </Typography>
+              <Typography color="text.secondary" sx={{ mb: 2 }}>
+                Create your first group to start splitting expenses!
+              </Typography>
+              <Button
+                component={Link}
+                href="/groups/new"
+                variant="contained"
+                startIcon={<AddIcon />}
+              >
+                Create Group
+              </Button>
+            </Paper>
+          ) : (
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", lg: "1fr 1fr 1fr" },
+                gap: 2,
+              }}
+            >
+              {groups.map((group: Record<string, unknown>) => (
+                <GroupCard key={group._id as string} group={group} userId={userId} />
+              ))}
+            </Box>
+          )}
+        </Box>
+      </Stack>
+    </Container>
   );
 }
-

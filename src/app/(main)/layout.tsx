@@ -16,9 +16,9 @@ export default async function MainLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
       <Navbar user={session.user} />
-      <div className="flex">
+      <Box sx={{ display: "flex" }}>
         <Sidebar />
         <Box
           component="main"
@@ -30,8 +30,7 @@ export default async function MainLayout({
         >
           {children}
         </Box>
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
-

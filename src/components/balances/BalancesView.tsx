@@ -2,6 +2,11 @@
 
 import useSWR from "swr";
 import { useState } from "react";
+import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Skeleton from "@mui/material/Skeleton";
 import Button from "@mui/material/Button";
 import { formatCurrency } from "@/lib/utils/currency";
 import SettleUpDialog from "@/components/settlements/SettleUpDialog";
@@ -35,105 +40,119 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
 
   if (isLoading) {
     return (
-      <div className="space-y-3">
+      <Stack spacing={1.5}>
         {[1, 2, 3].map((i) => (
-          <div key={i} className="bg-white rounded-xl p-4 animate-pulse h-16" />
+          <Skeleton key={i} variant="rounded" height={64} />
         ))}
-      </div>
+      </Stack>
     );
   }
 
   if (balances.length === 0) {
     return (
-      <div className="bg-white rounded-xl p-12 text-center">
-        <span className="text-4xl mb-4 block">⚖️</span>
-        <h3 className="text-lg font-medium text-gray-900 mb-2">All settled up!</h3>
-        <p className="text-gray-500">No outstanding balances in this group.</p>
-      </div>
+      <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
+        <Typography component="span" sx={{ fontSize: "2.5rem", display: "block", mb: 2 }}>⚖️</Typography>
+        <Typography variant="subtitle1" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
+          All settled up!
+        </Typography>
+        <Typography color="text.secondary">No outstanding balances in this group.</Typography>
+      </Paper>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <Stack spacing={3}>
       {/* Your Balance */}
       {userBalance && (
-        <div className="bg-white rounded-xl p-6 border border-gray-100">
-          <p className="text-sm text-gray-500 mb-1">Your balance</p>
-          <p
-            className={`text-2xl font-bold ${
-              userBalance.balance > 0
-                ? "text-green-600"
+        <Paper variant="outlined" sx={{ p: 3 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
+            Your balance
+          </Typography>
+          <Typography
+            variant="h5"
+            fontWeight={700}
+            sx={{
+              color: userBalance.balance > 0
+                ? "success.main"
                 : userBalance.balance < 0
-                  ? "text-red-500"
-                  : "text-gray-500"
-            }`}
+                  ? "error.main"
+                  : "text.secondary",
+            }}
           >
             {userBalance.balance > 0
               ? `+${formatCurrency(userBalance.balance, currency)}`
               : userBalance.balance < 0
                 ? formatCurrency(userBalance.balance, currency)
                 : "All settled ✓"}
-          </p>
-          <p className="text-xs text-gray-500 mt-1">
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
             {userBalance.balance > 0
               ? "Others owe you"
               : userBalance.balance < 0
                 ? "You owe others"
                 : ""}
-          </p>
-        </div>
+          </Typography>
+        </Paper>
       )}
 
       {/* Member Balances */}
-      <div>
-        <h3 className="text-sm font-semibold text-gray-700 mb-3">Member Balances</h3>
-        <div className="space-y-2">
+      <Box>
+        <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ mb: 1.5 }}>
+          Member Balances
+        </Typography>
+        <Stack spacing={1}>
           {balances.map((b: { user: { _id: string; name: string; image?: string }; balance: number }) => (
-            <div
+            <Paper
               key={b.user._id}
-              className="bg-white rounded-xl px-4 py-3 border border-gray-100 flex items-center justify-between"
+              variant="outlined"
+              sx={{ px: 2, py: 1.5, display: "flex", alignItems: "center", justifyContent: "space-between" }}
             >
-              <span className="text-sm text-gray-900">{b.user._id === userId ? "You" : b.user.name}</span>
-              <span
-                className={`text-sm font-semibold ${
-                  b.balance > 0 ? "text-green-600" : b.balance < 0 ? "text-red-500" : "text-gray-400"
-                }`}
+              <Typography variant="body2" color="text.primary">
+                {b.user._id === userId ? "You" : b.user.name}
+              </Typography>
+              <Typography
+                variant="body2"
+                fontWeight={600}
+                sx={{
+                  color: b.balance > 0 ? "success.main" : b.balance < 0 ? "error.main" : "text.disabled",
+                }}
               >
                 {b.balance > 0
                   ? `+${formatCurrency(b.balance, currency)}`
                   : b.balance < 0
                     ? formatCurrency(b.balance, currency)
                     : "Settled ✓"}
-              </span>
-            </div>
+              </Typography>
+            </Paper>
           ))}
-        </div>
-      </div>
+        </Stack>
+      </Box>
 
       {/* Simplified Debts */}
       {debts.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-gray-700 mb-3">
+        <Box>
+          <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ mb: 1.5 }}>
             Simplified Debts ({debts.length} payment{debts.length !== 1 ? "s" : ""} to settle)
-          </h3>
-          <div className="space-y-2">
+          </Typography>
+          <Stack spacing={1}>
             {debts.map((d: { from: { _id: string; name: string }; to: { _id: string; name: string }; amount: number }, i: number) => (
-              <div
+              <Paper
                 key={i}
-                className="bg-white rounded-xl px-4 py-3 border border-gray-100 flex items-center justify-between"
+                variant="outlined"
+                sx={{ px: 2, py: 1.5, display: "flex", alignItems: "center", justifyContent: "space-between" }}
               >
-                <div className="text-sm">
-                  <span className="font-medium text-gray-900">
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Typography variant="body2" fontWeight={500} color="text.primary">
                     {d.from._id === userId ? "You" : d.from.name}
-                  </span>
-                  <span className="text-gray-400 mx-2">→</span>
-                  <span className="font-medium text-gray-900">
+                  </Typography>
+                  <Typography variant="body2" color="text.disabled">→</Typography>
+                  <Typography variant="body2" fontWeight={500} color="text.primary">
                     {d.to._id === userId ? "You" : d.to.name}
-                  </span>
-                  <span className="ml-2 font-semibold text-red-500">
+                  </Typography>
+                  <Typography variant="body2" fontWeight={600} color="error.main" sx={{ ml: 1 }}>
                     {formatCurrency(d.amount, currency)}
-                  </span>
-                </div>
+                  </Typography>
+                </Box>
                 {d.from._id === userId && (
                   <Button
                     size="small"
@@ -142,19 +161,19 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                       setSettleDialog({ open: true, toUser: d.to, amount: d.amount })
                     }
                     sx={{
-                      borderColor: "#00BFA5",
-                      color: "#00BFA5",
-                      "&:hover": { borderColor: "#009688", backgroundColor: "rgba(0,191,165,0.04)" },
+                      borderColor: "secondary.main",
+                      color: "secondary.main",
+                      "&:hover": { borderColor: "secondary.dark", backgroundColor: "rgba(0,191,165,0.04)" },
                       fontSize: 12,
                     }}
                   >
                     Settle Up
                   </Button>
                 )}
-              </div>
+              </Paper>
             ))}
-          </div>
-        </div>
+          </Stack>
+        </Box>
       )}
 
       <SettleUpDialog
@@ -166,7 +185,6 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
         defaultAmount={settleDialog.amount}
         onSettled={() => mutate()}
       />
-    </div>
+    </Stack>
   );
 }
-

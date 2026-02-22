@@ -1,6 +1,11 @@
 "use client";
 
 import useSWR from "swr";
+import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Skeleton from "@mui/material/Skeleton";
 import Button from "@mui/material/Button";
 import { formatDateTime } from "@/lib/utils/date";
 import { formatCurrency } from "@/lib/utils/currency";
@@ -60,46 +65,54 @@ export default function ActivityView({ groupId }: ActivityViewProps) {
 
   if (isLoading) {
     return (
-      <div className="space-y-3">
+      <Stack spacing={1.5}>
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-white rounded-xl p-4 animate-pulse h-16" />
+          <Skeleton key={i} variant="rounded" height={64} />
         ))}
-      </div>
+      </Stack>
     );
   }
 
   if (activities.length === 0) {
     return (
-      <div className="bg-white rounded-xl p-12 text-center">
-        <span className="text-4xl mb-4 block">📝</span>
-        <h3 className="text-lg font-medium text-gray-900 mb-2">No activity yet</h3>
-        <p className="text-gray-500">Actions in this group will appear here.</p>
-      </div>
+      <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
+        <Typography component="span" sx={{ fontSize: "2.5rem", display: "block", mb: 2 }}>
+          📝
+        </Typography>
+        <Typography variant="subtitle1" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
+          No activity yet
+        </Typography>
+        <Typography color="text.secondary">Actions in this group will appear here.</Typography>
+      </Paper>
     );
   }
 
   return (
-    <div className="space-y-2">
+    <Stack spacing={1}>
       {activities.map((activity: Record<string, unknown>) => {
         const type = activity.type as string;
         const icon = ACTIVITY_ICONS[type] || "📋";
 
         return (
-          <div
+          <Paper
             key={activity._id as string}
-            className="bg-white rounded-xl px-4 py-3 border border-gray-100 flex items-start gap-3"
+            variant="outlined"
+            sx={{ px: 2, py: 1.5, display: "flex", alignItems: "flex-start", gap: 1.5 }}
           >
-            <span className="text-lg mt-0.5">{icon}</span>
-            <div className="flex-1">
-              <p className="text-sm text-gray-900">{getActivityText(activity)}</p>
-              <p className="text-xs text-gray-400 mt-0.5">
+            <Typography component="span" sx={{ fontSize: "1.125rem", mt: 0.25 }}>
+              {icon}
+            </Typography>
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="body2" color="text.primary">
+                {getActivityText(activity)}
+              </Typography>
+              <Typography variant="caption" color="text.disabled" sx={{ mt: 0.25 }}>
                 {formatDateTime(activity.createdAt as string)}
-              </p>
-            </div>
-          </div>
+              </Typography>
+            </Box>
+          </Paper>
         );
       })}
-    </div>
+    </Stack>
   );
 }
-

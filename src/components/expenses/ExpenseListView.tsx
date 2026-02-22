@@ -2,6 +2,11 @@
 
 import useSWR from "swr";
 import { useState, useMemo } from "react";
+import Box from "@mui/material/Box";
+import Paper from "@mui/material/Paper";
+import Stack from "@mui/material/Stack";
+import Typography from "@mui/material/Typography";
+import Skeleton from "@mui/material/Skeleton";
 import Chip from "@mui/material/Chip";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
@@ -41,7 +46,6 @@ interface ExpenseListViewProps {
 }
 
 export default function ExpenseListView({ groupId, userId, group }: ExpenseListViewProps) {
-  // Filters
   const [quickFilter, setQuickFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
@@ -51,24 +55,19 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
   const [showFilters, setShowFilters] = useState(false);
   const [page, setPage] = useState(1);
 
-  // Custom date range
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
-  // Inline expansion
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
 
-  // Edit / Delete state
   const [editingExpense, setEditingExpense] = useState<Record<string, unknown> | null>(null);
   const [deletingExpense, setDeletingExpense] = useState<Record<string, unknown> | null>(null);
 
-  // Undo snackbar
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; expenseId?: string }>({
     open: false,
     message: "",
   });
 
-  // Custom date range validation
   const dateRangeError = useMemo(() => {
     if (quickFilter !== "custom") return "";
     if (dateFrom && dateTo) {
@@ -81,7 +80,6 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
     return "";
   }, [quickFilter, dateFrom, dateTo]);
 
-  // Build query params
   const params = new URLSearchParams();
   if (quickFilter === "custom") {
     if (dateFrom) params.set("dateFrom", dateFrom);
@@ -97,7 +95,6 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
   params.set("page", String(page));
   params.set("limit", "20");
 
-  // Don't fetch if custom date range has validation errors
   const shouldFetch = !(quickFilter === "custom" && dateRangeError);
 
   const { data, isLoading, isValidating, mutate } = useSWR(
@@ -112,10 +109,8 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
 
   const currency = group.defaultCurrency as string;
 
-  // Active filter count
   const activeFilterCount = [category, tagFilter, quickFilter !== "all" ? quickFilter : "", search].filter(Boolean).length;
 
-  // Group expenses by date
   const groupedExpenses: Record<string, Array<Record<string, unknown>>> = {};
   for (const expense of expenses) {
     const dateKey = formatDate(expense.date);
@@ -123,7 +118,6 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
     groupedExpenses[dateKey].push(expense);
   }
 
-  // Handlers
   const handleDeleted = (expenseId: string) => {
     mutate();
     if (expandedExpenseId === expenseId) setExpandedExpenseId(null);
@@ -159,9 +153,9 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
   const showLoadingIndicator = isValidating && hasData;
 
   return (
-    <div className="space-y-4">
+    <Stack spacing={2}>
       {/* Quick Filters */}
-      <div className="flex gap-2 overflow-x-auto pb-2">
+      <Stack direction="row" spacing={1} sx={{ overflowX: "auto", pb: 1 }}>
         {QUICK_FILTERS.map((f) => (
           <Chip
             key={f.id}
@@ -170,56 +164,58 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
             onClick={() => handleQuickFilterChange(f.id)}
             sx={{
               ...(quickFilter === f.id
-                ? { backgroundColor: "#6C63FF", color: "white" }
+                ? { backgroundColor: "primary.main", color: "white" }
                 : {}),
               flexShrink: 0,
             }}
           />
         ))}
-      </div>
+      </Stack>
 
       {/* Custom Date Range */}
       {quickFilter === "custom" && (
-        <div className="bg-white rounded-xl p-4 border border-gray-100 space-y-3">
-          <div className="flex gap-3 items-end">
-            <TextField
-              label="From"
-              type="date"
-              value={dateFrom}
-              onChange={(e) => {
-                setDateFrom(e.target.value);
-                setPage(1);
-              }}
-              size="small"
-              sx={{ flex: 1 }}
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-            <TextField
-              label="To"
-              type="date"
-              value={dateTo}
-              onChange={(e) => {
-                setDateTo(e.target.value);
-                setPage(1);
-              }}
-              size="small"
-              sx={{ flex: 1 }}
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-          </div>
-          {dateRangeError && (
-            <p className="text-xs text-red-500">{dateRangeError}</p>
-          )}
-          {!dateRangeError && dateFrom && dateTo && (
-            <p className="text-xs text-gray-500">
-              {Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24))} days selected (max 31)
-            </p>
-          )}
-        </div>
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Stack spacing={1.5}>
+            <Stack direction="row" spacing={1.5} alignItems="flex-end">
+              <TextField
+                label="From"
+                type="date"
+                value={dateFrom}
+                onChange={(e) => {
+                  setDateFrom(e.target.value);
+                  setPage(1);
+                }}
+                size="small"
+                sx={{ flex: 1 }}
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+              <TextField
+                label="To"
+                type="date"
+                value={dateTo}
+                onChange={(e) => {
+                  setDateTo(e.target.value);
+                  setPage(1);
+                }}
+                size="small"
+                sx={{ flex: 1 }}
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+            </Stack>
+            {dateRangeError && (
+              <Typography variant="caption" color="error.main">{dateRangeError}</Typography>
+            )}
+            {!dateRangeError && dateFrom && dateTo && (
+              <Typography variant="caption" color="text.secondary">
+                {Math.ceil((new Date(dateTo).getTime() - new Date(dateFrom).getTime()) / (1000 * 60 * 60 * 24))} days selected (max 31)
+              </Typography>
+            )}
+          </Stack>
+        </Paper>
       )}
 
       {/* Search + Filter toggle + Sort */}
-      <div className="flex gap-2 items-center">
+      <Stack direction="row" spacing={1} alignItems="center">
         <TextField
           placeholder="Search expenses..."
           value={search}
@@ -244,149 +240,165 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
           size="small"
           sx={{
             border: "1px solid",
-            borderColor: activeFilterCount > 0 ? "#6C63FF" : "divider",
+            borderColor: activeFilterCount > 0 ? "primary.main" : "divider",
             backgroundColor: activeFilterCount > 0 ? "rgba(108,99,255,0.08)" : "transparent",
           }}
         >
-          <FilterListIcon fontSize="small" sx={{ color: activeFilterCount > 0 ? "#6C63FF" : "inherit" }} />
+          <FilterListIcon fontSize="small" sx={{ color: activeFilterCount > 0 ? "primary.main" : "inherit" }} />
         </IconButton>
-      </div>
+      </Stack>
 
       {/* Expanded Filters */}
       {showFilters && (
-        <div className="bg-white rounded-xl p-4 border border-gray-100 space-y-3">
-          {/* Category */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-2">Category</label>
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
-              <Chip
-                label="All"
-                size="small"
-                variant={!category ? "filled" : "outlined"}
-                onClick={() => {
-                  setCategory("");
-                  setPage(1);
-                }}
-                sx={!category ? { backgroundColor: "#6C63FF", color: "white" } : {}}
-              />
-              {EXPENSE_CATEGORIES.map((c) => (
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Stack spacing={1.5}>
+            {/* Category */}
+            <Box>
+              <Typography variant="caption" fontWeight={500} color="text.secondary" sx={{ mb: 1, display: "block" }}>
+                Category
+              </Typography>
+              <Stack direction="row" spacing={0.75} sx={{ overflowX: "auto", pb: 0.5 }}>
                 <Chip
-                  key={c.id}
-                  label={`${c.icon} ${c.label}`}
+                  label="All"
                   size="small"
-                  variant={category === c.id ? "filled" : "outlined"}
+                  variant={!category ? "filled" : "outlined"}
                   onClick={() => {
-                    setCategory(category === c.id ? "" : c.id);
+                    setCategory("");
                     setPage(1);
                   }}
-                  sx={{
-                    flexShrink: 0,
-                    fontSize: 12,
-                    ...(category === c.id ? { backgroundColor: "#6C63FF", color: "white" } : {}),
-                  }}
+                  sx={!category ? { backgroundColor: "primary.main", color: "white" } : {}}
                 />
-              ))}
-            </div>
-          </div>
-
-          {/* Tag filter */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-2">Tag</label>
-            <div className="flex gap-1.5 overflow-x-auto pb-1">
-              <Chip
-                label="All"
-                size="small"
-                variant={!tagFilter ? "filled" : "outlined"}
-                onClick={() => {
-                  setTagFilter("");
-                  setPage(1);
-                }}
-                sx={!tagFilter ? { backgroundColor: "#6C63FF", color: "white" } : {}}
-              />
-              {((group.tags || []) as Array<{ _id: string; name: string; isArchived: boolean }>)
-                .filter((t) => !t.isArchived)
-                .map((t) => (
+                {EXPENSE_CATEGORIES.map((c) => (
                   <Chip
-                    key={t._id}
-                    label={t.name}
+                    key={c.id}
+                    label={`${c.icon} ${c.label}`}
                     size="small"
-                    variant={tagFilter === t.name ? "filled" : "outlined"}
+                    variant={category === c.id ? "filled" : "outlined"}
                     onClick={() => {
-                      setTagFilter(tagFilter === t.name ? "" : t.name);
+                      setCategory(category === c.id ? "" : c.id);
                       setPage(1);
                     }}
                     sx={{
                       flexShrink: 0,
                       fontSize: 12,
-                      ...(tagFilter === t.name ? { backgroundColor: "#6C63FF", color: "white" } : {}),
+                      ...(category === c.id ? { backgroundColor: "primary.main", color: "white" } : {}),
                     }}
                   />
                 ))}
-            </div>
-          </div>
+              </Stack>
+            </Box>
 
-          {/* Sort */}
-          <div className="flex gap-2 items-center">
-            <label className="text-xs font-medium text-gray-500">Sort by</label>
-            <TextField
-              select
-              value={sortBy}
-              onChange={(e) => {
-                setSortBy(e.target.value as "date" | "amount");
-                setPage(1);
-              }}
-              size="small"
-              sx={{ width: 120 }}
-            >
-              <MenuItem value="date">Date</MenuItem>
-              <MenuItem value="amount">Amount</MenuItem>
-            </TextField>
-            <IconButton
-              size="small"
-              onClick={() => setSortOrder(sortOrder === "desc" ? "asc" : "desc")}
-              title={sortOrder === "desc" ? "Descending" : "Ascending"}
-            >
-              {sortOrder === "desc" ? (
-                <ArrowDownwardIcon fontSize="small" />
-              ) : (
-                <ArrowUpwardIcon fontSize="small" />
-              )}
-            </IconButton>
-          </div>
-        </div>
+            {/* Tag filter */}
+            <Box>
+              <Typography variant="caption" fontWeight={500} color="text.secondary" sx={{ mb: 1, display: "block" }}>
+                Tag
+              </Typography>
+              <Stack direction="row" spacing={0.75} sx={{ overflowX: "auto", pb: 0.5 }}>
+                <Chip
+                  label="All"
+                  size="small"
+                  variant={!tagFilter ? "filled" : "outlined"}
+                  onClick={() => {
+                    setTagFilter("");
+                    setPage(1);
+                  }}
+                  sx={!tagFilter ? { backgroundColor: "primary.main", color: "white" } : {}}
+                />
+                {((group.tags || []) as Array<{ _id: string; name: string; isArchived: boolean }>)
+                  .filter((t) => !t.isArchived)
+                  .map((t) => (
+                    <Chip
+                      key={t._id}
+                      label={t.name}
+                      size="small"
+                      variant={tagFilter === t.name ? "filled" : "outlined"}
+                      onClick={() => {
+                        setTagFilter(tagFilter === t.name ? "" : t.name);
+                        setPage(1);
+                      }}
+                      sx={{
+                        flexShrink: 0,
+                        fontSize: 12,
+                        ...(tagFilter === t.name ? { backgroundColor: "primary.main", color: "white" } : {}),
+                      }}
+                    />
+                  ))}
+              </Stack>
+            </Box>
+
+            {/* Sort */}
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Typography variant="caption" fontWeight={500} color="text.secondary">
+                Sort by
+              </Typography>
+              <TextField
+                select
+                value={sortBy}
+                onChange={(e) => {
+                  setSortBy(e.target.value as "date" | "amount");
+                  setPage(1);
+                }}
+                size="small"
+                sx={{ width: 120 }}
+              >
+                <MenuItem value="date">Date</MenuItem>
+                <MenuItem value="amount">Amount</MenuItem>
+              </TextField>
+              <IconButton
+                size="small"
+                onClick={() => setSortOrder(sortOrder === "desc" ? "asc" : "desc")}
+                title={sortOrder === "desc" ? "Descending" : "Ascending"}
+              >
+                {sortOrder === "desc" ? (
+                  <ArrowDownwardIcon fontSize="small" />
+                ) : (
+                  <ArrowUpwardIcon fontSize="small" />
+                )}
+              </IconButton>
+            </Stack>
+          </Stack>
+        </Paper>
       )}
 
       {/* Summary Bar */}
       {summary && (
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Total expenses</p>
-              <p className="text-lg font-bold text-gray-900">
+        <Paper variant="outlined" sx={{ p: 2 }}>
+          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+            <Box>
+              <Typography variant="caption" fontWeight={500} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Total expenses
+              </Typography>
+              <Typography variant="h6" fontWeight={700} color="text.primary">
                 {formatCurrency(summary.totalAmount || 0, currency)}
-              </p>
-              <p className="text-xs text-gray-400">{summary.count || 0} expense{(summary.count || 0) !== 1 ? "s" : ""}</p>
-            </div>
-            <div className="text-right">
+              </Typography>
+              <Typography variant="caption" color="text.disabled">
+                {summary.count || 0} expense{(summary.count || 0) !== 1 ? "s" : ""}
+              </Typography>
+            </Box>
+            <Box sx={{ textAlign: "right" }}>
               {(summary.userOwes || 0) > 0.01 && (
-                <div className="mb-1">
-                  <p className="text-xs font-medium text-red-500 uppercase tracking-wide">You owe</p>
-                  <p className="text-lg font-bold text-red-500">
+                <Box sx={{ mb: 0.5 }}>
+                  <Typography variant="caption" fontWeight={500} color="error.main" sx={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    You owe
+                  </Typography>
+                  <Typography variant="h6" fontWeight={700} color="error.main">
                     {formatCurrency(summary.userOwes, currency)}
-                  </p>
-                </div>
+                  </Typography>
+                </Box>
               )}
               {(summary.userGetsBack || 0) > 0.01 && (
-                <div>
-                  <p className="text-xs font-medium text-green-600 uppercase tracking-wide">You get back</p>
-                  <p className="text-lg font-bold text-green-600">
+                <Box>
+                  <Typography variant="caption" fontWeight={500} color="success.main" sx={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    You get back
+                  </Typography>
+                  <Typography variant="h6" fontWeight={700} color="success.main">
                     {formatCurrency(summary.userGetsBack, currency)}
-                  </p>
-                </div>
+                  </Typography>
+                </Box>
               )}
-            </div>
-          </div>
-        </div>
+            </Box>
+          </Box>
+        </Paper>
       )}
 
       {/* Loading Indicator (non-blocking) */}
@@ -395,7 +407,7 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
           sx={{
             height: 2,
             borderRadius: 1,
-            "& .MuiLinearProgress-bar": { backgroundColor: "#6C63FF" },
+            "& .MuiLinearProgress-bar": { backgroundColor: "primary.main" },
             backgroundColor: "rgba(108,99,255,0.1)",
           }}
         />
@@ -403,27 +415,33 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
 
       {/* Expenses List */}
       {showSkeleton ? (
-        <div className="space-y-3">
+        <Stack spacing={1.5}>
           {[1, 2, 3].map((i) => (
-            <div key={i} className="bg-white rounded-xl p-4 animate-pulse h-20" />
+            <Skeleton key={i} variant="rounded" height={80} />
           ))}
-        </div>
+        </Stack>
       ) : expenses.length === 0 ? (
-        <div className="bg-white rounded-xl p-12 text-center">
-          <span className="text-4xl mb-4 block">🧾</span>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No expenses yet</h3>
-          <p className="text-gray-500">
+        <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
+          <Typography component="span" sx={{ fontSize: "2.5rem", display: "block", mb: 2 }}>
+            🧾
+          </Typography>
+          <Typography variant="subtitle1" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
+            No expenses yet
+          </Typography>
+          <Typography color="text.secondary">
             {search || quickFilter !== "all" || category || tagFilter
               ? "No expenses match your filters."
               : "Add your first expense using the + button below."}
-          </p>
-        </div>
+          </Typography>
+        </Paper>
       ) : (
-        <div className={`space-y-6 transition-opacity ${showLoadingIndicator ? "opacity-60" : "opacity-100"}`}>
+        <Stack spacing={3} sx={{ transition: "opacity 0.2s", opacity: showLoadingIndicator ? 0.6 : 1 }}>
           {Object.entries(groupedExpenses).map(([date, exps]) => (
-            <div key={date}>
-              <h3 className="text-sm font-medium text-gray-500 mb-2">{date}</h3>
-              <div className="space-y-2">
+            <Box key={date}>
+              <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1 }}>
+                {date}
+              </Typography>
+              <Stack spacing={1}>
                 {exps.map((expense) => (
                   <ExpenseCard
                     key={expense._id as string}
@@ -439,22 +457,22 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
                     onDelete={(exp) => setDeletingExpense(exp)}
                   />
                 ))}
-              </div>
-            </div>
+              </Stack>
+            </Box>
           ))}
 
           {/* Pagination */}
           {pagination && pagination.totalPages > 1 && (
-            <div className="flex justify-center pt-4">
+            <Box sx={{ display: "flex", justifyContent: "center", pt: 2 }}>
               <Pagination
                 count={pagination.totalPages}
                 page={page}
                 onChange={(_, p) => setPage(p)}
                 color="primary"
               />
-            </div>
+            </Box>
           )}
-        </div>
+        </Stack>
       )}
 
       {/* Edit Expense Dialog */}
@@ -490,6 +508,6 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
           ) : undefined
         }
       />
-    </div>
+    </Stack>
   );
 }
