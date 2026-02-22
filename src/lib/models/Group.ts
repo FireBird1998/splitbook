@@ -75,7 +75,7 @@ const GroupSchema = new Schema<IGroupDocument>(
       default: "other",
     },
     isArchived: { type: Boolean, default: false },
-    inviteCode: { type: String, default: null, sparse: true },
+    inviteCode: { type: String, default: null },
     inviteCodeExpiresAt: { type: Date, default: null },
   },
   {
