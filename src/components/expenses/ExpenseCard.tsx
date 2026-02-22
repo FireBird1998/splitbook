@@ -134,33 +134,35 @@ export default function ExpenseCard({
         direction="row"
         alignItems="flex-start"
         justifyContent="space-between"
-        sx={{ p: 2, cursor: "pointer" }}
+        sx={{ p: { xs: 1.5, sm: 2 }, cursor: "pointer" }}
         onClick={onToggleExpand}
       >
-        <Stack direction="row" alignItems="flex-start" spacing={1.5} sx={{ flex: 1, minWidth: 0 }}>
-          <Typography component="span" sx={{ fontSize: "1.5rem", mt: 0.25 }}>{icon}</Typography>
+        <Stack direction="row" alignItems="flex-start" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
+          <Typography component="span" sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" }, mt: 0.25 }}>{icon}</Typography>
           <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography variant="body2" fontWeight={500} color="text.primary" noWrap>
+            <Typography variant="body2" fontWeight={500} color="text.primary" noWrap sx={{ fontSize: { xs: 13, sm: 14 } }}>
               {expense.description as string}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, fontSize: { xs: 11, sm: 12 }, display: { xs: "none", sm: "block" } }}>
               {payerName} paid{" "}
               {formatCurrency(expense.amount as number, expense.currency as string)}
               {paidBy.length > 1 && ` (+${paidBy.length - 1} more)`}
               {" · "}Split {splitBetween.length} way{splitBetween.length !== 1 ? "s" : ""}
             </Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, fontSize: 11, display: { xs: "block", sm: "none" } }}>
+              {payerName} paid · {splitBetween.length} way{splitBetween.length !== 1 ? "s" : ""}
+            </Typography>
           </Box>
         </Stack>
-        <Stack direction="row" alignItems="flex-start" spacing={0.5} sx={{ flexShrink: 0 }}>
+        <Stack direction="row" alignItems="flex-start" spacing={0.5} sx={{ flexShrink: 0, ml: 0.5 }}>
           <Box sx={{ textAlign: "right" }}>
-            <Typography variant="body2" fontWeight={600} color="text.primary">
+            <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ fontSize: { xs: 13, sm: 14 } }}>
               {formatCurrency(expense.amount as number, expense.currency as string)}
             </Typography>
             {Math.abs(userOwes) >= 0.01 && (
               <Typography
-                variant="caption"
                 fontWeight={500}
-                sx={{ color: userOwes > 0 ? "error.main" : "success.main" }}
+                sx={{ color: userOwes > 0 ? "error.main" : "success.main", fontSize: { xs: 10, sm: 12 } }}
               >
                 {userOwes > 0
                   ? `You owe ${formatCurrency(userOwes, expense.currency as string)}`

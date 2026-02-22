@@ -155,13 +155,25 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
   return (
     <Stack spacing={2}>
       {/* Quick Filters */}
-      <Stack direction="row" spacing={1} sx={{ overflowX: "auto", pb: 1 }}>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{
+          overflowX: "auto",
+          pb: 1,
+          "&::-webkit-scrollbar": { height: 4 },
+          "&::-webkit-scrollbar-track": { bgcolor: "transparent" },
+          "&::-webkit-scrollbar-thumb": { bgcolor: "grey.300", borderRadius: 2 },
+          scrollbarWidth: "thin",
+        }}
+      >
         {QUICK_FILTERS.map((f) => (
           <Chip
             key={f.id}
             label={f.label}
             variant={quickFilter === f.id ? "filled" : "outlined"}
             onClick={() => handleQuickFilterChange(f.id)}
+            size="small"
             sx={{
               ...(quickFilter === f.id
                 ? { backgroundColor: "primary.main", color: "white" }
@@ -363,25 +375,31 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
       {/* Summary Bar */}
       {summary && (
         <Paper variant="outlined" sx={{ p: 2 }}>
-          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+              gap: { xs: 1.5, sm: 2 },
+            }}
+          >
             <Box>
               <Typography variant="caption" fontWeight={500} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
                 Total expenses
               </Typography>
-              <Typography variant="h6" fontWeight={700} color="text.primary">
+              <Typography fontWeight={700} color="text.primary" sx={{ fontSize: { xs: "1.1rem", sm: "1.25rem" } }}>
                 {formatCurrency(summary.totalAmount || 0, currency)}
               </Typography>
               <Typography variant="caption" color="text.disabled">
                 {summary.count || 0} expense{(summary.count || 0) !== 1 ? "s" : ""}
               </Typography>
             </Box>
-            <Box sx={{ textAlign: "right" }}>
+            <Box sx={{ textAlign: { xs: "left", sm: "right" } }}>
               {(summary.userOwes || 0) > 0.01 && (
                 <Box sx={{ mb: 0.5 }}>
                   <Typography variant="caption" fontWeight={500} color="error.main" sx={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
                     You owe
                   </Typography>
-                  <Typography variant="h6" fontWeight={700} color="error.main">
+                  <Typography fontWeight={700} color="error.main" sx={{ fontSize: { xs: "1.1rem", sm: "1.25rem" } }}>
                     {formatCurrency(summary.userOwes, currency)}
                   </Typography>
                 </Box>
@@ -391,7 +409,7 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
                   <Typography variant="caption" fontWeight={500} color="success.main" sx={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
                     You get back
                   </Typography>
-                  <Typography variant="h6" fontWeight={700} color="success.main">
+                  <Typography fontWeight={700} color="success.main" sx={{ fontSize: { xs: "1.1rem", sm: "1.25rem" } }}>
                     {formatCurrency(summary.userGetsBack, currency)}
                   </Typography>
                 </Box>

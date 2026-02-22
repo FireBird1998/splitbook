@@ -25,7 +25,7 @@ export default function Sidebar() {
         flexDirection: "column",
         width: 240,
         position: "fixed",
-        top: 64,
+        top: 56,
         bottom: 0,
         borderRight: 1,
         borderColor: "divider",

@@ -47,9 +47,11 @@ export default function Navbar({ user }: NavbarProps) {
       <Box
         component="nav"
         sx={{
-          position: "sticky",
+          position: "fixed",
           top: 0,
-          zIndex: 50,
+          left: 0,
+          right: 0,
+          zIndex: (theme) => theme.zIndex.appBar,
           bgcolor: "background.paper",
           borderBottom: 1,
           borderColor: "divider",

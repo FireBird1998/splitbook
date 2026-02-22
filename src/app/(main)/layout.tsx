@@ -16,16 +16,20 @@ export default async function MainLayout({
   }
 
   return (
-    <Box sx={{ minHeight: "100vh", bgcolor: "background.default" }}>
+    <Box sx={{ minHeight: "100vh", bgcolor: "background.default", overflowX: "hidden" }}>
       <Navbar user={session.user} />
+      {/* Spacer for fixed navbar */}
+      <Box sx={{ height: 56 }} />
       <Box sx={{ display: "flex" }}>
         <Sidebar />
         <Box
           component="main"
           sx={{
             flex: 1,
-            p: 3,
+            p: { xs: 2, sm: 3 },
             ml: { xs: 0, lg: "240px" },
+            minWidth: 0,
+            maxWidth: "100%",
           }}
         >
           {children}

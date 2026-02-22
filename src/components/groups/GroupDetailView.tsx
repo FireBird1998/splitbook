@@ -85,57 +85,69 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
   const category = group.category as string;
 
   return (
-    <Container maxWidth="lg" disableGutters>
+    <Container maxWidth="lg" disableGutters sx={{ overflow: "hidden" }}>
       {/* Header */}
-      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" sx={{ mb: 3 }}>
-        <Stack direction="row" alignItems="center" spacing={1.5}>
-          <IconButton component={Link} href="/groups" size="small">
-            <ArrowBackIcon />
-          </IconButton>
-          <Box>
-            <Stack direction="row" alignItems="center" spacing={1}>
-              <Typography component="span" sx={{ fontSize: "1.5rem" }}>
-                {CATEGORY_ICONS[category] || "📋"}
-              </Typography>
-              <Typography variant="h5" fontWeight={700} color="text.primary">
-                {group.name}
-              </Typography>
-            </Stack>
-            <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mt: 0.5 }}>
-              <Chip label={category} size="small" variant="outlined" />
-              <AvatarGroup
-                max={5}
-                sx={{ "& .MuiAvatar-root": { width: 24, height: 24, fontSize: 11 } }}
-              >
-                {members.map((m) => (
-                  <Avatar key={m.user._id} src={m.user.image} alt={m.user.name} sx={{ width: 24, height: 24 }}>
-                    {m.user.name?.[0]}
-                  </Avatar>
-                ))}
-              </AvatarGroup>
-              <Typography variant="body2" color="text.secondary">
-                {members.length} member{members.length !== 1 ? "s" : ""}
-              </Typography>
-            </Stack>
-          </Box>
+      <Box sx={{ mb: 3 }}>
+        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <IconButton component={Link} href="/groups" size="small">
+              <ArrowBackIcon />
+            </IconButton>
+            <Typography component="span" sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" } }}>
+              {CATEGORY_ICONS[category] || "📋"}
+            </Typography>
+            <Typography
+              variant="h5"
+              fontWeight={700}
+              color="text.primary"
+              sx={{ fontSize: { xs: "1.15rem", sm: "1.5rem" } }}
+              noWrap
+            >
+              {group.name}
+            </Typography>
+          </Stack>
+          <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+            <IconButton onClick={() => setInviteDialogOpen(true)} size="small" title="Invite">
+              <ShareIcon />
+            </IconButton>
+            <IconButton component={Link} href={`/groups/${groupId}/settings`} size="small" title="Settings">
+              <SettingsIcon />
+            </IconButton>
+          </Stack>
         </Stack>
-        <Stack direction="row" spacing={0.5}>
-          <IconButton onClick={() => setInviteDialogOpen(true)} size="small" title="Invite">
-            <ShareIcon />
-          </IconButton>
-          <IconButton component={Link} href={`/groups/${groupId}/settings`} size="small" title="Settings">
-            <SettingsIcon />
-          </IconButton>
+        <Stack
+          direction="row"
+          alignItems="center"
+          spacing={1}
+          sx={{ pl: { xs: 1, sm: 5.5 }, flexWrap: "wrap", rowGap: 0.5 }}
+        >
+          <Chip label={category} size="small" variant="outlined" />
+          <AvatarGroup
+            max={4}
+            sx={{ "& .MuiAvatar-root": { width: 24, height: 24, fontSize: 11 } }}
+          >
+            {members.map((m) => (
+              <Avatar key={m.user._id} src={m.user.image} alt={m.user.name} sx={{ width: 24, height: 24 }}>
+                {m.user.name?.[0]}
+              </Avatar>
+            ))}
+          </AvatarGroup>
+          <Typography variant="body2" color="text.secondary">
+            {members.length} member{members.length !== 1 ? "s" : ""}
+          </Typography>
         </Stack>
-      </Stack>
+      </Box>
 
       {/* Tabs */}
       <Tabs
         value={tab}
         onChange={(_, v) => setTab(v)}
+        variant="scrollable"
+        scrollButtons="auto"
+        allowScrollButtonsMobile
         sx={{
           mb: 3,
-          "& .MuiTab-root": { textTransform: "none", fontWeight: 600 },
+          "& .MuiTab-root": { textTransform: "none", fontWeight: 600, minWidth: { xs: "auto", sm: 90 }, px: { xs: 2, sm: 3 } },
           "& .Mui-selected": { color: "primary.main" },
           "& .MuiTabs-indicator": { backgroundColor: "primary.main" },
         }}
