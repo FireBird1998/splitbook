@@ -16,6 +16,7 @@ import Snackbar from "@mui/material/Snackbar";
 import Button from "@mui/material/Button";
 import Pagination from "@mui/material/Pagination";
 import LinearProgress from "@mui/material/LinearProgress";
+import { alpha } from "@mui/material/styles";
 import SearchIcon from "@mui/icons-material/Search";
 import FilterListIcon from "@mui/icons-material/FilterList";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
@@ -253,7 +254,7 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
           sx={{
             border: "1px solid",
             borderColor: activeFilterCount > 0 ? "primary.main" : "divider",
-            backgroundColor: activeFilterCount > 0 ? "rgba(108,99,255,0.08)" : "transparent",
+            backgroundColor: (theme) => activeFilterCount > 0 ? alpha(theme.palette.primary.main, 0.08) : "transparent",
           }}
         >
           <FilterListIcon fontSize="small" sx={{ color: activeFilterCount > 0 ? "primary.main" : "inherit" }} />
@@ -426,7 +427,7 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
             height: 2,
             borderRadius: 1,
             "& .MuiLinearProgress-bar": { backgroundColor: "primary.main" },
-            backgroundColor: "rgba(108,99,255,0.1)",
+            backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
           }}
         />
       )}

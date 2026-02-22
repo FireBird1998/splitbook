@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
+import { alpha } from "@mui/material/styles";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import GroupIcon from "@mui/icons-material/Group";
 import SettingsIcon from "@mui/icons-material/Settings";
@@ -58,8 +59,7 @@ export default function Sidebar() {
                 transition: "background-color 0.15s, color 0.15s",
                 ...(isActive
                   ? {
-                      bgcolor: (theme) => `rgba(${theme.palette.primary.main}, 0.1)`,
-                      backgroundColor: "rgba(108,99,255,0.1)",
+                      bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
                       color: "primary.main",
                     }
                   : {

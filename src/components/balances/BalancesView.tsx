@@ -8,6 +8,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Skeleton from "@mui/material/Skeleton";
 import Button from "@mui/material/Button";
+import { alpha } from "@mui/material/styles";
 import { formatCurrency } from "@/lib/utils/currency";
 import SettleUpDialog from "@/components/settlements/SettleUpDialog";
 
@@ -163,7 +164,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                     sx={{
                       borderColor: "secondary.main",
                       color: "secondary.main",
-                      "&:hover": { borderColor: "secondary.dark", backgroundColor: "rgba(0,191,165,0.04)" },
+                      "&:hover": { borderColor: "secondary.dark", backgroundColor: (theme) => alpha(theme.palette.secondary.main, 0.04) },
                       fontSize: 12,
                     }}
                   >

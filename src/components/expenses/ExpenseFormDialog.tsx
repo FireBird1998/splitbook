@@ -874,7 +874,7 @@ export default function ExpenseFormDialog({
           onClick={handleSubmit}
           variant="contained"
           disabled={loading || !description.trim() || !amount || !tag}
-          sx={{ bgcolor: "primary.main", "&:hover": { bgcolor: "primary.dark" } }}
+          sx={{ bgcolor: "primary.main", color: "primary.contrastText", "&:hover": { bgcolor: "primary.dark" } }}
         >
           {loading ? <CircularProgress size={20} /> : isEditMode ? "Save Changes" : "Save Expense"}
         </Button>

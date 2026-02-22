@@ -25,6 +25,7 @@ import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
 import CircularProgress from "@mui/material/CircularProgress";
 import Snackbar from "@mui/material/Snackbar";
+import { alpha } from "@mui/material/styles";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import MoreVertIcon from "@mui/icons-material/MoreVert";
 import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
@@ -587,7 +588,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                       <Chip
                         label="Archived"
                         size="small"
-                        sx={{ fontSize: 10, height: 20, backgroundColor: "rgba(0,0,0,0.06)" }}
+                        sx={{ fontSize: 10, height: 20, backgroundColor: (theme) => alpha(theme.palette.text.primary, 0.06) }}
                       />
                     )}
                   </Stack>
@@ -724,7 +725,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                           fontSize: 10,
                           height: 20,
                           ...(m.role === "admin"
-                            ? { backgroundColor: "rgba(108,99,255,0.1)", color: "primary.main" }
+                            ? { backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1), color: "primary.main" }
                             : {}),
                         }}
                       />

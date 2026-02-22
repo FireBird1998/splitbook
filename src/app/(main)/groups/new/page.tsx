@@ -14,6 +14,7 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import CircularProgress from "@mui/material/CircularProgress";
 import Autocomplete from "@mui/material/Autocomplete";
+import { alpha } from "@mui/material/styles";
 import { CURRENCIES } from "@/lib/utils/currency";
 
 const CATEGORIES = [
@@ -133,7 +134,7 @@ export default function NewGroupPage() {
                     borderColor: "divider",
                     textTransform: "none",
                     "&.Mui-selected": {
-                      backgroundColor: "rgba(108,99,255,0.1)",
+                      backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
                       color: "primary.main",
                       borderColor: "primary.main",
                     },

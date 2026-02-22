@@ -21,7 +21,12 @@ import Drawer from "@mui/material/Drawer";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
+import Tooltip from "@mui/material/Tooltip";
+import { alpha } from "@mui/material/styles";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
 import { usePathname } from "next/navigation";
+import { useThemeMode } from "@/providers/ThemeProvider";
 
 interface NavbarProps {
   user: {
@@ -41,6 +46,7 @@ export default function Navbar({ user }: NavbarProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const pathname = usePathname();
+  const { mode, toggleTheme } = useThemeMode();
 
   return (
     <>
@@ -90,6 +96,15 @@ export default function Navbar({ user }: NavbarProps) {
           </Stack>
 
           <Stack direction="row" alignItems="center" spacing={1}>
+            <Tooltip title={mode === "light" ? "Dark mode" : "Light mode"}>
+              <IconButton onClick={toggleTheme} size="small">
+                {mode === "light" ? (
+                  <DarkModeIcon fontSize="small" />
+                ) : (
+                  <LightModeIcon fontSize="small" />
+                )}
+              </IconButton>
+            </Tooltip>
             <Typography
               variant="body2"
               sx={{
@@ -188,7 +203,7 @@ export default function Navbar({ user }: NavbarProps) {
                     borderRadius: 2,
                     mb: 0.5,
                     "&.Mui-selected": {
-                      backgroundColor: "rgba(108,99,255,0.1)",
+                      backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
                       color: "primary.main",
                     },
                   }}
