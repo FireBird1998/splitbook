@@ -59,7 +59,6 @@ The first page visitors see. Communicates the app's value proposition and has a 
 
 ## Components Used
 
-- Custom hero section (Tailwind)
-- Feature cards (Tailwind grid)
+- Custom hero section (MUI Box + Typography)
+- Feature cards (MUI Box grid via sx)
 - MUI Button for CTA
-

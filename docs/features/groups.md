@@ -18,13 +18,13 @@ Groups are the core organizing unit. Every expense, settlement, and activity bel
 
 ## Group Categories
 
-| Category | Icon   | Use Case                  |
-| -------- | ------ | ------------------------- |
-| trip     | ✈️     | Vacation / travel         |
-| home     | 🏠     | Roommates / household     |
-| couple   | 💑     | Partner expenses          |
-| work     | 💼     | Work-related splitting    |
-| other    | 📋     | Everything else           |
+| Category | Icon | Use Case               |
+| -------- | ---- | ---------------------- |
+| trip     | ✈️   | Vacation / travel      |
+| home     | 🏠   | Roommates / household  |
+| couple   | 💑   | Partner expenses       |
+| work     | 💼   | Work-related splitting |
+| other    | 📋   | Everything else        |
 
 ---
 
@@ -61,6 +61,7 @@ Groups are the core organizing unit. Every expense, settlement, and activity bel
 ```
 
 ### Tabs:
+
 - **Expenses** (default): Expense list with filters + "Add Expense" FAB
 - **Balances**: Balance summary + simplified debts + "Settle Up" button
 - **Activity**: Chronological activity feed
@@ -85,19 +86,19 @@ Only accessible to group admins.
 
 ## Roles & Permissions
 
-| Action              | Admin | Member |
-| ------------------- | ----- | ------ |
-| View group          | ✅    | ✅     |
-| Add expense         | ✅    | ✅     |
-| Edit own expense    | ✅    | ✅     |
-| Delete own expense  | ✅    | ✅     |
-| Edit others' expense| ✅    | ❌     |
-| Delete others' exp. | ✅    | ❌     |
-| Record settlement   | ✅    | ✅     |
-| Edit group settings | ✅    | ❌     |
-| Invite members      | ✅    | ✅     |
-| Remove members      | ✅    | ❌     |
-| Archive group       | ✅    | ❌     |
+| Action               | Admin | Member |
+| -------------------- | ----- | ------ |
+| View group           | ✅    | ✅     |
+| Add expense          | ✅    | ✅     |
+| Edit own expense     | ✅    | ✅     |
+| Delete own expense   | ✅    | ✅     |
+| Edit others' expense | ✅    | ❌     |
+| Delete others' exp.  | ✅    | ❌     |
+| Record settlement    | ✅    | ✅     |
+| Edit group settings  | ✅    | ❌     |
+| Invite members       | ✅    | ✅     |
+| Remove members       | ✅    | ❌     |
+| Archive group        | ✅    | ❌     |
 
 ---
 
@@ -115,4 +116,3 @@ See [api.md](../api.md#groups) for full endpoint documentation.
 - Deleting last admin → must promote another member first
 - Max group members: 50 (reasonable limit)
 - Archived groups appear in a separate "Archived" section
-

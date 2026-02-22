@@ -1,26 +1,26 @@
-"use client";
+'use client';
 
-import useSWR from "swr";
-import Box from "@mui/material/Box";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Skeleton from "@mui/material/Skeleton";
-import Button from "@mui/material/Button";
-import { formatDateTime } from "@/lib/utils/date";
-import { formatCurrency } from "@/lib/utils/currency";
+import useSWR from 'swr';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Skeleton from '@mui/material/Skeleton';
+import Button from '@mui/material/Button';
+import { formatDateTime } from '@/lib/utils/date';
+import { formatCurrency } from '@/lib/utils/currency';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 const ACTIVITY_ICONS: Record<string, string> = {
-  expense_added: "🧾",
-  expense_updated: "✏️",
-  expense_deleted: "🗑️",
-  settlement_recorded: "💰",
-  member_joined: "👤",
-  member_left: "👋",
-  group_created: "🎉",
-  group_updated: "⚙️",
+  expense_added: '🧾',
+  expense_updated: '✏️',
+  expense_deleted: '🗑️',
+  settlement_recorded: '💰',
+  member_joined: '👤',
+  member_left: '👋',
+  group_created: '🎉',
+  group_updated: '⚙️',
 };
 
 function getActivityText(activity: Record<string, unknown>): string {
@@ -29,21 +29,21 @@ function getActivityText(activity: Record<string, unknown>): string {
   const type = activity.type as string;
 
   switch (type) {
-    case "expense_added":
+    case 'expense_added':
       return `${actor.name} added "${meta.description}" — ${formatCurrency(meta.amount as number, meta.currency as string)}`;
-    case "expense_updated":
+    case 'expense_updated':
       return `${actor.name} updated "${meta.description}"`;
-    case "expense_deleted":
+    case 'expense_deleted':
       return `${actor.name} deleted "${meta.description}"`;
-    case "settlement_recorded":
+    case 'settlement_recorded':
       return `${actor.name} recorded a payment of ${formatCurrency(meta.amount as number, meta.currency as string)}`;
-    case "member_joined":
+    case 'member_joined':
       return `${actor.name} joined the group`;
-    case "member_left":
+    case 'member_left':
       return `${actor.name} left the group`;
-    case "group_created":
+    case 'group_created':
       return `${actor.name} created the group`;
-    case "group_updated":
+    case 'group_updated':
       return `${actor.name} updated the group`;
     default:
       return `${actor.name} performed an action`;
@@ -55,11 +55,9 @@ interface ActivityViewProps {
 }
 
 export default function ActivityView({ groupId }: ActivityViewProps) {
-  const { data, isLoading } = useSWR(
-    `/api/groups/${groupId}/activity?page=1&limit=50`,
-    fetcher,
-    { refreshInterval: 10_000 }
-  );
+  const { data, isLoading } = useSWR(`/api/groups/${groupId}/activity?page=1&limit=50`, fetcher, {
+    refreshInterval: 10_000,
+  });
 
   const activities = data?.data?.activities || [];
 
@@ -75,8 +73,8 @@ export default function ActivityView({ groupId }: ActivityViewProps) {
 
   if (activities.length === 0) {
     return (
-      <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-        <Typography component="span" sx={{ fontSize: "2.5rem", display: "block", mb: 2 }}>
+      <Paper variant="outlined" sx={{ p: 6, textAlign: 'center' }}>
+        <Typography component="span" sx={{ fontSize: '2.5rem', display: 'block', mb: 2 }}>
           📝
         </Typography>
         <Typography variant="subtitle1" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
@@ -91,15 +89,21 @@ export default function ActivityView({ groupId }: ActivityViewProps) {
     <Stack spacing={1}>
       {activities.map((activity: Record<string, unknown>) => {
         const type = activity.type as string;
-        const icon = ACTIVITY_ICONS[type] || "📋";
+        const icon = ACTIVITY_ICONS[type] || '📋';
 
         return (
           <Paper
             key={activity._id as string}
             variant="outlined"
-            sx={{ px: 2, py: 1.5, display: "flex", alignItems: "flex-start", gap: 1.5 }}
+            sx={{
+              px: 2,
+              py: 1.5,
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 1.5,
+            }}
           >
-            <Typography component="span" sx={{ fontSize: "1.125rem", mt: 0.25 }}>
+            <Typography component="span" sx={{ fontSize: '1.125rem', mt: 0.25 }}>
               {icon}
             </Typography>
             <Box sx={{ flex: 1 }}>

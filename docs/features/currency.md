@@ -58,26 +58,26 @@ We support major world currencies. Stored as ISO 4217 codes.
 
 ```typescript
 const CURRENCIES = [
-  { code: "USD", name: "US Dollar", symbol: "$", flag: "🇺🇸" },
-  { code: "EUR", name: "Euro", symbol: "€", flag: "🇪🇺" },
-  { code: "GBP", name: "British Pound", symbol: "£", flag: "🇬🇧" },
-  { code: "INR", name: "Indian Rupee", symbol: "₹", flag: "🇮🇳" },
-  { code: "JPY", name: "Japanese Yen", symbol: "¥", flag: "🇯🇵" },
-  { code: "CAD", name: "Canadian Dollar", symbol: "C$", flag: "🇨🇦" },
-  { code: "AUD", name: "Australian Dollar", symbol: "A$", flag: "🇦🇺" },
-  { code: "CHF", name: "Swiss Franc", symbol: "CHF", flag: "🇨🇭" },
-  { code: "CNY", name: "Chinese Yuan", symbol: "¥", flag: "🇨🇳" },
-  { code: "SGD", name: "Singapore Dollar", symbol: "S$", flag: "🇸🇬" },
-  { code: "THB", name: "Thai Baht", symbol: "฿", flag: "🇹🇭" },
-  { code: "MYR", name: "Malaysian Ringgit", symbol: "RM", flag: "🇲🇾" },
-  { code: "IDR", name: "Indonesian Rupiah", symbol: "Rp", flag: "🇮🇩" },
-  { code: "PHP", name: "Philippine Peso", symbol: "₱", flag: "🇵🇭" },
-  { code: "KRW", name: "South Korean Won", symbol: "₩", flag: "🇰🇷" },
-  { code: "AED", name: "UAE Dirham", symbol: "د.إ", flag: "🇦🇪" },
-  { code: "SAR", name: "Saudi Riyal", symbol: "﷼", flag: "🇸🇦" },
-  { code: "BRL", name: "Brazilian Real", symbol: "R$", flag: "🇧🇷" },
-  { code: "MXN", name: "Mexican Peso", symbol: "MX$", flag: "🇲🇽" },
-  { code: "ZAR", name: "South African Rand", symbol: "R", flag: "🇿🇦" },
+  { code: 'USD', name: 'US Dollar', symbol: '$', flag: '🇺🇸' },
+  { code: 'EUR', name: 'Euro', symbol: '€', flag: '🇪🇺' },
+  { code: 'GBP', name: 'British Pound', symbol: '£', flag: '🇬🇧' },
+  { code: 'INR', name: 'Indian Rupee', symbol: '₹', flag: '🇮🇳' },
+  { code: 'JPY', name: 'Japanese Yen', symbol: '¥', flag: '🇯🇵' },
+  { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$', flag: '🇨🇦' },
+  { code: 'AUD', name: 'Australian Dollar', symbol: 'A$', flag: '🇦🇺' },
+  { code: 'CHF', name: 'Swiss Franc', symbol: 'CHF', flag: '🇨🇭' },
+  { code: 'CNY', name: 'Chinese Yuan', symbol: '¥', flag: '🇨🇳' },
+  { code: 'SGD', name: 'Singapore Dollar', symbol: 'S$', flag: '🇸🇬' },
+  { code: 'THB', name: 'Thai Baht', symbol: '฿', flag: '🇹🇭' },
+  { code: 'MYR', name: 'Malaysian Ringgit', symbol: 'RM', flag: '🇲🇾' },
+  { code: 'IDR', name: 'Indonesian Rupiah', symbol: 'Rp', flag: '🇮🇩' },
+  { code: 'PHP', name: 'Philippine Peso', symbol: '₱', flag: '🇵🇭' },
+  { code: 'KRW', name: 'South Korean Won', symbol: '₩', flag: '🇰🇷' },
+  { code: 'AED', name: 'UAE Dirham', symbol: 'د.إ', flag: '🇦🇪' },
+  { code: 'SAR', name: 'Saudi Riyal', symbol: '﷼', flag: '🇸🇦' },
+  { code: 'BRL', name: 'Brazilian Real', symbol: 'R$', flag: '🇧🇷' },
+  { code: 'MXN', name: 'Mexican Peso', symbol: 'MX$', flag: '🇲🇽' },
+  { code: 'ZAR', name: 'South African Rand', symbol: 'R', flag: '🇿🇦' },
   // ... more as needed
 ];
 ```
@@ -90,8 +90,8 @@ const CURRENCIES = [
 
 ```typescript
 function formatCurrency(amount: number, currencyCode: string): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
     currency: currencyCode,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
@@ -153,4 +153,3 @@ Optional "estimated total" that converts everything to user's preferred currency
 - Alternate currencies are optional (0, 1, or 2)
 - Alternate currencies must be different from default and from each other
 - User's preferred currency defaults to "INR" (configurable)
-

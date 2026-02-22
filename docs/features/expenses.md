@@ -132,27 +132,28 @@ Same as unequal — user enters exact amounts per person.
 
 Quick-select common expenses instead of typing description manually.
 
-| Item           | Category       | Default Tags      |
-| -------------- | -------------- | ----------------- |
-| Groceries      | food           | groceries         |
-| Restaurant     | food           | dining            |
-| Taxi / Uber    | transport      | taxi              |
-| Gas / Fuel     | transport      | fuel              |
-| Hotel          | accommodation  | hotel             |
-| Airbnb         | accommodation  | airbnb            |
-| Flight         | travel         | flight            |
-| Train ticket   | travel         | train             |
-| Movie tickets  | entertainment  | movie             |
-| Rent           | housing        | rent, monthly     |
-| Utilities      | housing        | utilities, monthly|
-| Internet       | housing        | internet, monthly |
-| Coffee         | food           | coffee            |
-| Drinks / Bar   | food           | drinks, bar       |
-| Shopping       | shopping       | -                 |
-| Medical        | health         | medical           |
-| Parking        | transport      | parking           |
+| Item          | Category      | Default Tags       |
+| ------------- | ------------- | ------------------ |
+| Groceries     | food          | groceries          |
+| Restaurant    | food          | dining             |
+| Taxi / Uber   | transport     | taxi               |
+| Gas / Fuel    | transport     | fuel               |
+| Hotel         | accommodation | hotel              |
+| Airbnb        | accommodation | airbnb             |
+| Flight        | travel        | flight             |
+| Train ticket  | travel        | train              |
+| Movie tickets | entertainment | movie              |
+| Rent          | housing       | rent, monthly      |
+| Utilities     | housing       | utilities, monthly |
+| Internet      | housing       | internet, monthly  |
+| Coffee        | food          | coffee             |
+| Drinks / Bar  | food          | drinks, bar        |
+| Shopping      | shopping      | -                  |
+| Medical       | health        | medical            |
+| Parking       | transport     | parking            |
 
 When user selects a predefined item:
+
 - Description auto-fills with item name
 - Category auto-fills
 - Tags auto-fill (user can modify)
@@ -163,16 +164,16 @@ When user selects a predefined item:
 
 ```typescript
 const EXPENSE_CATEGORIES = [
-  { id: "food", label: "Food & Drink", icon: "🍕" },
-  { id: "transport", label: "Transport", icon: "🚗" },
-  { id: "accommodation", label: "Accommodation", icon: "🏨" },
-  { id: "travel", label: "Travel", icon: "✈️" },
-  { id: "entertainment", label: "Entertainment", icon: "🎬" },
-  { id: "shopping", label: "Shopping", icon: "🛍️" },
-  { id: "housing", label: "Housing", icon: "🏠" },
-  { id: "health", label: "Health", icon: "🏥" },
-  { id: "education", label: "Education", icon: "📚" },
-  { id: "other", label: "Other", icon: "📋" },
+  { id: 'food', label: 'Food & Drink', icon: '🍕' },
+  { id: 'transport', label: 'Transport', icon: '🚗' },
+  { id: 'accommodation', label: 'Accommodation', icon: '🏨' },
+  { id: 'travel', label: 'Travel', icon: '✈️' },
+  { id: 'entertainment', label: 'Entertainment', icon: '🎬' },
+  { id: 'shopping', label: 'Shopping', icon: '🛍️' },
+  { id: 'housing', label: 'Housing', icon: '🏠' },
+  { id: 'health', label: 'Health', icon: '🏥' },
+  { id: 'education', label: 'Education', icon: '📚' },
+  { id: 'other', label: 'Other', icon: '📋' },
 ];
 ```
 
@@ -228,4 +229,3 @@ See [api.md](../api.md#expenses) for full endpoint documentation.
 - Very large amounts: Cap at 10,000,000 per expense
 - Empty description: Not allowed
 - Duplicate detection: If same description + amount + date exists, show warning (not blocker)
-

@@ -6,9 +6,9 @@ import {
   notFound,
   serverError,
   validationError,
-} from "@/lib/utils/api-response";
-import { groupService } from "@/lib/services/group.service";
-import { z } from "zod/v4";
+} from '@/lib/utils/api-response';
+import { groupService } from '@/lib/services/group.service';
+import { z } from 'zod/v4';
 
 const updateTagSchema = z.object({
   name: z.string().min(1).max(50).trim().optional(),
@@ -18,7 +18,7 @@ const updateTagSchema = z.object({
 // PATCH /api/groups/[id]/tags/[tagId] — Archive/unarchive or rename a tag
 export async function PATCH(
   req: Request,
-  { params }: { params: Promise<{ id: string; tagId: string }> }
+  { params }: { params: Promise<{ id: string; tagId: string }> },
 ) {
   try {
     const user = await getAuthUser();
@@ -30,17 +30,17 @@ export async function PATCH(
     if (!parsed.success) return validationError(parsed.error);
 
     const group = await groupService.updateTag(id, tagId, parsed.data, user.id!);
-    if (!group) return notFound("Tag");
+    if (!group) return notFound('Tag');
 
     return success(group);
   } catch (err) {
     if (err instanceof Error) {
-      if (err.message === "FORBIDDEN") return forbidden();
-      if (err.message === "TAG_EXISTS") {
-        return new Response(
-          JSON.stringify({ error: "A tag with this name already exists" }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
-        );
+      if (err.message === 'FORBIDDEN') return forbidden();
+      if (err.message === 'TAG_EXISTS') {
+        return new Response(JSON.stringify({ error: 'A tag with this name already exists' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
       }
     }
     return serverError(err);
@@ -50,7 +50,7 @@ export async function PATCH(
 // DELETE /api/groups/[id]/tags/[tagId] — Delete a tag (only if unused)
 export async function DELETE(
   req: Request,
-  { params }: { params: Promise<{ id: string; tagId: string }> }
+  { params }: { params: Promise<{ id: string; tagId: string }> },
 ) {
   try {
     const user = await getAuthUser();
@@ -59,23 +59,22 @@ export async function DELETE(
     const { id, tagId } = await params;
 
     const group = await groupService.deleteTag(id, tagId, user.id!);
-    if (!group) return notFound("Tag");
+    if (!group) return notFound('Tag');
 
     return success(group);
   } catch (err) {
     if (err instanceof Error) {
-      if (err.message === "FORBIDDEN") return forbidden();
-      if (err.message.startsWith("TAG_IN_USE:")) {
-        const count = err.message.split(":")[1];
+      if (err.message === 'FORBIDDEN') return forbidden();
+      if (err.message.startsWith('TAG_IN_USE:')) {
+        const count = err.message.split(':')[1];
         return new Response(
           JSON.stringify({
-            error: `Cannot delete tag — it is used by ${count} expense${count === "1" ? "" : "s"}`,
+            error: `Cannot delete tag — it is used by ${count} expense${count === '1' ? '' : 's'}`,
           }),
-          { status: 400, headers: { "Content-Type": "application/json" } }
+          { status: 400, headers: { 'Content-Type': 'application/json' } },
         );
       }
     }
     return serverError(err);
   }
 }
-

@@ -1,14 +1,11 @@
-import connectDB from "@/lib/db";
-import Expense from "@/lib/models/Expense";
-import "@/lib/models/User"; // Ensure User model is registered for populate()
-import { activityService } from "./activity.service";
-import type {
-  CreateExpenseInput,
-  UpdateExpenseInput,
-} from "@/lib/validators/expense.validator";
-import type { ExpenseFilters } from "@/types";
-import { getQuickFilterDates } from "@/lib/utils/date";
-import mongoose from "mongoose";
+import connectDB from '@/lib/db';
+import Expense from '@/lib/models/Expense';
+import '@/lib/models/User'; // Ensure User model is registered for populate()
+import { activityService } from './activity.service';
+import type { CreateExpenseInput, UpdateExpenseInput } from '@/lib/validators/expense.validator';
+import type { ExpenseFilters } from '@/types';
+import { getQuickFilterDates } from '@/lib/utils/date';
+import mongoose from 'mongoose';
 
 export class ExpenseService {
   /**
@@ -19,11 +16,9 @@ export class ExpenseService {
 
     // Calculate split amounts for equal split
     let splitBetween = data.splitBetween;
-    if (data.splitMethod === "equal") {
-      const perPerson =
-        Math.floor((data.amount * 100) / splitBetween.length) / 100;
-      const remainder =
-        Math.round((data.amount - perPerson * splitBetween.length) * 100) / 100;
+    if (data.splitMethod === 'equal') {
+      const perPerson = Math.floor((data.amount * 100) / splitBetween.length) / 100;
+      const remainder = Math.round((data.amount - perPerson * splitBetween.length) * 100) / 100;
 
       splitBetween = splitBetween.map((s, i) => ({
         ...s,
@@ -32,27 +27,21 @@ export class ExpenseService {
     }
 
     // For shares split, calculate amounts
-    if (data.splitMethod === "shares") {
-      const totalShares = splitBetween.reduce(
-        (sum, s) => sum + (s.shares || 0),
-        0
-      );
+    if (data.splitMethod === 'shares') {
+      const totalShares = splitBetween.reduce((sum, s) => sum + (s.shares || 0), 0);
       if (totalShares > 0) {
         splitBetween = splitBetween.map((s) => ({
           ...s,
-          amount:
-            Math.round(((s.shares || 0) / totalShares) * data.amount * 100) /
-            100,
+          amount: Math.round(((s.shares || 0) / totalShares) * data.amount * 100) / 100,
         }));
       }
     }
 
     // For percentage split, calculate amounts
-    if (data.splitMethod === "percentage") {
+    if (data.splitMethod === 'percentage') {
       splitBetween = splitBetween.map((s) => ({
         ...s,
-        amount:
-          Math.round(((s.percentage || 0) / 100) * data.amount * 100) / 100,
+        amount: Math.round(((s.percentage || 0) / 100) * data.amount * 100) / 100,
       }));
     }
 
@@ -73,7 +62,7 @@ export class ExpenseService {
     });
 
     // Log activity
-    await activityService.log(groupId, "expense_added", userId, {
+    await activityService.log(groupId, 'expense_added', userId, {
       expenseId: expense._id.toString(),
       description: expense.description,
       amount: expense.amount,
@@ -81,9 +70,9 @@ export class ExpenseService {
     });
 
     return expense.populate([
-      { path: "paidBy.user", select: "name email image" },
-      { path: "splitBetween.user", select: "name email image" },
-      { path: "createdBy", select: "name email image" },
+      { path: 'paidBy.user', select: 'name email image' },
+      { path: 'splitBetween.user', select: 'name email image' },
+      { path: 'createdBy', select: 'name email image' },
     ]);
   }
 
@@ -91,11 +80,7 @@ export class ExpenseService {
    * Get expenses for a group with filters and pagination.
    * Optionally computes a summary (total, user owe/get-back) for the filtered set.
    */
-  async getGroupExpenses(
-    groupId: string,
-    filters: ExpenseFilters = {},
-    userId?: string
-  ) {
+  async getGroupExpenses(groupId: string, filters: ExpenseFilters = {}, userId?: string) {
     await connectDB();
 
     const page = filters.page || 1;
@@ -109,7 +94,7 @@ export class ExpenseService {
     };
 
     // Date range filter
-    if (filters.quickFilter && filters.quickFilter !== "all") {
+    if (filters.quickFilter && filters.quickFilter !== 'all') {
       const dates = getQuickFilterDates(filters.quickFilter);
       if (dates) {
         query.date = { $gte: dates.from, $lte: dates.to };
@@ -117,11 +102,8 @@ export class ExpenseService {
     } else if (filters.dateFrom || filters.dateTo) {
       query.date = {};
       if (filters.dateFrom)
-        (query.date as Record<string, unknown>).$gte = new Date(
-          filters.dateFrom
-        );
-      if (filters.dateTo)
-        (query.date as Record<string, unknown>).$lte = new Date(filters.dateTo);
+        (query.date as Record<string, unknown>).$gte = new Date(filters.dateFrom);
+      if (filters.dateTo) (query.date as Record<string, unknown>).$lte = new Date(filters.dateTo);
     }
 
     // Category filter
@@ -136,24 +118,22 @@ export class ExpenseService {
 
     // Search filter (regex on description)
     if (filters.search) {
-      query.description = { $regex: filters.search, $options: "i" };
+      query.description = { $regex: filters.search, $options: 'i' };
     }
 
     // Paid-by member filter
     if (filters.paidByUser) {
-      query["paidBy.user"] = new mongoose.Types.ObjectId(filters.paidByUser);
+      query['paidBy.user'] = new mongoose.Types.ObjectId(filters.paidByUser);
     }
 
     // Owed-by member filter (who is in splitBetween)
     if (filters.owedByUser) {
-      query["splitBetween.user"] = new mongoose.Types.ObjectId(
-        filters.owedByUser
-      );
+      query['splitBetween.user'] = new mongoose.Types.ObjectId(filters.owedByUser);
     }
 
     // Sort
-    const sortField = filters.sortBy === "amount" ? "amount" : "date";
-    const sortOrder = filters.sortOrder === "asc" ? 1 : -1;
+    const sortField = filters.sortBy === 'amount' ? 'amount' : 'date';
+    const sortOrder = filters.sortOrder === 'asc' ? 1 : -1;
 
     // Run paginated query + count + summary aggregation in parallel
     const [expenses, total, summaryAgg] = await Promise.all([
@@ -161,10 +141,10 @@ export class ExpenseService {
         .sort({ [sortField]: sortOrder, createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate("paidBy.user", "name email image")
-        .populate("splitBetween.user", "name email image")
-        .populate("createdBy", "name email image")
-        .populate("editHistory.editedBy", "name email image")
+        .populate('paidBy.user', 'name email image')
+        .populate('splitBetween.user', 'name email image')
+        .populate('createdBy', 'name email image')
+        .populate('editHistory.editedBy', 'name email image')
         .lean(),
       Expense.countDocuments(query),
       // Aggregation for summary (totalAmount across ALL filtered, not just page)
@@ -173,7 +153,7 @@ export class ExpenseService {
         {
           $group: {
             _id: null,
-            totalAmount: { $sum: "$amount" },
+            totalAmount: { $sum: '$amount' },
             count: { $sum: 1 },
           },
         },
@@ -189,21 +169,19 @@ export class ExpenseService {
       // For efficiency, if total <= limit we already have all. Otherwise run a lean query.
       let allFiltered = expenses;
       if (total > limit) {
-        allFiltered = await Expense.find(query)
-          .select("paidBy splitBetween")
-          .lean();
+        allFiltered = await Expense.find(query).select('paidBy splitBetween').lean();
       }
 
       for (const exp of allFiltered) {
         const paidEntry = exp.paidBy?.find(
           (p: { user: unknown }) =>
             p.user?.toString() === userId ||
-            (p.user as { _id?: unknown })?._id?.toString() === userId
+            (p.user as { _id?: unknown })?._id?.toString() === userId,
         );
         const splitEntry = exp.splitBetween?.find(
           (s: { user: unknown }) =>
             s.user?.toString() === userId ||
-            (s.user as { _id?: unknown })?._id?.toString() === userId
+            (s.user as { _id?: unknown })?._id?.toString() === userId,
         );
 
         const paidAmount = paidEntry?.amount || 0;
@@ -240,10 +218,10 @@ export class ExpenseService {
   async getById(expenseId: string) {
     await connectDB();
     return Expense.findById(expenseId)
-      .populate("paidBy.user", "name email image")
-      .populate("splitBetween.user", "name email image")
-      .populate("createdBy", "name email image")
-      .populate("editHistory.editedBy", "name email image")
+      .populate('paidBy.user', 'name email image')
+      .populate('splitBetween.user', 'name email image')
+      .populate('createdBy', 'name email image')
+      .populate('editHistory.editedBy', 'name email image')
       .lean();
   }
 
@@ -263,21 +241,16 @@ export class ExpenseService {
       expense.deletedBy = null;
       await expense.save();
 
-      await activityService.log(
-        expense.group.toString(),
-        "expense_updated",
-        userId,
-        {
-          expenseId: expense._id.toString(),
-          description: expense.description,
-          action: "restored",
-        }
-      );
+      await activityService.log(expense.group.toString(), 'expense_updated', userId, {
+        expenseId: expense._id.toString(),
+        description: expense.description,
+        action: 'restored',
+      });
 
       return expense.populate([
-        { path: "paidBy.user", select: "name email image" },
-        { path: "splitBetween.user", select: "name email image" },
-        { path: "createdBy", select: "name email image" },
+        { path: 'paidBy.user', select: 'name email image' },
+        { path: 'splitBetween.user', select: 'name email image' },
+        { path: 'createdBy', select: 'name email image' },
       ]);
     }
 
@@ -285,36 +258,27 @@ export class ExpenseService {
     if (data.splitBetween && data.splitMethod && data.amount !== undefined) {
       const totalAmount = data.amount;
       let splitBetween = data.splitBetween;
-      if (data.splitMethod === "equal") {
-        const perPerson =
-          Math.floor((totalAmount * 100) / splitBetween.length) / 100;
-        const remainder =
-          Math.round((totalAmount - perPerson * splitBetween.length) * 100) /
-          100;
+      if (data.splitMethod === 'equal') {
+        const perPerson = Math.floor((totalAmount * 100) / splitBetween.length) / 100;
+        const remainder = Math.round((totalAmount - perPerson * splitBetween.length) * 100) / 100;
         splitBetween = splitBetween.map((s, i) => ({
           ...s,
           amount: i === 0 ? perPerson + remainder : perPerson,
         }));
       }
-      if (data.splitMethod === "shares") {
-        const totalShares = splitBetween.reduce(
-          (sum, s) => sum + (s.shares || 0),
-          0
-        );
+      if (data.splitMethod === 'shares') {
+        const totalShares = splitBetween.reduce((sum, s) => sum + (s.shares || 0), 0);
         if (totalShares > 0) {
           splitBetween = splitBetween.map((s) => ({
             ...s,
-            amount:
-              Math.round(((s.shares || 0) / totalShares) * totalAmount * 100) /
-              100,
+            amount: Math.round(((s.shares || 0) / totalShares) * totalAmount * 100) / 100,
           }));
         }
       }
-      if (data.splitMethod === "percentage") {
+      if (data.splitMethod === 'percentage') {
         splitBetween = splitBetween.map((s) => ({
           ...s,
-          amount:
-            Math.round(((s.percentage || 0) / 100) * totalAmount * 100) / 100,
+          amount: Math.round(((s.percentage || 0) / 100) * totalAmount * 100) / 100,
         }));
       }
       data.splitBetween = splitBetween;
@@ -323,7 +287,7 @@ export class ExpenseService {
     // Track changes (exclude isDeleted from edit tracking)
     const changes: Record<string, { old: unknown; new: unknown }> = {};
     for (const [key, value] of Object.entries(data)) {
-      if (key === "isDeleted") continue;
+      if (key === 'isDeleted') continue;
       const oldValue = (expense as unknown as Record<string, unknown>)[key];
       if (JSON.stringify(oldValue) !== JSON.stringify(value)) {
         changes[key] = { old: oldValue, new: value };
@@ -344,22 +308,17 @@ export class ExpenseService {
 
     // Log activity
     if (Object.keys(changes).length > 0) {
-      await activityService.log(
-        expense.group.toString(),
-        "expense_updated",
-        userId,
-        {
-          expenseId: expense._id.toString(),
-          description: expense.description,
-          changes,
-        }
-      );
+      await activityService.log(expense.group.toString(), 'expense_updated', userId, {
+        expenseId: expense._id.toString(),
+        description: expense.description,
+        changes,
+      });
     }
 
     return expense.populate([
-      { path: "paidBy.user", select: "name email image" },
-      { path: "splitBetween.user", select: "name email image" },
-      { path: "createdBy", select: "name email image" },
+      { path: 'paidBy.user', select: 'name email image' },
+      { path: 'splitBetween.user', select: 'name email image' },
+      { path: 'createdBy', select: 'name email image' },
     ]);
   }
 
@@ -378,15 +337,10 @@ export class ExpenseService {
     await expense.save();
 
     // Log activity
-    await activityService.log(
-      expense.group.toString(),
-      "expense_deleted",
-      userId,
-      {
-        expenseId: expense._id.toString(),
-        description: expense.description,
-      }
-    );
+    await activityService.log(expense.group.toString(), 'expense_deleted', userId, {
+      expenseId: expense._id.toString(),
+      description: expense.description,
+    });
 
     return expense;
   }
@@ -399,7 +353,7 @@ export class ExpenseService {
     description: string,
     amount: number,
     date: Date,
-    excludeId?: string
+    excludeId?: string,
   ) {
     await connectDB();
 
@@ -408,11 +362,11 @@ export class ExpenseService {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    const escaped = description.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const escaped = description.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
     const query: Record<string, unknown> = {
       group: new mongoose.Types.ObjectId(groupId),
-      description: { $regex: `^${escaped}$`, $options: "i" },
+      description: { $regex: `^${escaped}$`, $options: 'i' },
       amount,
       date: { $gte: startOfDay, $lte: endOfDay },
       isDeleted: false,
@@ -421,9 +375,7 @@ export class ExpenseService {
       query._id = { $ne: new mongoose.Types.ObjectId(excludeId) };
     }
 
-    const existing = await Expense.findOne(query)
-      .populate("createdBy", "name")
-      .lean();
+    const existing = await Expense.findOne(query).populate('createdBy', 'name').lean();
 
     return {
       isDuplicate: !!existing,

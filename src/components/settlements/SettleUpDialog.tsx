@@ -1,18 +1,18 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import Box from "@mui/material/Box";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import TextField from "@mui/material/TextField";
-import Button from "@mui/material/Button";
-import MenuItem from "@mui/material/MenuItem";
-import CircularProgress from "@mui/material/CircularProgress";
-import { getSortedCurrencies } from "@/lib/utils/currency";
+import { useState } from 'react';
+import Box from '@mui/material/Box';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import MenuItem from '@mui/material/MenuItem';
+import CircularProgress from '@mui/material/CircularProgress';
+import { getSortedCurrencies } from '@/lib/utils/currency';
 
 interface SettleUpDialogProps {
   open: boolean;
@@ -34,29 +34,29 @@ export default function SettleUpDialog({
   onSettled,
 }: SettleUpDialogProps) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [amount, setAmount] = useState(defaultAmount?.toString() || "");
+  const [error, setError] = useState('');
+  const [amount, setAmount] = useState(defaultAmount?.toString() || '');
   const [currency, setCurrency] = useState(group.defaultCurrency as string);
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState('');
 
   const currencies = getSortedCurrencies(
     group.defaultCurrency as string,
-    (group.alternateCurrencies || []) as string[]
+    (group.alternateCurrencies || []) as string[],
   );
 
   const handleSubmit = async () => {
     if (!amount || parseFloat(amount) <= 0) {
-      setError("Please enter a valid amount.");
+      setError('Please enter a valid amount.');
       return;
     }
 
     setLoading(true);
-    setError("");
+    setError('');
 
     try {
       const res = await fetch(`/api/groups/${groupId}/settlements`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           paidTo: (toUser as { _id: string })?._id,
           amount: parseFloat(amount),
@@ -67,16 +67,16 @@ export default function SettleUpDialog({
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Failed to record settlement");
+        setError(data.error || 'Failed to record settlement');
         return;
       }
 
       onSettled();
       onClose();
-      setAmount("");
-      setNote("");
+      setAmount('');
+      setNote('');
     } catch {
-      setError("Something went wrong.");
+      setError('Something went wrong.');
     } finally {
       setLoading(false);
     }
@@ -91,11 +91,11 @@ export default function SettleUpDialog({
             <Box
               sx={{
                 bgcolor: (theme) => `${theme.palette.error.main}12`,
-                color: "error.main",
+                color: 'error.main',
                 px: 1.5,
                 py: 1,
                 borderRadius: 2,
-                fontSize: "0.875rem",
+                fontSize: '0.875rem',
               }}
             >
               {error}
@@ -103,10 +103,10 @@ export default function SettleUpDialog({
           )}
 
           <Typography variant="body2" color="text.secondary">
-            You are paying <strong>{(toUser as { name?: string })?.name || "..."}</strong>
+            You are paying <strong>{(toUser as { name?: string })?.name || '...'}</strong>
           </Typography>
 
-          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1.5 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
             <TextField
               label="Amount"
               value={amount}
@@ -149,9 +149,12 @@ export default function SettleUpDialog({
           onClick={handleSubmit}
           variant="contained"
           disabled={loading}
-          sx={{ backgroundColor: "secondary.main", "&:hover": { backgroundColor: "secondary.dark" } }}
+          sx={{
+            backgroundColor: 'secondary.main',
+            '&:hover': { backgroundColor: 'secondary.dark' },
+          }}
         >
-          {loading ? <CircularProgress size={20} /> : "Record Payment"}
+          {loading ? <CircularProgress size={20} /> : 'Record Payment'}
         </Button>
       </DialogActions>
     </Dialog>

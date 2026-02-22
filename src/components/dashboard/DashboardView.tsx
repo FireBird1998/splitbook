@@ -1,19 +1,19 @@
-"use client";
+'use client';
 
-import useSWR from "swr";
-import Link from "next/link";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Skeleton from "@mui/material/Skeleton";
-import Button from "@mui/material/Button";
-import Chip from "@mui/material/Chip";
-import AddIcon from "@mui/icons-material/Add";
-import GroupCard from "@/components/groups/GroupCard";
-import InvitationCard from "@/components/dashboard/InvitationCard";
-import { formatCurrency } from "@/lib/utils/currency";
+import useSWR from 'swr';
+import Link from 'next/link';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Skeleton from '@mui/material/Skeleton';
+import Button from '@mui/material/Button';
+import Chip from '@mui/material/Chip';
+import AddIcon from '@mui/icons-material/Add';
+import GroupCard from '@/components/groups/GroupCard';
+import InvitationCard from '@/components/dashboard/InvitationCard';
+import { formatCurrency } from '@/lib/utils/currency';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -24,22 +24,18 @@ interface DashboardViewProps {
 
 function getGreeting(): string {
   const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
 }
 
 export default function DashboardView({ userId, userName }: DashboardViewProps) {
-  const { data: groupsData, isLoading: groupsLoading } = useSWR(
-    "/api/groups",
-    fetcher,
-    { refreshInterval: 30_000 }
-  );
-  const { data: invitationsData, mutate: mutateInvitations } = useSWR(
-    "/api/invitations",
-    fetcher,
-    { refreshInterval: 30_000 }
-  );
+  const { data: groupsData, isLoading: groupsLoading } = useSWR('/api/groups', fetcher, {
+    refreshInterval: 30_000,
+  });
+  const { data: invitationsData, mutate: mutateInvitations } = useSWR('/api/invitations', fetcher, {
+    refreshInterval: 30_000,
+  });
 
   const groups = groupsData?.data || [];
   const invitations = invitationsData?.data || [];
@@ -49,7 +45,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
       <Stack spacing={4}>
         {/* Greeting */}
         <Typography variant="h5" fontWeight={700} color="text.primary">
-          {getGreeting()}, {userName.split(" ")[0]}! 👋
+          {getGreeting()}, {userName.split(' ')[0]}! 👋
         </Typography>
 
         {/* Pending Invitations */}
@@ -93,8 +89,12 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
           {groupsLoading ? (
             <Box
               sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", lg: "1fr 1fr 1fr" },
+                display: 'grid',
+                gridTemplateColumns: {
+                  xs: '1fr',
+                  md: '1fr 1fr',
+                  lg: '1fr 1fr 1fr',
+                },
                 gap: 2,
               }}
             >
@@ -103,8 +103,8 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
               ))}
             </Box>
           ) : groups.length === 0 ? (
-            <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-              <Typography component="span" sx={{ fontSize: "2.5rem", display: "block", mb: 2 }}>
+            <Paper variant="outlined" sx={{ p: 6, textAlign: 'center' }}>
+              <Typography component="span" sx={{ fontSize: '2.5rem', display: 'block', mb: 2 }}>
                 👥
               </Typography>
               <Typography variant="subtitle1" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
@@ -125,8 +125,12 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
           ) : (
             <Box
               sx={{
-                display: "grid",
-                gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", lg: "1fr 1fr 1fr" },
+                display: 'grid',
+                gridTemplateColumns: {
+                  xs: '1fr',
+                  md: '1fr 1fr',
+                  lg: '1fr 1fr 1fr',
+                },
                 gap: 2,
               }}
             >

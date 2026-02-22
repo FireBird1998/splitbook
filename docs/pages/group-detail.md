@@ -88,6 +88,7 @@ Yesterday
 ## Group Header
 
 Shows at the top of all tabs:
+
 - **Back button**: Navigate to groups list
 - **Group name**: Large title
 - **Category badge**: Icon + label (e.g. ✈️ Trip)
@@ -126,8 +127,8 @@ Tab state stored in URL for deep linking and back-button support.
 
 ```typescript
 const group = await groupService.getGroup(params.id);
-const isMember = group.members.some(m => m.user.toString() === session.user.id);
-if (!isMember) redirect("/dashboard");
+const isMember = group.members.some((m) => m.user.toString() === session.user.id);
+if (!isMember) redirect('/dashboard');
 ```
 
 ---
@@ -150,4 +151,3 @@ if (!isMember) redirect("/dashboard");
 - `BalanceSummary` + `SimplifiedDebts` (Balances tab)
 - `ActivityFeed` (Activity tab)
 - MUI `Fab` for add expense button
-

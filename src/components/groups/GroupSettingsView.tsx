@@ -1,54 +1,54 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import useSWR, { useSWRConfig } from "swr";
-import Link from "next/link";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Skeleton from "@mui/material/Skeleton";
-import TextField from "@mui/material/TextField";
-import Button from "@mui/material/Button";
-import MenuItem from "@mui/material/MenuItem";
-import Avatar from "@mui/material/Avatar";
-import Chip from "@mui/material/Chip";
-import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
-import MuiMenuItem from "@mui/material/MenuItem";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import CircularProgress from "@mui/material/CircularProgress";
-import Snackbar from "@mui/material/Snackbar";
-import { alpha } from "@mui/material/styles";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import AdminPanelSettingsIcon from "@mui/icons-material/AdminPanelSettings";
-import PersonIcon from "@mui/icons-material/Person";
-import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import ShareIcon from "@mui/icons-material/Share";
-import AddIcon from "@mui/icons-material/Add";
-import ArchiveIcon from "@mui/icons-material/Archive";
-import UnarchiveIcon from "@mui/icons-material/Unarchive";
-import DeleteIcon from "@mui/icons-material/Delete";
-import LabelIcon from "@mui/icons-material/Label";
-import { CURRENCIES, getSortedCurrencies } from "@/lib/utils/currency";
-import { formatDate } from "@/lib/utils/date";
+import { useState } from 'react';
+import useSWR, { useSWRConfig } from 'swr';
+import Link from 'next/link';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Skeleton from '@mui/material/Skeleton';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import MenuItem from '@mui/material/MenuItem';
+import Avatar from '@mui/material/Avatar';
+import Chip from '@mui/material/Chip';
+import IconButton from '@mui/material/IconButton';
+import Menu from '@mui/material/Menu';
+import MuiMenuItem from '@mui/material/MenuItem';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import CircularProgress from '@mui/material/CircularProgress';
+import Snackbar from '@mui/material/Snackbar';
+import { alpha } from '@mui/material/styles';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import PersonIcon from '@mui/icons-material/Person';
+import PersonRemoveIcon from '@mui/icons-material/PersonRemove';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import ShareIcon from '@mui/icons-material/Share';
+import AddIcon from '@mui/icons-material/Add';
+import ArchiveIcon from '@mui/icons-material/Archive';
+import UnarchiveIcon from '@mui/icons-material/Unarchive';
+import DeleteIcon from '@mui/icons-material/Delete';
+import LabelIcon from '@mui/icons-material/Label';
+import { CURRENCIES, getSortedCurrencies } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/date';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 const GROUP_CATEGORIES = [
-  { id: "trip", label: "✈️ Trip" },
-  { id: "home", label: "🏠 Home" },
-  { id: "couple", label: "💑 Couple" },
-  { id: "work", label: "💼 Work" },
-  { id: "other", label: "📋 Other" },
+  { id: 'trip', label: '✈️ Trip' },
+  { id: 'home', label: '🏠 Home' },
+  { id: 'couple', label: '💑 Couple' },
+  { id: 'work', label: '💼 Work' },
+  { id: 'other', label: '📋 Other' },
 ];
 
 interface GroupSettingsViewProps {
@@ -58,20 +58,17 @@ interface GroupSettingsViewProps {
 
 export default function GroupSettingsView({ groupId, userId }: GroupSettingsViewProps) {
   const { mutate: globalMutate } = useSWRConfig();
-  const { data: groupData, isLoading, mutate } = useSWR(
-    `/api/groups/${groupId}`,
-    fetcher
-  );
+  const { data: groupData, isLoading, mutate } = useSWR(`/api/groups/${groupId}`, fetcher);
 
   const group = groupData?.data;
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("other");
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('other');
   const [generalSaving, setGeneralSaving] = useState(false);
   const [generalInitialized, setGeneralInitialized] = useState(false);
 
-  const [defaultCurrency, setDefaultCurrency] = useState("");
+  const [defaultCurrency, setDefaultCurrency] = useState('');
   const [alternateCurrencies, setAlternateCurrencies] = useState<string[]>([]);
   const [currencySaving, setCurrencySaving] = useState(false);
   const [currencyInitialized, setCurrencyInitialized] = useState(false);
@@ -83,27 +80,27 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteLinkLoading, setInviteLinkLoading] = useState(false);
 
-  const [newTagName, setNewTagName] = useState("");
+  const [newTagName, setNewTagName] = useState('');
   const [tagLoading, setTagLoading] = useState(false);
   const [tagMenuAnchor, setTagMenuAnchor] = useState<HTMLElement | null>(null);
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [deleteTagDialogOpen, setDeleteTagDialogOpen] = useState(false);
-  const [deleteTagError, setDeleteTagError] = useState("");
+  const [deleteTagError, setDeleteTagError] = useState('');
 
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveLoading, setArchiveLoading] = useState(false);
 
-  const [snackbar, setSnackbar] = useState({ open: false, message: "" });
+  const [snackbar, setSnackbar] = useState({ open: false, message: '' });
 
   if (group && !generalInitialized) {
-    setName(group.name || "");
-    setDescription(group.description || "");
-    setCategory(group.category || "other");
+    setName(group.name || '');
+    setDescription(group.description || '');
+    setCategory(group.category || 'other');
     setGeneralInitialized(true);
   }
 
   if (group && !currencyInitialized) {
-    setDefaultCurrency(group.defaultCurrency || "INR");
+    setDefaultCurrency(group.defaultCurrency || 'INR');
     setAlternateCurrencies(group.alternateCurrencies || []);
     setCurrencyInitialized(true);
   }
@@ -121,7 +118,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
   if (!group) {
     return (
       <Container maxWidth="md" disableGutters>
-        <Box sx={{ textAlign: "center", py: 6 }}>
+        <Box sx={{ textAlign: 'center', py: 6 }}>
           <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
             Group not found
           </Typography>
@@ -140,12 +137,12 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
   }>;
 
   const currentUserMember = members.find((m) => m.user._id === userId);
-  const isAdmin = currentUserMember?.role === "admin";
+  const isAdmin = currentUserMember?.role === 'admin';
 
   if (!isAdmin) {
     return (
       <Container maxWidth="md" disableGutters>
-        <Box sx={{ textAlign: "center", py: 6 }}>
+        <Box sx={{ textAlign: 'center', py: 6 }}>
           <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
             Access denied
           </Typography>
@@ -160,26 +157,23 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     );
   }
 
-  const currencies = getSortedCurrencies(
-    group.defaultCurrency,
-    group.alternateCurrencies || []
-  );
+  const currencies = getSortedCurrencies(group.defaultCurrency, group.alternateCurrencies || []);
 
   const handleSaveGeneral = async () => {
     setGeneralSaving(true);
     try {
       const res = await fetch(`/api/groups/${groupId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, description, category }),
       });
       if (res.ok) {
         mutate();
-        globalMutate((key: unknown) => typeof key === "string" && key.includes("/api/groups"));
-        setSnackbar({ open: true, message: "Group info updated" });
+        globalMutate((key: unknown) => typeof key === 'string' && key.includes('/api/groups'));
+        setSnackbar({ open: true, message: 'Group info updated' });
       }
     } catch {
-      setSnackbar({ open: true, message: "Failed to update" });
+      setSnackbar({ open: true, message: 'Failed to update' });
     } finally {
       setGeneralSaving(false);
     }
@@ -189,35 +183,35 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     setCurrencySaving(true);
     try {
       const res = await fetch(`/api/groups/${groupId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ defaultCurrency, alternateCurrencies }),
       });
       if (res.ok) {
         mutate();
-        setSnackbar({ open: true, message: "Currency settings updated" });
+        setSnackbar({ open: true, message: 'Currency settings updated' });
       }
     } catch {
-      setSnackbar({ open: true, message: "Failed to update" });
+      setSnackbar({ open: true, message: 'Failed to update' });
     } finally {
       setCurrencySaving(false);
     }
   };
 
-  const handleMemberAction = async (action: "promote" | "demote" | "remove") => {
+  const handleMemberAction = async (action: 'promote' | 'demote' | 'remove') => {
     if (!selectedMember) return;
     setMemberLoading(true);
     try {
-      if (action === "remove") {
+      if (action === 'remove') {
         await fetch(`/api/groups/${groupId}/members/${selectedMember}`, {
-          method: "DELETE",
+          method: 'DELETE',
         });
       } else {
         await fetch(`/api/groups/${groupId}/members/${selectedMember}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            role: action === "promote" ? "admin" : "member",
+            role: action === 'promote' ? 'admin' : 'member',
           }),
         });
       }
@@ -225,14 +219,14 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
       setSnackbar({
         open: true,
         message:
-          action === "remove"
-            ? "Member removed"
-            : action === "promote"
-            ? "Promoted to admin"
-            : "Demoted to member",
+          action === 'remove'
+            ? 'Member removed'
+            : action === 'promote'
+              ? 'Promoted to admin'
+              : 'Demoted to member',
       });
     } catch {
-      setSnackbar({ open: true, message: "Action failed" });
+      setSnackbar({ open: true, message: 'Action failed' });
     } finally {
       setMemberLoading(false);
       setMemberMenuAnchor(null);
@@ -244,8 +238,8 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     setInviteLinkLoading(true);
     try {
       const res = await fetch(`/api/groups/${groupId}/invite-link`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expiresInDays: 7 }),
       });
       const data = await res.json();
@@ -253,7 +247,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
         setInviteLink(data.data.inviteUrl);
       }
     } catch {
-      setSnackbar({ open: true, message: "Failed to generate link" });
+      setSnackbar({ open: true, message: 'Failed to generate link' });
     } finally {
       setInviteLinkLoading(false);
     }
@@ -262,19 +256,19 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
   const handleCopyLink = () => {
     if (inviteLink) {
       navigator.clipboard.writeText(inviteLink);
-      setSnackbar({ open: true, message: "Link copied to clipboard" });
+      setSnackbar({ open: true, message: 'Link copied to clipboard' });
     }
   };
 
   const handleArchive = async () => {
     setArchiveLoading(true);
     try {
-      const res = await fetch(`/api/groups/${groupId}`, { method: "DELETE" });
+      const res = await fetch(`/api/groups/${groupId}`, { method: 'DELETE' });
       if (res.ok) {
-        window.location.href = "/groups";
+        window.location.href = '/groups';
       }
     } catch {
-      setSnackbar({ open: true, message: "Failed to archive group" });
+      setSnackbar({ open: true, message: 'Failed to archive group' });
     } finally {
       setArchiveLoading(false);
     }
@@ -294,20 +288,23 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     setTagLoading(true);
     try {
       const res = await fetch(`/api/groups/${groupId}/tags`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newTagName.trim() }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setSnackbar({ open: true, message: data.error || "Failed to create tag" });
+        setSnackbar({
+          open: true,
+          message: data.error || 'Failed to create tag',
+        });
       } else {
-        setNewTagName("");
+        setNewTagName('');
         mutate();
-        setSnackbar({ open: true, message: "Tag created" });
+        setSnackbar({ open: true, message: 'Tag created' });
       }
     } catch {
-      setSnackbar({ open: true, message: "Failed to create tag" });
+      setSnackbar({ open: true, message: 'Failed to create tag' });
     } finally {
       setTagLoading(false);
     }
@@ -318,19 +315,19 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     setTagLoading(true);
     try {
       const res = await fetch(`/api/groups/${groupId}/tags/${selectedTag}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isArchived: !selectedTagData.isArchived }),
       });
       if (res.ok) {
         mutate();
         setSnackbar({
           open: true,
-          message: selectedTagData.isArchived ? "Tag unarchived" : "Tag archived",
+          message: selectedTagData.isArchived ? 'Tag unarchived' : 'Tag archived',
         });
       }
     } catch {
-      setSnackbar({ open: true, message: "Failed to update tag" });
+      setSnackbar({ open: true, message: 'Failed to update tag' });
     } finally {
       setTagLoading(false);
       setTagMenuAnchor(null);
@@ -341,23 +338,23 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
   const handleDeleteTag = async () => {
     if (!selectedTag) return;
     setTagLoading(true);
-    setDeleteTagError("");
+    setDeleteTagError('');
     try {
       const res = await fetch(`/api/groups/${groupId}/tags/${selectedTag}`, {
-        method: "DELETE",
+        method: 'DELETE',
       });
       const data = await res.json();
       if (!res.ok) {
-        setDeleteTagError(data.error || "Failed to delete tag");
+        setDeleteTagError(data.error || 'Failed to delete tag');
       } else {
         mutate();
-        setSnackbar({ open: true, message: "Tag deleted" });
+        setSnackbar({ open: true, message: 'Tag deleted' });
         setDeleteTagDialogOpen(false);
         setTagMenuAnchor(null);
         setSelectedTag(null);
       }
     } catch {
-      setDeleteTagError("Failed to delete tag");
+      setDeleteTagError('Failed to delete tag');
     } finally {
       setTagLoading(false);
     }
@@ -419,13 +416,13 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 </MenuItem>
               ))}
             </TextField>
-            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
               <Button
                 variant="contained"
                 onClick={handleSaveGeneral}
                 disabled={generalSaving || !name.trim()}
               >
-                {generalSaving ? <CircularProgress size={20} /> : "Save Changes"}
+                {generalSaving ? <CircularProgress size={20} /> : 'Save Changes'}
               </Button>
             </Box>
           </Stack>
@@ -453,7 +450,12 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
             </TextField>
 
             <Box>
-              <Typography variant="caption" fontWeight={500} color="text.secondary" sx={{ mb: 1, display: "block" }}>
+              <Typography
+                variant="caption"
+                fontWeight={500}
+                color="text.secondary"
+                sx={{ mb: 1, display: 'block' }}
+              >
                 Alternate Currencies (max 2)
               </Typography>
               <Stack direction="row" spacing={1} flexWrap="wrap" sx={{ mb: 1 }}>
@@ -462,7 +464,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                   return (
                     <Chip
                       key={code}
-                      label={`${curr?.flag || ""} ${code}`}
+                      label={`${curr?.flag || ''} ${code}`}
                       onDelete={() =>
                         setAlternateCurrencies(alternateCurrencies.filter((c) => c !== code))
                       }
@@ -492,7 +494,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                     Select currency...
                   </MenuItem>
                   {CURRENCIES.filter(
-                    (c) => c.code !== defaultCurrency && !alternateCurrencies.includes(c.code)
+                    (c) => c.code !== defaultCurrency && !alternateCurrencies.includes(c.code),
                   ).map((c) => (
                     <MenuItem key={c.code} value={c.code}>
                       {c.flag} {c.code} — {c.name}
@@ -502,13 +504,9 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
               )}
             </Box>
 
-            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-              <Button
-                variant="contained"
-                onClick={handleSaveCurrency}
-                disabled={currencySaving}
-              >
-                {currencySaving ? <CircularProgress size={20} /> : "Save Currency"}
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Button variant="contained" onClick={handleSaveCurrency} disabled={currencySaving}>
+                {currencySaving ? <CircularProgress size={20} /> : 'Save Currency'}
               </Button>
             </Box>
           </Stack>
@@ -520,7 +518,8 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
             Tags
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Every expense must have exactly one tag. Archived tags won&apos;t appear in the expense form.
+            Every expense must have exactly one tag. Archived tags won&apos;t appear in the expense
+            form.
           </Typography>
 
           {/* Add tag */}
@@ -532,7 +531,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
               size="small"
               fullWidth
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleAddTag();
+                if (e.key === 'Enter') handleAddTag();
               }}
               slotProps={{ htmlInput: { maxLength: 50 } }}
             />
@@ -549,7 +548,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
 
           {/* Tag list */}
           {tags.length === 0 ? (
-            <Box sx={{ textAlign: "center", py: 3, color: "text.disabled" }}>
+            <Box sx={{ textAlign: 'center', py: 3, color: 'text.disabled' }}>
               <LabelIcon sx={{ fontSize: 40, mb: 1, opacity: 0.4 }} />
               <Typography variant="body2">No tags yet. Create your first tag above.</Typography>
             </Box>
@@ -565,21 +564,23 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                     py: 1,
                     px: 1.5,
                     borderRadius: 2,
-                    bgcolor: tag.isArchived ? "grey.50" : "background.paper",
+                    bgcolor: tag.isArchived ? 'grey.50' : 'background.paper',
                     opacity: tag.isArchived ? 0.7 : 1,
                   }}
                 >
                   <Stack direction="row" alignItems="center" spacing={1}>
                     <LabelIcon
                       fontSize="small"
-                      sx={{ color: tag.isArchived ? "text.disabled" : "primary.main" }}
+                      sx={{
+                        color: tag.isArchived ? 'text.disabled' : 'primary.main',
+                      }}
                     />
                     <Typography
                       variant="body2"
                       fontWeight={500}
                       sx={{
-                        color: tag.isArchived ? "text.disabled" : "text.primary",
-                        textDecoration: tag.isArchived ? "line-through" : "none",
+                        color: tag.isArchived ? 'text.disabled' : 'text.primary',
+                        textDecoration: tag.isArchived ? 'line-through' : 'none',
                       }}
                     >
                       {tag.name}
@@ -588,7 +589,11 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                       <Chip
                         label="Archived"
                         size="small"
-                        sx={{ fontSize: 10, height: 20, backgroundColor: (theme) => alpha(theme.palette.text.primary, 0.06) }}
+                        sx={{
+                          fontSize: 10,
+                          height: 20,
+                          backgroundColor: (theme) => alpha(theme.palette.text.primary, 0.06),
+                        }}
                       />
                     )}
                   </Stack>
@@ -616,10 +621,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
             }}
             slotProps={{ paper: { sx: { minWidth: 180 } } }}
           >
-            <MuiMenuItem
-              onClick={handleToggleArchiveTag}
-              disabled={tagLoading}
-            >
+            <MuiMenuItem onClick={handleToggleArchiveTag} disabled={tagLoading}>
               <ListItemIcon>
                 {selectedTagData?.isArchived ? (
                   <UnarchiveIcon fontSize="small" />
@@ -627,22 +629,20 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                   <ArchiveIcon fontSize="small" />
                 )}
               </ListItemIcon>
-              <ListItemText>
-                {selectedTagData?.isArchived ? "Unarchive" : "Archive"}
-              </ListItemText>
+              <ListItemText>{selectedTagData?.isArchived ? 'Unarchive' : 'Archive'}</ListItemText>
             </MuiMenuItem>
             <MuiMenuItem
               onClick={() => {
-                setDeleteTagError("");
+                setDeleteTagError('');
                 setDeleteTagDialogOpen(true);
                 setTagMenuAnchor(null);
               }}
               disabled={tagLoading}
             >
               <ListItemIcon>
-                <DeleteIcon fontSize="small" sx={{ color: "error.main" }} />
+                <DeleteIcon fontSize="small" sx={{ color: 'error.main' }} />
               </ListItemIcon>
-              <ListItemText sx={{ color: "error.main" }}>Delete</ListItemText>
+              <ListItemText sx={{ color: 'error.main' }}>Delete</ListItemText>
             </MuiMenuItem>
           </Menu>
         </Paper>
@@ -660,9 +660,9 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
           <DialogTitle>Delete Tag</DialogTitle>
           <DialogContent>
             <Typography variant="body2" color="text.primary">
-              Are you sure you want to delete the tag{" "}
-              <strong>&ldquo;{selectedTagData?.name}&rdquo;</strong>?
-              This is only possible if no expenses use this tag.
+              Are you sure you want to delete the tag{' '}
+              <strong>&ldquo;{selectedTagData?.name}&rdquo;</strong>? This is only possible if no
+              expenses use this tag.
             </Typography>
             {deleteTagError && (
               <Typography variant="body2" color="error.main" sx={{ mt: 1 }}>
@@ -687,7 +687,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
               color="error"
               disabled={tagLoading}
             >
-              {tagLoading ? <CircularProgress size={20} /> : "Delete"}
+              {tagLoading ? <CircularProgress size={20} /> : 'Delete'}
             </Button>
           </DialogActions>
         </Dialog>
@@ -707,16 +707,13 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 sx={{ py: 1 }}
               >
                 <Stack direction="row" alignItems="center" spacing={1.5}>
-                  <Avatar
-                    src={m.user.image}
-                    sx={{ width: 36, height: 36, fontSize: 14 }}
-                  >
+                  <Avatar src={m.user.image} sx={{ width: 36, height: 36, fontSize: 14 }}>
                     {m.user.name?.[0]}
                   </Avatar>
                   <Box>
                     <Stack direction="row" alignItems="center" spacing={1}>
                       <Typography variant="body2" fontWeight={500} color="text.primary">
-                        {m.user._id === userId ? "You" : m.user.name}
+                        {m.user._id === userId ? 'You' : m.user.name}
                       </Typography>
                       <Chip
                         label={m.role}
@@ -724,8 +721,11 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                         sx={{
                           fontSize: 10,
                           height: 20,
-                          ...(m.role === "admin"
-                            ? { backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1), color: "primary.main" }
+                          ...(m.role === 'admin'
+                            ? {
+                                backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
+                                color: 'primary.main',
+                              }
                             : {}),
                         }}
                       />
@@ -761,36 +761,27 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
             }}
             slotProps={{ paper: { sx: { minWidth: 180 } } }}
           >
-            {selectedMemberData?.role === "member" && (
-              <MuiMenuItem
-                onClick={() => handleMemberAction("promote")}
-                disabled={memberLoading}
-              >
+            {selectedMemberData?.role === 'member' && (
+              <MuiMenuItem onClick={() => handleMemberAction('promote')} disabled={memberLoading}>
                 <ListItemIcon>
                   <AdminPanelSettingsIcon fontSize="small" />
                 </ListItemIcon>
                 <ListItemText>Promote to Admin</ListItemText>
               </MuiMenuItem>
             )}
-            {selectedMemberData?.role === "admin" && (
-              <MuiMenuItem
-                onClick={() => handleMemberAction("demote")}
-                disabled={memberLoading}
-              >
+            {selectedMemberData?.role === 'admin' && (
+              <MuiMenuItem onClick={() => handleMemberAction('demote')} disabled={memberLoading}>
                 <ListItemIcon>
                   <PersonIcon fontSize="small" />
                 </ListItemIcon>
                 <ListItemText>Demote to Member</ListItemText>
               </MuiMenuItem>
             )}
-            <MuiMenuItem
-              onClick={() => handleMemberAction("remove")}
-              disabled={memberLoading}
-            >
+            <MuiMenuItem onClick={() => handleMemberAction('remove')} disabled={memberLoading}>
               <ListItemIcon>
-                <PersonRemoveIcon fontSize="small" sx={{ color: "error.main" }} />
+                <PersonRemoveIcon fontSize="small" sx={{ color: 'error.main' }} />
               </ListItemIcon>
-              <ListItemText sx={{ color: "error.main" }}>Remove</ListItemText>
+              <ListItemText sx={{ color: 'error.main' }}>Remove</ListItemText>
             </MuiMenuItem>
           </Menu>
         </Paper>
@@ -806,13 +797,18 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 direction="row"
                 alignItems="center"
                 spacing={1}
-                sx={{ bgcolor: "grey.50", borderRadius: 2, px: 1.5, py: 1 }}
+                sx={{ bgcolor: 'grey.50', borderRadius: 2, px: 1.5, py: 1 }}
               >
                 <Typography
                   component="code"
                   variant="body2"
                   color="text.primary"
-                  sx={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                  sx={{
+                    flex: 1,
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
                 >
                   {inviteLink}
                 </Typography>
@@ -833,13 +829,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 variant="outlined"
                 onClick={handleGenerateInviteLink}
                 disabled={inviteLinkLoading}
-                startIcon={
-                  inviteLinkLoading ? (
-                    <CircularProgress size={16} />
-                  ) : (
-                    <ShareIcon />
-                  )
-                }
+                startIcon={inviteLinkLoading ? <CircularProgress size={16} /> : <ShareIcon />}
               >
                 Generate Invite Link
               </Button>
@@ -848,18 +838,15 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
         </Paper>
 
         {/* ─── Danger Zone ─────────────────────────── */}
-        <Paper sx={{ p: 3, border: 2, borderColor: "error.light" }}>
+        <Paper sx={{ p: 3, border: 2, borderColor: 'error.light' }}>
           <Typography variant="subtitle1" fontWeight={600} color="error.main" sx={{ mb: 1 }}>
             Danger Zone
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Archiving a group will hide it from all members. Existing expenses and settlements will be preserved.
+            Archiving a group will hide it from all members. Existing expenses and settlements will
+            be preserved.
           </Typography>
-          <Button
-            variant="outlined"
-            color="error"
-            onClick={() => setArchiveDialogOpen(true)}
-          >
+          <Button variant="outlined" color="error" onClick={() => setArchiveDialogOpen(true)}>
             Archive Group
           </Button>
         </Paper>
@@ -875,8 +862,8 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
         <DialogTitle>Archive Group</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.primary">
-            Are you sure you want to archive <strong>&ldquo;{group.name}&rdquo;</strong>?
-            This will hide the group from all members.
+            Are you sure you want to archive <strong>&ldquo;{group.name}&rdquo;</strong>? This will
+            hide the group from all members.
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
@@ -893,7 +880,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
             color="error"
             disabled={archiveLoading}
           >
-            {archiveLoading ? <CircularProgress size={20} /> : "Archive"}
+            {archiveLoading ? <CircularProgress size={20} /> : 'Archive'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -902,7 +889,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
       <Snackbar
         open={snackbar.open}
         autoHideDuration={3000}
-        onClose={() => setSnackbar({ open: false, message: "" })}
+        onClose={() => setSnackbar({ open: false, message: '' })}
         message={snackbar.message}
       />
     </Container>

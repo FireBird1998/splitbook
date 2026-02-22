@@ -44,12 +44,12 @@ Allow users to update their profile preferences.
 
 ## Fields
 
-| Field              | Editable | Type     | Notes                           |
-| ------------------ | -------- | -------- | ------------------------------- |
-| Avatar             | No       | Image    | Pulled from Google profile      |
-| Name               | Yes      | Text     | 1-100 chars                     |
-| Email              | No       | Text     | From Google, can't be changed   |
-| Preferred Currency | Yes      | Select   | Used as default for new groups  |
+| Field              | Editable | Type   | Notes                          |
+| ------------------ | -------- | ------ | ------------------------------ |
+| Avatar             | No       | Image  | Pulled from Google profile     |
+| Name               | Yes      | Text   | 1-100 chars                    |
+| Email              | No       | Text   | From Google, can't be changed  |
+| Preferred Currency | Yes      | Select | Used as default for new groups |
 
 ---
 
@@ -70,4 +70,3 @@ Allow users to update their profile preferences.
 - `CurrencySelect` for preferred currency
 - MUI `Button` for save and sign out
 - MUI `Snackbar` for success/error feedback
-

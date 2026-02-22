@@ -1,6 +1,12 @@
-import { getAuthUser, unauthorized, success, serverError, validationError } from "@/lib/utils/api-response";
-import { groupService } from "@/lib/services/group.service";
-import { createGroupSchema } from "@/lib/validators/group.validator";
+import {
+  getAuthUser,
+  unauthorized,
+  success,
+  serverError,
+  validationError,
+} from '@/lib/utils/api-response';
+import { groupService } from '@/lib/services/group.service';
+import { createGroupSchema } from '@/lib/validators/group.validator';
 
 // POST /api/groups — Create a new group
 export async function POST(req: Request) {
@@ -31,4 +37,3 @@ export async function GET() {
     return serverError(err);
   }
 }
-

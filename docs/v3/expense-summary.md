@@ -68,7 +68,7 @@ Expense.aggregate([
   {
     $group: {
       _id: null,
-      totalAmount: { $sum: "$amount" },
+      totalAmount: { $sum: '$amount' },
       count: { $sum: 1 },
     },
   },

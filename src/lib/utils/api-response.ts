@@ -1,5 +1,5 @@
-import { auth } from "@/lib/auth";
-import { NextResponse } from "next/server";
+import { auth } from '@/lib/auth';
+import { NextResponse } from 'next/server';
 
 /**
  * Get authenticated user from session.
@@ -29,35 +29,29 @@ export function error(message: string, status: number = 400) {
  * 401 Unauthorized response
  */
 export function unauthorized() {
-  return NextResponse.json({ error: "Unauthorized", status: 401 }, { status: 401 });
+  return NextResponse.json({ error: 'Unauthorized', status: 401 }, { status: 401 });
 }
 
 /**
  * 403 Forbidden response
  */
 export function forbidden() {
-  return NextResponse.json({ error: "Forbidden", status: 403 }, { status: 403 });
+  return NextResponse.json({ error: 'Forbidden', status: 403 }, { status: 403 });
 }
 
 /**
  * 404 Not Found response
  */
-export function notFound(resource: string = "Resource") {
-  return NextResponse.json(
-    { error: `${resource} not found`, status: 404 },
-    { status: 404 }
-  );
+export function notFound(resource: string = 'Resource') {
+  return NextResponse.json({ error: `${resource} not found`, status: 404 }, { status: 404 });
 }
 
 /**
  * 500 Server Error response
  */
 export function serverError(err?: unknown) {
-  console.error("Server error:", err);
-  return NextResponse.json(
-    { error: "Internal server error", status: 500 },
-    { status: 500 }
-  );
+  console.error('Server error:', err);
+  return NextResponse.json({ error: 'Internal server error', status: 500 }, { status: 500 });
 }
 
 /**
@@ -65,8 +59,7 @@ export function serverError(err?: unknown) {
  */
 export function validationError(errors: unknown) {
   return NextResponse.json(
-    { error: "Validation error", details: errors, status: 422 },
-    { status: 422 }
+    { error: 'Validation error', details: errors, status: 422 },
+    { status: 422 },
   );
 }
-

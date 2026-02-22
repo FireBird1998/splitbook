@@ -73,6 +73,7 @@ Clicking "View Receipt" opens a full-screen modal with the image.
 **Development**: Store in `public/uploads/receipts/` with unique filenames.
 
 **Production**: Use Cloudinary (or similar) for:
+
 - CDN delivery
 - Image optimization
 - Automatic format conversion
@@ -95,13 +96,13 @@ Response: { data: { receiptUrl: "https://..." } }
 // In API route
 export async function POST(req: Request) {
   const formData = await req.formData();
-  const file = formData.get("file") as File;
+  const file = formData.get('file') as File;
 
   // Validate
-  if (!file) return error("No file provided");
-  if (file.size > 5 * 1024 * 1024) return error("File too large (max 5MB)");
-  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-    return error("Invalid file type");
+  if (!file) return error('No file provided');
+  if (file.size > 5 * 1024 * 1024) return error('File too large (max 5MB)');
+  if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+    return error('Invalid file type');
   }
 
   // Save file (local or Cloudinary)
@@ -132,4 +133,3 @@ export async function POST(req: Request) {
 - Slow connection: Show upload progress bar
 - Receipt on deleted expense: Receipt file is preserved (not cleaned up immediately)
 - Mobile: Camera option in file picker (native on most phones)
-

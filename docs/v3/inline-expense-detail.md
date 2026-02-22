@@ -59,4 +59,3 @@ The list API (`GET /api/groups/[id]/expenses`) already returns full expense data
 - Edit/Delete buttons inside expanded area trigger the same handlers as before
 - The 3-dot menu on collapsed cards is kept for quick edit/delete without expanding
 - Collapsing animation: simple CSS `max-height` transition or MUI `Collapse` component
-

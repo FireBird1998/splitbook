@@ -1,32 +1,32 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import { signOut } from "next-auth/react";
-import { useState } from "react";
-import Avatar from "@mui/material/Avatar";
-import Box from "@mui/material/Box";
-import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import Divider from "@mui/material/Divider";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import LogoutIcon from "@mui/icons-material/Logout";
-import SettingsIcon from "@mui/icons-material/Settings";
-import DashboardIcon from "@mui/icons-material/Dashboard";
-import GroupIcon from "@mui/icons-material/Group";
-import MenuIcon from "@mui/icons-material/Menu";
-import Drawer from "@mui/material/Drawer";
-import List from "@mui/material/List";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemText from "@mui/material/ListItemText";
-import Tooltip from "@mui/material/Tooltip";
-import { alpha } from "@mui/material/styles";
-import LightModeIcon from "@mui/icons-material/LightMode";
-import DarkModeIcon from "@mui/icons-material/DarkMode";
-import { usePathname } from "next/navigation";
-import { useThemeMode } from "@/providers/ThemeProvider";
+import Link from 'next/link';
+import { signOut } from 'next-auth/react';
+import { useState } from 'react';
+import Avatar from '@mui/material/Avatar';
+import Box from '@mui/material/Box';
+import IconButton from '@mui/material/IconButton';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import Divider from '@mui/material/Divider';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import LogoutIcon from '@mui/icons-material/Logout';
+import SettingsIcon from '@mui/icons-material/Settings';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import GroupIcon from '@mui/icons-material/Group';
+import MenuIcon from '@mui/icons-material/Menu';
+import Drawer from '@mui/material/Drawer';
+import List from '@mui/material/List';
+import ListItemButton from '@mui/material/ListItemButton';
+import ListItemText from '@mui/material/ListItemText';
+import Tooltip from '@mui/material/Tooltip';
+import { alpha } from '@mui/material/styles';
+import LightModeIcon from '@mui/icons-material/LightMode';
+import DarkModeIcon from '@mui/icons-material/DarkMode';
+import { usePathname } from 'next/navigation';
+import { useThemeMode } from '@/providers/ThemeProvider';
 
 interface NavbarProps {
   user: {
@@ -37,9 +37,9 @@ interface NavbarProps {
 }
 
 const mobileNavItems = [
-  { href: "/dashboard", label: "Dashboard", icon: DashboardIcon },
-  { href: "/groups", label: "Groups", icon: GroupIcon },
-  { href: "/settings", label: "Settings", icon: SettingsIcon },
+  { href: '/dashboard', label: 'Dashboard', icon: DashboardIcon },
+  { href: '/groups', label: 'Groups', icon: GroupIcon },
+  { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
 export default function Navbar({ user }: NavbarProps) {
@@ -53,14 +53,14 @@ export default function Navbar({ user }: NavbarProps) {
       <Box
         component="nav"
         sx={{
-          position: "fixed",
+          position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
           zIndex: (theme) => theme.zIndex.appBar,
-          bgcolor: "background.paper",
+          bgcolor: 'background.paper',
           borderBottom: 1,
-          borderColor: "divider",
+          borderColor: 'divider',
           px: 2,
           py: 1.5,
         }}
@@ -70,7 +70,7 @@ export default function Navbar({ user }: NavbarProps) {
             <IconButton
               onClick={() => setDrawerOpen(true)}
               size="small"
-              sx={{ display: { xs: "inline-flex", lg: "none" } }}
+              sx={{ display: { xs: 'inline-flex', lg: 'none' } }}
             >
               <MenuIcon />
             </IconButton>
@@ -79,16 +79,22 @@ export default function Navbar({ user }: NavbarProps) {
               component={Link}
               href="/dashboard"
               sx={{
-                display: "flex",
-                alignItems: "center",
+                display: 'flex',
+                alignItems: 'center',
                 gap: 1,
-                textDecoration: "none",
+                textDecoration: 'none',
               }}
             >
-              <Typography component="span" sx={{ fontSize: "1.5rem" }}>💰</Typography>
+              <Typography component="span" sx={{ fontSize: '1.5rem' }}>
+                💰
+              </Typography>
               <Typography
                 component="span"
-                sx={{ fontSize: "1.125rem", fontWeight: 700, color: "text.primary" }}
+                sx={{
+                  fontSize: '1.125rem',
+                  fontWeight: 700,
+                  color: 'text.primary',
+                }}
               >
                 SplitWise
               </Typography>
@@ -96,9 +102,9 @@ export default function Navbar({ user }: NavbarProps) {
           </Stack>
 
           <Stack direction="row" alignItems="center" spacing={1}>
-            <Tooltip title={mode === "light" ? "Dark mode" : "Light mode"}>
+            <Tooltip title={mode === 'light' ? 'Dark mode' : 'Light mode'}>
               <IconButton onClick={toggleTheme} size="small">
-                {mode === "light" ? (
+                {mode === 'light' ? (
                   <DarkModeIcon fontSize="small" />
                 ) : (
                   <LightModeIcon fontSize="small" />
@@ -108,8 +114,8 @@ export default function Navbar({ user }: NavbarProps) {
             <Typography
               variant="body2"
               sx={{
-                display: { xs: "none", sm: "block" },
-                color: "text.secondary",
+                display: { xs: 'none', sm: 'block' },
+                color: 'text.secondary',
               }}
             >
               {user.name}
@@ -117,7 +123,7 @@ export default function Navbar({ user }: NavbarProps) {
             <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small">
               <Avatar
                 src={user.image || undefined}
-                alt={user.name || "User"}
+                alt={user.name || 'User'}
                 sx={{ width: 32, height: 32 }}
               />
             </IconButton>
@@ -130,8 +136,8 @@ export default function Navbar({ user }: NavbarProps) {
         anchorEl={anchorEl}
         open={Boolean(anchorEl)}
         onClose={() => setAnchorEl(null)}
-        transformOrigin={{ horizontal: "right", vertical: "top" }}
-        anchorOrigin={{ horizontal: "right", vertical: "bottom" }}
+        transformOrigin={{ horizontal: 'right', vertical: 'top' }}
+        anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
         slotProps={{
           paper: {
             sx: { mt: 1, minWidth: 200 },
@@ -147,11 +153,7 @@ export default function Navbar({ user }: NavbarProps) {
           </Typography>
         </Box>
         <Divider />
-        <MenuItem
-          component={Link}
-          href="/settings"
-          onClick={() => setAnchorEl(null)}
-        >
+        <MenuItem component={Link} href="/settings" onClick={() => setAnchorEl(null)}>
           <ListItemIcon>
             <SettingsIcon fontSize="small" />
           </ListItemIcon>
@@ -160,7 +162,7 @@ export default function Navbar({ user }: NavbarProps) {
         <MenuItem
           onClick={() => {
             setAnchorEl(null);
-            signOut({ callbackUrl: "/" });
+            signOut({ callbackUrl: '/' });
           }}
         >
           <ListItemIcon>
@@ -171,25 +173,26 @@ export default function Navbar({ user }: NavbarProps) {
       </Menu>
 
       {/* Mobile Drawer */}
-      <Drawer
-        anchor="left"
-        open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
-      >
+      <Drawer anchor="left" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <Box sx={{ width: 256, p: 2 }}>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
-            <Typography component="span" sx={{ fontSize: "1.5rem" }}>💰</Typography>
+            <Typography component="span" sx={{ fontSize: '1.5rem' }}>
+              💰
+            </Typography>
             <Typography
               component="span"
-              sx={{ fontSize: "1.125rem", fontWeight: 700, color: "text.primary" }}
+              sx={{
+                fontSize: '1.125rem',
+                fontWeight: 700,
+                color: 'text.primary',
+              }}
             >
               SplitWise
             </Typography>
           </Stack>
           <List>
             {mobileNavItems.map((item) => {
-              const isActive =
-                pathname === item.href || pathname.startsWith(item.href + "/");
+              const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
               const Icon = item.icon;
 
               return (
@@ -202,17 +205,14 @@ export default function Navbar({ user }: NavbarProps) {
                   sx={{
                     borderRadius: 2,
                     mb: 0.5,
-                    "&.Mui-selected": {
+                    '&.Mui-selected': {
                       backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
-                      color: "primary.main",
+                      color: 'primary.main',
                     },
                   }}
                 >
                   <ListItemIcon sx={{ minWidth: 40 }}>
-                    <Icon
-                      fontSize="small"
-                      sx={{ color: isActive ? "primary.main" : undefined }}
-                    />
+                    <Icon fontSize="small" sx={{ color: isActive ? 'primary.main' : undefined }} />
                   </ListItemIcon>
                   <ListItemText primary={item.label} />
                 </ListItemButton>

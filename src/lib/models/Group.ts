@@ -1,8 +1,8 @@
-import mongoose, { Schema, Model } from "mongoose";
+import mongoose, { Schema, Model } from 'mongoose';
 
 export interface IGroupMemberDocument {
   user: mongoose.Types.ObjectId;
-  role: "admin" | "member";
+  role: 'admin' | 'member';
   joinedAt: Date;
 }
 
@@ -23,7 +23,7 @@ export interface IGroupDocument {
   tags: IGroupTagDocument[];
   defaultCurrency: string;
   alternateCurrencies: string[];
-  category: "trip" | "home" | "couple" | "work" | "other";
+  category: 'trip' | 'home' | 'couple' | 'work' | 'other';
   isArchived: boolean;
   inviteCode?: string | null;
   inviteCodeExpiresAt?: Date | null;
@@ -33,11 +33,11 @@ export interface IGroupDocument {
 
 const GroupMemberSchema = new Schema<IGroupMemberDocument>(
   {
-    user: { type: Schema.Types.ObjectId, ref: "User", required: true },
-    role: { type: String, enum: ["admin", "member"], default: "member" },
+    user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    role: { type: String, enum: ['admin', 'member'], default: 'member' },
     joinedAt: { type: Date, default: Date.now },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const GroupTagSchema = new Schema<IGroupTagDocument>({
@@ -57,7 +57,7 @@ const GroupSchema = new Schema<IGroupDocument>(
     },
     description: { type: String, trim: true, maxlength: 500 },
     image: { type: String },
-    createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     members: { type: [GroupMemberSchema], default: [] },
     tags: { type: [GroupTagSchema], default: [] },
     defaultCurrency: { type: String, required: true, trim: true },
@@ -66,13 +66,13 @@ const GroupSchema = new Schema<IGroupDocument>(
       default: [],
       validate: {
         validator: (v: string[]) => v.length <= 2,
-        message: "Maximum 2 alternate currencies allowed",
+        message: 'Maximum 2 alternate currencies allowed',
       },
     },
     category: {
       type: String,
-      enum: ["trip", "home", "couple", "work", "other"],
-      default: "other",
+      enum: ['trip', 'home', 'couple', 'work', 'other'],
+      default: 'other',
     },
     isArchived: { type: Boolean, default: false },
     inviteCode: { type: String, default: null, sparse: true },
@@ -80,22 +80,19 @@ const GroupSchema = new Schema<IGroupDocument>(
   },
   {
     timestamps: true,
-  }
+  },
 );
 
 // Indexes
-GroupSchema.index({ "members.user": 1 });
+GroupSchema.index({ 'members.user': 1 });
 GroupSchema.index({ createdBy: 1 });
 GroupSchema.index({ inviteCode: 1 }, { unique: true, sparse: true });
 
 // In development, Mongoose models persist across hot reloads but schema changes
 // are not picked up. Force re-registration so new/modified fields are recognised.
 if (mongoose.models.Group) {
-  mongoose.deleteModel("Group");
+  mongoose.deleteModel('Group');
 }
-const Group: Model<IGroupDocument> = mongoose.model<IGroupDocument>(
-  "Group",
-  GroupSchema
-);
+const Group: Model<IGroupDocument> = mongoose.model<IGroupDocument>('Group', GroupSchema);
 
 export default Group;

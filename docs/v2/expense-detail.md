@@ -23,11 +23,9 @@ Props:
 ```
 
 Fetches full expense data via SWR:
+
 ```typescript
-const { data } = useSWR(
-  expenseId ? `/api/groups/${groupId}/expenses/${expenseId}` : null,
-  fetcher
-);
+const { data } = useSWR(expenseId ? `/api/groups/${groupId}/expenses/${expenseId}` : null, fetcher);
 ```
 
 #### UI Layout
@@ -90,7 +88,7 @@ Make the card clickable:
 onClick?: () => void;
 
 // Wrap card in a clickable div / button:
-<div onClick={onClick} className="cursor-pointer ...">
+<Box onClick={onClick} sx={{ cursor: "pointer" }}>
 ```
 
 ### File: `src/components/expenses/ExpenseListView.tsx`
@@ -114,4 +112,3 @@ None. The GET single expense API already returns all needed data including `edit
 - **New** `src/components/expenses/ExpenseDetailDialog.tsx`
 - `src/components/expenses/ExpenseCard.tsx` — add `onClick` prop, cursor pointer
 - `src/components/expenses/ExpenseListView.tsx` — manage detail dialog state
-

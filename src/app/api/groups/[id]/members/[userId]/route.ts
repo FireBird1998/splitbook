@@ -6,18 +6,18 @@ import {
   forbidden,
   serverError,
   validationError,
-} from "@/lib/utils/api-response";
-import { groupService } from "@/lib/services/group.service";
-import { z } from "zod/v4";
+} from '@/lib/utils/api-response';
+import { groupService } from '@/lib/services/group.service';
+import { z } from 'zod/v4';
 
 const updateMemberSchema = z.object({
-  role: z.enum(["admin", "member"]),
+  role: z.enum(['admin', 'member']),
 });
 
 // PATCH /api/groups/[id]/members/[userId] — Update member role
 export async function PATCH(
   req: Request,
-  { params }: { params: Promise<{ id: string; userId: string }> }
+  { params }: { params: Promise<{ id: string; userId: string }> },
 ) {
   try {
     const user = await getAuthUser();
@@ -32,17 +32,15 @@ export async function PATCH(
       id,
       targetUserId,
       parsed.data.role,
-      user.id!
+      user.id!,
     );
-    if (!result) return notFound("Group");
+    if (!result) return notFound('Group');
 
     return success(result);
   } catch (err) {
-    if (err instanceof Error && err.message === "FORBIDDEN") return forbidden();
-    if (err instanceof Error && err.message === "LAST_ADMIN")
-      return serverError(
-        new Error("Cannot demote the last admin. Promote another member first.")
-      );
+    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
+    if (err instanceof Error && err.message === 'LAST_ADMIN')
+      return serverError(new Error('Cannot demote the last admin. Promote another member first.'));
     return serverError(err);
   }
 }
@@ -50,7 +48,7 @@ export async function PATCH(
 // DELETE /api/groups/[id]/members/[userId] — Remove member from group
 export async function DELETE(
   _req: Request,
-  { params }: { params: Promise<{ id: string; userId: string }> }
+  { params }: { params: Promise<{ id: string; userId: string }> },
 ) {
   try {
     const user = await getAuthUser();
@@ -59,20 +57,15 @@ export async function DELETE(
     const { id, userId: targetUserId } = await params;
 
     const result = await groupService.removeMember(id, targetUserId, user.id!);
-    if (!result) return notFound("Group");
+    if (!result) return notFound('Group');
 
-    return success({ message: "Member removed" });
+    return success({ message: 'Member removed' });
   } catch (err) {
-    if (err instanceof Error && err.message === "FORBIDDEN") return forbidden();
-    if (err instanceof Error && err.message === "LAST_ADMIN")
-      return serverError(
-        new Error("Cannot remove the last admin.")
-      );
-    if (err instanceof Error && err.message === "SELF_REMOVE")
-      return serverError(
-        new Error("You cannot remove yourself. Use leave group instead.")
-      );
+    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
+    if (err instanceof Error && err.message === 'LAST_ADMIN')
+      return serverError(new Error('Cannot remove the last admin.'));
+    if (err instanceof Error && err.message === 'SELF_REMOVE')
+      return serverError(new Error('You cannot remove yourself. Use leave group instead.'));
     return serverError(err);
   }
 }
-

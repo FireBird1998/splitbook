@@ -1,12 +1,12 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import Box from "@mui/material/Box";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Button from "@mui/material/Button";
-import CircularProgress from "@mui/material/CircularProgress";
+import { useState } from 'react';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
 
 interface InvitationCardProps {
   invitation: Record<string, unknown>;
@@ -19,17 +19,17 @@ export default function InvitationCard({ invitation, onAction }: InvitationCardP
   const group = invitation.group as Record<string, unknown>;
   const invitedBy = invitation.invitedBy as Record<string, unknown>;
 
-  const handleAction = async (action: "accept" | "decline") => {
+  const handleAction = async (action: 'accept' | 'decline') => {
     setLoading(action);
     try {
       await fetch(`/api/invitations/${invitation._id}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
       });
       onAction();
     } catch {
-      console.error("Failed to process invitation");
+      console.error('Failed to process invitation');
     } finally {
       setLoading(null);
     }
@@ -40,9 +40,9 @@ export default function InvitationCard({ invitation, onAction }: InvitationCardP
       variant="outlined"
       sx={{
         p: 2,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
         gap: 2,
       }}
     >
@@ -59,18 +59,18 @@ export default function InvitationCard({ invitation, onAction }: InvitationCardP
           size="small"
           variant="contained"
           disabled={!!loading}
-          onClick={() => handleAction("accept")}
+          onClick={() => handleAction('accept')}
         >
-          {loading === "accept" ? <CircularProgress size={16} /> : "Accept"}
+          {loading === 'accept' ? <CircularProgress size={16} /> : 'Accept'}
         </Button>
         <Button
           size="small"
           variant="outlined"
           disabled={!!loading}
-          onClick={() => handleAction("decline")}
+          onClick={() => handleAction('decline')}
           color="inherit"
         >
-          {loading === "decline" ? <CircularProgress size={16} /> : "Decline"}
+          {loading === 'decline' ? <CircularProgress size={16} /> : 'Decline'}
         </Button>
       </Stack>
     </Paper>

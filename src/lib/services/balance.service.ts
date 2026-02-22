@@ -1,9 +1,9 @@
-import connectDB from "@/lib/db";
-import Expense from "@/lib/models/Expense";
-import Settlement from "@/lib/models/Settlement";
-import Group from "@/lib/models/Group";
-import User from "@/lib/models/User";
-import { calculateNetBalances, simplifyDebts } from "@/lib/utils/debt-simplifier";
+import connectDB from '@/lib/db';
+import Expense from '@/lib/models/Expense';
+import Settlement from '@/lib/models/Settlement';
+import Group from '@/lib/models/Group';
+import User from '@/lib/models/User';
+import { calculateNetBalances, simplifyDebts } from '@/lib/utils/debt-simplifier';
 
 export class BalanceService {
   /**
@@ -16,7 +16,7 @@ export class BalanceService {
     const [expenses, settlements, group] = await Promise.all([
       Expense.find({ group: groupId, isDeleted: false }).lean(),
       Settlement.find({ group: groupId }).lean(),
-      Group.findById(groupId).populate("members.user", "name email image").lean(),
+      Group.findById(groupId).populate('members.user', 'name email image').lean(),
     ]);
 
     if (!group) return null;
@@ -44,7 +44,12 @@ export class BalanceService {
     // Build user info map
     const userMap = new Map<string, { _id: string; name: string; email: string; image?: string }>();
     for (const member of group.members) {
-      const user = member.user as unknown as { _id: { toString(): string }; name: string; email: string; image?: string };
+      const user = member.user as unknown as {
+        _id: { toString(): string };
+        name: string;
+        email: string;
+        image?: string;
+      };
       userMap.set(user._id.toString(), {
         _id: user._id.toString(),
         name: user.name,
@@ -55,15 +60,19 @@ export class BalanceService {
 
     // Map balances to include user info
     const balances = netBalances.map((b) => ({
-      user: userMap.get(b.userId) || { _id: b.userId, name: "Unknown", email: "" },
+      user: userMap.get(b.userId) || {
+        _id: b.userId,
+        name: 'Unknown',
+        email: '',
+      },
       balance: b.amount,
     }));
 
     // Calculate simplified debts
     const simplifiedTransactions = simplifyDebts(netBalances);
     const debts = simplifiedTransactions.map((t) => ({
-      from: userMap.get(t.from) || { _id: t.from, name: "Unknown", email: "" },
-      to: userMap.get(t.to) || { _id: t.to, name: "Unknown", email: "" },
+      from: userMap.get(t.from) || { _id: t.from, name: 'Unknown', email: '' },
+      to: userMap.get(t.to) || { _id: t.to, name: 'Unknown', email: '' },
       amount: t.amount,
     }));
 
@@ -81,7 +90,7 @@ export class BalanceService {
     await connectDB();
 
     const groups = await Group.find({
-      "members.user": userId,
+      'members.user': userId,
       isArchived: false,
     }).lean();
 
@@ -94,8 +103,14 @@ export class BalanceService {
       ]);
 
       const expenseData = expenses.map((e) => ({
-        paidBy: e.paidBy.map((p) => ({ user: p.user.toString(), amount: p.amount })),
-        splitBetween: e.splitBetween.map((s) => ({ user: s.user.toString(), amount: s.amount })),
+        paidBy: e.paidBy.map((p) => ({
+          user: p.user.toString(),
+          amount: p.amount,
+        })),
+        splitBetween: e.splitBetween.map((s) => ({
+          user: s.user.toString(),
+          amount: s.amount,
+        })),
       }));
 
       const settlementData = settlements.map((s) => ({
@@ -126,4 +141,3 @@ export class BalanceService {
 }
 
 export const balanceService = new BalanceService();
-

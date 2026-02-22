@@ -24,6 +24,7 @@ Managed by Auth.js + extended with app-specific fields.
 **Indexes**: `{ email: 1 }` (unique)
 
 **Notes**:
+
 - Auth.js creates `users`, `accounts`, and `sessions` collections automatically.
 - We extend the `users` collection with `preferredCurrency`.
 
@@ -55,11 +56,13 @@ Managed by Auth.js + extended with app-specific fields.
 ```
 
 **Indexes**:
+
 - `{ "members.user": 1 }` — fast lookup of user's groups
 - `{ inviteCode: 1 }` — unique sparse (only when set)
 - `{ createdBy: 1 }`
 
 **Validation**:
+
 - `name`: required, trimmed, 1-100 chars
 - `alternateCurrencies`: max 2 items, each must be valid ISO 4217 code
 - `members`: at least 1 member (the creator)
@@ -119,6 +122,7 @@ Managed by Auth.js + extended with app-specific fields.
 ```
 
 **Indexes**:
+
 - `{ group: 1, date: -1 }` — list expenses by date
 - `{ group: 1, isDeleted: 1 }` — filter out deleted
 - `{ group: 1, tags: 1 }` — filter by tag
@@ -126,6 +130,7 @@ Managed by Auth.js + extended with app-specific fields.
 - `{ description: "text" }` — text search for regex-like queries
 
 **Validation**:
+
 - `amount`: positive number
 - `paidBy`: at least 1 entry, amounts sum to `amount`
 - `splitBetween`: at least 1 entry, amounts sum to `amount`
@@ -151,6 +156,7 @@ Managed by Auth.js + extended with app-specific fields.
 ```
 
 **Indexes**:
+
 - `{ group: 1, createdAt: -1 }`
 - `{ group: 1, paidBy: 1 }`
 - `{ group: 1, paidTo: 1 }`
@@ -184,9 +190,11 @@ Managed by Auth.js + extended with app-specific fields.
 ```
 
 **Indexes**:
+
 - `{ group: 1, createdAt: -1 }` — paginated activity feed
 
 **Notes**:
+
 - Activity records are append-only, never updated or deleted.
 - Used for the group activity feed and audit trail.
 
@@ -209,6 +217,7 @@ Managed by Auth.js + extended with app-specific fields.
 ```
 
 **Indexes**:
+
 - `{ token: 1 }` (unique)
 - `{ invitedEmail: 1, group: 1 }` — prevent duplicate invites
 - `{ status: 1, expiresAt: 1 }` — cleanup expired invitations
@@ -247,4 +256,3 @@ Auth.js with the MongoDB adapter automatically creates and manages:
 - **verification_tokens** — Email verification tokens (not used with Google-only)
 
 We use JWT strategy for sessions (no `sessions` collection needed).
-

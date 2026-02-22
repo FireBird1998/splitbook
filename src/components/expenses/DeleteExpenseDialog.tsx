@@ -1,15 +1,15 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import Button from "@mui/material/Button";
-import CircularProgress from "@mui/material/CircularProgress";
-import { formatCurrency } from "@/lib/utils/currency";
+import { useState } from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import { formatCurrency } from '@/lib/utils/currency';
 
 interface DeleteExpenseDialogProps {
   open: boolean;
@@ -27,30 +27,29 @@ export default function DeleteExpenseDialog({
   onDeleted,
 }: DeleteExpenseDialogProps) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
   if (!expense) return null;
 
   const handleDelete = async () => {
     setLoading(true);
-    setError("");
+    setError('');
 
     try {
-      const res = await fetch(
-        `/api/groups/${groupId}/expenses/${expense._id}`,
-        { method: "DELETE" }
-      );
+      const res = await fetch(`/api/groups/${groupId}/expenses/${expense._id}`, {
+        method: 'DELETE',
+      });
 
       if (!res.ok) {
         const data = await res.json();
-        setError(data.error || "Failed to delete expense");
+        setError(data.error || 'Failed to delete expense');
         return;
       }
 
       onDeleted(expense._id as string);
       onClose();
     } catch {
-      setError("Something went wrong.");
+      setError('Something went wrong.');
     } finally {
       setLoading(false);
     }
@@ -64,11 +63,11 @@ export default function DeleteExpenseDialog({
           <Box
             sx={{
               bgcolor: (theme) => `${theme.palette.error.main}12`,
-              color: "error.main",
+              color: 'error.main',
               px: 1.5,
               py: 1,
               borderRadius: 2,
-              fontSize: "0.875rem",
+              fontSize: '0.875rem',
               mb: 1.5,
             }}
           >
@@ -76,11 +75,12 @@ export default function DeleteExpenseDialog({
           </Box>
         )}
         <Typography variant="body2" color="text.primary">
-          Are you sure you want to delete{" "}
-          <strong>&ldquo;{expense.description as string}&rdquo;</strong>{" "}
-          ({formatCurrency(expense.amount as number, expense.currency as string)})?
+          Are you sure you want to delete{' '}
+          <strong>&ldquo;{expense.description as string}&rdquo;</strong> (
+          {formatCurrency(expense.amount as number, expense.currency as string)}
+          )?
         </Typography>
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: "block" }}>
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
           This can be undone shortly after deletion.
         </Typography>
       </DialogContent>
@@ -88,13 +88,8 @@ export default function DeleteExpenseDialog({
         <Button onClick={onClose} color="inherit" disabled={loading}>
           Cancel
         </Button>
-        <Button
-          onClick={handleDelete}
-          variant="contained"
-          color="error"
-          disabled={loading}
-        >
-          {loading ? <CircularProgress size={20} /> : "Delete"}
+        <Button onClick={handleDelete} variant="contained" color="error" disabled={loading}>
+          {loading ? <CircularProgress size={20} /> : 'Delete'}
         </Button>
       </DialogActions>
     </Dialog>

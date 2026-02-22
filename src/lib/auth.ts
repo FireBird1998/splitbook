@@ -1,7 +1,7 @@
-import NextAuth from "next-auth";
-import { MongoDBAdapter } from "@auth/mongodb-adapter";
-import clientPromise from "./mongodb-client";
-import { authConfig } from "./auth.config";
+import NextAuth from 'next-auth';
+import { MongoDBAdapter } from '@auth/mongodb-adapter';
+import clientPromise from './mongodb-client';
+import { authConfig } from './auth.config';
 
 /**
  * Full Auth.js configuration with MongoDB adapter.

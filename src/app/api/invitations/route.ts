@@ -1,5 +1,5 @@
-import { getAuthUser, unauthorized, success, serverError } from "@/lib/utils/api-response";
-import { invitationService } from "@/lib/services/invitation.service";
+import { getAuthUser, unauthorized, success, serverError } from '@/lib/utils/api-response';
+import { invitationService } from '@/lib/services/invitation.service';
 
 // GET /api/invitations — Get my pending invitations
 export async function GET() {
@@ -13,4 +13,3 @@ export async function GET() {
     return serverError(err);
   }
 }
-

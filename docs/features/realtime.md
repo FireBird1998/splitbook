@@ -18,11 +18,11 @@ When multiple group members are viewing the same group, changes (new expenses, s
 
 ### Why Polling First?
 
-| Approach | Pros | Cons |
-| -------- | ---- | ---- |
-| Polling (SWR) | Simple, works everywhere, no server state | Slight delay, unnecessary requests |
-| SSE | Real-time, server push | Needs connection management, more complex |
-| WebSocket | Bi-directional, real-time | Most complex, overkill for this use case |
+| Approach      | Pros                                      | Cons                                      |
+| ------------- | ----------------------------------------- | ----------------------------------------- |
+| Polling (SWR) | Simple, works everywhere, no server state | Slight delay, unnecessary requests        |
+| SSE           | Real-time, server push                    | Needs connection management, more complex |
+| WebSocket     | Bi-directional, real-time                 | Most complex, overkill for this use case  |
 
 For v1, SWR's built-in polling (`refreshInterval`) is sufficient and simple.
 
@@ -35,40 +35,28 @@ For v1, SWR's built-in polling (`refreshInterval`) is sufficient and simple.
 ```typescript
 // Expenses list — auto-refresh every 10 seconds when tab is focused
 function useExpenses(groupId: string, filters: ExpenseFilters) {
-  return useSWR(
-    `/api/groups/${groupId}/expenses?${buildParams(filters)}`,
-    fetcher,
-    {
-      refreshInterval: 10_000,        // Poll every 10s
-      revalidateOnFocus: true,        // Refresh when tab gets focus
-      revalidateOnReconnect: true,    // Refresh after network recovery
-      dedupingInterval: 5_000,        // Dedupe requests within 5s
-    }
-  );
+  return useSWR(`/api/groups/${groupId}/expenses?${buildParams(filters)}`, fetcher, {
+    refreshInterval: 10_000, // Poll every 10s
+    revalidateOnFocus: true, // Refresh when tab gets focus
+    revalidateOnReconnect: true, // Refresh after network recovery
+    dedupingInterval: 5_000, // Dedupe requests within 5s
+  });
 }
 
 // Balances — auto-refresh every 15 seconds
 function useBalances(groupId: string) {
-  return useSWR(
-    `/api/groups/${groupId}/balances`,
-    fetcher,
-    {
-      refreshInterval: 15_000,
-      revalidateOnFocus: true,
-    }
-  );
+  return useSWR(`/api/groups/${groupId}/balances`, fetcher, {
+    refreshInterval: 15_000,
+    revalidateOnFocus: true,
+  });
 }
 
 // Activity feed — auto-refresh every 10 seconds
 function useActivity(groupId: string, page: number) {
-  return useSWR(
-    `/api/groups/${groupId}/activity?page=${page}`,
-    fetcher,
-    {
-      refreshInterval: 10_000,
-      revalidateOnFocus: true,
-    }
-  );
+  return useSWR(`/api/groups/${groupId}/activity?page=${page}`, fetcher, {
+    refreshInterval: 10_000,
+    revalidateOnFocus: true,
+  });
 }
 ```
 
@@ -83,7 +71,7 @@ async function addExpense(groupId: string, data: CreateExpenseInput) {
     `/api/groups/${groupId}/expenses`,
     async (current) => {
       const response = await fetch(`/api/groups/${groupId}/expenses`, {
-        method: "POST",
+        method: 'POST',
         body: JSON.stringify(data),
       });
       const result = await response.json();
@@ -92,12 +80,13 @@ async function addExpense(groupId: string, data: CreateExpenseInput) {
         expenses: [result.data, ...(current?.expenses ?? [])],
       };
     },
-    { optimisticData: (current) => ({
+    {
+      optimisticData: (current) => ({
         ...current,
-        expenses: [{ ...data, _id: "temp", createdAt: new Date() }, ...(current?.expenses ?? [])],
+        expenses: [{ ...data, _id: 'temp', createdAt: new Date() }, ...(current?.expenses ?? [])],
       }),
       rollbackOnError: true,
-    }
+    },
   );
 }
 ```
@@ -120,8 +109,8 @@ When polling detects new data that the user didn't create:
 ```typescript
 // Compare previous and new data
 function detectNewItems(prev: Expense[], next: Expense[], currentUserId: string) {
-  const prevIds = new Set(prev.map(e => e._id));
-  const newItems = next.filter(e => !prevIds.has(e._id) && e.createdBy !== currentUserId);
+  const prevIds = new Set(prev.map((e) => e._id));
+  const newItems = next.filter((e) => !prevIds.has(e._id) && e.createdBy !== currentUserId);
   return newItems;
 }
 ```
@@ -144,7 +133,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
       // Send keepalive every 30s
       const keepalive = setInterval(() => {
-        controller.enqueue(encoder.encode(": keepalive\n\n"));
+        controller.enqueue(encoder.encode(': keepalive\n\n'));
       }, 30_000);
 
       // Listen for group events (from a pub/sub or change stream)
@@ -156,7 +145,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       eventEmitter.on(`group:${params.id}`, listener);
 
       // Cleanup
-      req.signal.addEventListener("abort", () => {
+      req.signal.addEventListener('abort', () => {
         clearInterval(keepalive);
         eventEmitter.off(`group:${params.id}`, listener);
       });
@@ -165,9 +154,9 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
   return new Response(stream, {
     headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
     },
   });
 }
@@ -196,11 +185,10 @@ function useGroupEvents(groupId: string) {
 
 ## Refresh Intervals Summary
 
-| Data        | Interval | Trigger                    |
-| ----------- | -------- | -------------------------- |
+| Data        | Interval | Trigger                     |
+| ----------- | -------- | --------------------------- |
 | Expenses    | 10s      | Polling + focus + reconnect |
 | Balances    | 15s      | Polling + focus             |
 | Activity    | 10s      | Polling + focus             |
 | Group info  | 30s      | Polling + focus             |
 | Groups list | 30s      | Polling + focus             |
-

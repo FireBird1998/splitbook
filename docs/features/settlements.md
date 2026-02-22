@@ -59,6 +59,7 @@ Settlements record payments between group members to clear debts. When someone o
 ### Problem
 
 With many expenses, the raw debts can have lots of transactions:
+
 ```
 A owes B: €30
 B owes C: €20
@@ -87,11 +88,12 @@ Use a **net balance algorithm** to minimize the number of transfers:
 ```typescript
 function simplifyDebts(balances: { userId: string; amount: number }[]) {
   // Separate into debtors (negative) and creditors (positive)
-  const debtors = balances.filter(b => b.amount < 0).sort((a, b) => a.amount - b.amount);
-  const creditors = balances.filter(b => b.amount > 0).sort((a, b) => b.amount - a.amount);
+  const debtors = balances.filter((b) => b.amount < 0).sort((a, b) => a.amount - b.amount);
+  const creditors = balances.filter((b) => b.amount > 0).sort((a, b) => b.amount - a.amount);
 
   const transactions = [];
-  let i = 0, j = 0;
+  let i = 0,
+    j = 0;
 
   while (i < debtors.length && j < creditors.length) {
     const amount = Math.min(-debtors[i].amount, creditors[j].amount);
@@ -119,10 +121,12 @@ function simplifyDebts(balances: { userId: string; amount: number }[]) {
 ### How Balances Work
 
 For each expense in the group:
+
 - Each person in `paidBy` gets **credited** their paid amount
 - Each person in `splitBetween` gets **debited** their share amount
 
 For each settlement:
+
 - `paidBy` gets **debited** the settlement amount (they paid out cash)
 - `paidTo` gets **credited** the settlement amount (they received cash)
 
@@ -186,4 +190,3 @@ See [api.md](../api.md#settlements) and [api.md](../api.md#balances) for full do
 - Settlement on archived group: Not allowed
 - Currency mismatch: Settlement currency should match group default or alternate currencies (warn but allow)
 - Concurrent expenses: Balance calculation must include all expenses up to current moment
-

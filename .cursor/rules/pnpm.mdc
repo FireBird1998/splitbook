@@ -1,0 +1,13 @@
+---
+description: Use pnpm as the package manager — never npm or yarn
+alwaysApply: true
+---
+
+# Package Manager: pnpm
+
+This project uses **pnpm** exclusively.
+
+- Install packages: `pnpm add <pkg>` / `pnpm add -D <pkg>`
+- Run scripts: `pnpm run <script>` or `pnpm <script>`
+- Install all deps: `pnpm install`
+- Never use `npm` or `yarn` commands

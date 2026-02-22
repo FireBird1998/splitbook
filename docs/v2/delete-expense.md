@@ -52,6 +52,7 @@ Props:
 Delete button: red color, calls `DELETE /api/groups/${groupId}/expenses/${expense._id}`
 
 On success:
+
 - Close dialog
 - Show Snackbar/toast: "Expense deleted" with "Undo" action
 - Revalidate expense list via SWR mutate
@@ -79,15 +80,15 @@ In `ExpenseListView`, after delete succeeds:
 // Show snackbar
 setSnackbar({
   open: true,
-  message: "Expense deleted",
+  message: 'Expense deleted',
   expenseId: deletedId,
 });
 
 // Undo handler
 const handleUndo = async () => {
   await fetch(`/api/groups/${groupId}/expenses/${snackbar.expenseId}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ isDeleted: false }),
   });
   mutate(); // refresh list
@@ -123,4 +124,3 @@ Snackbar auto-hides after 5 seconds.
 - `src/lib/validators/expense.validator.ts` — add `isDeleted` to update schema
 - `src/lib/services/expense.service.ts` — handle restore logic
 - `src/types/index.ts` — add activity type
-

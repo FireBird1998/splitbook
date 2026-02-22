@@ -69,14 +69,14 @@ Each group has an expense dashboard as its primary view. It shows a filterable, 
 
 One-click pill buttons that set date range automatically.
 
-| Filter       | Date Range                              |
-| ------------ | --------------------------------------- |
-| All          | No date filter                          |
-| This Week    | Monday of current week → today          |
-| Last Week    | Monday → Sunday of previous week        |
-| This Month   | 1st of current month → today            |
-| Last Month   | 1st → last day of previous month        |
-| Last 30 Days | Today - 30 days → today                 |
+| Filter       | Date Range                       |
+| ------------ | -------------------------------- |
+| All          | No date filter                   |
+| This Week    | Monday of current week → today   |
+| Last Week    | Monday → Sunday of previous week |
+| This Month   | 1st of current month → today     |
+| Last Month   | 1st → last day of previous month |
+| Last 30 Days | Today - 30 days → today          |
 
 ### Implementation
 
@@ -84,16 +84,22 @@ One-click pill buttons that set date range automatically.
 function getQuickFilterDates(filter: string): { from: Date; to: Date } | null {
   const now = new Date();
   switch (filter) {
-    case "thisWeek":
+    case 'thisWeek':
       return { from: startOfWeek(now, { weekStartsOn: 1 }), to: now };
-    case "lastWeek":
+    case 'lastWeek':
       const lastWeekStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
-      return { from: lastWeekStart, to: endOfWeek(lastWeekStart, { weekStartsOn: 1 }) };
-    case "thisMonth":
+      return {
+        from: lastWeekStart,
+        to: endOfWeek(lastWeekStart, { weekStartsOn: 1 }),
+      };
+    case 'thisMonth':
       return { from: startOfMonth(now), to: now };
-    case "lastMonth":
-      return { from: startOfMonth(subMonths(now, 1)), to: endOfMonth(subMonths(now, 1)) };
-    case "last30Days":
+    case 'lastMonth':
+      return {
+        from: startOfMonth(subMonths(now, 1)),
+        to: endOfMonth(subMonths(now, 1)),
+      };
+    case 'last30Days':
       return { from: subDays(now, 30), to: now };
     default:
       return null;
@@ -108,26 +114,31 @@ function getQuickFilterDates(filter: string): { from: Date; to: Date } | null {
 Expandable section (collapsed by default on mobile).
 
 ### Date Range Filter
+
 - Two date pickers: "From" and "To"
 - Selecting a quick filter auto-fills these
 - Custom date range overrides quick filter selection
 
 ### Category Filter
+
 - Dropdown with all categories
 - "All" option to reset
 
 ### Tag Filter
+
 - Autocomplete chip input
 - Shows tags that exist in group expenses
 - Multiple tags = AND filter (expense must have ALL selected tags)
 
 ### Search
+
 - Text input with debounce (300ms)
 - Searches `description` field
 - Supports partial matches (substring search)
 - API uses regex: `/searchTerm/i`
 
 ### Sort
+
 - **Sort by**: Date (default), Amount
 - **Sort order**: Newest first (default), Oldest first, Highest amount, Lowest amount
 
@@ -149,22 +160,22 @@ function useExpenseFilters() {
   const router = useRouter();
 
   const filters = {
-    quickFilter: searchParams.get("quickFilter") ?? "all",
-    dateFrom: searchParams.get("dateFrom"),
-    dateTo: searchParams.get("dateTo"),
-    category: searchParams.get("category"),
-    tags: searchParams.get("tags")?.split(",").filter(Boolean) ?? [],
-    search: searchParams.get("search") ?? "",
-    sortBy: searchParams.get("sortBy") ?? "date",
-    sortOrder: searchParams.get("sortOrder") ?? "desc",
-    page: parseInt(searchParams.get("page") ?? "1"),
+    quickFilter: searchParams.get('quickFilter') ?? 'all',
+    dateFrom: searchParams.get('dateFrom'),
+    dateTo: searchParams.get('dateTo'),
+    category: searchParams.get('category'),
+    tags: searchParams.get('tags')?.split(',').filter(Boolean) ?? [],
+    search: searchParams.get('search') ?? '',
+    sortBy: searchParams.get('sortBy') ?? 'date',
+    sortOrder: searchParams.get('sortOrder') ?? 'desc',
+    page: parseInt(searchParams.get('page') ?? '1'),
   };
 
   const setFilter = (key: string, value: string | null) => {
     const params = new URLSearchParams(searchParams);
     if (value) params.set(key, value);
     else params.delete(key);
-    params.set("page", "1"); // Reset to page 1 on filter change
+    params.set('page', '1'); // Reset to page 1 on filter change
     router.push(`?${params.toString()}`);
   };
 
@@ -185,11 +196,11 @@ function useExpenseFilters() {
 
 ## Empty States
 
-| State                     | Message                                     |
-| ------------------------- | ------------------------------------------- |
-| No expenses in group      | "No expenses yet. Add your first expense!"  |
-| No expenses match filters | "No expenses match your filters."           |
-| No expenses this week     | "No expenses this week."                    |
+| State                     | Message                                    |
+| ------------------------- | ------------------------------------------ |
+| No expenses in group      | "No expenses yet. Add your first expense!" |
+| No expenses match filters | "No expenses match your filters."          |
+| No expenses this week     | "No expenses this week."                   |
 
 ---
 
@@ -199,15 +210,15 @@ function useExpenseFilters() {
 // Client-side SWR hook
 function useExpenses(groupId: string, filters: ExpenseFilters) {
   const params = new URLSearchParams();
-  if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
-  if (filters.dateTo) params.set("dateTo", filters.dateTo);
-  if (filters.category) params.set("category", filters.category);
-  if (filters.tags.length) params.set("tags", filters.tags.join(","));
-  if (filters.search) params.set("search", filters.search);
-  params.set("sortBy", filters.sortBy);
-  params.set("sortOrder", filters.sortOrder);
-  params.set("page", String(filters.page));
-  params.set("limit", "20");
+  if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
+  if (filters.dateTo) params.set('dateTo', filters.dateTo);
+  if (filters.category) params.set('category', filters.category);
+  if (filters.tags.length) params.set('tags', filters.tags.join(','));
+  if (filters.search) params.set('search', filters.search);
+  params.set('sortBy', filters.sortBy);
+  params.set('sortOrder', filters.sortOrder);
+  params.set('page', String(filters.page));
+  params.set('limit', '20');
 
   return useSWR(`/api/groups/${groupId}/expenses?${params}`);
 }
@@ -222,4 +233,3 @@ function useExpenses(groupId: string, filters: ExpenseFilters) {
 - Expense cards: Full-width, stacked
 - Search: Always visible at top
 - Pagination: "Load More" button instead of page numbers
-

@@ -2,7 +2,7 @@
 // It's separate from Mongoose connection to avoid conflicts.
 // Uses lazy initialization to avoid build-time errors.
 
-import { MongoClient, MongoClientOptions } from "mongodb";
+import { MongoClient, MongoClientOptions } from 'mongodb';
 
 const options: MongoClientOptions = {
   directConnection: true,
@@ -14,10 +14,10 @@ const globalWithMongo = global as typeof globalThis & {
 
 let clientPromise: Promise<MongoClient>;
 
-if (typeof process.env.MONGODB_URI === "string" && process.env.MONGODB_URI) {
+if (typeof process.env.MONGODB_URI === 'string' && process.env.MONGODB_URI) {
   const uri = process.env.MONGODB_URI;
 
-  if (process.env.NODE_ENV === "development") {
+  if (process.env.NODE_ENV === 'development') {
     if (!globalWithMongo._mongoClientPromise) {
       const client = new MongoClient(uri, options);
       globalWithMongo._mongoClientPromise = client.connect();

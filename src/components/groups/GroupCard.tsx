@@ -1,19 +1,19 @@
-"use client";
+'use client';
 
-import Link from "next/link";
-import Box from "@mui/material/Box";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Avatar from "@mui/material/Avatar";
-import AvatarGroup from "@mui/material/AvatarGroup";
+import Link from 'next/link';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Avatar from '@mui/material/Avatar';
+import AvatarGroup from '@mui/material/AvatarGroup';
 
 const CATEGORY_ICONS: Record<string, string> = {
-  trip: "✈️",
-  home: "🏠",
-  couple: "💑",
-  work: "💼",
-  other: "📋",
+  trip: '✈️',
+  home: '🏠',
+  couple: '💑',
+  work: '💼',
+  other: '📋',
 };
 
 interface GroupCardProps {
@@ -27,7 +27,7 @@ export default function GroupCard({ group, userId }: GroupCardProps) {
     role: string;
   }>;
   const category = group.category as string;
-  const icon = CATEGORY_ICONS[category] || "📋";
+  const icon = CATEGORY_ICONS[category] || '📋';
 
   return (
     <Paper
@@ -35,21 +35,32 @@ export default function GroupCard({ group, userId }: GroupCardProps) {
       href={`/groups/${group._id}`}
       variant="outlined"
       sx={{
-        display: "block",
+        display: 'block',
         p: 3,
-        textDecoration: "none",
-        transition: "box-shadow 0.2s",
-        "&:hover": { boxShadow: 3 },
+        textDecoration: 'none',
+        transition: 'box-shadow 0.2s',
+        '&:hover': { boxShadow: 3 },
       }}
     >
-      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" sx={{ mb: 1.5 }}>
+      <Stack
+        direction="row"
+        alignItems="flex-start"
+        justifyContent="space-between"
+        sx={{ mb: 1.5 }}
+      >
         <Stack direction="row" alignItems="center" spacing={1}>
-          <Typography component="span" sx={{ fontSize: "1.5rem" }}>{icon}</Typography>
+          <Typography component="span" sx={{ fontSize: '1.5rem' }}>
+            {icon}
+          </Typography>
           <Box>
             <Typography variant="body2" fontWeight={600} color="text.primary">
               {group.name as string}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ textTransform: "capitalize" }}>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ textTransform: 'capitalize' }}
+            >
               {category}
             </Typography>
           </Box>
@@ -57,7 +68,7 @@ export default function GroupCard({ group, userId }: GroupCardProps) {
       </Stack>
 
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 2 }}>
-        <AvatarGroup max={4} sx={{ "& .MuiAvatar-root": { width: 28, height: 28, fontSize: 12 } }}>
+        <AvatarGroup max={4} sx={{ '& .MuiAvatar-root': { width: 28, height: 28, fontSize: 12 } }}>
           {members.map((m) => (
             <Avatar
               key={m.user._id}
@@ -70,7 +81,7 @@ export default function GroupCard({ group, userId }: GroupCardProps) {
           ))}
         </AvatarGroup>
         <Typography variant="caption" color="text.secondary">
-          {members.length} member{members.length !== 1 ? "s" : ""}
+          {members.length} member{members.length !== 1 ? 's' : ''}
         </Typography>
       </Stack>
     </Paper>

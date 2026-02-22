@@ -104,11 +104,11 @@ export default async function DashboardPage() {
 
 ## Empty States
 
-| State            | Message                                              |
-| ---------------- | ---------------------------------------------------- |
-| No groups        | "You haven't joined any groups yet. Create one!"     |
-| No invitations   | Section hidden (not shown at all)                    |
-| All settled      | "All settled up! 🎉"                                |
+| State          | Message                                          |
+| -------------- | ------------------------------------------------ |
+| No groups      | "You haven't joined any groups yet. Create one!" |
+| No invitations | Section hidden (not shown at all)                |
+| All settled    | "All settled up! 🎉"                             |
 
 ---
 
@@ -120,4 +120,3 @@ export default async function DashboardPage() {
 - `EmptyState` — For no-groups state
 - `Sidebar` — Navigation sidebar
 - `Navbar` — Top navigation bar
-

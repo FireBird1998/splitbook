@@ -1,11 +1,15 @@
-import { getAuthUser, unauthorized, forbidden, notFound, success, serverError } from "@/lib/utils/api-response";
-import { groupService } from "@/lib/services/group.service";
+import {
+  getAuthUser,
+  unauthorized,
+  forbidden,
+  notFound,
+  success,
+  serverError,
+} from '@/lib/utils/api-response';
+import { groupService } from '@/lib/services/group.service';
 
 // POST /api/groups/[id]/invite-link — Generate invite link
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser();
     if (!user) return unauthorized();
@@ -16,20 +20,17 @@ export async function POST(
     const expiresInDays = body.expiresInDays || 7;
 
     const result = await groupService.generateInviteCode(id, user.id!, expiresInDays);
-    if (!result) return notFound("Group");
+    if (!result) return notFound('Group');
 
     return success(result, 201);
   } catch (err) {
-    if (err instanceof Error && err.message === "FORBIDDEN") return forbidden();
+    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
     return serverError(err);
   }
 }
 
 // GET /api/groups/[id]/invite-link — Get current invite link
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser();
     if (!user) return unauthorized();
@@ -37,7 +38,7 @@ export async function GET(
     const { id } = await params;
 
     const group = await groupService.getById(id);
-    if (!group) return notFound("Group");
+    if (!group) return notFound('Group');
 
     if (!group.inviteCode || !group.inviteCodeExpiresAt || new Date() > group.inviteCodeExpiresAt) {
       return success({ inviteCode: null, inviteUrl: null, expiresAt: null });
@@ -52,4 +53,3 @@ export async function GET(
     return serverError(err);
   }
 }
-

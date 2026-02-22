@@ -41,30 +41,28 @@ const [showHistory, setShowHistory] = useState(false);
     </Button>
 
     {showHistory && (
-      <div className="mt-2 space-y-3 border-l-2 border-gray-200 pl-4">
-        {/* Created entry */}
-        <div>
-          <p className="text-sm text-gray-600">
+      <Stack spacing={1.5} sx={{ mt: 2, borderLeft: 2, borderColor: "divider", pl: 2 }}>
+        <Box>
+          <Typography variant="body2" color="text.secondary">
             Created by {expense.createdBy.name} · {formatDateTime(expense.createdAt)}
-          </p>
-        </div>
+          </Typography>
+        </Box>
 
-        {/* Edit entries */}
         {expense.editHistory.map((edit, i) => (
-          <div key={i}>
-            <p className="text-sm text-gray-600">
-              ✏️ Edited by {edit.editedBy.name} · {formatDateTime(edit.editedAt)}
-            </p>
-            <ul className="mt-1 text-xs text-gray-500">
+          <Box key={i}>
+            <Typography variant="body2" color="text.secondary">
+              Edited by {edit.editedBy.name} · {formatDateTime(edit.editedAt)}
+            </Typography>
+            <Box component="ul" sx={{ mt: 0.5, pl: 2 }}>
               {Object.entries(edit.changes).map(([field, { old, new: newVal }]) => (
-                <li key={field}>
-                  • {formatFieldName(field)}: {formatValue(old)} → {formatValue(newVal)}
-                </li>
+                <Typography component="li" variant="caption" color="text.disabled" key={field}>
+                  {formatFieldName(field)}: {formatValue(old)} → {formatValue(newVal)}
+                </Typography>
               ))}
-            </ul>
-          </div>
+            </Box>
+          </Box>
         ))}
-      </div>
+      </Stack>
     )}
   </div>
 )}
@@ -76,16 +74,16 @@ Map internal field names to human-readable labels:
 
 ```typescript
 const FIELD_LABELS: Record<string, string> = {
-  description: "Description",
-  amount: "Amount",
-  currency: "Currency",
-  category: "Category",
-  date: "Date",
-  splitMethod: "Split method",
-  tags: "Tags",
-  notes: "Notes",
-  paidBy: "Paid by",
-  splitBetween: "Split between",
+  description: 'Description',
+  amount: 'Amount',
+  currency: 'Currency',
+  category: 'Category',
+  date: 'Date',
+  splitMethod: 'Split method',
+  tags: 'Tags',
+  notes: 'Notes',
+  paidBy: 'Paid by',
+  splitBetween: 'Split between',
 };
 ```
 
@@ -96,6 +94,7 @@ const FIELD_LABELS: Record<string, string> = {
 Ensure `editHistory.editedBy` is populated in the response:
 
 In `getById()`, add:
+
 ```typescript
 .populate("editHistory.editedBy", "name email image")
 ```
@@ -106,4 +105,3 @@ This allows the frontend to show editor names without extra API calls.
 
 - `src/components/expenses/ExpenseDetailDialog.tsx` — add collapsible edit history section
 - `src/lib/services/expense.service.ts` — populate `editHistory.editedBy` in `getById()`
-

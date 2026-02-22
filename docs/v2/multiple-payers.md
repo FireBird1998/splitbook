@@ -11,14 +11,16 @@ The schema supports `paidBy: IExpensePayerDocument[]` (an array), but the form o
 #### Replace single payer with payer list
 
 Remove:
+
 ```typescript
 const [paidByUser, setPaidByUser] = useState(userId);
 ```
 
 Add:
+
 ```typescript
 const [payers, setPayers] = useState<Array<{ user: string; amount: string }>>([
-  { user: userId, amount: "" },
+  { user: userId, amount: '' },
 ]);
 ```
 
@@ -57,12 +59,12 @@ Click "Split payment" → expands to multi-payer mode.
 
 ```typescript
 // Old:
-paidBy: [{ user: paidByUser, amount: parseFloat(amount) }]
+paidBy: [{ user: paidByUser, amount: parseFloat(amount) }];
 
 // New:
 paidBy: payers.length === 1
   ? [{ user: payers[0].user, amount: parseFloat(amount) }]
-  : payers.map(p => ({ user: p.user, amount: parseFloat(p.amount) }))
+  : payers.map((p) => ({ user: p.user, amount: parseFloat(p.amount) }));
 ```
 
 #### Validation
@@ -83,4 +85,3 @@ None. The API and service already handle multiple payers. The `createExpenseSche
 ## Files Modified
 
 - `src/components/expenses/ExpenseFormDialog.tsx` — replace single payer with dynamic payer list
-

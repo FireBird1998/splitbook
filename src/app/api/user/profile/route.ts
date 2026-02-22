@@ -1,8 +1,14 @@
-import { getAuthUser, unauthorized, success, serverError, validationError } from "@/lib/utils/api-response";
-import connectDB from "@/lib/db";
-import User from "@/lib/models/User";
-import { z } from "zod/v4";
-import { CURRENCY_CODES } from "@/lib/utils/currency";
+import {
+  getAuthUser,
+  unauthorized,
+  success,
+  serverError,
+  validationError,
+} from '@/lib/utils/api-response';
+import connectDB from '@/lib/db';
+import User from '@/lib/models/User';
+import { z } from 'zod/v4';
+import { CURRENCY_CODES } from '@/lib/utils/currency';
 
 const updateProfileSchema = z.object({
   name: z.string().min(1).max(100).trim().optional(),
@@ -24,9 +30,9 @@ export async function GET() {
       // User exists in Auth.js but not yet in our User model — create it
       const newUser = await User.create({
         _id: user.id,
-        name: user.name || "User",
-        email: user.email || "",
-        image: user.image || "",
+        name: user.name || 'User',
+        email: user.email || '',
+        image: user.image || '',
       });
       return success(newUser);
     }
@@ -57,4 +63,3 @@ export async function PATCH(req: Request) {
     return serverError(err);
   }
 }
-

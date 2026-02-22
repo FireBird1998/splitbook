@@ -1,5 +1,5 @@
-import NextAuth from "next-auth";
-import { authConfig } from "@/lib/auth.config";
+import NextAuth from 'next-auth';
+import { authConfig } from '@/lib/auth.config';
 
 /**
  * Middleware uses the edge-compatible auth config (no MongoDB adapter).
@@ -8,5 +8,5 @@ import { authConfig } from "@/lib/auth.config";
 export default NextAuth(authConfig).auth;
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)'],
 };

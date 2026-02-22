@@ -36,6 +36,7 @@ From: [2026-01-15]  To: [2026-02-12]   ⚠️ Max 31 days
 The backend already supports `dateFrom` and `dateTo` query params in `GET /api/groups/[id]/expenses`. No backend changes needed.
 
 The service (`expense.service.ts`) already handles:
+
 ```typescript
 if (filters.dateFrom || filters.dateTo) {
   query.date = {};
@@ -57,4 +58,3 @@ if (filters.dateFrom || filters.dateTo) {
 
 - The 31-day limit is a client-side validation only (prevents fetching unreasonably large datasets)
 - Date inputs use native `<input type="date">` via MUI `TextField` with `type="date"`
-

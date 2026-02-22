@@ -2,11 +2,13 @@
 
 ## Overview
 
-The app uses **Tailwind CSS** for utility styling and **Material UI (MUI)** for complex interactive components (dialogs, inputs, tables, snackbars, tabs). This gives us fast iteration with Tailwind + polished UI with MUI.
+The app uses **Material UI (MUI) v7** exclusively for all styling and components. All layout, spacing, typography, colors, and interactive elements use MUI's `sx` prop and component library. There is no Tailwind CSS or other CSS framework.
 
 ---
 
 ## Theme
+
+Defined in `src/providers/ThemeProvider.tsx`.
 
 ### Color Palette
 
@@ -22,18 +24,36 @@ Text:        #1A1A2E (Dark navy)
 TextSecondary: #6B7280 (Gray)
 ```
 
+### Theme Tokens (used via sx prop)
+
+| Token                      | Usage                             |
+| -------------------------- | --------------------------------- |
+| `"primary.main"`           | Brand color (#6C63FF)             |
+| `"text.primary"`           | Main text (#1A1A2E)               |
+| `"text.secondary"`         | Secondary text (#6B7280)          |
+| `"text.disabled"`          | Muted text                        |
+| `"background.default"`     | Page background (#F5F5F5)         |
+| `"background.paper"`       | Card/surface background (#FFFFFF) |
+| `"divider"`                | Border color                      |
+| `"error.main"`             | Red for negative amounts          |
+| `"success.main"`           | Green for positive amounts        |
+| `"grey.50"` - `"grey.900"` | Grey scale                        |
+
 ### MUI Theme Override
 
 ```typescript
 const theme = createTheme({
   palette: {
-    primary: { main: "#6C63FF" },
-    secondary: { main: "#00BFA5" },
-    error: { main: "#FF5252" },
-    background: { default: "#F5F5F5" },
+    primary: { main: '#6C63FF' },
+    secondary: { main: '#00BFA5' },
+    error: { main: '#FF5252' },
+    warning: { main: '#FFA726' },
+    success: { main: '#66BB6A' },
+    background: { default: '#F5F5F5', paper: '#FFFFFF' },
+    text: { primary: '#1A1A2E', secondary: '#6B7280' },
   },
   typography: {
-    fontFamily: "Inter, system-ui, sans-serif",
+    fontFamily: 'var(--font-geist-sans), system-ui, sans-serif',
   },
   shape: {
     borderRadius: 12,
@@ -41,12 +61,22 @@ const theme = createTheme({
   components: {
     MuiButton: {
       styleOverrides: {
-        root: { textTransform: "none", fontWeight: 600 },
+        root: { textTransform: 'none', fontWeight: 600, borderRadius: 8 },
       },
     },
     MuiCard: {
       styleOverrides: {
-        root: { boxShadow: "0 1px 3px rgba(0,0,0,0.08)" },
+        root: { boxShadow: '0 1px 3px rgba(0,0,0,0.08)', borderRadius: 12 },
+      },
+    },
+    MuiDialog: {
+      styleOverrides: {
+        paper: { borderRadius: 16 },
+      },
+    },
+    MuiChip: {
+      styleOverrides: {
+        root: { borderRadius: 8 },
       },
     },
   },
@@ -55,161 +85,125 @@ const theme = createTheme({
 
 ---
 
+## Styling Approach
+
+All styling uses MUI's `sx` prop. Key patterns:
+
+| Need                        | Use                                                                               |
+| --------------------------- | --------------------------------------------------------------------------------- |
+| Generic container           | `Box` with `sx`                                                                   |
+| Vertical stack with spacing | `Stack spacing={N}`                                                               |
+| Horizontal row with spacing | `Stack direction="row" spacing={N}`                                               |
+| Page max-width wrapper      | `Container maxWidth="sm"\|"md"\|"lg"`                                             |
+| Card / panel with border    | `Paper variant="outlined"`                                                        |
+| All text elements           | `Typography` with `variant` prop                                                  |
+| Responsive grid             | `Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" } }}` |
+| Loading placeholder         | `Skeleton` component                                                              |
+| Responsive values           | `sx={{ p: { xs: 2, sm: 3, lg: 4 } }}`                                             |
+
+---
+
 ## Layout
 
-### Desktop (≥1024px)
+### Desktop (≥1200px — MUI lg breakpoint)
 
 ```
-┌─────────────────────────────────────────────┐
-│ Navbar (sticky top)              [User Menu] │
-├────────┬────────────────────────────────────┤
-│        │                                    │
-│ Side-  │         Main Content               │
-│ bar    │                                    │
-│ (240px)│                                    │
-│        │                                    │
-│ - Dash │                                    │
-│ - Groups│                                   │
-│ - Settings│                                 │
-│        │                                    │
-└────────┴────────────────────────────────────┘
+┌──────────────────────────────────────────────┐
+│ Navbar (fixed top, 56px)           [User Menu]│
+├────────┬─────────────────────────────────────┤
+│        │                                     │
+│ Side-  │         Main Content                │
+│ bar    │         (ml: 240px)                 │
+│ (240px)│                                     │
+│ fixed  │                                     │
+│        │                                     │
+│ - Dash │                                     │
+│ - Groups│                                    │
+│ - Settings│                                  │
+│        │                                     │
+└────────┴─────────────────────────────────────┘
 ```
 
-### Mobile (<1024px)
+### Mobile (<1200px)
 
 ```
 ┌─────────────────────┐
-│ Navbar    [☰] [User]│
+│ [☰] Navbar    [User]│  ← fixed top
 ├─────────────────────┤
 │                     │
 │   Main Content      │
+│   (full width)      │
 │                     │
 │                     │
-├─────────────────────┤
-│ Bottom Tab Bar      │
-│ [Home][Groups][+][⚙]│
+│                     │
+│               [FAB] │  ← floating action button
 └─────────────────────┘
+
+☰ opens a Drawer with navigation
 ```
 
 ---
 
-## When to Use Tailwind vs MUI
+## Responsive Breakpoints (MUI)
 
-| Use Case                    | Use           |
-| --------------------------- | ------------- |
-| Page layout, spacing        | Tailwind      |
-| Flexbox / Grid              | Tailwind      |
-| Colors, typography          | Tailwind      |
-| Hover/focus states          | Tailwind      |
-| Responsive breakpoints      | Tailwind      |
-| Buttons (simple)            | Tailwind      |
-| Text inputs, Select         | MUI           |
-| Dialog / Modal              | MUI           |
-| Tabs                        | MUI           |
-| Snackbar / Toast            | MUI           |
-| DataTable (if needed)       | MUI           |
-| Autocomplete / Chip input   | MUI           |
-| Date picker                 | MUI           |
-| Tooltips                    | MUI           |
-| Avatars + Avatar groups     | MUI           |
+```
+xs:    0px    — Mobile
+sm:  600px    — Mobile landscape / small tablet
+md:  900px    — Tablet
+lg: 1200px    — Desktop (sidebar appears, hamburger hides)
+xl: 1536px    — Large desktop
+```
 
 ---
 
-## Component Library
+## Components
 
-### Reusable UI Components (src/components/ui/)
+### Layout (`src/components/layout/`)
 
-| Component        | Description                                        |
-| ---------------- | -------------------------------------------------- |
-| `LoadingSpinner` | Centered spinner with optional message             |
-| `EmptyState`     | Illustration + message + optional CTA              |
-| `ConfirmDialog`  | MUI Dialog for delete/archive confirmations        |
-| `CurrencySelect` | Dropdown with currency code + symbol + flag        |
-| `CurrencyAmount` | Formatted amount display (e.g. "€120.00")          |
-| `AvatarStack`    | Overlapping avatars for group members               |
-| `PageHeader`     | Title + description + action buttons                |
-| `SearchInput`    | Debounced text input with search icon               |
-| `TagChip`        | Colored chip for expense tags                       |
-| `QuickFilter`    | Pill buttons for time-based filters                 |
+| Component | Description                                                   |
+| --------- | ------------------------------------------------------------- |
+| `Navbar`  | Fixed top bar with hamburger (mobile), logo, user avatar menu |
+| `Sidebar` | Fixed sidebar (lg+) with nav links; hidden on mobile          |
 
-### Layout Components (src/components/layout/)
+### Groups (`src/components/groups/`)
 
-| Component   | Description                               |
-| ----------- | ----------------------------------------- |
-| `Sidebar`   | Navigation sidebar with group list        |
-| `Navbar`    | Top bar with breadcrumbs + user menu      |
-| `MobileNav` | Bottom tab navigation for mobile          |
+| Component           | Description                                            |
+| ------------------- | ------------------------------------------------------ |
+| `GroupCard`         | Card with group name, category, members, balance       |
+| `GroupsListView`    | Grid of GroupCards + create button                     |
+| `GroupDetailView`   | Tabs (expenses, balances, activity) + FAB              |
+| `GroupSettingsView` | Admin page: info, currency, members, tags, danger zone |
+| `InviteDialog`      | Email invite + copy invite link                        |
 
----
+### Expenses (`src/components/expenses/`)
 
-## Page-Specific Components
-
-### Groups
-
-| Component        | Description                                    |
-| ---------------- | ---------------------------------------------- |
-| `GroupCard`       | Card showing group name, members, balance      |
-| `GroupForm`       | Create/edit group form                         |
-| `GroupMemberList` | List of members with roles                     |
-| `InviteDialog`    | Dialog to invite by email or copy link         |
-
-### Expenses
-
-| Component             | Description                                |
-| --------------------- | ------------------------------------------ |
-| `ExpenseList`         | Paginated list of expense cards            |
-| `ExpenseCard`         | Single expense display (amount, who paid)  |
-| `ExpenseForm`         | Add/edit expense (full form)               |
-| `SplitMethodSelector` | Toggle between equal/unequal/percentage etc |
-| `TagSelector`         | Multi-select tag input with suggestions    |
-| `ReceiptUpload`       | Image upload with preview                  |
-| `PredefinedItemPicker`| Quick-select from predefined items         |
+| Component             | Description                                                         |
+| --------------------- | ------------------------------------------------------------------- |
+| `ExpenseListView`     | Filters, summary bar, date-grouped list with pagination             |
+| `ExpenseCard`         | Expandable card with inline detail (paid by, split, notes, history) |
+| `ExpenseFormDialog`   | Two-tier create/edit form (simple + advanced)                       |
+| `ExpenseDetailDialog` | Full detail modal (legacy, may be removed)                          |
+| `DeleteExpenseDialog` | Confirmation dialog with undo snackbar                              |
 
 ### Balances & Settlements
 
-| Component         | Description                                  |
-| ----------------- | -------------------------------------------- |
-| `BalanceSummary`  | Visual summary of who owes whom              |
-| `DebtCard`        | Single debt display (A owes B $X)            |
-| `SimplifiedDebts` | Minimized transaction view                   |
-| `SettleUpDialog`  | Dialog to record a payment                   |
-| `SettlementList`  | History of settlements                       |
+| Component        | Description                                |
+| ---------------- | ------------------------------------------ |
+| `BalancesView`   | Net balances per member + simplified debts |
+| `SettleUpDialog` | Record a payment dialog                    |
 
-### Dashboard
+### Dashboard (`src/components/dashboard/`)
 
-| Component          | Description                               |
-| ------------------ | ----------------------------------------- |
-| `ExpenseDashboard` | Main dashboard with filters + expense list |
-| `FilterBar`        | Date range, category, tag filters          |
-| `QuickFilters`     | One-click time period buttons              |
+| Component        | Description                                   |
+| ---------------- | --------------------------------------------- |
+| `DashboardView`  | Groups overview + stats + pending invitations |
+| `InvitationCard` | Accept/decline invitation card                |
 
-### Activity
+### Activity (`src/components/activity/`)
 
-| Component      | Description                          |
-| -------------- | ------------------------------------ |
-| `ActivityFeed` | Paginated activity timeline          |
-| `ActivityItem` | Single activity with icon + text     |
-
----
-
-## Animations & Transitions
-
-- Page transitions: Subtle fade (CSS transitions)
-- List items: Stagger fade-in on load
-- Dialogs: MUI default slide-up
-- Snackbars: Slide from bottom
-- Skeleton loaders: For all data-fetching states
-
----
-
-## Responsive Breakpoints
-
-```
-sm:  640px   — Mobile landscape
-md:  768px   — Tablet
-lg:  1024px  — Desktop (sidebar appears)
-xl:  1280px  — Large desktop
-```
+| Component      | Description                      |
+| -------------- | -------------------------------- |
+| `ActivityView` | Paginated activity feed timeline |
 
 ---
 
@@ -220,4 +214,3 @@ xl:  1280px  — Large desktop
 - Color contrast meets WCAG AA standards
 - Focus indicators on all interactive elements
 - Screen reader labels on icon-only buttons
-

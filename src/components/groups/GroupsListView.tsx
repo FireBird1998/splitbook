@@ -1,16 +1,16 @@
-"use client";
+'use client';
 
-import useSWR from "swr";
-import Link from "next/link";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Skeleton from "@mui/material/Skeleton";
-import Button from "@mui/material/Button";
-import AddIcon from "@mui/icons-material/Add";
-import GroupCard from "./GroupCard";
+import useSWR from 'swr';
+import Link from 'next/link';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Skeleton from '@mui/material/Skeleton';
+import Button from '@mui/material/Button';
+import AddIcon from '@mui/icons-material/Add';
+import GroupCard from './GroupCard';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
@@ -19,7 +19,7 @@ interface GroupsListViewProps {
 }
 
 export default function GroupsListView({ userId }: GroupsListViewProps) {
-  const { data, isLoading } = useSWR("/api/groups", fetcher, {
+  const { data, isLoading } = useSWR('/api/groups', fetcher, {
     refreshInterval: 30_000,
   });
 
@@ -31,12 +31,7 @@ export default function GroupsListView({ userId }: GroupsListViewProps) {
         <Typography variant="h5" fontWeight={700} color="text.primary">
           Groups
         </Typography>
-        <Button
-          component={Link}
-          href="/groups/new"
-          variant="contained"
-          startIcon={<AddIcon />}
-        >
+        <Button component={Link} href="/groups/new" variant="contained" startIcon={<AddIcon />}>
           New Group
         </Button>
       </Stack>
@@ -44,8 +39,12 @@ export default function GroupsListView({ userId }: GroupsListViewProps) {
       {isLoading ? (
         <Box
           sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", lg: "1fr 1fr 1fr" },
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              md: '1fr 1fr',
+              lg: '1fr 1fr 1fr',
+            },
             gap: 2,
           }}
         >
@@ -54,8 +53,8 @@ export default function GroupsListView({ userId }: GroupsListViewProps) {
           ))}
         </Box>
       ) : groups.length === 0 ? (
-        <Paper variant="outlined" sx={{ p: 6, textAlign: "center" }}>
-          <Typography component="span" sx={{ fontSize: "2.5rem", display: "block", mb: 2 }}>
+        <Paper variant="outlined" sx={{ p: 6, textAlign: 'center' }}>
+          <Typography component="span" sx={{ fontSize: '2.5rem', display: 'block', mb: 2 }}>
             👥
           </Typography>
           <Typography variant="subtitle1" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
@@ -64,20 +63,19 @@ export default function GroupsListView({ userId }: GroupsListViewProps) {
           <Typography color="text.secondary" sx={{ mb: 2 }}>
             Create your first group to start splitting expenses!
           </Typography>
-          <Button
-            component={Link}
-            href="/groups/new"
-            variant="contained"
-            startIcon={<AddIcon />}
-          >
+          <Button component={Link} href="/groups/new" variant="contained" startIcon={<AddIcon />}>
             Create Group
           </Button>
         </Paper>
       ) : (
         <Box
           sx={{
-            display: "grid",
-            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr", lg: "1fr 1fr 1fr" },
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              md: '1fr 1fr',
+              lg: '1fr 1fr 1fr',
+            },
             gap: 2,
           }}
         >

@@ -2,17 +2,17 @@
 
 ## Tech Stack Detail
 
-| Component          | Choice               | Why                                                       |
-| ------------------ | -------------------- | --------------------------------------------------------- |
-| Next.js 16         | App Router           | Server components, API routes, middleware, SSR            |
-| TypeScript         | Strict mode          | Type safety across frontend + backend                     |
-| Tailwind CSS       | v4                   | Utility-first, fast iteration                             |
-| Material UI        | v6                   | Pre-built components (dialogs, inputs, tables, snackbars) |
-| MongoDB            | Atlas (cloud)        | Flexible schema, good for nested expense data             |
-| Mongoose           | v8                   | Schema validation, middleware, population                 |
-| Auth.js v5         | MongoDB adapter      | Self-hosted auth, Google OAuth built-in                   |
-| Zod                | Request validation   | Type-safe validation with TS inference                    |
-| SWR or React Query | Client data fetching | Caching, revalidation, optimistic updates                 |
+| Component    | Choice          | Why                                                  |
+| ------------ | --------------- | ---------------------------------------------------- |
+| Next.js 16   | App Router      | Server components, API routes, middleware, SSR       |
+| TypeScript 5 | Strict mode     | Type safety across frontend + backend                |
+| React 19     | Latest          | Server components, concurrent features               |
+| Material UI  | v7 (Emotion)    | Full design system — layout, styling, and components |
+| MongoDB      | Atlas (cloud)   | Flexible schema, good for nested expense data        |
+| Mongoose     | v9              | Schema validation, middleware, population            |
+| Auth.js v5   | MongoDB adapter | Self-hosted auth, Google OAuth built-in              |
+| Zod          | v4              | Type-safe validation with TS inference               |
+| SWR          | v2              | Client data fetching, caching, revalidation          |
 
 ---
 
@@ -25,7 +25,7 @@ src/
 │   │   └── login/
 │   │       └── page.tsx
 │   ├── (main)/                     # Authenticated route group (with sidebar)
-│   │   ├── layout.tsx              # Sidebar + navbar layout
+│   │   ├── layout.tsx              # Fixed navbar + sidebar + main layout
 │   │   ├── dashboard/
 │   │   │   └── page.tsx            # Home dashboard
 │   │   ├── groups/
@@ -34,12 +34,8 @@ src/
 │   │   │   │   └── page.tsx        # Create group form
 │   │   │   └── [id]/
 │   │   │       ├── page.tsx        # Group detail (expenses tab)
-│   │   │       ├── balances/
-│   │   │       │   └── page.tsx    # Balance summary
-│   │   │       ├── activity/
-│   │   │       │   └── page.tsx    # Activity feed
 │   │   │       └── settings/
-│   │   │           └── page.tsx    # Group settings
+│   │   │           └── page.tsx    # Group settings (admin)
 │   │   └── settings/
 │   │       └── page.tsx            # User settings
 │   ├── api/
@@ -51,19 +47,28 @@ src/
 │   │   │   └── [id]/
 │   │   │       ├── route.ts        # GET, PATCH, DELETE
 │   │   │       ├── expenses/
-│   │   │       │   ├── route.ts    # POST (create), GET (list + filters)
+│   │   │       │   ├── route.ts    # POST (create), GET (list + filters + summary)
+│   │   │       │   ├── check-duplicate/
+│   │   │       │   │   └── route.ts # GET (duplicate check)
 │   │   │       │   └── [expenseId]/
 │   │   │       │       └── route.ts # GET, PATCH, DELETE
 │   │   │       ├── settlements/
 │   │   │       │   └── route.ts    # POST, GET
 │   │   │       ├── balances/
-│   │   │       │   └── route.ts    # GET
+│   │   │       │   └── route.ts    # GET (balances + simplified debts)
 │   │   │       ├── activity/
 │   │   │       │   └── route.ts    # GET (paginated)
 │   │   │       ├── invite/
 │   │   │       │   └── route.ts    # POST (send invite)
-│   │   │       └── invite-link/
-│   │   │           └── route.ts    # POST (generate), GET (info)
+│   │   │       ├── invite-link/
+│   │   │       │   └── route.ts    # POST (generate), GET (info)
+│   │   │       ├── tags/
+│   │   │       │   ├── route.ts    # POST (create tag)
+│   │   │       │   └── [tagId]/
+│   │   │       │       └── route.ts # PATCH (archive/rename), DELETE
+│   │   │       └── members/
+│   │   │           └── [userId]/
+│   │   │               └── route.ts # PATCH (role), DELETE (remove)
 │   │   ├── invitations/
 │   │   │   ├── route.ts            # GET (my pending)
 │   │   │   └── [id]/
@@ -79,86 +84,71 @@ src/
 │   │       └── page.tsx            # Join group page (public)
 │   ├── layout.tsx                  # Root layout (providers)
 │   ├── page.tsx                    # Landing page (redirect if auth'd)
-│   └── globals.css
+│   └── globals.css                 # Minimal (body margin reset only)
 ├── components/
-│   ├── ui/                         # Generic reusable components
-│   │   ├── LoadingSpinner.tsx
-│   │   ├── EmptyState.tsx
-│   │   ├── ConfirmDialog.tsx
-│   │   ├── CurrencySelect.tsx
-│   │   └── AvatarGroup.tsx
 │   ├── layout/
-│   │   ├── Sidebar.tsx
-│   │   ├── Navbar.tsx
-│   │   └── MobileNav.tsx
+│   │   ├── Sidebar.tsx             # Fixed sidebar (lg+), MUI Box
+│   │   └── Navbar.tsx              # Fixed navbar + mobile drawer
+│   ├── landing/
+│   │   └── LandingPage.tsx         # Public landing page
 │   ├── groups/
 │   │   ├── GroupCard.tsx
-│   │   ├── GroupForm.tsx
-│   │   ├── GroupMemberList.tsx
+│   │   ├── GroupsListView.tsx
+│   │   ├── GroupDetailView.tsx     # Tabs: expenses, balances, activity
+│   │   ├── GroupSettingsView.tsx   # Admin settings (info, currency, members, tags)
 │   │   └── InviteDialog.tsx
 │   ├── expenses/
-│   │   ├── ExpenseList.tsx
-│   │   ├── ExpenseCard.tsx
-│   │   ├── ExpenseForm.tsx
-│   │   ├── SplitMethodSelector.tsx
-│   │   ├── TagSelector.tsx
-│   │   └── ReceiptUpload.tsx
+│   │   ├── ExpenseListView.tsx     # Filters, summary bar, grouped list
+│   │   ├── ExpenseCard.tsx         # Expandable card with inline detail
+│   │   ├── ExpenseFormDialog.tsx   # Create + edit (two-tier form)
+│   │   ├── ExpenseDetailDialog.tsx # Full detail modal (legacy)
+│   │   └── DeleteExpenseDialog.tsx
 │   ├── settlements/
-│   │   ├── SettleUpDialog.tsx
-│   │   └── SettlementList.tsx
+│   │   └── SettleUpDialog.tsx
 │   ├── balances/
-│   │   ├── BalanceSummary.tsx
-│   │   ├── DebtCard.tsx
-│   │   └── SimplifiedDebts.tsx
+│   │   └── BalancesView.tsx        # Balance summary + simplified debts
 │   ├── dashboard/
-│   │   ├── QuickFilters.tsx
-│   │   ├── FilterBar.tsx
-│   │   └── ExpenseDashboard.tsx
+│   │   ├── DashboardView.tsx       # Groups overview + invitations
+│   │   └── InvitationCard.tsx
 │   └── activity/
-│       ├── ActivityFeed.tsx
-│       └── ActivityItem.tsx
+│       └── ActivityView.tsx        # Paginated activity feed
 ├── lib/
-│   ├── auth.ts                     # Auth.js configuration
+│   ├── auth.ts                     # Auth.js config (Node.js runtime)
+│   ├── auth.config.ts              # Auth.js config (Edge-compatible)
 │   ├── db.ts                       # MongoDB/Mongoose connection singleton
+│   ├── mongodb-client.ts           # MongoDB client for Auth.js adapter
 │   ├── models/
 │   │   ├── User.ts
-│   │   ├── Group.ts
-│   │   ├── Expense.ts
+│   │   ├── Group.ts                # Includes tags subdocument array
+│   │   ├── Expense.ts              # Uses `tag` (singular, required)
 │   │   ├── Settlement.ts
 │   │   ├── Activity.ts
 │   │   └── Invitation.ts
 │   ├── services/
-│   │   ├── group.service.ts
-│   │   ├── expense.service.ts
+│   │   ├── group.service.ts        # Includes tag CRUD + member management
+│   │   ├── expense.service.ts      # Includes summary aggregation
 │   │   ├── settlement.service.ts
 │   │   ├── balance.service.ts
 │   │   ├── invitation.service.ts
 │   │   └── activity.service.ts
-│   ├── validators/                 # Zod schemas
+│   ├── validators/                 # Zod v4 schemas
 │   │   ├── group.validator.ts
 │   │   ├── expense.validator.ts
 │   │   └── settlement.validator.ts
 │   ├── utils/
-│   │   ├── currency.ts             # Currency helpers + conversion
+│   │   ├── currency.ts             # Currency helpers + formatting
 │   │   ├── debt-simplifier.ts      # Min-transaction algorithm
 │   │   ├── api-response.ts         # Consistent API response helpers
 │   │   └── date.ts                 # Date formatting utilities
 │   └── constants/
-│       ├── currencies.ts           # Supported currencies list
 │       ├── categories.ts           # Expense categories
 │       └── predefined-items.ts     # Predefined expense items
-├── hooks/
-│   ├── useGroups.ts
-│   ├── useExpenses.ts
-│   ├── useBalances.ts
-│   ├── useActivity.ts
-│   └── useRealtime.ts
 ├── types/
 │   └── index.ts                    # Shared TypeScript interfaces
-└── providers/
-    ├── AuthProvider.tsx             # Session provider
-    ├── ThemeProvider.tsx            # MUI theme provider
-    └── QueryProvider.tsx            # SWR/React Query provider
+├── providers/
+│   ├── AuthProvider.tsx            # NextAuth SessionProvider
+│   └── ThemeProvider.tsx           # MUI ThemeProvider + CssBaseline
+└── middleware.ts                   # Auth middleware for route protection
 ```
 
 ---
@@ -181,13 +171,9 @@ Client Component
 ### Real-time Sync Flow
 
 ```
-Client opens SSE connection → /api/groups/[id]/events
-Server sends events when:
-  - New expense added
-  - Expense updated/deleted
-  - Settlement recorded
-  - Member joined/left
-Client receives event → SWR revalidation → UI updates
+SWR hooks use refreshInterval (e.g. 10s for expenses, 30s for groups)
+  → Automatic background revalidation
+  → UI updates seamlessly via keepPreviousData option
 ```
 
 ### Auth Flow
@@ -209,10 +195,7 @@ User clicks "Sign in with Google"
 
 ```typescript
 // Every API route follows this pattern:
-export async function POST(
-  req: Request,
-  { params }: { params: { id: string } },
-) {
+export async function POST(req: Request, { params }: { params: { id: string } }) {
   try {
     const session = await auth();
     if (!session?.user) return unauthorized();
@@ -248,11 +231,14 @@ class ExpenseService {
 ### Client Data Fetching Pattern
 
 ```typescript
-// SWR hook for client components
-function useExpenses(groupId: string, filters?: ExpenseFilters) {
-  const params = new URLSearchParams(filters);
-  return useSWR(`/api/groups/${groupId}/expenses?${params}`);
-}
+// SWR used directly in components (no custom hooks layer)
+const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
+const { data, isLoading, isValidating, mutate } = useSWR(
+  `/api/groups/${groupId}/expenses?${params}`,
+  fetcher,
+  { refreshInterval: 10_000, keepPreviousData: true },
+);
 ```
 
 ---

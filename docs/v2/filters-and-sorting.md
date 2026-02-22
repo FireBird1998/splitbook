@@ -11,18 +11,18 @@ The backend supports filtering by category, tags, date range, member, and sortin
 #### Add new filter state
 
 ```typescript
-const [category, setCategory] = useState<string>("");        // category filter
-const [sortBy, setSortBy] = useState<"date" | "amount">("date");
-const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-const [showFilters, setShowFilters] = useState(false);        // toggle advanced filters
+const [category, setCategory] = useState<string>(''); // category filter
+const [sortBy, setSortBy] = useState<'date' | 'amount'>('date');
+const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+const [showFilters, setShowFilters] = useState(false); // toggle advanced filters
 ```
 
 #### Update URL params builder
 
 ```typescript
-if (category) params.set("category", category);
-params.set("sortBy", sortBy);
-params.set("sortOrder", sortOrder);
+if (category) params.set('category', category);
+params.set('sortBy', sortBy);
+params.set('sortOrder', sortOrder);
 ```
 
 #### UI — Filter bar (below quick filters)
@@ -35,13 +35,16 @@ Category: [All ▾]  [🍕Food] [🚗Transport] [🏨Accom] ...  (chip row)
 ```
 
 **Sort dropdown** (always visible, compact):
+
 ```
 Sort: [Date ▾]  [↑↓]
 ```
+
 - Dropdown: Date, Amount
 - Toggle button: Ascending / Descending (arrow icon flips)
 
 **Category filter** (expandable):
+
 - Row of category chips (from `EXPENSE_CATEGORIES`)
 - "All" chip to clear
 - Active chip highlighted with brand color
@@ -51,7 +54,7 @@ Sort: [Date ▾]  [↑↓]
 Show a badge on the "Filters" button when any filter is active:
 
 ```typescript
-const activeFilterCount = [category, quickFilter !== "all", search].filter(Boolean).length;
+const activeFilterCount = [category, quickFilter !== 'all', search].filter(Boolean).length;
 ```
 
 ### New Backend Support: Member Filter
@@ -59,6 +62,7 @@ const activeFilterCount = [category, quickFilter !== "all", search].filter(Boole
 #### File: `src/types/index.ts`
 
 Add to `ExpenseFilters`:
+
 ```typescript
 paidByUser?: string;     // filter by who paid
 owedByUser?: string;     // filter by who is in the split
@@ -71,18 +75,19 @@ Add to `getGroupExpenses` query builder:
 ```typescript
 // Paid-by filter
 if (filters.paidByUser) {
-  query["paidBy.user"] = new mongoose.Types.ObjectId(filters.paidByUser);
+  query['paidBy.user'] = new mongoose.Types.ObjectId(filters.paidByUser);
 }
 
 // Owed-by filter (who is in splitBetween)
 if (filters.owedByUser) {
-  query["splitBetween.user"] = new mongoose.Types.ObjectId(filters.owedByUser);
+  query['splitBetween.user'] = new mongoose.Types.ObjectId(filters.owedByUser);
 }
 ```
 
 #### File: `src/app/api/groups/[id]/expenses/route.ts`
 
 Parse new query params:
+
 ```typescript
 paidByUser: searchParams.get("paidByUser") || undefined,
 owedByUser: searchParams.get("owedByUser") || undefined,
@@ -100,4 +105,3 @@ owedByUser: searchParams.get("owedByUser") || undefined,
 - `src/types/index.ts` — add `paidByUser`, `owedByUser` to `ExpenseFilters`
 - `src/lib/services/expense.service.ts` — handle new filter params
 - `src/app/api/groups/[id]/expenses/route.ts` — parse new query params
-

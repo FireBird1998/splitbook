@@ -1,9 +1,9 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
 function getMongoURI(): string {
   const uri = process.env.MONGODB_URI;
   if (!uri) {
-    throw new Error("Please define the MONGODB_URI environment variable in .env.local");
+    throw new Error('Please define the MONGODB_URI environment variable in .env.local');
   }
   return uri;
 }
@@ -18,7 +18,10 @@ const globalWithMongoose = global as typeof globalThis & {
   mongoose: MongooseCache;
 };
 
-let cached: MongooseCache = globalWithMongoose.mongoose || { conn: null, promise: null };
+let cached: MongooseCache = globalWithMongoose.mongoose || {
+  conn: null,
+  promise: null,
+};
 
 if (!globalWithMongoose.mongoose) {
   globalWithMongoose.mongoose = cached;
@@ -50,4 +53,3 @@ export async function connectDB(): Promise<typeof mongoose> {
 }
 
 export default connectDB;
-

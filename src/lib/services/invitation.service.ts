@@ -1,8 +1,8 @@
-import connectDB from "@/lib/db";
-import Invitation from "@/lib/models/Invitation";
-import Group from "@/lib/models/Group";
-import { activityService } from "./activity.service";
-import crypto from "crypto";
+import connectDB from '@/lib/db';
+import Invitation from '@/lib/models/Invitation';
+import Group from '@/lib/models/Group';
+import { activityService } from './activity.service';
+import crypto from 'crypto';
 
 export class InvitationService {
   /**
@@ -13,21 +13,21 @@ export class InvitationService {
 
     // Check if already a member
     const group = await Group.findById(groupId);
-    if (!group) throw new Error("Group not found");
+    if (!group) throw new Error('Group not found');
 
     // Check for existing pending invitation
     const existing = await Invitation.findOne({
       group: groupId,
       invitedEmail: email.toLowerCase(),
-      status: "pending",
+      status: 'pending',
       expiresAt: { $gt: new Date() },
     });
 
     if (existing) {
-      throw new Error("ALREADY_INVITED");
+      throw new Error('ALREADY_INVITED');
     }
 
-    const token = crypto.randomBytes(16).toString("hex");
+    const token = crypto.randomBytes(16).toString('hex');
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 day expiry
 
@@ -40,8 +40,8 @@ export class InvitationService {
     });
 
     return invitation.populate([
-      { path: "group", select: "name category" },
-      { path: "invitedBy", select: "name email image" },
+      { path: 'group', select: 'name category' },
+      { path: 'invitedBy', select: 'name email image' },
     ]);
   }
 
@@ -52,11 +52,11 @@ export class InvitationService {
     await connectDB();
     return Invitation.find({
       invitedEmail: email.toLowerCase(),
-      status: "pending",
+      status: 'pending',
       expiresAt: { $gt: new Date() },
     })
-      .populate("group", "name category members")
-      .populate("invitedBy", "name email image")
+      .populate('group', 'name category members')
+      .populate('invitedBy', 'name email image')
       .sort({ createdAt: -1 })
       .lean();
   }
@@ -70,42 +70,37 @@ export class InvitationService {
     const invitation = await Invitation.findById(invitationId);
     if (!invitation) return null;
 
-    if (invitation.status !== "pending") {
-      throw new Error("INVITATION_NOT_PENDING");
+    if (invitation.status !== 'pending') {
+      throw new Error('INVITATION_NOT_PENDING');
     }
 
     if (new Date() > invitation.expiresAt) {
-      invitation.status = "expired";
+      invitation.status = 'expired';
       await invitation.save();
-      throw new Error("INVITATION_EXPIRED");
+      throw new Error('INVITATION_EXPIRED');
     }
 
     // Update invitation status
-    invitation.status = "accepted";
+    invitation.status = 'accepted';
     await invitation.save();
 
     // Add user to group
     const group = await Group.findById(invitation.group);
     if (!group) return null;
 
-    const alreadyMember = group.members.some(
-      (m) => m.user.toString() === userId
-    );
+    const alreadyMember = group.members.some((m) => m.user.toString() === userId);
 
     if (!alreadyMember) {
       group.members.push({
-        user: userId as unknown as import("mongoose").Types.ObjectId,
-        role: "member",
+        user: userId as unknown as import('mongoose').Types.ObjectId,
+        role: 'member',
         joinedAt: new Date(),
       });
       await group.save();
 
-      await activityService.log(
-        group._id.toString(),
-        "member_joined",
-        userId,
-        { method: "invite" }
-      );
+      await activityService.log(group._id.toString(), 'member_joined', userId, {
+        method: 'invite',
+      });
     }
 
     return invitation;
@@ -120,7 +115,7 @@ export class InvitationService {
     const invitation = await Invitation.findById(invitationId);
     if (!invitation) return null;
 
-    invitation.status = "declined";
+    invitation.status = 'declined';
     await invitation.save();
 
     return invitation;
@@ -128,4 +123,3 @@ export class InvitationService {
 }
 
 export const invitationService = new InvitationService();
-

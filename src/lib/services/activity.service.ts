@@ -1,6 +1,6 @@
-import connectDB from "@/lib/db";
-import Activity from "@/lib/models/Activity";
-import type { ActivityType } from "@/types";
+import connectDB from '@/lib/db';
+import Activity from '@/lib/models/Activity';
+import type { ActivityType } from '@/types';
 
 export class ActivityService {
   /**
@@ -10,7 +10,7 @@ export class ActivityService {
     groupId: string,
     type: ActivityType,
     actorId: string,
-    metadata: Record<string, unknown> = {}
+    metadata: Record<string, unknown> = {},
   ) {
     await connectDB();
     return Activity.create({
@@ -24,11 +24,7 @@ export class ActivityService {
   /**
    * Get paginated activity feed for a group.
    */
-  async getGroupActivity(
-    groupId: string,
-    page: number = 1,
-    limit: number = 20
-  ) {
+  async getGroupActivity(groupId: string, page: number = 1, limit: number = 20) {
     await connectDB();
     const skip = (page - 1) * limit;
 
@@ -37,7 +33,7 @@ export class ActivityService {
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .populate("actor", "name email image")
+        .populate('actor', 'name email image')
         .lean(),
       Activity.countDocuments({ group: groupId }),
     ]);
@@ -55,4 +51,3 @@ export class ActivityService {
 }
 
 export const activityService = new ActivityService();
-

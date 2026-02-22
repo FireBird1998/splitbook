@@ -1,31 +1,31 @@
-"use client";
+'use client';
 
-import { signIn } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
-import { Suspense } from "react";
-import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
-import Button from "@mui/material/Button";
-import GoogleIcon from "@mui/icons-material/Google";
+import { signIn } from 'next-auth/react';
+import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
+import GoogleIcon from '@mui/icons-material/Google';
 
 function LoginForm() {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get("callbackUrl") || "/dashboard";
-  const error = searchParams.get("error");
+  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
+  const error = searchParams.get('error');
 
   return (
     <Box
       sx={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        bgcolor: "background.default",
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        bgcolor: 'background.default',
       }}
     >
-      <Box sx={{ textAlign: "center", p: 4 }}>
+      <Box sx={{ textAlign: 'center', p: 4 }}>
         <Box sx={{ mb: 4 }}>
-          <Typography component="span" sx={{ fontSize: "3rem", display: "block", mb: 2 }}>
+          <Typography component="span" sx={{ fontSize: '3rem', display: 'block', mb: 2 }}>
             💰
           </Typography>
           <Typography variant="h4" fontWeight={700} color="text.primary">
@@ -44,11 +44,11 @@ function LoginForm() {
           <Box
             sx={{
               bgcolor: (theme) => `${theme.palette.error.main}12`,
-              color: "error.main",
+              color: 'error.main',
               px: 2,
               py: 1.5,
               borderRadius: 2,
-              fontSize: "0.875rem",
+              fontSize: '0.875rem',
               mb: 4,
             }}
           >
@@ -61,9 +61,9 @@ function LoginForm() {
           size="large"
           fullWidth
           startIcon={<GoogleIcon />}
-          onClick={() => signIn("google", { callbackUrl })}
+          onClick={() => signIn('google', { callbackUrl })}
           sx={{
-            fontSize: "1rem",
+            fontSize: '1rem',
             py: 1.5,
             px: 3,
             maxWidth: 320,
@@ -75,7 +75,7 @@ function LoginForm() {
         <Typography
           variant="caption"
           color="text.disabled"
-          sx={{ display: "block", maxWidth: 320, mx: "auto", mt: 4 }}
+          sx={{ display: 'block', maxWidth: 320, mx: 'auto', mt: 4 }}
         >
           By signing in, you agree to our Terms of Service and Privacy Policy.
         </Typography>
@@ -90,15 +90,15 @@ export default function LoginPage() {
       fallback={
         <Box
           sx={{
-            minHeight: "100vh",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            bgcolor: "background.default",
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: 'background.default',
           }}
         >
-          <Box sx={{ textAlign: "center" }}>
-            <Typography component="span" sx={{ fontSize: "3rem", display: "block", mb: 2 }}>
+          <Box sx={{ textAlign: 'center' }}>
+            <Typography component="span" sx={{ fontSize: '3rem', display: 'block', mb: 2 }}>
               💰
             </Typography>
             <Typography color="text.secondary">Loading...</Typography>

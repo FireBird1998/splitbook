@@ -11,6 +11,7 @@ The `PATCH /api/groups/[id]/expenses/[expenseId]` API and `expenseService.update
 #### Make the dialog dual-purpose (create + edit)
 
 Add optional prop:
+
 ```typescript
 interface ExpenseFormDialogProps {
   open: boolean;
@@ -18,13 +19,14 @@ interface ExpenseFormDialogProps {
   groupId: string;
   group: Record<string, unknown>;
   userId: string;
-  expense?: Record<string, unknown> | null;  // NEW — if provided, we're editing
+  expense?: Record<string, unknown> | null; // NEW — if provided, we're editing
 }
 ```
 
 #### Pre-fill form when `expense` is provided
 
 In a `useEffect` keyed on `expense`:
+
 - Set `description` from `expense.description`
 - Set `amount` from `expense.amount`
 - Set `currency` from `expense.currency`
@@ -49,8 +51,8 @@ In a `useEffect` keyed on `expense`:
 if (expense) {
   // PATCH existing
   const res = await fetch(`/api/groups/${groupId}/expenses/${expense._id}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ...payload }),
   });
 } else {
@@ -92,6 +94,7 @@ Pass `onEdit` callback to each `ExpenseCard`. When triggered, open `ExpenseFormD
 ### File: `src/components/groups/GroupDetailView.tsx`
 
 Update `ExpenseFormDialog` usage to also support edit mode:
+
 - Pass `editingExpense` from `ExpenseListView` up, or let `ExpenseListView` manage its own dialog instance.
 
 Preferred approach: `ExpenseListView` renders its own `ExpenseFormDialog` for editing (separate from the FAB's create dialog). This avoids prop drilling.
@@ -111,4 +114,3 @@ None. `PATCH` API and `expenseService.update()` already work with edit history.
 - `src/components/expenses/ExpenseFormDialog.tsx` — add `expense` prop, pre-fill, PATCH logic
 - `src/components/expenses/ExpenseCard.tsx` — add 3-dot menu with "Edit"
 - `src/components/expenses/ExpenseListView.tsx` — manage edit state, render edit dialog
-

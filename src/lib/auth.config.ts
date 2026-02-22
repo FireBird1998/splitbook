@@ -1,5 +1,5 @@
-import type { NextAuthConfig } from "next-auth";
-import Google from "next-auth/providers/google";
+import type { NextAuthConfig } from 'next-auth';
+import Google from 'next-auth/providers/google';
 
 /**
  * Edge-compatible Auth.js configuration.
@@ -14,7 +14,7 @@ export const authConfig: NextAuthConfig = {
     }),
   ],
   session: {
-    strategy: "jwt",
+    strategy: 'jwt',
   },
   callbacks: {
     async jwt({ token, user }) {
@@ -33,17 +33,17 @@ export const authConfig: NextAuthConfig = {
       const isLoggedIn = !!auth?.user;
       const { pathname } = nextUrl;
 
-      const isAuthPage = pathname.startsWith("/login");
-      const isPublicPage = pathname === "/" || pathname.startsWith("/join");
-      const isApiAuth = pathname.startsWith("/api/auth");
-      const isApi = pathname.startsWith("/api");
+      const isAuthPage = pathname.startsWith('/login');
+      const isPublicPage = pathname === '/' || pathname.startsWith('/join');
+      const isApiAuth = pathname.startsWith('/api/auth');
+      const isApi = pathname.startsWith('/api');
 
       // Always allow auth API routes
       if (isApiAuth) return true;
 
       // Redirect logged-in users away from login page
       if (isLoggedIn && isAuthPage) {
-        return Response.redirect(new URL("/dashboard", nextUrl));
+        return Response.redirect(new URL('/dashboard', nextUrl));
       }
 
       // Allow public pages and login page
@@ -54,8 +54,8 @@ export const authConfig: NextAuthConfig = {
 
       // Protect all other pages — redirect to login
       if (!isLoggedIn) {
-        const loginUrl = new URL("/login", nextUrl);
-        loginUrl.searchParams.set("callbackUrl", pathname);
+        const loginUrl = new URL('/login', nextUrl);
+        loginUrl.searchParams.set('callbackUrl', pathname);
         return Response.redirect(loginUrl);
       }
 
@@ -63,6 +63,6 @@ export const authConfig: NextAuthConfig = {
     },
   },
   pages: {
-    signIn: "/login",
+    signIn: '/login',
   },
 };

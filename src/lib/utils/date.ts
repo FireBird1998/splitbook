@@ -10,16 +10,16 @@ import {
   subDays,
   isToday,
   isYesterday,
-} from "date-fns";
+} from 'date-fns';
 
 /**
  * Format a date for display.
  */
 export function formatDate(date: Date | string): string {
   const d = new Date(date);
-  if (isToday(d)) return "Today";
-  if (isYesterday(d)) return "Yesterday";
-  return format(d, "MMM d, yyyy");
+  if (isToday(d)) return 'Today';
+  if (isYesterday(d)) return 'Yesterday';
+  return format(d, 'MMM d, yyyy');
 }
 
 /**
@@ -27,8 +27,8 @@ export function formatDate(date: Date | string): string {
  */
 export function formatDateTime(date: Date | string): string {
   const d = new Date(date);
-  if (isToday(d)) return `Today at ${format(d, "h:mm a")}`;
-  if (isYesterday(d)) return `Yesterday at ${format(d, "h:mm a")}`;
+  if (isToday(d)) return `Today at ${format(d, 'h:mm a')}`;
+  if (isYesterday(d)) return `Yesterday at ${format(d, 'h:mm a')}`;
   return format(d, "MMM d, yyyy 'at' h:mm a");
 }
 
@@ -42,35 +42,33 @@ export function formatRelativeTime(date: Date | string): string {
 /**
  * Get date range for quick filters.
  */
-export function getQuickFilterDates(
-  filter: string
-): { from: Date; to: Date } | null {
+export function getQuickFilterDates(filter: string): { from: Date; to: Date } | null {
   const now = new Date();
 
   switch (filter) {
-    case "thisWeek":
+    case 'thisWeek':
       return {
         from: startOfWeek(now, { weekStartsOn: 1 }),
         to: now,
       };
-    case "lastWeek": {
+    case 'lastWeek': {
       const lastWeekStart = startOfWeek(subWeeks(now, 1), { weekStartsOn: 1 });
       return {
         from: lastWeekStart,
         to: endOfWeek(lastWeekStart, { weekStartsOn: 1 }),
       };
     }
-    case "thisMonth":
+    case 'thisMonth':
       return {
         from: startOfMonth(now),
         to: now,
       };
-    case "lastMonth":
+    case 'lastMonth':
       return {
         from: startOfMonth(subMonths(now, 1)),
         to: endOfMonth(subMonths(now, 1)),
       };
-    case "last30Days":
+    case 'last30Days':
       return {
         from: subDays(now, 30),
         to: now,
@@ -84,6 +82,5 @@ export function getQuickFilterDates(
  * Format a date for API query parameter (ISO date string).
  */
 export function toDateParam(date: Date): string {
-  return format(date, "yyyy-MM-dd");
+  return format(date, 'yyyy-MM-dd');
 }
-

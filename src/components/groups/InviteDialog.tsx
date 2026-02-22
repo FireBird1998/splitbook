@@ -1,21 +1,21 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import Box from "@mui/material/Box";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import TextField from "@mui/material/TextField";
-import Button from "@mui/material/Button";
-import CircularProgress from "@mui/material/CircularProgress";
-import Divider from "@mui/material/Divider";
-import IconButton from "@mui/material/IconButton";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import CloseIcon from "@mui/icons-material/Close";
-import CheckIcon from "@mui/icons-material/Check";
-import Snackbar from "@mui/material/Snackbar";
+import { useState } from 'react';
+import Box from '@mui/material/Box';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import CircularProgress from '@mui/material/CircularProgress';
+import Divider from '@mui/material/Divider';
+import IconButton from '@mui/material/IconButton';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CloseIcon from '@mui/icons-material/Close';
+import CheckIcon from '@mui/icons-material/Check';
+import Snackbar from '@mui/material/Snackbar';
 
 interface InviteDialogProps {
   open: boolean;
@@ -24,39 +24,39 @@ interface InviteDialogProps {
 }
 
 export default function InviteDialog({ open, onClose, groupId }: InviteDialogProps) {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState('');
   const [emailLoading, setEmailLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
-  const [emailError, setEmailError] = useState("");
+  const [emailError, setEmailError] = useState('');
 
-  const [inviteLink, setInviteLink] = useState("");
+  const [inviteLink, setInviteLink] = useState('');
   const [linkLoading, setLinkLoading] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [snackbar, setSnackbar] = useState("");
+  const [snackbar, setSnackbar] = useState('');
 
   const handleEmailInvite = async () => {
     if (!email.trim()) return;
     setEmailLoading(true);
-    setEmailError("");
+    setEmailError('');
 
     try {
       const res = await fetch(`/api/groups/${groupId}/invite`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
 
       if (!res.ok) {
         const data = await res.json();
-        setEmailError(data.error || "Failed to send invite");
+        setEmailError(data.error || 'Failed to send invite');
         return;
       }
 
       setEmailSent(true);
-      setEmail("");
-      setSnackbar("Invitation sent!");
+      setEmail('');
+      setSnackbar('Invitation sent!');
     } catch {
-      setEmailError("Something went wrong.");
+      setEmailError('Something went wrong.');
     } finally {
       setEmailLoading(false);
     }
@@ -66,8 +66,8 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
     setLinkLoading(true);
     try {
       const res = await fetch(`/api/groups/${groupId}/invite-link`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expiresInDays: 7 }),
       });
 
@@ -76,7 +76,7 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
         setInviteLink(data.data.inviteUrl);
       }
     } catch {
-      console.error("Failed to generate link");
+      console.error('Failed to generate link');
     } finally {
       setLinkLoading(false);
     }
@@ -86,13 +86,19 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
     await navigator.clipboard.writeText(inviteLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-    setSnackbar("Link copied!");
+    setSnackbar('Link copied!');
   };
 
   return (
     <>
       <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <DialogTitle
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
           Invite Members
           <IconButton onClick={onClose} size="small">
             <CloseIcon />
@@ -107,7 +113,7 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
                 Invite by email
               </Typography>
               {emailError && (
-                <Typography variant="caption" color="error.main" sx={{ mb: 1, display: "block" }}>
+                <Typography variant="caption" color="error.main" sx={{ mb: 1, display: 'block' }}>
                   {emailError}
                 </Typography>
               )}
@@ -137,13 +143,15 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
                   disabled={emailLoading || !email.trim()}
                   sx={{ flexShrink: 0 }}
                 >
-                  {emailLoading ? <CircularProgress size={20} /> : "Send"}
+                  {emailLoading ? <CircularProgress size={20} /> : 'Send'}
                 </Button>
               </Stack>
             </Box>
 
             <Divider>
-              <Typography variant="caption" color="text.disabled">OR</Typography>
+              <Typography variant="caption" color="text.disabled">
+                OR
+              </Typography>
             </Divider>
 
             {/* Invite Link */}
@@ -159,9 +167,13 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
                       size="small"
                       fullWidth
                       slotProps={{ input: { readOnly: true } }}
-                      sx={{ "& input": { fontSize: 12 } }}
+                      sx={{ '& input': { fontSize: 12 } }}
                     />
-                    <IconButton onClick={handleCopy} size="small" color={copied ? "success" : "default"}>
+                    <IconButton
+                      onClick={handleCopy}
+                      size="small"
+                      color={copied ? 'success' : 'default'}
+                    >
                       {copied ? <CheckIcon /> : <ContentCopyIcon />}
                     </IconButton>
                   </Stack>
@@ -175,9 +187,9 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
                   fullWidth
                   onClick={handleGenerateLink}
                   disabled={linkLoading}
-                  sx={{ borderColor: "primary.main", color: "primary.main" }}
+                  sx={{ borderColor: 'primary.main', color: 'primary.main' }}
                 >
-                  {linkLoading ? <CircularProgress size={20} /> : "Generate Invite Link"}
+                  {linkLoading ? <CircularProgress size={20} /> : 'Generate Invite Link'}
                 </Button>
               )}
             </Box>
@@ -188,7 +200,7 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
       <Snackbar
         open={!!snackbar}
         autoHideDuration={3000}
-        onClose={() => setSnackbar("")}
+        onClose={() => setSnackbar('')}
         message={snackbar}
       />
     </>

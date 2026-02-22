@@ -34,7 +34,10 @@ function calculateBalances(groupId: string): Balance[] {
     }
     // Debit participants
     for (const participant of expense.splitBetween) {
-      balanceMap.set(participant.user, (balanceMap.get(participant.user) ?? 0) - participant.amount);
+      balanceMap.set(
+        participant.user,
+        (balanceMap.get(participant.user) ?? 0) - participant.amount,
+      );
     }
   }
 
@@ -156,4 +159,3 @@ See [api.md](../api.md#balances) for full documentation.
   - Recommendation: Always settle in the same currency as the expense
 - Floating point: Always round to 2 decimal places
 - Empty group (no expenses): Show "No expenses yet" state
-

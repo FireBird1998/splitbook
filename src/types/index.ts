@@ -1,4 +1,4 @@
-import { Types } from "mongoose";
+import { Types } from 'mongoose';
 
 // ─── User ───────────────────────────────────────────────
 export interface IUser {
@@ -13,8 +13,8 @@ export interface IUser {
 }
 
 // ─── Group ──────────────────────────────────────────────
-export type GroupCategory = "trip" | "home" | "couple" | "work" | "other";
-export type MemberRole = "admin" | "member";
+export type GroupCategory = 'trip' | 'home' | 'couple' | 'work' | 'other';
+export type MemberRole = 'admin' | 'member';
 
 export interface IGroupMember {
   user: string | IUser;
@@ -48,7 +48,7 @@ export interface IGroup {
 }
 
 // ─── Expense ────────────────────────────────────────────
-export type SplitMethod = "equal" | "unequal" | "percentage" | "shares" | "exact";
+export type SplitMethod = 'equal' | 'unequal' | 'percentage' | 'shares' | 'exact';
 
 export interface IExpensePayer {
   user: string | IUser;
@@ -108,14 +108,14 @@ export interface ISettlement {
 
 // ─── Activity ───────────────────────────────────────────
 export type ActivityType =
-  | "expense_added"
-  | "expense_updated"
-  | "expense_deleted"
-  | "settlement_recorded"
-  | "member_joined"
-  | "member_left"
-  | "group_created"
-  | "group_updated";
+  | 'expense_added'
+  | 'expense_updated'
+  | 'expense_deleted'
+  | 'settlement_recorded'
+  | 'member_joined'
+  | 'member_left'
+  | 'group_created'
+  | 'group_updated';
 
 export interface IActivity {
   _id: string;
@@ -127,7 +127,7 @@ export interface IActivity {
 }
 
 // ─── Invitation ─────────────────────────────────────────
-export type InvitationStatus = "pending" | "accepted" | "declined" | "expired";
+export type InvitationStatus = 'pending' | 'accepted' | 'declined' | 'expired';
 
 export interface IInvitation {
   _id: string;
@@ -170,8 +170,8 @@ export interface ExpenseFilters {
   search?: string;
   paidByUser?: string;
   owedByUser?: string;
-  sortBy?: "date" | "amount";
-  sortOrder?: "asc" | "desc";
+  sortBy?: 'date' | 'amount';
+  sortOrder?: 'asc' | 'desc';
   page?: number;
   limit?: number;
 }
@@ -193,4 +193,3 @@ export interface GroupBalanceResponse {
   debts: Debt[];
   currency: string;
 }
-

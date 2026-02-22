@@ -3,6 +3,7 @@
 ## Overview
 
 Users can be invited to groups via two methods:
+
 1. **Email invitation** — Direct invite to a specific email address
 2. **Invite link** — Shareable link anyone with the link can use to join
 
@@ -117,4 +118,3 @@ See [api.md](../api.md#invitations) for full endpoint documentation.
 - Invite link shared publicly → anyone with Google account can join (by design — admin can remove)
 - Expired invitation → show "This invitation has expired" message
 - Already a member clicking join link → redirect to group page with info message
-

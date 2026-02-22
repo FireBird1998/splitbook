@@ -1,12 +1,20 @@
-import { getAuthUser, unauthorized, forbidden, notFound, success, serverError, validationError } from "@/lib/utils/api-response";
-import { groupService } from "@/lib/services/group.service";
-import { expenseService } from "@/lib/services/expense.service";
-import { updateExpenseSchema } from "@/lib/validators/expense.validator";
+import {
+  getAuthUser,
+  unauthorized,
+  forbidden,
+  notFound,
+  success,
+  serverError,
+  validationError,
+} from '@/lib/utils/api-response';
+import { groupService } from '@/lib/services/group.service';
+import { expenseService } from '@/lib/services/expense.service';
+import { updateExpenseSchema } from '@/lib/validators/expense.validator';
 
 // GET /api/groups/[id]/expenses/[expenseId]
 export async function GET(
   req: Request,
-  { params }: { params: Promise<{ id: string; expenseId: string }> }
+  { params }: { params: Promise<{ id: string; expenseId: string }> },
 ) {
   try {
     const user = await getAuthUser();
@@ -18,7 +26,7 @@ export async function GET(
     if (!isMember) return forbidden();
 
     const expense = await expenseService.getById(expenseId);
-    if (!expense) return notFound("Expense");
+    if (!expense) return notFound('Expense');
 
     return success(expense);
   } catch (err) {
@@ -29,7 +37,7 @@ export async function GET(
 // PATCH /api/groups/[id]/expenses/[expenseId]
 export async function PATCH(
   req: Request,
-  { params }: { params: Promise<{ id: string; expenseId: string }> }
+  { params }: { params: Promise<{ id: string; expenseId: string }> },
 ) {
   try {
     const user = await getAuthUser();
@@ -45,7 +53,7 @@ export async function PATCH(
     if (!parsed.success) return validationError(parsed.error);
 
     const expense = await expenseService.update(expenseId, parsed.data, user.id!);
-    if (!expense) return notFound("Expense");
+    if (!expense) return notFound('Expense');
 
     return success(expense);
   } catch (err) {
@@ -56,7 +64,7 @@ export async function PATCH(
 // DELETE /api/groups/[id]/expenses/[expenseId]
 export async function DELETE(
   req: Request,
-  { params }: { params: Promise<{ id: string; expenseId: string }> }
+  { params }: { params: Promise<{ id: string; expenseId: string }> },
 ) {
   try {
     const user = await getAuthUser();
@@ -68,11 +76,10 @@ export async function DELETE(
     if (!isMember) return forbidden();
 
     const expense = await expenseService.delete(expenseId, user.id!);
-    if (!expense) return notFound("Expense");
+    if (!expense) return notFound('Expense');
 
-    return success({ message: "Expense deleted" });
+    return success({ message: 'Expense deleted' });
   } catch (err) {
     return serverError(err);
   }
 }
-

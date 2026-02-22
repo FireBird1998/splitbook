@@ -1,27 +1,30 @@
-import { getAuthUser, unauthorized, success, notFound, forbidden, serverError, validationError } from "@/lib/utils/api-response";
-import { groupService } from "@/lib/services/group.service";
-import { updateGroupSchema } from "@/lib/validators/group.validator";
+import {
+  getAuthUser,
+  unauthorized,
+  success,
+  notFound,
+  forbidden,
+  serverError,
+  validationError,
+} from '@/lib/utils/api-response';
+import { groupService } from '@/lib/services/group.service';
+import { updateGroupSchema } from '@/lib/validators/group.validator';
 
 // GET /api/groups/[id] — Get group detail
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
     const { id } = await params;
     const group = await groupService.getById(id);
-    if (!group) return notFound("Group");
+    if (!group) return notFound('Group');
 
     // Check membership
-    const isMember = group.members.some(
-      (m) => {
-        const memberUser = m.user as unknown as { _id: { toString(): string } };
-        return memberUser._id.toString() === user.id;
-      }
-    );
+    const isMember = group.members.some((m) => {
+      const memberUser = m.user as unknown as { _id: { toString(): string } };
+      return memberUser._id.toString() === user.id;
+    });
     if (!isMember) return forbidden();
 
     return success(group);
@@ -31,10 +34,7 @@ export async function GET(
 }
 
 // PATCH /api/groups/[id] — Update group
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser();
     if (!user) return unauthorized();
@@ -45,32 +45,28 @@ export async function PATCH(
     if (!parsed.success) return validationError(parsed.error);
 
     const group = await groupService.update(id, parsed.data, user.id!);
-    if (!group) return notFound("Group");
+    if (!group) return notFound('Group');
 
     return success(group);
   } catch (err) {
-    if (err instanceof Error && err.message === "FORBIDDEN") return forbidden();
+    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
     return serverError(err);
   }
 }
 
 // DELETE /api/groups/[id] — Archive group
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
     const { id } = await params;
     const group = await groupService.archive(id, user.id!);
-    if (!group) return notFound("Group");
+    if (!group) return notFound('Group');
 
-    return success({ message: "Group archived" });
+    return success({ message: 'Group archived' });
   } catch (err) {
-    if (err instanceof Error && err.message === "FORBIDDEN") return forbidden();
+    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
     return serverError(err);
   }
 }
-

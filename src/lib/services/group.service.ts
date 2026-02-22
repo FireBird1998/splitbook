@@ -1,12 +1,9 @@
-import connectDB from "@/lib/db";
-import Group from "@/lib/models/Group";
-import "@/lib/models/User"; // Ensure User model is registered for populate()
-import { activityService } from "./activity.service";
-import type {
-  CreateGroupInput,
-  UpdateGroupInput,
-} from "@/lib/validators/group.validator";
-import crypto from "crypto";
+import connectDB from '@/lib/db';
+import Group from '@/lib/models/Group';
+import '@/lib/models/User'; // Ensure User model is registered for populate()
+import { activityService } from './activity.service';
+import type { CreateGroupInput, UpdateGroupInput } from '@/lib/validators/group.validator';
+import crypto from 'crypto';
 
 export class GroupService {
   /**
@@ -21,18 +18,18 @@ export class GroupService {
       members: [
         {
           user: userId,
-          role: "admin",
+          role: 'admin',
           joinedAt: new Date(),
         },
       ],
     });
 
     // Log activity
-    await activityService.log(group._id.toString(), "group_created", userId, {
+    await activityService.log(group._id.toString(), 'group_created', userId, {
       groupName: group.name,
     });
 
-    return group.populate("members.user", "name email image");
+    return group.populate('members.user', 'name email image');
   }
 
   /**
@@ -42,14 +39,14 @@ export class GroupService {
     await connectDB();
 
     const filter: Record<string, unknown> = {
-      "members.user": userId,
+      'members.user': userId,
     };
     if (!includeArchived) {
       filter.isArchived = false;
     }
 
     return Group.find(filter)
-      .populate("members.user", "name email image")
+      .populate('members.user', 'name email image')
       .sort({ updatedAt: -1 })
       .lean();
   }
@@ -59,9 +56,7 @@ export class GroupService {
    */
   async getById(groupId: string) {
     await connectDB();
-    return Group.findById(groupId)
-      .populate("members.user", "name email image")
-      .lean();
+    return Group.findById(groupId).populate('members.user', 'name email image').lean();
   }
 
   /**
@@ -75,8 +70,8 @@ export class GroupService {
 
     // Check admin permission
     const member = group.members.find((m) => m.user.toString() === userId);
-    if (!member || member.role !== "admin") {
-      throw new Error("FORBIDDEN");
+    if (!member || member.role !== 'admin') {
+      throw new Error('FORBIDDEN');
     }
 
     // Track changes for activity log
@@ -92,10 +87,10 @@ export class GroupService {
     await group.save();
 
     if (Object.keys(changes).length > 0) {
-      await activityService.log(groupId, "group_updated", userId, { changes });
+      await activityService.log(groupId, 'group_updated', userId, { changes });
     }
 
-    return group.populate("members.user", "name email image");
+    return group.populate('members.user', 'name email image');
   }
 
   /**
@@ -108,14 +103,14 @@ export class GroupService {
     if (!group) return null;
 
     const member = group.members.find((m) => m.user.toString() === userId);
-    if (!member || member.role !== "admin") {
-      throw new Error("FORBIDDEN");
+    if (!member || member.role !== 'admin') {
+      throw new Error('FORBIDDEN');
     }
 
     group.isArchived = true;
     await group.save();
 
-    await activityService.log(groupId, "group_updated", userId, {
+    await activityService.log(groupId, 'group_updated', userId, {
       changes: { isArchived: { old: false, new: true } },
     });
 
@@ -129,7 +124,7 @@ export class GroupService {
     await connectDB();
     const group = await Group.findOne({
       _id: groupId,
-      "members.user": userId,
+      'members.user': userId,
     }).lean();
     return !!group;
   }
@@ -140,9 +135,9 @@ export class GroupService {
   async addMember(
     groupId: string,
     userId: string,
-    role: "admin" | "member" = "member",
+    role: 'admin' | 'member' = 'member',
     addedBy?: string,
-    method?: string
+    method?: string,
   ) {
     await connectDB();
 
@@ -154,18 +149,18 @@ export class GroupService {
     if (existing) return group;
 
     group.members.push({
-      user: userId as unknown as import("mongoose").Types.ObjectId,
+      user: userId as unknown as import('mongoose').Types.ObjectId,
       role,
       joinedAt: new Date(),
     });
     await group.save();
 
-    await activityService.log(groupId, "member_joined", userId, {
+    await activityService.log(groupId, 'member_joined', userId, {
       userId,
-      method: method || "invite",
+      method: method || 'invite',
     });
 
-    return group.populate("members.user", "name email image");
+    return group.populate('members.user', 'name email image');
   }
 
   /**
@@ -175,8 +170,8 @@ export class GroupService {
   async updateMemberRole(
     groupId: string,
     targetUserId: string,
-    newRole: "admin" | "member",
-    actorId: string
+    newRole: 'admin' | 'member',
+    actorId: string,
   ) {
     await connectDB();
 
@@ -185,27 +180,25 @@ export class GroupService {
 
     // Check admin permission
     const actor = group.members.find((m) => m.user.toString() === actorId);
-    if (!actor || actor.role !== "admin") {
-      throw new Error("FORBIDDEN");
+    if (!actor || actor.role !== 'admin') {
+      throw new Error('FORBIDDEN');
     }
 
-    const target = group.members.find(
-      (m) => m.user.toString() === targetUserId
-    );
+    const target = group.members.find((m) => m.user.toString() === targetUserId);
     if (!target) return null;
 
     // Prevent demoting the last admin
-    if (newRole === "member" && target.role === "admin") {
-      const adminCount = group.members.filter((m) => m.role === "admin").length;
+    if (newRole === 'member' && target.role === 'admin') {
+      const adminCount = group.members.filter((m) => m.role === 'admin').length;
       if (adminCount <= 1) {
-        throw new Error("LAST_ADMIN");
+        throw new Error('LAST_ADMIN');
       }
     }
 
     target.role = newRole;
     await group.save();
 
-    await activityService.log(groupId, "group_updated", actorId, {
+    await activityService.log(groupId, 'group_updated', actorId, {
       changes: {
         memberRole: {
           old: { userId: targetUserId, role: target.role },
@@ -214,7 +207,7 @@ export class GroupService {
       },
     });
 
-    return group.populate("members.user", "name email image");
+    return group.populate('members.user', 'name email image');
   }
 
   /**
@@ -229,39 +222,37 @@ export class GroupService {
 
     // Check admin permission
     const actor = group.members.find((m) => m.user.toString() === actorId);
-    if (!actor || actor.role !== "admin") {
-      throw new Error("FORBIDDEN");
+    if (!actor || actor.role !== 'admin') {
+      throw new Error('FORBIDDEN');
     }
 
     // Prevent self-removal
     if (targetUserId === actorId) {
-      throw new Error("SELF_REMOVE");
+      throw new Error('SELF_REMOVE');
     }
 
-    const target = group.members.find(
-      (m) => m.user.toString() === targetUserId
-    );
+    const target = group.members.find((m) => m.user.toString() === targetUserId);
     if (!target) return null;
 
     // Prevent removing the last admin
-    if (target.role === "admin") {
-      const adminCount = group.members.filter((m) => m.role === "admin").length;
+    if (target.role === 'admin') {
+      const adminCount = group.members.filter((m) => m.role === 'admin').length;
       if (adminCount <= 1) {
-        throw new Error("LAST_ADMIN");
+        throw new Error('LAST_ADMIN');
       }
     }
 
     group.members = group.members.filter(
-      (m) => m.user.toString() !== targetUserId
+      (m) => m.user.toString() !== targetUserId,
     ) as typeof group.members;
     await group.save();
 
-    await activityService.log(groupId, "member_left", actorId, {
+    await activityService.log(groupId, 'member_left', actorId, {
       userId: targetUserId,
-      method: "removed",
+      method: 'removed',
     });
 
-    return group.populate("members.user", "name email image");
+    return group.populate('members.user', 'name email image');
   }
 
   // ─── Tag Management ─────────────────────────────────
@@ -279,17 +270,15 @@ export class GroupService {
 
     // Check admin permission
     const member = group.members.find((m) => m.user.toString() === userId);
-    if (!member || member.role !== "admin") {
-      throw new Error("FORBIDDEN");
+    if (!member || member.role !== 'admin') {
+      throw new Error('FORBIDDEN');
     }
 
     // Check for duplicate tag name (case-insensitive)
     const normalised = name.trim().toLowerCase();
-    const exists = (group.tags || []).some(
-      (t) => t.name.toLowerCase() === normalised
-    );
+    const exists = (group.tags || []).some((t) => t.name.toLowerCase() === normalised);
     if (exists) {
-      throw new Error("TAG_EXISTS");
+      throw new Error('TAG_EXISTS');
     }
 
     // Atomic $push directly to MongoDB
@@ -304,8 +293,8 @@ export class GroupService {
           },
         },
       },
-      { new: true }
-    ).populate("members.user", "name email image");
+      { new: true },
+    ).populate('members.user', 'name email image');
 
     return updated;
   }
@@ -318,7 +307,7 @@ export class GroupService {
     groupId: string,
     tagId: string,
     data: { name?: string; isArchived?: boolean },
-    userId: string
+    userId: string,
   ) {
     await connectDB();
 
@@ -327,8 +316,8 @@ export class GroupService {
 
     // Check admin permission
     const member = group.members.find((m) => m.user.toString() === userId);
-    if (!member || member.role !== "admin") {
-      throw new Error("FORBIDDEN");
+    if (!member || member.role !== 'admin') {
+      throw new Error('FORBIDDEN');
     }
 
     const tag = (group.tags || []).find((t) => t._id.toString() === tagId);
@@ -338,24 +327,23 @@ export class GroupService {
     if (data.name !== undefined) {
       const normalised = data.name.trim().toLowerCase();
       const duplicate = (group.tags || []).some(
-        (t) => t._id.toString() !== tagId && t.name.toLowerCase() === normalised
+        (t) => t._id.toString() !== tagId && t.name.toLowerCase() === normalised,
       );
       if (duplicate) {
-        throw new Error("TAG_EXISTS");
+        throw new Error('TAG_EXISTS');
       }
     }
 
     // Build $set for the matched array element
     const setFields: Record<string, unknown> = {};
-    if (data.name !== undefined) setFields["tags.$.name"] = data.name.trim();
-    if (data.isArchived !== undefined)
-      setFields["tags.$.isArchived"] = data.isArchived;
+    if (data.name !== undefined) setFields['tags.$.name'] = data.name.trim();
+    if (data.isArchived !== undefined) setFields['tags.$.isArchived'] = data.isArchived;
 
     const updated = await Group.findOneAndUpdate(
-      { _id: groupId, "tags._id": tagId },
+      { _id: groupId, 'tags._id': tagId },
       { $set: setFields },
-      { new: true }
-    ).populate("members.user", "name email image");
+      { new: true },
+    ).populate('members.user', 'name email image');
 
     return updated;
   }
@@ -372,15 +360,15 @@ export class GroupService {
 
     // Check admin permission
     const member = group.members.find((m) => m.user.toString() === userId);
-    if (!member || member.role !== "admin") {
-      throw new Error("FORBIDDEN");
+    if (!member || member.role !== 'admin') {
+      throw new Error('FORBIDDEN');
     }
 
     const tag = (group.tags || []).find((t) => t._id.toString() === tagId);
     if (!tag) return null;
 
     // Check if any expenses use this tag
-    const { default: Expense } = await import("@/lib/models/Expense");
+    const { default: Expense } = await import('@/lib/models/Expense');
     const usageCount = await Expense.countDocuments({
       group: groupId,
       tag: tag.name,
@@ -394,8 +382,8 @@ export class GroupService {
     const updated = await Group.findByIdAndUpdate(
       groupId,
       { $pull: { tags: { _id: tagId } } },
-      { new: true }
-    ).populate("members.user", "name email image");
+      { new: true },
+    ).populate('members.user', 'name email image');
 
     return updated;
   }
@@ -403,20 +391,16 @@ export class GroupService {
   /**
    * Generate an invite code for the group.
    */
-  async generateInviteCode(
-    groupId: string,
-    userId: string,
-    expiresInDays: number = 7
-  ) {
+  async generateInviteCode(groupId: string, userId: string, expiresInDays: number = 7) {
     await connectDB();
 
     const group = await Group.findById(groupId);
     if (!group) return null;
 
     const member = group.members.find((m) => m.user.toString() === userId);
-    if (!member) throw new Error("FORBIDDEN");
+    if (!member) throw new Error('FORBIDDEN');
 
-    const inviteCode = crypto.randomBytes(4).toString("hex"); // 8-char hex
+    const inviteCode = crypto.randomBytes(4).toString('hex'); // 8-char hex
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + expiresInDays);
 
@@ -441,7 +425,7 @@ export class GroupService {
       inviteCodeExpiresAt: { $gt: new Date() },
       isArchived: false,
     })
-      .populate("members.user", "name email image")
+      .populate('members.user', 'name email image')
       .lean();
   }
 }

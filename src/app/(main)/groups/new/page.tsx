@@ -1,50 +1,50 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import TextField from "@mui/material/TextField";
-import Button from "@mui/material/Button";
-import MenuItem from "@mui/material/MenuItem";
-import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import CircularProgress from "@mui/material/CircularProgress";
-import Autocomplete from "@mui/material/Autocomplete";
-import { alpha } from "@mui/material/styles";
-import { CURRENCIES } from "@/lib/utils/currency";
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import MenuItem from '@mui/material/MenuItem';
+import ToggleButton from '@mui/material/ToggleButton';
+import ToggleButtonGroup from '@mui/material/ToggleButtonGroup';
+import CircularProgress from '@mui/material/CircularProgress';
+import Autocomplete from '@mui/material/Autocomplete';
+import { alpha } from '@mui/material/styles';
+import { CURRENCIES } from '@/lib/utils/currency';
 
 const CATEGORIES = [
-  { id: "trip", label: "Trip", icon: "✈️" },
-  { id: "home", label: "Home", icon: "🏠" },
-  { id: "couple", label: "Couple", icon: "💑" },
-  { id: "work", label: "Work", icon: "💼" },
-  { id: "other", label: "Other", icon: "📋" },
+  { id: 'trip', label: 'Trip', icon: '✈️' },
+  { id: 'home', label: 'Home', icon: '🏠' },
+  { id: 'couple', label: 'Couple', icon: '💑' },
+  { id: 'work', label: 'Work', icon: '💼' },
+  { id: 'other', label: 'Other', icon: '📋' },
 ];
 
 export default function NewGroupPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState('');
 
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState("other");
-  const [defaultCurrency, setDefaultCurrency] = useState("INR");
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [category, setCategory] = useState('other');
+  const [defaultCurrency, setDefaultCurrency] = useState('INR');
   const [alternateCurrencies, setAlternateCurrencies] = useState<string[]>([]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setError("");
+    setError('');
 
     try {
-      const res = await fetch("/api/groups", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/groups', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           description,
@@ -57,13 +57,13 @@ export default function NewGroupPage() {
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || "Failed to create group");
+        setError(data.error || 'Failed to create group');
         return;
       }
 
       router.push(`/groups/${data.data._id}`);
     } catch {
-      setError("Something went wrong. Please try again.");
+      setError('Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -81,11 +81,11 @@ export default function NewGroupPage() {
             <Box
               sx={{
                 bgcolor: (theme) => `${theme.palette.error.main}12`,
-                color: "error.main",
+                color: 'error.main',
                 px: 2,
                 py: 1.5,
                 borderRadius: 2,
-                fontSize: "0.875rem",
+                fontSize: '0.875rem',
               }}
             >
               {error}
@@ -122,21 +122,21 @@ export default function NewGroupPage() {
               exclusive
               onChange={(_, val) => val && setCategory(val)}
               size="small"
-              sx={{ flexWrap: "wrap", gap: 1 }}
+              sx={{ flexWrap: 'wrap', gap: 1 }}
             >
               {CATEGORIES.map((cat) => (
                 <ToggleButton
                   key={cat.id}
                   value={cat.id}
                   sx={{
-                    borderRadius: "8px !important",
-                    border: "1px solid",
-                    borderColor: "divider",
-                    textTransform: "none",
-                    "&.Mui-selected": {
+                    borderRadius: '8px !important',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    textTransform: 'none',
+                    '&.Mui-selected': {
                       backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
-                      color: "primary.main",
-                      borderColor: "primary.main",
+                      color: 'primary.main',
+                      borderColor: 'primary.main',
                     },
                   }}
                 >
@@ -184,19 +184,11 @@ export default function NewGroupPage() {
           />
 
           <Stack direction="row" justifyContent="flex-end" spacing={1.5} sx={{ pt: 1 }}>
-            <Button
-              variant="outlined"
-              onClick={() => router.back()}
-              color="inherit"
-            >
+            <Button variant="outlined" onClick={() => router.back()} color="inherit">
               Cancel
             </Button>
-            <Button
-              type="submit"
-              variant="contained"
-              disabled={loading || !name.trim()}
-            >
-              {loading ? <CircularProgress size={20} /> : "Create Group"}
+            <Button type="submit" variant="contained" disabled={loading || !name.trim()}>
+              {loading ? <CircularProgress size={20} /> : 'Create Group'}
             </Button>
           </Stack>
         </Stack>

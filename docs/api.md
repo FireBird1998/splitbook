@@ -3,6 +3,7 @@
 All endpoints return JSON. Auth required unless marked 🔓 (public).
 
 Standard response format:
+
 ```json
 // Success
 { "data": { ... }, "status": 200 }
@@ -17,22 +18,23 @@ Standard response format:
 
 Handled entirely by Auth.js. No custom endpoints needed.
 
-| Method | Path                        | Description        | Auth |
-| ------ | --------------------------- | ------------------ | ---- |
-| *      | `/api/auth/[...nextauth]`   | Auth.js catch-all  | 🔓   |
+| Method | Path                      | Description       | Auth |
+| ------ | ------------------------- | ----------------- | ---- |
+| \*     | `/api/auth/[...nextauth]` | Auth.js catch-all | 🔓   |
 
 ---
 
 ## User Profile
 
-| Method | Path                | Description            |
-| ------ | ------------------- | ---------------------- |
-| GET    | `/api/user/profile` | Get current user       |
-| PATCH  | `/api/user/profile` | Update profile         |
+| Method | Path                | Description      |
+| ------ | ------------------- | ---------------- |
+| GET    | `/api/user/profile` | Get current user |
+| PATCH  | `/api/user/profile` | Update profile   |
 
 ### GET /api/user/profile
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -48,6 +50,7 @@ Handled entirely by Auth.js. No custom endpoints needed.
 ### PATCH /api/user/profile
 
 **Body:**
+
 ```json
 {
   "name": "John Doe",
@@ -59,17 +62,18 @@ Handled entirely by Auth.js. No custom endpoints needed.
 
 ## Groups
 
-| Method | Path                               | Description                  |
-| ------ | ---------------------------------- | ---------------------------- |
-| POST   | `/api/groups`                      | Create group                 |
-| GET    | `/api/groups`                      | List user's groups           |
-| GET    | `/api/groups/[id]`                 | Get group detail             |
-| PATCH  | `/api/groups/[id]`                 | Update group                 |
-| DELETE | `/api/groups/[id]`                 | Archive group (soft delete)  |
+| Method | Path               | Description                 |
+| ------ | ------------------ | --------------------------- |
+| POST   | `/api/groups`      | Create group                |
+| GET    | `/api/groups`      | List user's groups          |
+| GET    | `/api/groups/[id]` | Get group detail            |
+| PATCH  | `/api/groups/[id]` | Update group                |
+| DELETE | `/api/groups/[id]` | Archive group (soft delete) |
 
 ### POST /api/groups
 
 **Body:**
+
 ```json
 {
   "name": "Europe Trip 2026",
@@ -85,17 +89,23 @@ Handled entirely by Auth.js. No custom endpoints needed.
 **Query params:** `?archived=false`
 
 **Response:**
+
 ```json
 {
   "data": [
     {
       "_id": "...",
       "name": "Europe Trip 2026",
-      "members": [{ "user": { "_id": "...", "name": "John", "image": "..." }, "role": "admin" }],
+      "members": [
+        {
+          "user": { "_id": "...", "name": "John", "image": "..." },
+          "role": "admin"
+        }
+      ],
       "defaultCurrency": "EUR",
       "category": "trip",
       "isArchived": false,
-      "totalBalance": 150.00
+      "totalBalance": 150.0
     }
   ]
 }
@@ -104,6 +114,7 @@ Handled entirely by Auth.js. No custom endpoints needed.
 ### PATCH /api/groups/[id]
 
 **Body (partial update):**
+
 ```json
 {
   "name": "New Group Name",
@@ -118,18 +129,19 @@ Handled entirely by Auth.js. No custom endpoints needed.
 
 ## Invitations
 
-| Method | Path                                     | Description              |
-| ------ | ---------------------------------------- | ------------------------ |
-| POST   | `/api/groups/[id]/invite`                | Send email invitation    |
-| POST   | `/api/groups/[id]/invite-link`           | Generate/refresh link    |
-| GET    | `/api/groups/[id]/invite-link`           | Get current invite link  |
-| GET    | `/api/invitations`                       | My pending invitations   |
-| POST   | `/api/invitations/[id]`                  | Accept or decline        |
-| POST   | `/api/join/[code]`                       | Join group via link      |
+| Method | Path                           | Description             |
+| ------ | ------------------------------ | ----------------------- |
+| POST   | `/api/groups/[id]/invite`      | Send email invitation   |
+| POST   | `/api/groups/[id]/invite-link` | Generate/refresh link   |
+| GET    | `/api/groups/[id]/invite-link` | Get current invite link |
+| GET    | `/api/invitations`             | My pending invitations  |
+| POST   | `/api/invitations/[id]`        | Accept or decline       |
+| POST   | `/api/join/[code]`             | Join group via link     |
 
 ### POST /api/groups/[id]/invite
 
 **Body:**
+
 ```json
 {
   "email": "friend@gmail.com"
@@ -137,6 +149,7 @@ Handled entirely by Auth.js. No custom endpoints needed.
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -151,6 +164,7 @@ Handled entirely by Auth.js. No custom endpoints needed.
 ### POST /api/groups/[id]/invite-link
 
 **Body:**
+
 ```json
 {
   "expiresInDays": 7
@@ -158,6 +172,7 @@ Handled entirely by Auth.js. No custom endpoints needed.
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -171,9 +186,10 @@ Handled entirely by Auth.js. No custom endpoints needed.
 ### POST /api/invitations/[id]
 
 **Body:**
+
 ```json
 {
-  "action": "accept"   // or "decline"
+  "action": "accept" // or "decline"
 }
 ```
 
@@ -185,33 +201,28 @@ No body needed. Adds current user to the group.
 
 ## Expenses
 
-| Method | Path                                             | Description           |
-| ------ | ------------------------------------------------ | --------------------- |
-| POST   | `/api/groups/[id]/expenses`                      | Add expense           |
-| GET    | `/api/groups/[id]/expenses`                      | List (with filters)   |
-| GET    | `/api/groups/[id]/expenses/[expenseId]`          | Get single expense    |
-| PATCH  | `/api/groups/[id]/expenses/[expenseId]`          | Update expense        |
-| DELETE | `/api/groups/[id]/expenses/[expenseId]`          | Soft delete           |
+| Method | Path                                    | Description         |
+| ------ | --------------------------------------- | ------------------- |
+| POST   | `/api/groups/[id]/expenses`             | Add expense         |
+| GET    | `/api/groups/[id]/expenses`             | List (with filters) |
+| GET    | `/api/groups/[id]/expenses/[expenseId]` | Get single expense  |
+| PATCH  | `/api/groups/[id]/expenses/[expenseId]` | Update expense      |
+| DELETE | `/api/groups/[id]/expenses/[expenseId]` | Soft delete         |
 
 ### POST /api/groups/[id]/expenses
 
 **Body:**
+
 ```json
 {
   "description": "Dinner at restaurant",
-  "amount": 120.00,
+  "amount": 120.0,
   "currency": "EUR",
   "category": "food",
   "date": "2026-02-10",
-  "paidBy": [
-    { "user": "userId1", "amount": 120.00 }
-  ],
+  "paidBy": [{ "user": "userId1", "amount": 120.0 }],
   "splitMethod": "equal",
-  "splitBetween": [
-    { "user": "userId1" },
-    { "user": "userId2" },
-    { "user": "userId3" }
-  ],
+  "splitBetween": [{ "user": "userId1" }, { "user": "userId2" }, { "user": "userId3" }],
   "tags": ["dinner", "birthday"],
   "predefinedItem": null,
   "notes": "John's birthday dinner"
@@ -219,6 +230,7 @@ No body needed. Adds current user to the group.
 ```
 
 **Notes on split calculation:**
+
 - `equal`: Server calculates equal amounts. Client just sends user IDs.
 - `unequal` / `exact`: Client sends `amount` for each user.
 - `percentage`: Client sends `percentage` for each user (must sum to 100).
@@ -227,6 +239,7 @@ No body needed. Adds current user to the group.
 ### GET /api/groups/[id]/expenses
 
 **Query params:**
+
 ```
 ?page=1
 &limit=20
@@ -241,6 +254,7 @@ No body needed. Adds current user to the group.
 ```
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -259,18 +273,19 @@ No body needed. Adds current user to the group.
 
 ## Settlements
 
-| Method | Path                                  | Description             |
-| ------ | ------------------------------------- | ----------------------- |
-| POST   | `/api/groups/[id]/settlements`        | Record settlement       |
-| GET    | `/api/groups/[id]/settlements`        | List settlements        |
+| Method | Path                           | Description       |
+| ------ | ------------------------------ | ----------------- |
+| POST   | `/api/groups/[id]/settlements` | Record settlement |
+| GET    | `/api/groups/[id]/settlements` | List settlements  |
 
 ### POST /api/groups/[id]/settlements
 
 **Body:**
+
 ```json
 {
   "paidTo": "userId2",
-  "amount": 50.00,
+  "amount": 50.0,
   "currency": "EUR",
   "note": "Paid via UPI"
 }
@@ -280,26 +295,35 @@ No body needed. Adds current user to the group.
 
 ## Balances
 
-| Method | Path                                  | Description                      |
-| ------ | ------------------------------------- | -------------------------------- |
-| GET    | `/api/groups/[id]/balances`           | Group balance summary            |
-| GET    | `/api/groups/[id]/balances/simplified`| Simplified debts (min transfers) |
-| GET    | `/api/user/balances`                  | User's balances across groups    |
+| Method | Path                                   | Description                      |
+| ------ | -------------------------------------- | -------------------------------- |
+| GET    | `/api/groups/[id]/balances`            | Group balance summary            |
+| GET    | `/api/groups/[id]/balances/simplified` | Simplified debts (min transfers) |
+| GET    | `/api/user/balances`                   | User's balances across groups    |
 
 ### GET /api/groups/[id]/balances
 
 **Response:**
+
 ```json
 {
   "data": {
     "balances": [
-      { "user": { "_id": "...", "name": "John" }, "balance": -30.00 },
-      { "user": { "_id": "...", "name": "Jane" }, "balance": 50.00 },
-      { "user": { "_id": "...", "name": "Bob" }, "balance": -20.00 }
+      { "user": { "_id": "...", "name": "John" }, "balance": -30.0 },
+      { "user": { "_id": "...", "name": "Jane" }, "balance": 50.0 },
+      { "user": { "_id": "...", "name": "Bob" }, "balance": -20.0 }
     ],
     "debts": [
-      { "from": { "_id": "...", "name": "John" }, "to": { "_id": "...", "name": "Jane" }, "amount": 30.00 },
-      { "from": { "_id": "...", "name": "Bob" }, "to": { "_id": "...", "name": "Jane" }, "amount": 20.00 }
+      {
+        "from": { "_id": "...", "name": "John" },
+        "to": { "_id": "...", "name": "Jane" },
+        "amount": 30.0
+      },
+      {
+        "from": { "_id": "...", "name": "Bob" },
+        "to": { "_id": "...", "name": "Jane" },
+        "amount": 20.0
+      }
     ],
     "currency": "EUR"
   }
@@ -314,15 +338,16 @@ Same format as above but with minimized transactions.
 
 ## Activity Feed
 
-| Method | Path                                  | Description              |
-| ------ | ------------------------------------- | ------------------------ |
-| GET    | `/api/groups/[id]/activity`           | Get activity feed        |
+| Method | Path                        | Description       |
+| ------ | --------------------------- | ----------------- |
+| GET    | `/api/groups/[id]/activity` | Get activity feed |
 
 ### GET /api/groups/[id]/activity
 
 **Query params:** `?page=1&limit=20`
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -334,7 +359,7 @@ Same format as above but with minimized transactions.
         "metadata": {
           "expenseId": "...",
           "description": "Dinner at restaurant",
-          "amount": 120.00,
+          "amount": 120.0,
           "currency": "EUR"
         },
         "createdAt": "2026-02-10T19:30:00Z"
@@ -349,16 +374,17 @@ Same format as above but with minimized transactions.
 
 ## Receipt Upload
 
-| Method | Path                                                  | Description        |
-| ------ | ----------------------------------------------------- | ------------------ |
-| POST   | `/api/groups/[id]/expenses/[expenseId]/receipt`       | Upload receipt     |
-| DELETE | `/api/groups/[id]/expenses/[expenseId]/receipt`       | Remove receipt     |
+| Method | Path                                            | Description    |
+| ------ | ----------------------------------------------- | -------------- |
+| POST   | `/api/groups/[id]/expenses/[expenseId]/receipt` | Upload receipt |
+| DELETE | `/api/groups/[id]/expenses/[expenseId]/receipt` | Remove receipt |
 
 ### POST .../receipt
 
 **Body:** `multipart/form-data` with `file` field (image, max 5MB)
 
 **Response:**
+
 ```json
 {
   "data": {
@@ -366,4 +392,3 @@ Same format as above but with minimized transactions.
   }
 }
 ```
-

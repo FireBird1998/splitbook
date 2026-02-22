@@ -6,14 +6,14 @@ Tags are group-scoped labels that must be assigned to every expense (exactly 1 t
 
 ## Rules
 
-| Rule | Detail |
-| --- | --- |
-| Mandatory | Every expense must have exactly 1 tag |
-| Single tag | Only 1 tag allowed per expense (not an array) |
-| Group-scoped | Tags are embedded in the Group document |
-| Archive | Archived tags are hidden from the expense form but remain on existing expenses |
-| Unarchive | Archived tags can be restored |
-| Delete | A tag can only be deleted if **no expense** uses it; otherwise the delete is rejected |
+| Rule         | Detail                                                                                |
+| ------------ | ------------------------------------------------------------------------------------- |
+| Mandatory    | Every expense must have exactly 1 tag                                                 |
+| Single tag   | Only 1 tag allowed per expense (not an array)                                         |
+| Group-scoped | Tags are embedded in the Group document                                               |
+| Archive      | Archived tags are hidden from the expense form but remain on existing expenses        |
+| Unarchive    | Archived tags can be restored                                                         |
+| Delete       | A tag can only be deleted if **no expense** uses it; otherwise the delete is rejected |
 
 ## Data Model Changes
 
@@ -30,11 +30,13 @@ interface IGroupTagDocument {
 }
 
 // In GroupSchema:
-tags: [{
-  name: { type: String, required: true, trim: true, maxlength: 50 },
-  isArchived: { type: Boolean, default: false },
-  createdAt: { type: Date, default: Date.now },
-}]
+tags: [
+  {
+    name: { type: String, required: true, trim: true, maxlength: 50 },
+    isArchived: { type: Boolean, default: false },
+    createdAt: { type: Date, default: Date.now },
+  },
+];
 ```
 
 ### Expense Model
@@ -70,10 +72,10 @@ interface IGroupTag {
 
 ### Tag CRUD
 
-| Method | Path | Description | Auth |
-| --- | --- | --- | --- |
-| POST | `/api/groups/[id]/tags` | Create new tag | Admin |
-| PATCH | `/api/groups/[id]/tags/[tagId]` | Archive/unarchive (or rename) | Admin |
+| Method | Path                            | Description                        | Auth  |
+| ------ | ------------------------------- | ---------------------------------- | ----- |
+| POST   | `/api/groups/[id]/tags`         | Create new tag                     | Admin |
+| PATCH  | `/api/groups/[id]/tags/[tagId]` | Archive/unarchive (or rename)      | Admin |
 | DELETE | `/api/groups/[id]/tags/[tagId]` | Delete tag (if no expenses use it) | Admin |
 
 Tags are returned as part of the group object (`GET /api/groups/[id]`), so no separate GET endpoint is needed.
@@ -100,6 +102,7 @@ Tags are returned as part of the group object (`GET /api/groups/[id]`), so no se
 ### Expense Endpoints
 
 Filter parameter changes:
+
 - `tags=foo,bar` (array) → `tag=foo` (single value)
 
 ## UI Changes
@@ -119,7 +122,7 @@ Replace the `Autocomplete` (multiple, freeSolo) tags field with:
 
 - `TextField select` (single select, required)
 - Options = group's non-archived tags
-- Label: "Tag *"
+- Label: "Tag \*"
 - Validation: must select exactly 1 tag before submitting
 
 ### Expense Card
@@ -133,4 +136,3 @@ Replace the `Autocomplete` (multiple, freeSolo) tags field with:
 ### Predefined Items
 
 Change `defaultTags: string[]` → `defaultTag: string` and update the predefined items data.
-

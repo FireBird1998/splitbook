@@ -23,12 +23,12 @@ if (isLoading) return <Skeleton />;
 
 // Show subtle indicator when revalidating with existing data
 return (
-  <div className="relative">
+  <Box sx={{ position: 'relative' }}>
     {isValidating && <LinearProgress />}
-    <div className={isValidating ? "opacity-50 pointer-events-none" : ""}>
+    <Box sx={isValidating ? { opacity: 0.5, pointerEvents: 'none' } : undefined}>
       {/* existing expense list */}
-    </div>
-  </div>
+    </Box>
+  </Box>
 );
 ```
 
@@ -47,12 +47,11 @@ By checking `!data` (no previous data) for skeleton and `isValidating` (in-fligh
   - Use `isLoading && !data` for initial skeleton
   - Use `isValidating && data` for subtle loading indicator
   - Add `LinearProgress` from MUI at top of list
-  - Add `opacity-50` class when validating
+  - Add `sx={{ opacity: 0.5 }}` when validating
 
 ## Notes
 
 - No backend changes
 - SWR's `keepPreviousData` option can also help — it keeps stale data visible while revalidating: `useSWR(key, fetcher, { keepPreviousData: true })`
-- The `pointer-events-none` class prevents clicking on stale items during transition
+- The `pointerEvents: "none"` sx prevents clicking on stale items during transition
 - Pagination changes should also use this pattern (not show skeleton)
-

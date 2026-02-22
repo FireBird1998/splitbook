@@ -36,10 +36,10 @@ We use **Auth.js v5** (formerly NextAuth.js) with the **Google OAuth provider** 
 File: `src/lib/auth.ts`
 
 ```typescript
-import NextAuth from "next-auth";
-import Google from "next-auth/providers/google";
-import { MongoDBAdapter } from "@auth/mongodb-adapter";
-import clientPromise from "./mongodb-client";
+import NextAuth from 'next-auth';
+import Google from 'next-auth/providers/google';
+import { MongoDBAdapter } from '@auth/mongodb-adapter';
+import clientPromise from './mongodb-client';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: MongoDBAdapter(clientPromise),
@@ -50,7 +50,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   session: {
-    strategy: "jwt",
+    strategy: 'jwt',
   },
   callbacks: {
     async jwt({ token, user }) {
@@ -67,7 +67,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     },
   },
   pages: {
-    signIn: "/login",
+    signIn: '/login',
   },
 });
 ```
@@ -77,7 +77,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 File: `src/app/api/auth/[...nextauth]/route.ts`
 
 ```typescript
-import { handlers } from "@/lib/auth";
+import { handlers } from '@/lib/auth';
 export const { GET, POST } = handlers;
 ```
 
@@ -86,21 +86,21 @@ export const { GET, POST } = handlers;
 File: `src/middleware.ts`
 
 ```typescript
-import { auth } from "@/lib/auth";
-import { NextResponse } from "next/server";
+import { auth } from '@/lib/auth';
+import { NextResponse } from 'next/server';
 
 export default auth((req) => {
   const isLoggedIn = !!req.auth;
-  const isAuthPage = req.nextUrl.pathname.startsWith("/login");
-  const isPublicPage = req.nextUrl.pathname === "/" || req.nextUrl.pathname.startsWith("/join");
-  const isApiAuth = req.nextUrl.pathname.startsWith("/api/auth");
+  const isAuthPage = req.nextUrl.pathname.startsWith('/login');
+  const isPublicPage = req.nextUrl.pathname === '/' || req.nextUrl.pathname.startsWith('/join');
+  const isApiAuth = req.nextUrl.pathname.startsWith('/api/auth');
 
   // Allow auth API routes
   if (isApiAuth) return NextResponse.next();
 
   // Redirect logged-in users away from login
   if (isLoggedIn && isAuthPage) {
-    return NextResponse.redirect(new URL("/dashboard", req.url));
+    return NextResponse.redirect(new URL('/dashboard', req.url));
   }
 
   // Allow public pages
@@ -108,14 +108,14 @@ export default auth((req) => {
 
   // Protect everything else
   if (!isLoggedIn) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    return NextResponse.redirect(new URL('/login', req.url));
   }
 
   return NextResponse.next();
 });
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
 };
 ```
 
@@ -126,7 +126,7 @@ export const config = {
 ### In Server Components
 
 ```typescript
-import { auth } from "@/lib/auth";
+import { auth } from '@/lib/auth';
 
 export default async function Page() {
   const session = await auth();
@@ -137,12 +137,12 @@ export default async function Page() {
 ### In API Routes
 
 ```typescript
-import { auth } from "@/lib/auth";
+import { auth } from '@/lib/auth';
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) {
-    return Response.json({ error: "Unauthorized" }, { status: 401 });
+    return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
   // Use session.user.id
 }
@@ -151,8 +151,8 @@ export async function GET() {
 ### In Client Components
 
 ```typescript
-"use client";
-import { useSession } from "next-auth/react";
+'use client';
+import { useSession } from 'next-auth/react';
 
 export function UserMenu() {
   const { data: session, status } = useSession();
@@ -167,7 +167,7 @@ export function UserMenu() {
 File: `src/lib/utils/api-response.ts`
 
 ```typescript
-import { auth } from "@/lib/auth";
+import { auth } from '@/lib/auth';
 
 export async function getAuthUser() {
   const session = await auth();
@@ -176,11 +176,11 @@ export async function getAuthUser() {
 }
 
 export function unauthorized() {
-  return Response.json({ error: "Unauthorized" }, { status: 401 });
+  return Response.json({ error: 'Unauthorized' }, { status: 401 });
 }
 
 export function forbidden() {
-  return Response.json({ error: "Forbidden" }, { status: 403 });
+  return Response.json({ error: 'Forbidden' }, { status: 403 });
 }
 ```
 
@@ -205,4 +205,3 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 - Google OAuth handles password security — we never store passwords
 - All API routes must check session before processing
 - MongoDB adapter stores only public Google profile info (name, email, image)
-

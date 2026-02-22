@@ -29,6 +29,7 @@ Response:
 ```
 
 Query params:
+
 - `description` (string, required)
 - `amount` (number, required)
 - `date` (string ISO date, required)
@@ -39,12 +40,14 @@ Query params:
 ```typescript
 const existing = await Expense.findOne({
   group: groupId,
-  description: { $regex: `^${escapeRegex(description)}$`, $options: "i" },
+  description: { $regex: `^${escapeRegex(description)}$`, $options: 'i' },
   amount,
   date: { $gte: startOfDay(date), $lte: endOfDay(date) },
   isDeleted: false,
   ...(excludeId ? { _id: { $ne: excludeId } } : {}),
-}).populate("createdBy", "name").lean();
+})
+  .populate('createdBy', 'name')
+  .lean();
 ```
 
 ### File: `src/components/expenses/ExpenseFormDialog.tsx`
@@ -54,12 +57,12 @@ const existing = await Expense.findOne({
 After the user fills description + amount + date, debounce a check:
 
 ```typescript
-const [duplicateWarning, setDuplicateWarning] = useState<string>("");
+const [duplicateWarning, setDuplicateWarning] = useState<string>('');
 
 useEffect(() => {
   const timer = setTimeout(async () => {
     if (!description.trim() || !amount || !date) {
-      setDuplicateWarning("");
+      setDuplicateWarning('');
       return;
     }
 
@@ -76,11 +79,11 @@ useEffect(() => {
     if (data.data?.isDuplicate) {
       setDuplicateWarning(
         `Similar expense found: "${data.data.matchingExpense.description}" ` +
-        `(${formatCurrency(data.data.matchingExpense.amount, currency)}) ` +
-        `added by ${data.data.matchingExpense.createdBy.name}`
+          `(${formatCurrency(data.data.matchingExpense.amount, currency)}) ` +
+          `added by ${data.data.matchingExpense.createdBy.name}`,
       );
     } else {
-      setDuplicateWarning("");
+      setDuplicateWarning('');
     }
   }, 800); // 800ms debounce
 
@@ -126,4 +129,3 @@ GET endpoint as described above.
 - `src/components/expenses/ExpenseFormDialog.tsx` — add debounced duplicate check + warning UI
 - `src/lib/services/expense.service.ts` — add `checkDuplicate()` method
 - **New** `src/app/api/groups/[id]/expenses/check-duplicate/route.ts`
-

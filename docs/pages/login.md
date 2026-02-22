@@ -49,18 +49,19 @@ Dedicated login page for users who need to authenticate. Single option: Google O
 ```typescript
 "use client";
 import { signIn } from "next-auth/react";
+import { Box, Typography, Button } from "@mui/material";
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="text-center space-y-6">
-        <h1>SplitWise</h1>
-        <p>Welcome back! Sign in to continue.</p>
-        <Button onClick={() => signIn("google", { callbackUrl: "/dashboard" })}>
+    <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "background.default" }}>
+      <Box sx={{ textAlign: "center" }}>
+        <Typography variant="h4">SplitWise</Typography>
+        <Typography sx={{ mt: 1, color: "text.secondary" }}>Welcome back! Sign in to continue.</Typography>
+        <Button variant="contained" sx={{ mt: 3 }} onClick={() => signIn("google", { callbackUrl: "/dashboard" })}>
           Sign in with Google
         </Button>
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 }
 ```
@@ -70,5 +71,4 @@ export default function LoginPage() {
 ## Components Used
 
 - MUI Button (Google-branded styling)
-- Centered card layout (Tailwind)
-
+- Centered card layout (MUI Box + sx)

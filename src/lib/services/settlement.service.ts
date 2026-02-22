@@ -1,7 +1,7 @@
-import connectDB from "@/lib/db";
-import Settlement from "@/lib/models/Settlement";
-import { activityService } from "./activity.service";
-import type { CreateSettlementInput } from "@/lib/validators/settlement.validator";
+import connectDB from '@/lib/db';
+import Settlement from '@/lib/models/Settlement';
+import { activityService } from './activity.service';
+import type { CreateSettlementInput } from '@/lib/validators/settlement.validator';
 
 export class SettlementService {
   /**
@@ -21,7 +21,7 @@ export class SettlementService {
     });
 
     // Log activity
-    await activityService.log(groupId, "settlement_recorded", userId, {
+    await activityService.log(groupId, 'settlement_recorded', userId, {
       settlementId: settlement._id.toString(),
       paidTo: data.paidTo,
       amount: data.amount,
@@ -29,8 +29,8 @@ export class SettlementService {
     });
 
     return settlement.populate([
-      { path: "paidBy", select: "name email image" },
-      { path: "paidTo", select: "name email image" },
+      { path: 'paidBy', select: 'name email image' },
+      { path: 'paidTo', select: 'name email image' },
     ]);
   }
 
@@ -41,11 +41,10 @@ export class SettlementService {
     await connectDB();
     return Settlement.find({ group: groupId })
       .sort({ createdAt: -1 })
-      .populate("paidBy", "name email image")
-      .populate("paidTo", "name email image")
+      .populate('paidBy', 'name email image')
+      .populate('paidTo', 'name email image')
       .lean();
   }
 }
 
 export const settlementService = new SettlementService();
-

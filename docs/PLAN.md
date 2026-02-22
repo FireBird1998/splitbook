@@ -2,7 +2,7 @@
 
 ## Overview
 
-A full-featured expense-splitting application built with Next.js (App Router), React, Tailwind CSS, Material UI, MongoDB (Mongoose), and Auth.js. Supports Google login, real-time sync, multi-currency, smart debt simplification, and rich expense management.
+A full-featured expense-splitting application built with Next.js (App Router), React, Material UI, MongoDB (Mongoose), and Auth.js. Supports Google login, real-time sync, multi-currency, smart debt simplification, and rich expense management.
 
 ---
 
@@ -11,13 +11,14 @@ A full-featured expense-splitting application built with Next.js (App Router), R
 | Layer       | Technology                          |
 | ----------- | ----------------------------------- |
 | Framework   | Next.js 16 (App Router, Turbopack)  |
-| Language    | TypeScript                          |
-| UI          | React + Tailwind CSS + Material UI  |
+| Language    | TypeScript 5                        |
+| UI          | React 19 + Material UI v7 (Emotion) |
 | Auth        | Auth.js v5 (Google OAuth)           |
 | Database    | MongoDB (Atlas or local)            |
-| ODM         | Mongoose                            |
-| Real-time   | Server-Sent Events (SSE) or Polling |
-| File Upload | Local disk / Cloudinary (receipts)  |
+| ODM         | Mongoose v9                         |
+| Validation  | Zod v4                              |
+| Data Fetch  | SWR v2                              |
+| Real-time   | SWR polling (refreshInterval)       |
 | Package Mgr | pnpm                                |
 
 ---
@@ -92,7 +93,7 @@ A full-featured expense-splitting application built with Next.js (App Router), R
 
 ### Phase 1 — Foundation
 
-1. Project setup (Next.js + Tailwind + MUI) ← DONE
+1. Project setup (Next.js + MUI) ← DONE
 2. Auth.js + Google OAuth + MongoDB connection
 3. Database models (User, Group, Expense, Settlement, Activity, Invitation)
 4. Auth middleware + protected routes

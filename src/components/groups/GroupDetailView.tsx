@@ -1,38 +1,38 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import useSWR from "swr";
-import Link from "next/link";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Skeleton from "@mui/material/Skeleton";
-import Tab from "@mui/material/Tab";
-import Tabs from "@mui/material/Tabs";
-import IconButton from "@mui/material/IconButton";
-import Avatar from "@mui/material/Avatar";
-import AvatarGroup from "@mui/material/AvatarGroup";
-import Fab from "@mui/material/Fab";
-import Chip from "@mui/material/Chip";
-import SettingsIcon from "@mui/icons-material/Settings";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import AddIcon from "@mui/icons-material/Add";
-import ShareIcon from "@mui/icons-material/Share";
-import ExpenseListView from "@/components/expenses/ExpenseListView";
-import BalancesView from "@/components/balances/BalancesView";
-import ActivityView from "@/components/activity/ActivityView";
-import ExpenseFormDialog from "@/components/expenses/ExpenseFormDialog";
-import InviteDialog from "@/components/groups/InviteDialog";
+import { useState } from 'react';
+import useSWR from 'swr';
+import Link from 'next/link';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Skeleton from '@mui/material/Skeleton';
+import Tab from '@mui/material/Tab';
+import Tabs from '@mui/material/Tabs';
+import IconButton from '@mui/material/IconButton';
+import Avatar from '@mui/material/Avatar';
+import AvatarGroup from '@mui/material/AvatarGroup';
+import Fab from '@mui/material/Fab';
+import Chip from '@mui/material/Chip';
+import SettingsIcon from '@mui/icons-material/Settings';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import AddIcon from '@mui/icons-material/Add';
+import ShareIcon from '@mui/icons-material/Share';
+import ExpenseListView from '@/components/expenses/ExpenseListView';
+import BalancesView from '@/components/balances/BalancesView';
+import ActivityView from '@/components/activity/ActivityView';
+import ExpenseFormDialog from '@/components/expenses/ExpenseFormDialog';
+import InviteDialog from '@/components/groups/InviteDialog';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 
 const CATEGORY_ICONS: Record<string, string> = {
-  trip: "✈️",
-  home: "🏠",
-  couple: "💑",
-  work: "💼",
-  other: "📋",
+  trip: '✈️',
+  home: '🏠',
+  couple: '💑',
+  work: '💼',
+  other: '📋',
 };
 
 interface GroupDetailViewProps {
@@ -45,11 +45,9 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
-  const { data: groupData, isLoading } = useSWR(
-    `/api/groups/${groupId}`,
-    fetcher,
-    { refreshInterval: 30_000 }
-  );
+  const { data: groupData, isLoading } = useSWR(`/api/groups/${groupId}`, fetcher, {
+    refreshInterval: 30_000,
+  });
 
   const group = groupData?.data;
 
@@ -66,7 +64,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
   if (!group) {
     return (
       <Container maxWidth="lg" disableGutters>
-        <Box sx={{ textAlign: "center", py: 6 }}>
+        <Box sx={{ textAlign: 'center', py: 6 }}>
           <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
             Group not found
           </Typography>
@@ -85,7 +83,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
   const category = group.category as string;
 
   return (
-    <Container maxWidth="lg" disableGutters sx={{ overflow: "hidden" }}>
+    <Container maxWidth="lg" disableGutters sx={{ overflow: 'hidden' }}>
       {/* Header */}
       <Box sx={{ mb: 3 }}>
         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
@@ -93,14 +91,14 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
             <IconButton component={Link} href="/groups" size="small">
               <ArrowBackIcon />
             </IconButton>
-            <Typography component="span" sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" } }}>
-              {CATEGORY_ICONS[category] || "📋"}
+            <Typography component="span" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' } }}>
+              {CATEGORY_ICONS[category] || '📋'}
             </Typography>
             <Typography
               variant="h5"
               fontWeight={700}
               color="text.primary"
-              sx={{ fontSize: { xs: "1.15rem", sm: "1.5rem" } }}
+              sx={{ fontSize: { xs: '1.15rem', sm: '1.5rem' } }}
               noWrap
             >
               {group.name}
@@ -110,7 +108,12 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
             <IconButton onClick={() => setInviteDialogOpen(true)} size="small" title="Invite">
               <ShareIcon />
             </IconButton>
-            <IconButton component={Link} href={`/groups/${groupId}/settings`} size="small" title="Settings">
+            <IconButton
+              component={Link}
+              href={`/groups/${groupId}/settings`}
+              size="small"
+              title="Settings"
+            >
               <SettingsIcon />
             </IconButton>
           </Stack>
@@ -119,21 +122,28 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
           direction="row"
           alignItems="center"
           spacing={1}
-          sx={{ pl: { xs: 1, sm: 5.5 }, flexWrap: "wrap", rowGap: 0.5 }}
+          sx={{ pl: { xs: 1, sm: 5.5 }, flexWrap: 'wrap', rowGap: 0.5 }}
         >
           <Chip label={category} size="small" variant="outlined" />
           <AvatarGroup
             max={4}
-            sx={{ "& .MuiAvatar-root": { width: 24, height: 24, fontSize: 11 } }}
+            sx={{
+              '& .MuiAvatar-root': { width: 24, height: 24, fontSize: 11 },
+            }}
           >
             {members.map((m) => (
-              <Avatar key={m.user._id} src={m.user.image} alt={m.user.name} sx={{ width: 24, height: 24 }}>
+              <Avatar
+                key={m.user._id}
+                src={m.user.image}
+                alt={m.user.name}
+                sx={{ width: 24, height: 24 }}
+              >
                 {m.user.name?.[0]}
               </Avatar>
             ))}
           </AvatarGroup>
           <Typography variant="body2" color="text.secondary">
-            {members.length} member{members.length !== 1 ? "s" : ""}
+            {members.length} member{members.length !== 1 ? 's' : ''}
           </Typography>
         </Stack>
       </Box>
@@ -147,9 +157,14 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
         allowScrollButtonsMobile
         sx={{
           mb: 3,
-          "& .MuiTab-root": { textTransform: "none", fontWeight: 600, minWidth: { xs: "auto", sm: 90 }, px: { xs: 2, sm: 3 } },
-          "& .Mui-selected": { color: "primary.main" },
-          "& .MuiTabs-indicator": { backgroundColor: "primary.main" },
+          '& .MuiTab-root': {
+            textTransform: 'none',
+            fontWeight: 600,
+            minWidth: { xs: 'auto', sm: 90 },
+            px: { xs: 2, sm: 3 },
+          },
+          '& .Mui-selected': { color: 'primary.main' },
+          '& .MuiTabs-indicator': { backgroundColor: 'primary.main' },
         }}
       >
         <Tab label="Expenses" />
@@ -167,7 +182,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
         color="primary"
         onClick={() => setExpenseDialogOpen(true)}
         sx={{
-          position: "fixed",
+          position: 'fixed',
           bottom: 24,
           right: 24,
         }}

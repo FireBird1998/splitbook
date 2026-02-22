@@ -1,35 +1,35 @@
-"use client";
+'use client';
 
-import { useState, useEffect } from "react";
-import { useSession, signOut } from "next-auth/react";
-import Box from "@mui/material/Box";
-import Container from "@mui/material/Container";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import TextField from "@mui/material/TextField";
-import Button from "@mui/material/Button";
-import MenuItem from "@mui/material/MenuItem";
-import Avatar from "@mui/material/Avatar";
-import CircularProgress from "@mui/material/CircularProgress";
-import Snackbar from "@mui/material/Snackbar";
-import LogoutIcon from "@mui/icons-material/Logout";
-import { CURRENCIES } from "@/lib/utils/currency";
+import { useState, useEffect } from 'react';
+import { useSession, signOut } from 'next-auth/react';
+import Box from '@mui/material/Box';
+import Container from '@mui/material/Container';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import TextField from '@mui/material/TextField';
+import Button from '@mui/material/Button';
+import MenuItem from '@mui/material/MenuItem';
+import Avatar from '@mui/material/Avatar';
+import CircularProgress from '@mui/material/CircularProgress';
+import Snackbar from '@mui/material/Snackbar';
+import LogoutIcon from '@mui/icons-material/Logout';
+import { CURRENCIES } from '@/lib/utils/currency';
 
 export default function SettingsPage() {
   const { data: session } = useSession();
-  const [name, setName] = useState("");
-  const [preferredCurrency, setPreferredCurrency] = useState("INR");
+  const [name, setName] = useState('');
+  const [preferredCurrency, setPreferredCurrency] = useState('INR');
   const [loading, setLoading] = useState(false);
-  const [snackbar, setSnackbar] = useState("");
+  const [snackbar, setSnackbar] = useState('');
 
   useEffect(() => {
     async function loadProfile() {
-      const res = await fetch("/api/user/profile");
+      const res = await fetch('/api/user/profile');
       const data = await res.json();
       if (data.data) {
-        setName(data.data.name || "");
-        setPreferredCurrency(data.data.preferredCurrency || "INR");
+        setName(data.data.name || '');
+        setPreferredCurrency(data.data.preferredCurrency || 'INR');
       }
     }
     loadProfile();
@@ -38,17 +38,17 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/user/profile", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+      const res = await fetch('/api/user/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name, preferredCurrency }),
       });
 
       if (res.ok) {
-        setSnackbar("Settings saved!");
+        setSnackbar('Settings saved!');
       }
     } catch {
-      setSnackbar("Failed to save settings.");
+      setSnackbar('Failed to save settings.');
     } finally {
       setLoading(false);
     }
@@ -70,7 +70,7 @@ export default function SettingsPage() {
           <Stack direction="row" alignItems="center" spacing={2}>
             <Avatar
               src={session?.user?.image || undefined}
-              alt={session?.user?.name || "User"}
+              alt={session?.user?.name || 'User'}
               sx={{ width: 64, height: 64 }}
             />
             <Box>
@@ -107,12 +107,8 @@ export default function SettingsPage() {
               ))}
             </TextField>
 
-            <Button
-              variant="contained"
-              onClick={handleSave}
-              disabled={loading}
-            >
-              {loading ? <CircularProgress size={20} /> : "Save Changes"}
+            <Button variant="contained" onClick={handleSave} disabled={loading}>
+              {loading ? <CircularProgress size={20} /> : 'Save Changes'}
             </Button>
           </Stack>
         </Stack>
@@ -141,7 +137,7 @@ export default function SettingsPage() {
             variant="outlined"
             color="error"
             startIcon={<LogoutIcon />}
-            onClick={() => signOut({ callbackUrl: "/" })}
+            onClick={() => signOut({ callbackUrl: '/' })}
           >
             Sign Out
           </Button>
@@ -151,7 +147,7 @@ export default function SettingsPage() {
       <Snackbar
         open={!!snackbar}
         autoHideDuration={3000}
-        onClose={() => setSnackbar("")}
+        onClose={() => setSnackbar('')}
         message={snackbar}
       />
     </Container>

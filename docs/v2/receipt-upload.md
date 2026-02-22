@@ -33,6 +33,7 @@ Response:
 ```
 
 Implementation:
+
 1. Authenticate user
 2. Validate file type (jpeg, png, webp, pdf) and size (max 5MB)
 3. Validate user is a member of the group
@@ -40,6 +41,7 @@ Implementation:
 5. Return the public URL
 
 #### File validation
+
 - Allowed types: `image/jpeg`, `image/png`, `image/webp`, `application/pdf`
 - Max size: 5MB
 - Sanitize filename (strip special chars)
@@ -62,8 +64,8 @@ After upload:
 
 ```typescript
 const [receiptFile, setReceiptFile] = useState<File | null>(null);
-const [receiptPreview, setReceiptPreview] = useState<string>("");   // data URL for preview
-const [existingReceipt, setExistingReceipt] = useState<string>(""); // when editing
+const [receiptPreview, setReceiptPreview] = useState<string>(''); // data URL for preview
+const [existingReceipt, setExistingReceipt] = useState<string>(''); // when editing
 ```
 
 #### Upload flow in `handleSubmit`
@@ -73,11 +75,11 @@ let receiptUrl = existingReceipt || undefined;
 
 if (receiptFile) {
   const formData = new FormData();
-  formData.append("file", receiptFile);
-  formData.append("groupId", groupId);
+  formData.append('file', receiptFile);
+  formData.append('groupId', groupId);
 
-  const uploadRes = await fetch("/api/upload/receipt", {
-    method: "POST",
+  const uploadRes = await fetch('/api/upload/receipt', {
+    method: 'POST',
     body: formData,
   });
   const uploadData = await uploadRes.json();
@@ -85,12 +87,13 @@ if (receiptFile) {
 }
 
 // Include receiptUrl in the expense payload
-body: JSON.stringify({ ...payload, receiptUrl })
+body: JSON.stringify({ ...payload, receiptUrl });
 ```
 
 #### Preview (images only)
 
 When a file is selected:
+
 - If image: show a small thumbnail preview
 - If PDF: show a PDF icon with filename
 - Show file size
@@ -98,6 +101,7 @@ When a file is selected:
 ### File: `src/components/expenses/ExpenseDetailDialog.tsx`
 
 In the Receipt section:
+
 - If `receiptUrl` is an image: show thumbnail, click to open full-size in new tab
 - If `receiptUrl` is a PDF: show download link
 - If no receipt: show "No receipt attached"
@@ -113,6 +117,7 @@ receiptUrl: z.string().url().nullable().optional(),
 ### Gitignore
 
 Add to `.gitignore`:
+
 ```
 public/uploads/
 ```
@@ -131,4 +136,3 @@ public/uploads/
 - `src/components/expenses/ExpenseDetailDialog.tsx` — show receipt
 - `src/lib/validators/expense.validator.ts` — add `receiptUrl` field
 - `.gitignore` — exclude uploads dir
-

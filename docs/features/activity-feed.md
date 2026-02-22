@@ -16,16 +16,16 @@ Every significant action in a group is logged as an activity. The activity feed 
 
 ## Activity Types
 
-| Type                | Trigger                          | Display Example                                              |
-| ------------------- | -------------------------------- | ------------------------------------------------------------ |
-| `expense_added`     | New expense created              | "**John** added **Dinner at restaurant** — €120.00"          |
-| `expense_updated`   | Expense edited                   | "**John** updated **Dinner at restaurant** — amount: €120→€130" |
-| `expense_deleted`   | Expense soft deleted             | "**John** deleted **Dinner at restaurant**"                  |
-| `settlement_recorded` | Settlement recorded            | "**Jane** paid **John** €30.00"                              |
-| `member_joined`     | New member joined                | "**Bob** joined the group via invite link"                   |
-| `member_left`       | Member left or removed           | "**Bob** left the group"                                     |
-| `group_created`     | Group created                    | "**John** created the group"                                 |
-| `group_updated`     | Group settings changed           | "**John** updated group name to **Summer Trip**"             |
+| Type                  | Trigger                | Display Example                                                 |
+| --------------------- | ---------------------- | --------------------------------------------------------------- |
+| `expense_added`       | New expense created    | "**John** added **Dinner at restaurant** — €120.00"             |
+| `expense_updated`     | Expense edited         | "**John** updated **Dinner at restaurant** — amount: €120→€130" |
+| `expense_deleted`     | Expense soft deleted   | "**John** deleted **Dinner at restaurant**"                     |
+| `settlement_recorded` | Settlement recorded    | "**Jane** paid **John** €30.00"                                 |
+| `member_joined`       | New member joined      | "**Bob** joined the group via invite link"                      |
+| `member_left`         | Member left or removed | "**Bob** left the group"                                        |
+| `group_created`       | Group created          | "**John** created the group"                                    |
+| `group_updated`       | Group settings changed | "**John** updated group name to **Summer Trip**"                |
 
 ---
 
@@ -67,6 +67,7 @@ Every significant action in a group is logged as an activity. The activity feed 
 ## Activity Item Component
 
 Each activity item includes:
+
 - **Icon**: Based on activity type
 - **Actor avatar + name**: Who performed the action
 - **Description**: Human-readable summary of what happened
@@ -78,14 +79,14 @@ Each activity item includes:
 
 ```typescript
 const ACTIVITY_ICONS = {
-  expense_added: "🧾",
-  expense_updated: "✏️",
-  expense_deleted: "🗑️",
-  settlement_recorded: "💰",
-  member_joined: "👤",
-  member_left: "👋",
-  group_created: "🎉",
-  group_updated: "⚙️",
+  expense_added: '🧾',
+  expense_updated: '✏️',
+  expense_deleted: '🗑️',
+  settlement_recorded: '💰',
+  member_joined: '👤',
+  member_left: '👋',
+  group_created: '🎉',
+  group_updated: '⚙️',
 };
 ```
 
@@ -149,4 +150,3 @@ See [api.md](../api.md#activity-feed) for full documentation.
 - Very old activity: Show full date instead of relative time (e.g., "Jan 1, 2026" vs "2 hours ago")
 - Empty activity feed: Show "No activity yet" with friendly illustration
 - Bulk actions: If 10 expenses are added at once, show 10 individual activities (not batched)
-

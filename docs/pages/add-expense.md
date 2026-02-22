@@ -64,49 +64,53 @@ Form to create a new expense or edit an existing one. This is the most complex f
 
 ### Required Fields
 
-| Field       | Type          | Default              | Validation                   |
-| ----------- | ------------- | -------------------- | ---------------------------- |
-| description | text          | "" or predefined item| 1-200 chars, required        |
-| amount      | number        | 0                    | > 0, max 10,000,000         |
-| currency    | select        | Group default        | Valid ISO 4217 code          |
-| date        | date picker   | Today                | Not in future (warn, allow)  |
-| paidBy      | member select | Current user         | At least 1 payer             |
-| splitMethod | toggle        | "equal"              | One of 5 methods             |
-| splitBetween| checkboxes    | All members checked  | At least 1 person            |
+| Field        | Type          | Default               | Validation                  |
+| ------------ | ------------- | --------------------- | --------------------------- |
+| description  | text          | "" or predefined item | 1-200 chars, required       |
+| amount       | number        | 0                     | > 0, max 10,000,000         |
+| currency     | select        | Group default         | Valid ISO 4217 code         |
+| date         | date picker   | Today                 | Not in future (warn, allow) |
+| paidBy       | member select | Current user          | At least 1 payer            |
+| splitMethod  | toggle        | "equal"               | One of 5 methods            |
+| splitBetween | checkboxes    | All members checked   | At least 1 person           |
 
 ### Optional Fields
 
-| Field          | Type              | Default | Notes                        |
-| -------------- | ----------------- | ------- | ---------------------------- |
-| category       | select            | "other" | From predefined categories   |
-| tags           | chip input        | []      | Autocomplete from group tags |
-| predefinedItem | quick select      | null    | Auto-fills description+tags  |
-| receiptUrl     | file upload       | null    | Image, max 5MB               |
-| notes          | textarea          | ""      | Max 500 chars                |
+| Field          | Type         | Default | Notes                        |
+| -------------- | ------------ | ------- | ---------------------------- |
+| category       | select       | "other" | From predefined categories   |
+| tags           | chip input   | []      | Autocomplete from group tags |
+| predefinedItem | quick select | null    | Auto-fills description+tags  |
+| receiptUrl     | file upload  | null    | Image, max 5MB               |
+| notes          | textarea     | ""      | Max 500 chars                |
 
 ---
 
 ## Split Method Interactions
 
 ### Equal
+
 - All checked members get equal share
 - Amount auto-calculated: `total / numberOfPeople`
 - Remainder cents go to first person(s)
 - User can only check/uncheck members
 
 ### Unequal / Exact
+
 - Each checked member has an editable amount input
 - Running total shown: "Total: €110.00 / €120.00 (€10.00 remaining)"
 - Validation: Sum must equal total amount
 - Error state if sum doesn't match
 
 ### Percentage
+
 - Each checked member has a percentage input
 - Running total: "Total: 90% / 100% (10% remaining)"
 - Auto-calculate amounts from percentages
 - Must sum to 100%
 
 ### Shares
+
 - Each checked member has a shares input (integer)
 - Show calculated amount per share
 - E.g., "3 shares × €20.00 = €60.00"
@@ -140,6 +144,7 @@ Top of the form — horizontal scrollable row of common expense types:
 ```
 
 Clicking one:
+
 1. Sets `description` to item name
 2. Sets `category` to item's category
 3. Sets `tags` to item's default tags
@@ -150,6 +155,7 @@ Clicking one:
 ## Edit Mode
 
 When editing an existing expense:
+
 - Form pre-filled with current values
 - Title changes to "Edit Expense"
 - On save → changes tracked in `editHistory`
@@ -169,17 +175,25 @@ const schema = z.object({
   currency: z.string().length(3),
   date: z.date(),
   category: z.string(),
-  paidBy: z.array(z.object({
-    user: z.string(),
-    amount: z.number().positive(),
-  })).min(1),
-  splitMethod: z.enum(["equal", "unequal", "percentage", "shares", "exact"]),
-  splitBetween: z.array(z.object({
-    user: z.string(),
-    amount: z.number().optional(),
-    percentage: z.number().optional(),
-    shares: z.number().optional(),
-  })).min(1),
+  paidBy: z
+    .array(
+      z.object({
+        user: z.string(),
+        amount: z.number().positive(),
+      }),
+    )
+    .min(1),
+  splitMethod: z.enum(['equal', 'unequal', 'percentage', 'shares', 'exact']),
+  splitBetween: z
+    .array(
+      z.object({
+        user: z.string(),
+        amount: z.number().optional(),
+        percentage: z.number().optional(),
+        shares: z.number().optional(),
+      }),
+    )
+    .min(1),
   tags: z.array(z.string()),
   notes: z.string().max(500).optional(),
 });
@@ -208,4 +222,3 @@ const schema = z.object({
 - `CurrencySelect` custom component
 - `ReceiptUpload` custom component
 - `PredefinedItemPicker` custom component
-

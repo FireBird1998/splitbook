@@ -1,47 +1,47 @@
-"use client";
+'use client';
 
-import { useState } from "react";
-import Box from "@mui/material/Box";
-import Paper from "@mui/material/Paper";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Chip from "@mui/material/Chip";
-import IconButton from "@mui/material/IconButton";
-import Menu from "@mui/material/Menu";
-import MuiMenuItem from "@mui/material/MenuItem";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
-import Avatar from "@mui/material/Avatar";
-import Button from "@mui/material/Button";
-import Collapse from "@mui/material/Collapse";
-import Divider from "@mui/material/Divider";
-import MoreVertIcon from "@mui/icons-material/MoreVert";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import { formatCurrency } from "@/lib/utils/currency";
-import { formatDateTime } from "@/lib/utils/date";
+import { useState } from 'react';
+import Box from '@mui/material/Box';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import Chip from '@mui/material/Chip';
+import IconButton from '@mui/material/IconButton';
+import Menu from '@mui/material/Menu';
+import MuiMenuItem from '@mui/material/MenuItem';
+import ListItemIcon from '@mui/material/ListItemIcon';
+import ListItemText from '@mui/material/ListItemText';
+import Avatar from '@mui/material/Avatar';
+import Button from '@mui/material/Button';
+import Collapse from '@mui/material/Collapse';
+import Divider from '@mui/material/Divider';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import EditIcon from '@mui/icons-material/Edit';
+import DeleteIcon from '@mui/icons-material/Delete';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import { formatCurrency } from '@/lib/utils/currency';
+import { formatDateTime } from '@/lib/utils/date';
 
 const CATEGORY_ICONS: Record<string, string> = {
-  food: "🍕",
-  transport: "🚗",
-  accommodation: "🏨",
-  travel: "✈️",
-  entertainment: "🎬",
-  shopping: "🛍️",
-  housing: "🏠",
-  health: "🏥",
-  education: "📚",
-  other: "📋",
+  food: '🍕',
+  transport: '🚗',
+  accommodation: '🏨',
+  travel: '✈️',
+  entertainment: '🎬',
+  shopping: '🛍️',
+  housing: '🏠',
+  health: '🏥',
+  education: '📚',
+  other: '📋',
 };
 
 const SPLIT_METHOD_LABELS: Record<string, string> = {
-  equal: "Equal",
-  unequal: "Unequal",
-  percentage: "Percentage",
-  shares: "Shares",
-  exact: "Exact",
+  equal: 'Equal',
+  unequal: 'Unequal',
+  percentage: 'Percentage',
+  shares: 'Shares',
+  exact: 'Exact',
 };
 
 interface ExpenseCardProps {
@@ -65,15 +65,20 @@ export default function ExpenseCard({
   const [showHistory, setShowHistory] = useState(false);
 
   const category = expense.category as string;
-  const icon = CATEGORY_ICONS[category] || "📋";
-  const paidBy = (expense.paidBy as Array<{ user: { _id: string; name: string; image?: string }; amount: number }>) || [];
-  const splitBetween = (expense.splitBetween as Array<{
-    user: { _id: string; name: string; image?: string };
-    amount: number;
-    percentage?: number;
-    shares?: number;
-  }>) || [];
-  const tag = (expense.tag as string) || "";
+  const icon = CATEGORY_ICONS[category] || '📋';
+  const paidBy =
+    (expense.paidBy as Array<{
+      user: { _id: string; name: string; image?: string };
+      amount: number;
+    }>) || [];
+  const splitBetween =
+    (expense.splitBetween as Array<{
+      user: { _id: string; name: string; image?: string };
+      amount: number;
+      percentage?: number;
+      shares?: number;
+    }>) || [];
+  const tag = (expense.tag as string) || '';
   const hasReceipt = !!expense.receiptUrl;
   const editHistory = (expense.editHistory || []) as Array<{
     editedBy: { _id: string; name: string } | string;
@@ -87,10 +92,10 @@ export default function ExpenseCard({
   const userOwes = (userSplit?.amount || 0) - (userPaid?.amount || 0);
 
   const mainPayer = paidBy[0];
-  const payerName = mainPayer?.user._id === userId ? "You" : mainPayer?.user.name;
+  const payerName = mainPayer?.user._id === userId ? 'You' : mainPayer?.user.name;
 
   const memberName = (user: { _id: string; name: string }) =>
-    user._id === userId ? "You" : user.name;
+    user._id === userId ? 'You' : user.name;
 
   const handleMenuOpen = (e: React.MouseEvent<HTMLElement>) => {
     e.stopPropagation();
@@ -100,33 +105,33 @@ export default function ExpenseCard({
   const handleMenuClose = () => setMenuAnchor(null);
 
   const formatValue = (val: unknown): string => {
-    if (val === null || val === undefined) return "—";
-    if (typeof val === "number") return String(val);
-    if (typeof val === "string") return val;
-    if (Array.isArray(val)) return val.join(", ") || "—";
+    if (val === null || val === undefined) return '—';
+    if (typeof val === 'number') return String(val);
+    if (typeof val === 'string') return val;
+    if (Array.isArray(val)) return val.join(', ') || '—';
     return JSON.stringify(val);
   };
 
   const FIELD_LABELS: Record<string, string> = {
-    description: "Description",
-    amount: "Amount",
-    currency: "Currency",
-    category: "Category",
-    date: "Date",
-    splitMethod: "Split method",
-    tag: "Tag",
-    notes: "Notes",
-    paidBy: "Paid by",
-    splitBetween: "Split between",
+    description: 'Description',
+    amount: 'Amount',
+    currency: 'Currency',
+    category: 'Category',
+    date: 'Date',
+    splitMethod: 'Split method',
+    tag: 'Tag',
+    notes: 'Notes',
+    paidBy: 'Paid by',
+    splitBetween: 'Split between',
   };
 
   return (
     <Paper
       variant="outlined"
       sx={{
-        transition: "all 0.2s",
-        borderColor: isExpanded ? "primary.light" : "divider",
-        ...(isExpanded ? { boxShadow: 1 } : { "&:hover": { boxShadow: 1 } }),
+        transition: 'all 0.2s',
+        borderColor: isExpanded ? 'primary.light' : 'divider',
+        ...(isExpanded ? { boxShadow: 1 } : { '&:hover': { boxShadow: 1 } }),
       }}
     >
       {/* ─── Collapsed Summary Row ────────────────── */}
@@ -134,35 +139,74 @@ export default function ExpenseCard({
         direction="row"
         alignItems="flex-start"
         justifyContent="space-between"
-        sx={{ p: { xs: 1.5, sm: 2 }, cursor: "pointer" }}
+        sx={{ p: { xs: 1.5, sm: 2 }, cursor: 'pointer' }}
         onClick={onToggleExpand}
       >
         <Stack direction="row" alignItems="flex-start" spacing={1} sx={{ flex: 1, minWidth: 0 }}>
-          <Typography component="span" sx={{ fontSize: { xs: "1.25rem", sm: "1.5rem" }, mt: 0.25 }}>{icon}</Typography>
+          <Typography component="span" sx={{ fontSize: { xs: '1.25rem', sm: '1.5rem' }, mt: 0.25 }}>
+            {icon}
+          </Typography>
           <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography variant="body2" fontWeight={500} color="text.primary" noWrap sx={{ fontSize: { xs: 13, sm: 14 } }}>
+            <Typography
+              variant="body2"
+              fontWeight={500}
+              color="text.primary"
+              noWrap
+              sx={{ fontSize: { xs: 13, sm: 14 } }}
+            >
               {expense.description as string}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, fontSize: { xs: 11, sm: 12 }, display: { xs: "none", sm: "block" } }}>
-              {payerName} paid{" "}
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{
+                mt: 0.25,
+                fontSize: { xs: 11, sm: 12 },
+                display: { xs: 'none', sm: 'block' },
+              }}
+            >
+              {payerName} paid{' '}
               {formatCurrency(expense.amount as number, expense.currency as string)}
               {paidBy.length > 1 && ` (+${paidBy.length - 1} more)`}
-              {" · "}Split {splitBetween.length} way{splitBetween.length !== 1 ? "s" : ""}
+              {' · '}Split {splitBetween.length} way
+              {splitBetween.length !== 1 ? 's' : ''}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, fontSize: 11, display: { xs: "block", sm: "none" } }}>
-              {payerName} paid · {splitBetween.length} way{splitBetween.length !== 1 ? "s" : ""}
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{
+                mt: 0.25,
+                fontSize: 11,
+                display: { xs: 'block', sm: 'none' },
+              }}
+            >
+              {payerName} paid · {splitBetween.length} way
+              {splitBetween.length !== 1 ? 's' : ''}
             </Typography>
           </Box>
         </Stack>
-        <Stack direction="row" alignItems="flex-start" spacing={0.5} sx={{ flexShrink: 0, ml: 0.5 }}>
-          <Box sx={{ textAlign: "right" }}>
-            <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ fontSize: { xs: 13, sm: 14 } }}>
+        <Stack
+          direction="row"
+          alignItems="flex-start"
+          spacing={0.5}
+          sx={{ flexShrink: 0, ml: 0.5 }}
+        >
+          <Box sx={{ textAlign: 'right' }}>
+            <Typography
+              variant="body2"
+              fontWeight={600}
+              color="text.primary"
+              sx={{ fontSize: { xs: 13, sm: 14 } }}
+            >
               {formatCurrency(expense.amount as number, expense.currency as string)}
             </Typography>
             {Math.abs(userOwes) >= 0.01 && (
               <Typography
                 fontWeight={500}
-                sx={{ color: userOwes > 0 ? "error.main" : "success.main", fontSize: { xs: 10, sm: 12 } }}
+                sx={{
+                  color: userOwes > 0 ? 'error.main' : 'success.main',
+                  fontSize: { xs: 10, sm: 12 },
+                }}
               >
                 {userOwes > 0
                   ? `You owe ${formatCurrency(userOwes, expense.currency as string)}`
@@ -172,11 +216,7 @@ export default function ExpenseCard({
           </Box>
           {(onEdit || onDelete) && (
             <>
-              <IconButton
-                size="small"
-                onClick={handleMenuOpen}
-                sx={{ ml: 0.5, mt: -0.5 }}
-              >
+              <IconButton size="small" onClick={handleMenuOpen} sx={{ ml: 0.5, mt: -0.5 }}>
                 <MoreVertIcon fontSize="small" />
               </IconButton>
               <Menu
@@ -207,9 +247,9 @@ export default function ExpenseCard({
                     }}
                   >
                     <ListItemIcon>
-                      <DeleteIcon fontSize="small" sx={{ color: "error.main" }} />
+                      <DeleteIcon fontSize="small" sx={{ color: 'error.main' }} />
                     </ListItemIcon>
-                    <ListItemText sx={{ color: "error.main" }}>Delete</ListItemText>
+                    <ListItemText sx={{ color: 'error.main' }}>Delete</ListItemText>
                   </MuiMenuItem>
                 )}
               </Menu>
@@ -222,12 +262,7 @@ export default function ExpenseCard({
       {!isExpanded && (tag || hasReceipt) && (
         <Stack direction="row" spacing={0.75} sx={{ px: 2, pb: 1.5 }} flexWrap="wrap">
           {tag && (
-            <Chip
-              label={tag}
-              size="small"
-              variant="outlined"
-              sx={{ fontSize: 11, height: 22 }}
-            />
+            <Chip label={tag} size="small" variant="outlined" sx={{ fontSize: 11, height: 22 }} />
           )}
           {hasReceipt && (
             <Chip
@@ -248,13 +283,11 @@ export default function ExpenseCard({
           {/* Metadata chips */}
           <Stack direction="row" spacing={1} flexWrap="wrap">
             <Chip
-              label={`${CATEGORY_ICONS[category] || ""} ${category}`}
+              label={`${CATEGORY_ICONS[category] || ''} ${category}`}
               size="small"
               variant="outlined"
             />
-            {tag && (
-              <Chip label={tag} size="small" variant="outlined" sx={{ fontSize: 11 }} />
-            )}
+            {tag && <Chip label={tag} size="small" variant="outlined" sx={{ fontSize: 11 }} />}
             {hasReceipt && (
               <Chip label="📎 Receipt" size="small" variant="outlined" sx={{ fontSize: 11 }} />
             )}
@@ -262,7 +295,17 @@ export default function ExpenseCard({
 
           {/* Paid By */}
           <Box>
-            <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em", mb: 1, display: "block" }}>
+            <Typography
+              variant="caption"
+              fontWeight={600}
+              color="text.secondary"
+              sx={{
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                mb: 1,
+                display: 'block',
+              }}
+            >
               Paid by
             </Typography>
             <Stack spacing={0.75}>
@@ -272,7 +315,9 @@ export default function ExpenseCard({
                     <Avatar src={p.user.image} sx={{ width: 24, height: 24, fontSize: 11 }}>
                       {p.user.name?.[0]}
                     </Avatar>
-                    <Typography variant="body2" color="text.primary">{memberName(p.user)}</Typography>
+                    <Typography variant="body2" color="text.primary">
+                      {memberName(p.user)}
+                    </Typography>
                   </Stack>
                   <Typography variant="body2" fontWeight={500} color="text.primary">
                     {formatCurrency(p.amount, expense.currency as string)}
@@ -284,8 +329,21 @@ export default function ExpenseCard({
 
           {/* Split */}
           <Box>
-            <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em", mb: 1, display: "block" }}>
-              Split ({SPLIT_METHOD_LABELS[expense.splitMethod as string] || (expense.splitMethod as string)})
+            <Typography
+              variant="caption"
+              fontWeight={600}
+              color="text.secondary"
+              sx={{
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                mb: 1,
+                display: 'block',
+              }}
+            >
+              Split (
+              {SPLIT_METHOD_LABELS[expense.splitMethod as string] ||
+                (expense.splitMethod as string)}
+              )
             </Typography>
             <Stack spacing={0.75}>
               {splitBetween.map((s, i) => (
@@ -294,12 +352,18 @@ export default function ExpenseCard({
                     <Avatar src={s.user.image} sx={{ width: 24, height: 24, fontSize: 11 }}>
                       {s.user.name?.[0]}
                     </Avatar>
-                    <Typography variant="body2" color="text.primary">{memberName(s.user)}</Typography>
+                    <Typography variant="body2" color="text.primary">
+                      {memberName(s.user)}
+                    </Typography>
                     {s.percentage !== undefined && (
-                      <Typography variant="caption" color="text.disabled">({s.percentage}%)</Typography>
+                      <Typography variant="caption" color="text.disabled">
+                        ({s.percentage}%)
+                      </Typography>
                     )}
                     {s.shares !== undefined && (
-                      <Typography variant="caption" color="text.disabled">({s.shares} shares)</Typography>
+                      <Typography variant="caption" color="text.disabled">
+                        ({s.shares} shares)
+                      </Typography>
                     )}
                   </Stack>
                   <Typography variant="body2" fontWeight={500} color="text.primary">
@@ -313,10 +377,20 @@ export default function ExpenseCard({
           {/* Notes */}
           {!!expense.notes && (
             <Box>
-              <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em", mb: 0.5, display: "block" }}>
+              <Typography
+                variant="caption"
+                fontWeight={600}
+                color="text.secondary"
+                sx={{
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  mb: 0.5,
+                  display: 'block',
+                }}
+              >
                 Notes
               </Typography>
-              <Typography variant="body2" color="text.primary" sx={{ whiteSpace: "pre-wrap" }}>
+              <Typography variant="body2" color="text.primary" sx={{ whiteSpace: 'pre-wrap' }}>
                 {expense.notes as string}
               </Typography>
             </Box>
@@ -333,12 +407,12 @@ export default function ExpenseCard({
                 variant="body2"
                 onClick={(e) => e.stopPropagation()}
                 sx={{
-                  display: "inline-flex",
-                  alignItems: "center",
+                  display: 'inline-flex',
+                  alignItems: 'center',
                   gap: 1,
-                  color: "primary.main",
-                  textDecoration: "none",
-                  "&:hover": { textDecoration: "underline" },
+                  color: 'primary.main',
+                  textDecoration: 'none',
+                  '&:hover': { textDecoration: 'underline' },
                 }}
               >
                 📎 View Receipt
@@ -352,7 +426,8 @@ export default function ExpenseCard({
           <Box>
             {createdBy && (
               <Typography variant="caption" color="text.secondary">
-                Created by <strong>{memberName(createdBy)}</strong> · {formatDateTime(expense.createdAt as string)}
+                Created by <strong>{memberName(createdBy)}</strong> ·{' '}
+                {formatDateTime(expense.createdAt as string)}
               </Typography>
             )}
 
@@ -365,29 +440,40 @@ export default function ExpenseCard({
                     setShowHistory(!showHistory);
                   }}
                   endIcon={showHistory ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                  sx={{ fontSize: 12, color: "primary.main", px: 0 }}
+                  sx={{ fontSize: 12, color: 'primary.main', px: 0 }}
                 >
-                  {showHistory ? "Hide" : "Show"} edit history ({editHistory.length} edit{editHistory.length !== 1 ? "s" : ""})
+                  {showHistory ? 'Hide' : 'Show'} edit history ({editHistory.length} edit
+                  {editHistory.length !== 1 ? 's' : ''})
                 </Button>
 
                 <Collapse in={showHistory}>
-                  <Stack spacing={1.5} sx={{ mt: 1, borderLeft: 2, borderColor: "divider", pl: 2 }}>
+                  <Stack spacing={1.5} sx={{ mt: 1, borderLeft: 2, borderColor: 'divider', pl: 2 }}>
                     {editHistory.map((edit, i) => {
-                      const editorName = typeof edit.editedBy === "string"
-                        ? edit.editedBy
-                        : memberName(edit.editedBy);
+                      const editorName =
+                        typeof edit.editedBy === 'string'
+                          ? edit.editedBy
+                          : memberName(edit.editedBy);
 
                       return (
                         <Box key={i}>
                           <Typography variant="caption" color="text.secondary">
-                            ✏️ Edited by <strong>{editorName}</strong> · {formatDateTime(edit.editedAt)}
+                            ✏️ Edited by <strong>{editorName}</strong> ·{' '}
+                            {formatDateTime(edit.editedAt)}
                           </Typography>
-                          <Box component="ul" sx={{ mt: 0.5, pl: 0, listStyle: "none" }}>
-                            {Object.entries(edit.changes).map(([field, { old: oldVal, new: newVal }]) => (
-                              <Typography component="li" key={field} variant="caption" color="text.secondary">
-                                • {FIELD_LABELS[field] || field}: {formatValue(oldVal)} → {formatValue(newVal)}
-                              </Typography>
-                            ))}
+                          <Box component="ul" sx={{ mt: 0.5, pl: 0, listStyle: 'none' }}>
+                            {Object.entries(edit.changes).map(
+                              ([field, { old: oldVal, new: newVal }]) => (
+                                <Typography
+                                  component="li"
+                                  key={field}
+                                  variant="caption"
+                                  color="text.secondary"
+                                >
+                                  • {FIELD_LABELS[field] || field}: {formatValue(oldVal)} →{' '}
+                                  {formatValue(newVal)}
+                                </Typography>
+                              ),
+                            )}
                           </Box>
                         </Box>
                       );
@@ -408,7 +494,7 @@ export default function ExpenseCard({
                   e.stopPropagation();
                   onEdit(expense);
                 }}
-                sx={{ fontSize: 13, color: "primary.main" }}
+                sx={{ fontSize: 13, color: 'primary.main' }}
               >
                 Edit
               </Button>

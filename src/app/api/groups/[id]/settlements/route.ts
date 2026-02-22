@@ -1,13 +1,17 @@
-import { getAuthUser, unauthorized, forbidden, success, serverError, validationError } from "@/lib/utils/api-response";
-import { groupService } from "@/lib/services/group.service";
-import { settlementService } from "@/lib/services/settlement.service";
-import { createSettlementSchema } from "@/lib/validators/settlement.validator";
+import {
+  getAuthUser,
+  unauthorized,
+  forbidden,
+  success,
+  serverError,
+  validationError,
+} from '@/lib/utils/api-response';
+import { groupService } from '@/lib/services/group.service';
+import { settlementService } from '@/lib/services/settlement.service';
+import { createSettlementSchema } from '@/lib/validators/settlement.validator';
 
 // POST /api/groups/[id]/settlements — Record settlement
-export async function POST(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser();
     if (!user) return unauthorized();
@@ -29,10 +33,7 @@ export async function POST(
 }
 
 // GET /api/groups/[id]/settlements — List settlements
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser();
     if (!user) return unauthorized();
@@ -48,4 +49,3 @@ export async function GET(
     return serverError(err);
   }
 }
-
