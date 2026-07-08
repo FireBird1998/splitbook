@@ -51,7 +51,7 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
 
       if (!res.ok) {
         const data = await res.json();
-        setEmailError(data.error || 'Failed to send invite');
+        setEmailError(data.error || 'Failed to save invitation');
         return;
       }
 

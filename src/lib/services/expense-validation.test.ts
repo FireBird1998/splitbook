@@ -14,8 +14,8 @@ describe('expense validation', () => {
       expect(() =>
         assertExpenseParticipants(
           memberIds,
-          [{ user: 'user-1', amount: 30 }],
-          [{ user: 'user-2', amount: 30 }],
+          [{ user: 'user-1' }],
+          [{ user: 'user-2' }],
         ),
       ).not.toThrow();
     });
@@ -26,8 +26,8 @@ describe('expense validation', () => {
       expect(() =>
         assertExpenseParticipants(
           memberIds,
-          [{ user: 'user-2', amount: 30 }],
-          [{ user: 'user-1', amount: 30 }],
+          [{ user: 'user-2' }],
+          [{ user: 'user-1' }],
         ),
       ).toThrow('INVALID_MEMBERS');
     });
@@ -38,8 +38,8 @@ describe('expense validation', () => {
       expect(() =>
         assertExpenseParticipants(
           memberIds,
-          [{ user: 'user-1', amount: 30 }],
-          [{ user: 'user-2', amount: 30 }],
+          [{ user: 'user-1' }],
+          [{ user: 'user-2' }],
         ),
       ).toThrow('INVALID_MEMBERS');
     });
