@@ -6,10 +6,17 @@ import {
   success,
   serverError,
   validationError,
+  error,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { updateExpenseSchema } from '@/lib/validators/expense.validator';
+
+const expenseValidationMessages: Record<string, string> = {
+  INVALID_MEMBERS: 'All payers and split participants must be group members',
+  INVALID_TAG: 'Tag must be an active group tag',
+  CURRENCY_MISMATCH: 'Currency must match the group default currency',
+};
 
 // GET /api/groups/[id]/expenses/[expenseId]
 export async function GET(
@@ -57,6 +64,10 @@ export async function PATCH(
 
     return success(expense);
   } catch (err) {
+    if (err instanceof Error && err.message in expenseValidationMessages) {
+      return error(expenseValidationMessages[err.message], 422);
+    }
+
     return serverError(err);
   }
 }

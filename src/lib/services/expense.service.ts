@@ -1,11 +1,17 @@
 import connectDB from '@/lib/db';
 import Expense from '@/lib/models/Expense';
+import Group from '@/lib/models/Group';
 import '@/lib/models/User'; // Ensure User model is registered for populate()
 import { activityService } from './activity.service';
 import type { CreateExpenseInput, UpdateExpenseInput } from '@/lib/validators/expense.validator';
 import type { ExpenseFilters } from '@/types';
 import { getQuickFilterDates } from '@/lib/utils/date';
 import { escapeRegex } from '@/lib/utils/escape-regex';
+import {
+  assertActiveTag,
+  assertExpenseParticipants,
+  assertGroupCurrency,
+} from './expense-validation';
 import mongoose from 'mongoose';
 
 export class ExpenseService {
@@ -14,6 +20,18 @@ export class ExpenseService {
    */
   async create(groupId: string, data: CreateExpenseInput, userId: string) {
     await connectDB();
+
+    const group = await Group.findById(groupId);
+    if (!group) throw new Error('Group not found');
+
+    const memberIds = new Set(group.members.map((member) => member.user.toString()));
+    const activeTagNames = new Set(
+      group.tags.filter((tag) => !tag.isArchived).map((tag) => tag.name),
+    );
+
+    assertExpenseParticipants(memberIds, data.paidBy, data.splitBetween);
+    assertActiveTag(activeTagNames, data.tag);
+    assertGroupCurrency(group.defaultCurrency, data.currency);
 
     // Calculate split amounts for equal split
     let splitBetween = data.splitBetween;
@@ -235,6 +253,14 @@ export class ExpenseService {
     const expense = await Expense.findById(expenseId);
     if (!expense) return null;
 
+    const group = await Group.findById(expense.group);
+    if (!group) throw new Error('Group not found');
+
+    const memberIds = new Set(group.members.map((member) => member.user.toString()));
+    const activeTagNames = new Set(
+      group.tags.filter((tag) => !tag.isArchived).map((tag) => tag.name),
+    );
+
     // Handle restore (undo delete)
     if (data.isDeleted === false && expense.isDeleted) {
       expense.isDeleted = false;
@@ -253,6 +279,16 @@ export class ExpenseService {
         { path: 'splitBetween.user', select: 'name email image' },
         { path: 'createdBy', select: 'name email image' },
       ]);
+    }
+
+    if (data.paidBy || data.splitBetween) {
+      assertExpenseParticipants(memberIds, data.paidBy ?? [], data.splitBetween ?? []);
+    }
+    if (data.tag !== undefined) {
+      assertActiveTag(activeTagNames, data.tag);
+    }
+    if (data.currency !== undefined) {
+      assertGroupCurrency(group.defaultCurrency, data.currency);
     }
 
     // Recalculate split amounts if split method or members changed
@@ -363,11 +399,9 @@ export class ExpenseService {
     const endOfDay = new Date(date);
     endOfDay.setHours(23, 59, 59, 999);
 
-    const escaped = description.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
     const query: Record<string, unknown> = {
       group: new mongoose.Types.ObjectId(groupId),
-      description: { $regex: `^${escaped}$`, $options: 'i' },
+      description: { $regex: `^${escapeRegex(description)}$`, $options: 'i' },
       amount,
       date: { $gte: startOfDay, $lte: endOfDay },
       isDeleted: false,

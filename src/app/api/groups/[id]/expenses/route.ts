@@ -5,11 +5,18 @@ import {
   success,
   serverError,
   validationError,
+  error,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { createExpenseSchema } from '@/lib/validators/expense.validator';
 import type { ExpenseFilters } from '@/types';
+
+const expenseValidationMessages: Record<string, string> = {
+  INVALID_MEMBERS: 'All payers and split participants must be group members',
+  INVALID_TAG: 'Tag must be an active group tag',
+  CURRENCY_MISMATCH: 'Currency must match the group default currency',
+};
 
 // POST /api/groups/[id]/expenses — Add expense
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -30,6 +37,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const expense = await expenseService.create(id, parsed.data, user.id!);
     return success(expense, 201);
   } catch (err) {
+    if (err instanceof Error && err.message in expenseValidationMessages) {
+      return error(expenseValidationMessages[err.message], 422);
+    }
+
     return serverError(err);
   }
 }
