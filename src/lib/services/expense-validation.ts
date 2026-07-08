@@ -22,6 +22,16 @@ export function assertActiveTag(activeTagNames: Set<string>, tag: string): void 
   }
 }
 
+export function assertSettlementMembers(
+  memberIds: Set<string>,
+  paidBy: string,
+  paidTo: string,
+): void {
+  if (!memberIds.has(paidBy) || !memberIds.has(paidTo)) {
+    throw new Error('INVALID_MEMBERS');
+  }
+}
+
 export function assertGroupCurrency(defaultCurrency: string, currency: string): void {
   if (currency !== defaultCurrency) {
     throw new Error('CURRENCY_MISMATCH');

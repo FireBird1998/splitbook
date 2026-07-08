@@ -3,6 +3,7 @@ import {
   assertActiveTag,
   assertExpenseParticipants,
   assertGroupCurrency,
+  assertSettlementMembers,
 } from './expense-validation';
 
 describe('expense validation', () => {
@@ -51,6 +52,30 @@ describe('expense validation', () => {
 
     it('throws INVALID_TAG when the tag is not active for the group', () => {
       expect(() => assertActiveTag(new Set(['Dinner']), 'Archived')).toThrow('INVALID_TAG');
+    });
+  });
+
+  describe('assertSettlementMembers', () => {
+    it('accepts payer and recipient who are group members', () => {
+      const memberIds = new Set(['user-1', 'user-2']);
+
+      expect(() => assertSettlementMembers(memberIds, 'user-1', 'user-2')).not.toThrow();
+    });
+
+    it('throws INVALID_MEMBERS when payer is not a group member', () => {
+      const memberIds = new Set(['user-2']);
+
+      expect(() => assertSettlementMembers(memberIds, 'user-1', 'user-2')).toThrow(
+        'INVALID_MEMBERS',
+      );
+    });
+
+    it('throws INVALID_MEMBERS when recipient is not a group member', () => {
+      const memberIds = new Set(['user-1']);
+
+      expect(() => assertSettlementMembers(memberIds, 'user-1', 'user-2')).toThrow(
+        'INVALID_MEMBERS',
+      );
     });
   });
 
