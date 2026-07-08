@@ -8,11 +8,15 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Skeleton from '@mui/material/Skeleton';
 import Button from '@mui/material/Button';
+import Alert from '@mui/material/Alert';
 import { alpha } from '@mui/material/styles';
 import { formatCurrency } from '@/lib/utils/currency';
 import SettleUpDialog from '@/components/settlements/SettleUpDialog';
 
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
+
+const MIXED_CURRENCY_WARNING =
+  "Some expenses or settlements use a different currency than this group's default. Balances may be inaccurate until those are updated.";
 
 interface BalancesViewProps {
   groupId: string;
@@ -36,6 +40,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
   const balances = data?.data?.balances || [];
   const debts = data?.data?.debts || [];
   const currency = data?.data?.currency || (group.defaultCurrency as string);
+  const hasMixedCurrencies = Boolean(data?.data?.hasMixedCurrencies);
 
   const userBalance = balances.find(
     (b: { user: { _id: string }; balance: number }) => b.user._id === userId,
@@ -53,20 +58,29 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
 
   if (balances.length === 0) {
     return (
-      <Paper variant="outlined" sx={{ p: 6, textAlign: 'center' }}>
-        <Typography component="span" sx={{ fontSize: '2.5rem', display: 'block', mb: 2 }}>
-          ⚖️
-        </Typography>
-        <Typography variant="subtitle1" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
-          All settled up!
-        </Typography>
-        <Typography color="text.secondary">No outstanding balances in this group.</Typography>
-      </Paper>
+      <Stack spacing={3}>
+        {hasMixedCurrencies && (
+          <Alert severity="warning">{MIXED_CURRENCY_WARNING}</Alert>
+        )}
+        <Paper variant="outlined" sx={{ p: 6, textAlign: 'center' }}>
+          <Typography component="span" sx={{ fontSize: '2.5rem', display: 'block', mb: 2 }}>
+            ⚖️
+          </Typography>
+          <Typography variant="subtitle1" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
+            All settled up!
+          </Typography>
+          <Typography color="text.secondary">No outstanding balances in this group.</Typography>
+        </Paper>
+      </Stack>
     );
   }
 
   return (
     <Stack spacing={3}>
+      {hasMixedCurrencies && (
+        <Alert severity="warning">{MIXED_CURRENCY_WARNING}</Alert>
+      )}
+
       {/* Your Balance */}
       {userBalance && (
         <Paper variant="outlined" sx={{ p: 3 }}>

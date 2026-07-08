@@ -25,7 +25,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useSWRConfig } from 'swr';
 import { EXPENSE_CATEGORIES } from '@/lib/constants/categories';
 import { PREDEFINED_ITEMS } from '@/lib/constants/predefined-items';
-import { getSortedCurrencies, formatCurrency } from '@/lib/utils/currency';
+import { getCurrency, formatCurrency } from '@/lib/utils/currency';
 
 // ─── Types ─────────────────────────────────────────────
 interface Member {
@@ -63,15 +63,13 @@ export default function ExpenseFormDialog({
   const isEditMode = !!expense;
 
   const members = useMemo(() => (group.members || []) as Member[], [group.members]);
-  const currencies = getSortedCurrencies(
-    group.defaultCurrency as string,
-    (group.alternateCurrencies || []) as string[],
-  );
+  const defaultCurrency = group.defaultCurrency as string;
+  const defaultCurrencyDetails = getCurrency(defaultCurrency);
 
   // ─── Form State ────────────────────────────────────
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState(group.defaultCurrency as string);
+  const [currency, setCurrency] = useState(defaultCurrency);
   const [category, setCategory] = useState('other');
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [splitMethod, setSplitMethod] = useState<string>('equal');
@@ -96,7 +94,7 @@ export default function ExpenseFormDialog({
   const resetForm = useCallback(() => {
     setDescription('');
     setAmount('');
-    setCurrency(group.defaultCurrency as string);
+    setCurrency(defaultCurrency);
     setCategory('other');
     setDate(new Date().toISOString().split('T')[0]);
     setSplitMethod('equal');
@@ -111,7 +109,7 @@ export default function ExpenseFormDialog({
     setShowSplitOptions(false);
     setShowMoreOptions(false);
     setError('');
-  }, [group.defaultCurrency, members, userId]);
+  }, [defaultCurrency, members, userId]);
 
   // Pre-fill form when editing
   useEffect(() => {
@@ -120,7 +118,7 @@ export default function ExpenseFormDialog({
     if (expense) {
       setDescription((expense.description as string) || '');
       setAmount(String(expense.amount || ''));
-      setCurrency((expense.currency as string) || (group.defaultCurrency as string));
+      setCurrency(defaultCurrency);
       setCategory((expense.category as string) || 'other');
       const expDate = expense.date
         ? new Date(expense.date as string).toISOString().split('T')[0]
@@ -178,7 +176,7 @@ export default function ExpenseFormDialog({
     } else {
       resetForm();
     }
-  }, [expense, open, group.defaultCurrency, resetForm]);
+  }, [expense, open, defaultCurrency, resetForm]);
 
   // ─── Derived Values ────────────────────────────────
   const parsedAmount = parseFloat(amount) || 0;
@@ -361,7 +359,7 @@ export default function ExpenseFormDialog({
     const payload = {
       description,
       amount: parsedAmount,
-      currency,
+      currency: defaultCurrency,
       category,
       date,
       paidBy: multiPayerMode
@@ -520,15 +518,14 @@ export default function ExpenseFormDialog({
               select
               label="Currency"
               value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
               size="small"
+              disabled
+              helperText="Group default"
               sx={{ width: 120 }}
             >
-              {currencies.map((c) => (
-                <MenuItem key={c.code} value={c.code}>
-                  {c.flag} {c.code}
-                </MenuItem>
-              ))}
+              <MenuItem value={defaultCurrency}>
+                {defaultCurrencyDetails?.flag} {defaultCurrency}
+              </MenuItem>
             </TextField>
           </Stack>
 
