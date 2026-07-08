@@ -40,6 +40,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const group = await groupService.getById(id);
     if (!group) return notFound('Group');
 
+    const isMember = await groupService.isMember(id, user.id!);
+    if (!isMember) return forbidden();
+
     if (!group.inviteCode || !group.inviteCodeExpiresAt || new Date() > group.inviteCodeExpiresAt) {
       return success({ inviteCode: null, inviteUrl: null, expiresAt: null });
     }
