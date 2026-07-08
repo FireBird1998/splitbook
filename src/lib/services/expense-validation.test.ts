@@ -4,6 +4,7 @@ import {
   assertExpenseParticipants,
   assertGroupCurrency,
   assertSettlementMembers,
+  shouldValidateExpenseTag,
 } from './expense-validation';
 
 describe('expense validation', () => {
@@ -42,6 +43,20 @@ describe('expense validation', () => {
           [{ user: 'user-2' }],
         ),
       ).toThrow('INVALID_MEMBERS');
+    });
+  });
+
+  describe('shouldValidateExpenseTag', () => {
+    it('returns false when tag is omitted from the update payload', () => {
+      expect(shouldValidateExpenseTag(undefined, 'Dinner')).toBe(false);
+    });
+
+    it('returns false when tag is unchanged (e.g. archived tag kept as-is)', () => {
+      expect(shouldValidateExpenseTag('Dinner', 'Dinner')).toBe(false);
+    });
+
+    it('returns true when tag is being changed to a new value', () => {
+      expect(shouldValidateExpenseTag('Hotel', 'Dinner')).toBe(true);
     });
   });
 

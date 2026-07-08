@@ -16,6 +16,13 @@ export function assertExpenseParticipants(
   }
 }
 
+export function shouldValidateExpenseTag(
+  incomingTag: string | undefined,
+  existingTag: string,
+): boolean {
+  return incomingTag !== undefined && incomingTag !== existingTag;
+}
+
 export function assertActiveTag(activeTagNames: Set<string>, tag: string): void {
   if (!activeTagNames.has(tag)) {
     throw new Error('INVALID_TAG');

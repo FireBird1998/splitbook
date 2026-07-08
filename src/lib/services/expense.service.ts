@@ -11,6 +11,7 @@ import {
   assertActiveTag,
   assertExpenseParticipants,
   assertGroupCurrency,
+  shouldValidateExpenseTag,
 } from './expense-validation';
 import mongoose from 'mongoose';
 
@@ -284,8 +285,8 @@ export class ExpenseService {
     if (data.paidBy || data.splitBetween) {
       assertExpenseParticipants(memberIds, data.paidBy ?? [], data.splitBetween ?? []);
     }
-    if (data.tag !== undefined) {
-      assertActiveTag(activeTagNames, data.tag);
+    if (shouldValidateExpenseTag(data.tag, expense.tag)) {
+      assertActiveTag(activeTagNames, data.tag!);
     }
     if (data.currency !== undefined) {
       assertGroupCurrency(group.defaultCurrency, data.currency);

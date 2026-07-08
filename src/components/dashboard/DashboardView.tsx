@@ -107,7 +107,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
                 <Skeleton key={i} variant="rounded" height={144} />
               ))}
             </Box>
-          ) : groups.length === 0 ? (
+          ) : groupsError ? null : groups.length === 0 ? (
             <Paper variant="outlined" sx={{ p: 6, textAlign: 'center' }}>
               <Typography component="span" sx={{ fontSize: '2.5rem', display: 'block', mb: 2 }}>
                 👥
