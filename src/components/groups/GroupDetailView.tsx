@@ -24,8 +24,7 @@ import BalancesView from '@/components/balances/BalancesView';
 import ActivityView from '@/components/activity/ActivityView';
 import ExpenseFormDialog from '@/components/expenses/ExpenseFormDialog';
 import InviteDialog from '@/components/groups/InviteDialog';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher } from '@/lib/utils/fetcher';
 
 const CATEGORY_ICONS: Record<string, string> = {
   trip: '✈️',
@@ -45,7 +44,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
-  const { data: groupData, isLoading } = useSWR(`/api/groups/${groupId}`, fetcher, {
+  const { data: groupData, isLoading, error } = useSWR(`/api/groups/${groupId}`, fetcher, {
     refreshInterval: 30_000,
   });
 
@@ -57,6 +56,14 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
         <Skeleton variant="text" width={192} height={32} sx={{ mb: 2 }} />
         <Skeleton variant="text" width={128} height={20} sx={{ mb: 4 }} />
         <Skeleton variant="rounded" height={384} />
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="lg" disableGutters>
+        <Typography color="error.main">{error.message}</Typography>
       </Container>
     );
   }

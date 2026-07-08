@@ -14,8 +14,7 @@ import AddIcon from '@mui/icons-material/Add';
 import GroupCard from '@/components/groups/GroupCard';
 import InvitationCard from '@/components/dashboard/InvitationCard';
 import { formatCurrency } from '@/lib/utils/currency';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher } from '@/lib/utils/fetcher';
 
 interface DashboardViewProps {
   userId: string;
@@ -30,10 +29,10 @@ function getGreeting(): string {
 }
 
 export default function DashboardView({ userId, userName }: DashboardViewProps) {
-  const { data: groupsData, isLoading: groupsLoading } = useSWR('/api/groups', fetcher, {
+  const { data: groupsData, isLoading: groupsLoading, error: groupsError } = useSWR('/api/groups', fetcher, {
     refreshInterval: 30_000,
   });
-  const { data: invitationsData, mutate: mutateInvitations } = useSWR('/api/invitations', fetcher, {
+  const { data: invitationsData, error: invitationsError, mutate: mutateInvitations } = useSWR('/api/invitations', fetcher, {
     refreshInterval: 30_000,
   });
 
@@ -67,6 +66,12 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
               ))}
             </Stack>
           </Box>
+        )}
+
+        {(groupsError || invitationsError) && (
+          <Typography color="error.main">
+            {groupsError?.message || invitationsError?.message}
+          </Typography>
         )}
 
         {/* Groups */}

@@ -12,8 +12,7 @@ import Alert from '@mui/material/Alert';
 import { alpha } from '@mui/material/styles';
 import { formatCurrency } from '@/lib/utils/currency';
 import SettleUpDialog from '@/components/settlements/SettleUpDialog';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher } from '@/lib/utils/fetcher';
 
 const MIXED_CURRENCY_WARNING =
   "Some expenses or settlements use a different currency than this group's default. Balances may be inaccurate until those are updated.";
@@ -33,7 +32,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     open: false,
   });
 
-  const { data, isLoading, mutate } = useSWR(`/api/groups/${groupId}/balances`, fetcher, {
+  const { data, isLoading, error, mutate } = useSWR(`/api/groups/${groupId}/balances`, fetcher, {
     refreshInterval: 15_000,
   });
 
@@ -54,6 +53,10 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
         ))}
       </Stack>
     );
+  }
+
+  if (error) {
+    return <Alert severity="error">{error.message}</Alert>;
   }
 
   if (balances.length === 0) {

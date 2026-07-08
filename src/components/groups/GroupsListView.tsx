@@ -11,15 +11,14 @@ import Skeleton from '@mui/material/Skeleton';
 import Button from '@mui/material/Button';
 import AddIcon from '@mui/icons-material/Add';
 import GroupCard from './GroupCard';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher } from '@/lib/utils/fetcher';
 
 interface GroupsListViewProps {
   userId: string;
 }
 
 export default function GroupsListView({ userId }: GroupsListViewProps) {
-  const { data, isLoading } = useSWR('/api/groups', fetcher, {
+  const { data, isLoading, error } = useSWR('/api/groups', fetcher, {
     refreshInterval: 30_000,
   });
 
@@ -36,7 +35,9 @@ export default function GroupsListView({ userId }: GroupsListViewProps) {
         </Button>
       </Stack>
 
-      {isLoading ? (
+      {error ? (
+        <Typography color="error.main">{error.message}</Typography>
+      ) : isLoading ? (
         <Box
           sx={{
             display: 'grid',

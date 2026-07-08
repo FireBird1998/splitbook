@@ -40,8 +40,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import LabelIcon from '@mui/icons-material/Label';
 import { CURRENCIES, getSortedCurrencies } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/date';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher } from '@/lib/utils/fetcher';
 
 const GROUP_CATEGORIES = [
   { id: 'trip', label: '✈️ Trip' },
@@ -58,7 +57,7 @@ interface GroupSettingsViewProps {
 
 export default function GroupSettingsView({ groupId, userId }: GroupSettingsViewProps) {
   const { mutate: globalMutate } = useSWRConfig();
-  const { data: groupData, isLoading, mutate } = useSWR(`/api/groups/${groupId}`, fetcher);
+  const { data: groupData, isLoading, error, mutate } = useSWR(`/api/groups/${groupId}`, fetcher);
 
   const group = groupData?.data;
 
@@ -111,6 +110,14 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
         <Skeleton variant="text" width={192} height={32} sx={{ mb: 2 }} />
         <Skeleton variant="text" width={128} height={20} sx={{ mb: 4 }} />
         <Skeleton variant="rounded" height={384} />
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="md" disableGutters>
+        <Typography color="error.main">{error.message}</Typography>
       </Container>
     );
   }

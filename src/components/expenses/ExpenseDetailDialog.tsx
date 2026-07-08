@@ -21,8 +21,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { formatCurrency } from '@/lib/utils/currency';
 import { formatDateTime } from '@/lib/utils/date';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher } from '@/lib/utils/fetcher';
 
 const CATEGORY_ICONS: Record<string, string> = {
   food: '🍕',
@@ -94,7 +93,7 @@ export default function ExpenseDetailDialog({
 }: ExpenseDetailDialogProps) {
   const [showHistory, setShowHistory] = useState(false);
 
-  const { data, isLoading } = useSWR(
+  const { data, isLoading, error } = useSWR(
     open && expenseId ? `/api/groups/${groupId}/expenses/${expenseId}` : null,
     fetcher,
   );
@@ -102,6 +101,16 @@ export default function ExpenseDetailDialog({
   const expense = data?.data;
 
   if (!open) return null;
+
+  if (error) {
+    return (
+      <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+        <DialogContent>
+          <Typography color="error.main">{error.message}</Typography>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   if (isLoading || !expense) {
     return (

@@ -9,8 +9,7 @@ import Skeleton from '@mui/material/Skeleton';
 import Button from '@mui/material/Button';
 import { formatDateTime } from '@/lib/utils/date';
 import { formatCurrency } from '@/lib/utils/currency';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher } from '@/lib/utils/fetcher';
 
 const ACTIVITY_ICONS: Record<string, string> = {
   expense_added: '🧾',
@@ -55,7 +54,7 @@ interface ActivityViewProps {
 }
 
 export default function ActivityView({ groupId }: ActivityViewProps) {
-  const { data, isLoading } = useSWR(`/api/groups/${groupId}/activity?page=1&limit=50`, fetcher, {
+  const { data, isLoading, error } = useSWR(`/api/groups/${groupId}/activity?page=1&limit=50`, fetcher, {
     refreshInterval: 10_000,
   });
 
@@ -68,6 +67,12 @@ export default function ActivityView({ groupId }: ActivityViewProps) {
           <Skeleton key={i} variant="rounded" height={64} />
         ))}
       </Stack>
+    );
+  }
+
+  if (error) {
+    return (
+      <Typography color="error.main">{error.message}</Typography>
     );
   }
 
