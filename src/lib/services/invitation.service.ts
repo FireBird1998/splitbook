@@ -2,6 +2,7 @@ import connectDB from '@/lib/db';
 import Invitation from '@/lib/models/Invitation';
 import Group from '@/lib/models/Group';
 import { activityService } from './activity.service';
+import { invitationEmailMatches } from './invitation-ownership';
 import crypto from 'crypto';
 
 export class InvitationService {
@@ -64,11 +65,13 @@ export class InvitationService {
   /**
    * Accept an invitation.
    */
-  async accept(invitationId: string, userId: string) {
+  async accept(invitationId: string, userId: string, userEmail: string) {
     await connectDB();
 
     const invitation = await Invitation.findById(invitationId);
     if (!invitation) return null;
+
+    if (!invitationEmailMatches(invitation.invitedEmail, userEmail)) return null;
 
     if (invitation.status !== 'pending') {
       throw new Error('INVITATION_NOT_PENDING');
@@ -109,11 +112,13 @@ export class InvitationService {
   /**
    * Decline an invitation.
    */
-  async decline(invitationId: string) {
+  async decline(invitationId: string, userEmail: string) {
     await connectDB();
 
     const invitation = await Invitation.findById(invitationId);
     if (!invitation) return null;
+
+    if (!invitationEmailMatches(invitation.invitedEmail, userEmail)) return null;
 
     invitation.status = 'declined';
     await invitation.save();
