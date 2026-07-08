@@ -5,6 +5,7 @@ import { activityService } from './activity.service';
 import type { CreateExpenseInput, UpdateExpenseInput } from '@/lib/validators/expense.validator';
 import type { ExpenseFilters } from '@/types';
 import { getQuickFilterDates } from '@/lib/utils/date';
+import { escapeRegex } from '@/lib/utils/escape-regex';
 import mongoose from 'mongoose';
 
 export class ExpenseService {
@@ -118,7 +119,7 @@ export class ExpenseService {
 
     // Search filter (regex on description)
     if (filters.search) {
-      query.description = { $regex: filters.search, $options: 'i' };
+      query.description = { $regex: escapeRegex(filters.search), $options: 'i' };
     }
 
     // Paid-by member filter
