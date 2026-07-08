@@ -11,6 +11,7 @@ import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import { alpha } from '@mui/material/styles';
 import { formatCurrency } from '@/lib/utils/currency';
+import { formatDate } from '@/lib/utils/date';
 import SettleUpDialog from '@/components/settlements/SettleUpDialog';
 import { fetcher } from '@/lib/utils/fetcher';
 
@@ -21,6 +22,16 @@ interface BalancesViewProps {
   groupId: string;
   userId: string;
   group: Record<string, unknown>;
+}
+
+interface Settlement {
+  _id: string;
+  paidBy: { _id: string; name: string };
+  paidTo: { _id: string; name: string };
+  amount: number;
+  currency: string;
+  note?: string;
+  createdAt: string;
 }
 
 export default function BalancesView({ groupId, userId, group }: BalancesViewProps) {
@@ -35,11 +46,17 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
   const { data, isLoading, error, mutate } = useSWR(`/api/groups/${groupId}/balances`, fetcher, {
     refreshInterval: 15_000,
   });
+  const {
+    data: settlementsData,
+    error: settlementsError,
+    mutate: mutateSettlements,
+  } = useSWR(`/api/groups/${groupId}/settlements`, fetcher);
 
   const balances = data?.data?.balances || [];
   const debts = data?.data?.debts || [];
   const currency = data?.data?.currency || (group.defaultCurrency as string);
   const hasMixedCurrencies = Boolean(data?.data?.hasMixedCurrencies);
+  const settlements = ((settlementsData?.data || []) as Settlement[]).slice(0, 5);
 
   const userBalance = balances.find(
     (b: { user: { _id: string }; balance: number }) => b.user._id === userId,
@@ -59,6 +76,62 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     return <Alert severity="error">{error.message}</Alert>;
   }
 
+  const displayName = (user: { _id: string; name: string }) => (user._id === userId ? 'You' : user.name);
+
+  const settlementHistory = (
+    <Box>
+      <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ mb: 1.5 }}>
+        Settlement history
+      </Typography>
+      <Stack spacing={1}>
+        {settlementsError && (
+          <Alert severity="warning">Could not load settlement history.</Alert>
+        )}
+        {!settlementsError && settlements.length === 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+            No settlements yet
+          </Typography>
+        )}
+        {settlements.map((settlement) => (
+          <Paper
+            key={settlement._id}
+            variant="outlined"
+            sx={{
+              px: 2,
+              py: 1.5,
+            }}
+          >
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              spacing={1}
+              justifyContent="space-between"
+              alignItems={{ xs: 'flex-start', sm: 'center' }}
+            >
+              <Box>
+                <Typography variant="body2" color="text.primary">
+                  <Box component="span" sx={{ fontWeight: 600 }}>
+                    {displayName(settlement.paidBy)}
+                  </Box>{' '}
+                  paid{' '}
+                  <Box component="span" sx={{ fontWeight: 600 }}>
+                    {displayName(settlement.paidTo)}
+                  </Box>
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {formatDate(settlement.createdAt)}
+                  {settlement.note ? ` · ${settlement.note}` : ''}
+                </Typography>
+              </Box>
+              <Typography variant="body2" fontWeight={600} color="success.main">
+                {formatCurrency(settlement.amount, settlement.currency || currency)}
+              </Typography>
+            </Stack>
+          </Paper>
+        ))}
+      </Stack>
+    </Box>
+  );
+
   if (balances.length === 0) {
     return (
       <Stack spacing={3}>
@@ -74,6 +147,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
           </Typography>
           <Typography color="text.secondary">No outstanding balances in this group.</Typography>
         </Paper>
+        {settlementHistory}
       </Stack>
     );
   }
@@ -237,6 +311,8 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
         </Box>
       )}
 
+      {settlementHistory}
+
       <SettleUpDialog
         open={settleDialog.open}
         onClose={() => setSettleDialog({ open: false })}
@@ -244,7 +320,10 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
         group={group}
         toUser={settleDialog.toUser}
         defaultAmount={settleDialog.amount}
-        onSettled={() => mutate()}
+        onSettled={() => {
+          mutate();
+          mutateSettlements();
+        }}
       />
     </Stack>
   );

@@ -12,7 +12,7 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import CircularProgress from '@mui/material/CircularProgress';
-import { getSortedCurrencies } from '@/lib/utils/currency';
+import { getCurrency } from '@/lib/utils/currency';
 
 interface SettleUpDialogProps {
   open: boolean;
@@ -36,13 +36,10 @@ export default function SettleUpDialog({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [amount, setAmount] = useState(defaultAmount?.toString() || '');
-  const [currency, setCurrency] = useState(group.defaultCurrency as string);
   const [note, setNote] = useState('');
 
-  const currencies = getSortedCurrencies(
-    group.defaultCurrency as string,
-    (group.alternateCurrencies || []) as string[],
-  );
+  const defaultCurrency = group.defaultCurrency as string;
+  const defaultCurrencyDetails = getCurrency(defaultCurrency);
 
   const handleSubmit = async () => {
     if (!amount || parseFloat(amount) <= 0) {
@@ -60,7 +57,7 @@ export default function SettleUpDialog({
         body: JSON.stringify({
           paidTo: (toUser as { _id: string })?._id,
           amount: parseFloat(amount),
-          currency,
+          currency: defaultCurrency,
           note,
         }),
       });
@@ -119,15 +116,14 @@ export default function SettleUpDialog({
             <TextField
               select
               label="Currency"
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
+              value={defaultCurrency}
               size="small"
+              disabled
+              helperText="Group default"
             >
-              {currencies.map((c) => (
-                <MenuItem key={c.code} value={c.code}>
-                  {c.flag} {c.code}
-                </MenuItem>
-              ))}
+              <MenuItem value={defaultCurrency}>
+                {defaultCurrencyDetails?.flag} {defaultCurrency}
+              </MenuItem>
             </TextField>
           </Box>
 

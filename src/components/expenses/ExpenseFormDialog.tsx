@@ -26,6 +26,7 @@ import { useSWRConfig } from 'swr';
 import { EXPENSE_CATEGORIES } from '@/lib/constants/categories';
 import { PREDEFINED_ITEMS } from '@/lib/constants/predefined-items';
 import { getCurrency, formatCurrency } from '@/lib/utils/currency';
+import { buildDuplicateCheckUrl } from './expense-duplicate-check';
 
 // ─── Types ─────────────────────────────────────────────
 interface Member {
@@ -375,6 +376,30 @@ export default function ExpenseFormDialog({
     };
 
     try {
+      try {
+        const duplicateRes = await fetch(
+          buildDuplicateCheckUrl({
+            groupId,
+            description: description.trim(),
+            amount: parsedAmount,
+            date,
+            excludeId: isEditMode ? String(expense!._id) : undefined,
+          }),
+        );
+
+        if (duplicateRes.ok) {
+          const duplicateData = await duplicateRes.json();
+          if (duplicateData.data?.isDuplicate) {
+            const shouldContinue = window.confirm(
+              'This looks like a duplicate expense with the same description, amount, and date. Save it anyway?',
+            );
+            if (!shouldContinue) return;
+          }
+        }
+      } catch (duplicateErr) {
+        console.warn('Duplicate expense check failed', duplicateErr);
+      }
+
       const url = isEditMode
         ? `/api/groups/${groupId}/expenses/${expense!._id}`
         : `/api/groups/${groupId}/expenses`;

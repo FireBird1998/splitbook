@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import Link from 'next/link';
 import Box from '@mui/material/Box';
@@ -91,18 +91,20 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '' });
 
-  if (group && !generalInitialized) {
+  useEffect(() => {
+    if (!group || generalInitialized) return;
     setName(group.name || '');
     setDescription(group.description || '');
     setCategory(group.category || 'other');
     setGeneralInitialized(true);
-  }
+  }, [group, generalInitialized]);
 
-  if (group && !currencyInitialized) {
+  useEffect(() => {
+    if (!group || currencyInitialized) return;
     setDefaultCurrency(group.defaultCurrency || 'INR');
     setAlternateCurrencies(group.alternateCurrencies || []);
     setCurrencyInitialized(true);
-  }
+  }, [group, currencyInitialized]);
 
   if (isLoading) {
     return (
