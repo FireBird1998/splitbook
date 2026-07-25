@@ -41,6 +41,7 @@ import LabelIcon from '@mui/icons-material/Label';
 import { CURRENCIES, getSortedCurrencies } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/date';
 import { fetcher } from '@/lib/utils/fetcher';
+import { validateTripDates } from '@/lib/utils/trip-setup';
 
 const GROUP_CATEGORIES = [
   { id: 'trip', label: '✈️ Trip' },
@@ -175,8 +176,10 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
   }
 
   const currencies = getSortedCurrencies(group.defaultCurrency, group.alternateCurrencies || []);
+  const tripDateError = validateTripDates(startDate || null, endDate || null);
 
   const handleSaveGeneral = async () => {
+    if (tripDateError) return;
     setGeneralSaving(true);
     try {
       const res = await fetch(`/api/groups/${groupId}`, {
@@ -456,6 +459,8 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 onChange={(e) => setEndDate(e.target.value)}
                 fullWidth
                 size="small"
+                error={Boolean(tripDateError)}
+                helperText={tripDateError || undefined}
                 slotProps={{ inputLabel: { shrink: true } }}
               />
             </Stack>
@@ -463,7 +468,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
               <Button
                 variant="contained"
                 onClick={handleSaveGeneral}
-                disabled={generalSaving || !name.trim()}
+                disabled={generalSaving || !name.trim() || Boolean(tripDateError)}
               >
                 {generalSaving ? <CircularProgress size={20} /> : 'Save Changes'}
               </Button>

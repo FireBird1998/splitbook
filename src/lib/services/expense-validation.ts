@@ -1,3 +1,5 @@
+import { canRecordSettlement } from '@/lib/utils/settlement-authorization';
+
 type Participant = {
   user: unknown;
 };
@@ -42,16 +44,7 @@ export function assertSettlementMembers(
   }
 }
 
-/**
- * Either party in a debt can record the settlement (payer or recipient).
- */
-export function canRecordSettlement(
-  actorId: string,
-  paidBy: string,
-  paidTo: string,
-): boolean {
-  return actorId === paidBy || actorId === paidTo;
-}
+export { canRecordSettlement };
 
 export function assertSettlementAuthorization(
   actorId: string,

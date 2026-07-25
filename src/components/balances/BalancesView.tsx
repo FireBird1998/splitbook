@@ -12,7 +12,7 @@ import { formatCurrency } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/date';
 import SettleUpDialog from '@/components/settlements/SettleUpDialog';
 import { fetcher } from '@/lib/utils/fetcher';
-import { canRecordSettlement } from '@/lib/services/expense-validation';
+import { canRecordSettlement } from '@/lib/utils/settlement-authorization';
 
 const MIXED_CURRENCY_WARNING =
   "Some expenses or settlements use a different currency than this group's default. Balances may be inaccurate until those are updated.";
