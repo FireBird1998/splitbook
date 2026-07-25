@@ -1,5 +1,3 @@
-import { Types } from 'mongoose';
-
 // ─── User ───────────────────────────────────────────────
 export interface IUser {
   _id: string;
@@ -192,4 +190,70 @@ export interface GroupBalanceResponse {
   balances: UserBalance[];
   debts: Debt[];
   currency: string;
+  hasMixedCurrencies?: boolean;
+}
+
+export interface DashboardSettlement {
+  counterpartyId: string;
+  counterpartyName: string;
+  amount: number;
+}
+
+export interface DashboardBalanceAmount {
+  currency: string;
+  balance: number;
+  settlement?: DashboardSettlement;
+}
+
+export interface DashboardGroupBalance {
+  groupId: string;
+  name: string;
+  category: GroupCategory;
+  updatedAt: string;
+  hasMixedCurrencies: boolean;
+  balances: DashboardBalanceAmount[];
+}
+
+export interface CurrencyBalanceBucket {
+  currency: string;
+  youOwe: number;
+  youAreOwed: number;
+  net: number;
+}
+
+export type DashboardNextAction =
+  | {
+      kind: 'create-trip';
+      title: string;
+      description: string;
+      href: '/groups/new';
+    }
+  | {
+      kind: 'settle';
+      title: string;
+      description: string;
+      href: string;
+      groupId: string;
+      counterpartyName: string;
+      amount: number;
+      currency: string;
+    }
+  | {
+      kind: 'review-invitations';
+      title: string;
+      description: string;
+      href: '#pending-actions';
+    }
+  | {
+      kind: 'add-expense';
+      title: string;
+      description: string;
+      href: string;
+      groupId: string;
+    };
+
+export interface UserBalancesResponse {
+  buckets: CurrencyBalanceBucket[];
+  groups: DashboardGroupBalance[];
+  hasMixedCurrencies: boolean;
 }

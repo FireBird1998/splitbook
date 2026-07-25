@@ -22,6 +22,7 @@ vi.mock('@/lib/models/Settlement', () => ({
 
 vi.mock('@/lib/models/Group', () => ({
   default: {
+    find: vi.fn(),
     findById: vi.fn(),
   },
 }));
@@ -72,6 +73,81 @@ describe('BalanceService', () => {
 
     await expect(new BalanceService().getGroupBalances('group-1')).resolves.toMatchObject({
       currency: 'USD',
+      hasMixedCurrencies: true,
+    });
+  });
+
+  it('keeps a user balance separated by transaction currency across groups', async () => {
+    vi.mocked(Group.find).mockReturnValue({
+      populate: vi.fn().mockReturnThis(),
+      lean: vi.fn().mockResolvedValue([
+        {
+          _id: objectId('group-1'),
+          name: 'Mixed trip',
+          category: 'trip',
+          defaultCurrency: 'USD',
+          updatedAt: new Date('2026-07-20T00:00:00.000Z'),
+          members: [
+            { user: { _id: objectId('user-1'), name: 'Alex' } },
+            { user: { _id: objectId('user-2'), name: 'Sam' } },
+          ],
+        },
+      ]),
+    } as unknown as ReturnType<typeof Group.find>);
+
+    vi.mocked(Expense.find).mockReturnValue({
+      lean: vi.fn().mockResolvedValue([
+        {
+          currency: 'EUR',
+          paidBy: [{ user: objectId('user-1'), amount: 30 }],
+          splitBetween: [{ user: objectId('user-2'), amount: 30 }],
+        },
+        {
+          currency: 'USD',
+          paidBy: [{ user: objectId('user-2'), amount: 10 }],
+          splitBetween: [{ user: objectId('user-1'), amount: 10 }],
+        },
+      ]),
+    } as unknown as ReturnType<typeof Expense.find>);
+
+    vi.mocked(Settlement.find).mockReturnValue({
+      lean: vi.fn().mockResolvedValue([]),
+    } as unknown as ReturnType<typeof Settlement.find>);
+
+    await expect(new BalanceService().getUserBalances('user-1')).resolves.toEqual({
+      buckets: [
+        { currency: 'EUR', youOwe: 0, youAreOwed: 30, net: 30 },
+        { currency: 'USD', youOwe: 10, youAreOwed: 0, net: -10 },
+      ],
+      groups: [
+        {
+          groupId: 'group-1',
+          name: 'Mixed trip',
+          category: 'trip',
+          updatedAt: '2026-07-20T00:00:00.000Z',
+          hasMixedCurrencies: true,
+          balances: [
+            {
+              currency: 'EUR',
+              balance: 30,
+              settlement: {
+                counterpartyId: 'user-2',
+                counterpartyName: 'Sam',
+                amount: 30,
+              },
+            },
+            {
+              currency: 'USD',
+              balance: -10,
+              settlement: {
+                counterpartyId: 'user-2',
+                counterpartyName: 'Sam',
+                amount: 10,
+              },
+            },
+          ],
+        },
+      ],
       hasMixedCurrencies: true,
     });
   });

@@ -3,6 +3,8 @@ import Expense from '@/lib/models/Expense';
 import Settlement from '@/lib/models/Settlement';
 import Group from '@/lib/models/Group';
 import { calculateNetBalances, simplifyDebts } from '@/lib/utils/debt-simplifier';
+import { aggregateCurrencyBalances } from '@/lib/utils/dashboard';
+import type { DashboardGroupBalance, GroupCategory } from '@/types';
 
 export class BalanceService {
   /**
@@ -96,9 +98,11 @@ export class BalanceService {
     const groups = await Group.find({
       'members.user': userId,
       isArchived: false,
-    }).lean();
+    })
+      .populate('members.user', 'name email image')
+      .lean();
 
-    const groupBalances = [];
+    const groupBalances: DashboardGroupBalance[] = [];
 
     for (const group of groups) {
       const [expenses, settlements] = await Promise.all([
@@ -106,41 +110,90 @@ export class BalanceService {
         Settlement.find({ group: group._id }).lean(),
       ]);
 
-      const expenseData = expenses.map((e) => ({
-        paidBy: e.paidBy.map((p) => ({
-          user: p.user.toString(),
-          amount: p.amount,
-        })),
-        splitBetween: e.splitBetween.map((s) => ({
-          user: s.user.toString(),
-          amount: s.amount,
-        })),
-      }));
+      const currencies = new Set([
+        ...expenses.map((expense) => expense.currency),
+        ...settlements.map((settlement) => settlement.currency),
+      ]);
+      const memberNames = new Map(
+        group.members.map((member) => {
+          const memberUser = member.user as unknown as {
+            _id: { toString(): string };
+            name: string;
+          };
+          return [memberUser._id.toString(), memberUser.name] as const;
+        }),
+      );
 
-      const settlementData = settlements.map((s) => ({
-        paidBy: s.paidBy.toString(),
-        paidTo: s.paidTo.toString(),
-        amount: s.amount,
-      }));
+      const balances = [...currencies].sort().flatMap((currency) => {
+        const expenseData = expenses
+          .filter((expense) => expense.currency === currency)
+          .map((expense) => ({
+            paidBy: expense.paidBy.map((payer) => ({
+              user: payer.user.toString(),
+              amount: payer.amount,
+            })),
+            splitBetween: expense.splitBetween.map((split) => ({
+              user: split.user.toString(),
+              amount: split.amount,
+            })),
+          }));
+        const settlementData = settlements
+          .filter((settlement) => settlement.currency === currency)
+          .map((settlement) => ({
+            paidBy: settlement.paidBy.toString(),
+            paidTo: settlement.paidTo.toString(),
+            amount: settlement.amount,
+          }));
+        const netBalances = calculateNetBalances(expenseData, settlementData);
+        const userBalance = netBalances.find((balance) => balance.userId === userId);
 
-      const netBalances = calculateNetBalances(expenseData, settlementData);
-      const userBalance = netBalances.find((b) => b.userId === userId);
+        if (!userBalance || Math.abs(userBalance.amount) < 0.01) return [];
 
-      if (userBalance && Math.abs(userBalance.amount) >= 0.01) {
-        groupBalances.push({
-          group: {
-            _id: group._id.toString(),
-            name: group.name,
-            category: group.category,
-            defaultCurrency: group.defaultCurrency,
+        const settlement = simplifyDebts(netBalances)
+          .filter(
+            (debt) =>
+              (userBalance.amount < 0 && debt.from === userId) ||
+              (userBalance.amount > 0 && debt.to === userId),
+          )
+          .sort((a, b) => b.amount - a.amount)[0];
+        const counterpartyId = settlement
+          ? settlement.from === userId
+            ? settlement.to
+            : settlement.from
+          : undefined;
+
+        return [
+          {
+            currency,
+            balance: userBalance.amount,
+            ...(settlement && counterpartyId
+              ? {
+                  settlement: {
+                    counterpartyId,
+                    counterpartyName: memberNames.get(counterpartyId) || 'Unknown',
+                    amount: settlement.amount,
+                  },
+                }
+              : {}),
           },
-          balance: userBalance.amount,
-          currency: group.defaultCurrency,
-        });
-      }
+        ];
+      });
+
+      groupBalances.push({
+        groupId: group._id.toString(),
+        name: group.name,
+        category: group.category as GroupCategory,
+        updatedAt: new Date(group.updatedAt).toISOString(),
+        hasMixedCurrencies: [...currencies].some((currency) => currency !== group.defaultCurrency),
+        balances,
+      });
     }
 
-    return groupBalances;
+    return {
+      buckets: aggregateCurrencyBalances(groupBalances),
+      groups: groupBalances,
+      hasMixedCurrencies: groupBalances.some((group) => group.hasMixedCurrencies),
+    };
   }
 }
 

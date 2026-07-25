@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import Box from '@mui/material/Box';
@@ -44,7 +44,21 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
-  const { data: groupData, isLoading, error } = useSWR(`/api/groups/${groupId}`, fetcher, {
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('tab') === 'balances') setTab(1);
+      if (params.get('action') === 'add-expense') setExpenseDialogOpen(true);
+    }, 0);
+
+    return () => window.clearTimeout(timeout);
+  }, []);
+
+  const {
+    data: groupData,
+    isLoading,
+    error,
+  } = useSWR(`/api/groups/${groupId}`, fetcher, {
     refreshInterval: 30_000,
   });
 
