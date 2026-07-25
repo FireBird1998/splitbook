@@ -8,6 +8,9 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import GoogleIcon from '@mui/icons-material/Google';
+import { getSignInProvider } from '@/lib/auth-sign-in';
+
+const SIGN_IN_PROVIDER = getSignInProvider('google');
 
 const features = [
   {
@@ -78,7 +81,7 @@ export default function LandingPage() {
           <Button
             variant="outlined"
             size="small"
-            onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+            onClick={() => signIn(SIGN_IN_PROVIDER, { callbackUrl: '/dashboard' })}
             sx={{ borderColor: 'primary.main', color: 'primary.main' }}
           >
             Sign In
@@ -116,7 +119,7 @@ export default function LandingPage() {
             variant="contained"
             size="large"
             startIcon={<GoogleIcon />}
-            onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+            onClick={() => signIn(SIGN_IN_PROVIDER, { callbackUrl: '/dashboard' })}
             sx={{
               fontSize: '1.1rem',
               py: 1.5,

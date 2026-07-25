@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Sidebar from '@/components/layout/Sidebar';
 import Navbar from '@/components/layout/Navbar';
+import { isDemoMode } from '@/lib/auth-mode';
 
 export default async function MainLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -19,7 +20,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
         overflowX: 'hidden',
       }}
     >
-      <Navbar user={session.user} />
+      <Navbar user={session.user} demoMode={isDemoMode()} />
       {/* Spacer for fixed navbar */}
       <Box sx={{ height: 56 }} />
       <Box sx={{ display: 'flex' }}>

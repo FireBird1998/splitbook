@@ -1,18 +1,42 @@
 import type { NextAuthConfig } from 'next-auth';
 import Google from 'next-auth/providers/google';
+import Credentials from 'next-auth/providers/credentials';
+import { authorizeDemoPersona } from '@/lib/demo-credentials';
 
 /**
  * Edge-compatible Auth.js configuration.
  * This file must NOT import any Node.js-only modules (mongodb, mongoose, etc.)
  * because it's used by middleware which runs in the Edge runtime.
+ *
+ * Both providers are registered so AUTH_MODE can switch without a rebuild.
+ * Demo Credentials authorize() fails closed unless demo mode is allowed.
+ * UI entry points choose the active provider via resolveAuthMode().
  */
-export const authConfig: NextAuthConfig = {
-  providers: [
+function buildProviders(): NextAuthConfig['providers'] {
+  return [
+    Credentials({
+      id: 'demo',
+      name: 'Demo',
+      credentials: {
+        personaId: { label: 'Persona', type: 'text' },
+      },
+      authorize(credentials) {
+        // Env is read at authorize-time so the production guard stays effective.
+        return authorizeDemoPersona({
+          personaId:
+            typeof credentials?.personaId === 'string' ? credentials.personaId : undefined,
+        });
+      },
+    }),
     Google({
       clientId: process.env.AUTH_GOOGLE_ID!,
       clientSecret: process.env.AUTH_GOOGLE_SECRET!,
     }),
-  ],
+  ];
+}
+
+export const authConfig: NextAuthConfig = {
+  providers: buildProviders(),
   session: {
     strategy: 'jwt',
   },

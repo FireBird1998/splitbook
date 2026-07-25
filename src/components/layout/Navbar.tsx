@@ -27,6 +27,7 @@ import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { usePathname } from 'next/navigation';
 import { useThemeMode } from '@/providers/ThemeProvider';
+import DemoModeBadge from '@/components/demo/DemoModeBadge';
 
 interface NavbarProps {
   user: {
@@ -34,6 +35,7 @@ interface NavbarProps {
     email?: string | null;
     image?: string | null;
   };
+  demoMode?: boolean;
 }
 
 const mobileNavItems = [
@@ -42,7 +44,7 @@ const mobileNavItems = [
   { href: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
-export default function Navbar({ user }: NavbarProps) {
+export default function Navbar({ user, demoMode = false }: NavbarProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const pathname = usePathname();
@@ -102,6 +104,7 @@ export default function Navbar({ user }: NavbarProps) {
           </Stack>
 
           <Stack direction="row" alignItems="center" spacing={1}>
+            {demoMode ? <DemoModeBadge compact /> : null}
             <Tooltip title={mode === 'light' ? 'Dark mode' : 'Light mode'}>
               <IconButton onClick={toggleTheme} size="small">
                 {mode === 'light' ? (
