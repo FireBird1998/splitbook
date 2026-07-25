@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>01 · Demo persona entry — SplitWise</title>
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/components.css" />
+    <script src="js/proto.js"></script>
+  </head>
+  <body>
+    <div class="proto-bar">
+      <strong>SplitWise · Phase 1</strong>
+      <a href="index.html" data-nav>Gallery</a>
+      <a href="01-persona-entry.html" data-nav>Personas</a>
+      <a href="02-dashboard.html" data-nav>Dashboard</a>
+      <a href="03-trip-workspace.html" data-nav>Trip</a>
+      <a href="04-quick-expense.html" data-nav>Expense</a>
+      <a href="05-balances-settle.html" data-nav>Balances</a>
+      <span class="spacer"></span>
+      <button type="button" data-theme-toggle="light">Light</button>
+      <button type="button" data-theme-toggle="dark">Dark</button>
+    </div>
+
+    <div class="entry-shell">
+      <div class="entry-inner animate-in">
+        <header class="entry-brand">
+          <div class="logo">
+            <span class="logo-mark" aria-hidden="true">S</span>
+            SplitWise
+          </div>
+          <span class="demo-pill">Demo mode</span>
+          <h1 style="margin-top: var(--space-4); font-size: var(--text-3xl)">
+            Enter as a persona
+          </h1>
+          <p style="margin-top: var(--space-3)">
+            Shared demo trip for private-beta testers. Pick who you are — balances
+            update for that person.
+          </p>
+        </header>
+
+        <div class="persona-grid" role="list">
+          <button
+            type="button"
+            class="persona-card"
+            data-persona="alex"
+            role="listitem"
+            aria-label="Enter as Alex, trip organizer. You are owed ₹2,450. You owe $18."
+          >
+            <div class="persona-head">
+              <span class="persona-avatar" aria-hidden="true">A</span>
+              <div>
+                <h2>Alex</h2>
+                <span class="chip chip-brand">Organizer</span>
+              </div>
+            </div>
+            <p class="secondary" style="font-size: var(--text-sm)">
+              Created Goa Weekend · manages invites and trip settings.
+            </p>
+            <div class="persona-balances">
+              <div class="row">
+                <span class="muted">You're owed</span>
+                <span class="money amount-positive">₹2,450</span>
+              </div>
+              <div class="row">
+                <span class="muted">You owe</span>
+                <span class="money amount-negative">$18.00</span>
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            class="persona-card"
+            data-persona="sam"
+            role="listitem"
+            aria-label="Enter as Sam, member. You owe ₹1,200."
+          >
+            <div class="persona-head">
+              <span class="persona-avatar" aria-hidden="true">S</span>
+              <div>
+                <h2>Sam</h2>
+                <span class="chip chip-info">Member</span>
+              </div>
+            </div>
+            <p class="secondary" style="font-size: var(--text-sm)">
+              Covered dinner night one · mostly settling in INR.
+            </p>
+            <div class="persona-balances">
+              <div class="row">
+                <span class="muted">You owe</span>
+                <span class="money amount-negative">₹1,200</span>
+              </div>
+              <div class="row">
+                <span class="muted">You're owed</span>
+                <span class="money">₹0</span>
+              </div>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            class="persona-card"
+            data-persona="priya"
+            role="listitem"
+            aria-label="Enter as Priya, member. You owe ₹1,250 and are owed $18."
+          >
+            <div class="persona-head">
+              <span class="persona-avatar" aria-hidden="true">P</span>
+              <div>
+                <h2>Priya</h2>
+                <span class="chip chip-positive">Member</span>
+              </div>
+            </div>
+            <p class="secondary" style="font-size: var(--text-sm)">
+              Booked the villa · paid the Uber in USD.
+            </p>
+            <div class="persona-balances">
+              <div class="row">
+                <span class="muted">You owe</span>
+                <span class="money amount-negative">₹1,250</span>
+              </div>
+              <div class="row">
+                <span class="muted">You're owed</span>
+                <span class="money amount-positive">$18.00</span>
+              </div>
+            </div>
+          </button>
+        </div>
+
+        <p class="muted" style="text-align: center; margin-top: var(--space-5); font-size: var(--text-sm)">
+          Currencies stay separate — never combined into one number.
+        </p>
+      </div>
+    </div>
+  </body>
+</html>

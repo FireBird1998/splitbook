@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>03 · Trip workspace — SplitWise</title>
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/components.css" />
+    <script src="js/proto.js"></script>
+  </head>
+  <body>
+    <div class="proto-bar">
+      <strong>SplitWise · Phase 1</strong>
+      <a href="index.html" data-nav>Gallery</a>
+      <a href="01-persona-entry.html" data-nav>Personas</a>
+      <a href="02-dashboard.html" data-nav>Dashboard</a>
+      <a href="03-trip-workspace.html" data-nav>Trip</a>
+      <a href="04-quick-expense.html" data-nav>Expense</a>
+      <a href="05-balances-settle.html" data-nav>Balances</a>
+      <span class="spacer"></span>
+      <button type="button" data-theme-toggle="light">Light</button>
+      <button type="button" data-theme-toggle="dark">Dark</button>
+    </div>
+
+    <header class="app-nav" role="banner">
+      <a class="brand" href="02-dashboard.html">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        SplitWise
+      </a>
+      <span class="demo-pill">Demo · Alex</span>
+      <div class="nav-actions">
+        <span class="avatar" aria-hidden="true">A</span>
+      </div>
+    </header>
+
+    <main class="frame stack-lg">
+      <p style="font-size: var(--text-sm)">
+        <a href="02-dashboard.html">← Dashboard</a>
+      </p>
+
+      <div
+        class="trip-strip animate-in"
+        role="region"
+        aria-label="Goa Weekend trip header"
+      >
+        <div class="trip-strip-main">
+          <div class="trip-route">
+            <span>BLR</span>
+            <span class="dash" aria-hidden="true">···· ✈ ····</span>
+            <span>GOA</span>
+          </div>
+          <div class="trip-meta">
+            <div>
+              <strong>Goa Weekend</strong>
+              Mar 14 – 17, 2026
+            </div>
+            <div>
+              <strong>Members</strong>
+              Alex · Sam · Priya
+            </div>
+            <div>
+              <strong>Invite</strong>
+              <span style="font-family: var(--font-mono)">GWA-7K2</span>
+            </div>
+          </div>
+        </div>
+        <div class="trip-strip-stub">
+          <div>
+            <div class="stub-label">Your balance</div>
+            <div class="stub-balance money animate-balance">+₹2,450</div>
+          </div>
+          <div>
+            <div class="stub-label">Trip total</div>
+            <div class="stub-code money">₹18,420</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row-between" style="flex-wrap: wrap">
+        <div
+          class="tabs"
+          role="tablist"
+          aria-label="Trip sections"
+        >
+          <button type="button" class="tab" role="tab" aria-selected="true" id="tab-expenses">
+            Expenses
+          </button>
+          <button type="button" class="tab" role="tab" aria-selected="false" id="tab-balances">
+            Balances
+          </button>
+          <button type="button" class="tab" role="tab" aria-selected="false" id="tab-activity">
+            Activity
+          </button>
+        </div>
+        <a class="btn btn-primary" href="04-quick-expense.html">Add expense</a>
+      </div>
+
+      <section
+        class="quiet-panel card-pad animate-in"
+        role="tabpanel"
+        aria-labelledby="tab-expenses"
+      >
+        <div class="section-head">
+          <h2>Expenses</h2>
+          <span class="chip">INR</span>
+        </div>
+        <ul class="activity-list">
+          <li>
+            <span class="activity-dot expense" aria-hidden="true"></span>
+            <div style="flex: 1">
+              <div class="row-between">
+                <div>
+                  <strong>Villa stay</strong>
+                  <span class="chip" style="margin-left: 8px">Stay</span>
+                </div>
+                <span class="money">₹9,000</span>
+              </div>
+              <p class="activity-meta">Alex paid · equal split · Mar 14</p>
+            </div>
+          </li>
+          <li>
+            <span class="activity-dot expense" aria-hidden="true"></span>
+            <div style="flex: 1">
+              <div class="row-between">
+                <div>
+                  <strong>Dinner at Thalassa</strong>
+                  <span class="chip" style="margin-left: 8px">Food</span>
+                </div>
+                <span class="money">₹3,600</span>
+              </div>
+              <p class="activity-meta">Sam paid · equal split · Mar 15</p>
+            </div>
+          </li>
+          <li>
+            <span class="activity-dot expense" aria-hidden="true"></span>
+            <div style="flex: 1">
+              <div class="row-between">
+                <div>
+                  <strong>Scooter rental</strong>
+                  <span class="chip" style="margin-left: 8px">Transport</span>
+                </div>
+                <span class="money">₹2,400</span>
+              </div>
+              <p class="activity-meta">Priya paid · Alex + Priya · Mar 15</p>
+            </div>
+          </li>
+          <li>
+            <span class="activity-dot expense" aria-hidden="true"></span>
+            <div style="flex: 1">
+              <div class="row-between">
+                <div>
+                  <strong>Beach shack lunch</strong>
+                  <span class="chip" style="margin-left: 8px">Food</span>
+                </div>
+                <span class="money">₹1,820</span>
+              </div>
+              <p class="activity-meta">Alex paid · equal split · Mar 16</p>
+            </div>
+          </li>
+        </ul>
+      </section>
+
+      <section class="grid-2">
+        <div class="quiet-panel card-pad" aria-labelledby="tab-balances">
+          <h2 id="balances-mini">Balances snapshot</h2>
+          <p class="muted" style="font-size: var(--text-sm); margin: var(--space-2) 0 var(--space-3)">
+            Who pays whom — open full settle view for history.
+          </p>
+          <div class="stack-sm">
+            <div class="split-row">
+              <span>Sam pays Alex</span>
+              <span class="money">₹1,200</span>
+            </div>
+            <div class="split-row">
+              <span>Priya pays Alex</span>
+              <span class="money">₹1,250</span>
+            </div>
+          </div>
+          <a class="btn btn-secondary btn-block" style="margin-top: var(--space-3)" href="05-balances-settle.html">
+            Open balances
+          </a>
+        </div>
+
+        <div class="quiet-panel card-pad" aria-labelledby="tab-activity">
+          <h2>Activity</h2>
+          <ul class="activity-list">
+            <li>
+              <span class="activity-dot settle" aria-hidden="true"></span>
+              <div>
+                <strong>Priya settled ₹800 with Alex</strong>
+                <p class="activity-meta">Mar 16 · 6:40 pm</p>
+              </div>
+            </li>
+            <li>
+              <span class="activity-dot expense" aria-hidden="true"></span>
+              <div>
+                <strong>Alex added Beach shack lunch</strong>
+                <p class="activity-meta">Mar 16 · 2:10 pm</p>
+              </div>
+            </li>
+            <li>
+              <span class="activity-dot" aria-hidden="true"></span>
+              <div>
+                <strong>Sam joined the trip</strong>
+                <p class="activity-meta">Mar 12 · invite GWA-7K2</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <div class="sticky-cta">
+      <a class="btn btn-primary btn-block" href="04-quick-expense.html">Add expense</a>
+    </div>
+
+    <script>
+      document.querySelectorAll('[role="tab"]').forEach((tab) => {
+        tab.addEventListener("click", () => {
+          document.querySelectorAll('[role="tab"]').forEach((t) => {
+            t.setAttribute("aria-selected", String(t === tab));
+          });
+        });
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>05 · Balances + settle — SplitWise</title>
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/components.css" />
+    <script src="js/proto.js"></script>
+  </head>
+  <body>
+    <div class="proto-bar">
+      <strong>SplitWise · Phase 1</strong>
+      <a href="index.html" data-nav>Gallery</a>
+      <a href="01-persona-entry.html" data-nav>Personas</a>
+      <a href="02-dashboard.html" data-nav>Dashboard</a>
+      <a href="03-trip-workspace.html" data-nav>Trip</a>
+      <a href="04-quick-expense.html" data-nav>Expense</a>
+      <a href="05-balances-settle.html" data-nav>Balances</a>
+      <span class="spacer"></span>
+      <button type="button" data-theme-toggle="light">Light</button>
+      <button type="button" data-theme-toggle="dark">Dark</button>
+    </div>
+
+    <header class="app-nav" role="banner">
+      <a class="brand" href="02-dashboard.html">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        SplitWise
+      </a>
+      <span class="demo-pill">Demo · Alex</span>
+      <div class="nav-actions">
+        <span class="avatar" aria-hidden="true">A</span>
+      </div>
+    </header>
+
+    <main class="frame stack-lg">
+      <p style="font-size: var(--text-sm)">
+        <a href="03-trip-workspace.html">← Goa Weekend</a>
+      </p>
+
+      <header class="page-title-block animate-in">
+        <p class="label">Goa Weekend · INR</p>
+        <h1>Balances</h1>
+        <p>Who pays whom, clearly. Either side can record a settlement when authorized.</p>
+      </header>
+
+      <section class="stack animate-in" aria-labelledby="open-heading">
+        <div class="section-head">
+          <h2 id="open-heading">Open settlements</h2>
+          <span class="chip chip-negative">2 open</span>
+        </div>
+
+        <article class="settle-card">
+          <div class="settle-flow">
+            <div class="settle-person">
+              <span class="avatar" aria-hidden="true">S</span>
+              Sam
+            </div>
+            <span class="settle-arrow" aria-hidden="true">pays →</span>
+            <div class="settle-person">
+              <span class="avatar" aria-hidden="true">A</span>
+              Alex
+            </div>
+            <span class="money" style="margin-left: auto; font-size: var(--text-xl); font-weight: 600">
+              ₹1,200
+            </span>
+          </div>
+          <p class="secondary" style="font-size: var(--text-sm)">
+            Mostly from villa stay. Suggested next action on your dashboard.
+          </p>
+          <div class="row" style="flex-wrap: wrap">
+            <button type="button" class="btn btn-primary">Mark settled</button>
+            <button type="button" class="btn btn-secondary">Partial amount</button>
+          </div>
+        </article>
+
+        <article class="settle-card">
+          <div class="settle-flow">
+            <div class="settle-person">
+              <span class="avatar" style="background: var(--positive-bg); color: var(--positive)" aria-hidden="true">P</span>
+              Priya
+            </div>
+            <span class="settle-arrow" aria-hidden="true">pays →</span>
+            <div class="settle-person">
+              <span class="avatar" aria-hidden="true">A</span>
+              Alex
+            </div>
+            <span class="money" style="margin-left: auto; font-size: var(--text-xl); font-weight: 600">
+              ₹1,250
+            </span>
+          </div>
+          <p class="secondary" style="font-size: var(--text-sm)">
+            After ₹800 already settled earlier this week.
+          </p>
+          <div class="row" style="flex-wrap: wrap">
+            <button type="button" class="btn btn-primary">Mark settled</button>
+            <button type="button" class="btn btn-secondary">Partial amount</button>
+          </div>
+        </article>
+      </section>
+
+      <section class="quiet-panel card-pad animate-in" aria-labelledby="summary-heading">
+        <h2 id="summary-heading">Net positions</h2>
+        <div class="stack-sm" style="margin-top: var(--space-3)">
+          <div class="row-between">
+            <span>Alex</span>
+            <span class="money amount-positive">+₹2,450</span>
+          </div>
+          <div class="row-between">
+            <span>Sam</span>
+            <span class="money amount-negative">−₹1,200</span>
+          </div>
+          <div class="row-between">
+            <span>Priya</span>
+            <span class="money amount-negative">−₹1,250</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="quiet-panel card-pad animate-in" aria-labelledby="history-heading">
+        <div class="section-head">
+          <h2 id="history-heading">Settlement history</h2>
+          <span class="chip chip-positive">Settled</span>
+        </div>
+        <div class="history-item">
+          <div>
+            <strong>Priya → Alex</strong>
+            <p class="activity-meta">Recorded by Priya · Mar 16, 6:40 pm</p>
+          </div>
+          <span class="money amount-positive">₹800</span>
+        </div>
+        <div class="history-item">
+          <div>
+            <strong>Sam → Alex</strong>
+            <p class="activity-meta">Recorded by Alex · Mar 15, 9:12 am</p>
+          </div>
+          <span class="money amount-positive">₹500</span>
+        </div>
+        <div class="history-item">
+          <div>
+            <strong>Priya → Sam</strong>
+            <p class="activity-meta">Recorded by Sam · Mar 14, 8:05 pm</p>
+          </div>
+          <span class="money amount-positive">₹200</span>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>
