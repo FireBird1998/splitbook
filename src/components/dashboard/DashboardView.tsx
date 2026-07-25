@@ -62,13 +62,16 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
     groupBalances.map((groupBalance) => [groupBalance.groupId, groupBalance]),
   );
   const nextAction = selectNextAction(groupBalances, invitations.length);
-  const isLoading = groupsLoading || balancesLoading || invitationsLoading;
-  const error = groupsError || balancesError || invitationsError;
   const recentGroups = [...groups]
     .sort((a, b) => Date.parse(b.updatedAt as string) - Date.parse(a.updatedAt as string))
     .slice(0, 3);
+  const initialLoading =
+    !groupsData &&
+    !invitationsData &&
+    !balancesData &&
+    (groupsLoading || invitationsLoading || balancesLoading);
 
-  if (isLoading) {
+  if (initialLoading) {
     return (
       <Container maxWidth="lg" disableGutters>
         <Stack spacing={3}>
@@ -91,29 +94,6 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
     );
   }
 
-  if (error) {
-    return (
-      <Container maxWidth="lg" disableGutters>
-        <Alert
-          severity="error"
-          action={
-            <Button
-              color="inherit"
-              size="small"
-              onClick={() => {
-                void Promise.all([mutateGroups(), mutateBalances(), mutateInvitations()]);
-              }}
-            >
-              Retry
-            </Button>
-          }
-        >
-          {error.message || 'Dashboard data could not be loaded.'}
-        </Alert>
-      </Container>
-    );
-  }
-
   return (
     <Container maxWidth="lg" disableGutters>
       <Stack spacing={4}>
@@ -130,7 +110,30 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
           <Typography id="current-balance-heading" variant="h6" fontWeight={700} sx={{ mb: 2 }}>
             Current balance
           </Typography>
-          {balanceSummary?.buckets.length ? (
+          {balancesLoading && !balanceSummary ? (
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+                gap: 2,
+              }}
+            >
+              {[1, 2].map((item) => (
+                <Skeleton key={item} variant="rounded" height={148} />
+              ))}
+            </Box>
+          ) : balancesError && !balanceSummary ? (
+            <Alert
+              severity="error"
+              action={
+                <Button color="inherit" size="small" onClick={() => void mutateBalances()}>
+                  Retry
+                </Button>
+              }
+            >
+              {balancesError.message || 'Balances could not be loaded.'}
+            </Alert>
+          ) : balanceSummary?.buckets.length ? (
             <Box
               sx={{
                 display: 'grid',
@@ -181,43 +184,47 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
           )}
         </Box>
 
-        <Paper component="section" variant="outlined" sx={{ p: { xs: 2.5, sm: 3 } }}>
-          <Typography variant="overline" color="text.secondary">
-            Next recommended action
-          </Typography>
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            alignItems={{ xs: 'stretch', sm: 'center' }}
-            justifyContent="space-between"
-            spacing={2}
-          >
-            <Box>
-              <Typography variant="h6" fontWeight={700}>
-                {nextAction.title}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                {nextAction.kind === 'settle'
-                  ? `${formatCurrency(nextAction.amount, nextAction.currency)} · ${nextAction.description}`
-                  : nextAction.description}
-              </Typography>
-            </Box>
-            <Button
-              component={Link}
-              href={nextAction.href}
-              variant="contained"
-              endIcon={<ArrowForwardIcon />}
-              sx={{ flexShrink: 0 }}
+        {balancesLoading && !balanceSummary ? (
+          <Skeleton variant="rounded" height={128} />
+        ) : (
+          <Paper component="section" variant="outlined" sx={{ p: { xs: 2.5, sm: 3 } }}>
+            <Typography variant="overline" color="text.secondary">
+              Next recommended action
+            </Typography>
+            <Stack
+              direction={{ xs: 'column', sm: 'row' }}
+              alignItems={{ xs: 'stretch', sm: 'center' }}
+              justifyContent="space-between"
+              spacing={2}
             >
-              {nextAction.kind === 'settle'
-                ? 'Settle up'
-                : nextAction.kind === 'review-invitations'
-                  ? 'Review'
-                  : nextAction.kind === 'create-trip'
-                    ? 'Create trip'
-                    : 'Add expense'}
-            </Button>
-          </Stack>
-        </Paper>
+              <Box>
+                <Typography variant="h6" fontWeight={700}>
+                  {nextAction.title}
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {nextAction.kind === 'settle'
+                    ? `${formatCurrency(nextAction.amount, nextAction.currency)} · ${nextAction.description}`
+                    : nextAction.description}
+                </Typography>
+              </Box>
+              <Button
+                component={Link}
+                href={nextAction.href}
+                variant="contained"
+                endIcon={<ArrowForwardIcon />}
+                sx={{ flexShrink: 0 }}
+              >
+                {nextAction.kind === 'settle'
+                  ? 'Settle up'
+                  : nextAction.kind === 'review-invitations'
+                    ? 'Review'
+                    : nextAction.kind === 'create-trip'
+                      ? 'Create trip'
+                      : 'Add expense'}
+              </Button>
+            </Stack>
+          </Paper>
+        )}
 
         <Box component="section">
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
@@ -234,7 +241,30 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
             </Button>
           </Stack>
 
-          {groups.length === 0 ? (
+          {groupsError && !groupsData ? (
+            <Alert
+              severity="error"
+              action={
+                <Button color="inherit" size="small" onClick={() => void mutateGroups()}>
+                  Retry
+                </Button>
+              }
+            >
+              {groupsError.message || 'Trips could not be loaded.'}
+            </Alert>
+          ) : groupsLoading && !groupsData ? (
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', md: 'repeat(2, 1fr)' },
+                gap: 2,
+              }}
+            >
+              {[1, 2].map((item) => (
+                <Skeleton key={item} variant="rounded" height={180} />
+              ))}
+            </Box>
+          ) : groups.length === 0 ? (
             <Paper variant="outlined" sx={{ p: 5, textAlign: 'center' }}>
               <Typography variant="h6" fontWeight={700}>
                 No trips yet
@@ -285,49 +315,64 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
             )}
           </Stack>
 
-          <Stack spacing={1.5}>
-            {invitations.map((invitation) => (
-              <InvitationCard
-                key={invitation._id as string}
-                invitation={invitation}
-                onAction={() => mutateInvitations()}
-              />
-            ))}
-            {recentGroups.map((group) => (
-              <Paper
-                key={group._id as string}
-                component={Link}
-                href={`/groups/${group._id}`}
-                variant="outlined"
-                sx={{
-                  p: 2,
-                  textDecoration: 'none',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 2,
-                  '&:hover': { bgcolor: 'action.hover' },
-                }}
-              >
-                <Box>
-                  <Typography variant="body2" fontWeight={600} color="text.primary">
-                    {group.name as string}
+          {invitationsError && !invitationsData ? (
+            <Alert
+              severity="error"
+              action={
+                <Button color="inherit" size="small" onClick={() => void mutateInvitations()}>
+                  Retry
+                </Button>
+              }
+            >
+              {invitationsError.message || 'Pending actions could not be loaded.'}
+            </Alert>
+          ) : invitationsLoading && groupsLoading && !invitationsData && !groupsData ? (
+            <Skeleton variant="rounded" height={120} />
+          ) : (
+            <Stack spacing={1.5}>
+              {invitations.map((invitation) => (
+                <InvitationCard
+                  key={invitation._id as string}
+                  invitation={invitation}
+                  onAction={() => mutateInvitations()}
+                />
+              ))}
+              {recentGroups.map((group) => (
+                <Paper
+                  key={group._id as string}
+                  component={Link}
+                  href={`/groups/${group._id}`}
+                  variant="outlined"
+                  sx={{
+                    p: 2,
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 2,
+                    '&:hover': { bgcolor: 'action.hover' },
+                  }}
+                >
+                  <Box>
+                    <Typography variant="body2" fontWeight={600} color="text.primary">
+                      {group.name as string}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Last activity {formatRelativeTime(group.updatedAt as string)}
+                    </Typography>
+                  </Box>
+                  <ArrowForwardIcon fontSize="small" color="action" />
+                </Paper>
+              ))}
+              {invitations.length === 0 && recentGroups.length === 0 && (
+                <Paper variant="outlined" sx={{ p: 3 }}>
+                  <Typography variant="body2" color="text.secondary">
+                    No recent activity or pending actions.
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Last activity {formatRelativeTime(group.updatedAt as string)}
-                  </Typography>
-                </Box>
-                <ArrowForwardIcon fontSize="small" color="action" />
-              </Paper>
-            ))}
-            {invitations.length === 0 && recentGroups.length === 0 && (
-              <Paper variant="outlined" sx={{ p: 3 }}>
-                <Typography variant="body2" color="text.secondary">
-                  No recent activity or pending actions.
-                </Typography>
-              </Paper>
-            )}
-          </Stack>
+                </Paper>
+              )}
+            </Stack>
+          )}
         </Box>
       </Stack>
     </Container>

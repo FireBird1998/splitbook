@@ -13,6 +13,10 @@ const group = (
 });
 
 describe('aggregateCurrencyBalances', () => {
+  it('returns an empty list when there are no group balances', () => {
+    expect(aggregateCurrencyBalances([])).toEqual([]);
+  });
+
   it('keeps totals in separate currency buckets', () => {
     const result = aggregateCurrencyBalances([
       group({
@@ -65,23 +69,25 @@ describe('selectNextAction', () => {
     });
   });
 
-  it('prioritizes the largest payment the user can settle', () => {
+  it('prioritizes the largest payment the user can settle across currencies', () => {
     const result = selectNextAction(
       [
         group({
-          groupId: 'small',
+          groupId: 'recent-small',
           name: 'Weekend',
+          updatedAt: '2026-07-24T00:00:00.000Z',
           balances: [
             {
-              currency: 'INR',
-              balance: -20,
-              settlement: { counterpartyId: 'sam', counterpartyName: 'Sam', amount: 20 },
+              currency: 'USD',
+              balance: -5,
+              settlement: { counterpartyId: 'sam', counterpartyName: 'Sam', amount: 5 },
             },
           ],
         }),
         group({
           groupId: 'large',
           name: 'Goa',
+          updatedAt: '2026-07-20T00:00:00.000Z',
           balances: [
             {
               currency: 'INR',

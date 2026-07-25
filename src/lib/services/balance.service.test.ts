@@ -92,17 +92,27 @@ describe('BalanceService', () => {
             { user: { _id: objectId('user-2'), name: 'Sam' } },
           ],
         },
+        {
+          _id: objectId('group-2'),
+          name: 'Quiet trip',
+          category: 'trip',
+          defaultCurrency: 'INR',
+          updatedAt: new Date('2026-07-18T00:00:00.000Z'),
+          members: [{ user: { _id: objectId('user-1'), name: 'Alex' } }],
+        },
       ]),
     } as unknown as ReturnType<typeof Group.find>);
 
     vi.mocked(Expense.find).mockReturnValue({
       lean: vi.fn().mockResolvedValue([
         {
+          group: objectId('group-1'),
           currency: 'EUR',
           paidBy: [{ user: objectId('user-1'), amount: 30 }],
           splitBetween: [{ user: objectId('user-2'), amount: 30 }],
         },
         {
+          group: objectId('group-1'),
           currency: 'USD',
           paidBy: [{ user: objectId('user-2'), amount: 10 }],
           splitBetween: [{ user: objectId('user-1'), amount: 10 }],
@@ -147,8 +157,58 @@ describe('BalanceService', () => {
             },
           ],
         },
+        {
+          groupId: 'group-2',
+          name: 'Quiet trip',
+          category: 'trip',
+          updatedAt: '2026-07-18T00:00:00.000Z',
+          hasMixedCurrencies: false,
+          balances: [],
+        },
       ],
       hasMixedCurrencies: true,
+    });
+
+    expect(Expense.find).toHaveBeenCalledTimes(1);
+    expect(Settlement.find).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not flag a single non-default currency as mixed', async () => {
+    vi.mocked(Group.find).mockReturnValue({
+      populate: vi.fn().mockReturnThis(),
+      lean: vi.fn().mockResolvedValue([
+        {
+          _id: objectId('group-1'),
+          name: 'EUR only',
+          category: 'trip',
+          defaultCurrency: 'USD',
+          updatedAt: new Date('2026-07-20T00:00:00.000Z'),
+          members: [
+            { user: { _id: objectId('user-1'), name: 'Alex' } },
+            { user: { _id: objectId('user-2'), name: 'Sam' } },
+          ],
+        },
+      ]),
+    } as unknown as ReturnType<typeof Group.find>);
+
+    vi.mocked(Expense.find).mockReturnValue({
+      lean: vi.fn().mockResolvedValue([
+        {
+          group: objectId('group-1'),
+          currency: 'EUR',
+          paidBy: [{ user: objectId('user-1'), amount: 12 }],
+          splitBetween: [{ user: objectId('user-2'), amount: 12 }],
+        },
+      ]),
+    } as unknown as ReturnType<typeof Expense.find>);
+
+    vi.mocked(Settlement.find).mockReturnValue({
+      lean: vi.fn().mockResolvedValue([]),
+    } as unknown as ReturnType<typeof Settlement.find>);
+
+    await expect(new BalanceService().getUserBalances('user-1')).resolves.toMatchObject({
+      hasMixedCurrencies: false,
+      groups: [{ groupId: 'group-1', hasMixedCurrencies: false }],
     });
   });
 });

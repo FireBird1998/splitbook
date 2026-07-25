@@ -102,13 +102,34 @@ export class BalanceService {
       .populate('members.user', 'name email image')
       .lean();
 
+    const groupIds = groups.map((group) => group._id);
+    const [allExpenses, allSettlements] = await Promise.all([
+      Expense.find({ group: { $in: groupIds }, isDeleted: false }).lean(),
+      Settlement.find({ group: { $in: groupIds } }).lean(),
+    ]);
+
+    const expensesByGroup = new Map<string, typeof allExpenses>();
+    for (const expense of allExpenses) {
+      const key = expense.group.toString();
+      const list = expensesByGroup.get(key) || [];
+      list.push(expense);
+      expensesByGroup.set(key, list);
+    }
+
+    const settlementsByGroup = new Map<string, typeof allSettlements>();
+    for (const settlement of allSettlements) {
+      const key = settlement.group.toString();
+      const list = settlementsByGroup.get(key) || [];
+      list.push(settlement);
+      settlementsByGroup.set(key, list);
+    }
+
     const groupBalances: DashboardGroupBalance[] = [];
 
     for (const group of groups) {
-      const [expenses, settlements] = await Promise.all([
-        Expense.find({ group: group._id, isDeleted: false }).lean(),
-        Settlement.find({ group: group._id }).lean(),
-      ]);
+      const groupId = group._id.toString();
+      const expenses = expensesByGroup.get(groupId) || [];
+      const settlements = settlementsByGroup.get(groupId) || [];
 
       const currencies = new Set([
         ...expenses.map((expense) => expense.currency),
@@ -180,11 +201,11 @@ export class BalanceService {
       });
 
       groupBalances.push({
-        groupId: group._id.toString(),
+        groupId,
         name: group.name,
         category: group.category as GroupCategory,
         updatedAt: new Date(group.updatedAt).toISOString(),
-        hasMixedCurrencies: [...currencies].some((currency) => currency !== group.defaultCurrency),
+        hasMixedCurrencies: currencies.size > 1,
         balances,
       });
     }

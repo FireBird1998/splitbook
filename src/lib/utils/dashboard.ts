@@ -1,6 +1,9 @@
 import type { CurrencyBalanceBucket, DashboardGroupBalance, DashboardNextAction } from '@/types';
 
-const roundMoney = (amount: number) => Math.round((amount + Number.EPSILON) * 100) / 100;
+const roundMoney = (amount: number) => {
+  const sign = Math.sign(amount) || 1;
+  return (sign * Math.round((Math.abs(amount) + Number.EPSILON) * 100)) / 100;
+};
 
 export function aggregateCurrencyBalances(
   groups: DashboardGroupBalance[],
@@ -42,19 +45,17 @@ export function selectNextAction(
     };
   }
 
-  const payableItems = groups.flatMap((group) =>
-    group.balances
-      .filter((item) => item.balance < 0 && item.settlement)
-      .map((item) => ({ group, item, settlement: item.settlement! })),
-  );
-  const latestPayable = [...payableItems].sort(
-    (a, b) => Date.parse(b.group.updatedAt) - Date.parse(a.group.updatedAt),
-  )[0];
-  const payable = latestPayable
-    ? payableItems
-        .filter((candidate) => candidate.item.currency === latestPayable.item.currency)
-        .sort((a, b) => b.settlement.amount - a.settlement.amount)[0]
-    : undefined;
+  const payable = groups
+    .flatMap((group) =>
+      group.balances
+        .filter((item) => item.balance < 0 && item.settlement)
+        .map((item) => ({ group, item, settlement: item.settlement! })),
+    )
+    .sort((a, b) => {
+      const amountDelta = b.settlement.amount - a.settlement.amount;
+      if (amountDelta !== 0) return amountDelta;
+      return Date.parse(b.group.updatedAt) - Date.parse(a.group.updatedAt);
+    })[0];
 
   if (payable) {
     return {
