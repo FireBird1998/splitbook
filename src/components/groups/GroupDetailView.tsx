@@ -44,8 +44,12 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
 
   useEffect(() => {
-    if (searchParams.get('tab') === 'balances') setTab(1);
-    if (searchParams.get('action') === 'add-expense') setExpenseDialogOpen(true);
+    // Defer so deep-link params apply after mount without sync setState-in-effect.
+    const timeout = window.setTimeout(() => {
+      if (searchParams.get('tab') === 'balances') setTab(1);
+      if (searchParams.get('action') === 'add-expense') setExpenseDialogOpen(true);
+    }, 0);
+    return () => window.clearTimeout(timeout);
   }, [searchParams]);
 
   const {

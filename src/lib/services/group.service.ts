@@ -2,12 +2,14 @@ import connectDB from '@/lib/db';
 import Group from '@/lib/models/Group';
 import '@/lib/models/User'; // Ensure User model is registered for populate()
 import { activityService } from './activity.service';
+import { buildDefaultGroupTags } from '@/lib/constants/default-tags';
 import type { CreateGroupInput, UpdateGroupInput } from '@/lib/validators/group.validator';
 import crypto from 'crypto';
 
 export class GroupService {
   /**
    * Create a new group. The creator becomes the admin.
+   * Seeds active default tags so the first expense is never blocked.
    */
   async create(data: CreateGroupInput, userId: string) {
     await connectDB();
@@ -22,6 +24,7 @@ export class GroupService {
           joinedAt: new Date(),
         },
       ],
+      tags: buildDefaultGroupTags(),
     });
 
     // Log activity

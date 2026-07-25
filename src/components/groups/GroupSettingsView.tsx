@@ -64,6 +64,8 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('other');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [generalSaving, setGeneralSaving] = useState(false);
   const [generalInitialized, setGeneralInitialized] = useState(false);
 
@@ -96,6 +98,12 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     setName(group.name || '');
     setDescription(group.description || '');
     setCategory(group.category || 'other');
+    setStartDate(
+      group.startDate ? new Date(group.startDate as string).toISOString().split('T')[0] : '',
+    );
+    setEndDate(
+      group.endDate ? new Date(group.endDate as string).toISOString().split('T')[0] : '',
+    );
     setGeneralInitialized(true);
   }, [group, generalInitialized]);
 
@@ -174,7 +182,13 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
       const res = await fetch(`/api/groups/${groupId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, category }),
+        body: JSON.stringify({
+          name,
+          description,
+          category,
+          startDate: startDate || null,
+          endDate: endDate || null,
+        }),
       });
       if (res.ok) {
         mutate();
@@ -425,6 +439,26 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 </MenuItem>
               ))}
             </TextField>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+              <TextField
+                label="Start date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                fullWidth
+                size="small"
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+              <TextField
+                label="End date"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                fullWidth
+                size="small"
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+            </Stack>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
               <Button
                 variant="contained"

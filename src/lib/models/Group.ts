@@ -24,6 +24,8 @@ export interface IGroupDocument {
   defaultCurrency: string;
   alternateCurrencies: string[];
   category: 'trip' | 'home' | 'couple' | 'work' | 'other';
+  startDate?: Date | null;
+  endDate?: Date | null;
   isArchived: boolean;
   inviteCode?: string | null;
   inviteCodeExpiresAt?: Date | null;
@@ -74,6 +76,8 @@ const GroupSchema = new Schema<IGroupDocument>(
       enum: ['trip', 'home', 'couple', 'work', 'other'],
       default: 'other',
     },
+    startDate: { type: Date, default: null },
+    endDate: { type: Date, default: null },
     isArchived: { type: Boolean, default: false },
     inviteCode: { type: String, default: null, sparse: true },
     inviteCodeExpiresAt: { type: Date, default: null },

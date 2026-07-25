@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -19,7 +19,10 @@ interface SettleUpDialogProps {
   onClose: () => void;
   groupId: string;
   group: Record<string, unknown>;
-  toUser?: Record<string, unknown>;
+  /** Person who paid (debtor). */
+  fromUser?: { _id: string; name: string };
+  /** Person who received (creditor). */
+  toUser?: { _id: string; name: string };
   defaultAmount?: number;
   onSettled: () => void;
 }
@@ -29,6 +32,7 @@ export default function SettleUpDialog({
   onClose,
   groupId,
   group,
+  fromUser,
   toUser,
   defaultAmount,
   onSettled,
@@ -41,7 +45,19 @@ export default function SettleUpDialog({
   const defaultCurrency = group.defaultCurrency as string;
   const defaultCurrencyDetails = getCurrency(defaultCurrency);
 
+  useEffect(() => {
+    if (open) {
+      setAmount(defaultAmount?.toString() || '');
+      setNote('');
+      setError('');
+    }
+  }, [open, defaultAmount]);
+
   const handleSubmit = async () => {
+    if (!fromUser?._id || !toUser?._id) {
+      setError('Missing settlement parties.');
+      return;
+    }
     if (!amount || parseFloat(amount) <= 0) {
       setError('Please enter a valid amount.');
       return;
@@ -55,7 +71,8 @@ export default function SettleUpDialog({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          paidTo: (toUser as { _id: string })?._id,
+          paidBy: fromUser._id,
+          paidTo: toUser._id,
           amount: parseFloat(amount),
           currency: defaultCurrency,
           note,
@@ -81,11 +98,12 @@ export default function SettleUpDialog({
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Settle Up</DialogTitle>
+      <DialogTitle>Record settlement</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ pt: 1 }}>
           {error && (
             <Box
+              role="alert"
               sx={{
                 bgcolor: (theme) => `${theme.palette.error.main}12`,
                 color: 'error.main',
@@ -100,7 +118,13 @@ export default function SettleUpDialog({
           )}
 
           <Typography variant="body2" color="text.secondary">
-            You are paying <strong>{(toUser as { name?: string })?.name || '...'}</strong>
+            <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
+              {fromUser?.name || 'Someone'}
+            </Box>
+            {' pays '}
+            <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
+              {toUser?.name || 'someone'}
+            </Box>
           </Typography>
 
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
@@ -111,6 +135,7 @@ export default function SettleUpDialog({
               type="number"
               size="small"
               required
+              autoFocus
               slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
             />
             <TextField
@@ -137,20 +162,17 @@ export default function SettleUpDialog({
           />
         </Stack>
       </DialogContent>
-      <DialogActions sx={{ p: 2 }}>
+      <DialogActions
+        sx={{
+          p: 2,
+          pb: { xs: 'calc(16px + env(safe-area-inset-bottom, 0px))', sm: 2 },
+        }}
+      >
         <Button onClick={onClose} color="inherit">
           Cancel
         </Button>
-        <Button
-          onClick={handleSubmit}
-          variant="contained"
-          disabled={loading}
-          sx={{
-            backgroundColor: 'secondary.main',
-            '&:hover': { backgroundColor: 'secondary.dark' },
-          }}
-        >
-          {loading ? <CircularProgress size={20} /> : 'Record Payment'}
+        <Button onClick={handleSubmit} variant="contained" disabled={loading}>
+          {loading ? <CircularProgress size={20} /> : 'Save settlement'}
         </Button>
       </DialogActions>
     </Dialog>

@@ -69,6 +69,8 @@ async function ensureGroup(plan: DemoSeedPlan): Promise<{ created: boolean }> {
     category: 'trip',
     defaultCurrency: plan.currency,
     alternateCurrencies: [],
+    startDate: daysAgoDate(10),
+    endDate: daysAgoDate(7),
     isArchived: false,
     members: [
       {

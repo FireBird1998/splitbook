@@ -38,6 +38,8 @@ export interface IGroup {
   defaultCurrency: string;
   alternateCurrencies: string[];
   category: GroupCategory;
+  startDate?: Date | string | null;
+  endDate?: Date | string | null;
   isArchived: boolean;
   inviteCode?: string | null;
   inviteCodeExpiresAt?: Date | null;

@@ -43,9 +43,15 @@ interface ExpenseListViewProps {
   groupId: string;
   userId: string;
   group: Record<string, unknown>;
+  onAddExpense?: () => void;
 }
 
-export default function ExpenseListView({ groupId, userId, group }: ExpenseListViewProps) {
+export default function ExpenseListView({
+  groupId,
+  userId,
+  group,
+  onAddExpense,
+}: ExpenseListViewProps) {
   const [quickFilter, setQuickFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
@@ -511,19 +517,23 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
           ))}
         </Stack>
       ) : expenses.length === 0 ? (
-        <Paper variant="outlined" sx={{ p: 6, textAlign: 'center' }}>
-          <Typography component="span" sx={{ fontSize: '2.5rem', display: 'block', mb: 2 }}>
-            🧾
-          </Typography>
-          <Typography variant="subtitle1" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
-            No expenses yet
-          </Typography>
-          <Typography color="text.secondary">
+        <Box sx={{ py: { xs: 4, sm: 6 }, textAlign: 'center' }}>
+          <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
             {search || quickFilter !== 'all' || category || tagFilter
-              ? 'No expenses match your filters.'
-              : 'Add your first expense using the + button below.'}
+              ? 'No matching expenses'
+              : 'No expenses yet'}
           </Typography>
-        </Paper>
+          <Typography color="text.secondary" sx={{ mb: onAddExpense ? 2.5 : 0 }}>
+            {search || quickFilter !== 'all' || category || tagFilter
+              ? 'Try clearing filters to see everything on this trip.'
+              : 'Add a shared cost — tags and equal split are ready.'}
+          </Typography>
+          {onAddExpense && !(search || quickFilter !== 'all' || category || tagFilter) && (
+            <Button variant="contained" onClick={onAddExpense} sx={{ textTransform: 'none' }}>
+              Add first expense
+            </Button>
+          )}
+        </Box>
       ) : (
         <Stack
           spacing={3}

@@ -3,10 +3,11 @@
  */
 
 import { DEMO_GROUP_ID, DEMO_PERSONA_IDS } from '@/lib/demo-personas';
+import { DEFAULT_GROUP_TAGS } from '@/lib/constants/default-tags';
 
 export const DEMO_TRIP_NAME = 'Goa Friends Trip';
 export const DEMO_CURRENCY = 'INR';
-export const DEMO_TAGS = ['General', 'Food', 'Transport', 'Stay', 'Activities'] as const;
+export const DEMO_TAGS = DEFAULT_GROUP_TAGS;
 
 export interface SeedExpensePlan {
   key: string;

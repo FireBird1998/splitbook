@@ -37,6 +37,30 @@ export function assertSettlementMembers(
   if (!memberIds.has(paidBy) || !memberIds.has(paidTo)) {
     throw new Error('INVALID_MEMBERS');
   }
+  if (paidBy === paidTo) {
+    throw new Error('SAME_PARTY');
+  }
+}
+
+/**
+ * Either party in a debt can record the settlement (payer or recipient).
+ */
+export function canRecordSettlement(
+  actorId: string,
+  paidBy: string,
+  paidTo: string,
+): boolean {
+  return actorId === paidBy || actorId === paidTo;
+}
+
+export function assertSettlementAuthorization(
+  actorId: string,
+  paidBy: string,
+  paidTo: string,
+): void {
+  if (!canRecordSettlement(actorId, paidBy, paidTo)) {
+    throw new Error('FORBIDDEN_SETTLEMENT');
+  }
 }
 
 export function assertGroupCurrency(defaultCurrency: string, currency: string): void {
