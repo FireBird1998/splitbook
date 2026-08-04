@@ -35,7 +35,18 @@ interface ThemeProviderProps {
 }
 
 export default function ThemeProvider({ children }: ThemeProviderProps) {
-  const [mode, setMode] = useState<ThemeMode>(getInitialMode);
+  // SSR and the first client render must agree, so start from a deterministic
+  // value; the stored/system preference is adopted right after hydration.
+  // (Initializing from getInitialMode() during hydration leaves React with a
+  // mismatch it refuses to patch — theme state and document attribute diverge.)
+  const [mode, setMode] = useState<ThemeMode>('light');
+
+  useEffect(() => {
+    // Defer out of the effect phase: adopting the preference synchronously
+    // here would cascade a render during hydration settlement.
+    const frame = requestAnimationFrame(() => setMode(getInitialMode()));
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   const toggleTheme = () => {
     setMode((prev) => {

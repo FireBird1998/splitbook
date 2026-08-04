@@ -2,11 +2,39 @@
 
 ## Overview
 
-We use **Auth.js v5** (formerly NextAuth.js) with the **Google OAuth provider** and **MongoDB adapter**. Sessions are managed via **JWT** (no database sessions collection needed).
+We use **Auth.js v5** (formerly NextAuth.js) with **JWT sessions** and the **MongoDB adapter**. Two providers are registered side by side in [`src/lib/auth.config.ts`](../src/lib/auth.config.ts) so the mode can switch without a rebuild:
+
+- **Google OAuth** — the real sign-in path (currently dormant, restored in Phase 7).
+- **Demo Credentials** — private-beta personas (Alex, Sam, Priya), guarded by `AUTH_MODE`.
+
+The active mode resolves through [`src/lib/auth-mode.ts`](../src/lib/auth-mode.ts):
+
+| `AUTH_MODE` | `NODE_ENV` | `ALLOW_DEMO_AUTH` | Effective mode |
+| --- | --- | --- | --- |
+| `demo` | development/test | — | **demo** |
+| `demo` | production | `true` | **demo** |
+| `demo` | production | anything else | **google** (fail closed) |
+| unset / `google` / anything else | any | any | **google** |
+
+Demo sign-in goes through the Credentials `authorize()` in
+[`src/lib/demo-credentials.ts`](../src/lib/demo-credentials.ts), which only
+returns one of the three allowlisted personas from
+[`src/lib/demo-personas.ts`](../src/lib/demo-personas.ts). Sessions are real
+Auth.js JWTs, so every API route keeps receiving a real `session.user.id`
+ObjectId string — the authorization path is identical in both modes.
+
+In demo mode `/` renders the persona picker; in Google mode it renders the
+marketing landing. A **Demo mode** badge shows in the navbar while demo auth
+is active. See the README for seeding (`pnpm demo:seed` / `pnpm demo:reset`).
+
+> Middleware note: route protection lives in the `authorized` callback of
+> `auth.config.ts` (edge-safe, no Node/Mongo imports); `src/middleware.ts`
+> just re-exports it. The examples below show the Google flow and session
+> usage.
 
 ---
 
-## Flow
+## Google OAuth Flow
 
 ```
 1. User visits /login
@@ -83,39 +111,16 @@ export const { GET, POST } = handlers;
 
 ### 4. Middleware (Route Protection)
 
-File: `src/middleware.ts`
+File: `src/middleware.ts` (delegates to the `authorized` callback in `src/lib/auth.config.ts`)
 
 ```typescript
-import { auth } from '@/lib/auth';
-import { NextResponse } from 'next/server';
+import NextAuth from 'next-auth';
+import { authConfig } from '@/lib/auth.config';
 
-export default auth((req) => {
-  const isLoggedIn = !!req.auth;
-  const isAuthPage = req.nextUrl.pathname.startsWith('/login');
-  const isPublicPage = req.nextUrl.pathname === '/' || req.nextUrl.pathname.startsWith('/join');
-  const isApiAuth = req.nextUrl.pathname.startsWith('/api/auth');
-
-  // Allow auth API routes
-  if (isApiAuth) return NextResponse.next();
-
-  // Redirect logged-in users away from login
-  if (isLoggedIn && isAuthPage) {
-    return NextResponse.redirect(new URL('/dashboard', req.url));
-  }
-
-  // Allow public pages
-  if (isPublicPage || isAuthPage) return NextResponse.next();
-
-  // Protect everything else
-  if (!isLoggedIn) {
-    return NextResponse.redirect(new URL('/login', req.url));
-  }
-
-  return NextResponse.next();
-});
+export default NextAuth(authConfig).auth;
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)'],
 };
 ```
 

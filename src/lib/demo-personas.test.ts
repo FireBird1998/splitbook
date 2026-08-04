@@ -29,6 +29,25 @@ describe('demo persona allowlist', () => {
     expect(isDemoPersonaId(DEMO_PERSONA_IDS.alex)).toBe(true);
     expect(isDemoPersonaId('b00000000000000000000001')).toBe(false);
   });
+
+  it('normalises key lookups but keeps id lookups exact', () => {
+    // Keys: trimmed + case-insensitive
+    expect(getDemoPersona('  sam  ')?.id).toBe(DEMO_PERSONA_IDS.sam);
+    expect(getDemoPersona('Priya')?.id).toBe(DEMO_PERSONA_IDS.priya);
+
+    // Ids: exact match only — no case folding
+    expect(getDemoPersona(DEMO_PERSONA_IDS.alex.toUpperCase())).toBeNull();
+    expect(getDemoPersona(` ${DEMO_PERSONA_IDS.alex} `)?.key).toBe('alex');
+  });
+
+  it('gives every persona a name, email, and role headline', () => {
+    for (const persona of DEMO_PERSONAS) {
+      expect(persona.name.length).toBeGreaterThan(0);
+      expect(persona.email).toMatch(/@splitwise\.local$/);
+      expect(persona.headline.length).toBeGreaterThan(0);
+      expect(persona.id).toBe(DEMO_PERSONA_IDS[persona.key]);
+    }
+  });
 });
 
 describe('authorizeDemoPersona', () => {
@@ -52,6 +71,15 @@ describe('authorizeDemoPersona', () => {
         { AUTH_MODE: 'demo', NODE_ENV: 'development' },
       ),
     ).toBeNull();
+  });
+
+  it('rejects missing or malformed credentials', () => {
+    const env = { AUTH_MODE: 'demo', NODE_ENV: 'development' };
+
+    expect(authorizeDemoPersona(undefined, env)).toBeNull();
+    expect(authorizeDemoPersona(null, env)).toBeNull();
+    expect(authorizeDemoPersona({}, env)).toBeNull();
+    expect(authorizeDemoPersona({ personaId: '' }, env)).toBeNull();
   });
 
   it('fails closed when demo auth is not allowed', () => {

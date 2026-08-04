@@ -97,16 +97,74 @@ Demo auth is **fail-closed** in production:
 | `pnpm build` | Production build |
 | `pnpm start` | Run the production server |
 | `pnpm lint` | Run ESLint |
-| `pnpm test` | Run Vitest unit tests |
+| `pnpm test` | Run all Vitest tests (unit + integration; needs MongoDB) |
+| `pnpm test:unit` | Run only DB-free unit tests |
+| `pnpm test:integration` | Run only MongoDB integration tests |
+| `pnpm test:e2e` | Run Playwright browser journeys (demo mode) |
+| `pnpm test:e2e:headed` | Run Playwright journeys with a visible browser |
 | `pnpm typecheck` | Run TypeScript without emitting files |
 | `pnpm format` | Format code with Prettier |
 | `pnpm format:check` | Check formatting without writing |
 | `pnpm demo:seed` | Idempotently seed demo personas + Goa friends trip |
 | `pnpm demo:reset` | Wipe demo trip data and reseed |
 
+## Testing
+
+SplitWise has three layers of tests; all of them run in CI.
+
+### Unit tests (no database)
+
+Pure helpers and services with mocked models: split calculations, debt
+simplification, dashboard currency buckets, auth-mode guards, demo persona
+selection, seed plan invariants, settlement authorization.
+
+```bash
+pnpm test:unit
+```
+
+### Integration tests (isolated MongoDB)
+
+Service-level tests against a real MongoDB: group membership enforcement,
+expense participants/tags/currency validation, edit history, soft delete,
+settlement authorization, invitation ownership, balance integrity, and demo
+seed idempotency.
+
+- Each test file gets its **own database** on the shared MongoDB instance,
+  named `splitwise-test-<file>` (dropped on teardown), so files can run in
+  parallel without clobbering each other.
+- The helper refuses to run against anything resembling the demo/production
+  databases — `splitwise-demo` is never touched.
+- Requires MongoDB running locally (the `split-mongo` container works).
+  Override the base connection with `TEST_MONGODB_URI` (any database segment
+  is replaced with the per-file test name).
+
+```bash
+pnpm test:integration   # or the full suite: pnpm test
+```
+
+### Browser journeys (Playwright)
+
+Persona journeys in demo mode — enter as Alex/Sam/Priya, inspect balances,
+create a trip, add/edit an expense, switch persona, record a settlement, and
+verify balances update — plus theme and accessibility checks.
+
+- Runs the app on **port 3100** with `AUTH_MODE=demo`; global setup resets and
+  reseeds the `splitwise-demo` database before the run.
+- Four projects cover **desktop (1280×800) and mobile (390×844)** in **light
+  and dark** themes; axe-core checks for critical accessibility violations.
+- Review screenshots are written to `playwright/artifacts/<project>/`
+  (gitignored).
+
+```bash
+pnpm exec playwright install chromium   # one-time browser install
+pnpm test:e2e
+```
+
 ## Notes
 
-- Each group uses a **single currency** for balances and settlements.
+- Each group uses a **single currency** for balances and settlements; the
+  dashboard aggregates cross-trip balances in separate currency buckets that
+  are never combined into one number.
 - Email invites create **pending invitation records** in the database; the app does not send email yet.
 
 ## Documentation

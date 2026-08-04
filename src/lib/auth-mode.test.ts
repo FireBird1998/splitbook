@@ -40,4 +40,34 @@ describe('resolveAuthMode', () => {
       }),
     ).toBe(false);
   });
+
+  it('requires exact, case-sensitive env values (fail closed on lookalikes)', () => {
+    // AUTH_MODE must be exactly 'demo'
+    expect(isDemoAuthAllowed({ AUTH_MODE: 'Demo', NODE_ENV: 'development' })).toBe(false);
+    expect(isDemoAuthAllowed({ AUTH_MODE: 'DEMO', NODE_ENV: 'development' })).toBe(false);
+    expect(isDemoAuthAllowed({ AUTH_MODE: ' demo', NODE_ENV: 'development' })).toBe(false);
+    expect(isDemoAuthAllowed({ AUTH_MODE: 'demo ', NODE_ENV: 'development' })).toBe(false);
+
+    // ALLOW_DEMO_AUTH must be exactly 'true'
+    expect(
+      isDemoAuthAllowed({
+        AUTH_MODE: 'demo',
+        NODE_ENV: 'production',
+        ALLOW_DEMO_AUTH: 'TRUE',
+      }),
+    ).toBe(false);
+    expect(
+      isDemoAuthAllowed({
+        AUTH_MODE: 'demo',
+        NODE_ENV: 'production',
+        ALLOW_DEMO_AUTH: 'yes',
+      }),
+    ).toBe(false);
+  });
+
+  it('treats non-production NODE_ENV values as development', () => {
+    expect(isDemoAuthAllowed({ AUTH_MODE: 'demo' })).toBe(true);
+    expect(isDemoAuthAllowed({ AUTH_MODE: 'demo', NODE_ENV: 'test' })).toBe(true);
+    expect(isDemoMode({ AUTH_MODE: 'demo', NODE_ENV: 'staging' })).toBe(true);
+  });
 });

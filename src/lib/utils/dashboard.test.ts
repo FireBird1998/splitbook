@@ -59,6 +59,45 @@ describe('aggregateCurrencyBalances', () => {
       { currency: 'USD', youOwe: 10.25, youAreOwed: 4.5, net: -5.75 },
     ]);
   });
+
+  it('nets owing and owed amounts within the same currency across many trips', () => {
+    const result = aggregateCurrencyBalances([
+      group({
+        groupId: 'a',
+        name: 'A',
+        balances: [{ currency: 'INR', balance: -100 }],
+      }),
+      group({
+        groupId: 'b',
+        name: 'B',
+        balances: [{ currency: 'INR', balance: 250 }],
+      }),
+      group({
+        groupId: 'c',
+        name: 'C',
+        balances: [{ currency: 'INR', balance: -50 }],
+      }),
+    ]);
+
+    expect(result).toEqual([{ currency: 'INR', youOwe: 150, youAreOwed: 250, net: 100 }]);
+  });
+
+  it('rounds bucket totals to cents to avoid floating point drift', () => {
+    const result = aggregateCurrencyBalances([
+      group({
+        groupId: 'a',
+        name: 'A',
+        balances: [{ currency: 'USD', balance: -10.1 }],
+      }),
+      group({
+        groupId: 'b',
+        name: 'B',
+        balances: [{ currency: 'USD', balance: -0.2 }],
+      }),
+    ]);
+
+    expect(result).toEqual([{ currency: 'USD', youOwe: 10.3, youAreOwed: 0, net: -10.3 }]);
+  });
 });
 
 describe('selectNextAction', () => {
