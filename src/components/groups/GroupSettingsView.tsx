@@ -102,9 +102,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     setStartDate(
       group.startDate ? new Date(group.startDate as string).toISOString().split('T')[0] : '',
     );
-    setEndDate(
-      group.endDate ? new Date(group.endDate as string).toISOString().split('T')[0] : '',
-    );
+    setEndDate(group.endDate ? new Date(group.endDate as string).toISOString().split('T')[0] : '');
     setGeneralInitialized(true);
   }, [group, generalInitialized]);
 

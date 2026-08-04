@@ -1,13 +1,7 @@
 /**
  * Active tags seeded on every new group so the first expense is never blocked.
  */
-export const DEFAULT_GROUP_TAGS = [
-  'General',
-  'Food',
-  'Transport',
-  'Stay',
-  'Activities',
-] as const;
+export const DEFAULT_GROUP_TAGS = ['General', 'Food', 'Transport', 'Stay', 'Activities'] as const;
 
 export type DefaultGroupTag = (typeof DEFAULT_GROUP_TAGS)[number];
 

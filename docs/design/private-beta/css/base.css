@@ -70,7 +70,7 @@ h3 {
 .money {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum";
+  font-feature-settings: 'tnum';
   letter-spacing: -0.01em;
 }
 
@@ -166,8 +166,8 @@ h3 {
 
 .proto-bar a:hover,
 .proto-bar button:hover,
-.proto-bar a[aria-current="page"],
-.proto-bar button[aria-pressed="true"] {
+.proto-bar a[aria-current='page'],
+.proto-bar button[aria-pressed='true'] {
   border-color: var(--brand);
   color: var(--brand);
   background: var(--brand-bg);

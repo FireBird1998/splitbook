@@ -28,15 +28,15 @@ SplitWise is an expense-splitting app for shared groups — track who paid, spli
    cp .env.example .env.local
    ```
 
-   | Variable | Description |
-   | --- | --- |
-   | `MONGODB_URI` | MongoDB connection string (use a dedicated DB for demo, e.g. `splitwise-demo`) |
-   | `AUTH_SECRET` | Random secret for Auth.js session signing ([generate one](https://generate-secret.vercel.app/32)) |
-   | `AUTH_GOOGLE_ID` | Google OAuth client ID (required when `AUTH_MODE=google`) |
-   | `AUTH_GOOGLE_SECRET` | Google OAuth client secret (required when `AUTH_MODE=google`) |
-   | `NEXT_PUBLIC_APP_URL` | App URL (e.g. `http://localhost:3000`) |
-   | `AUTH_MODE` | `google` (default) or `demo` for private-beta personas |
-   | `ALLOW_DEMO_AUTH` | Must be `true` to allow demo auth when `NODE_ENV=production` |
+   | Variable              | Description                                                                                       |
+   | --------------------- | ------------------------------------------------------------------------------------------------- |
+   | `MONGODB_URI`         | MongoDB connection string (use a dedicated DB for demo, e.g. `splitwise-demo`)                    |
+   | `AUTH_SECRET`         | Random secret for Auth.js session signing ([generate one](https://generate-secret.vercel.app/32)) |
+   | `AUTH_GOOGLE_ID`      | Google OAuth client ID (required when `AUTH_MODE=google`)                                         |
+   | `AUTH_GOOGLE_SECRET`  | Google OAuth client secret (required when `AUTH_MODE=google`)                                     |
+   | `NEXT_PUBLIC_APP_URL` | App URL (e.g. `http://localhost:3000`)                                                            |
+   | `AUTH_MODE`           | `google` (default) or `demo` for private-beta personas                                            |
+   | `ALLOW_DEMO_AUTH`     | Must be `true` to allow demo auth when `NODE_ENV=production`                                      |
 
 3. Start MongoDB locally (if needed):
 
@@ -58,10 +58,10 @@ SplitWise is an expense-splitting app for shared groups — track who paid, spli
 
 The app runs in one of two auth modes, selected by `AUTH_MODE` (default: `google`):
 
-| Mode | `AUTH_MODE` | Sign-in UI |
-| --- | --- | --- |
-| Google OAuth | `google` (or unset) | Marketing landing + "Sign in with Google" |
-| Demo personas | `demo` | Persona picker (Alex, Sam, Priya) — no OAuth setup needed |
+| Mode          | `AUTH_MODE`         | Sign-in UI                                                |
+| ------------- | ------------------- | --------------------------------------------------------- |
+| Google OAuth  | `google` (or unset) | Marketing landing + "Sign in with Google"                 |
+| Demo personas | `demo`              | Persona picker (Alex, Sam, Priya) — no OAuth setup needed |
 
 Switch modes by editing `AUTH_MODE` in `.env.local` and restarting the dev server.
 Both providers stay registered, so no code change or rebuild is required.
@@ -111,23 +111,23 @@ setup steps and a non-interactive smoke test (`pnpm test:e2e:google`) are in
 
 ## Scripts
 
-| Command | Description |
-| --- | --- |
-| `pnpm dev` | Start the development server |
-| `pnpm build` | Production build |
-| `pnpm start` | Run the production server |
-| `pnpm lint` | Run ESLint |
-| `pnpm test` | Run all Vitest tests (unit + integration; needs MongoDB) |
-| `pnpm test:unit` | Run only DB-free unit tests |
-| `pnpm test:integration` | Run only MongoDB integration tests |
-| `pnpm test:e2e` | Run Playwright browser journeys (demo mode) |
-| `pnpm test:e2e:headed` | Run Playwright journeys with a visible browser |
-| `pnpm test:e2e:google` | Run Google OAuth smoke tests (google mode, no real login) |
-| `pnpm typecheck` | Run TypeScript without emitting files |
-| `pnpm format` | Format code with Prettier |
-| `pnpm format:check` | Check formatting without writing |
-| `pnpm demo:seed` | Idempotently seed demo personas + Goa friends trip |
-| `pnpm demo:reset` | Wipe demo trip data and reseed |
+| Command                 | Description                                               |
+| ----------------------- | --------------------------------------------------------- |
+| `pnpm dev`              | Start the development server                              |
+| `pnpm build`            | Production build                                          |
+| `pnpm start`            | Run the production server                                 |
+| `pnpm lint`             | Run ESLint                                                |
+| `pnpm test`             | Run all Vitest tests (unit + integration; needs MongoDB)  |
+| `pnpm test:unit`        | Run only DB-free unit tests                               |
+| `pnpm test:integration` | Run only MongoDB integration tests                        |
+| `pnpm test:e2e`         | Run Playwright browser journeys (demo mode)               |
+| `pnpm test:e2e:headed`  | Run Playwright journeys with a visible browser            |
+| `pnpm test:e2e:google`  | Run Google OAuth smoke tests (google mode, no real login) |
+| `pnpm typecheck`        | Run TypeScript without emitting files                     |
+| `pnpm format`           | Format code with Prettier                                 |
+| `pnpm format:check`     | Check formatting without writing                          |
+| `pnpm demo:seed`        | Idempotently seed demo personas + Goa friends trip        |
+| `pnpm demo:reset`       | Wipe demo trip data and reseed                            |
 
 ## Testing
 

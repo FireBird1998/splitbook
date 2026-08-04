@@ -311,7 +311,11 @@ export default function NewGroupPage() {
             <Button variant="outlined" onClick={() => router.back()} color="inherit">
               Cancel
             </Button>
-            <Button type="submit" variant="contained" disabled={loading || !name.trim() || Boolean(dateError)}>
+            <Button
+              type="submit"
+              variant="contained"
+              disabled={loading || !name.trim() || Boolean(dateError)}
+            >
               {loading ? <CircularProgress size={20} /> : 'Create trip'}
             </Button>
           </Stack>

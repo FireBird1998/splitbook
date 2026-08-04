@@ -72,10 +72,7 @@ export default function ExpenseFormDialog({
   const isEditMode = !!expense;
 
   const members = useMemo(() => (group.members || []) as Member[], [group.members]);
-  const groupTags = useMemo(
-    () => (group.tags || []) as GroupTagOption[],
-    [group.tags],
-  );
+  const groupTags = useMemo(() => (group.tags || []) as GroupTagOption[], [group.tags]);
   const defaultCurrency = group.defaultCurrency as string;
   const defaultCurrencyDetails = getCurrency(defaultCurrency);
 
@@ -442,8 +439,7 @@ export default function ExpenseFormDialog({
     currentUserId: userId,
   });
 
-  const hasNonDefaultMore =
-    category !== 'other' || notes.trim().length > 0;
+  const hasNonDefaultMore = category !== 'other' || notes.trim().length > 0;
 
   const selectableTags = getSelectableExpenseTags(
     groupTags,

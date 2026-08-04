@@ -1,19 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import {
-  DEFAULT_GROUP_TAGS,
-  buildDefaultGroupTags,
-  mergeMissingDefaultTags,
-} from './default-tags';
+import { DEFAULT_GROUP_TAGS, buildDefaultGroupTags, mergeMissingDefaultTags } from './default-tags';
 
 describe('default group tags', () => {
   it('exposes the five trip-ready default tags', () => {
-    expect(DEFAULT_GROUP_TAGS).toEqual([
-      'General',
-      'Food',
-      'Transport',
-      'Stay',
-      'Activities',
-    ]);
+    expect(DEFAULT_GROUP_TAGS).toEqual(['General', 'Food', 'Transport', 'Stay', 'Activities']);
   });
 
   it('builds active default tag seeds', () => {

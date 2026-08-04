@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
@@ -39,11 +39,7 @@
         <a href="02-dashboard.html">← Dashboard</a>
       </p>
 
-      <div
-        class="trip-strip animate-in"
-        role="region"
-        aria-label="Goa Weekend trip header"
-      >
+      <div class="trip-strip animate-in" role="region" aria-label="Goa Weekend trip header">
         <div class="trip-strip-main">
           <div class="trip-route">
             <span>BLR</span>
@@ -78,11 +74,7 @@
       </div>
 
       <div class="row-between" style="flex-wrap: wrap">
-        <div
-          class="tabs"
-          role="tablist"
-          aria-label="Trip sections"
-        >
+        <div class="tabs" role="tablist" aria-label="Trip sections">
           <button type="button" class="tab" role="tab" aria-selected="true" id="tab-expenses">
             Expenses
           </button>
@@ -164,7 +156,10 @@
       <section class="grid-2">
         <div class="quiet-panel card-pad" aria-labelledby="tab-balances">
           <h2 id="balances-mini">Balances snapshot</h2>
-          <p class="muted" style="font-size: var(--text-sm); margin: var(--space-2) 0 var(--space-3)">
+          <p
+            class="muted"
+            style="font-size: var(--text-sm); margin: var(--space-2) 0 var(--space-3)"
+          >
             Who pays whom — open full settle view for history.
           </p>
           <div class="stack-sm">
@@ -177,7 +172,11 @@
               <span class="money">₹1,250</span>
             </div>
           </div>
-          <a class="btn btn-secondary btn-block" style="margin-top: var(--space-3)" href="05-balances-settle.html">
+          <a
+            class="btn btn-secondary btn-block"
+            style="margin-top: var(--space-3)"
+            href="05-balances-settle.html"
+          >
             Open balances
           </a>
         </div>
@@ -217,9 +216,9 @@
 
     <script>
       document.querySelectorAll('[role="tab"]').forEach((tab) => {
-        tab.addEventListener("click", () => {
+        tab.addEventListener('click', () => {
           document.querySelectorAll('[role="tab"]').forEach((t) => {
-            t.setAttribute("aria-selected", String(t === tab));
+            t.setAttribute('aria-selected', String(t === tab));
           });
         });
       });

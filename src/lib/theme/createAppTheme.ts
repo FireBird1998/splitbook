@@ -1,11 +1,5 @@
 import { createTheme, type Shadows, type Theme } from '@mui/material/styles';
-import {
-  FONT_MONO,
-  FONT_UI,
-  RADIUS,
-  getSemanticTokens,
-  type ThemeMode,
-} from './tokens';
+import { FONT_MONO, FONT_UI, RADIUS, getSemanticTokens, type ThemeMode } from './tokens';
 
 declare module '@mui/material/styles' {
   interface Palette {

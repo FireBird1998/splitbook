@@ -90,7 +90,12 @@ const GroupSchema = new Schema<IGroupDocument>(
 // Indexes
 GroupSchema.index({ 'members.user': 1 });
 GroupSchema.index({ createdBy: 1 });
-GroupSchema.index({ inviteCode: 1 }, { unique: true, sparse: true });
+// Partial (not sparse): `inviteCode` has `default: null`, and sparse unique
+// indexes still index explicit nulls — multiple null-coded groups would collide.
+GroupSchema.index(
+  { inviteCode: 1 },
+  { unique: true, partialFilterExpression: { inviteCode: { $type: 'string' } } },
+);
 
 // In development, Mongoose models persist across hot reloads but schema changes
 // are not picked up. Force re-registration so new/modified fields are recognised.

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en" data-theme="light">
   <head>
     <meta charset="utf-8" />
@@ -57,7 +57,9 @@
               value="1,200"
               aria-describedby="amount-hint"
             />
-            <span id="amount-hint" class="field-hint">Trip currency is INR — one currency per trip.</span>
+            <span id="amount-hint" class="field-hint"
+              >Trip currency is INR — one currency per trip.</span
+            >
           </div>
 
           <div class="field">
@@ -75,7 +77,17 @@
           </div>
 
           <div class="field">
-            <span id="tag-label" class="label" style="text-transform: none; letter-spacing: 0; font-size: var(--text-sm); color: var(--text-secondary)">Tag</span>
+            <span
+              id="tag-label"
+              class="label"
+              style="
+                text-transform: none;
+                letter-spacing: 0;
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+              "
+              >Tag</span
+            >
             <div class="tag-row" role="group" aria-labelledby="tag-label">
               <button type="button" class="tag-choice" aria-pressed="false">General</button>
               <button type="button" class="tag-choice" aria-pressed="true">Food</button>
@@ -86,17 +98,20 @@
           </div>
 
           <div class="field">
-            <span class="label" style="text-transform: none; letter-spacing: 0; font-size: var(--text-sm); color: var(--text-secondary)">Split equally among</span>
+            <span
+              class="label"
+              style="
+                text-transform: none;
+                letter-spacing: 0;
+                font-size: var(--text-sm);
+                color: var(--text-secondary);
+              "
+              >Split equally among</span
+            >
             <div>
-              <label class="member-check">
-                <input type="checkbox" checked /> Alex
-              </label>
-              <label class="member-check">
-                <input type="checkbox" checked /> Sam
-              </label>
-              <label class="member-check">
-                <input type="checkbox" checked /> Priya
-              </label>
+              <label class="member-check"> <input type="checkbox" checked /> Alex </label>
+              <label class="member-check"> <input type="checkbox" checked /> Sam </label>
+              <label class="member-check"> <input type="checkbox" checked /> Priya </label>
             </div>
           </div>
 
@@ -144,12 +159,12 @@
     </main>
 
     <script>
-      document.querySelectorAll(".tag-choice").forEach((btn) => {
-        btn.addEventListener("click", () => {
-          document.querySelectorAll(".tag-choice").forEach((b) => {
-            b.setAttribute("aria-pressed", "false");
+      document.querySelectorAll('.tag-choice').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          document.querySelectorAll('.tag-choice').forEach((b) => {
+            b.setAttribute('aria-pressed', 'false');
           });
-          btn.setAttribute("aria-pressed", "true");
+          btn.setAttribute('aria-pressed', 'true');
         });
       });
     </script>

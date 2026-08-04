@@ -27,22 +27,26 @@ const features = [
   {
     icon: '💰',
     title: 'Settle Up',
-    description: 'See who pays whom with minimal transactions, and record settlements either side can confirm.',
+    description:
+      'See who pays whom with minimal transactions, and record settlements either side can confirm.',
   },
   {
     icon: '📊',
     title: 'Money-first Dashboard',
-    description: 'Your balance by currency, the next best action, and recent trip activity at a glance.',
+    description:
+      'Your balance by currency, the next best action, and recent trip activity at a glance.',
   },
   {
     icon: '🧾',
     title: 'Activity Audit Trail',
-    description: 'Every expense edit and settlement is logged, so the group can always see what changed.',
+    description:
+      'Every expense edit and settlement is logged, so the group can always see what changed.',
   },
   {
     icon: '💱',
     title: 'One Currency per Trip',
-    description: 'Each trip keeps a single currency, and balances never mix currencies into one number.',
+    description:
+      'Each trip keeps a single currency, and balances never mix currencies into one number.',
   },
 ];
 

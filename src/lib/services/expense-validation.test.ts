@@ -15,11 +15,7 @@ describe('expense validation', () => {
       const memberIds = new Set(['user-1', 'user-2']);
 
       expect(() =>
-        assertExpenseParticipants(
-          memberIds,
-          [{ user: 'user-1' }],
-          [{ user: 'user-2' }],
-        ),
+        assertExpenseParticipants(memberIds, [{ user: 'user-1' }], [{ user: 'user-2' }]),
       ).not.toThrow();
     });
 
@@ -27,11 +23,7 @@ describe('expense validation', () => {
       const memberIds = new Set(['user-1']);
 
       expect(() =>
-        assertExpenseParticipants(
-          memberIds,
-          [{ user: 'user-2' }],
-          [{ user: 'user-1' }],
-        ),
+        assertExpenseParticipants(memberIds, [{ user: 'user-2' }], [{ user: 'user-1' }]),
       ).toThrow('INVALID_MEMBERS');
     });
 
@@ -39,11 +31,7 @@ describe('expense validation', () => {
       const memberIds = new Set(['user-1']);
 
       expect(() =>
-        assertExpenseParticipants(
-          memberIds,
-          [{ user: 'user-1' }],
-          [{ user: 'user-2' }],
-        ),
+        assertExpenseParticipants(memberIds, [{ user: 'user-1' }], [{ user: 'user-2' }]),
       ).toThrow('INVALID_MEMBERS');
     });
   });

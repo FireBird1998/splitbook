@@ -190,11 +190,7 @@ export default function DemoPersonaPicker({
           })}
         </Box>
 
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          sx={{ textAlign: 'center', mt: 4 }}
-        >
+        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', mt: 4 }}>
           Shared demo data — sign out and pick another persona to switch views. Currencies stay
           separate, never combined into one number.
         </Typography>

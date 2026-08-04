@@ -296,7 +296,7 @@ export class GroupService {
           },
         },
       },
-      { new: true },
+      { returnDocument: 'after' },
     ).populate('members.user', 'name email image');
 
     return updated;
@@ -345,7 +345,7 @@ export class GroupService {
     const updated = await Group.findOneAndUpdate(
       { _id: groupId, 'tags._id': tagId },
       { $set: setFields },
-      { new: true },
+      { returnDocument: 'after' },
     ).populate('members.user', 'name email image');
 
     return updated;
@@ -385,7 +385,7 @@ export class GroupService {
     const updated = await Group.findByIdAndUpdate(
       groupId,
       { $pull: { tags: { _id: tagId } } },
-      { new: true },
+      { returnDocument: 'after' },
     ).populate('members.user', 'name email image');
 
     return updated;

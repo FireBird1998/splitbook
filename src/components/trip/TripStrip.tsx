@@ -32,7 +32,15 @@ interface TripStripProps {
 
 const MOBILE_QUERY = '@media (max-width:640px)';
 
-function MetaItem({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+function MetaItem({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
   return (
     <Box component="span">
       <Box
@@ -48,11 +56,7 @@ function MetaItem({ label, value, mono = false }: { label: string; value: string
       </Box>
       <Box
         component="span"
-        sx={
-          mono
-            ? (theme) => ({ ...(theme.typography.money as React.CSSProperties) })
-            : undefined
-        }
+        sx={mono ? (theme) => ({ ...(theme.typography.money as React.CSSProperties) }) : undefined}
       >
         {value}
       </Box>
@@ -100,12 +104,16 @@ export default function TripStrip({
   const isFull = variant === 'full';
 
   const tone = balance ? getMoneyTone(balance.amount) : 'neutral';
-  const balanceText = !balance || tone === 'neutral' ? 'Settled' : formatSignedCurrency(balance.amount, balance.currency);
-  const balanceDescription = !balance || tone === 'neutral'
-    ? 'Settled up'
-    : tone === 'positive'
-      ? `You're owed ${formatCurrency(balance.amount, balance.currency)}`
-      : `You owe ${formatCurrency(Math.abs(balance.amount), balance.currency)}`;
+  const balanceText =
+    !balance || tone === 'neutral'
+      ? 'Settled'
+      : formatSignedCurrency(balance.amount, balance.currency);
+  const balanceDescription =
+    !balance || tone === 'neutral'
+      ? 'Settled up'
+      : tone === 'positive'
+        ? `You're owed ${formatCurrency(balance.amount, balance.currency)}`
+        : `You owe ${formatCurrency(Math.abs(balance.amount), balance.currency)}`;
 
   const peopleLabel =
     memberCount !== undefined ? `${memberCount} ${memberCount === 1 ? 'person' : 'people'}` : null;

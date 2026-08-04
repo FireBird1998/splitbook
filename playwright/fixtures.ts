@@ -46,13 +46,15 @@ export function expectedTheme(testInfo: TestInfo): 'light' | 'dark' {
 /** Assert the document carries the project's expected theme. */
 export async function expectThemeApplied(page: Page, testInfo: TestInfo): Promise<void> {
   const theme = expectedTheme(testInfo);
-  await expect
-    .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
-    .toBe(theme);
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme);
 }
 
 /** Save a full-page screenshot for design review under playwright/artifacts/. */
-export async function reviewScreenshot(page: Page, testInfo: TestInfo, name: string): Promise<void> {
+export async function reviewScreenshot(
+  page: Page,
+  testInfo: TestInfo,
+  name: string,
+): Promise<void> {
   await page.screenshot({
     path: `playwright/artifacts/${testInfo.project.name}/${name}.png`,
     fullPage: true,

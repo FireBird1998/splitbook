@@ -6,13 +6,13 @@ Standalone HTML/CSS mockups for design approval before the Phase 5 MUI theme reb
 
 ## Screens
 
-| File | Screen |
-|------|--------|
-| [`01-persona-entry.html`](./01-persona-entry.html) | Demo persona picker (Alex / Sam / Priya) |
-| [`02-dashboard.html`](./02-dashboard.html) | Money-first dashboard |
-| [`03-trip-workspace.html`](./03-trip-workspace.html) | Trip header + Expenses / Balances / Activity |
-| [`04-quick-expense.html`](./04-quick-expense.html) | Quick expense + advanced split disclosure |
-| [`05-balances-settle.html`](./05-balances-settle.html) | Who pays whom + settlement history |
+| File                                                   | Screen                                       |
+| ------------------------------------------------------ | -------------------------------------------- |
+| [`01-persona-entry.html`](./01-persona-entry.html)     | Demo persona picker (Alex / Sam / Priya)     |
+| [`02-dashboard.html`](./02-dashboard.html)             | Money-first dashboard                        |
+| [`03-trip-workspace.html`](./03-trip-workspace.html)   | Trip header + Expenses / Balances / Activity |
+| [`04-quick-expense.html`](./04-quick-expense.html)     | Quick expense + advanced split disclosure    |
+| [`05-balances-settle.html`](./05-balances-settle.html) | Who pays whom + settlement history           |
 
 Theme query: append `?theme=light` or `?theme=dark` (also persisted in `localStorage`).
 
@@ -30,33 +30,33 @@ Defined in [`css/tokens.css`](./css/tokens.css).
 
 ### Color primitives
 
-| Token | Role | Light | Dark |
-|-------|------|-------|------|
-| Indigo | Brand / identity | `#3d4fcf` | `#7b8cff` |
-| Sky | Informational actions | `#0b8fd9` | `#4db4ef` |
-| Coral | Attention / you owe | `#e04f3d` | `#f07162` |
-| Mint | Settled / you're owed | `#1a9a6e` | `#3dca96` |
+| Token  | Role                  | Light     | Dark      |
+| ------ | --------------------- | --------- | --------- |
+| Indigo | Brand / identity      | `#3d4fcf` | `#7b8cff` |
+| Sky    | Informational actions | `#0b8fd9` | `#4db4ef` |
+| Coral  | Attention / you owe   | `#e04f3d` | `#f07162` |
+| Mint   | Settled / you're owed | `#1a9a6e` | `#3dca96` |
 
 ### Semantic surfaces & text
 
-| Token | Light | Dark |
-|-------|-------|------|
-| `--bg` | `#f4f5f9` | `#0e1016` |
-| `--surface` | `#ffffff` | `#181b26` |
-| `--border` | `#dce0ec` | `#2c3142` |
-| `--text` | `#151828` | `#f0f2f8` |
-| `--text-secondary` | `#4a5168` | `#b4bace` |
-| `--text-muted` | `#6b7289` | `#858da3` |
+| Token                       | Light        | Dark         |
+| --------------------------- | ------------ | ------------ |
+| `--bg`                      | `#f4f5f9`    | `#0e1016`    |
+| `--surface`                 | `#ffffff`    | `#181b26`    |
+| `--border`                  | `#dce0ec`    | `#2c3142`    |
+| `--text`                    | `#151828`    | `#f0f2f8`    |
+| `--text-secondary`          | `#4a5168`    | `#b4bace`    |
+| `--text-muted`              | `#6b7289`    | `#858da3`    |
 | `--positive` / `--negative` | mint / coral | mint / coral |
-| `--warning` | `#c47a0a` | `#e0a73a` |
-| `--focus` | indigo | `#9aa6ff` |
+| `--warning`                 | `#c47a0a`    | `#e0a73a`    |
+| `--focus`                   | indigo       | `#9aa6ff`    |
 
 ### Typography
 
-| Role | Face | Usage |
-|------|------|--------|
-| UI / content | **Outfit** (geometric sans) | Body, labels, headings |
-| Money / data | **IBM Plex Mono** | Amounts, trip codes, currency tags |
+| Role         | Face                        | Usage                              |
+| ------------ | --------------------------- | ---------------------------------- |
+| UI / content | **Outfit** (geometric sans) | Body, labels, headings             |
+| Money / data | **IBM Plex Mono**           | Amounts, trip codes, currency tags |
 
 Avoid Inter / Roboto / Arial / system stacks in production theme.
 
@@ -87,22 +87,22 @@ Do not multiply competing signatures (no second motif like floating badges or co
 
 Apply in `src/providers/ThemeProvider.tsx` as shared semantic palette keys — **not** hardcoded hex in components.
 
-| CSS token | Suggested MUI path |
-|-----------|-------------------|
-| `--bg` | `palette.background.default` |
-| `--surface` / `--bg-elevated` | `palette.background.paper` |
-| `--border` | `palette.divider` (+ custom `palette.border` if needed) |
-| `--text` | `palette.text.primary` |
-| `--text-secondary` / `--text-muted` | `palette.text.secondary` / `disabled` |
-| `--brand` (indigo) | `palette.primary.main` |
-| `--info` (sky) | `palette.info.main` |
-| `--negative` (coral) | `palette.error.main` (owed) |
-| `--positive` (mint) | `palette.success.main` (owed to you / settled) |
-| `--warning` | `palette.warning.main` |
-| `--focus` | `palette.primary.main` + `MuiButtonBase` focusVisible overrides |
-| Outfit | `typography.fontFamily` |
-| IBM Plex Mono | custom `typography.money` or `components` style override for amount display |
-| Trip strip | Dedicated `TripStrip` component; colors from `primary` gradient + contrast text — no one-off hex in call sites |
+| CSS token                           | Suggested MUI path                                                                                             |
+| ----------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `--bg`                              | `palette.background.default`                                                                                   |
+| `--surface` / `--bg-elevated`       | `palette.background.paper`                                                                                     |
+| `--border`                          | `palette.divider` (+ custom `palette.border` if needed)                                                        |
+| `--text`                            | `palette.text.primary`                                                                                         |
+| `--text-secondary` / `--text-muted` | `palette.text.secondary` / `disabled`                                                                          |
+| `--brand` (indigo)                  | `palette.primary.main`                                                                                         |
+| `--info` (sky)                      | `palette.info.main`                                                                                            |
+| `--negative` (coral)                | `palette.error.main` (owed)                                                                                    |
+| `--positive` (mint)                 | `palette.success.main` (owed to you / settled)                                                                 |
+| `--warning`                         | `palette.warning.main`                                                                                         |
+| `--focus`                           | `palette.primary.main` + `MuiButtonBase` focusVisible overrides                                                |
+| Outfit                              | `typography.fontFamily`                                                                                        |
+| IBM Plex Mono                       | custom `typography.money` or `components` style override for amount display                                    |
+| Trip strip                          | Dedicated `TripStrip` component; colors from `primary` gradient + contrast text — no one-off hex in call sites |
 
 Light and dark `createTheme` pairs should set the same semantic keys; components consume tokens only.
 

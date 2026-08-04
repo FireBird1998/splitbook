@@ -324,19 +324,11 @@ describe('SettlementService integration', () => {
     const groupId = await createTrip();
 
     await expect(
-      settlementService.create(
-        groupId,
-        { paidTo: dave, amount: 50, currency: 'INR' },
-        alice,
-      ),
+      settlementService.create(groupId, { paidTo: dave, amount: 50, currency: 'INR' }, alice),
     ).rejects.toThrow('INVALID_MEMBERS');
 
     await expect(
-      settlementService.create(
-        groupId,
-        { paidTo: alice, amount: 50, currency: 'INR' },
-        alice,
-      ),
+      settlementService.create(groupId, { paidTo: alice, amount: 50, currency: 'INR' }, alice),
     ).rejects.toThrow('SAME_PARTY');
   });
 
@@ -344,11 +336,7 @@ describe('SettlementService integration', () => {
     const groupId = await createTrip();
 
     await expect(
-      settlementService.create(
-        groupId,
-        { paidTo: alice, amount: 50, currency: 'USD' },
-        bob,
-      ),
+      settlementService.create(groupId, { paidTo: alice, amount: 50, currency: 'USD' }, bob),
     ).rejects.toThrow('CURRENCY_MISMATCH');
   });
 

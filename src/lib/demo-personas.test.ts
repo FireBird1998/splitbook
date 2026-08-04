@@ -66,10 +66,7 @@ describe('authorizeDemoPersona', () => {
 
   it('rejects unknown personas', () => {
     expect(
-      authorizeDemoPersona(
-        { personaId: 'hacker' },
-        { AUTH_MODE: 'demo', NODE_ENV: 'development' },
-      ),
+      authorizeDemoPersona({ personaId: 'hacker' }, { AUTH_MODE: 'demo', NODE_ENV: 'development' }),
     ).toBeNull();
   });
 
@@ -84,16 +81,10 @@ describe('authorizeDemoPersona', () => {
 
   it('fails closed when demo auth is not allowed', () => {
     expect(
-      authorizeDemoPersona(
-        { personaId: 'alex' },
-        { AUTH_MODE: 'google', NODE_ENV: 'development' },
-      ),
+      authorizeDemoPersona({ personaId: 'alex' }, { AUTH_MODE: 'google', NODE_ENV: 'development' }),
     ).toBeNull();
     expect(
-      authorizeDemoPersona(
-        { personaId: 'alex' },
-        { AUTH_MODE: 'demo', NODE_ENV: 'production' },
-      ),
+      authorizeDemoPersona({ personaId: 'alex' }, { AUTH_MODE: 'demo', NODE_ENV: 'production' }),
     ).toBeNull();
   });
 });

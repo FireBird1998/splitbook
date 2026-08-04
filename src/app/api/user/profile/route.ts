@@ -55,7 +55,7 @@ export async function PATCH(req: Request) {
 
     await connectDB();
     const updated = await User.findByIdAndUpdate(user.id, parsed.data, {
-      new: true,
+      returnDocument: 'after',
     }).lean();
 
     return success(updated);

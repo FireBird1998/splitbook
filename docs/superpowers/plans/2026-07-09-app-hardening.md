@@ -23,35 +23,37 @@
 
 ## File structure
 
-| File | Responsibility |
-|------|----------------|
-| `src/lib/utils/escape-regex.ts` | Escape user input for Mongo `$regex` |
-| `src/lib/utils/fetcher.ts` | Shared SWR fetcher that throws on `!res.ok` |
-| `src/lib/services/invitation.service.ts` | Email ownership on accept/decline |
-| `src/app/api/invitations/[id]/route.ts` | Pass user email into service |
-| `src/app/api/groups/[id]/invite-link/route.ts` | Membership check on GET |
-| `src/lib/services/expense.service.ts` | Member/tag/currency validation; escaped search |
-| `src/lib/services/settlement.service.ts` | Member + currency validation |
-| `src/lib/services/group.service.ts` | Helpers to list member IDs / active tag names if needed |
-| `src/components/expenses/ExpenseFormDialog.tsx` | Lock currency; wire duplicate check |
-| `src/components/balances/BalancesView.tsx` | Settlement history + mixed-currency warning |
-| `src/components/groups/InviteDialog.tsx` | Honest “no email sent” copy |
-| `src/components/groups/GroupSettingsView.tsx` | Fix setState-during-render |
-| Delete `src/components/expenses/ExpenseDetailDialog.tsx` | Dead code |
-| `vitest.config.ts`, `src/**/*.test.ts` | Unit test foundation |
-| `.github/workflows/ci.yml` | lint + test + build |
-| `README.md`, `.env.example` | Onboarding |
+| File                                                     | Responsibility                                          |
+| -------------------------------------------------------- | ------------------------------------------------------- |
+| `src/lib/utils/escape-regex.ts`                          | Escape user input for Mongo `$regex`                    |
+| `src/lib/utils/fetcher.ts`                               | Shared SWR fetcher that throws on `!res.ok`             |
+| `src/lib/services/invitation.service.ts`                 | Email ownership on accept/decline                       |
+| `src/app/api/invitations/[id]/route.ts`                  | Pass user email into service                            |
+| `src/app/api/groups/[id]/invite-link/route.ts`           | Membership check on GET                                 |
+| `src/lib/services/expense.service.ts`                    | Member/tag/currency validation; escaped search          |
+| `src/lib/services/settlement.service.ts`                 | Member + currency validation                            |
+| `src/lib/services/group.service.ts`                      | Helpers to list member IDs / active tag names if needed |
+| `src/components/expenses/ExpenseFormDialog.tsx`          | Lock currency; wire duplicate check                     |
+| `src/components/balances/BalancesView.tsx`               | Settlement history + mixed-currency warning             |
+| `src/components/groups/InviteDialog.tsx`                 | Honest “no email sent” copy                             |
+| `src/components/groups/GroupSettingsView.tsx`            | Fix setState-during-render                              |
+| Delete `src/components/expenses/ExpenseDetailDialog.tsx` | Dead code                                               |
+| `vitest.config.ts`, `src/**/*.test.ts`                   | Unit test foundation                                    |
+| `.github/workflows/ci.yml`                               | lint + test + build                                     |
+| `README.md`, `.env.example`                              | Onboarding                                              |
 
 ---
 
 ### Task 1: Vitest foundation + debt-simplifier tests
 
 **Files:**
+
 - Create: `vitest.config.ts`
 - Create: `src/lib/utils/debt-simplifier.test.ts`
 - Modify: `package.json` (scripts + devDependency)
 
 **Interfaces:**
+
 - Consumes: existing `simplifyDebts`, `calculateNetBalances` from `src/lib/utils/debt-simplifier.ts`
 - Produces: `pnpm test` runs Vitest; green suite for debt math
 
@@ -90,6 +92,7 @@ export default defineConfig({
 - [ ] **Step 2: Write failing tests for debt simplifier**
 
 Create `src/lib/utils/debt-simplifier.test.ts` covering:
+
 1. Two-person settle: A paid 100, split equal with B → B owes A 50 (one transaction).
 2. Three-person simplify: nets collapse to minimal transfers.
 3. Settlements reduce balances to zero when fully paid.
@@ -122,11 +125,13 @@ EOF
 ### Task 2: Escape regex helper + wire into expense search
 
 **Files:**
+
 - Create: `src/lib/utils/escape-regex.ts`
 - Create: `src/lib/utils/escape-regex.test.ts`
 - Modify: `src/lib/services/expense.service.ts` (search filter ~line 121)
 
 **Interfaces:**
+
 - Consumes: none
 - Produces: `export function escapeRegex(input: string): string`
 
@@ -197,11 +202,13 @@ EOF
 ### Task 3: Invitation email ownership (accept + decline)
 
 **Files:**
+
 - Modify: `src/lib/services/invitation.service.ts`
 - Modify: `src/app/api/invitations/[id]/route.ts`
 - Create: `src/lib/services/invitation-ownership.test.ts` (pure helper)
 
 **Interfaces:**
+
 - Consumes: invitation `invitedEmail`, user email
 - Produces: `export function invitationEmailMatches(invitedEmail: string, userEmail: string): boolean`
 - `accept(invitationId, userId, userEmail)` and `decline(invitationId, userEmail)` reject mismatch
@@ -253,9 +260,11 @@ EOF
 ### Task 4: Invite-link GET membership check
 
 **Files:**
+
 - Modify: `src/app/api/groups/[id]/invite-link/route.ts`
 
 **Interfaces:**
+
 - Consumes: `groupService.isMember(id, userId)`
 - Produces: GET returns 403 for non-members
 
@@ -291,11 +300,13 @@ EOF
 ### Task 5: Expense member / tag / currency validation
 
 **Files:**
+
 - Modify: `src/lib/services/expense.service.ts` (create + update)
 - Modify: `src/app/api/groups/[id]/expenses/route.ts` and `[expenseId]/route.ts` to map new errors
 - Create: `src/lib/services/expense-validation.ts` + `.test.ts` (pure validators)
 
 **Interfaces:**
+
 - Produces:
   - `assertExpenseParticipants(memberIds: Set<string>, paidBy, splitBetween): void` throws `INVALID_MEMBERS`
   - `assertActiveTag(activeTagNames: Set<string>, tag: string): void` throws `INVALID_TAG`
@@ -327,11 +338,13 @@ EOF
 ### Task 6: Settlement member + currency validation
 
 **Files:**
+
 - Modify: `src/lib/services/settlement.service.ts`
 - Modify: `src/app/api/groups/[id]/settlements/route.ts`
 - Reuse: `assertGroupCurrency` from Task 5; add `assertSettlementMembers(memberIds, paidBy, paidTo)`
 
 **Interfaces:**
+
 - Produces: create settlement rejects non-members and wrong currency
 
 - [ ] **Step 1: Add pure helper + test** (can live in `expense-validation.ts` or `settlement-validation.ts`)
@@ -355,11 +368,13 @@ EOF
 ### Task 7: Lock expense form currency + mixed-currency balance warning
 
 **Files:**
+
 - Modify: `src/components/expenses/ExpenseFormDialog.tsx`
 - Modify: `src/components/balances/BalancesView.tsx`
 - Modify: `src/lib/services/balance.service.ts` (optional flag `hasMixedCurrencies`)
 
 **Interfaces:**
+
 - Consumes: `group.defaultCurrency`
 - Produces: form always submits `defaultCurrency`; balances API may include `hasMixedCurrencies: boolean` and UI shows Alert if true
 
@@ -384,11 +399,13 @@ EOF
 ### Task 8: Shared SWR fetcher + migrate call sites
 
 **Files:**
+
 - Create: `src/lib/utils/fetcher.ts`
 - Create: `src/lib/utils/fetcher.test.ts` (mock Response if feasible; otherwise skip heavy mock and keep helper tiny)
 - Modify: all components with local `const fetcher = ...` (dashboard, groups, expenses, balances, activity, settings, etc.)
 
 **Interfaces:**
+
 - Produces: `export async function fetcher<T>(url: string): Promise<T>` — `fetch` → if `!res.ok` throw `Error` with server `error` string or status text; else return `json` (or `json.data` if existing callers expect unwrapped — **match current caller expectations**).
 
 Inspect existing fetchers first: many do `res.json()` and SWR uses `data?.data`. Keep returning full JSON body `{ data, error }` so callers stay `data?.data`.
@@ -423,6 +440,7 @@ EOF
 ### Task 9: Settlement history UI + duplicate warning + invite copy + dead code + settings fix
 
 **Files:**
+
 - Modify: `src/components/balances/BalancesView.tsx` (list settlements via SWR `GET /api/groups/[id]/settlements`)
 - Modify: `src/components/expenses/ExpenseFormDialog.tsx` (call check-duplicate before create)
 - Modify: `src/components/groups/InviteDialog.tsx` (honest copy)
@@ -430,6 +448,7 @@ EOF
 - Modify: `src/components/groups/GroupSettingsView.tsx` (useEffect for form init)
 
 **Interfaces:**
+
 - Duplicate check: existing `POST/GET` check-duplicate route — read route and call correctly; if duplicate, `window.confirm` or MUI Dialog before proceed.
 - Invite success: e.g. `'Invitation saved. No email is sent — share the invite link, or they will see it after signing in with that email.'`
 
@@ -450,15 +469,18 @@ EOF
 ### Task 10: README, .env.example, GitHub Actions CI
 
 **Files:**
+
 - Modify: `README.md`
 - Create: `.env.example`
 - Create: `.github/workflows/ci.yml`
 - Modify: `package.json` if needed (`"typecheck": "tsc --noEmit"`)
 
 **Interfaces:**
+
 - CI jobs: `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm test`, `pnpm build` with dummy env vars for Auth/Mongo so build can compile.
 
 `.env.example` keys (names only):
+
 ```
 MONGODB_URI=
 AUTH_SECRET=

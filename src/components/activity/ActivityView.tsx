@@ -112,11 +112,20 @@ export default function ActivityView({ groupId }: ActivityViewProps) {
                       {formatActivityHeadline(activity)}
                     </Typography>
                     {detail && (
-                      <Typography variant="body2" fontWeight={600} color="text.secondary" sx={{ mt: 0.25 }}>
+                      <Typography
+                        variant="body2"
+                        fontWeight={600}
+                        color="text.secondary"
+                        sx={{ mt: 0.25 }}
+                      >
                         {detail}
                       </Typography>
                     )}
-                    <Typography variant="caption" color="text.disabled" sx={{ mt: 0.25, display: 'block' }}>
+                    <Typography
+                      variant="caption"
+                      color="text.disabled"
+                      sx={{ mt: 0.25, display: 'block' }}
+                    >
                       {formatActivityTimestamp(activity)}
                     </Typography>
                   </Box>

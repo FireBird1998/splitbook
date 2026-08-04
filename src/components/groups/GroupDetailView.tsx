@@ -58,11 +58,9 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
     refreshInterval: 30_000,
   });
 
-  const { data: expensesData } = useSWR(
-    `/api/groups/${groupId}/expenses?page=1&limit=1`,
-    fetcher,
-    { refreshInterval: 30_000 },
-  );
+  const { data: expensesData } = useSWR(`/api/groups/${groupId}/expenses?page=1&limit=1`, fetcher, {
+    refreshInterval: 30_000,
+  });
 
   const { data: balancesData } = useSWR(`/api/groups/${groupId}/balances`, fetcher, {
     refreshInterval: 30_000,
@@ -72,7 +70,8 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
 
   const checklist = useMemo(() => {
     const memberCount = (group?.members as unknown[] | undefined)?.length ?? 1;
-    const expenseCount = (expensesData?.data?.pagination?.total as number | undefined) ??
+    const expenseCount =
+      (expensesData?.data?.pagination?.total as number | undefined) ??
       (expensesData?.data?.expenses as unknown[] | undefined)?.length ??
       0;
     const outstandingDebtCount = (balancesData?.data?.debts as unknown[] | undefined)?.length ?? 0;
@@ -124,8 +123,8 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
       : startDate
         ? `Starts ${formatDate(startDate)}`
         : null;
-  const currency = (balancesData?.data?.currency as string | undefined) ??
-    (group.defaultCurrency as string);
+  const currency =
+    (balancesData?.data?.currency as string | undefined) ?? (group.defaultCurrency as string);
   const userBalance = (
     (balancesData?.data?.balances || []) as Array<{
       user: { _id: string };
@@ -196,9 +195,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
           )}
           inviteCode={(group.inviteCode as string | null | undefined) ?? null}
           balance={userBalance ? { amount: userBalance.balance, currency } : null}
-          tripTotal={
-            typeof tripTotal === 'number' ? { amount: tripTotal, currency } : null
-          }
+          tripTotal={typeof tripTotal === 'number' ? { amount: tripTotal, currency } : null}
         />
       </Box>
 

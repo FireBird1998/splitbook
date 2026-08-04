@@ -4,10 +4,10 @@
  * Brand: indigo · Info: sky · Attention: coral · Positive: mint
  */
 
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap');
 
 :root,
-[data-theme="light"] {
+[data-theme='light'] {
   /* Brand & accent primitives */
   --indigo-500: #3d4fcf;
   --indigo-600: #3240b0;
@@ -72,7 +72,7 @@
   color-scheme: light;
 }
 
-[data-theme="dark"] {
+[data-theme='dark'] {
   --indigo-500: #7b8cff;
   --indigo-600: #6a7cf0;
   --indigo-100: #232849;
@@ -121,8 +121,8 @@
 }
 
 :root {
-  --font-ui: "Outfit", "Segoe UI", sans-serif;
-  --font-mono: "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+  --font-ui: 'Outfit', 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', 'SFMono-Regular', ui-monospace, monospace;
 
   --text-xs: 0.75rem;
   --text-sm: 0.875rem;

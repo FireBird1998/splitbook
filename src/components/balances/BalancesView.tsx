@@ -113,9 +113,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
         )}
       </Stack>
       <Stack spacing={1.25}>
-        {settlementsError && (
-          <Alert severity="warning">Could not load settlement history.</Alert>
-        )}
+        {settlementsError && <Alert severity="warning">Could not load settlement history.</Alert>}
         {!settlementsError && settlements.length === 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
             No settlements yet — record one when someone pays.
@@ -177,9 +175,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
           <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
             All settled up
           </Typography>
-          <Typography color="text.secondary">
-            No one owes anyone in this trip right now.
-          </Typography>
+          <Typography color="text.secondary">No one owes anyone in this trip right now.</Typography>
         </Box>
         {settlementHistory}
       </Stack>

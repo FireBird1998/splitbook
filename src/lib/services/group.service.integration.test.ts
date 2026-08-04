@@ -164,9 +164,7 @@ describe('GroupService integration', () => {
       await groupService.addMember(groupId, bob);
       await groupService.addMember(groupId, carol);
 
-      await expect(groupService.removeMember(groupId, alice, alice)).rejects.toThrow(
-        'SELF_REMOVE',
-      );
+      await expect(groupService.removeMember(groupId, alice, alice)).rejects.toThrow('SELF_REMOVE');
 
       // Non-admin cannot remove anyone
       await expect(groupService.removeMember(groupId, carol, bob)).rejects.toThrow('FORBIDDEN');

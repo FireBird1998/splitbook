@@ -52,10 +52,7 @@ export function isAdvancedSplit(input: {
   );
 }
 
-export function resolvePredefinedTag(
-  tags: GroupTagOption[],
-  preferredTag: string,
-): string | null {
+export function resolvePredefinedTag(tags: GroupTagOption[], preferredTag: string): string | null {
   const active = tags.filter((tag) => !tag.isArchived);
   const exact = active.find((tag) => tag.name.toLowerCase() === preferredTag.toLowerCase());
   return exact?.name ?? null;

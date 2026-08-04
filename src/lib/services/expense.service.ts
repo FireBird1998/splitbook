@@ -36,11 +36,7 @@ export class ExpenseService {
     assertGroupCurrency(group.defaultCurrency, data.currency);
 
     // Resolve split amounts for equal/shares/percentage methods
-    const splitBetween = calculateSplitAmounts(
-      data.splitMethod,
-      data.amount,
-      data.splitBetween,
-    );
+    const splitBetween = calculateSplitAmounts(data.splitMethod, data.amount, data.splitBetween);
 
     const expense = await Expense.create({
       group: groupId,

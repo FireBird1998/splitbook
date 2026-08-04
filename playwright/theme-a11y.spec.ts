@@ -14,9 +14,7 @@ import {
  * for critical violations and screenshots are saved for design review.
  */
 
-test('persona entry respects the project theme and is accessible', async ({
-  page,
-}, testInfo) => {
+test('persona entry respects the project theme and is accessible', async ({ page }, testInfo) => {
   await page.goto('/');
 
   // Persona cards are keyboard-focusable buttons with accessible names.
@@ -62,16 +60,12 @@ test('theme toggle flips the document theme and persists', async ({ page }, test
   const target = initial === 'light' ? 'dark' : 'light';
 
   await page.getByRole('button', { name: `Switch to ${target} mode` }).click();
-  await expect
-    .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
-    .toBe(target);
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe(target);
   await expect(page.getByRole('button', { name: `Switch to ${initial} mode` })).toBeVisible();
 
   // Persists via localStorage across reloads.
   await page.reload();
-  await expect
-    .poll(() => page.evaluate(() => document.documentElement.dataset.theme))
-    .toBe(target);
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe(target);
 
   await reviewScreenshot(page, testInfo, `toggled-${target}`);
 });

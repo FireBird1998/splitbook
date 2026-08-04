@@ -1,10 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  darkTokens,
-  getSemanticTokens,
-  lightTokens,
-  type SemanticTokens,
-} from './tokens';
+import { darkTokens, getSemanticTokens, lightTokens, type SemanticTokens } from './tokens';
 
 function leafKeys(value: Record<string, unknown>, prefix = ''): string[] {
   return Object.entries(value).flatMap(([key, val]) => {

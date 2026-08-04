@@ -38,7 +38,11 @@ describe('InvitationService integration', () => {
   it('creates a pending invitation with a normalised email', async () => {
     const groupId = await createTrip();
 
-    const invitation = await invitationService.create(groupId, 'Bob.Test@Splitwise-Test.LOCAL', alice);
+    const invitation = await invitationService.create(
+      groupId,
+      'Bob.Test@Splitwise-Test.LOCAL',
+      alice,
+    );
 
     expect(invitation.status).toBe('pending');
     expect(invitation.invitedEmail).toBe(BOB_EMAIL);
@@ -69,7 +73,9 @@ describe('InvitationService integration', () => {
     const forBobUpper = await invitationService.getPendingByEmail('BOB.TEST@SPLITWISE-TEST.LOCAL');
     expect(forBobUpper).toHaveLength(1);
 
-    await expect(invitationService.getPendingByEmail('nobody@example.com')).resolves.toHaveLength(0);
+    await expect(invitationService.getPendingByEmail('nobody@example.com')).resolves.toHaveLength(
+      0,
+    );
   });
 
   it('lets the invited email accept and joins the trip exactly once', async () => {
@@ -127,9 +133,9 @@ describe('InvitationService integration', () => {
     const invitation = await invitationService.create(groupId, BOB_EMAIL, alice);
     await invitationService.decline(invitation._id.toString(), BOB_EMAIL);
 
-    await expect(invitationService.accept(invitation._id.toString(), bob, BOB_EMAIL)).rejects.toThrow(
-      'INVITATION_NOT_PENDING',
-    );
+    await expect(
+      invitationService.accept(invitation._id.toString(), bob, BOB_EMAIL),
+    ).rejects.toThrow('INVITATION_NOT_PENDING');
   });
 
   it('marks expired invitations and refuses acceptance', async () => {
@@ -140,9 +146,9 @@ describe('InvitationService integration', () => {
       expiresAt: new Date(Date.now() - 60_000),
     });
 
-    await expect(invitationService.accept(invitation._id.toString(), bob, BOB_EMAIL)).rejects.toThrow(
-      'INVITATION_EXPIRED',
-    );
+    await expect(
+      invitationService.accept(invitation._id.toString(), bob, BOB_EMAIL),
+    ).rejects.toThrow('INVITATION_EXPIRED');
 
     const stored = await Invitation.findById(invitation._id);
     expect(stored!.status).toBe('expired');

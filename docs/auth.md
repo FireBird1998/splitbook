@@ -9,12 +9,12 @@ We use **Auth.js v5** (formerly NextAuth.js) with **JWT sessions** and the **Mon
 
 The active mode resolves through [`src/lib/auth-mode.ts`](../src/lib/auth-mode.ts):
 
-| `AUTH_MODE` | `NODE_ENV` | `ALLOW_DEMO_AUTH` | Effective mode |
-| --- | --- | --- | --- |
-| `demo` | development/test | — | **demo** |
-| `demo` | production | `true` | **demo** |
-| `demo` | production | anything else | **google** (fail closed) |
-| unset / `google` / anything else | any | any | **google** |
+| `AUTH_MODE`                      | `NODE_ENV`       | `ALLOW_DEMO_AUTH` | Effective mode           |
+| -------------------------------- | ---------------- | ----------------- | ------------------------ |
+| `demo`                           | development/test | —                 | **demo**                 |
+| `demo`                           | production       | `true`            | **demo**                 |
+| `demo`                           | production       | anything else     | **google** (fail closed) |
+| unset / `google` / anything else | any              | any               | **google**               |
 
 Demo sign-in goes through the Credentials `authorize()` in
 [`src/lib/demo-credentials.ts`](../src/lib/demo-credentials.ts), which only
@@ -81,11 +81,11 @@ or paid APIs are required.
 4. Add the matching **Authorized redirect URIs** — always
    `<origin>/api/auth/callback/google`:
 
-   | Environment | Redirect URI |
-   | --- | --- |
-   | Local dev (default port) | `http://localhost:3000/api/auth/callback/google` |
+   | Environment                         | Redirect URI                                     |
+   | ----------------------------------- | ------------------------------------------------ |
+   | Local dev (default port)            | `http://localhost:3000/api/auth/callback/google` |
    | Local dev (private-beta / e2e port) | `http://localhost:3100/api/auth/callback/google` |
-   | Production | `https://<your-domain>/api/auth/callback/google` |
+   | Production                          | `https://<your-domain>/api/auth/callback/google` |
 
    The redirect URI must match **exactly** (scheme, host, port, path) or Google
    shows `redirect_uri_mismatch`. Auth.js always uses
@@ -246,10 +246,10 @@ ALLOW_DEMO_AUTH=
 
 ## Switching between Google and demo mode
 
-| Goal | `.env.local` | Entry UI |
-| --- | --- | --- |
+| Goal                   | `.env.local`                | Entry UI                                  |
+| ---------------------- | --------------------------- | ----------------------------------------- |
 | Real sign-in (default) | `AUTH_MODE=google` or unset | Marketing landing + "Sign in with Google" |
-| Private-beta personas | `AUTH_MODE=demo` | Persona picker (Alex / Sam / Priya) |
+| Private-beta personas  | `AUTH_MODE=demo`            | Persona picker (Alex / Sam / Priya)       |
 
 - Restart the dev server after changing `AUTH_MODE` — it is read server-side.
 - Both providers stay registered either way; the mode only chooses which one

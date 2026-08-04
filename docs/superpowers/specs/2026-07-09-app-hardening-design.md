@@ -20,20 +20,24 @@ Make SplitWise safe and correct for real use: close authz holes, make balances m
 ## 1. Security
 
 ### Invitation accept/decline ownership
+
 - `invitationService.accept(id, userId, userEmail)` must require `userEmail.toLowerCase() === invitation.invitedEmail`.
 - `decline` must take `userEmail` and enforce the same match (or return not found).
 - Mismatch → treat as not found / forbidden (do not leak invitation existence beyond current patterns).
 
 ### Invite-link GET membership
+
 - `GET /api/groups/[id]/invite-link` must call `groupService.isMember(id, user.id)` and return 403 if false.
 
 ### Expense / settlement member + tag validation
+
 - Before create/update expense: every `paidBy.user` and `splitBetween.user` must be a current group member.
 - Expense `tag` must match an active (non-archived) group tag name.
 - Expense `currency` must equal the group's `defaultCurrency` (see §2).
 - Settlement `paidTo` (and `paidBy`) must be group members; settlement currency = group default.
 
 ### Search regex safety
+
 - Escape user search input before `$regex` (escape `.*+?^${}()|[]\\`).
 
 ## 2. Single-currency correctness

@@ -2,11 +2,11 @@
 
 Three layers of tests, all wired into CI (`.github/workflows/ci.yml`).
 
-| Layer | Runner | Database | Command |
-| --- | --- | --- | --- |
-| Unit | Vitest | none (mocked models / pure helpers) | `pnpm test:unit` |
-| Integration | Vitest | real MongoDB, isolated per file | `pnpm test:integration` |
-| Browser | Playwright | seeded `splitwise-demo` | `pnpm test:e2e` |
+| Layer       | Runner     | Database                            | Command                 |
+| ----------- | ---------- | ----------------------------------- | ----------------------- |
+| Unit        | Vitest     | none (mocked models / pure helpers) | `pnpm test:unit`        |
+| Integration | Vitest     | real MongoDB, isolated per file     | `pnpm test:integration` |
+| Browser     | Playwright | seeded `splitwise-demo`             | `pnpm test:e2e`         |
 
 `pnpm test` runs unit + integration together and requires MongoDB running
 locally (the `split-mongo` Docker container works).

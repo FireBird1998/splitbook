@@ -169,9 +169,7 @@ export default function ExpenseListView({
 
   return (
     <Stack spacing={2}>
-      {error && (
-        <Typography color="error.main">{error.message}</Typography>
-      )}
+      {error && <Typography color="error.main">{error.message}</Typography>}
 
       {/* Quick Filters */}
       <Stack

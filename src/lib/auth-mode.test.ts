@@ -9,19 +9,13 @@ describe('resolveAuthMode', () => {
   });
 
   it('uses demo when AUTH_MODE=demo in development', () => {
-    expect(
-      resolveAuthMode({ AUTH_MODE: 'demo', NODE_ENV: 'development' }),
-    ).toBe('demo');
+    expect(resolveAuthMode({ AUTH_MODE: 'demo', NODE_ENV: 'development' })).toBe('demo');
     expect(isDemoMode({ AUTH_MODE: 'demo', NODE_ENV: 'test' })).toBe(true);
   });
 
   it('fails closed in production without ALLOW_DEMO_AUTH', () => {
-    expect(
-      resolveAuthMode({ AUTH_MODE: 'demo', NODE_ENV: 'production' }),
-    ).toBe('google');
-    expect(
-      isDemoAuthAllowed({ AUTH_MODE: 'demo', NODE_ENV: 'production' }),
-    ).toBe(false);
+    expect(resolveAuthMode({ AUTH_MODE: 'demo', NODE_ENV: 'production' })).toBe('google');
+    expect(isDemoAuthAllowed({ AUTH_MODE: 'demo', NODE_ENV: 'production' })).toBe(false);
   });
 
   it('allows demo in production only with explicit override', () => {

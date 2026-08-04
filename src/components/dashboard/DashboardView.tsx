@@ -124,7 +124,12 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
           aria-labelledby="current-balance-heading"
           sx={{ animation: 'balance-settle 400ms ease-out both' }}
         >
-          <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 2 }}>
+          <Stack
+            direction="row"
+            alignItems="baseline"
+            justifyContent="space-between"
+            sx={{ mb: 2 }}
+          >
             <Typography id="current-balance-heading" variant="h6">
               Current balance
             </Typography>

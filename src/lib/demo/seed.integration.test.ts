@@ -113,8 +113,16 @@ describe('demo seed integration', () => {
 
     // Simplified debts: priya and sam both settle up with alex
     expect(balances!.debts).toEqual([
-      { from: expect.objectContaining({ _id: DEMO_PERSONA_IDS.priya }), to: expect.objectContaining({ _id: DEMO_PERSONA_IDS.alex }), amount: 4680 },
-      { from: expect.objectContaining({ _id: DEMO_PERSONA_IDS.sam }), to: expect.objectContaining({ _id: DEMO_PERSONA_IDS.alex }), amount: 1480 },
+      {
+        from: expect.objectContaining({ _id: DEMO_PERSONA_IDS.priya }),
+        to: expect.objectContaining({ _id: DEMO_PERSONA_IDS.alex }),
+        amount: 4680,
+      },
+      {
+        from: expect.objectContaining({ _id: DEMO_PERSONA_IDS.sam }),
+        to: expect.objectContaining({ _id: DEMO_PERSONA_IDS.alex }),
+        amount: 1480,
+      },
     ]);
 
     expect(balances!.currency).toBe('INR');
@@ -125,9 +133,13 @@ describe('demo seed integration', () => {
     await seedDemoData();
 
     const samBalances = await balanceService.getUserBalances(DEMO_PERSONA_IDS.sam);
-    expect(samBalances.buckets).toEqual([{ currency: 'INR', youOwe: 1480, youAreOwed: 0, net: -1480 }]);
+    expect(samBalances.buckets).toEqual([
+      { currency: 'INR', youOwe: 1480, youAreOwed: 0, net: -1480 },
+    ]);
 
     const alexBalances = await balanceService.getUserBalances(DEMO_PERSONA_IDS.alex);
-    expect(alexBalances.buckets).toEqual([{ currency: 'INR', youOwe: 0, youAreOwed: 6160, net: 6160 }]);
+    expect(alexBalances.buckets).toEqual([
+      { currency: 'INR', youOwe: 0, youAreOwed: 6160, net: 6160 },
+    ]);
   });
 });

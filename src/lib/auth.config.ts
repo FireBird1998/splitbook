@@ -23,8 +23,7 @@ function buildProviders(): NextAuthConfig['providers'] {
       authorize(credentials) {
         // Env is read at authorize-time so the production guard stays effective.
         return authorizeDemoPersona({
-          personaId:
-            typeof credentials?.personaId === 'string' ? credentials.personaId : undefined,
+          personaId: typeof credentials?.personaId === 'string' ? credentials.personaId : undefined,
         });
       },
     }),
