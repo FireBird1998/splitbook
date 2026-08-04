@@ -25,11 +25,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (!parsed.success) return error('Invalid action', 422);
 
     if (parsed.data.action === 'accept') {
-      const invitation = await invitationService.accept(id, user.id!);
+      const invitation = await invitationService.accept(id, user.id!, user.email!);
       if (!invitation) return notFound('Invitation');
       return success({ message: 'Invitation accepted' });
     } else {
-      const invitation = await invitationService.decline(id);
+      const invitation = await invitationService.decline(id, user.email!);
       if (!invitation) return notFound('Invitation');
       return success({ message: 'Invitation declined' });
     }

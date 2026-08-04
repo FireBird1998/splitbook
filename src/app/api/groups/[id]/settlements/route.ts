@@ -5,10 +5,16 @@ import {
   success,
   serverError,
   validationError,
+  error,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { settlementService } from '@/lib/services/settlement.service';
 import { createSettlementSchema } from '@/lib/validators/settlement.validator';
+
+const settlementValidationMessages: Record<string, string> = {
+  INVALID_MEMBERS: 'Both payer and recipient must be group members',
+  CURRENCY_MISMATCH: 'Currency must match the group default currency',
+};
 
 // POST /api/groups/[id]/settlements — Record settlement
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -28,6 +34,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const settlement = await settlementService.create(id, parsed.data, user.id!);
     return success(settlement, 201);
   } catch (err) {
+    if (err instanceof Error && err.message in settlementValidationMessages) {
+      return error(settlementValidationMessages[err.message], 422);
+    }
+
     return serverError(err);
   }
 }

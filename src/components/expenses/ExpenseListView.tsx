@@ -27,8 +27,7 @@ import DeleteExpenseDialog from './DeleteExpenseDialog';
 import { formatDate } from '@/lib/utils/date';
 import { formatCurrency } from '@/lib/utils/currency';
 import { EXPENSE_CATEGORIES } from '@/lib/constants/categories';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher } from '@/lib/utils/fetcher';
 
 const QUICK_FILTERS = [
   { id: 'all', label: 'All' },
@@ -102,7 +101,7 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
 
   const shouldFetch = !(quickFilter === 'custom' && dateRangeError);
 
-  const { data, isLoading, isValidating, mutate } = useSWR(
+  const { data, isLoading, isValidating, error, mutate } = useSWR(
     shouldFetch ? `/api/groups/${groupId}/expenses?${params.toString()}` : null,
     fetcher,
     { refreshInterval: 10_000, keepPreviousData: true },
@@ -164,6 +163,10 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
 
   return (
     <Stack spacing={2}>
+      {error && (
+        <Typography color="error.main">{error.message}</Typography>
+      )}
+
       {/* Quick Filters */}
       <Stack
         direction="row"

@@ -1,36 +1,67 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# SplitWise
 
-## Getting Started
+SplitWise is an expense-splitting app for shared groups — track who paid, split costs fairly, and settle up when balances are due.
 
-First, run the development server:
+## Tech stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Next.js 16** (App Router) + **React 19** + **TypeScript**
+- **MUI v7** (Material UI + Emotion) for UI
+- **MongoDB** + **Mongoose v9** for data
+- **Auth.js v5** (NextAuth) with Google OAuth
+- **SWR** for client-side data fetching
+- **Zod v4** for request validation
+- **pnpm** as the package manager
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Setup
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repository and install dependencies:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+   ```bash
+   git clone <repo-url>
+   cd split
+   pnpm install
+   ```
 
-## Learn More
+2. Copy the environment template and fill in values:
 
-To learn more about Next.js, take a look at the following resources:
+   ```bash
+   cp .env.example .env.local
+   ```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+   | Variable | Description |
+   | --- | --- |
+   | `MONGODB_URI` | MongoDB connection string |
+   | `AUTH_SECRET` | Random secret for Auth.js session signing ([generate one](https://generate-secret.vercel.app/32)) |
+   | `AUTH_GOOGLE_ID` | Google OAuth client ID |
+   | `AUTH_GOOGLE_SECRET` | Google OAuth client secret |
+   | `NEXT_PUBLIC_APP_URL` | App URL (e.g. `http://localhost:3000`) |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+3. Start the development server:
 
-## Deploy on Vercel
+   ```bash
+   pnpm dev
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+   Open [http://localhost:3000](http://localhost:3000).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Scripts
+
+| Command | Description |
+| --- | --- |
+| `pnpm dev` | Start the development server |
+| `pnpm build` | Production build |
+| `pnpm start` | Run the production server |
+| `pnpm lint` | Run ESLint |
+| `pnpm test` | Run Vitest unit tests |
+| `pnpm typecheck` | Run TypeScript without emitting files |
+| `pnpm format` | Format code with Prettier |
+| `pnpm format:check` | Check formatting without writing |
+
+## Notes
+
+- Each group uses a **single currency** for balances and settlements.
+- Email invites create **pending invitation records** in the database; the app does not send email yet.
+
+## Documentation
+
+See [`docs/`](docs/) for architecture, API, feature specs, and page-level design notes.

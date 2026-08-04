@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import Link from 'next/link';
 import Box from '@mui/material/Box';
@@ -40,8 +40,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import LabelIcon from '@mui/icons-material/Label';
 import { CURRENCIES, getSortedCurrencies } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/date';
-
-const fetcher = (url: string) => fetch(url).then((r) => r.json());
+import { fetcher } from '@/lib/utils/fetcher';
 
 const GROUP_CATEGORIES = [
   { id: 'trip', label: '✈️ Trip' },
@@ -58,7 +57,7 @@ interface GroupSettingsViewProps {
 
 export default function GroupSettingsView({ groupId, userId }: GroupSettingsViewProps) {
   const { mutate: globalMutate } = useSWRConfig();
-  const { data: groupData, isLoading, mutate } = useSWR(`/api/groups/${groupId}`, fetcher);
+  const { data: groupData, isLoading, error, mutate } = useSWR(`/api/groups/${groupId}`, fetcher);
 
   const group = groupData?.data;
 
@@ -92,18 +91,20 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '' });
 
-  if (group && !generalInitialized) {
+  useEffect(() => {
+    if (!group || generalInitialized) return;
     setName(group.name || '');
     setDescription(group.description || '');
     setCategory(group.category || 'other');
     setGeneralInitialized(true);
-  }
+  }, [group, generalInitialized]);
 
-  if (group && !currencyInitialized) {
+  useEffect(() => {
+    if (!group || currencyInitialized) return;
     setDefaultCurrency(group.defaultCurrency || 'INR');
     setAlternateCurrencies(group.alternateCurrencies || []);
     setCurrencyInitialized(true);
-  }
+  }, [group, currencyInitialized]);
 
   if (isLoading) {
     return (
@@ -111,6 +112,14 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
         <Skeleton variant="text" width={192} height={32} sx={{ mb: 2 }} />
         <Skeleton variant="text" width={128} height={20} sx={{ mb: 4 }} />
         <Skeleton variant="rounded" height={384} />
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container maxWidth="md" disableGutters>
+        <Typography color="error.main">{error.message}</Typography>
       </Container>
     );
   }

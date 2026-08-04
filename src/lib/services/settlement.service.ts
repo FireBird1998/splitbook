@@ -1,6 +1,8 @@
 import connectDB from '@/lib/db';
+import Group from '@/lib/models/Group';
 import Settlement from '@/lib/models/Settlement';
 import { activityService } from './activity.service';
+import { assertGroupCurrency, assertSettlementMembers } from './expense-validation';
 import type { CreateSettlementInput } from '@/lib/validators/settlement.validator';
 
 export class SettlementService {
@@ -9,6 +11,14 @@ export class SettlementService {
    */
   async create(groupId: string, data: CreateSettlementInput, userId: string) {
     await connectDB();
+
+    const group = await Group.findById(groupId);
+    if (!group) throw new Error('Group not found');
+
+    const memberIds = new Set(group.members.map((member) => member.user.toString()));
+
+    assertSettlementMembers(memberIds, userId, data.paidTo);
+    assertGroupCurrency(group.defaultCurrency, data.currency);
 
     const settlement = await Settlement.create({
       group: groupId,

@@ -2,7 +2,6 @@ import connectDB from '@/lib/db';
 import Expense from '@/lib/models/Expense';
 import Settlement from '@/lib/models/Settlement';
 import Group from '@/lib/models/Group';
-import User from '@/lib/models/User';
 import { calculateNetBalances, simplifyDebts } from '@/lib/utils/debt-simplifier';
 
 export class BalanceService {
@@ -20,6 +19,10 @@ export class BalanceService {
     ]);
 
     if (!group) return null;
+
+    const hasMixedCurrencies =
+      expenses.some((e) => e.currency !== group.defaultCurrency) ||
+      settlements.some((s) => s.currency !== group.defaultCurrency);
 
     // Calculate net balances
     const expenseData = expenses.map((e) => ({
@@ -80,6 +83,7 @@ export class BalanceService {
       balances,
       debts,
       currency: group.defaultCurrency,
+      hasMixedCurrencies,
     };
   }
 

@@ -17,6 +17,9 @@ import CloseIcon from '@mui/icons-material/Close';
 import CheckIcon from '@mui/icons-material/Check';
 import Snackbar from '@mui/material/Snackbar';
 
+const INVITATION_SAVED_MESSAGE =
+  'Invitation saved. No email is sent - share the invite link, or they will see it after signing in with that email.';
+
 interface InviteDialogProps {
   open: boolean;
   onClose: () => void;
@@ -48,13 +51,13 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
 
       if (!res.ok) {
         const data = await res.json();
-        setEmailError(data.error || 'Failed to send invite');
+        setEmailError(data.error || 'Failed to save invitation');
         return;
       }
 
       setEmailSent(true);
       setEmail('');
-      setSnackbar('Invitation sent!');
+      setSnackbar(INVITATION_SAVED_MESSAGE);
     } catch {
       setEmailError('Something went wrong.');
     } finally {
@@ -121,7 +124,7 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
                 <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1 }}>
                   <CheckIcon fontSize="small" color="success" />
                   <Typography variant="caption" color="success.main">
-                    Invitation sent!
+                    {INVITATION_SAVED_MESSAGE}
                   </Typography>
                 </Stack>
               )}
