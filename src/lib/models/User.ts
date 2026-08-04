@@ -14,13 +14,7 @@ export interface IUserDocument {
 const UserSchema = new Schema<IUserDocument>(
   {
     name: { type: String, required: true, trim: true },
-    email: {
-      type: String,
-      required: true,
-      unique: true,
-      trim: true,
-      lowercase: true,
-    },
+    email: { type: String, required: true, trim: true, lowercase: true },
     image: { type: String },
     emailVerified: { type: Date, default: null },
     preferredCurrency: { type: String, default: 'INR', trim: true },
