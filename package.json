@@ -15,6 +15,7 @@
     "test:integration": "vitest run integration",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
+    "test:e2e:google": "playwright test --config playwright.google.config.ts",
     "typecheck": "tsc --noEmit",
     "demo:seed": "tsx scripts/demo-seed.ts",
     "demo:reset": "tsx scripts/demo-reset.ts"

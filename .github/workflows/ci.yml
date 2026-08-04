@@ -91,6 +91,9 @@ jobs:
       - name: Run browser journeys (demo mode, seeded)
         run: pnpm test:e2e
 
+      - name: Run Google OAuth smoke tests (google mode, intercepted)
+        run: pnpm test:e2e:google
+
       - name: Upload Playwright report and review screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -100,4 +103,6 @@ jobs:
             playwright/report/
             playwright/artifacts/
             playwright/results/
+            playwright-google/report/
+            playwright-google/results/
           retention-days: 7

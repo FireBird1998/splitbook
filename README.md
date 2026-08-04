@@ -54,6 +54,18 @@ SplitWise is an expense-splitting app for shared groups — track who paid, spli
 
    Open [http://localhost:3000](http://localhost:3000).
 
+## Authentication modes
+
+The app runs in one of two auth modes, selected by `AUTH_MODE` (default: `google`):
+
+| Mode | `AUTH_MODE` | Sign-in UI |
+| --- | --- | --- |
+| Google OAuth | `google` (or unset) | Marketing landing + "Sign in with Google" |
+| Demo personas | `demo` | Persona picker (Alex, Sam, Priya) — no OAuth setup needed |
+
+Switch modes by editing `AUTH_MODE` in `.env.local` and restarting the dev server.
+Both providers stay registered, so no code change or rebuild is required.
+
 ## Demo mode (private beta)
 
 Demo mode uses real Auth.js JWT sessions with three fixed seeded personas (Alex, Sam, Priya). Downstream APIs still receive a real `session.user.id` ObjectId string.
@@ -83,11 +95,19 @@ Demo auth is **fail-closed** in production:
 - `AUTH_MODE=demo` alone is ignored when `NODE_ENV=production`
 - Set `ALLOW_DEMO_AUTH=true` only if you intentionally need demo personas in a production-like environment
 
-### Restore Google OAuth later
+## Google OAuth mode (default)
+
+Google sign-in is the default whenever demo mode is not explicitly enabled:
 
 1. Set `AUTH_MODE=google` (or remove `AUTH_MODE`)
 2. Ensure `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` are set
-3. Restart the app — marketing landing + Google sign-in return
+3. Restart the app — `/` shows the marketing landing and `/login` the Google button
+
+The Google Cloud OAuth client needs the consent screen configured and
+`<origin>/api/auth/callback/google` whitelisted as an authorized redirect URI
+(e.g. `http://localhost:3000/api/auth/callback/google` for local dev). Full
+setup steps and a non-interactive smoke test (`pnpm test:e2e:google`) are in
+[`docs/auth.md`](docs/auth.md).
 
 ## Scripts
 
@@ -102,6 +122,7 @@ Demo auth is **fail-closed** in production:
 | `pnpm test:integration` | Run only MongoDB integration tests |
 | `pnpm test:e2e` | Run Playwright browser journeys (demo mode) |
 | `pnpm test:e2e:headed` | Run Playwright journeys with a visible browser |
+| `pnpm test:e2e:google` | Run Google OAuth smoke tests (google mode, no real login) |
 | `pnpm typecheck` | Run TypeScript without emitting files |
 | `pnpm format` | Format code with Prettier |
 | `pnpm format:check` | Check formatting without writing |
@@ -159,6 +180,13 @@ verify balances update — plus theme and accessibility checks.
 pnpm exec playwright install chromium   # one-time browser install
 pnpm test:e2e
 ```
+
+A separate google-mode smoke suite (`pnpm test:e2e:google`) runs the app with
+`AUTH_MODE=google` on port 3101 and verifies the real OAuth entry points —
+marketing landing vs. persona picker, the `/login` Google button, and the
+redirect to `accounts.google.com` with the configured `client_id` and
+`/api/auth/callback/google` redirect URI. The Google endpoint is intercepted,
+so no real login happens and no secrets are needed.
 
 ## Notes
 

@@ -4,7 +4,7 @@
 
 We use **Auth.js v5** (formerly NextAuth.js) with **JWT sessions** and the **MongoDB adapter**. Two providers are registered side by side in [`src/lib/auth.config.ts`](../src/lib/auth.config.ts) so the mode can switch without a rebuild:
 
-- **Google OAuth** — the real sign-in path (currently dormant, restored in Phase 7).
+- **Google OAuth** — the real sign-in path, and the default whenever demo mode is not explicitly enabled.
 - **Demo Credentials** — private-beta personas (Alex, Sam, Priya), guarded by `AUTH_MODE`.
 
 The active mode resolves through [`src/lib/auth-mode.ts`](../src/lib/auth-mode.ts):
@@ -54,10 +54,46 @@ is active. See the README for seeding (`pnpm demo:seed` / `pnpm demo:reset`).
 
 ### 1. Google Cloud Console
 
-1. Go to https://console.cloud.google.com/apis/credentials
-2. Create a new OAuth 2.0 Client ID
-3. Set authorized redirect URI: `http://localhost:3000/api/auth/callback/google` (dev)
-4. Copy Client ID and Client Secret to `.env.local`
+You need a Google Cloud project with an OAuth 2.0 web client. No Google Workspace
+or paid APIs are required.
+
+**a. Configure the OAuth consent screen** (once per project)
+
+1. Go to https://console.cloud.google.com/apis/credentials and pick (or create) a project.
+2. Open **OAuth consent screen** in the left nav.
+3. Choose **External** user type and click **Create**.
+4. Fill in the app name, user support email, and developer contact email.
+   No scopes beyond the defaults are needed — the app requests only
+   `openid profile email`.
+5. While the consent screen is in **Testing** publishing status, add each
+   tester's Google account under **Test users**. Only listed test users can
+   sign in. (Publishing to "In production" requires Google's verification and
+   is not needed for the private beta.)
+
+**b. Create the OAuth client**
+
+1. Go to **Credentials** → **Create Credentials** → **OAuth client ID**.
+2. Application type: **Web application**.
+3. **Authorized JavaScript origins are not required** — Auth.js uses a
+   server-side authorization-code flow, not the Google Sign-In JS SDK. (Adding
+   `http://localhost:3000` etc. is harmless but unused.)
+
+4. Add the matching **Authorized redirect URIs** — always
+   `<origin>/api/auth/callback/google`:
+
+   | Environment | Redirect URI |
+   | --- | --- |
+   | Local dev (default port) | `http://localhost:3000/api/auth/callback/google` |
+   | Local dev (private-beta / e2e port) | `http://localhost:3100/api/auth/callback/google` |
+   | Production | `https://<your-domain>/api/auth/callback/google` |
+
+   The redirect URI must match **exactly** (scheme, host, port, path) or Google
+   shows `redirect_uri_mismatch`. Auth.js always uses
+   `/api/auth/callback/google` — it is derived from the route handler in
+   `src/app/api/auth/[...nextauth]/route.ts`, not from configuration.
+
+5. Copy the **Client ID** and **Client Secret** into `.env.local` as
+   `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`. Never commit these values.
 
 ### 2. Auth.js Configuration
 
@@ -199,7 +235,58 @@ AUTH_GOOGLE_ID=your-google-client-id.apps.googleusercontent.com
 AUTH_GOOGLE_SECRET=your-google-client-secret
 MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/splitwise
 NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Auth mode: google (default when unset) | demo
+AUTH_MODE=
+# Required to use demo auth when NODE_ENV=production (fail closed otherwise)
+ALLOW_DEMO_AUTH=
 ```
+
+---
+
+## Switching between Google and demo mode
+
+| Goal | `.env.local` | Entry UI |
+| --- | --- | --- |
+| Real sign-in (default) | `AUTH_MODE=google` or unset | Marketing landing + "Sign in with Google" |
+| Private-beta personas | `AUTH_MODE=demo` | Persona picker (Alex / Sam / Priya) |
+
+- Restart the dev server after changing `AUTH_MODE` — it is read server-side.
+- Both providers stay registered either way; the mode only chooses which one
+  the UI offers. The demo Credentials `authorize()` fails closed whenever demo
+  mode is not allowed, so a direct POST to the demo callback in google mode
+  just redirects back to `/login` with an error and sets no session.
+- Production is fail closed: `AUTH_MODE=demo` is ignored when
+  `NODE_ENV=production` unless `ALLOW_DEMO_AUTH=true` is also set.
+
+---
+
+## Verifying Google mode (OAuth smoke test)
+
+No interactive Google login is needed to verify the wiring:
+
+```bash
+AUTH_MODE=google pnpm dev   # or: pnpm test:e2e:google for the automated version
+```
+
+1. `/` shows the marketing landing with **Sign in with Google** (not the
+   persona picker); `/login` shows the Google button.
+2. `GET /api/auth/providers` lists `google` with callback URL
+   `<origin>/api/auth/callback/google`.
+3. Clicking the button (or POSTing `/api/auth/signin/google` with a CSRF
+   token) redirects to
+   `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=<AUTH_GOOGLE_ID>&redirect_uri=<origin>%2Fapi%2Fauth%2Fcallback%2Fgoogle&scope=openid+profile+email&code_challenge=...&code_challenge_method=S256`.
+   Confirm `client_id` and `redirect_uri` match the Google Cloud client.
+4. `AUTH_SECRET` must be set — sessions are JWT (`session.strategy: 'jwt'` in
+   `auth.config.ts`), so the MongoDB adapter only persists users/accounts
+   while session state lives in the httpOnly cookie.
+
+The automated equivalent is `pnpm test:e2e:google`
+([`playwright.google.config.ts`](../playwright.google.config.ts) +
+[`playwright-google/google-auth.spec.ts`](../playwright-google/google-auth.spec.ts)),
+which runs the app in google mode on port 3101, intercepts the
+`accounts.google.com` navigation, and asserts the request shape without
+completing a real login.
 
 ---
 

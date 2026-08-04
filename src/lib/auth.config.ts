@@ -53,17 +53,23 @@ export const authConfig: NextAuthConfig = {
       }
       return session;
     },
-    authorized({ auth, request: { nextUrl } }) {
+    authorized({ auth, request }) {
       const isLoggedIn = !!auth?.user;
+      const { nextUrl, method } = request;
       const { pathname } = nextUrl;
 
       const isAuthPage = pathname.startsWith('/login');
       const isPublicPage = pathname === '/' || pathname.startsWith('/join');
       const isApiAuth = pathname.startsWith('/api/auth');
+      // GET /api/join/[code] is intentionally auth-free (invite preview); POST joins and stays protected
+      const isJoinPreview = pathname.startsWith('/api/join/') && method === 'GET';
       const isApi = pathname.startsWith('/api');
 
       // Always allow auth API routes
       if (isApiAuth) return true;
+
+      // Allow the public invite-preview read so the join page can render its sign-in CTA
+      if (isJoinPreview) return true;
 
       // Redirect logged-in users away from login page
       if (isLoggedIn && isAuthPage) {
