@@ -17,6 +17,7 @@ import IconButton from '@mui/material/IconButton';
 import Collapse from '@mui/material/Collapse';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
@@ -27,6 +28,13 @@ import { EXPENSE_CATEGORIES } from '@/lib/constants/categories';
 import { PREDEFINED_ITEMS } from '@/lib/constants/predefined-items';
 import { getCurrency, formatCurrency } from '@/lib/utils/currency';
 import { buildDuplicateCheckUrl } from './expense-duplicate-check';
+import {
+  getDefaultExpenseTag,
+  getSelectableExpenseTags,
+  isAdvancedSplit,
+  resolvePredefinedTag,
+  type GroupTagOption,
+} from './expense-form-helpers';
 
 // ─── Types ─────────────────────────────────────────────
 interface Member {
@@ -64,6 +72,10 @@ export default function ExpenseFormDialog({
   const isEditMode = !!expense;
 
   const members = useMemo(() => (group.members || []) as Member[], [group.members]);
+  const groupTags = useMemo(
+    () => (group.tags || []) as GroupTagOption[],
+    [group.tags],
+  );
   const defaultCurrency = group.defaultCurrency as string;
   const defaultCurrencyDetails = getCurrency(defaultCurrency);
 
@@ -100,7 +112,7 @@ export default function ExpenseFormDialog({
     setDate(new Date().toISOString().split('T')[0]);
     setSplitMethod('equal');
     setSelectedMembers(members.map((m) => m.user._id));
-    setTag('');
+    setTag(getDefaultExpenseTag(groupTags));
     setNotes('');
     setPayers([{ user: userId, amount: '' }]);
     setMultiPayerMode(false);
@@ -110,7 +122,7 @@ export default function ExpenseFormDialog({
     setShowSplitOptions(false);
     setShowMoreOptions(false);
     setError('');
-  }, [defaultCurrency, members, userId]);
+  }, [defaultCurrency, groupTags, members, userId]);
 
   // Pre-fill form when editing
   useEffect(() => {
@@ -232,18 +244,8 @@ export default function ExpenseFormDialog({
     if (item) {
       setDescription(item.label);
       setCategory(item.category);
-      // Auto-select tag if the group has a matching one
-      const groupTags = (
-        (group.tags || []) as Array<{
-          _id: string;
-          name: string;
-          isArchived: boolean;
-        }>
-      ).filter((t) => !t.isArchived);
-      const matchingTag = groupTags.find(
-        (t) => t.name.toLowerCase() === item.defaultTag.toLowerCase(),
-      );
-      if (matchingTag) setTag(matchingTag.name);
+      const matchingTag = resolvePredefinedTag(groupTags, item.defaultTag);
+      if (matchingTag) setTag(matchingTag);
     }
   };
 
@@ -431,22 +433,43 @@ export default function ExpenseFormDialog({
     return id === userId ? 'You' : members.find((m) => m.user._id === id)?.user.name || 'Unknown';
   }
 
-  // Check if split options differ from defaults (to show indicator)
-  const hasNonDefaultSplit =
-    splitMethod !== 'equal' ||
-    selectedMembers.length !== members.length ||
-    multiPayerMode ||
-    payers[0]?.user !== userId;
+  const hasNonDefaultSplit = isAdvancedSplit({
+    splitMethod,
+    selectedMemberCount: selectedMembers.length,
+    memberCount: members.length,
+    multiPayerMode,
+    primaryPayerId: payers[0]?.user || userId,
+    currentUserId: userId,
+  });
 
-  // Check if more options differ from defaults
   const hasNonDefaultMore =
-    category !== 'other' ||
-    notes.trim().length > 0 ||
-    date !== new Date().toISOString().split('T')[0];
+    category !== 'other' || notes.trim().length > 0;
+
+  const selectableTags = getSelectableExpenseTags(
+    groupTags,
+    isEditMode ? (expense?.tag as string | undefined) : null,
+  );
 
   // ─── Render ────────────────────────────────────────
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="sm"
+      fullWidth
+      fullScreen={false}
+      slotProps={{
+        paper: {
+          sx: {
+            m: { xs: 1, sm: 2 },
+            maxHeight: {
+              xs: 'calc(100% - 16px - env(safe-area-inset-bottom, 0px))',
+              sm: 'calc(100% - 64px)',
+            },
+          },
+        },
+      }}
+    >
       <DialogTitle
         sx={{
           display: 'flex',
@@ -455,8 +478,8 @@ export default function ExpenseFormDialog({
           pb: 1,
         }}
       >
-        {isEditMode ? 'Edit Expense' : 'Add Expense'}
-        <IconButton onClick={onClose} size="small">
+        {isEditMode ? 'Edit expense' : 'Add expense'}
+        <IconButton onClick={onClose} size="small" aria-label="Close expense form">
           <CloseIcon />
         </IconButton>
       </DialogTitle>
@@ -493,14 +516,14 @@ export default function ExpenseFormDialog({
                   bgcolor: 'transparent',
                 },
                 '&::-webkit-scrollbar-thumb': {
-                  bgcolor: 'grey.300',
+                  bgcolor: 'border.strong',
                   borderRadius: 2,
                 },
                 '&::-webkit-scrollbar-thumb:hover': {
-                  bgcolor: 'grey.400',
+                  bgcolor: 'text.disabled',
                 },
                 scrollbarWidth: 'thin',
-                scrollbarColor: (theme) => `${theme.palette.grey[300]} transparent`,
+                scrollbarColor: (theme) => `${theme.palette.border.strong} transparent`,
               }}
             >
               {PREDEFINED_ITEMS.slice(0, 8).map((item) => (
@@ -527,8 +550,8 @@ export default function ExpenseFormDialog({
             autoFocus={!isEditMode}
           />
 
-          {/* ─── Amount + Currency ──────────────────── */}
-          <Stack direction="row" spacing={1.5}>
+          {/* ─── Amount + Currency + Date (fast path) ─ */}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
             <TextField
               label="Amount"
               value={amount}
@@ -536,7 +559,14 @@ export default function ExpenseFormDialog({
               required
               type="number"
               size="small"
-              sx={{ flex: 1 }}
+              sx={{
+                flex: 1,
+                '& input': (theme) => ({
+                  ...(theme.typography.money as React.CSSProperties),
+                  fontSize: '1.25rem',
+                  fontWeight: 600,
+                }),
+              }}
               slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
             />
             <TextField
@@ -545,19 +575,60 @@ export default function ExpenseFormDialog({
               value={currency}
               size="small"
               disabled
-              helperText="Group default"
-              sx={{ width: 120 }}
+              helperText="Trip currency"
+              sx={{ width: { xs: '100%', sm: 120 } }}
             >
               <MenuItem value={defaultCurrency}>
                 {defaultCurrencyDetails?.flag} {defaultCurrency}
               </MenuItem>
             </TextField>
+            <TextField
+              label="Date"
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              size="small"
+              sx={{ flex: 1 }}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
           </Stack>
+
+          {/* ─── Tag chips (fast path) ─────────────── */}
+          <Box>
+            <Typography
+              component="label"
+              variant="caption"
+              fontWeight={500}
+              color="text.secondary"
+              sx={{ display: 'block', mb: 1 }}
+            >
+              Tag
+            </Typography>
+            <Stack direction="row" flexWrap="wrap" gap={1}>
+              {selectableTags.map((t) => (
+                <Chip
+                  key={t._id || t.name}
+                  label={t.isArchived ? `${t.name} (archived)` : t.name}
+                  size="small"
+                  clickable
+                  color={tag === t.name ? 'primary' : 'default'}
+                  variant={tag === t.name ? 'filled' : 'outlined'}
+                  onClick={() => setTag(t.name)}
+                  aria-pressed={tag === t.name}
+                />
+              ))}
+            </Stack>
+            {selectableTags.length === 0 && (
+              <Typography variant="caption" color="error.main">
+                No tags available — create tags in trip settings
+              </Typography>
+            )}
+          </Box>
 
           {/* ─── Summary Line + Change Button ────────── */}
           <Box
             sx={{
-              bgcolor: 'grey.50',
+              bgcolor: 'surface.muted',
               borderRadius: 2,
               px: 2,
               py: 1.5,
@@ -579,6 +650,8 @@ export default function ExpenseFormDialog({
               size="small"
               onClick={() => setShowSplitOptions(!showSplitOptions)}
               endIcon={showSplitOptions ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              aria-expanded={showSplitOptions}
+              aria-label="Advanced split options"
               sx={{
                 textTransform: 'none',
                 fontSize: 12,
@@ -599,7 +672,7 @@ export default function ExpenseFormDialog({
               sx={{
                 border: 1,
                 borderColor: 'divider',
-                borderRadius: 3,
+                borderRadius: '12px',
                 p: 2.5,
                 bgcolor: 'background.paper',
               }}
@@ -676,11 +749,12 @@ export default function ExpenseFormDialog({
                           size="small"
                           onClick={() => removePayer(i)}
                           disabled={payers.length <= 1}
+                          aria-label={`Remove payer ${memberName(payer.user)}`}
                         >
                           <RemoveCircleOutlineIcon
                             fontSize="small"
                             sx={{
-                              color: payers.length <= 1 ? 'grey.400' : 'error.main',
+                              color: payers.length <= 1 ? 'text.disabled' : 'error.main',
                             }}
                           />
                         </IconButton>
@@ -951,51 +1025,12 @@ export default function ExpenseFormDialog({
             </Stack>
           </Collapse>
 
-          {/* ─── Tag (mandatory) ──────────────────── */}
-          <TextField
-            select
-            label="Tag *"
-            value={tag}
-            onChange={(e) => setTag(e.target.value)}
-            size="small"
-            fullWidth
-            error={!tag && !!error}
-            helperText={!tag && !!error ? 'Tag is required' : ''}
-          >
-            <MenuItem value="" disabled>
-              Select a tag...
-            </MenuItem>
-            {(
-              (group.tags || []) as Array<{
-                _id: string;
-                name: string;
-                isArchived: boolean;
-              }>
-            )
-              .filter((t) => !t.isArchived)
-              .map((t) => (
-                <MenuItem key={t._id} value={t.name}>
-                  {t.name}
-                </MenuItem>
-              ))}
-            {(
-              (group.tags || []) as Array<{
-                _id: string;
-                name: string;
-                isArchived: boolean;
-              }>
-            ).filter((t) => !t.isArchived).length === 0 && (
-              <MenuItem value="" disabled>
-                No tags available — create tags in group settings
-              </MenuItem>
-            )}
-          </TextField>
-
           {/* ─── More Options Toggle ───────────────── */}
           <Button
             size="small"
             onClick={() => setShowMoreOptions(!showMoreOptions)}
             endIcon={showMoreOptions ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            aria-expanded={showMoreOptions}
             sx={{
               textTransform: 'none',
               fontSize: 12,
@@ -1015,36 +1050,25 @@ export default function ExpenseFormDialog({
               sx={{
                 border: 1,
                 borderColor: 'divider',
-                borderRadius: 3,
+                borderRadius: '12px',
                 p: 2.5,
                 bgcolor: 'background.paper',
               }}
             >
-              <Stack direction="row" spacing={1.5}>
-                <TextField
-                  label="Date"
-                  type="date"
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  size="small"
-                  sx={{ flex: 1 }}
-                  slotProps={{ inputLabel: { shrink: true } }}
-                />
-                <TextField
-                  select
-                  label="Category"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  size="small"
-                  sx={{ flex: 1 }}
-                >
-                  {EXPENSE_CATEGORIES.map((c) => (
-                    <MenuItem key={c.id} value={c.id}>
-                      {c.icon} {c.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
-              </Stack>
+              <TextField
+                select
+                label="Category"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                size="small"
+                fullWidth
+              >
+                {EXPENSE_CATEGORIES.map((c) => (
+                  <MenuItem key={c.id} value={c.id}>
+                    {c.icon} {c.label}
+                  </MenuItem>
+                ))}
+              </TextField>
 
               <TextField
                 label="Notes (optional)"
@@ -1060,8 +1084,19 @@ export default function ExpenseFormDialog({
         </Stack>
       </DialogContent>
 
-      <DialogActions sx={{ p: 2 }}>
-        <Button onClick={onClose} color="inherit">
+      <DialogActions
+        sx={{
+          p: 2,
+          pb: { xs: 'calc(16px + env(safe-area-inset-bottom, 0px))', sm: 2 },
+          position: { xs: 'sticky', sm: 'static' },
+          bottom: 0,
+          bgcolor: 'background.paper',
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          gap: 1,
+        }}
+      >
+        <Button onClick={onClose} color="inherit" sx={{ minHeight: 40 }}>
           Cancel
         </Button>
         <Button
@@ -1069,12 +1104,14 @@ export default function ExpenseFormDialog({
           variant="contained"
           disabled={loading || !description.trim() || !amount || !tag}
           sx={{
+            minHeight: 40,
+            textTransform: 'none',
             bgcolor: 'primary.main',
             color: 'primary.contrastText',
             '&:hover': { bgcolor: 'primary.dark' },
           }}
         >
-          {loading ? <CircularProgress size={20} /> : isEditMode ? 'Save Changes' : 'Save Expense'}
+          {loading ? <CircularProgress size={20} /> : isEditMode ? 'Save changes' : 'Save expense'}
         </Button>
       </DialogActions>
     </Dialog>

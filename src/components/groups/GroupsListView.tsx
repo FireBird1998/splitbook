@@ -81,7 +81,7 @@ export default function GroupsListView({ userId }: GroupsListViewProps) {
           }}
         >
           {groups.map((group: Record<string, unknown>) => (
-            <GroupCard key={group._id as string} group={group} userId={userId} />
+            <GroupCard key={group._id as string} group={group} userId={userId} mode="management" />
           ))}
         </Box>
       )}

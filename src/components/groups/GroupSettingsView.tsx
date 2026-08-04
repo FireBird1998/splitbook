@@ -41,6 +41,7 @@ import LabelIcon from '@mui/icons-material/Label';
 import { CURRENCIES, getSortedCurrencies } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/date';
 import { fetcher } from '@/lib/utils/fetcher';
+import { validateTripDates } from '@/lib/utils/trip-setup';
 
 const GROUP_CATEGORIES = [
   { id: 'trip', label: '✈️ Trip' },
@@ -64,6 +65,8 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('other');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [generalSaving, setGeneralSaving] = useState(false);
   const [generalInitialized, setGeneralInitialized] = useState(false);
 
@@ -96,6 +99,12 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     setName(group.name || '');
     setDescription(group.description || '');
     setCategory(group.category || 'other');
+    setStartDate(
+      group.startDate ? new Date(group.startDate as string).toISOString().split('T')[0] : '',
+    );
+    setEndDate(
+      group.endDate ? new Date(group.endDate as string).toISOString().split('T')[0] : '',
+    );
     setGeneralInitialized(true);
   }, [group, generalInitialized]);
 
@@ -167,14 +176,22 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
   }
 
   const currencies = getSortedCurrencies(group.defaultCurrency, group.alternateCurrencies || []);
+  const tripDateError = validateTripDates(startDate || null, endDate || null);
 
   const handleSaveGeneral = async () => {
+    if (tripDateError) return;
     setGeneralSaving(true);
     try {
       const res = await fetch(`/api/groups/${groupId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, description, category }),
+        body: JSON.stringify({
+          name,
+          description,
+          category,
+          startDate: startDate || null,
+          endDate: endDate || null,
+        }),
       });
       if (res.ok) {
         mutate();
@@ -375,7 +392,12 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     <Container maxWidth="md" disableGutters>
       {/* Header */}
       <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 4 }}>
-        <IconButton component={Link} href={`/groups/${groupId}`} size="small">
+        <IconButton
+          component={Link}
+          href={`/groups/${groupId}`}
+          size="small"
+          aria-label="Back to trip"
+        >
           <ArrowBackIcon />
         </IconButton>
         <Box>
@@ -425,11 +447,33 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 </MenuItem>
               ))}
             </TextField>
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+              <TextField
+                label="Start date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                fullWidth
+                size="small"
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+              <TextField
+                label="End date"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                fullWidth
+                size="small"
+                error={Boolean(tripDateError)}
+                helperText={tripDateError || undefined}
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+            </Stack>
             <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
               <Button
                 variant="contained"
                 onClick={handleSaveGeneral}
-                disabled={generalSaving || !name.trim()}
+                disabled={generalSaving || !name.trim() || Boolean(tripDateError)}
               >
                 {generalSaving ? <CircularProgress size={20} /> : 'Save Changes'}
               </Button>
@@ -573,7 +617,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                     py: 1,
                     px: 1.5,
                     borderRadius: 2,
-                    bgcolor: tag.isArchived ? 'grey.50' : 'background.paper',
+                    bgcolor: tag.isArchived ? 'surface.muted' : 'background.paper',
                     opacity: tag.isArchived ? 0.7 : 1,
                   }}
                 >
@@ -608,6 +652,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                   </Stack>
                   <IconButton
                     size="small"
+                    aria-label={`Actions for tag ${tag.name}`}
                     onClick={(e) => {
                       setSelectedTag(tag._id);
                       setTagMenuAnchor(e.currentTarget);
@@ -748,6 +793,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 {m.user._id !== userId && (
                   <IconButton
                     size="small"
+                    aria-label={`Actions for member ${m.user.name}`}
                     onClick={(e) => {
                       setSelectedMember(m.user._id);
                       setMemberMenuAnchor(e.currentTarget);
@@ -806,7 +852,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 direction="row"
                 alignItems="center"
                 spacing={1}
-                sx={{ bgcolor: 'grey.50', borderRadius: 2, px: 1.5, py: 1 }}
+                sx={{ bgcolor: 'surface.muted', borderRadius: 2, px: 1.5, py: 1 }}
               >
                 <Typography
                   component="code"
@@ -821,7 +867,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 >
                   {inviteLink}
                 </Typography>
-                <IconButton size="small" onClick={handleCopyLink}>
+                <IconButton size="small" onClick={handleCopyLink} aria-label="Copy invite link">
                   <ContentCopyIcon fontSize="small" />
                 </IconButton>
               </Stack>

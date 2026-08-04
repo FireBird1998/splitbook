@@ -8,12 +8,16 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import GoogleIcon from '@mui/icons-material/Google';
+import BrandMark from '@/components/layout/BrandMark';
+import { getSignInProvider } from '@/lib/auth-sign-in';
+
+const SIGN_IN_PROVIDER = getSignInProvider('google');
 
 const features = [
   {
     icon: '👥',
-    title: 'Groups',
-    description: 'Create groups for trips, home, work, or anything else.',
+    title: 'Trips & Groups',
+    description: 'Create a trip, invite friends with a link, and start splitting in minutes.',
   },
   {
     icon: '💸',
@@ -23,22 +27,22 @@ const features = [
   {
     icon: '💰',
     title: 'Settle Up',
-    description: 'Minimize transactions with smart debt simplification.',
+    description: 'See who pays whom with minimal transactions, and record settlements either side can confirm.',
   },
   {
     icon: '📊',
-    title: 'Dashboard',
-    description: 'Filter and search expenses by date, tags, categories, and more.',
+    title: 'Money-first Dashboard',
+    description: 'Your balance by currency, the next best action, and recent trip activity at a glance.',
   },
   {
-    icon: '🔄',
-    title: 'Real-time Sync',
-    description: 'Instant updates when anyone adds or edits an expense.',
+    icon: '🧾',
+    title: 'Activity Audit Trail',
+    description: 'Every expense edit and settlement is logged, so the group can always see what changed.',
   },
   {
     icon: '💱',
-    title: 'Multi-Currency',
-    description: 'Set default + 2 alternate currencies per group for easy selection.',
+    title: 'One Currency per Trip',
+    description: 'Each trip keeps a single currency, and balances never mix currencies into one number.',
   },
 ];
 
@@ -60,15 +64,14 @@ export default function LandingPage() {
           justifyContent="space-between"
           sx={{ py: 2 }}
         >
-          <Stack direction="row" alignItems="center" spacing={1}>
-            <Typography component="span" sx={{ fontSize: '1.5rem' }}>
-              💰
-            </Typography>
+          <Stack direction="row" alignItems="center" spacing={1.25}>
+            <BrandMark size={30} fontSize={14} />
             <Typography
               component="span"
               sx={{
                 fontSize: '1.25rem',
                 fontWeight: 700,
+                letterSpacing: '-0.02em',
                 color: 'text.primary',
               }}
             >
@@ -78,7 +81,7 @@ export default function LandingPage() {
           <Button
             variant="outlined"
             size="small"
-            onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+            onClick={() => signIn(SIGN_IN_PROVIDER, { callbackUrl: '/dashboard' })}
             sx={{ borderColor: 'primary.main', color: 'primary.main' }}
           >
             Sign In
@@ -116,7 +119,7 @@ export default function LandingPage() {
             variant="contained"
             size="large"
             startIcon={<GoogleIcon />}
-            onClick={() => signIn('google', { callbackUrl: '/dashboard' })}
+            onClick={() => signIn(SIGN_IN_PROVIDER, { callbackUrl: '/dashboard' })}
             sx={{
               fontSize: '1.1rem',
               py: 1.5,
@@ -147,7 +150,6 @@ export default function LandingPage() {
               variant="outlined"
               sx={{
                 p: 4,
-                borderRadius: 4,
                 transition: 'box-shadow 0.2s',
                 '&:hover': { boxShadow: 3 },
               }}
@@ -167,7 +169,7 @@ export default function LandingPage() {
       {/* Footer */}
       <Box sx={{ textAlign: 'center', py: 4 }}>
         <Typography variant="body2" color="text.secondary">
-          Built with ❤️ · SplitWise Clone
+          SplitWise — trip expenses, settled fairly.
         </Typography>
       </Box>
     </Box>

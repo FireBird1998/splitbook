@@ -1,0 +1,138 @@
+/**
+ * SplitWise Private Beta — Design Tokens
+ * Light and dark designed together via semantic variables.
+ * Brand: indigo · Info: sky · Attention: coral · Positive: mint
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700&display=swap");
+
+:root,
+[data-theme="light"] {
+  /* Brand & accent primitives */
+  --indigo-500: #3d4fcf;
+  --indigo-600: #3240b0;
+  --indigo-100: #e8ebff;
+  --sky-500: #0b8fd9;
+  --sky-100: #e3f4fd;
+  --coral-500: #e04f3d;
+  --coral-100: #fde9e6;
+  --mint-500: #1a9a6e;
+  --mint-100: #e3f7ef;
+
+  /* Semantic surfaces */
+  --bg: #f4f5f9;
+  --bg-elevated: #ffffff;
+  --surface: #ffffff;
+  --surface-muted: #eef0f6;
+  --border: #dce0ec;
+  --border-strong: #c5cbdb;
+
+  /* Text */
+  --text: #151828;
+  --text-secondary: #4a5168;
+  --text-muted: #6b7289;
+  --text-inverse: #ffffff;
+
+  /* Status */
+  --positive: var(--mint-500);
+  --positive-bg: var(--mint-100);
+  --negative: var(--coral-500);
+  --negative-bg: var(--coral-100);
+  --warning: #c47a0a;
+  --warning-bg: #fef3e0;
+  --info: var(--sky-500);
+  --info-bg: var(--sky-100);
+  --brand: var(--indigo-500);
+  --brand-bg: var(--indigo-100);
+  --focus: var(--indigo-500);
+  --focus-ring: rgba(61, 79, 207, 0.35);
+
+  /* Boarding-pass strip */
+  --strip-bg: linear-gradient(135deg, #2f3db8 0%, #3d4fcf 55%, #4a62e0 100%);
+  --strip-text: #ffffff;
+  --strip-muted: rgba(255, 255, 255, 0.72);
+  --strip-perforation: rgba(244, 245, 249, 0.95);
+  --strip-stub: rgba(255, 255, 255, 0.12);
+
+  /* Shadows & chrome */
+  --shadow-sm: 0 1px 2px rgba(21, 24, 40, 0.05);
+  --shadow-md: 0 4px 16px rgba(21, 24, 40, 0.07);
+  --nav-height: 56px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --indigo-500: #7b8cff;
+  --indigo-600: #6a7cf0;
+  --indigo-100: #232849;
+  --sky-500: #4db4ef;
+  --sky-100: #163246;
+  --coral-500: #f07162;
+  --coral-100: #3a221f;
+  --mint-500: #3dca96;
+  --mint-100: #17362b;
+
+  --bg: #0e1016;
+  --bg-elevated: #161922;
+  --surface: #181b26;
+  --surface-muted: #222634;
+  --border: #2c3142;
+  --border-strong: #3d445a;
+
+  --text: #f0f2f8;
+  --text-secondary: #b4bace;
+  --text-muted: #858da3;
+  --text-inverse: #151828;
+
+  --positive: var(--mint-500);
+  --positive-bg: var(--mint-100);
+  --negative: var(--coral-500);
+  --negative-bg: var(--coral-100);
+  --warning: #e0a73a;
+  --warning-bg: #322614;
+  --info: var(--sky-500);
+  --info-bg: var(--sky-100);
+  --brand: var(--indigo-500);
+  --brand-bg: var(--indigo-100);
+  --focus: #9aa6ff;
+  --focus-ring: rgba(123, 140, 255, 0.45);
+
+  --strip-bg: linear-gradient(135deg, #252f7a 0%, #3544a8 55%, #3f52c4 100%);
+  --strip-text: #f5f7ff;
+  --strip-muted: rgba(245, 247, 255, 0.7);
+  --strip-perforation: rgba(14, 16, 22, 0.95);
+  --strip-stub: rgba(255, 255, 255, 0.08);
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 6px 20px rgba(0, 0, 0, 0.4);
+
+  color-scheme: dark;
+}
+
+:root {
+  --font-ui: "Outfit", "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", ui-monospace, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2.25rem;
+
+  --leading-tight: 1.2;
+  --leading-normal: 1.45;
+  --tracking-tight: -0.02em;
+}

@@ -2,12 +2,17 @@ import connectDB from '@/lib/db';
 import Group from '@/lib/models/Group';
 import Settlement from '@/lib/models/Settlement';
 import { activityService } from './activity.service';
-import { assertGroupCurrency, assertSettlementMembers } from './expense-validation';
+import {
+  assertGroupCurrency,
+  assertSettlementAuthorization,
+  assertSettlementMembers,
+} from './expense-validation';
 import type { CreateSettlementInput } from '@/lib/validators/settlement.validator';
 
 export class SettlementService {
   /**
    * Record a new settlement.
+   * Either the payer or the recipient may record it when authorized.
    */
   async create(groupId: string, data: CreateSettlementInput, userId: string) {
     await connectDB();
@@ -16,13 +21,15 @@ export class SettlementService {
     if (!group) throw new Error('Group not found');
 
     const memberIds = new Set(group.members.map((member) => member.user.toString()));
+    const paidBy = data.paidBy || userId;
 
-    assertSettlementMembers(memberIds, userId, data.paidTo);
+    assertSettlementMembers(memberIds, paidBy, data.paidTo);
+    assertSettlementAuthorization(userId, paidBy, data.paidTo);
     assertGroupCurrency(group.defaultCurrency, data.currency);
 
     const settlement = await Settlement.create({
       group: groupId,
-      paidBy: userId,
+      paidBy,
       paidTo: data.paidTo,
       amount: data.amount,
       currency: data.currency,
@@ -30,18 +37,26 @@ export class SettlementService {
       createdBy: userId,
     });
 
-    // Log activity
+    const populated = await settlement.populate([
+      { path: 'paidBy', select: 'name email image' },
+      { path: 'paidTo', select: 'name email image' },
+      { path: 'createdBy', select: 'name email image' },
+    ]);
+
+    const paidByDoc = populated.paidBy as unknown as { name?: string };
+    const paidToDoc = populated.paidTo as unknown as { name?: string };
+
     await activityService.log(groupId, 'settlement_recorded', userId, {
       settlementId: settlement._id.toString(),
+      paidBy: paidBy,
       paidTo: data.paidTo,
+      paidByName: paidByDoc?.name,
+      paidToName: paidToDoc?.name,
       amount: data.amount,
       currency: data.currency,
     });
 
-    return settlement.populate([
-      { path: 'paidBy', select: 'name email image' },
-      { path: 'paidTo', select: 'name email image' },
-    ]);
+    return populated;
   }
 
   /**
@@ -53,6 +68,7 @@ export class SettlementService {
       .sort({ createdAt: -1 })
       .populate('paidBy', 'name email image')
       .populate('paidTo', 'name email image')
+      .populate('createdBy', 'name email image')
       .lean();
   }
 }

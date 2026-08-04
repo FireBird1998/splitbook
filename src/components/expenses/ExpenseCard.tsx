@@ -20,6 +20,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import MoneyText from '@/components/common/MoneyText';
 import { formatCurrency } from '@/lib/utils/currency';
 import { formatDateTime } from '@/lib/utils/date';
 
@@ -139,6 +140,19 @@ export default function ExpenseCard({
         direction="row"
         alignItems="flex-start"
         justifyContent="space-between"
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
+        aria-label={`${expense.description as string}, ${formatCurrency(
+          expense.amount as number,
+          expense.currency as string,
+        )}. ${isExpanded ? 'Collapse' : 'Expand'} expense details.`}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onToggleExpand();
+          }
+        }}
         sx={{ p: { xs: 1.5, sm: 2 }, cursor: 'pointer' }}
         onClick={onToggleExpand}
       >
@@ -192,31 +206,45 @@ export default function ExpenseCard({
           sx={{ flexShrink: 0, ml: 0.5 }}
         >
           <Box sx={{ textAlign: 'right' }}>
-            <Typography
+            <MoneyText
+              amount={expense.amount as number}
+              currency={expense.currency as string}
+              tone="neutral"
               variant="body2"
               fontWeight={600}
-              color="text.primary"
               sx={{ fontSize: { xs: 13, sm: 14 } }}
-            >
-              {formatCurrency(expense.amount as number, expense.currency as string)}
-            </Typography>
+            />
             {Math.abs(userOwes) >= 0.01 && (
               <Typography
+                component="span"
                 fontWeight={500}
                 sx={{
+                  display: 'block',
                   color: userOwes > 0 ? 'error.main' : 'success.main',
                   fontSize: { xs: 10, sm: 12 },
                 }}
               >
-                {userOwes > 0
-                  ? `You owe ${formatCurrency(userOwes, expense.currency as string)}`
-                  : `You get back ${formatCurrency(-userOwes, expense.currency as string)}`}
+                {userOwes > 0 ? 'You owe ' : 'You get back '}
+                <MoneyText
+                  amount={Math.abs(userOwes)}
+                  currency={expense.currency as string}
+                  tone="neutral"
+                  color="inherit"
+                  variant="inherit"
+                />
               </Typography>
             )}
           </Box>
           {(onEdit || onDelete) && (
             <>
-              <IconButton size="small" onClick={handleMenuOpen} sx={{ ml: 0.5, mt: -0.5 }}>
+              <IconButton
+                size="small"
+                onClick={handleMenuOpen}
+                aria-label="Expense actions"
+                aria-haspopup="true"
+                aria-expanded={!!menuAnchor}
+                sx={{ ml: 0.5, mt: -0.5 }}
+              >
                 <MoreVertIcon fontSize="small" />
               </IconButton>
               <Menu
@@ -319,9 +347,13 @@ export default function ExpenseCard({
                       {memberName(p.user)}
                     </Typography>
                   </Stack>
-                  <Typography variant="body2" fontWeight={500} color="text.primary">
-                    {formatCurrency(p.amount, expense.currency as string)}
-                  </Typography>
+                  <MoneyText
+                    amount={p.amount}
+                    currency={expense.currency as string}
+                    tone="neutral"
+                    variant="body2"
+                    fontWeight={500}
+                  />
                 </Stack>
               ))}
             </Stack>
@@ -366,9 +398,13 @@ export default function ExpenseCard({
                       </Typography>
                     )}
                   </Stack>
-                  <Typography variant="body2" fontWeight={500} color="text.primary">
-                    {formatCurrency(s.amount, expense.currency as string)}
-                  </Typography>
+                  <MoneyText
+                    amount={s.amount}
+                    currency={expense.currency as string}
+                    tone="neutral"
+                    variant="body2"
+                    fontWeight={500}
+                  />
                 </Stack>
               ))}
             </Stack>

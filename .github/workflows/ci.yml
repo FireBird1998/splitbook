@@ -2,12 +2,18 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/private-beta]
   pull_request:
 
 jobs:
   verify:
     runs-on: ubuntu-latest
+
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
 
     steps:
       - uses: actions/checkout@v4
@@ -27,8 +33,12 @@ jobs:
       - name: Lint
         run: pnpm lint
 
-      - name: Test
+      - name: Test (unit + integration)
         run: pnpm test
+        env:
+          # Integration suites derive per-file splitwise-test-* databases from
+          # this base URI; the demo database is never touched.
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
 
       - name: Typecheck
         run: pnpm typecheck
@@ -41,3 +51,58 @@ jobs:
           NEXT_PUBLIC_APP_URL: http://localhost:3000
           AUTH_GOOGLE_ID: test
           AUTH_GOOGLE_SECRET: test
+
+  playwright:
+    runs-on: ubuntu-latest
+
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build
+        run: pnpm build
+        env:
+          AUTH_SECRET: test
+          MONGODB_URI: mongodb://127.0.0.1:27017/split-test
+          NEXT_PUBLIC_APP_URL: http://localhost:3100
+          AUTH_GOOGLE_ID: test
+          AUTH_GOOGLE_SECRET: test
+
+      - name: Run browser journeys (demo mode, seeded)
+        run: pnpm test:e2e
+
+      - name: Run Google OAuth smoke tests (google mode, intercepted)
+        run: pnpm test:e2e:google
+
+      - name: Upload Playwright report and review screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright/report/
+            playwright/artifacts/
+            playwright/results/
+            playwright-google/report/
+            playwright-google/results/
+          retention-days: 7

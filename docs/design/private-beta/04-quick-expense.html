@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>04 · Quick expense flow — SplitWise</title>
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/components.css" />
+    <script src="js/proto.js"></script>
+  </head>
+  <body>
+    <div class="proto-bar">
+      <strong>SplitWise · Phase 1</strong>
+      <a href="index.html" data-nav>Gallery</a>
+      <a href="01-persona-entry.html" data-nav>Personas</a>
+      <a href="02-dashboard.html" data-nav>Dashboard</a>
+      <a href="03-trip-workspace.html" data-nav>Trip</a>
+      <a href="04-quick-expense.html" data-nav>Expense</a>
+      <a href="05-balances-settle.html" data-nav>Balances</a>
+      <span class="spacer"></span>
+      <button type="button" data-theme-toggle="light">Light</button>
+      <button type="button" data-theme-toggle="dark">Dark</button>
+    </div>
+
+    <header class="app-nav" role="banner">
+      <a class="brand" href="02-dashboard.html">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        SplitWise
+      </a>
+      <span class="demo-pill">Demo · Alex</span>
+      <div class="nav-actions">
+        <span class="avatar" aria-hidden="true">A</span>
+      </div>
+    </header>
+
+    <main class="frame">
+      <p style="font-size: var(--text-sm); margin-bottom: var(--space-4)">
+        <a href="03-trip-workspace.html">← Goa Weekend</a>
+      </p>
+
+      <div class="expense-sheet stack-lg animate-in">
+        <header class="page-title-block">
+          <p class="label">Quick path</p>
+          <h1>Add expense</h1>
+          <p>Amount, who paid, tag — then save. Unequal splits stay behind Advanced.</p>
+        </header>
+
+        <form class="quiet-panel card-pad stack" onsubmit="event.preventDefault()">
+          <div class="field">
+            <label for="amount">Amount (INR)</label>
+            <input
+              id="amount"
+              class="amount-input"
+              name="amount"
+              inputmode="decimal"
+              value="1,200"
+              aria-describedby="amount-hint"
+            />
+            <span id="amount-hint" class="field-hint">Trip currency is INR — one currency per trip.</span>
+          </div>
+
+          <div class="field">
+            <label for="desc">Description</label>
+            <input id="desc" name="desc" value="Market snacks" autocomplete="off" />
+          </div>
+
+          <div class="field">
+            <label for="payer">Paid by</label>
+            <select id="payer" name="payer">
+              <option selected>Alex (you)</option>
+              <option>Sam</option>
+              <option>Priya</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <span id="tag-label" class="label" style="text-transform: none; letter-spacing: 0; font-size: var(--text-sm); color: var(--text-secondary)">Tag</span>
+            <div class="tag-row" role="group" aria-labelledby="tag-label">
+              <button type="button" class="tag-choice" aria-pressed="false">General</button>
+              <button type="button" class="tag-choice" aria-pressed="true">Food</button>
+              <button type="button" class="tag-choice" aria-pressed="false">Transport</button>
+              <button type="button" class="tag-choice" aria-pressed="false">Stay</button>
+              <button type="button" class="tag-choice" aria-pressed="false">Activities</button>
+            </div>
+          </div>
+
+          <div class="field">
+            <span class="label" style="text-transform: none; letter-spacing: 0; font-size: var(--text-sm); color: var(--text-secondary)">Split equally among</span>
+            <div>
+              <label class="member-check">
+                <input type="checkbox" checked /> Alex
+              </label>
+              <label class="member-check">
+                <input type="checkbox" checked /> Sam
+              </label>
+              <label class="member-check">
+                <input type="checkbox" checked /> Priya
+              </label>
+            </div>
+          </div>
+
+          <div class="split-preview" aria-live="polite">
+            <p class="label">Each owes</p>
+            <div class="split-row">
+              <span>Alex · Sam · Priya</span>
+              <span class="money">₹400 each</span>
+            </div>
+          </div>
+
+          <details class="disclosure">
+            <summary>Advanced split</summary>
+            <div class="disclosure-body">
+              <div class="field">
+                <label for="split-mode">Split type</label>
+                <select id="split-mode">
+                  <option>Exact amounts</option>
+                  <option>Percentages</option>
+                  <option>Shares</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="alex-amt">Alex</label>
+                <input id="alex-amt" class="money" value="400" inputmode="decimal" />
+              </div>
+              <div class="field">
+                <label for="sam-amt">Sam</label>
+                <input id="sam-amt" class="money" value="400" inputmode="decimal" />
+              </div>
+              <div class="field">
+                <label for="priya-amt">Priya</label>
+                <input id="priya-amt" class="money" value="400" inputmode="decimal" />
+              </div>
+              <p class="field-hint">Amounts must total ₹1,200.</p>
+            </div>
+          </details>
+
+          <div class="row" style="flex-wrap: wrap">
+            <button type="submit" class="btn btn-primary" style="flex: 1">Save expense</button>
+            <a class="btn btn-secondary" href="03-trip-workspace.html">Cancel</a>
+          </div>
+        </form>
+      </div>
+    </main>
+
+    <script>
+      document.querySelectorAll(".tag-choice").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document.querySelectorAll(".tag-choice").forEach((b) => {
+            b.setAttribute("aria-pressed", "false");
+          });
+          btn.setAttribute("aria-pressed", "true");
+        });
+      });
+    </script>
+  </body>
+</html>

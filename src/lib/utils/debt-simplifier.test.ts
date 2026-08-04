@@ -51,6 +51,106 @@ describe('calculateNetBalances', () => {
     );
     expect(balances).toHaveLength(2);
   });
+
+  it('partial settlement shrinks the outstanding balance', () => {
+    const balances = calculateNetBalances(
+      [
+        {
+          paidBy: [{ user: 'A', amount: 100 }],
+          splitBetween: [
+            { user: 'A', amount: 50 },
+            { user: 'B', amount: 50 },
+          ],
+        },
+      ],
+      [{ paidBy: 'B', paidTo: 'A', amount: 20 }],
+    );
+
+    expect(balances).toEqual(
+      expect.arrayContaining([
+        { userId: 'A', amount: 30 },
+        { userId: 'B', amount: -30 },
+      ]),
+    );
+  });
+
+  it('over-settlement flips who owes whom', () => {
+    const balances = calculateNetBalances(
+      [
+        {
+          paidBy: [{ user: 'A', amount: 100 }],
+          splitBetween: [
+            { user: 'A', amount: 50 },
+            { user: 'B', amount: 50 },
+          ],
+        },
+      ],
+      [{ paidBy: 'B', paidTo: 'A', amount: 70 }],
+    );
+
+    expect(balances).toEqual(
+      expect.arrayContaining([
+        { userId: 'A', amount: -20 },
+        { userId: 'B', amount: 20 },
+      ]),
+    );
+  });
+
+  it('nets multiple payers against their splits within one expense', () => {
+    const balances = calculateNetBalances(
+      [
+        {
+          paidBy: [
+            { user: 'A', amount: 60 },
+            { user: 'B', amount: 40 },
+          ],
+          splitBetween: [
+            { user: 'A', amount: 50 },
+            { user: 'B', amount: 50 },
+          ],
+        },
+      ],
+      [],
+    );
+
+    expect(balances).toEqual(
+      expect.arrayContaining([
+        { userId: 'A', amount: 10 },
+        { userId: 'B', amount: -10 },
+      ]),
+    );
+  });
+
+  it('always keeps the group zero-sum across expenses and settlements', () => {
+    const balances = calculateNetBalances(
+      [
+        {
+          paidBy: [{ user: 'A', amount: 90 }],
+          splitBetween: [
+            { user: 'A', amount: 30 },
+            { user: 'B', amount: 30 },
+            { user: 'C', amount: 30 },
+          ],
+        },
+        {
+          paidBy: [{ user: 'B', amount: 45 }],
+          splitBetween: [
+            { user: 'A', amount: 15 },
+            { user: 'B', amount: 15 },
+            { user: 'C', amount: 15 },
+          ],
+        },
+      ],
+      [
+        { paidBy: 'C', paidTo: 'A', amount: 25 },
+        { paidBy: 'C', paidTo: 'B', amount: 10 },
+      ],
+    );
+
+    const total = balances.reduce((sum, balance) => sum + balance.amount, 0);
+    expect(total).toBeCloseTo(0, 10);
+    expect(balances).toHaveLength(3);
+  });
 });
 
 describe('simplifyDebts', () => {

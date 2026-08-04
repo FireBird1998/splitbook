@@ -13,6 +13,8 @@ import { createSettlementSchema } from '@/lib/validators/settlement.validator';
 
 const settlementValidationMessages: Record<string, string> = {
   INVALID_MEMBERS: 'Both payer and recipient must be group members',
+  SAME_PARTY: 'Payer and recipient must be different people',
+  FORBIDDEN_SETTLEMENT: 'Only the payer or recipient can record this settlement',
   CURRENCY_MISMATCH: 'Currency must match the group default currency',
 };
 

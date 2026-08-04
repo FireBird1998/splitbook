@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SplitWise Private Beta — Design Prototypes</title>
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/components.css" />
+    <script src="js/proto.js"></script>
+    <style>
+      .gallery {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+        gap: var(--space-4);
+      }
+      .gallery a {
+        display: block;
+        padding: var(--space-5);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        color: var(--text);
+        text-decoration: none;
+        transition: border-color 160ms ease, box-shadow 160ms ease;
+      }
+      .gallery a:hover {
+        border-color: var(--brand);
+        box-shadow: var(--shadow-md);
+        text-decoration: none;
+      }
+      .gallery .num {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        color: var(--brand);
+        font-weight: 600;
+      }
+      .gallery h2 {
+        margin: var(--space-2) 0;
+        font-size: var(--text-lg);
+      }
+      .gallery p {
+        font-size: var(--text-sm);
+        color: var(--text-secondary);
+      }
+      .swatches {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-2);
+        margin-top: var(--space-5);
+      }
+      .swatch {
+        width: 72px;
+        border-radius: var(--radius-sm);
+        overflow: hidden;
+        border: 1px solid var(--border);
+        font-size: 10px;
+        text-align: center;
+      }
+      .swatch i {
+        display: block;
+        height: 36px;
+      }
+      .swatch span {
+        display: block;
+        padding: 4px;
+        background: var(--surface);
+        color: var(--text-muted);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="proto-bar">
+      <strong>SplitWise · Phase 1 prototypes</strong>
+      <a href="index.html" data-nav>Gallery</a>
+      <a href="01-persona-entry.html" data-nav>Personas</a>
+      <a href="02-dashboard.html" data-nav>Dashboard</a>
+      <a href="03-trip-workspace.html" data-nav>Trip</a>
+      <a href="04-quick-expense.html" data-nav>Expense</a>
+      <a href="05-balances-settle.html" data-nav>Balances</a>
+      <span class="spacer"></span>
+      <button type="button" data-theme-toggle="light">Light</button>
+      <button type="button" data-theme-toggle="dark">Dark</button>
+    </div>
+
+    <main class="frame stack-lg animate-in">
+      <header class="page-title-block">
+        <p class="label">Visual prototype checkpoint</p>
+        <h1>Travel Ledger + Calm Finance</h1>
+        <p>
+          Hybrid direction for private beta. Signature boarding-pass trip strip;
+          everything else stays quiet and money-first. Toggle light/dark above;
+          resize the browser for mobile.
+        </p>
+      </header>
+
+      <section class="gallery">
+        <a href="01-persona-entry.html">
+          <span class="num">01</span>
+          <h2>Demo persona entry</h2>
+          <p>Alex, Sam, Priya — role and balance preview before entering.</p>
+        </a>
+        <a href="02-dashboard.html">
+          <span class="num">02</span>
+          <h2>Money-first dashboard</h2>
+          <p>Per-currency owe/owed, next action, trip strips, activity.</p>
+        </a>
+        <a href="03-trip-workspace.html">
+          <span class="num">03</span>
+          <h2>Trip workspace</h2>
+          <p>Header strip + Expenses / Balances / Activity tabs.</p>
+        </a>
+        <a href="04-quick-expense.html">
+          <span class="num">04</span>
+          <h2>Quick expense flow</h2>
+          <p>Fast common path; advanced split progressively disclosed.</p>
+        </a>
+        <a href="05-balances-settle.html">
+          <span class="num">05</span>
+          <h2>Balances + settle</h2>
+          <p>Who pays whom, record settlement, history.</p>
+        </a>
+      </section>
+
+      <section class="quiet-panel card-pad">
+        <p class="label">Palette primitives</p>
+        <div class="swatches">
+          <div class="swatch"><i style="background: var(--indigo-500)"></i><span>Indigo</span></div>
+          <div class="swatch"><i style="background: var(--sky-500)"></i><span>Sky</span></div>
+          <div class="swatch"><i style="background: var(--coral-500)"></i><span>Coral</span></div>
+          <div class="swatch"><i style="background: var(--mint-500)"></i><span>Mint</span></div>
+        </div>
+        <p class="muted" style="margin-top: var(--space-4); font-size: var(--text-sm)">
+          Type: Outfit (UI) · IBM Plex Mono (money). See README.md for MUI token mapping.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

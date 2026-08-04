@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>02 · Money-first dashboard — SplitWise</title>
+    <link rel="stylesheet" href="css/tokens.css" />
+    <link rel="stylesheet" href="css/base.css" />
+    <link rel="stylesheet" href="css/components.css" />
+    <script src="js/proto.js"></script>
+  </head>
+  <body>
+    <div class="proto-bar">
+      <strong>SplitWise · Phase 1</strong>
+      <a href="index.html" data-nav>Gallery</a>
+      <a href="01-persona-entry.html" data-nav>Personas</a>
+      <a href="02-dashboard.html" data-nav>Dashboard</a>
+      <a href="03-trip-workspace.html" data-nav>Trip</a>
+      <a href="04-quick-expense.html" data-nav>Expense</a>
+      <a href="05-balances-settle.html" data-nav>Balances</a>
+      <span class="spacer"></span>
+      <button type="button" data-theme-toggle="light">Light</button>
+      <button type="button" data-theme-toggle="dark">Dark</button>
+    </div>
+
+    <header class="app-nav" role="banner">
+      <a class="brand" href="02-dashboard.html">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        SplitWise
+      </a>
+      <span class="demo-pill">Demo · Alex</span>
+      <div class="nav-actions">
+        <button type="button" class="btn btn-ghost btn-sm" aria-label="Switch persona">
+          Switch
+        </button>
+        <span class="avatar" aria-hidden="true">A</span>
+      </div>
+    </header>
+
+    <main class="frame stack-lg">
+      <header class="page-title-block animate-in">
+        <p class="label">Your money</p>
+        <h1>Hi Alex — here’s where you stand</h1>
+        <p>Balances by currency. Settle or open a trip when you’re ready.</p>
+      </header>
+
+      <section class="animate-balance" aria-labelledby="balances-heading">
+        <div class="section-head">
+          <h2 id="balances-heading">Balances</h2>
+          <span class="currency-tag">INR · USD kept separate</span>
+        </div>
+        <div class="balance-grid">
+          <div class="balance-tile owed">
+            <div class="row-between">
+              <span class="label">You owe</span>
+              <span class="currency-tag">USD</span>
+            </div>
+            <p class="amount money">$18.00</p>
+            <p class="muted" style="margin-top: 6px; font-size: var(--text-sm)">
+              To Priya · Goa Weekend
+            </p>
+          </div>
+          <div class="balance-tile owing">
+            <div class="row-between">
+              <span class="label">You're owed</span>
+              <span class="currency-tag">INR</span>
+            </div>
+            <p class="amount money">₹2,450</p>
+            <p class="muted" style="margin-top: 6px; font-size: var(--text-sm)">
+              From Sam + Priya · Goa Weekend
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <section class="animate-in" style="animation-delay: 60ms" aria-labelledby="next-heading">
+        <div class="section-head">
+          <h2 id="next-heading">Next best action</h2>
+        </div>
+        <div class="next-action">
+          <div class="icon" aria-hidden="true">→</div>
+          <div class="body">
+            <strong>Record ₹1,200 from Sam</strong>
+            <p>Sam’s share of villa stay is still open. Either of you can mark it settled.</p>
+          </div>
+          <a class="btn btn-sky" href="05-balances-settle.html">Settle</a>
+        </div>
+      </section>
+
+      <section class="animate-in" style="animation-delay: 100ms" aria-labelledby="trips-heading">
+        <div class="section-head">
+          <h2 id="trips-heading">Trips</h2>
+          <a class="btn btn-secondary btn-sm" href="#">New trip</a>
+        </div>
+        <div class="stack">
+          <a
+            class="trip-strip compact interactive"
+            href="03-trip-workspace.html"
+            aria-label="Goa Weekend trip, Bangalore to Goa, Mar 14 to 17. You're owed 2450 rupees."
+          >
+            <div class="trip-strip-main">
+              <div class="trip-route">
+                <span>BLR</span>
+                <span class="dash" aria-hidden="true">···· ✈ ····</span>
+                <span>GOA</span>
+              </div>
+              <div class="trip-meta">
+                <div>
+                  <strong>Goa Weekend</strong>
+                  Mar 14 – 17 · 3 people
+                </div>
+                <div>
+                  <strong>Currency</strong>
+                  INR
+                </div>
+              </div>
+            </div>
+            <div class="trip-strip-stub">
+              <div>
+                <div class="stub-label">Your balance</div>
+                <div class="stub-balance money">+₹2,450</div>
+              </div>
+              <div class="stub-code">TRP · GWA</div>
+            </div>
+          </a>
+
+          <a
+            class="trip-strip compact interactive"
+            href="#"
+            aria-label="SF Layover trip, SFO to LAX. You owe 18 dollars."
+          >
+            <div class="trip-strip-main">
+              <div class="trip-route">
+                <span>SFO</span>
+                <span class="dash" aria-hidden="true">···· ✈ ····</span>
+                <span>LAX</span>
+              </div>
+              <div class="trip-meta">
+                <div>
+                  <strong>SF Layover</strong>
+                  Apr 2 · 2 people
+                </div>
+                <div>
+                  <strong>Currency</strong>
+                  USD
+                </div>
+              </div>
+            </div>
+            <div class="trip-strip-stub">
+              <div>
+                <div class="stub-label">Your balance</div>
+                <div class="stub-balance money">−$18.00</div>
+              </div>
+              <div class="stub-code">TRP · SFL</div>
+            </div>
+          </a>
+        </div>
+      </section>
+
+      <section class="grid-2 animate-in" style="animation-delay: 140ms">
+        <div class="quiet-panel card-pad">
+          <div class="section-head">
+            <h2>Recent activity</h2>
+          </div>
+          <ul class="activity-list">
+            <li>
+              <span class="activity-dot expense" aria-hidden="true"></span>
+              <div style="flex: 1">
+                <div class="row-between">
+                  <strong>Dinner at Thalassa</strong>
+                  <span class="money">₹3,600</span>
+                </div>
+                <p class="activity-meta">Sam paid · split 3 ways · yesterday</p>
+              </div>
+            </li>
+            <li>
+              <span class="activity-dot settle" aria-hidden="true"></span>
+              <div style="flex: 1">
+                <div class="row-between">
+                  <strong>Priya settled with Alex</strong>
+                  <span class="money amount-positive">₹800</span>
+                </div>
+                <p class="activity-meta">Goa Weekend · 2 days ago</p>
+              </div>
+            </li>
+            <li>
+              <span class="activity-dot expense" aria-hidden="true"></span>
+              <div style="flex: 1">
+                <div class="row-between">
+                  <strong>Airport Uber</strong>
+                  <span class="money">$54.00</span>
+                </div>
+                <p class="activity-meta">Priya paid · SF Layover · Apr 2</p>
+              </div>
+            </li>
+          </ul>
+        </div>
+
+        <div class="quiet-panel card-pad stack">
+          <h2>Pending</h2>
+          <div class="split-row">
+            <span>Sam → you</span>
+            <span class="money amount-positive">₹1,200</span>
+          </div>
+          <div class="split-row">
+            <span>Priya → you</span>
+            <span class="money amount-positive">₹1,250</span>
+          </div>
+          <div class="split-row">
+            <span>You → Priya</span>
+            <span class="money amount-negative">$18.00</span>
+          </div>
+          <a class="btn btn-secondary btn-block" href="05-balances-settle.html">
+            Review settlements
+          </a>
+        </div>
+      </section>
+    </main>
+
+    <div class="sticky-cta">
+      <a class="btn btn-primary btn-block" href="04-quick-expense.html">Add expense</a>
+    </div>
+  </body>
+</html>

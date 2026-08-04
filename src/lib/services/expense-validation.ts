@@ -1,3 +1,5 @@
+import { canRecordSettlement } from '@/lib/utils/settlement-authorization';
+
 type Participant = {
   user: unknown;
 };
@@ -36,6 +38,21 @@ export function assertSettlementMembers(
 ): void {
   if (!memberIds.has(paidBy) || !memberIds.has(paidTo)) {
     throw new Error('INVALID_MEMBERS');
+  }
+  if (paidBy === paidTo) {
+    throw new Error('SAME_PARTY');
+  }
+}
+
+export { canRecordSettlement };
+
+export function assertSettlementAuthorization(
+  actorId: string,
+  paidBy: string,
+  paidTo: string,
+): void {
+  if (!canRecordSettlement(actorId, paidBy, paidTo)) {
+    throw new Error('FORBIDDEN_SETTLEMENT');
   }
 }
 

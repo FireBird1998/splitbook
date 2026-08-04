@@ -13,6 +13,7 @@ import {
   assertGroupCurrency,
   shouldValidateExpenseTag,
 } from './expense-validation';
+import { calculateSplitAmounts } from './split-calculation';
 import mongoose from 'mongoose';
 
 export class ExpenseService {
@@ -34,36 +35,12 @@ export class ExpenseService {
     assertActiveTag(activeTagNames, data.tag);
     assertGroupCurrency(group.defaultCurrency, data.currency);
 
-    // Calculate split amounts for equal split
-    let splitBetween = data.splitBetween;
-    if (data.splitMethod === 'equal') {
-      const perPerson = Math.floor((data.amount * 100) / splitBetween.length) / 100;
-      const remainder = Math.round((data.amount - perPerson * splitBetween.length) * 100) / 100;
-
-      splitBetween = splitBetween.map((s, i) => ({
-        ...s,
-        amount: i === 0 ? perPerson + remainder : perPerson,
-      }));
-    }
-
-    // For shares split, calculate amounts
-    if (data.splitMethod === 'shares') {
-      const totalShares = splitBetween.reduce((sum, s) => sum + (s.shares || 0), 0);
-      if (totalShares > 0) {
-        splitBetween = splitBetween.map((s) => ({
-          ...s,
-          amount: Math.round(((s.shares || 0) / totalShares) * data.amount * 100) / 100,
-        }));
-      }
-    }
-
-    // For percentage split, calculate amounts
-    if (data.splitMethod === 'percentage') {
-      splitBetween = splitBetween.map((s) => ({
-        ...s,
-        amount: Math.round(((s.percentage || 0) / 100) * data.amount * 100) / 100,
-      }));
-    }
+    // Resolve split amounts for equal/shares/percentage methods
+    const splitBetween = calculateSplitAmounts(
+      data.splitMethod,
+      data.amount,
+      data.splitBetween,
+    );
 
     const expense = await Expense.create({
       group: groupId,
@@ -294,32 +271,7 @@ export class ExpenseService {
 
     // Recalculate split amounts if split method or members changed
     if (data.splitBetween && data.splitMethod && data.amount !== undefined) {
-      const totalAmount = data.amount;
-      let splitBetween = data.splitBetween;
-      if (data.splitMethod === 'equal') {
-        const perPerson = Math.floor((totalAmount * 100) / splitBetween.length) / 100;
-        const remainder = Math.round((totalAmount - perPerson * splitBetween.length) * 100) / 100;
-        splitBetween = splitBetween.map((s, i) => ({
-          ...s,
-          amount: i === 0 ? perPerson + remainder : perPerson,
-        }));
-      }
-      if (data.splitMethod === 'shares') {
-        const totalShares = splitBetween.reduce((sum, s) => sum + (s.shares || 0), 0);
-        if (totalShares > 0) {
-          splitBetween = splitBetween.map((s) => ({
-            ...s,
-            amount: Math.round(((s.shares || 0) / totalShares) * totalAmount * 100) / 100,
-          }));
-        }
-      }
-      if (data.splitMethod === 'percentage') {
-        splitBetween = splitBetween.map((s) => ({
-          ...s,
-          amount: Math.round(((s.percentage || 0) / 100) * totalAmount * 100) / 100,
-        }));
-      }
-      data.splitBetween = splitBetween;
+      data.splitBetween = calculateSplitAmounts(data.splitMethod, data.amount, data.splitBetween);
     }
 
     // Track changes (exclude isDeleted from edit tracking)

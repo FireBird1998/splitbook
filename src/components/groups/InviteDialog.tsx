@@ -103,7 +103,7 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
           }}
         >
           Invite Members
-          <IconButton onClick={onClose} size="small">
+          <IconButton onClick={onClose} size="small" aria-label="Close invite dialog">
             <CloseIcon />
           </IconButton>
         </DialogTitle>
@@ -176,6 +176,7 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
                       onClick={handleCopy}
                       size="small"
                       color={copied ? 'success' : 'default'}
+                      aria-label={copied ? 'Invite link copied' : 'Copy invite link'}
                     >
                       {copied ? <CheckIcon /> : <ContentCopyIcon />}
                     </IconButton>

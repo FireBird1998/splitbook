@@ -32,8 +32,17 @@ A full-featured expense-splitting application built with Next.js (App Router), R
 | [architecture.md](./architecture.md) | Folder structure, data flow, conventions |
 | [database.md](./database.md)         | MongoDB schemas and relationships        |
 | [api.md](./api.md)                   | All REST API endpoints                   |
-| [auth.md](./auth.md)                 | Auth.js + Google OAuth setup             |
+| [auth.md](./auth.md)                 | Auth.js: demo personas + Google OAuth    |
+| [testing.md](./testing.md)           | Unit / integration / browser test layers |
 | [ui.md](./ui.md)                     | Design system, theme, components         |
+
+> **Private-beta status (feat/private-beta):** demo persona auth (Alex, Sam,
+> Priya) with an idempotent seeded Goa trip is the active entry path; Google
+> OAuth stays dormant behind `AUTH_MODE` until Phase 7. Each trip uses a
+> single currency; dashboard balances aggregate in separate currency buckets.
+> Receipts, email delivery, FX conversion, and realtime sync are deferred —
+> see [features/realtime.md](./features/realtime.md) and
+> [features/receipts.md](./features/receipts.md) for their future scope.
 
 ### Feature Specs
 

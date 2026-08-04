@@ -3,7 +3,9 @@ import {
   assertActiveTag,
   assertExpenseParticipants,
   assertGroupCurrency,
+  assertSettlementAuthorization,
   assertSettlementMembers,
+  canRecordSettlement,
   shouldValidateExpenseTag,
 } from './expense-validation';
 
@@ -90,6 +92,23 @@ describe('expense validation', () => {
 
       expect(() => assertSettlementMembers(memberIds, 'user-1', 'user-2')).toThrow(
         'INVALID_MEMBERS',
+      );
+    });
+
+    it('throws SAME_PARTY when payer and recipient are identical', () => {
+      const memberIds = new Set(['user-1']);
+      expect(() => assertSettlementMembers(memberIds, 'user-1', 'user-1')).toThrow('SAME_PARTY');
+    });
+  });
+
+  describe('settlement authorization', () => {
+    it('allows either authorized party to record a settlement', () => {
+      expect(canRecordSettlement('payer', 'payer', 'payee')).toBe(true);
+      expect(canRecordSettlement('payee', 'payer', 'payee')).toBe(true);
+      expect(canRecordSettlement('other', 'payer', 'payee')).toBe(false);
+      expect(() => assertSettlementAuthorization('payee', 'payer', 'payee')).not.toThrow();
+      expect(() => assertSettlementAuthorization('other', 'payer', 'payee')).toThrow(
+        'FORBIDDEN_SETTLEMENT',
       );
     });
   });

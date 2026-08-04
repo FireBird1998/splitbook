@@ -24,8 +24,8 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ExpenseCard from './ExpenseCard';
 import ExpenseFormDialog from './ExpenseFormDialog';
 import DeleteExpenseDialog from './DeleteExpenseDialog';
+import MoneyText from '@/components/common/MoneyText';
 import { formatDate } from '@/lib/utils/date';
-import { formatCurrency } from '@/lib/utils/currency';
 import { EXPENSE_CATEGORIES } from '@/lib/constants/categories';
 import { fetcher } from '@/lib/utils/fetcher';
 
@@ -43,9 +43,15 @@ interface ExpenseListViewProps {
   groupId: string;
   userId: string;
   group: Record<string, unknown>;
+  onAddExpense?: () => void;
 }
 
-export default function ExpenseListView({ groupId, userId, group }: ExpenseListViewProps) {
+export default function ExpenseListView({
+  groupId,
+  userId,
+  group,
+  onAddExpense,
+}: ExpenseListViewProps) {
   const [quickFilter, setQuickFilter] = useState('all');
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
@@ -177,7 +183,7 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
           '&::-webkit-scrollbar': { height: 4 },
           '&::-webkit-scrollbar-track': { bgcolor: 'transparent' },
           '&::-webkit-scrollbar-thumb': {
-            bgcolor: 'grey.300',
+            bgcolor: 'border.strong',
             borderRadius: 2,
           },
           scrollbarWidth: 'thin',
@@ -191,7 +197,9 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
             onClick={() => handleQuickFilterChange(f.id)}
             size="small"
             sx={{
-              ...(quickFilter === f.id ? { backgroundColor: 'primary.main', color: 'white' } : {}),
+              ...(quickFilter === f.id
+                ? { backgroundColor: 'primary.main', color: 'primary.contrastText' }
+                : {}),
               flexShrink: 0,
             }}
           />
@@ -270,6 +278,8 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
         <IconButton
           onClick={() => setShowFilters(!showFilters)}
           size="small"
+          aria-label={showFilters ? 'Hide filters' : 'Show filters'}
+          aria-expanded={showFilters}
           sx={{
             border: '1px solid',
             borderColor: activeFilterCount > 0 ? 'primary.main' : 'divider',
@@ -307,7 +317,11 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
                     setCategory('');
                     setPage(1);
                   }}
-                  sx={!category ? { backgroundColor: 'primary.main', color: 'white' } : {}}
+                  sx={
+                    !category
+                      ? { backgroundColor: 'primary.main', color: 'primary.contrastText' }
+                      : {}
+                  }
                 />
                 {EXPENSE_CATEGORIES.map((c) => (
                   <Chip
@@ -323,7 +337,7 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
                       flexShrink: 0,
                       fontSize: 12,
                       ...(category === c.id
-                        ? { backgroundColor: 'primary.main', color: 'white' }
+                        ? { backgroundColor: 'primary.main', color: 'primary.contrastText' }
                         : {}),
                     }}
                   />
@@ -350,7 +364,11 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
                     setTagFilter('');
                     setPage(1);
                   }}
-                  sx={!tagFilter ? { backgroundColor: 'primary.main', color: 'white' } : {}}
+                  sx={
+                    !tagFilter
+                      ? { backgroundColor: 'primary.main', color: 'primary.contrastText' }
+                      : {}
+                  }
                 />
                 {(
                   (group.tags || []) as Array<{
@@ -374,7 +392,7 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
                         flexShrink: 0,
                         fontSize: 12,
                         ...(tagFilter === t.name
-                          ? { backgroundColor: 'primary.main', color: 'white' }
+                          ? { backgroundColor: 'primary.main', color: 'primary.contrastText' }
                           : {}),
                       }}
                     />
@@ -404,6 +422,9 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
                 size="small"
                 onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
                 title={sortOrder === 'desc' ? 'Descending' : 'Ascending'}
+                aria-label={`Sort ${sortOrder === 'desc' ? 'descending' : 'ascending'}, switch to ${
+                  sortOrder === 'desc' ? 'ascending' : 'descending'
+                }`}
               >
                 {sortOrder === 'desc' ? (
                   <ArrowDownwardIcon fontSize="small" />
@@ -435,13 +456,13 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
               >
                 Total expenses
               </Typography>
-              <Typography
+              <MoneyText
+                amount={summary.totalAmount || 0}
+                currency={currency}
+                tone="neutral"
                 fontWeight={700}
-                color="text.primary"
-                sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
-              >
-                {formatCurrency(summary.totalAmount || 0, currency)}
-              </Typography>
+                sx={{ display: 'block', fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
+              />
               <Typography variant="caption" color="text.disabled">
                 {summary.count || 0} expense
                 {(summary.count || 0) !== 1 ? 's' : ''}
@@ -458,13 +479,13 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
                   >
                     You owe
                   </Typography>
-                  <Typography
+                  <MoneyText
+                    amount={summary.userOwes}
+                    currency={currency}
+                    tone="negative"
                     fontWeight={700}
-                    color="error.main"
-                    sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
-                  >
-                    {formatCurrency(summary.userOwes, currency)}
-                  </Typography>
+                    sx={{ display: 'block', fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
+                  />
                 </Box>
               )}
               {(summary.userGetsBack || 0) > 0.01 && (
@@ -477,13 +498,13 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
                   >
                     You get back
                   </Typography>
-                  <Typography
+                  <MoneyText
+                    amount={summary.userGetsBack}
+                    currency={currency}
+                    tone="positive"
                     fontWeight={700}
-                    color="success.main"
-                    sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
-                  >
-                    {formatCurrency(summary.userGetsBack, currency)}
-                  </Typography>
+                    sx={{ display: 'block', fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
+                  />
                 </Box>
               )}
             </Box>
@@ -511,19 +532,23 @@ export default function ExpenseListView({ groupId, userId, group }: ExpenseListV
           ))}
         </Stack>
       ) : expenses.length === 0 ? (
-        <Paper variant="outlined" sx={{ p: 6, textAlign: 'center' }}>
-          <Typography component="span" sx={{ fontSize: '2.5rem', display: 'block', mb: 2 }}>
-            🧾
-          </Typography>
-          <Typography variant="subtitle1" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
-            No expenses yet
-          </Typography>
-          <Typography color="text.secondary">
+        <Box sx={{ py: { xs: 4, sm: 6 }, textAlign: 'center' }}>
+          <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
             {search || quickFilter !== 'all' || category || tagFilter
-              ? 'No expenses match your filters.'
-              : 'Add your first expense using the + button below.'}
+              ? 'No matching expenses'
+              : 'No expenses yet'}
           </Typography>
-        </Paper>
+          <Typography color="text.secondary" sx={{ mb: onAddExpense ? 2.5 : 0 }}>
+            {search || quickFilter !== 'all' || category || tagFilter
+              ? 'Try clearing filters to see everything on this trip.'
+              : 'Add a shared cost — tags and equal split are ready.'}
+          </Typography>
+          {onAddExpense && !(search || quickFilter !== 'all' || category || tagFilter) && (
+            <Button variant="contained" onClick={onAddExpense} sx={{ textTransform: 'none' }}>
+              Add first expense
+            </Button>
+          )}
+        </Box>
       ) : (
         <Stack
           spacing={3}
