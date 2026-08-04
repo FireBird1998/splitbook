@@ -392,7 +392,12 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     <Container maxWidth="md" disableGutters>
       {/* Header */}
       <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 4 }}>
-        <IconButton component={Link} href={`/groups/${groupId}`} size="small">
+        <IconButton
+          component={Link}
+          href={`/groups/${groupId}`}
+          size="small"
+          aria-label="Back to trip"
+        >
           <ArrowBackIcon />
         </IconButton>
         <Box>
@@ -612,7 +617,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                     py: 1,
                     px: 1.5,
                     borderRadius: 2,
-                    bgcolor: tag.isArchived ? 'grey.50' : 'background.paper',
+                    bgcolor: tag.isArchived ? 'surface.muted' : 'background.paper',
                     opacity: tag.isArchived ? 0.7 : 1,
                   }}
                 >
@@ -647,6 +652,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                   </Stack>
                   <IconButton
                     size="small"
+                    aria-label={`Actions for tag ${tag.name}`}
                     onClick={(e) => {
                       setSelectedTag(tag._id);
                       setTagMenuAnchor(e.currentTarget);
@@ -787,6 +793,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 {m.user._id !== userId && (
                   <IconButton
                     size="small"
+                    aria-label={`Actions for member ${m.user.name}`}
                     onClick={(e) => {
                       setSelectedMember(m.user._id);
                       setMemberMenuAnchor(e.currentTarget);
@@ -845,7 +852,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 direction="row"
                 alignItems="center"
                 spacing={1}
-                sx={{ bgcolor: 'grey.50', borderRadius: 2, px: 1.5, py: 1 }}
+                sx={{ bgcolor: 'surface.muted', borderRadius: 2, px: 1.5, py: 1 }}
               >
                 <Typography
                   component="code"
@@ -860,7 +867,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
                 >
                   {inviteLink}
                 </Typography>
-                <IconButton size="small" onClick={handleCopyLink}>
+                <IconButton size="small" onClick={handleCopyLink} aria-label="Copy invite link">
                   <ContentCopyIcon fontSize="small" />
                 </IconButton>
               </Stack>

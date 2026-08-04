@@ -3,9 +3,11 @@
 import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import Box from '@mui/material/Box';
+import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import GoogleIcon from '@mui/icons-material/Google';
+import BrandMark from '@/components/layout/BrandMark';
 import type { AuthMode } from '@/lib/auth-mode';
 import { getSignInProvider } from '@/lib/auth-sign-in';
 
@@ -35,12 +37,12 @@ export default function LoginForm({ authMode }: LoginFormProps) {
     >
       <Box sx={{ textAlign: 'center', p: 4 }}>
         <Box sx={{ mb: 4 }}>
-          <Typography component="span" sx={{ fontSize: '3rem', display: 'block', mb: 2 }}>
-            💰
-          </Typography>
-          <Typography variant="h4" fontWeight={700} color="text.primary">
-            SplitWise
-          </Typography>
+          <Stack direction="row" alignItems="center" justifyContent="center" spacing={1.5}>
+            <BrandMark size={44} fontSize={20} />
+            <Typography variant="h4" fontWeight={700} color="text.primary">
+              SplitWise
+            </Typography>
+          </Stack>
         </Box>
 
         <Box sx={{ mb: 4 }}>

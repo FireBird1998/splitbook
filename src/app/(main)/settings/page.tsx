@@ -123,14 +123,14 @@ export default function SettingsPage() {
           <Stack direction="row" alignItems="center" justifyContent="space-between">
             <Box>
               <Typography variant="body2" color="text.secondary">
-                Connected with Google
+                Signed in
               </Typography>
               <Typography variant="caption" color="text.disabled">
                 {session?.user?.email}
               </Typography>
             </Box>
             <Typography variant="body2" color="success.main">
-              ✓ Connected
+              ✓ Active session
             </Typography>
           </Stack>
           <Button

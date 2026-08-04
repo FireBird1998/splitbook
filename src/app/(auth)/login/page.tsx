@@ -1,6 +1,7 @@
 import { Suspense } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
+import BrandMark from '@/components/layout/BrandMark';
 import { isDemoMode } from '@/lib/auth-mode';
 import LoginForm from '@/components/auth/LoginForm';
 import DemoLoginClient from '@/components/auth/DemoLoginClient';
@@ -21,10 +22,10 @@ export default function LoginPage() {
           }}
         >
           <Box sx={{ textAlign: 'center' }}>
-            <Typography component="span" sx={{ fontSize: '3rem', display: 'block', mb: 2 }}>
-              💰
+            <BrandMark size={44} fontSize={20} />
+            <Typography color="text.secondary" sx={{ mt: 2 }}>
+              Loading...
             </Typography>
-            <Typography color="text.secondary">Loading...</Typography>
           </Box>
         </Box>
       }

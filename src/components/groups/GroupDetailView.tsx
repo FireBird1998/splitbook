@@ -12,10 +12,7 @@ import Skeleton from '@mui/material/Skeleton';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import IconButton from '@mui/material/IconButton';
-import Avatar from '@mui/material/Avatar';
-import AvatarGroup from '@mui/material/AvatarGroup';
 import Fab from '@mui/material/Fab';
-import Chip from '@mui/material/Chip';
 import Button from '@mui/material/Button';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
@@ -23,6 +20,7 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AddIcon from '@mui/icons-material/Add';
 import ShareIcon from '@mui/icons-material/Share';
+import TripStrip from '@/components/trip/TripStrip';
 import ExpenseListView from '@/components/expenses/ExpenseListView';
 import BalancesView from '@/components/balances/BalancesView';
 import ActivityView from '@/components/activity/ActivityView';
@@ -126,6 +124,15 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
       : startDate
         ? `Starts ${formatDate(startDate)}`
         : null;
+  const currency = (balancesData?.data?.currency as string | undefined) ??
+    (group.defaultCurrency as string);
+  const userBalance = (
+    (balancesData?.data?.balances || []) as Array<{
+      user: { _id: string };
+      balance: number;
+    }>
+  ).find((balance) => balance.user._id === userId);
+  const tripTotal = expensesData?.data?.summary?.totalAmount as number | undefined;
   const showChecklist = shouldShowTripChecklist(checklist);
 
   const handleChecklistAction = (id: 'invite' | 'expense' | 'settle') => {
@@ -143,74 +150,56 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
         pb: { xs: 'calc(88px + env(safe-area-inset-bottom, 0px))', sm: 0 },
       }}
     >
-      <Box sx={{ mb: 3 }}>
-        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
-            <IconButton component={Link} href="/" size="small" aria-label="Back to dashboard">
-              <ArrowBackIcon />
-            </IconButton>
-            <Typography
-              variant="h5"
-              fontWeight={700}
-              color="text.primary"
-              sx={{ fontSize: { xs: '1.15rem', sm: '1.5rem' } }}
-              noWrap
-            >
-              {group.name}
-            </Typography>
-          </Stack>
-          <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
-            <IconButton
-              onClick={() => setInviteDialogOpen(true)}
-              size="small"
-              aria-label="Invite friends"
-            >
-              <ShareIcon />
-            </IconButton>
-            <IconButton
-              component={Link}
-              href={`/groups/${groupId}/settings`}
-              size="small"
-              aria-label="Trip settings"
-            >
-              <SettingsIcon />
-            </IconButton>
-          </Stack>
-        </Stack>
-        <Stack
-          direction="row"
-          alignItems="center"
-          spacing={1}
-          sx={{ pl: { xs: 1, sm: 5.5 }, flexWrap: 'wrap', rowGap: 0.5 }}
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        sx={{ mb: 2, animation: 'panel-in 280ms ease-out both' }}
+      >
+        <Button
+          component={Link}
+          href="/"
+          size="small"
+          startIcon={<ArrowBackIcon />}
+          sx={{ color: 'text.secondary', px: 0 }}
         >
-          {dateLabel ? (
-            <Typography variant="body2" color="text.secondary">
-              {dateLabel}
-            </Typography>
-          ) : (
-            <Chip label={String(group.category || 'trip')} size="small" variant="outlined" />
-          )}
-          <AvatarGroup
-            max={4}
-            sx={{
-              '& .MuiAvatar-root': { width: 24, height: 24, fontSize: 11 },
-            }}
+          Dashboard
+        </Button>
+        <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+          <IconButton
+            onClick={() => setInviteDialogOpen(true)}
+            size="small"
+            aria-label="Invite friends"
           >
-            {members.map((m) => (
-              <Avatar
-                key={m.user._id}
-                src={m.user.image}
-                alt={m.user.name}
-                sx={{ width: 24, height: 24 }}
-              >
-                {m.user.name?.[0]}
-              </Avatar>
-            ))}
-          </AvatarGroup>
-          <Typography variant="body2" color="text.secondary">
-            {members.length} member{members.length !== 1 ? 's' : ''}
-          </Typography>
+            <ShareIcon />
+          </IconButton>
+          <IconButton
+            component={Link}
+            href={`/groups/${groupId}/settings`}
+            size="small"
+            aria-label="Trip settings"
+          >
+            <SettingsIcon />
+          </IconButton>
         </Stack>
+      </Stack>
+
+      <Box sx={{ mb: 3, animation: 'panel-in 280ms ease-out both' }}>
+        <TripStrip
+          name={group.name as string}
+          currency={currency}
+          variant="full"
+          dateLabel={dateLabel}
+          memberCount={members.length}
+          memberNames={members.map((member) =>
+            member.user._id === userId ? 'You' : member.user.name.split(' ')[0],
+          )}
+          inviteCode={(group.inviteCode as string | null | undefined) ?? null}
+          balance={userBalance ? { amount: userBalance.balance, currency } : null}
+          tripTotal={
+            typeof tripTotal === 'number' ? { amount: tripTotal, currency } : null
+          }
+        />
       </Box>
 
       {showChecklist && (
@@ -219,7 +208,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
             mb: 3,
             border: '1px solid',
             borderColor: 'divider',
-            borderRadius: 2,
+            borderRadius: '12px',
             px: { xs: 2, sm: 2.5 },
             py: 2,
           }}
@@ -284,17 +273,8 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
         variant="scrollable"
         scrollButtons="auto"
         allowScrollButtonsMobile
-        sx={{
-          mb: 3,
-          '& .MuiTab-root': {
-            textTransform: 'none',
-            fontWeight: 600,
-            minWidth: { xs: 'auto', sm: 90 },
-            px: { xs: 2, sm: 3 },
-          },
-          '& .Mui-selected': { color: 'primary.main' },
-          '& .MuiTabs-indicator': { backgroundColor: 'primary.main' },
-        }}
+        aria-label="Trip sections"
+        sx={{ mb: 3 }}
       >
         <Tab label="Expenses" />
         <Tab label="Balances" />

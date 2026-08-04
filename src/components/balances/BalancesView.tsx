@@ -2,13 +2,15 @@
 
 import useSWR from 'swr';
 import { useState } from 'react';
+import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Skeleton from '@mui/material/Skeleton';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
-import { formatCurrency } from '@/lib/utils/currency';
+import MoneyText from '@/components/common/MoneyText';
 import { formatDate } from '@/lib/utils/date';
 import SettleUpDialog from '@/components/settlements/SettleUpDialog';
 import { fetcher } from '@/lib/utils/fetcher';
@@ -32,6 +34,22 @@ interface Settlement {
   note?: string;
   createdAt: string;
   createdBy?: { _id: string; name: string };
+}
+
+function PersonChip({ name }: { name: string }) {
+  return (
+    <Stack direction="row" alignItems="center" spacing={1}>
+      <Avatar
+        aria-hidden="true"
+        sx={{ width: 32, height: 32, fontSize: 13, bgcolor: 'tint.brand', color: 'primary.main' }}
+      >
+        {name[0]}
+      </Avatar>
+      <Typography variant="body2" fontWeight={600} color="text.primary">
+        {name}
+      </Typography>
+    </Stack>
+  );
 }
 
 export default function BalancesView({ groupId, userId, group }: BalancesViewProps) {
@@ -82,9 +100,18 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
 
   const settlementHistory = (
     <Box>
-      <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ mb: 1.5 }}>
-        Settlement history
-      </Typography>
+      <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1.5 }}>
+        <Typography variant="body2" fontWeight={600} color="text.primary">
+          Settlement history
+        </Typography>
+        {settlements.length > 0 && (
+          <Chip
+            label="Settled"
+            size="small"
+            sx={{ height: 22, fontSize: '0.7rem', bgcolor: 'tint.positive', color: 'success.main' }}
+          />
+        )}
+      </Stack>
       <Stack spacing={1.25}>
         {settlementsError && (
           <Alert severity="warning">Could not load settlement history.</Alert>
@@ -128,9 +155,13 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                   {settlement.note ? ` · ${settlement.note}` : ''}
                 </Typography>
               </Box>
-              <Typography variant="body2" fontWeight={700} color="success.main">
-                {formatCurrency(settlement.amount, settlement.currency || currency)}
-              </Typography>
+              <MoneyText
+                amount={settlement.amount}
+                currency={settlement.currency || currency}
+                tone="positive"
+                variant="body2"
+                fontWeight={700}
+              />
             </Stack>
           </Box>
         ))}
@@ -160,28 +191,18 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
       {hasMixedCurrencies && <Alert severity="warning">{MIXED_CURRENCY_WARNING}</Alert>}
 
       {userBalance && (
-        <Box>
+        <Box sx={{ animation: 'balance-settle 400ms ease-out both' }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
             Your balance
           </Typography>
-          <Typography
+          <MoneyText
+            amount={userBalance.balance}
+            currency={currency}
+            signed
             variant="h5"
             fontWeight={700}
-            sx={{
-              color:
-                userBalance.balance > 0
-                  ? 'success.main'
-                  : userBalance.balance < 0
-                    ? 'error.main'
-                    : 'text.secondary',
-            }}
-          >
-            {userBalance.balance > 0
-              ? `+${formatCurrency(userBalance.balance, currency)}`
-              : userBalance.balance < 0
-                ? formatCurrency(userBalance.balance, currency)
-                : 'Settled'}
-          </Typography>
+            sx={{ display: 'block' }}
+          />
           <Typography variant="caption" color="text.secondary">
             {userBalance.balance > 0
               ? 'Others owe you'
@@ -194,9 +215,21 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
 
       {debts.length > 0 && (
         <Box>
-          <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ mb: 0.5 }}>
-            Who pays whom
-          </Typography>
+          <Stack
+            direction="row"
+            alignItems="baseline"
+            justifyContent="space-between"
+            sx={{ mb: 0.5 }}
+          >
+            <Typography variant="body2" fontWeight={600} color="text.primary">
+              Who pays whom
+            </Typography>
+            <Chip
+              label={`${debts.length} open`}
+              size="small"
+              sx={{ height: 22, fontSize: '0.7rem', bgcolor: 'tint.negative', color: 'error.main' }}
+            />
+          </Stack>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
             {debts.length} payment{debts.length !== 1 ? 's' : ''} to settle · either person can
             record it
@@ -218,9 +251,10 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                     sx={{
                       border: '1px solid',
                       borderColor: 'divider',
-                      borderRadius: 2,
+                      borderRadius: '12px',
                       px: 2,
                       py: 1.75,
+                      bgcolor: 'background.paper',
                     }}
                   >
                     <Stack
@@ -229,21 +263,32 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                       alignItems={{ xs: 'stretch', sm: 'center' }}
                       justifyContent="space-between"
                     >
-                      <Box>
-                        <Typography variant="body1" fontWeight={600} color="text.primary">
-                          {displayName(d.from)}
-                          <Box
-                            component="span"
-                            sx={{ mx: 1, color: 'text.secondary', fontWeight: 400 }}
-                          >
-                            pays
-                          </Box>
-                          {displayName(d.to)}
+                      <Stack
+                        direction="row"
+                        alignItems="center"
+                        spacing={1.5}
+                        sx={{ flexWrap: 'wrap', rowGap: 0.5 }}
+                      >
+                        <PersonChip name={displayName(d.from)} />
+                        <Typography
+                          component="span"
+                          variant="caption"
+                          color="text.disabled"
+                          aria-hidden="true"
+                          sx={{ letterSpacing: '0.08em' }}
+                        >
+                          pays →
                         </Typography>
-                        <Typography variant="h6" fontWeight={700} color="text.primary" sx={{ mt: 0.5 }}>
-                          {formatCurrency(d.amount, currency)}
-                        </Typography>
-                      </Box>
+                        <PersonChip name={displayName(d.to)} />
+                        <MoneyText
+                          amount={d.amount}
+                          currency={currency}
+                          tone="neutral"
+                          variant="h6"
+                          fontWeight={600}
+                          sx={{ ml: { sm: 'auto' } }}
+                        />
+                      </Stack>
                       {involved && (
                         <Button
                           size="medium"
@@ -256,7 +301,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                               amount: d.amount,
                             })
                           }
-                          sx={{ textTransform: 'none', minHeight: 40 }}
+                          sx={{ flexShrink: 0 }}
                         >
                           Record settlement
                         </Button>
@@ -287,24 +332,19 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                 <Typography variant="body2" color="text.primary">
                   {b.user._id === userId ? 'You' : b.user.name}
                 </Typography>
-                <Typography
-                  variant="body2"
-                  fontWeight={600}
-                  sx={{
-                    color:
-                      b.balance > 0
-                        ? 'success.main'
-                        : b.balance < 0
-                          ? 'error.main'
-                          : 'text.disabled',
-                  }}
-                >
-                  {b.balance > 0
-                    ? `+${formatCurrency(b.balance, currency)}`
-                    : b.balance < 0
-                      ? formatCurrency(b.balance, currency)
-                      : 'Settled'}
-                </Typography>
+                {Math.abs(b.balance) < 0.005 ? (
+                  <Typography variant="body2" fontWeight={600} color="text.disabled">
+                    Settled
+                  </Typography>
+                ) : (
+                  <MoneyText
+                    amount={b.balance}
+                    currency={currency}
+                    signed
+                    variant="body2"
+                    fontWeight={600}
+                  />
+                )}
               </Stack>
             ),
           )}

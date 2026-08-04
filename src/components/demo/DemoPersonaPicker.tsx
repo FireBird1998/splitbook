@@ -3,13 +3,13 @@
 import { signIn } from 'next-auth/react';
 import { useState } from 'react';
 import Box from '@mui/material/Box';
-import Button from '@mui/material/Button';
-import Paper from '@mui/material/Paper';
+import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import { DEMO_PERSONAS, type DemoPersonaKey } from '@/lib/demo-personas';
 import DemoModeBadge from '@/components/demo/DemoModeBadge';
+import BrandMark from '@/components/layout/BrandMark';
 
 interface DemoPersonaPickerProps {
   callbackUrl?: string;
@@ -17,14 +17,20 @@ interface DemoPersonaPickerProps {
   subtitle?: string;
 }
 
+const PERSONA_TINTS: Record<DemoPersonaKey, { bg: string; fg: string }> = {
+  alex: { bg: 'tint.brand', fg: 'primary.main' },
+  sam: { bg: 'tint.info', fg: 'info.main' },
+  priya: { bg: 'tint.positive', fg: 'success.main' },
+};
+
 /**
- * Minimal functional persona entry for private beta.
- * Phase 5 owns the final visual design.
+ * Persona entry for the private beta — the first screen testers see.
+ * Visual language mirrors docs/design/private-beta/01-persona-entry.html.
  */
 export default function DemoPersonaPicker({
   callbackUrl = '/dashboard',
-  title = 'Try the private beta',
-  subtitle = 'Pick a persona to enter the seeded Goa friends trip.',
+  title = 'Enter as a persona',
+  subtitle = 'Shared demo trip for private-beta testers. Pick who you are — balances update for that person.',
 }: DemoPersonaPickerProps) {
   const [loadingKey, setLoadingKey] = useState<DemoPersonaKey | null>(null);
   const [error, setError] = useState('');
@@ -47,86 +53,152 @@ export default function DemoPersonaPicker({
     <Box
       sx={{
         minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        bgcolor: 'background.default',
+        display: 'grid',
+        placeItems: 'center',
         px: 2,
+        py: 6,
+        background: (theme) =>
+          `radial-gradient(ellipse 80% 50% at 50% -10%, ${theme.palette.primary.main}24, transparent), ${theme.palette.background.default}`,
       }}
     >
-      <Paper
-        variant="outlined"
+      <Box
         sx={{
           width: '100%',
-          maxWidth: 420,
-          p: { xs: 3, sm: 4 },
-          borderRadius: 3,
+          maxWidth: 920,
+          animation: 'panel-in 280ms ease-out both',
         }}
       >
-        <Stack spacing={3}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Stack direction="row" spacing={1} alignItems="center">
-              <Typography component="span" sx={{ fontSize: '1.75rem' }}>
-                💰
-              </Typography>
-              <Typography variant="h6" fontWeight={700} color="text.primary">
-                SplitWise
-              </Typography>
-            </Stack>
-            <DemoModeBadge />
-          </Stack>
-
-          <Box>
-            <Typography variant="h5" fontWeight={700} color="text.primary" sx={{ mb: 1 }}>
-              {title}
+        <Stack alignItems="center" spacing={1.5} sx={{ textAlign: 'center', mb: 6 }}>
+          <Stack direction="row" alignItems="center" spacing={1.25}>
+            <BrandMark size={40} fontSize={18} />
+            <Typography
+              component="span"
+              sx={{
+                fontSize: '1.75rem',
+                fontWeight: 700,
+                letterSpacing: '-0.02em',
+                color: 'text.primary',
+              }}
+            >
+              SplitWise
             </Typography>
-            <Typography color="text.secondary">{subtitle}</Typography>
-          </Box>
-
-          {error && (
-            <Typography color="error.main" variant="body2">
-              {error}
-            </Typography>
-          )}
-
-          <Stack spacing={1.5}>
-            {DEMO_PERSONAS.map((persona) => {
-              const busy = loadingKey === persona.key;
-              return (
-                <Button
-                  key={persona.key}
-                  variant="outlined"
-                  fullWidth
-                  disabled={loadingKey !== null}
-                  onClick={() => handleSelect(persona.key)}
-                  sx={{
-                    justifyContent: 'flex-start',
-                    textAlign: 'left',
-                    py: 1.5,
-                    px: 2,
-                    borderColor: 'divider',
-                    color: 'text.primary',
-                  }}
-                >
-                  <Stack spacing={0.25} sx={{ width: '100%' }}>
-                    <Stack direction="row" justifyContent="space-between" alignItems="center">
-                      <Typography fontWeight={600}>{persona.name}</Typography>
-                      {busy ? <CircularProgress size={16} /> : null}
-                    </Stack>
-                    <Typography variant="caption" color="text.secondary">
-                      {persona.headline}
-                    </Typography>
-                  </Stack>
-                </Button>
-              );
-            })}
           </Stack>
-
-          <Typography variant="caption" color="text.disabled">
-            Shared demo data. Sign out and pick another persona to switch views.
+          <DemoModeBadge />
+          <Typography
+            variant="h4"
+            component="h1"
+            fontWeight={700}
+            color="text.primary"
+            sx={{ letterSpacing: '-0.02em', mt: 2 }}
+          >
+            {title}
+          </Typography>
+          <Typography color="text.secondary" sx={{ maxWidth: '36ch' }}>
+            {subtitle}
           </Typography>
         </Stack>
-      </Paper>
+
+        {error && (
+          <Typography color="error.main" variant="body2" sx={{ textAlign: 'center', mb: 2 }}>
+            {error}
+          </Typography>
+        )}
+
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' },
+            gap: 2,
+          }}
+        >
+          {DEMO_PERSONAS.map((persona) => {
+            const busy = loadingKey === persona.key;
+            const tint = PERSONA_TINTS[persona.key];
+            return (
+              <Box
+                key={persona.key}
+                component="button"
+                type="button"
+                disabled={loadingKey !== null}
+                onClick={() => handleSelect(persona.key)}
+                aria-label={`Enter as ${persona.name}, ${persona.role}. ${persona.headline}`}
+                sx={{
+                  textAlign: 'left',
+                  p: 3,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: '16px',
+                  bgcolor: 'background.paper',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 2,
+                  width: '100%',
+                  font: 'inherit',
+                  color: 'inherit',
+                  transition:
+                    'border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease',
+                  '&:hover': {
+                    borderColor: 'primary.main',
+                    boxShadow: 2,
+                    transform: 'translateY(-2px)',
+                  },
+                  '&:focus-visible': { borderColor: 'focus.main' },
+                  '&:disabled': { opacity: 0.7, cursor: 'default' },
+                }}
+              >
+                <Stack direction="row" alignItems="center" spacing={1.5}>
+                  <Box
+                    component="span"
+                    aria-hidden="true"
+                    sx={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: '14px',
+                      display: 'grid',
+                      placeItems: 'center',
+                      fontWeight: 700,
+                      fontSize: '1.125rem',
+                      bgcolor: tint.bg,
+                      color: tint.fg,
+                    }}
+                  >
+                    {persona.name[0]}
+                  </Box>
+                  <Box>
+                    <Typography variant="subtitle1" fontWeight={700} color="text.primary">
+                      {persona.name}
+                    </Typography>
+                    <Chip
+                      label={persona.role === 'organizer' ? 'Organizer' : 'Member'}
+                      size="small"
+                      sx={{
+                        height: 22,
+                        fontSize: '0.7rem',
+                        bgcolor: tint.bg,
+                        color: tint.fg,
+                      }}
+                    />
+                  </Box>
+                  {busy && <CircularProgress size={18} sx={{ ml: 'auto' }} />}
+                </Stack>
+                <Typography variant="body2" color="text.secondary">
+                  {persona.headline}
+                </Typography>
+              </Box>
+            );
+          })}
+        </Box>
+
+        <Typography
+          variant="body2"
+          color="text.secondary"
+          sx={{ textAlign: 'center', mt: 4 }}
+        >
+          Shared demo data — sign out and pick another persona to switch views. Currencies stay
+          separate, never combined into one number.
+        </Typography>
+      </Box>
     </Box>
   );
 }

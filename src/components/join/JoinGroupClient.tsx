@@ -10,6 +10,7 @@ import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import GoogleIcon from '@mui/icons-material/Google';
+import BrandMark from '@/components/layout/BrandMark';
 import type { AuthMode } from '@/lib/auth-mode';
 import { getSignInProvider } from '@/lib/auth-sign-in';
 import DemoPersonaPicker from '@/components/demo/DemoPersonaPicker';
@@ -151,15 +152,13 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
         sx={{
           textAlign: 'center',
           p: 4,
-          borderRadius: 4,
+          borderRadius: '16px',
           maxWidth: 384,
           mx: 2,
         }}
       >
-        <Stack spacing={3}>
-          <Typography component="span" sx={{ fontSize: '3rem' }}>
-            💰
-          </Typography>
+        <Stack spacing={3} alignItems="center">
+          <BrandMark size={44} fontSize={20} />
           <Box>
             <Typography color="text.secondary" sx={{ mb: 1 }}>
               You&apos;ve been invited to join:

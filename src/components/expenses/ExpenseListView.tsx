@@ -24,8 +24,8 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import ExpenseCard from './ExpenseCard';
 import ExpenseFormDialog from './ExpenseFormDialog';
 import DeleteExpenseDialog from './DeleteExpenseDialog';
+import MoneyText from '@/components/common/MoneyText';
 import { formatDate } from '@/lib/utils/date';
-import { formatCurrency } from '@/lib/utils/currency';
 import { EXPENSE_CATEGORIES } from '@/lib/constants/categories';
 import { fetcher } from '@/lib/utils/fetcher';
 
@@ -183,7 +183,7 @@ export default function ExpenseListView({
           '&::-webkit-scrollbar': { height: 4 },
           '&::-webkit-scrollbar-track': { bgcolor: 'transparent' },
           '&::-webkit-scrollbar-thumb': {
-            bgcolor: 'grey.300',
+            bgcolor: 'border.strong',
             borderRadius: 2,
           },
           scrollbarWidth: 'thin',
@@ -197,7 +197,9 @@ export default function ExpenseListView({
             onClick={() => handleQuickFilterChange(f.id)}
             size="small"
             sx={{
-              ...(quickFilter === f.id ? { backgroundColor: 'primary.main', color: 'white' } : {}),
+              ...(quickFilter === f.id
+                ? { backgroundColor: 'primary.main', color: 'primary.contrastText' }
+                : {}),
               flexShrink: 0,
             }}
           />
@@ -276,6 +278,8 @@ export default function ExpenseListView({
         <IconButton
           onClick={() => setShowFilters(!showFilters)}
           size="small"
+          aria-label={showFilters ? 'Hide filters' : 'Show filters'}
+          aria-expanded={showFilters}
           sx={{
             border: '1px solid',
             borderColor: activeFilterCount > 0 ? 'primary.main' : 'divider',
@@ -313,7 +317,11 @@ export default function ExpenseListView({
                     setCategory('');
                     setPage(1);
                   }}
-                  sx={!category ? { backgroundColor: 'primary.main', color: 'white' } : {}}
+                  sx={
+                    !category
+                      ? { backgroundColor: 'primary.main', color: 'primary.contrastText' }
+                      : {}
+                  }
                 />
                 {EXPENSE_CATEGORIES.map((c) => (
                   <Chip
@@ -329,7 +337,7 @@ export default function ExpenseListView({
                       flexShrink: 0,
                       fontSize: 12,
                       ...(category === c.id
-                        ? { backgroundColor: 'primary.main', color: 'white' }
+                        ? { backgroundColor: 'primary.main', color: 'primary.contrastText' }
                         : {}),
                     }}
                   />
@@ -356,7 +364,11 @@ export default function ExpenseListView({
                     setTagFilter('');
                     setPage(1);
                   }}
-                  sx={!tagFilter ? { backgroundColor: 'primary.main', color: 'white' } : {}}
+                  sx={
+                    !tagFilter
+                      ? { backgroundColor: 'primary.main', color: 'primary.contrastText' }
+                      : {}
+                  }
                 />
                 {(
                   (group.tags || []) as Array<{
@@ -380,7 +392,7 @@ export default function ExpenseListView({
                         flexShrink: 0,
                         fontSize: 12,
                         ...(tagFilter === t.name
-                          ? { backgroundColor: 'primary.main', color: 'white' }
+                          ? { backgroundColor: 'primary.main', color: 'primary.contrastText' }
                           : {}),
                       }}
                     />
@@ -410,6 +422,9 @@ export default function ExpenseListView({
                 size="small"
                 onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
                 title={sortOrder === 'desc' ? 'Descending' : 'Ascending'}
+                aria-label={`Sort ${sortOrder === 'desc' ? 'descending' : 'ascending'}, switch to ${
+                  sortOrder === 'desc' ? 'ascending' : 'descending'
+                }`}
               >
                 {sortOrder === 'desc' ? (
                   <ArrowDownwardIcon fontSize="small" />
@@ -441,13 +456,13 @@ export default function ExpenseListView({
               >
                 Total expenses
               </Typography>
-              <Typography
+              <MoneyText
+                amount={summary.totalAmount || 0}
+                currency={currency}
+                tone="neutral"
                 fontWeight={700}
-                color="text.primary"
-                sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
-              >
-                {formatCurrency(summary.totalAmount || 0, currency)}
-              </Typography>
+                sx={{ display: 'block', fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
+              />
               <Typography variant="caption" color="text.disabled">
                 {summary.count || 0} expense
                 {(summary.count || 0) !== 1 ? 's' : ''}
@@ -464,13 +479,13 @@ export default function ExpenseListView({
                   >
                     You owe
                   </Typography>
-                  <Typography
+                  <MoneyText
+                    amount={summary.userOwes}
+                    currency={currency}
+                    tone="negative"
                     fontWeight={700}
-                    color="error.main"
-                    sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
-                  >
-                    {formatCurrency(summary.userOwes, currency)}
-                  </Typography>
+                    sx={{ display: 'block', fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
+                  />
                 </Box>
               )}
               {(summary.userGetsBack || 0) > 0.01 && (
@@ -483,13 +498,13 @@ export default function ExpenseListView({
                   >
                     You get back
                   </Typography>
-                  <Typography
+                  <MoneyText
+                    amount={summary.userGetsBack}
+                    currency={currency}
+                    tone="positive"
                     fontWeight={700}
-                    color="success.main"
-                    sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
-                  >
-                    {formatCurrency(summary.userGetsBack, currency)}
-                  </Typography>
+                    sx={{ display: 'block', fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
+                  />
                 </Box>
               )}
             </Box>

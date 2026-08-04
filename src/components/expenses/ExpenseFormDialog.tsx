@@ -516,14 +516,14 @@ export default function ExpenseFormDialog({
                   bgcolor: 'transparent',
                 },
                 '&::-webkit-scrollbar-thumb': {
-                  bgcolor: 'grey.300',
+                  bgcolor: 'border.strong',
                   borderRadius: 2,
                 },
                 '&::-webkit-scrollbar-thumb:hover': {
-                  bgcolor: 'grey.400',
+                  bgcolor: 'text.disabled',
                 },
                 scrollbarWidth: 'thin',
-                scrollbarColor: (theme) => `${theme.palette.grey[300]} transparent`,
+                scrollbarColor: (theme) => `${theme.palette.border.strong} transparent`,
               }}
             >
               {PREDEFINED_ITEMS.slice(0, 8).map((item) => (
@@ -559,7 +559,14 @@ export default function ExpenseFormDialog({
               required
               type="number"
               size="small"
-              sx={{ flex: 1 }}
+              sx={{
+                flex: 1,
+                '& input': (theme) => ({
+                  ...(theme.typography.money as React.CSSProperties),
+                  fontSize: '1.25rem',
+                  fontWeight: 600,
+                }),
+              }}
               slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
             />
             <TextField
@@ -621,7 +628,7 @@ export default function ExpenseFormDialog({
           {/* ─── Summary Line + Change Button ────────── */}
           <Box
             sx={{
-              bgcolor: 'grey.50',
+              bgcolor: 'surface.muted',
               borderRadius: 2,
               px: 2,
               py: 1.5,
@@ -665,7 +672,7 @@ export default function ExpenseFormDialog({
               sx={{
                 border: 1,
                 borderColor: 'divider',
-                borderRadius: 3,
+                borderRadius: '12px',
                 p: 2.5,
                 bgcolor: 'background.paper',
               }}
@@ -742,11 +749,12 @@ export default function ExpenseFormDialog({
                           size="small"
                           onClick={() => removePayer(i)}
                           disabled={payers.length <= 1}
+                          aria-label={`Remove payer ${memberName(payer.user)}`}
                         >
                           <RemoveCircleOutlineIcon
                             fontSize="small"
                             sx={{
-                              color: payers.length <= 1 ? 'grey.400' : 'error.main',
+                              color: payers.length <= 1 ? 'text.disabled' : 'error.main',
                             }}
                           />
                         </IconButton>
@@ -1042,7 +1050,7 @@ export default function ExpenseFormDialog({
               sx={{
                 border: 1,
                 borderColor: 'divider',
-                borderRadius: 3,
+                borderRadius: '12px',
                 p: 2.5,
                 bgcolor: 'background.paper',
               }}

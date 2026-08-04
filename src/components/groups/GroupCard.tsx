@@ -14,7 +14,7 @@ import AddIcon from '@mui/icons-material/Add';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import SettingsIcon from '@mui/icons-material/Settings';
-import { formatCurrency } from '@/lib/utils/currency';
+import TripStrip from '@/components/trip/TripStrip';
 import { formatDate, formatRelativeTime } from '@/lib/utils/date';
 import type { DashboardBalanceAmount } from '@/types';
 
@@ -50,10 +50,17 @@ export default function GroupCard({
   const category = group.category as string;
   const icon = CATEGORY_ICONS[category] || '📋';
   const groupId = group._id as string;
+  const groupName = group.name as string;
+  const currency = group.defaultCurrency as string;
   const startDate = group.startDate as string | undefined;
   const endDate = group.endDate as string | undefined;
   const updatedAt = group.updatedAt as string | undefined;
   const payableBalance = balances.find((balance) => balance.balance < 0);
+  const dominantBalance = balances.reduce<DashboardBalanceAmount | null>(
+    (current, item) =>
+      !current || Math.abs(item.balance) > Math.abs(current.balance) ? item : current,
+    null,
+  );
   const dateLabel =
     startDate && endDate
       ? `${formatDate(startDate)} – ${formatDate(endDate)}`
@@ -61,13 +68,98 @@ export default function GroupCard({
         ? `Starts ${formatDate(startDate)}`
         : null;
 
+  if (mode === 'dashboard') {
+    return (
+      <Paper
+        variant="outlined"
+        sx={{
+          overflow: 'hidden',
+          transition: 'box-shadow 0.2s',
+          '&:hover': { boxShadow: 2 },
+        }}
+      >
+        <TripStrip
+          name={groupName}
+          currency={currency}
+          variant="compact"
+          href={`/groups/${groupId}`}
+          dateLabel={dateLabel}
+          memberCount={members.length}
+          joinedBottom
+          balance={
+            dominantBalance
+              ? { amount: dominantBalance.balance, currency: dominantBalance.currency }
+              : null
+          }
+        />
+        <Box sx={{ p: 2 }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+            <AvatarGroup
+              max={4}
+              sx={{ '& .MuiAvatar-root': { width: 28, height: 28, fontSize: 12 } }}
+            >
+              {members.map((m) => (
+                <Avatar
+                  key={m.user._id}
+                  src={m.user.image}
+                  alt={m.user.name}
+                  sx={{ width: 28, height: 28 }}
+                >
+                  {m.user.name?.[0]}
+                </Avatar>
+              ))}
+            </AvatarGroup>
+            {hasMixedCurrencies ? (
+              <Chip label="Mixed currency" size="small" color="warning" variant="outlined" />
+            ) : (
+              <Typography variant="caption" color="text.secondary">
+                {members.length} member{members.length !== 1 ? 's' : ''}
+              </Typography>
+            )}
+          </Stack>
+
+          <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 1 }}>
+            {updatedAt ? `Last activity ${formatRelativeTime(updatedAt)}` : 'No activity yet'}
+          </Typography>
+
+          <Divider sx={{ my: 1.5 }} />
+
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+            <Button
+              component={Link}
+              href={`/groups/${groupId}`}
+              size="small"
+              variant="contained"
+              endIcon={<ArrowForwardIcon />}
+            >
+              Open trip
+            </Button>
+            <Button
+              component={Link}
+              href={
+                payableBalance
+                  ? `/groups/${groupId}?tab=balances`
+                  : `/groups/${groupId}?action=add-expense`
+              }
+              size="small"
+              variant="outlined"
+              startIcon={payableBalance ? <PaymentsIcon /> : <AddIcon />}
+            >
+              {payableBalance ? 'Settle' : 'Add expense'}
+            </Button>
+          </Stack>
+        </Box>
+      </Paper>
+    );
+  }
+
   return (
     <Paper
       variant="outlined"
       sx={{
         p: 3,
         transition: 'box-shadow 0.2s',
-        '&:hover': { boxShadow: 3 },
+        '&:hover': { boxShadow: 2 },
       }}
     >
       <Stack
@@ -89,7 +181,7 @@ export default function GroupCard({
               color="text.primary"
               sx={{ textDecoration: 'none', '&:hover': { color: 'primary.main' } }}
             >
-              {group.name as string}
+              {groupName}
             </Typography>
             <Typography
               variant="caption"
@@ -100,42 +192,7 @@ export default function GroupCard({
             </Typography>
           </Box>
         </Stack>
-        {hasMixedCurrencies && (
-          <Chip label="Mixed currency" size="small" color="warning" variant="outlined" />
-        )}
       </Stack>
-
-      {mode === 'dashboard' && (
-        <Box sx={{ minHeight: 48, mb: 2 }}>
-          {balances.length === 0 ? (
-            <Typography variant="body2" fontWeight={600} color="success.main">
-              Settled up
-            </Typography>
-          ) : (
-            <Stack spacing={0.5}>
-              {balances.map((item) => (
-                <Stack
-                  key={item.currency}
-                  direction="row"
-                  justifyContent="space-between"
-                  spacing={1}
-                >
-                  <Typography variant="caption" color="text.secondary">
-                    {item.balance < 0 ? 'You owe' : "You're owed"}
-                  </Typography>
-                  <Typography
-                    variant="body2"
-                    fontWeight={700}
-                    color={item.balance < 0 ? 'error.main' : 'success.main'}
-                  >
-                    {formatCurrency(Math.abs(item.balance), item.currency)}
-                  </Typography>
-                </Stack>
-              ))}
-            </Stack>
-          )}
-        </Box>
-      )}
 
       <Stack direction="row" alignItems="center" justifyContent="space-between">
         <AvatarGroup max={4} sx={{ '& .MuiAvatar-root': { width: 28, height: 28, fontSize: 12 } }}>
@@ -166,34 +223,19 @@ export default function GroupCard({
           component={Link}
           href={`/groups/${groupId}`}
           size="small"
-          variant={mode === 'dashboard' ? 'contained' : 'outlined'}
+          variant="outlined"
           endIcon={<ArrowForwardIcon />}
         >
           Open trip
         </Button>
-        {mode === 'dashboard' ? (
-          <Button
-            component={Link}
-            href={
-              payableBalance
-                ? `/groups/${groupId}?tab=balances`
-                : `/groups/${groupId}?action=add-expense`
-            }
-            size="small"
-            startIcon={payableBalance ? <PaymentsIcon /> : <AddIcon />}
-          >
-            {payableBalance ? 'Settle' : 'Add expense'}
-          </Button>
-        ) : (
-          <Button
-            component={Link}
-            href={`/groups/${groupId}/settings`}
-            size="small"
-            startIcon={<SettingsIcon />}
-          >
-            Manage
-          </Button>
-        )}
+        <Button
+          component={Link}
+          href={`/groups/${groupId}/settings`}
+          size="small"
+          startIcon={<SettingsIcon />}
+        >
+          Manage
+        </Button>
       </Stack>
     </Paper>
   );

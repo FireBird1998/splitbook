@@ -22,12 +22,12 @@ import List from '@mui/material/List';
 import ListItemButton from '@mui/material/ListItemButton';
 import ListItemText from '@mui/material/ListItemText';
 import Tooltip from '@mui/material/Tooltip';
-import { alpha } from '@mui/material/styles';
 import LightModeIcon from '@mui/icons-material/LightMode';
 import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { usePathname } from 'next/navigation';
 import { useThemeMode } from '@/providers/ThemeProvider';
 import DemoModeBadge from '@/components/demo/DemoModeBadge';
+import BrandMark from '@/components/layout/BrandMark';
 
 interface NavbarProps {
   user: {
@@ -50,28 +50,39 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
   const pathname = usePathname();
   const { mode, toggleTheme } = useThemeMode();
 
+  const accountMenuOpen = Boolean(anchorEl);
+
   return (
     <>
       <Box
         component="nav"
+        aria-label="Main navigation"
         sx={{
           position: 'fixed',
           top: 0,
           left: 0,
           right: 0,
+          height: 56,
+          display: 'flex',
+          alignItems: 'center',
           zIndex: (theme) => theme.zIndex.appBar,
           bgcolor: 'background.paper',
           borderBottom: 1,
           borderColor: 'divider',
           px: 2,
-          py: 1.5,
         }}
       >
-        <Stack direction="row" alignItems="center" justifyContent="space-between">
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          sx={{ width: '100%' }}
+        >
           <Stack direction="row" alignItems="center" spacing={1.5}>
             <IconButton
               onClick={() => setDrawerOpen(true)}
               size="small"
+              aria-label="Open navigation menu"
               sx={{ display: { xs: 'inline-flex', lg: 'none' } }}
             >
               <MenuIcon />
@@ -83,18 +94,17 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
               sx={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 1,
+                gap: 1.25,
                 textDecoration: 'none',
               }}
             >
-              <Typography component="span" sx={{ fontSize: '1.5rem' }}>
-                💰
-              </Typography>
+              <BrandMark size={28} fontSize={13} />
               <Typography
                 component="span"
                 sx={{
                   fontSize: '1.125rem',
                   fontWeight: 700,
+                  letterSpacing: '-0.02em',
                   color: 'text.primary',
                 }}
               >
@@ -105,8 +115,12 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
 
           <Stack direction="row" alignItems="center" spacing={1}>
             {demoMode ? <DemoModeBadge compact /> : null}
-            <Tooltip title={mode === 'light' ? 'Dark mode' : 'Light mode'}>
-              <IconButton onClick={toggleTheme} size="small">
+            <Tooltip title={mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}>
+              <IconButton
+                onClick={toggleTheme}
+                size="small"
+                aria-label={mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+              >
                 {mode === 'light' ? (
                   <DarkModeIcon fontSize="small" />
                 ) : (
@@ -123,11 +137,18 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
             >
               {user.name}
             </Typography>
-            <IconButton onClick={(e) => setAnchorEl(e.currentTarget)} size="small">
+            <IconButton
+              onClick={(e) => setAnchorEl(e.currentTarget)}
+              size="small"
+              aria-label="Account menu"
+              aria-haspopup="true"
+              aria-expanded={accountMenuOpen}
+              aria-controls={accountMenuOpen ? 'account-menu' : undefined}
+            >
               <Avatar
                 src={user.image || undefined}
                 alt={user.name || 'User'}
-                sx={{ width: 32, height: 32 }}
+                sx={{ width: 32, height: 32, bgcolor: 'tint.brand', color: 'primary.main' }}
               />
             </IconButton>
           </Stack>
@@ -136,8 +157,9 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
 
       {/* User Menu */}
       <Menu
+        id="account-menu"
         anchorEl={anchorEl}
-        open={Boolean(anchorEl)}
+        open={accountMenuOpen}
         onClose={() => setAnchorEl(null)}
         transformOrigin={{ horizontal: 'right', vertical: 'top' }}
         anchorOrigin={{ horizontal: 'right', vertical: 'bottom' }}
@@ -178,15 +200,14 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
       {/* Mobile Drawer */}
       <Drawer anchor="left" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <Box sx={{ width: 256, p: 2 }}>
-          <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 3 }}>
-            <Typography component="span" sx={{ fontSize: '1.5rem' }}>
-              💰
-            </Typography>
+          <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: 3 }}>
+            <BrandMark size={28} fontSize={13} />
             <Typography
               component="span"
               sx={{
                 fontSize: '1.125rem',
                 fontWeight: 700,
+                letterSpacing: '-0.02em',
                 color: 'text.primary',
               }}
             >
@@ -206,11 +227,11 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
                   selected={isActive}
                   onClick={() => setDrawerOpen(false)}
                   sx={{
-                    borderRadius: 2,
                     mb: 0.5,
                     '&.Mui-selected': {
-                      backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.1),
+                      backgroundColor: 'tint.brand',
                       color: 'primary.main',
+                      '&:hover': { backgroundColor: 'tint.brand' },
                     },
                   }}
                 >

@@ -4,7 +4,6 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
-import { alpha } from '@mui/material/styles';
 import DashboardIcon from '@mui/icons-material/Dashboard';
 import GroupIcon from '@mui/icons-material/Group';
 import SettingsIcon from '@mui/icons-material/Settings';
@@ -35,7 +34,7 @@ export default function Sidebar() {
         pt: 3,
       }}
     >
-      <Stack component="nav" spacing={0.5}>
+      <Stack component="nav" aria-label="Primary" spacing={0.5}>
         {navItems.map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
           const Icon = item.icon;
@@ -45,26 +44,27 @@ export default function Sidebar() {
               key={item.href}
               component={Link}
               href={item.href}
+              aria-current={isActive ? 'page' : undefined}
               sx={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 1.5,
                 px: 2,
-                py: 1.5,
-                borderRadius: 3,
+                minHeight: 44,
+                borderRadius: '8px',
                 fontSize: '0.875rem',
-                fontWeight: 500,
+                fontWeight: isActive ? 600 : 500,
                 textDecoration: 'none',
                 transition: 'background-color 0.15s, color 0.15s',
                 ...(isActive
                   ? {
-                      bgcolor: (theme) => alpha(theme.palette.primary.main, 0.1),
+                      bgcolor: 'tint.brand',
                       color: 'primary.main',
                     }
                   : {
                       color: 'text.secondary',
                       '&:hover': {
-                        bgcolor: 'grey.100',
+                        bgcolor: 'action.hover',
                         color: 'text.primary',
                       },
                     }),

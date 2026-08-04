@@ -16,7 +16,7 @@ import AddIcon from '@mui/icons-material/Add';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import GroupCard from '@/components/groups/GroupCard';
 import InvitationCard from '@/components/dashboard/InvitationCard';
-import { formatCurrency } from '@/lib/utils/currency';
+import MoneyText from '@/components/common/MoneyText';
 import { formatRelativeTime } from '@/lib/utils/date';
 import { selectNextAction } from '@/lib/utils/dashboard';
 import { fetcher } from '@/lib/utils/fetcher';
@@ -33,6 +33,11 @@ function getGreeting(): string {
   if (hour < 18) return 'Good afternoon';
   return 'Good evening';
 }
+
+const panelIn = (delayMs = 0) => ({
+  animation: 'panel-in 280ms ease-out both',
+  animationDelay: `${delayMs}ms`,
+});
 
 export default function DashboardView({ userId, userName }: DashboardViewProps) {
   const {
@@ -97,8 +102,16 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
   return (
     <Container maxWidth="lg" disableGutters>
       <Stack spacing={4}>
-        <Box>
-          <Typography variant="h5" fontWeight={700} color="text.primary">
+        <Box sx={panelIn()}>
+          <Typography
+            variant="overline"
+            component="p"
+            color="text.disabled"
+            sx={{ display: 'block' }}
+          >
+            Your money
+          </Typography>
+          <Typography variant="h5" component="h1" color="text.primary">
             {getGreeting()}, {userName.split(' ')[0]}
           </Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
@@ -106,10 +119,25 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
           </Typography>
         </Box>
 
-        <Box component="section" aria-labelledby="current-balance-heading">
-          <Typography id="current-balance-heading" variant="h6" fontWeight={700} sx={{ mb: 2 }}>
-            Current balance
-          </Typography>
+        <Box
+          component="section"
+          aria-labelledby="current-balance-heading"
+          sx={{ animation: 'balance-settle 400ms ease-out both' }}
+        >
+          <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 2 }}>
+            <Typography id="current-balance-heading" variant="h6">
+              Current balance
+            </Typography>
+            {balanceSummary?.buckets.length ? (
+              <Typography
+                variant="caption"
+                color="text.disabled"
+                sx={(theme) => ({ ...(theme.typography.money as React.CSSProperties) })}
+              >
+                {balanceSummary.buckets.map((bucket) => bucket.currency).join(' · ')} kept separate
+              </Typography>
+            ) : null}
+          </Stack>
           {balancesLoading && !balanceSummary ? (
             <Box
               sx={{
@@ -142,25 +170,50 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
               }}
             >
               {balanceSummary.buckets.map((bucket) => (
-                <Paper key={bucket.currency} variant="outlined" sx={{ p: 3 }}>
-                  <Chip label={bucket.currency} size="small" variant="outlined" sx={{ mb: 2 }} />
-                  <Stack direction="row" spacing={3}>
+                <Paper key={bucket.currency} variant="outlined" sx={{ p: { xs: 2, sm: 2.5 } }}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between">
+                    <Typography
+                      variant="caption"
+                      fontWeight={600}
+                      color="text.disabled"
+                      sx={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}
+                    >
+                      Balance
+                    </Typography>
+                    <Typography
+                      component="span"
+                      variant="caption"
+                      color="text.disabled"
+                      sx={(theme) => ({ ...(theme.typography.money as React.CSSProperties) })}
+                    >
+                      {bucket.currency}
+                    </Typography>
+                  </Stack>
+                  <Stack direction="row" spacing={2} sx={{ mt: 1.5 }} alignItems="center">
                     <Box sx={{ flex: 1 }}>
                       <Typography variant="caption" color="text.secondary">
                         You owe
                       </Typography>
-                      <Typography variant="h6" fontWeight={700} color="error.main">
-                        {formatCurrency(bucket.youOwe, bucket.currency)}
-                      </Typography>
+                      <MoneyText
+                        amount={bucket.youOwe}
+                        currency={bucket.currency}
+                        tone={bucket.youOwe > 0.005 ? 'negative' : 'neutral'}
+                        variant="h6"
+                        sx={{ display: 'block', fontWeight: 600 }}
+                      />
                     </Box>
                     <Divider orientation="vertical" flexItem />
                     <Box sx={{ flex: 1 }}>
                       <Typography variant="caption" color="text.secondary">
                         You&apos;re owed
                       </Typography>
-                      <Typography variant="h6" fontWeight={700} color="success.main">
-                        {formatCurrency(bucket.youAreOwed, bucket.currency)}
-                      </Typography>
+                      <MoneyText
+                        amount={bucket.youAreOwed}
+                        currency={bucket.currency}
+                        tone={bucket.youAreOwed > 0.005 ? 'positive' : 'neutral'}
+                        variant="h6"
+                        sx={{ display: 'block', fontWeight: 600 }}
+                      />
                     </Box>
                   </Stack>
                 </Paper>
@@ -187,30 +240,65 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
         {balancesLoading && !balanceSummary ? (
           <Skeleton variant="rounded" height={128} />
         ) : (
-          <Paper component="section" variant="outlined" sx={{ p: { xs: 2.5, sm: 3 } }}>
-            <Typography variant="overline" color="text.secondary">
-              Next recommended action
-            </Typography>
+          <Paper
+            component="section"
+            variant="outlined"
+            sx={{ p: { xs: 2, sm: 2.5 }, ...panelIn(60) }}
+          >
             <Stack
               direction={{ xs: 'column', sm: 'row' }}
               alignItems={{ xs: 'stretch', sm: 'center' }}
-              justifyContent="space-between"
               spacing={2}
             >
-              <Box>
-                <Typography variant="h6" fontWeight={700}>
+              <Box
+                aria-hidden="true"
+                sx={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: '10px',
+                  bgcolor: 'tint.info',
+                  color: 'info.main',
+                  display: 'grid',
+                  placeItems: 'center',
+                  flexShrink: 0,
+                  fontWeight: 700,
+                }}
+              >
+                →
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography
+                  variant="caption"
+                  fontWeight={600}
+                  color="text.disabled"
+                  sx={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}
+                >
+                  Next best action
+                </Typography>
+                <Typography variant="subtitle1" color="text.primary">
                   {nextAction.title}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  {nextAction.kind === 'settle'
-                    ? `${formatCurrency(nextAction.amount, nextAction.currency)} · ${nextAction.description}`
-                    : nextAction.description}
+                  {nextAction.kind === 'settle' ? (
+                    <>
+                      <MoneyText
+                        amount={nextAction.amount}
+                        currency={nextAction.currency}
+                        tone="neutral"
+                        color="text.secondary"
+                      />
+                      {` · ${nextAction.description}`}
+                    </>
+                  ) : (
+                    nextAction.description
+                  )}
                 </Typography>
               </Box>
               <Button
                 component={Link}
                 href={nextAction.href}
                 variant="contained"
+                color="info"
                 endIcon={<ArrowForwardIcon />}
                 sx={{ flexShrink: 0 }}
               >
@@ -226,12 +314,10 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
           </Paper>
         )}
 
-        <Box component="section">
+        <Box component="section" sx={panelIn(100)}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
             <Box>
-              <Typography variant="h6" fontWeight={700}>
-                Your trips
-              </Typography>
+              <Typography variant="h6">Your trips</Typography>
               <Typography variant="body2" color="text.secondary">
                 Personal balances and the quickest next step for each trip.
               </Typography>
@@ -266,9 +352,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
             </Box>
           ) : groups.length === 0 ? (
             <Paper variant="outlined" sx={{ p: 5, textAlign: 'center' }}>
-              <Typography variant="h6" fontWeight={700}>
-                No trips yet
-              </Typography>
+              <Typography variant="h6">No trips yet</Typography>
               <Typography color="text.secondary" sx={{ mt: 1, mb: 2 }}>
                 Create a trip to start tracking shared expenses.
               </Typography>
@@ -305,9 +389,14 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
           )}
         </Box>
 
-        <Box component="section" id="pending-actions" aria-labelledby="activity-heading">
+        <Box
+          component="section"
+          id="pending-actions"
+          aria-labelledby="activity-heading"
+          sx={panelIn(140)}
+        >
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-            <Typography id="activity-heading" variant="h6" fontWeight={700}>
+            <Typography id="activity-heading" variant="h6">
               Recent activity & pending actions
             </Typography>
             {invitations.length > 0 && (
