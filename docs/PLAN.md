@@ -70,6 +70,16 @@ A full-featured expense-splitting application built with Next.js (App Router), R
 | [pages/add-expense.md](./pages/add-expense.md)   | Add/edit expense modal |
 | [pages/settings.md](./pages/settings.md)         | User settings          |
 
+### Iteration Plans
+
+Each iteration has its own roadmap README describing only what changes relative to the previous state.
+
+| Doc                            | Description                                                                |
+| ------------------------------ | -------------------------------------------------------------------------- |
+| [v2/README.md](./v2/README.md) | Expense management improvements (edit, delete, detail, receipts)           |
+| [v3/README.md](./v3/README.md) | UX simplification, group settings, tag management                          |
+| [v4/README.md](./v4/README.md) | Category as theme: Trip / Household / Couple / Work groups, monthly cycles |
+
 ---
 
 ## Feature Scope (v1)
