@@ -15,16 +15,10 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import SettingsIcon from '@mui/icons-material/Settings';
 import TripStrip from '@/components/trip/TripStrip';
+import GroupHeader from '@/components/groups/GroupHeader';
 import { formatDate, formatRelativeTime } from '@/lib/utils/date';
-import type { DashboardBalanceAmount } from '@/types';
-
-const CATEGORY_ICONS: Record<string, string> = {
-  trip: '✈️',
-  home: '🏠',
-  couple: '💑',
-  work: '💼',
-  other: '📋',
-};
+import { getGroupTheme } from '@/lib/group-themes';
+import type { DashboardBalanceAmount, GroupCategory } from '@/types';
 
 interface GroupCardProps {
   group: Record<string, unknown>;
@@ -48,7 +42,7 @@ export default function GroupCard({
     }>),
   ].sort((a, b) => Number(b.user._id === userId) - Number(a.user._id === userId));
   const category = group.category as string;
-  const icon = CATEGORY_ICONS[category] || '📋';
+  const theme = getGroupTheme(category as GroupCategory);
   const groupId = group._id as string;
   const groupName = group.name as string;
   const currency = group.defaultCurrency as string;
@@ -62,11 +56,13 @@ export default function GroupCard({
     null,
   );
   const dateLabel =
-    startDate && endDate
-      ? `${formatDate(startDate)} – ${formatDate(endDate)}`
-      : startDate
-        ? `Starts ${formatDate(startDate)}`
-        : null;
+    theme.dates === 'bounded'
+      ? startDate && endDate
+        ? `${formatDate(startDate)} – ${formatDate(endDate)}`
+        : startDate
+          ? `Starts ${formatDate(startDate)}`
+          : null
+      : null;
 
   if (mode === 'dashboard') {
     return (
@@ -78,20 +74,38 @@ export default function GroupCard({
           '&:hover': { boxShadow: 2 },
         }}
       >
-        <TripStrip
-          name={groupName}
-          currency={currency}
-          variant="compact"
-          href={`/groups/${groupId}`}
-          dateLabel={dateLabel}
-          memberCount={members.length}
-          joinedBottom
-          balance={
-            dominantBalance
-              ? { amount: dominantBalance.balance, currency: dominantBalance.currency }
-              : null
-          }
-        />
+        {theme.header === 'strip' ? (
+          <TripStrip
+            name={groupName}
+            currency={currency}
+            variant="compact"
+            href={`/groups/${groupId}`}
+            dateLabel={dateLabel}
+            memberCount={members.length}
+            joinedBottom
+            balance={
+              dominantBalance
+                ? { amount: dominantBalance.balance, currency: dominantBalance.currency }
+                : null
+            }
+          />
+        ) : (
+          <GroupHeader
+            name={groupName}
+            themeLabel={theme.label}
+            themeIcon={theme.icon}
+            currency={currency}
+            variant="compact"
+            href={`/groups/${groupId}`}
+            members={members.map((member) => member.user)}
+            joinedBottom
+            balance={
+              dominantBalance
+                ? { amount: dominantBalance.balance, currency: dominantBalance.currency }
+                : null
+            }
+          />
+        )}
         <Box sx={{ p: 2 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
             <AvatarGroup
@@ -132,7 +146,7 @@ export default function GroupCard({
               variant="contained"
               endIcon={<ArrowForwardIcon />}
             >
-              Open trip
+              Open {theme.nouns.singular}
             </Button>
             <Button
               component={Link}
@@ -170,7 +184,7 @@ export default function GroupCard({
       >
         <Stack direction="row" alignItems="center" spacing={1}>
           <Typography component="span" sx={{ fontSize: '1.5rem' }}>
-            {icon}
+            {theme.icon}
           </Typography>
           <Box>
             <Typography
@@ -183,12 +197,8 @@ export default function GroupCard({
             >
               {groupName}
             </Typography>
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ textTransform: 'capitalize' }}
-            >
-              {dateLabel || category}
+            <Typography variant="caption" color="text.secondary">
+              {dateLabel || theme.label}
             </Typography>
           </Box>
         </Stack>
@@ -226,7 +236,7 @@ export default function GroupCard({
           variant="outlined"
           endIcon={<ArrowForwardIcon />}
         >
-          Open trip
+          Open {theme.nouns.singular}
         </Button>
         <Button
           component={Link}

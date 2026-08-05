@@ -38,9 +38,9 @@ export function selectNextAction(
 ): DashboardNextAction {
   if (groups.length === 0) {
     return {
-      kind: 'create-trip',
-      title: 'Create your first trip',
-      description: 'Start a shared ledger and invite the people travelling with you.',
+      kind: 'create-group',
+      title: 'Create your first group',
+      description: 'Start a shared ledger and invite the people you split costs with.',
       href: '/groups/new',
     };
   }
@@ -73,7 +73,7 @@ export function selectNextAction(
   if (pendingInvitationCount > 0) {
     return {
       kind: 'review-invitations',
-      title: 'Review your trip invitation',
+      title: 'Review your group invitation',
       description: `${pendingInvitationCount} invitation${pendingInvitationCount === 1 ? '' : 's'} waiting for you.`,
       href: '#pending-actions',
     };

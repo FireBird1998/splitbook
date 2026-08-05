@@ -115,7 +115,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
             {getGreeting()}, {userName.split(' ')[0]}
           </Typography>
           <Typography color="text.secondary" sx={{ mt: 0.5 }}>
-            Here&apos;s where your trip money stands.
+            Here&apos;s where your shared money stands.
           </Typography>
         </Box>
 
@@ -230,13 +230,13 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
                 You&apos;re all settled up
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                No outstanding balances across your trips.
+                No outstanding balances across your groups.
               </Typography>
             </Paper>
           )}
           {balanceSummary?.hasMixedCurrencies && (
             <Alert severity="warning" sx={{ mt: 2 }}>
-              A trip contains legacy transactions in more than one currency. Amounts remain in
+              A group contains legacy transactions in more than one currency. Amounts remain in
               separate currency buckets.
             </Alert>
           )}
@@ -311,8 +311,8 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
                   ? 'Settle up'
                   : nextAction.kind === 'review-invitations'
                     ? 'Review'
-                    : nextAction.kind === 'create-trip'
-                      ? 'Create trip'
+                    : nextAction.kind === 'create-group'
+                      ? 'Create group'
                       : 'Add expense'}
               </Button>
             </Stack>
@@ -322,13 +322,13 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
         <Box component="section" sx={panelIn(100)}>
           <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
             <Box>
-              <Typography variant="h6">Your trips</Typography>
+              <Typography variant="h6">Your groups</Typography>
               <Typography variant="body2" color="text.secondary">
-                Personal balances and the quickest next step for each trip.
+                Personal balances and the quickest next step for each group.
               </Typography>
             </Box>
             <Button component={Link} href="/groups/new" startIcon={<AddIcon />} size="small">
-              New trip
+              New group
             </Button>
           </Stack>
 
@@ -341,7 +341,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
                 </Button>
               }
             >
-              {groupsError.message || 'Trips could not be loaded.'}
+              {groupsError.message || 'Groups could not be loaded.'}
             </Alert>
           ) : groupsLoading && !groupsData ? (
             <Box
@@ -357,9 +357,9 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
             </Box>
           ) : groups.length === 0 ? (
             <Paper variant="outlined" sx={{ p: 5, textAlign: 'center' }}>
-              <Typography variant="h6">No trips yet</Typography>
+              <Typography variant="h6">No groups yet</Typography>
               <Typography color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-                Create a trip to start tracking shared expenses.
+                Create a group to start tracking shared expenses.
               </Typography>
               <Button
                 component={Link}
@@ -367,7 +367,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
                 variant="contained"
                 startIcon={<AddIcon />}
               >
-                Create your first trip
+                Create your first group
               </Button>
             </Paper>
           ) : (

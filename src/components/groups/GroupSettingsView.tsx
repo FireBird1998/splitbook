@@ -42,14 +42,7 @@ import { CURRENCIES, getSortedCurrencies } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/date';
 import { fetcher } from '@/lib/utils/fetcher';
 import { validateTripDates } from '@/lib/utils/trip-setup';
-
-const GROUP_CATEGORIES = [
-  { id: 'trip', label: '✈️ Trip' },
-  { id: 'home', label: '🏠 Home' },
-  { id: 'couple', label: '💑 Couple' },
-  { id: 'work', label: '💼 Work' },
-  { id: 'other', label: '📋 Other' },
-];
+import { GROUP_THEME_LIST } from '@/lib/group-themes';
 
 interface GroupSettingsViewProps {
   groupId: string;
@@ -394,7 +387,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
           component={Link}
           href={`/groups/${groupId}`}
           size="small"
-          aria-label="Back to trip"
+          aria-label="Back to group"
         >
           <ArrowBackIcon />
         </IconButton>
@@ -439,9 +432,9 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
               fullWidth
               size="small"
             >
-              {GROUP_CATEGORIES.map((c) => (
-                <MenuItem key={c.id} value={c.id}>
-                  {c.label}
+              {GROUP_THEME_LIST.map((theme) => (
+                <MenuItem key={theme.id} value={theme.id}>
+                  {theme.icon} {theme.label}
                 </MenuItem>
               ))}
             </TextField>

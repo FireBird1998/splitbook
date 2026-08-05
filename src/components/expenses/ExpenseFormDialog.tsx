@@ -35,6 +35,8 @@ import {
   resolvePredefinedTag,
   type GroupTagOption,
 } from './expense-form-helpers';
+import { getGroupTheme } from '@/lib/group-themes';
+import type { GroupCategory } from '@/types';
 
 // ─── Types ─────────────────────────────────────────────
 interface Member {
@@ -75,6 +77,8 @@ export default function ExpenseFormDialog({
   const groupTags = useMemo(() => (group.tags || []) as GroupTagOption[], [group.tags]);
   const defaultCurrency = group.defaultCurrency as string;
   const defaultCurrencyDetails = getCurrency(defaultCurrency);
+  const groupNoun = getGroupTheme(group.category as GroupCategory).nouns.singular;
+  const groupNounTitle = groupNoun.charAt(0).toUpperCase() + groupNoun.slice(1);
 
   // ─── Form State ────────────────────────────────────
   const [description, setDescription] = useState('');
@@ -571,7 +575,7 @@ export default function ExpenseFormDialog({
               value={currency}
               size="small"
               disabled
-              helperText="Trip currency"
+              helperText={`${groupNounTitle} currency`}
               sx={{ width: { xs: '100%', sm: 120 } }}
             >
               <MenuItem value={defaultCurrency}>
@@ -616,7 +620,7 @@ export default function ExpenseFormDialog({
             </Stack>
             {selectableTags.length === 0 && (
               <Typography variant="caption" color="error.main">
-                No tags available — create tags in trip settings
+                No tags available — create tags in {groupNoun} settings
               </Typography>
             )}
           </Box>

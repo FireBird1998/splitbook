@@ -225,7 +225,7 @@ export interface CurrencyBalanceBucket {
 
 export type DashboardNextAction =
   | {
-      kind: 'create-trip';
+      kind: 'create-group';
       title: string;
       description: string;
       href: '/groups/new';

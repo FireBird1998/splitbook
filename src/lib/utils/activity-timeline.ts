@@ -59,13 +59,13 @@ export function formatActivityHeadline(activity: ActivityLike): string {
       return `${actorName} recorded ${amount}`;
     }
     case 'member_joined':
-      return `${actorName} joined the trip`;
+      return `${actorName} joined the group`;
     case 'member_left':
-      return `${actorName} left the trip`;
+      return `${actorName} left the group`;
     case 'group_created':
-      return `${actorName} created the trip`;
+      return `${actorName} created the group`;
     case 'group_updated':
-      return `${actorName} updated trip settings`;
+      return `${actorName} updated group settings`;
     default:
       return `${actorName} performed an action`;
   }

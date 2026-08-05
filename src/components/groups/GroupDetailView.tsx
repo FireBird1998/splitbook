@@ -21,6 +21,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AddIcon from '@mui/icons-material/Add';
 import ShareIcon from '@mui/icons-material/Share';
 import TripStrip from '@/components/trip/TripStrip';
+import GroupHeader from '@/components/groups/GroupHeader';
 import ExpenseListView from '@/components/expenses/ExpenseListView';
 import BalancesView from '@/components/balances/BalancesView';
 import ActivityView from '@/components/activity/ActivityView';
@@ -29,6 +30,8 @@ import InviteDialog from '@/components/groups/InviteDialog';
 import { fetcher } from '@/lib/utils/fetcher';
 import { formatDate } from '@/lib/utils/date';
 import { buildTripChecklist, shouldShowTripChecklist } from '@/lib/utils/trip-setup';
+import { getGroupTheme } from '@/lib/group-themes';
+import type { GroupCategory } from '@/types';
 
 interface GroupDetailViewProps {
   groupId: string;
@@ -101,10 +104,10 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
       <Container maxWidth="lg" disableGutters>
         <Box sx={{ textAlign: 'center', py: 6 }}>
           <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
-            Trip not found
+            Group not found
           </Typography>
           <Typography color="text.secondary">
-            This trip may have been deleted or you don&apos;t have access.
+            This group may have been deleted or you don&apos;t have access.
           </Typography>
         </Box>
       </Container>
@@ -115,13 +118,19 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
     user: { _id: string; name: string; image?: string; email?: string };
     role: string;
   }>;
+  const theme = getGroupTheme(group.category as GroupCategory);
+  const nounTitle = theme.nouns.singular.charAt(0).toUpperCase() + theme.nouns.singular.slice(1);
   const startDate = group.startDate as string | undefined;
   const endDate = group.endDate as string | undefined;
   const dateLabel =
-    startDate && endDate
-      ? `${formatDate(startDate)} – ${formatDate(endDate)}`
-      : startDate
-        ? `Starts ${formatDate(startDate)}`
+    theme.dates === 'bounded'
+      ? startDate && endDate
+        ? `${formatDate(startDate)} – ${formatDate(endDate)}`
+        : startDate
+          ? `Starts ${formatDate(startDate)}`
+          : null
+      : theme.signature === 'monthCycle' && startDate
+        ? `Tracking since ${formatDate(startDate)}`
         : null;
   const currency =
     (balancesData?.data?.currency as string | undefined) ?? (group.defaultCurrency as string);
@@ -176,7 +185,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
             component={Link}
             href={`/groups/${groupId}/settings`}
             size="small"
-            aria-label="Trip settings"
+            aria-label={`${nounTitle} settings`}
           >
             <SettingsIcon />
           </IconButton>
@@ -184,22 +193,37 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
       </Stack>
 
       <Box sx={{ mb: 3, animation: 'panel-in 280ms ease-out both' }}>
-        <TripStrip
-          name={group.name as string}
-          currency={currency}
-          variant="full"
-          dateLabel={dateLabel}
-          memberCount={members.length}
-          memberNames={members.map((member) =>
-            member.user._id === userId ? 'You' : member.user.name.split(' ')[0],
-          )}
-          inviteCode={(group.inviteCode as string | null | undefined) ?? null}
-          balance={userBalance ? { amount: userBalance.balance, currency } : null}
-          tripTotal={typeof tripTotal === 'number' ? { amount: tripTotal, currency } : null}
-        />
+        {theme.header === 'strip' ? (
+          <TripStrip
+            name={group.name as string}
+            currency={currency}
+            variant="full"
+            dateLabel={dateLabel}
+            memberCount={members.length}
+            memberNames={members.map((member) =>
+              member.user._id === userId ? 'You' : member.user.name.split(' ')[0],
+            )}
+            inviteCode={(group.inviteCode as string | null | undefined) ?? null}
+            balance={userBalance ? { amount: userBalance.balance, currency } : null}
+            tripTotal={typeof tripTotal === 'number' ? { amount: tripTotal, currency } : null}
+          />
+        ) : (
+          <GroupHeader
+            name={group.name as string}
+            themeLabel={theme.label}
+            themeIcon={theme.icon}
+            currency={currency}
+            variant="full"
+            dateLabel={dateLabel}
+            members={members.map((member) => member.user)}
+            userId={userId}
+            inviteCode={(group.inviteCode as string | null | undefined) ?? null}
+            balance={userBalance ? { amount: userBalance.balance, currency } : null}
+          />
+        )}
       </Box>
 
-      {showChecklist && (
+      {theme.signature === 'checklist' && showChecklist && (
         <Box
           sx={{
             mb: 3,
@@ -270,7 +294,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
         variant="scrollable"
         scrollButtons="auto"
         allowScrollButtonsMobile
-        aria-label="Trip sections"
+        aria-label={`${nounTitle} sections`}
         sx={{ mb: 3 }}
       >
         <Tab label="Expenses" />

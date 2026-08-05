@@ -60,7 +60,7 @@ describe('aggregateCurrencyBalances', () => {
     ]);
   });
 
-  it('nets owing and owed amounts within the same currency across many trips', () => {
+  it('nets owing and owed amounts within the same currency across many groups', () => {
     const result = aggregateCurrencyBalances([
       group({
         groupId: 'a',
@@ -101,9 +101,9 @@ describe('aggregateCurrencyBalances', () => {
 });
 
 describe('selectNextAction', () => {
-  it('recommends creating a trip when none exist', () => {
+  it('recommends creating a group when none exist', () => {
     expect(selectNextAction([], 0)).toMatchObject({
-      kind: 'create-trip',
+      kind: 'create-group',
       href: '/groups/new',
     });
   });
@@ -164,7 +164,7 @@ describe('selectNextAction', () => {
     ).toMatchObject({ kind: 'review-invitations', href: '#pending-actions' });
   });
 
-  it('suggests adding an expense to the most recently active trip', () => {
+  it('suggests adding an expense to the most recently active group', () => {
     const result = selectNextAction(
       [
         group({
