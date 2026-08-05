@@ -53,6 +53,9 @@ export default defineConfig({
     timeout: 180_000,
     env: {
       AUTH_MODE: 'google',
+      // CI serves a production build (`next start`), where Auth.js no longer
+      // auto-trusts the host; `next dev` (local) implies it via NODE_ENV.
+      AUTH_TRUST_HOST: 'true',
       AUTH_SECRET: 'playwright-google-secret',
       AUTH_GOOGLE_ID: GOOGLE_MODE_CLIENT_ID,
       AUTH_GOOGLE_SECRET: 'playwright-google-client-secret',

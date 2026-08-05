@@ -83,6 +83,11 @@ export default defineConfig({
     timeout: 180_000,
     env: {
       AUTH_MODE: 'demo',
+      // CI serves a production build (`next start`), where demo auth fails
+      // closed without ALLOW_DEMO_AUTH and Auth.js no longer auto-trusts the
+      // host. `next dev` (local) implies both via NODE_ENV=development.
+      ALLOW_DEMO_AUTH: 'true',
+      AUTH_TRUST_HOST: 'true',
       AUTH_SECRET: 'playwright-demo-secret',
       AUTH_GOOGLE_ID: 'unused-in-demo-mode',
       AUTH_GOOGLE_SECRET: 'unused-in-demo-mode',
