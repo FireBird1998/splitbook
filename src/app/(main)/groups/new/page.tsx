@@ -10,6 +10,7 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import Chip from '@mui/material/Chip';
+import Paper from '@mui/material/Paper';
 import Collapse from '@mui/material/Collapse';
 import CircularProgress from '@mui/material/CircularProgress';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -21,14 +22,8 @@ import {
   normalizeParticipantEmails,
   validateTripDates,
 } from '@/lib/utils/trip-setup';
-
-const CATEGORIES = [
-  { id: 'trip', label: 'Trip' },
-  { id: 'home', label: 'Home' },
-  { id: 'couple', label: 'Couple' },
-  { id: 'work', label: 'Work' },
-  { id: 'other', label: 'Other' },
-];
+import { GROUP_THEME_LIST, getGroupTheme } from '@/lib/group-themes';
+import type { GroupCategory } from '@/types';
 
 export default function NewGroupPage() {
   const router = useRouter();
@@ -36,6 +31,7 @@ export default function NewGroupPage() {
   const [error, setError] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  const [category, setCategory] = useState<GroupCategory>('trip');
   const [name, setName] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -44,10 +40,12 @@ export default function NewGroupPage() {
   const [participants, setParticipants] = useState<string[]>([]);
 
   const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('trip');
   const [alternateCurrencies, setAlternateCurrencies] = useState<string[]>([]);
 
-  const dateError = validateTripDates(startDate || null, endDate || null);
+  const theme = getGroupTheme(category);
+  const nounTitle = theme.nouns.singular.charAt(0).toUpperCase() + theme.nouns.singular.slice(1);
+  const showDates = theme.dates === 'bounded';
+  const dateError = showDates ? validateTripDates(startDate || null, endDate || null) : null;
 
   const addParticipant = () => {
     const email = participantInput.trim().toLowerCase();
@@ -81,15 +79,15 @@ export default function NewGroupPage() {
           category,
           defaultCurrency,
           alternateCurrencies,
-          startDate: startDate || null,
-          endDate: endDate || null,
+          startDate: showDates ? startDate || null : null,
+          endDate: showDates ? endDate || null : null,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || 'Failed to create trip');
+        setError(data.error || `Failed to create ${theme.nouns.singular}`);
         return;
       }
 
@@ -117,10 +115,11 @@ export default function NewGroupPage() {
   return (
     <Container maxWidth="sm" disableGutters>
       <Typography variant="h5" fontWeight={700} color="text.primary" sx={{ mb: 1 }}>
-        New trip
+        New {theme.nouns.singular}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Name it, set dates and currency, then invite friends. Tags are ready for your first expense.
+        Pick a theme, name it, set a currency, then invite people. Tags are ready for your first
+        expense.
       </Typography>
 
       <Box
@@ -147,37 +146,99 @@ export default function NewGroupPage() {
             </Box>
           )}
 
+          <Box>
+            <Typography variant="body2" fontWeight={500} color="text.secondary" sx={{ mb: 1.5 }}>
+              Theme
+            </Typography>
+            <Box
+              role="radiogroup"
+              aria-label="Group theme"
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                gap: 1.5,
+              }}
+            >
+              {GROUP_THEME_LIST.map((option) => {
+                const selected = option.id === category;
+                return (
+                  <Paper
+                    key={option.id}
+                    component="button"
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setCategory(option.id)}
+                    variant="outlined"
+                    sx={{
+                      p: 1.5,
+                      textAlign: 'left',
+                      cursor: 'pointer',
+                      font: 'inherit',
+                      color: 'inherit',
+                      bgcolor: selected ? 'tint.brand' : 'background.paper',
+                      borderColor: selected ? 'primary.main' : 'divider',
+                      transition: 'border-color 160ms ease, background-color 160ms ease',
+                      '&:hover': { borderColor: selected ? 'primary.main' : 'border.strong' },
+                    }}
+                  >
+                    <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                      <Typography component="span" aria-hidden="true" sx={{ fontSize: '1.25rem' }}>
+                        {option.icon}
+                      </Typography>
+                      <Typography variant="subtitle2" color="text.primary">
+                        {option.label}
+                      </Typography>
+                    </Stack>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ display: 'block', mb: 0.5 }}
+                    >
+                      {option.tagline}
+                    </Typography>
+                    <Typography variant="caption" color="text.disabled" sx={{ display: 'block' }}>
+                      {option.perk}
+                    </Typography>
+                  </Paper>
+                );
+              })}
+            </Box>
+          </Box>
+
           <TextField
-            label="Trip name"
+            label={`${nounTitle} name`}
             value={name}
             onChange={(e) => setName(e.target.value)}
             required
             fullWidth
             autoFocus
-            placeholder="e.g. Goa Weekend"
+            placeholder={theme.namePlaceholder}
             slotProps={{ htmlInput: { maxLength: 100 } }}
           />
 
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-            <TextField
-              label="Start date"
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              fullWidth
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-            <TextField
-              label="End date"
-              type="date"
-              value={endDate}
-              onChange={(e) => setEndDate(e.target.value)}
-              fullWidth
-              error={Boolean(dateError)}
-              helperText={dateError || ' '}
-              slotProps={{ inputLabel: { shrink: true } }}
-            />
-          </Stack>
+          {showDates && (
+            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+              <TextField
+                label="Start date"
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                fullWidth
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+              <TextField
+                label="End date"
+                type="date"
+                value={endDate}
+                onChange={(e) => setEndDate(e.target.value)}
+                fullWidth
+                error={Boolean(dateError)}
+                helperText={dateError || ' '}
+                slotProps={{ inputLabel: { shrink: true } }}
+              />
+            </Stack>
+          )}
 
           <TextField
             select
@@ -186,7 +247,7 @@ export default function NewGroupPage() {
             onChange={(e) => setDefaultCurrency(e.target.value)}
             fullWidth
             required
-            helperText="One currency per trip"
+            helperText={`One currency per ${theme.nouns.singular}`}
           >
             {CURRENCIES.map((c) => (
               <MenuItem key={c.code} value={c.code}>
@@ -200,7 +261,7 @@ export default function NewGroupPage() {
               Participants
             </Typography>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-              You&apos;re already on the trip. Add emails to invite after creation.
+              You&apos;re already a member. Add emails to invite people after creation.
             </Typography>
             <Stack direction="row" spacing={1} sx={{ mb: participants.length ? 1.5 : 0 }}>
               <TextField
@@ -262,21 +323,8 @@ export default function NewGroupPage() {
                 fullWidth
                 multiline
                 rows={2}
-                placeholder="What’s this trip for?"
+                placeholder={`What’s this ${theme.nouns.singular} for?`}
               />
-              <TextField
-                select
-                label="Category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                fullWidth
-              >
-                {CATEGORIES.map((cat) => (
-                  <MenuItem key={cat.id} value={cat.id}>
-                    {cat.label}
-                  </MenuItem>
-                ))}
-              </TextField>
               <Autocomplete
                 multiple
                 options={CURRENCIES.filter((c) => c.code !== defaultCurrency).map((c) => c.code)}
@@ -290,7 +338,7 @@ export default function NewGroupPage() {
                   <TextField
                     {...params}
                     label="Alternate currencies (max 2)"
-                    helperText="Legacy option — expenses still use the trip currency"
+                    helperText={`Legacy option — expenses still use the ${theme.nouns.singular} currency`}
                   />
                 )}
                 disableCloseOnSelect
@@ -316,7 +364,7 @@ export default function NewGroupPage() {
               variant="contained"
               disabled={loading || !name.trim() || Boolean(dateError)}
             >
-              {loading ? <CircularProgress size={20} /> : 'Create trip'}
+              {loading ? <CircularProgress size={20} /> : `Create ${theme.nouns.singular}`}
             </Button>
           </Stack>
         </Stack>
@@ -347,7 +395,7 @@ export default function NewGroupPage() {
             variant="contained"
             disabled={loading || !name.trim() || Boolean(dateError)}
           >
-            {loading ? <CircularProgress size={20} /> : 'Create trip'}
+            {loading ? <CircularProgress size={20} /> : `Create ${theme.nouns.singular}`}
           </Button>
         </Box>
       </Box>

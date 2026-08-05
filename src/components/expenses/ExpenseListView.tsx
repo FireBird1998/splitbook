@@ -28,6 +28,8 @@ import MoneyText from '@/components/common/MoneyText';
 import { formatDate } from '@/lib/utils/date';
 import { EXPENSE_CATEGORIES } from '@/lib/constants/categories';
 import { fetcher } from '@/lib/utils/fetcher';
+import { getGroupTheme } from '@/lib/group-themes';
+import type { GroupCategory } from '@/types';
 
 const QUICK_FILTERS = [
   { id: 'all', label: 'All' },
@@ -538,7 +540,7 @@ export default function ExpenseListView({
           </Typography>
           <Typography color="text.secondary" sx={{ mb: onAddExpense ? 2.5 : 0 }}>
             {search || quickFilter !== 'all' || category || tagFilter
-              ? 'Try clearing filters to see everything on this trip.'
+              ? `Try clearing filters to see everything in this ${getGroupTheme(group.category as GroupCategory).nouns.singular}.`
               : 'Add a shared cost — tags and equal split are ready.'}
           </Typography>
           {onAddExpense && !(search || quickFilter !== 'all' || category || tagFilter) && (

@@ -14,14 +14,8 @@ import BrandMark from '@/components/layout/BrandMark';
 import type { AuthMode } from '@/lib/auth-mode';
 import { getSignInProvider } from '@/lib/auth-sign-in';
 import DemoPersonaPicker from '@/components/demo/DemoPersonaPicker';
-
-const CATEGORY_ICONS: Record<string, string> = {
-  trip: '✈️',
-  home: '🏠',
-  couple: '💑',
-  work: '💼',
-  other: '📋',
-};
+import { getGroupTheme } from '@/lib/group-themes';
+import type { GroupCategory } from '@/types';
 
 interface JoinGroupClientProps {
   code: string;
@@ -165,7 +159,8 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
             </Typography>
             <Stack direction="row" spacing={1} justifyContent="center" alignItems="center">
               <Typography variant="h6" fontWeight={700} color="text.primary">
-                {CATEGORY_ICONS[(group?.category as string) || 'other']} {group?.name as string}
+                {getGroupTheme(((group?.category as string) || 'other') as GroupCategory).icon}{' '}
+                {group?.name as string}
               </Typography>
             </Stack>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>

@@ -24,7 +24,7 @@ export class GroupService {
           joinedAt: new Date(),
         },
       ],
-      tags: buildDefaultGroupTags(),
+      tags: buildDefaultGroupTags(data.category),
     });
 
     // Log activity

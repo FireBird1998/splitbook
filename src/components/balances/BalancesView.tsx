@@ -15,6 +15,8 @@ import { formatDate } from '@/lib/utils/date';
 import SettleUpDialog from '@/components/settlements/SettleUpDialog';
 import { fetcher } from '@/lib/utils/fetcher';
 import { canRecordSettlement } from '@/lib/utils/settlement-authorization';
+import { getGroupTheme } from '@/lib/group-themes';
+import type { GroupCategory } from '@/types';
 
 const MIXED_CURRENCY_WARNING =
   "Some expenses or settlements use a different currency than this group's default. Balances may be inaccurate until those are updated.";
@@ -175,7 +177,10 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
           <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
             All settled up
           </Typography>
-          <Typography color="text.secondary">No one owes anyone in this trip right now.</Typography>
+          <Typography color="text.secondary">
+            No one owes anyone in this{' '}
+            {getGroupTheme(group.category as GroupCategory).nouns.singular} right now.
+          </Typography>
         </Box>
         {settlementHistory}
       </Stack>
