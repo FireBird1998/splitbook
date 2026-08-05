@@ -84,3 +84,15 @@ export function getQuickFilterDates(filter: string): { from: Date; to: Date } | 
 export function toDateParam(date: Date): string {
   return format(date, 'yyyy-MM-dd');
 }
+
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Resolve an inclusive `dateTo` filter bound. Date-only strings (`yyyy-MM-dd`)
+ * parse as UTC midnight, which would silently drop expenses later on the final
+ * day — so they are widened to end-of-day UTC. Full ISO timestamps are
+ * respected as-is. Boundaries are UTC, per the repo's UTC-storage convention.
+ */
+export function toInclusiveDateToBound(dateTo: string): Date {
+  return DATE_ONLY_PATTERN.test(dateTo) ? new Date(`${dateTo}T23:59:59.999Z`) : new Date(dateTo);
+}

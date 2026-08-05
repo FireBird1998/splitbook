@@ -5,7 +5,7 @@ import '@/lib/models/User'; // Ensure User model is registered for populate()
 import { activityService } from './activity.service';
 import type { CreateExpenseInput, UpdateExpenseInput } from '@/lib/validators/expense.validator';
 import type { ExpenseFilters } from '@/types';
-import { getQuickFilterDates } from '@/lib/utils/date';
+import { getQuickFilterDates, toInclusiveDateToBound } from '@/lib/utils/date';
 import { escapeRegex } from '@/lib/utils/escape-regex';
 import {
   assertActiveTag,
@@ -96,7 +96,8 @@ export class ExpenseService {
       query.date = {};
       if (filters.dateFrom)
         (query.date as Record<string, unknown>).$gte = new Date(filters.dateFrom);
-      if (filters.dateTo) (query.date as Record<string, unknown>).$lte = new Date(filters.dateTo);
+      if (filters.dateTo)
+        (query.date as Record<string, unknown>).$lte = toInclusiveDateToBound(filters.dateTo);
     }
 
     // Category filter
