@@ -4,10 +4,6 @@
 
 import { MongoClient, MongoClientOptions } from 'mongodb';
 
-const options: MongoClientOptions = {
-  directConnection: true,
-};
-
 const globalWithMongo = global as typeof globalThis & {
   _mongoClientPromise?: Promise<MongoClient>;
 };
@@ -16,6 +12,10 @@ let clientPromise: Promise<MongoClient>;
 
 if (typeof process.env.MONGODB_URI === 'string' && process.env.MONGODB_URI) {
   const uri = process.env.MONGODB_URI;
+  // directConnection is needed for the local Docker Mongo but is rejected by mongodb+srv:// (Atlas)
+  const options: MongoClientOptions = uri.startsWith('mongodb+srv://')
+    ? {}
+    : { directConnection: true };
 
   if (process.env.NODE_ENV === 'development') {
     if (!globalWithMongo._mongoClientPromise) {
