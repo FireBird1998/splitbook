@@ -56,6 +56,12 @@ interface ExpenseFormDialogProps {
   group: Record<string, unknown>;
   userId: string;
   expense?: Record<string, unknown> | null; // If provided → edit mode
+  /**
+   * Default date for a NEW expense (`yyyy-MM-dd`), e.g. the last day of a
+   * past month when the form opens from a Household month view. Ignored in
+   * edit mode; the user can still override it.
+   */
+  defaultDate?: string | null;
 }
 
 // ─── Component ─────────────────────────────────────────
@@ -66,6 +72,7 @@ export default function ExpenseFormDialog({
   group,
   userId,
   expense = null,
+  defaultDate = null,
 }: ExpenseFormDialogProps) {
   const { mutate } = useSWRConfig();
   const [loading, setLoading] = useState(false);
@@ -110,7 +117,8 @@ export default function ExpenseFormDialog({
     setAmount('');
     setCurrency(defaultCurrency);
     setCategory('other');
-    setDate(new Date().toISOString().split('T')[0]);
+    // A month view passes the month's last day; otherwise default to today.
+    setDate(defaultDate ?? new Date().toISOString().split('T')[0]);
     setSplitMethod('equal');
     setSelectedMembers(members.map((m) => m.user._id));
     setTag(getDefaultExpenseTag(groupTags));
@@ -123,7 +131,7 @@ export default function ExpenseFormDialog({
     setShowSplitOptions(false);
     setShowMoreOptions(false);
     setError('');
-  }, [defaultCurrency, groupTags, members, userId]);
+  }, [defaultCurrency, defaultDate, groupTags, members, userId]);
 
   // Pre-fill form when editing
   useEffect(() => {
@@ -136,7 +144,7 @@ export default function ExpenseFormDialog({
       setCategory((expense.category as string) || 'other');
       const expDate = expense.date
         ? new Date(expense.date as string).toISOString().split('T')[0]
-        : new Date().toISOString().split('T')[0];
+        : (defaultDate ?? new Date().toISOString().split('T')[0]);
       setDate(expDate);
       setSplitMethod((expense.splitMethod as string) || 'equal');
       setTag((expense.tag as string) || '');
@@ -190,7 +198,7 @@ export default function ExpenseFormDialog({
     } else {
       resetForm();
     }
-  }, [expense, open, defaultCurrency, resetForm]);
+  }, [expense, open, defaultCurrency, defaultDate, resetForm]);
 
   // ─── Derived Values ────────────────────────────────
   const parsedAmount = parseFloat(amount) || 0;

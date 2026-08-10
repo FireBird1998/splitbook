@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -22,6 +22,8 @@ import AddIcon from '@mui/icons-material/Add';
 import ShareIcon from '@mui/icons-material/Share';
 import TripStrip from '@/components/trip/TripStrip';
 import GroupHeader from '@/components/groups/GroupHeader';
+import MonthCycleBar, { parseMonthParam } from '@/components/groups/MonthCycleBar';
+import MonthMemberTable from '@/components/groups/MonthMemberTable';
 import ExpenseListView from '@/components/expenses/ExpenseListView';
 import BalancesView from '@/components/balances/BalancesView';
 import ActivityView from '@/components/activity/ActivityView';
@@ -31,7 +33,7 @@ import { fetcher } from '@/lib/utils/fetcher';
 import { formatDate } from '@/lib/utils/date';
 import { buildTripChecklist, shouldShowTripChecklist } from '@/lib/utils/trip-setup';
 import { getGroupTheme } from '@/lib/group-themes';
-import type { GroupCategory } from '@/types';
+import type { ExpenseMemberBreakdownRow, GroupCategory } from '@/types';
 
 interface GroupDetailViewProps {
   groupId: string;
@@ -43,6 +45,13 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
   const [tab, setTab] = useState(0);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  // Month-view summary surfaced from ExpenseListView while a month is active.
+  const [monthSummary, setMonthSummary] = useState<{
+    totalAmount: number;
+    count: number;
+    byMember?: ExpenseMemberBreakdownRow[];
+    userFronted: number;
+  } | null>(null);
 
   useEffect(() => {
     // Defer so deep-link params apply after mount without sync setState-in-effect.
@@ -80,6 +89,23 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
     const outstandingDebtCount = (balancesData?.data?.debts as unknown[] | undefined)?.length ?? 0;
     return buildTripChecklist({ memberCount, expenseCount, outstandingDebtCount });
   }, [group?.members, expensesData, balancesData]);
+
+  const handleMonthSummaryChange = useCallback(
+    (summary: Record<string, unknown> | undefined) => {
+      if (!summary) {
+        setMonthSummary(null);
+        return;
+      }
+      const byMember = summary.byMember as ExpenseMemberBreakdownRow[] | undefined;
+      setMonthSummary({
+        totalAmount: (summary.totalAmount as number) ?? 0,
+        count: (summary.count as number) ?? 0,
+        byMember,
+        userFronted: byMember?.find((row) => row.user._id === userId)?.paid ?? 0,
+      });
+    },
+    [userId],
+  );
 
   if (isLoading) {
     return (
@@ -142,6 +168,28 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
   ).find((balance) => balance.user._id === userId);
   const tripTotal = expensesData?.data?.summary?.totalAmount as number | undefined;
   const showChecklist = shouldShowTripChecklist(checklist);
+
+  // ── Household month view (read-only lens; balances stay running) ──
+  const hasMonthCycle = theme.signature === 'monthCycle';
+  const activeMonth = hasMonthCycle ? parseMonthParam(searchParams.get('month')) : null;
+  const runningDebts = (balancesData?.data?.debts || []) as Array<{
+    from: { _id: string };
+    to: { _id: string };
+    amount: number;
+  }>;
+  const memberFronted = activeMonth
+    ? (monthSummary?.byMember?.find((row) => row.user._id === userId)?.paid ?? 0)
+    : 0;
+  // Amendment B: opening the form from a past-month view defaults the expense
+  // date to that month's last day (viewer-local). Current month / All time → today.
+  const expenseDefaultDate =
+    activeMonth && !activeMonth.isCurrentMonth
+      ? `${activeMonth.key}-${String(activeMonth.lastDay.getDate()).padStart(2, '0')}`
+      : null;
+  // Amendment D: the "Settle {Month}?" nudge — past month + outstanding running debt.
+  const showSettlePrompt = Boolean(
+    activeMonth && !activeMonth.isCurrentMonth && runningDebts.length > 0,
+  );
 
   const handleChecklistAction = (id: 'invite' | 'expense' | 'settle') => {
     if (id === 'invite') setInviteDialogOpen(true);
@@ -223,6 +271,23 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
         )}
       </Box>
 
+      {hasMonthCycle && (
+        <Box sx={{ mb: 3, animation: 'panel-in 280ms ease-out both' }}>
+          <MonthCycleBar
+            currency={currency}
+            summary={
+              activeMonth && monthSummary
+                ? {
+                    totalAmount: monthSummary.totalAmount,
+                    count: monthSummary.count,
+                    userFronted: memberFronted,
+                  }
+                : null
+            }
+          />
+        </Box>
+      )}
+
       {theme.signature === 'checklist' && showChecklist && (
         <Box
           sx={{
@@ -303,12 +368,64 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
       </Tabs>
 
       {tab === 0 && (
-        <ExpenseListView
-          groupId={groupId}
-          userId={userId}
-          group={group}
-          onAddExpense={() => setExpenseDialogOpen(true)}
-        />
+        <Stack spacing={2}>
+          {activeMonth && monthSummary?.byMember && monthSummary.byMember.length > 0 && (
+            <MonthMemberTable
+              rows={monthSummary.byMember}
+              currency={currency}
+              userId={userId}
+              monthName={activeMonth.monthName}
+            />
+          )}
+
+          {showSettlePrompt && activeMonth && (
+            <Box
+              sx={{
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: '12px',
+                px: { xs: 2, sm: 2.5 },
+                py: 1.75,
+                display: 'flex',
+                alignItems: { xs: 'flex-start', sm: 'center' },
+                justifyContent: 'space-between',
+                flexDirection: { xs: 'column', sm: 'row' },
+                gap: 1.5,
+                bgcolor: 'tint.info',
+              }}
+            >
+              <Box sx={{ minWidth: 0 }}>
+                <Typography variant="body2" fontWeight={600} color="text.primary">
+                  Settle {activeMonth.monthName}?
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {activeMonth.monthName}&apos;s numbers are in — settle the running balance on the
+                  Balances tab.
+                </Typography>
+              </Box>
+              <Button
+                size="small"
+                variant="contained"
+                onClick={() => setTab(1)}
+                sx={{ textTransform: 'none', flexShrink: 0 }}
+              >
+                Open Balances
+              </Button>
+            </Box>
+          )}
+
+          <ExpenseListView
+            groupId={groupId}
+            userId={userId}
+            group={group}
+            onAddExpense={() => setExpenseDialogOpen(true)}
+            controlledDateRange={
+              activeMonth ? { dateFrom: activeMonth.dateFrom, dateTo: activeMonth.dateTo } : null
+            }
+            includeMemberBreakdown={Boolean(activeMonth)}
+            onSummaryChange={activeMonth ? handleMonthSummaryChange : undefined}
+          />
+        </Stack>
       )}
       {tab === 1 && <BalancesView groupId={groupId} userId={userId} group={group} />}
       {tab === 2 && <ActivityView groupId={groupId} />}
@@ -363,6 +480,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
         groupId={groupId}
         group={group}
         userId={userId}
+        defaultDate={expenseDefaultDate}
       />
 
       <InviteDialog

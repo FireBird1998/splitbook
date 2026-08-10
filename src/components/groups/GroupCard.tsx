@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import useSWR from 'swr';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -14,8 +15,11 @@ import AddIcon from '@mui/icons-material/Add';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import SettingsIcon from '@mui/icons-material/Settings';
+import { endOfMonth, format, startOfMonth } from 'date-fns';
 import TripStrip from '@/components/trip/TripStrip';
 import GroupHeader from '@/components/groups/GroupHeader';
+import MoneyText from '@/components/common/MoneyText';
+import { fetcher } from '@/lib/utils/fetcher';
 import { formatDate, formatRelativeTime } from '@/lib/utils/date';
 import { getGroupTheme } from '@/lib/group-themes';
 import type { DashboardBalanceAmount, GroupCategory } from '@/types';
@@ -26,6 +30,38 @@ interface GroupCardProps {
   balances?: DashboardBalanceAmount[];
   hasMixedCurrencies?: boolean;
   mode?: 'dashboard' | 'management';
+}
+
+/**
+ * This month's spend for a Household card — one extra date-ranged summary
+ * request, only mounted for `monthCycle` themes. Viewer-local month bounds,
+ * full ISO so the service respects them as-is.
+ */
+function HouseholdMonthSpend({ groupId, currency }: { groupId: string; currency: string }) {
+  const now = new Date();
+  const params = new URLSearchParams({
+    dateFrom: startOfMonth(now).toISOString(),
+    dateTo: endOfMonth(now).toISOString(),
+    page: '1',
+    limit: '1',
+  });
+  const { data } = useSWR(`/api/groups/${groupId}/expenses?${params.toString()}`, fetcher);
+  const summary = data?.data?.summary as { totalAmount?: number; count?: number } | undefined;
+  if (!summary) return null;
+
+  return (
+    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+      {format(now, 'MMMM')} so far ·{' '}
+      <MoneyText
+        amount={summary.totalAmount ?? 0}
+        currency={currency}
+        tone="neutral"
+        variant="caption"
+        fontWeight={700}
+      />{' '}
+      across {summary.count ?? 0} expense{(summary.count ?? 0) === 1 ? '' : 's'}
+    </Typography>
+  );
 }
 
 export default function GroupCard({
@@ -131,6 +167,10 @@ export default function GroupCard({
               </Typography>
             )}
           </Stack>
+
+          {theme.signature === 'monthCycle' && (
+            <HouseholdMonthSpend groupId={groupId} currency={currency} />
+          )}
 
           <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 1 }}>
             {updatedAt ? `Last activity ${formatRelativeTime(updatedAt)}` : 'No activity yet'}

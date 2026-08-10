@@ -174,6 +174,28 @@ export interface ExpenseFilters {
   sortOrder?: 'asc' | 'desc';
   page?: number;
   limit?: number;
+  /** Opt-in: include the per-member paid/share/net breakdown in the summary. */
+  includeMemberBreakdown?: boolean;
+}
+
+// ─── Expense Summary Types ──────────────────────────────
+export interface ExpenseMemberBreakdownRow {
+  user: { _id: string; name: string; image?: string };
+  /** Sum of this member's paidBy amounts in the window. */
+  paid: number;
+  /** Sum of this member's splitBetween amounts in the window. */
+  share: number;
+  /** share - paid. Positive = under-contributed this window. */
+  net: number;
+}
+
+export interface ExpenseSummary {
+  totalAmount: number;
+  count: number;
+  userOwes: number;
+  userGetsBack: number;
+  /** Present only when includeMemberBreakdown is requested. */
+  byMember?: ExpenseMemberBreakdownRow[];
 }
 
 // ─── Balance Types ──────────────────────────────────────

@@ -124,14 +124,14 @@ The volume is bounded — a household month is tens of expenses — so the in-me
 
 `MonthCycleBar` owns the active month; `ExpenseListView` receives it.
 
-| Concern                        | Behaviour                                                                                                                                                    |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Source of truth                | `?month=YYYY-MM` search param; absent means "all time"                                                                                                       |
-| Range computation              | `startOfMonth` / `endOfMonth` from `date-fns` in the **viewer's timezone**, sent as full ISO 8601 bounds (`dateFrom` / `dateTo`) — not date-only strings       |
-| Forward limit                  | `›` disabled when the active month is the current month                                                                                                      |
-| Backward limit                 | None. Empty months render an empty state, not an error                                                                                                       |
-| Interaction with quick filters | While a month is active, `ExpenseListView` hides its quick-filter chip row. "All time" restores it                                                           |
-| Fetch keys                     | Unchanged SWR-key-from-query-string pattern, so month stepping is cached per month and `keepPreviousData` holds the previous month on screen during the swap |
+| Concern                        | Behaviour                                                                                                                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Source of truth                | `?month=YYYY-MM` search param; absent means "all time"                                                                                                                          |
+| Range computation              | `startOfMonth` / `endOfMonth` from `date-fns` in the **viewer's timezone**, sent as full ISO 8601 bounds (`dateFrom` / `dateTo`) — not date-only strings                        |
+| Forward limit                  | `›` disabled when the active month is the current month                                                                                                                         |
+| Backward limit                 | None. Empty months render an empty state, not an error                                                                                                                          |
+| Interaction with quick filters | While a month is active, `ExpenseListView` hides its quick-filter chip row. "All time" restores it                                                                              |
+| Fetch keys                     | Unchanged SWR-key-from-query-string pattern, so month stepping is cached per month and `keepPreviousData` holds the previous month on screen during the swap                    |
 | Expense date default           | When the form opens while a **past** month is active, its date defaults to that month's last day (viewer-local); current month or All time → today. The user can still override |
 
 `ExpenseListView` gains an optional controlled date range prop (full ISO bounds). When provided it overrides internal `quickFilter` / `dateFrom` / `dateTo` state and suppresses the chip row; when absent the component behaves exactly as it does today. Trip, Couple, Work, and General groups pass nothing and are untouched. The group page passes the active month down to whatever opens `ExpenseFormDialog` so the date default above applies only when a month view is active.

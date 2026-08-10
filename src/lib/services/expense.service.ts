@@ -13,6 +13,11 @@ import {
   assertGroupCurrency,
   shouldValidateExpenseTag,
 } from './expense-validation';
+import {
+  computeMemberBreakdown,
+  computeUserOweGetBack,
+  type LeanExpenseContribution,
+} from './expense-summary';
 import { calculateSplitAmounts } from './split-calculation';
 import mongoose from 'mongoose';
 
@@ -154,36 +159,49 @@ export class ExpenseService {
       ]),
     ]);
 
-    // Compute user-specific owe/get-back from the full filtered set
+    // User owe/get-back and the opt-in per-member breakdown come from the
+    // same pass over the full filtered set (not just the current page).
     let userOwes = 0;
     let userGetsBack = 0;
+    let byMember: import('@/types').ExpenseMemberBreakdownRow[] | undefined;
 
-    if (userId) {
-      // We need all filtered expenses (not just current page) for accurate summary.
+    if (userId || filters.includeMemberBreakdown) {
       // For efficiency, if total <= limit we already have all. Otherwise run a lean query.
       let allFiltered = expenses;
       if (total > limit) {
         allFiltered = await Expense.find(query).select('paidBy splitBetween').lean();
       }
+      const window = allFiltered as LeanExpenseContribution[];
 
-      for (const exp of allFiltered) {
-        const paidEntry = exp.paidBy?.find(
-          (p: { user: unknown }) =>
-            p.user?.toString() === userId ||
-            (p.user as { _id?: unknown })?._id?.toString() === userId,
-        );
-        const splitEntry = exp.splitBetween?.find(
-          (s: { user: unknown }) =>
-            s.user?.toString() === userId ||
-            (s.user as { _id?: unknown })?._id?.toString() === userId,
-        );
+      if (userId) {
+        const oweGetBack = computeUserOweGetBack(window, userId);
+        userOwes = oweGetBack.userOwes;
+        userGetsBack = oweGetBack.userGetsBack;
+      }
 
-        const paidAmount = paidEntry?.amount || 0;
-        const splitAmount = splitEntry?.amount || 0;
-        const net = splitAmount - paidAmount;
+      if (filters.includeMemberBreakdown) {
+        const group = await Group.findById(groupId)
+          .select('members')
+          .populate('members.user', 'name image')
+          .lean();
+        const members = (group?.members || []) as Array<{
+          user: { _id: unknown; name?: string; image?: string };
+        }>;
+        const memberIds = members.map((member) => String(member.user._id));
 
-        if (net > 0) userOwes += net;
-        if (net < 0) userGetsBack += Math.abs(net);
+        byMember = computeMemberBreakdown(window, memberIds).map((row) => {
+          const member = members.find((candidate) => String(candidate.user._id) === row.userId);
+          return {
+            user: {
+              _id: row.userId,
+              name: member?.user?.name ?? 'Former member',
+              image: member?.user?.image,
+            },
+            paid: row.paid,
+            share: row.share,
+            net: row.net,
+          };
+        });
       }
     }
 
@@ -200,8 +218,9 @@ export class ExpenseService {
       summary: {
         totalAmount: summaryData.totalAmount,
         count: summaryData.count,
-        userOwes: Math.round(userOwes * 100) / 100,
-        userGetsBack: Math.round(userGetsBack * 100) / 100,
+        userOwes,
+        userGetsBack,
+        ...(byMember ? { byMember } : {}),
       },
     };
   }

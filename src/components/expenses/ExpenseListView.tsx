@@ -1,7 +1,7 @@
 'use client';
 
 import useSWR from 'swr';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -46,6 +46,19 @@ interface ExpenseListViewProps {
   userId: string;
   group: Record<string, unknown>;
   onAddExpense?: () => void;
+  /**
+   * Controlled date range (full ISO 8601 bounds), owned by the Household
+   * month switcher. When present it overrides the internal quick-filter /
+   * date state and the quick-filter chip row is hidden; when absent the
+   * component behaves exactly as before.
+   */
+  controlledDateRange?: { dateFrom: string; dateTo: string } | null;
+  /**
+   * Opt-in per-member breakdown — appended to the fetch only when a month
+   * view is active, and surfaced via `onSummaryChange` for the member table.
+   */
+  includeMemberBreakdown?: boolean;
+  onSummaryChange?: (summary: Record<string, unknown> | undefined) => void;
 }
 
 export default function ExpenseListView({
@@ -53,6 +66,9 @@ export default function ExpenseListView({
   userId,
   group,
   onAddExpense,
+  controlledDateRange = null,
+  includeMemberBreakdown = false,
+  onSummaryChange,
 }: ExpenseListViewProps) {
   const [quickFilter, setQuickFilter] = useState('all');
   const [search, setSearch] = useState('');
@@ -93,7 +109,11 @@ export default function ExpenseListView({
   }, [quickFilter, dateFrom, dateTo]);
 
   const params = new URLSearchParams();
-  if (quickFilter === 'custom') {
+  if (controlledDateRange) {
+    params.set('dateFrom', controlledDateRange.dateFrom);
+    params.set('dateTo', controlledDateRange.dateTo);
+    if (includeMemberBreakdown) params.set('includeMemberBreakdown', '1');
+  } else if (quickFilter === 'custom') {
     if (dateFrom) params.set('dateFrom', dateFrom);
     if (dateTo) params.set('dateTo', dateTo);
   } else if (quickFilter !== 'all') {
@@ -107,7 +127,7 @@ export default function ExpenseListView({
   params.set('page', String(page));
   params.set('limit', '20');
 
-  const shouldFetch = !(quickFilter === 'custom' && dateRangeError);
+  const shouldFetch = controlledDateRange ? true : !(quickFilter === 'custom' && dateRangeError);
 
   const { data, isLoading, isValidating, error, mutate } = useSWR(
     shouldFetch ? `/api/groups/${groupId}/expenses?${params.toString()}` : null,
@@ -118,6 +138,12 @@ export default function ExpenseListView({
   const expenses = data?.data?.expenses || [];
   const pagination = data?.data?.pagination;
   const summary = data?.data?.summary;
+
+  // Surface the summary (month totals + per-member breakdown) to the parent
+  // when a month view drives this list. Deferred to avoid setState-in-render.
+  useEffect(() => {
+    onSummaryChange?.(summary);
+  }, [onSummaryChange, summary]);
 
   const currency = group.defaultCurrency as string;
 
@@ -173,38 +199,40 @@ export default function ExpenseListView({
     <Stack spacing={2}>
       {error && <Typography color="error.main">{error.message}</Typography>}
 
-      {/* Quick Filters */}
-      <Stack
-        direction="row"
-        spacing={1}
-        sx={{
-          overflowX: 'auto',
-          pb: 1,
-          '&::-webkit-scrollbar': { height: 4 },
-          '&::-webkit-scrollbar-track': { bgcolor: 'transparent' },
-          '&::-webkit-scrollbar-thumb': {
-            bgcolor: 'border.strong',
-            borderRadius: 2,
-          },
-          scrollbarWidth: 'thin',
-        }}
-      >
-        {QUICK_FILTERS.map((f) => (
-          <Chip
-            key={f.id}
-            label={f.label}
-            variant={quickFilter === f.id ? 'filled' : 'outlined'}
-            onClick={() => handleQuickFilterChange(f.id)}
-            size="small"
-            sx={{
-              ...(quickFilter === f.id
-                ? { backgroundColor: 'primary.main', color: 'primary.contrastText' }
-                : {}),
-              flexShrink: 0,
-            }}
-          />
-        ))}
-      </Stack>
+      {/* Quick Filters — hidden while a month view drives the date range */}
+      {!controlledDateRange && (
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{
+            overflowX: 'auto',
+            pb: 1,
+            '&::-webkit-scrollbar': { height: 4 },
+            '&::-webkit-scrollbar-track': { bgcolor: 'transparent' },
+            '&::-webkit-scrollbar-thumb': {
+              bgcolor: 'border.strong',
+              borderRadius: 2,
+            },
+            scrollbarWidth: 'thin',
+          }}
+        >
+          {QUICK_FILTERS.map((f) => (
+            <Chip
+              key={f.id}
+              label={f.label}
+              variant={quickFilter === f.id ? 'filled' : 'outlined'}
+              onClick={() => handleQuickFilterChange(f.id)}
+              size="small"
+              sx={{
+                ...(quickFilter === f.id
+                  ? { backgroundColor: 'primary.main', color: 'primary.contrastText' }
+                  : {}),
+                flexShrink: 0,
+              }}
+            />
+          ))}
+        </Stack>
+      )}
 
       {/* Custom Date Range */}
       {quickFilter === 'custom' && (
@@ -534,20 +562,23 @@ export default function ExpenseListView({
       ) : expenses.length === 0 ? (
         <Box sx={{ py: { xs: 4, sm: 6 }, textAlign: 'center' }}>
           <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
-            {search || quickFilter !== 'all' || category || tagFilter
+            {search || quickFilter !== 'all' || category || tagFilter || controlledDateRange
               ? 'No matching expenses'
               : 'No expenses yet'}
           </Typography>
           <Typography color="text.secondary" sx={{ mb: onAddExpense ? 2.5 : 0 }}>
-            {search || quickFilter !== 'all' || category || tagFilter
-              ? `Try clearing filters to see everything in this ${getGroupTheme(group.category as GroupCategory).nouns.singular}.`
-              : 'Add a shared cost — tags and equal split are ready.'}
+            {controlledDateRange && !(search || category || tagFilter)
+              ? 'Nothing logged in this month yet.'
+              : search || quickFilter !== 'all' || category || tagFilter
+                ? `Try clearing filters to see everything in this ${getGroupTheme(group.category as GroupCategory).nouns.singular}.`
+                : 'Add a shared cost — tags and equal split are ready.'}
           </Typography>
-          {onAddExpense && !(search || quickFilter !== 'all' || category || tagFilter) && (
-            <Button variant="contained" onClick={onAddExpense} sx={{ textTransform: 'none' }}>
-              Add first expense
-            </Button>
-          )}
+          {onAddExpense &&
+            !(search || quickFilter !== 'all' || category || tagFilter || controlledDateRange) && (
+              <Button variant="contained" onClick={onAddExpense} sx={{ textTransform: 'none' }}>
+                Add first expense
+              </Button>
+            )}
         </Box>
       ) : (
         <Stack
