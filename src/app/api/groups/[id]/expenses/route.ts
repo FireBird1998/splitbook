@@ -71,6 +71,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       sortOrder: (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc',
       page: parseInt(searchParams.get('page') || '1'),
       limit: parseInt(searchParams.get('limit') || '20'),
+      includeMemberBreakdown: searchParams.get('includeMemberBreakdown') === '1' || undefined,
     };
 
     const result = await expenseService.getGroupExpenses(id, filters, user.id!);
