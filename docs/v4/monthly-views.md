@@ -50,7 +50,7 @@ const to = DATE_ONLY.test(filters.dateTo)
 
 One place, fixes the existing Custom Range bug, keeps the API shape, and needs no client coordination. Timestamps passed in full ISO form are respected as-is.
 
-Boundaries are UTC, per the repo's UTC-storage convention. A household in IST will see a late-night 31 August expense fall into September; documented, and acceptable while the alternative is a per-user timezone parameter threaded through the aggregation.
+Boundaries are **viewer-local**: the month switcher computes `startOfMonth` / `endOfMonth` in the viewer's timezone and sends full ISO 8601 bounds (e.g. an IST viewer's August runs `2026-07-31T18:30:00.000Z` → `2026-08-31T18:29:59.999Z`), which the service respects as-is. The date-only → end-of-day-UTC widening above stays purely as a fallback for plain `yyyy-MM-dd` params (the Custom Range filter). A late-night 31 August expense therefore lands in August for an IST viewer; two viewers in different timezones can legitimately see different month totals for the same group — months are a lens, not a ledger boundary.
 
 **Tests:** an expense at `23:30` on the last day of the range is included; an expense at `00:15` the next day is excluded; a full ISO `dateTo` is not widened.
 
@@ -127,22 +127,25 @@ The volume is bounded — a household month is tens of expenses — so the in-me
 | Concern                        | Behaviour                                                                                                                                                    |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Source of truth                | `?month=YYYY-MM` search param; absent means "all time"                                                                                                       |
-| Range computation              | `startOfMonth` / `endOfMonth` from `date-fns`, formatted with `toDateParam`                                                                                  |
+| Range computation              | `startOfMonth` / `endOfMonth` from `date-fns` in the **viewer's timezone**, sent as full ISO 8601 bounds (`dateFrom` / `dateTo`) — not date-only strings       |
 | Forward limit                  | `›` disabled when the active month is the current month                                                                                                      |
 | Backward limit                 | None. Empty months render an empty state, not an error                                                                                                       |
 | Interaction with quick filters | While a month is active, `ExpenseListView` hides its quick-filter chip row. "All time" restores it                                                           |
 | Fetch keys                     | Unchanged SWR-key-from-query-string pattern, so month stepping is cached per month and `keepPreviousData` holds the previous month on screen during the swap |
+| Expense date default           | When the form opens while a **past** month is active, its date defaults to that month's last day (viewer-local); current month or All time → today. The user can still override |
 
-`ExpenseListView` gains an optional controlled date range prop. When provided it overrides internal `quickFilter` / `dateFrom` / `dateTo` state and suppresses the chip row; when absent the component behaves exactly as it does today. Trip, Couple, Work, and General groups pass nothing and are untouched.
+`ExpenseListView` gains an optional controlled date range prop (full ISO bounds). When provided it overrides internal `quickFilter` / `dateFrom` / `dateTo` state and suppresses the chip row; when absent the component behaves exactly as it does today. Trip, Couple, Work, and General groups pass nothing and are untouched. The group page passes the active month down to whatever opens `ExpenseFormDialog` so the date default above applies only when a month view is active.
 
 ### Reads per month view
 
 Two requests, both already cached by SWR:
 
-| Request                                                    | Serves                                         |
-| ---------------------------------------------------------- | ---------------------------------------------- |
-| `expenses?dateFrom&dateTo&includeMemberBreakdown=1`        | Month total, count, expense list, member table |
-| `balances` (unfiltered, already fetched by the group page) | Running balance in the header, settle-up debts |
+| Request                                                    | Serves                                                                                       |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `expenses?dateFrom&dateTo&includeMemberBreakdown=1`        | Month total, count, expense list, member table                                               |
+| `balances` (unfiltered, already fetched by the group page) | Running balance in the header, settle-up debts (running simplified debts, expense-only lens) |
+
+Monthly views aggregate **expenses only** — settlements are never month-attributed (`Settlement` has no `date`, only `createdAt`; see §3 of the V4 README). The "Settle {Month}?" prompt reads from the **running** simplified debts in the unfiltered balances response and simply links to the Balances tab; it is visible only when viewing a **past** month with non-empty running debts, and its copy must not imply the month itself is being closed.
 
 ### Labelling rules
 
@@ -160,5 +163,4 @@ Non-negotiable, because two similar-looking numbers sit on one screen:
 - Month-scoped balances or settlements, and `Settlement.date` (see V4 README §3).
 - Configurable cycle start day; calendar months only.
 - Multi-month comparison, trends, or charts.
-- Per-user timezone boundaries for date filters.
 - Recurring expense generation — Phase 3, and it needs a new collection.

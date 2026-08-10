@@ -15,10 +15,10 @@ V4 turns `category` into a **theme** chosen at creation, and adds the long-runni
 
 | #   | Feature                                              | Doc                                    | Phase | Status  |
 | --- | ---------------------------------------------------- | -------------------------------------- | ----- | ------- |
-| 1   | Theme registry derived from `Group.category`         | this doc, §1                           | 1     | Pending |
-| 2   | Category-aware chrome (trip strip vs neutral header) | this doc, §2                           | 1     | Pending |
-| 3   | Theme picker at group creation                       | this doc, §4                           | 1     | Pending |
-| 4   | Terminology pass ("trips" → "groups" where generic)  | this doc, §4                           | 1     | Pending |
+| 1   | Theme registry derived from `Group.category`         | this doc, §1                           | 1     | Done    |
+| 2   | Category-aware chrome (trip strip vs neutral header) | this doc, §2                           | 1     | Done    |
+| 3   | Theme picker at group creation                       | this doc, §4                           | 1     | Done    |
+| 4   | Terminology pass ("trips" → "groups" where generic)  | this doc, §4                           | 1     | Done    |
 | 5   | Household month switcher + monthly summary           | [monthly-views.md](./monthly-views.md) | 2     | Pending |
 | 6   | Recurring expense templates for Household            | this doc, §4                           | 3     | Pending |
 
@@ -176,14 +176,14 @@ Repo conventions apply throughout: pnpm only, `{ data }` / `{ error }` responses
 
 No schema change. No new endpoints. Pure derivation plus branching.
 
-- [ ] **Theme registry.** Create `src/lib/group-themes.ts` with `GroupTheme` and `getGroupTheme`, plus `src/lib/group-themes.test.ts` covering every category, the `home → "Household"` label, and a fallback for unknown values (defensive: old documents).
-- [ ] **Neutral header.** Add `src/components/groups/GroupHeader.tsx` — name, member avatars, currency, personal balance, invite code — reusing `MoneyText` and the `typography.money` treatment. Leave `TripStrip` and `deriveTripCodes` untouched.
-- [ ] **Gate the trip chrome.** In `GroupDetailView`, render `TripStrip` when `theme.header === 'strip'` and `GroupHeader` otherwise. Move the checklist behind `theme.signature === 'checklist'`. Replace the hardcoded "Trip not found" / "Trip settings" / "Trip sections" strings with theme nouns.
-- [ ] **Dashboard cards adapt.** In `GroupCard` (dashboard mode), branch the header the same way. Show the date range only for bounded themes; show "Last activity" for open-ended ones. The management mode already uses a neutral layout with a category icon — align its icon and label with the registry.
-- [ ] **Theme picker at creation.** In `src/app/(main)/groups/new/page.tsx`, promote category from an advanced-settings dropdown to the **first** field: five selectable cards showing icon, label, tagline, and a one-line "what you get" (e.g. Household → "Month-by-month totals and a running balance"). Selecting a theme relabels the form live — title, name-field label and placeholder, date fields per §2, and the submit button.
-- [ ] **Theme-aware default tags.** Add a category parameter to `buildDefaultGroupTags` / `mergeMissingDefaultTags` and per-theme lists to `src/lib/constants/default-tags.ts`; pass `category` from `groupService.create`. Update `default-tags.test.ts` (it currently asserts the five trip tags exactly). Existing groups are untouched — the merge helper only ever appends.
-- [ ] **Terminology pass.** Generic surfaces become group-language; trip surfaces keep trip language via `theme.nouns`. At minimum: dashboard "Your trips" → "Your groups", its subtitle and empty state, "New trip" → "New group"; `selectNextAction`'s `'create-trip'` kind → `'create-group'` with group copy (update `dashboard.test.ts` and the `DashboardNextAction` type); "Review your trip invitation" → group wording; `ExpenseListView`'s "everything on this trip" empty-state copy; `GroupSettingsView` labels; the mixed-currency alert's "A trip contains…". Sweep with `rg -i '\btrip' src` and treat every hit outside `src/components/trip/`, `trip-codes`, and trip-themed copy as a candidate.
-- [ ] **Verify.** `pnpm test && pnpm lint && pnpm typecheck`. Manually: create one group per theme and confirm only the trip shows the strip and checklist, and that no non-trip surface says "trip".
+- [x] **Theme registry.** Create `src/lib/group-themes.ts` with `GroupTheme` and `getGroupTheme`, plus `src/lib/group-themes.test.ts` covering every category, the `home → "Household"` label, and a fallback for unknown values (defensive: old documents).
+- [x] **Neutral header.** Add `src/components/groups/GroupHeader.tsx` — name, member avatars, currency, personal balance, invite code — reusing `MoneyText` and the `typography.money` treatment. Leave `TripStrip` and `deriveTripCodes` untouched.
+- [x] **Gate the trip chrome.** In `GroupDetailView`, render `TripStrip` when `theme.header === 'strip'` and `GroupHeader` otherwise. Move the checklist behind `theme.signature === 'checklist'`. Replace the hardcoded "Trip not found" / "Trip settings" / "Trip sections" strings with theme nouns.
+- [x] **Dashboard cards adapt.** In `GroupCard` (dashboard mode), branch the header the same way. Show the date range only for bounded themes; show "Last activity" for open-ended ones. The management mode already uses a neutral layout with a category icon — align its icon and label with the registry.
+- [x] **Theme picker at creation.** In `src/app/(main)/groups/new/page.tsx`, promote category from an advanced-settings dropdown to the **first** field: five selectable cards showing icon, label, tagline, and a one-line "what you get" (e.g. Household → "Month-by-month totals and a running balance"). Selecting a theme relabels the form live — title, name-field label and placeholder, date fields per §2, and the submit button.
+- [x] **Theme-aware default tags.** Add a category parameter to `buildDefaultGroupTags` / `mergeMissingDefaultTags` and per-theme lists to `src/lib/constants/default-tags.ts`; pass `category` from `groupService.create`. Update `default-tags.test.ts` (it currently asserts the five trip tags exactly). Existing groups are untouched — the merge helper only ever appends.
+- [x] **Terminology pass.** Generic surfaces become group-language; trip surfaces keep trip language via `theme.nouns`. At minimum: dashboard "Your trips" → "Your groups", its subtitle and empty state, "New trip" → "New group"; `selectNextAction`'s `'create-trip'` kind → `'create-group'` with group copy (update `dashboard.test.ts` and the `DashboardNextAction` type); "Review your trip invitation" → group wording; `ExpenseListView`'s "everything on this trip" empty-state copy; `GroupSettingsView` labels; the mixed-currency alert's "A trip contains…". Sweep with `rg -i '\btrip' src` and treat every hit outside `src/components/trip/`, `trip-codes`, and trip-themed copy as a candidate.
+- [x] **Verify.** `pnpm test && pnpm lint && pnpm typecheck`. Manually: create one group per theme and confirm only the trip shows the strip and checklist, and that no non-trip surface says "trip".
 
 ### Phase 2 — Household monthly views
 
