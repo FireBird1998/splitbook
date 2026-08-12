@@ -3,6 +3,7 @@ import {
   getDefaultExpenseTag,
   getSelectableExpenseTags,
   isAdvancedSplit,
+  resolveExpenseCategory,
   resolvePredefinedTag,
 } from './expense-form-helpers';
 
@@ -63,5 +64,19 @@ describe('expense form helpers', () => {
   it('resolves predefined item tags against active group tags', () => {
     expect(resolvePredefinedTag(tags, 'food')).toBe('Food');
     expect(resolvePredefinedTag(tags, 'taxi')).toBeNull();
+  });
+
+  it('derives the category from a quick-pick id', () => {
+    expect(resolveExpenseCategory('restaurant')).toBe('food');
+    expect(resolveExpenseCategory('flight')).toBe('travel');
+    expect(resolveExpenseCategory('rent')).toBe('housing');
+  });
+
+  it("falls back to 'other' when no quick-pick is selected", () => {
+    expect(resolveExpenseCategory(null)).toBe('other');
+  });
+
+  it("falls back to 'other' for an unknown quick-pick id", () => {
+    expect(resolveExpenseCategory('not-a-real-item')).toBe('other');
   });
 });

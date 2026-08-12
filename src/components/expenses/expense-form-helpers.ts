@@ -2,6 +2,8 @@
  * Pure helpers for the expense form fast path and progressive split UI.
  */
 
+import { getPredefinedItem } from '@/lib/constants/predefined-items';
+
 export interface GroupTagOption {
   _id?: string;
   name: string;
@@ -56,4 +58,13 @@ export function resolvePredefinedTag(tags: GroupTagOption[], preferredTag: strin
   const active = tags.filter((tag) => !tag.isArchived);
   const exact = active.find((tag) => tag.name.toLowerCase() === preferredTag.toLowerCase());
   return exact?.name ?? null;
+}
+
+/**
+ * Category is derived, never asked for: a quick-pick sets it, anything else
+ * (custom description, unknown id) falls back to 'other'.
+ */
+export function resolveExpenseCategory(predefinedItemId: string | null): string {
+  if (!predefinedItemId) return 'other';
+  return getPredefinedItem(predefinedItemId)?.category ?? 'other';
 }
