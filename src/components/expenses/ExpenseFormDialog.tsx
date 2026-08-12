@@ -24,7 +24,6 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useSWRConfig } from 'swr';
-import { EXPENSE_CATEGORIES } from '@/lib/constants/categories';
 import { PREDEFINED_ITEMS } from '@/lib/constants/predefined-items';
 import { getCurrency, formatCurrency } from '@/lib/utils/currency';
 import { buildDuplicateCheckUrl } from './expense-duplicate-check';
@@ -32,6 +31,7 @@ import {
   getDefaultExpenseTag,
   getSelectableExpenseTags,
   isAdvancedSplit,
+  resolveExpenseCategory,
   resolvePredefinedTag,
   type GroupTagOption,
 } from './expense-form-helpers';
@@ -252,7 +252,7 @@ export default function ExpenseFormDialog({
     const item = PREDEFINED_ITEMS.find((i) => i.id === itemId);
     if (item) {
       setDescription(item.label);
-      setCategory(item.category);
+      setCategory(resolveExpenseCategory(itemId));
       const matchingTag = resolvePredefinedTag(groupTags, item.defaultTag);
       if (matchingTag) setTag(matchingTag);
     }
@@ -451,7 +451,7 @@ export default function ExpenseFormDialog({
     currentUserId: userId,
   });
 
-  const hasNonDefaultMore = category !== 'other' || notes.trim().length > 0;
+  const hasNonDefaultMore = notes.trim().length > 0;
 
   const selectableTags = getSelectableExpenseTags(
     groupTags,
@@ -1063,21 +1063,6 @@ export default function ExpenseFormDialog({
                 bgcolor: 'background.paper',
               }}
             >
-              <TextField
-                select
-                label="Category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                size="small"
-                fullWidth
-              >
-                {EXPENSE_CATEGORIES.map((c) => (
-                  <MenuItem key={c.id} value={c.id}>
-                    {c.icon} {c.label}
-                  </MenuItem>
-                ))}
-              </TextField>
-
               <TextField
                 label="Notes (optional)"
                 value={notes}
