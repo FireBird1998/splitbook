@@ -20,7 +20,7 @@ V4 turns `category` into a **theme** chosen at creation, and adds the long-runni
 | 3   | Theme picker at group creation                       | this doc, §4                           | 1     | Done    |
 | 4   | Terminology pass ("trips" → "groups" where generic)  | this doc, §4                           | 1     | Done    |
 | 5   | Household month switcher + monthly summary           | [monthly-views.md](./monthly-views.md) | 2     | Pending |
-| 6   | Recurring expense templates for Household            | this doc, §4                           | 3     | Pending |
+| 6   | Recurring expense templates for Household            | this doc, §4                           | 3     | Done    |
 
 ## Key Principles
 
@@ -201,8 +201,8 @@ Reuses the existing expense filter API. One additive, opt-in response field. Ful
 
 **This phase needs a new collection.** Rent, internet, and utilities repeat with the same amount, payer, and split every month, and re-entering them is the main friction in a household group. A template is a definition, not a derivation — there is nothing in `Expense` or `Group` to compute it from.
 
-- [ ] **Model.** New `RecurringExpense` collection: `group`, `description`, `amount`, `currency`, `category`, `tag`, `paidBy`, `splitMethod`, `splitBetween`, `dayOfMonth`, `startsOn`, `endsOn`, `isPaused`, `lastGeneratedFor` (`YYYY-MM`), `createdBy`. Generated expenses carry a `recurringExpense` reference and a unique `(recurringExpense, period)` index so generation is idempotent under concurrency.
-- [ ] **Decide the creation trigger.** Two options:
+- [x] **Model.** New `RecurringExpense` collection: `group`, `description`, `amount`, `currency`, `category`, `tag`, `paidBy`, `splitMethod`, `splitBetween`, `dayOfMonth`, `startsOn`, `endsOn`, `isPaused`, `lastGeneratedFor` (`YYYY-MM`), `createdBy`. Generated expenses carry a `recurringExpense` reference and a unique `(recurringExpense, period)` index so generation is idempotent under concurrency.
+- [x] **Decide the creation trigger.** Two options:
 
   | Trigger                                                           | Pros                                                                                                                          | Cons                                                                                                                                      |
   | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
@@ -211,9 +211,9 @@ Reuses the existing expense filter API. One additive, opt-in response field. Ful
 
   **Recommendation: lazy on read**, with generation in a service called from group and expense reads, guarded by `lastGeneratedFor` and the unique index. For a private beta with active members, "created when someone looks" is indistinguishable from "created on the 1st", and it keeps the system self-contained and testable. Revisit if notifications or reminders ever need rows to exist before anyone opens the app — that requirement, not this one, is what justifies a scheduler.
 
-- [ ] **Management UI.** A "Recurring" section in Household group settings: list, add, edit, pause, delete. Deleting a template never touches expenses it already generated.
-- [ ] **Surface generated expenses honestly.** A "Recurring" marker on the expense card, editable and deletable like any other expense (soft delete applies).
-- [ ] **Verify.** Unit tests for due-period calculation across month lengths and pauses; an integration test proving two concurrent generations produce exactly one expense.
+- [x] **Management UI.** A "Recurring" section in Household group settings: list, add, edit, pause, delete. Deleting a template never touches expenses it already generated.
+- [x] **Surface generated expenses honestly.** A "Recurring" marker on the expense card, editable and deletable like any other expense (soft delete applies).
+- [x] **Verify.** Unit tests for due-period calculation across month lengths and pauses; an integration test proving two concurrent generations produce exactly one expense.
 
 ---
 

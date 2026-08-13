@@ -9,6 +9,7 @@ import {
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
+import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { createExpenseSchema } from '@/lib/validators/expense.validator';
 import type { ExpenseFilters } from '@/types';
 
@@ -55,6 +56,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
     const isMember = await groupService.isMember(id, user.id!);
     if (!isMember) return forbidden();
+
+    // Lazy-on-read: materialize due recurring expenses before listing, so the
+    // response includes rows that fell due since the last read.
+    await recurringExpenseService.generateDueExpenses(id);
 
     const { searchParams } = new URL(req.url);
 

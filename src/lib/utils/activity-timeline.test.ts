@@ -83,4 +83,16 @@ describe('activity timeline helpers', () => {
       }),
     ).toBe('Priya → Alex');
   });
+
+  it('marks recurring-generated expenses in the headline', () => {
+    expect(
+      formatActivityHeadline({
+        _id: '1',
+        type: 'expense_added',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        actor: { name: 'Alex' },
+        metadata: { description: 'Rent', amount: 30000, currency: 'INR', recurring: true },
+      }),
+    ).toBe('Alex added “Rent” (recurring)');
+  });
 });

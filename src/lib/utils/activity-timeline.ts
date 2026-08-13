@@ -46,7 +46,10 @@ export function formatActivityHeadline(activity: ActivityLike): string {
 
   switch (activity.type) {
     case 'expense_added':
-      return `${actorName} added “${meta.description ?? 'an expense'}”`;
+      return (
+        `${actorName} added “${meta.description ?? 'an expense'}”` +
+        (meta.recurring === true ? ' (recurring)' : '')
+      );
     case 'expense_updated':
       return `${actorName} updated “${meta.description ?? 'an expense'}”`;
     case 'expense_deleted':

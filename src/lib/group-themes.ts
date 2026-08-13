@@ -26,6 +26,8 @@ export interface GroupTheme {
   dates: 'bounded' | 'openEnded';
   /** The one distinctive surface this theme adds. */
   signature: 'checklist' | 'monthCycle' | 'none';
+  /** Whether the theme supports recurring expense templates (Household only). */
+  recurringExpenses: boolean;
   /** Tags seeded on creation. */
   defaultTags: readonly string[];
   /** Nouns for generated copy, so no component hardcodes "trip". */
@@ -44,6 +46,7 @@ export const GROUP_THEMES: Record<GroupCategory, GroupTheme> = {
     header: 'strip',
     dates: 'bounded',
     signature: 'checklist',
+    recurringExpenses: false,
     defaultTags: DEFAULT_GROUP_TAGS_BY_CATEGORY.trip,
     nouns: { singular: 'trip', plural: 'trips' },
     namePlaceholder: 'e.g. Goa Weekend',
@@ -57,6 +60,7 @@ export const GROUP_THEMES: Record<GroupCategory, GroupTheme> = {
     header: 'neutral',
     dates: 'openEnded',
     signature: 'monthCycle',
+    recurringExpenses: true,
     defaultTags: DEFAULT_GROUP_TAGS_BY_CATEGORY.home,
     nouns: { singular: 'household', plural: 'households' },
     namePlaceholder: 'e.g. Flat 302',
@@ -70,6 +74,7 @@ export const GROUP_THEMES: Record<GroupCategory, GroupTheme> = {
     header: 'neutral',
     dates: 'openEnded',
     signature: 'none',
+    recurringExpenses: false,
     defaultTags: DEFAULT_GROUP_TAGS_BY_CATEGORY.couple,
     nouns: { singular: 'group', plural: 'groups' },
     namePlaceholder: 'e.g. Alex & Sam',
@@ -83,6 +88,7 @@ export const GROUP_THEMES: Record<GroupCategory, GroupTheme> = {
     header: 'neutral',
     dates: 'openEnded',
     signature: 'none',
+    recurringExpenses: false,
     defaultTags: DEFAULT_GROUP_TAGS_BY_CATEGORY.work,
     nouns: { singular: 'group', plural: 'groups' },
     namePlaceholder: 'e.g. Q3 Offsite',
@@ -96,6 +102,7 @@ export const GROUP_THEMES: Record<GroupCategory, GroupTheme> = {
     header: 'neutral',
     dates: 'openEnded',
     signature: 'none',
+    recurringExpenses: false,
     defaultTags: DEFAULT_GROUP_TAGS_BY_CATEGORY.other,
     nouns: { singular: 'group', plural: 'groups' },
     namePlaceholder: 'e.g. Sunday Football',

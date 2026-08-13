@@ -81,6 +81,7 @@ export default function ExpenseCard({
     }>) || [];
   const tag = (expense.tag as string) || '';
   const hasReceipt = !!expense.receiptUrl;
+  const isRecurring = !!expense.recurringExpense;
   const editHistory = (expense.editHistory || []) as Array<{
     editedBy: { _id: string; name: string } | string;
     editedAt: string;
@@ -287,10 +288,18 @@ export default function ExpenseCard({
       </Stack>
 
       {/* Tag (always visible in collapsed state) */}
-      {!isExpanded && (tag || hasReceipt) && (
+      {!isExpanded && (tag || hasReceipt || isRecurring) && (
         <Stack direction="row" spacing={0.75} sx={{ px: 2, pb: 1.5 }} flexWrap="wrap">
           {tag && (
             <Chip label={tag} size="small" variant="outlined" sx={{ fontSize: 11, height: 22 }} />
+          )}
+          {isRecurring && (
+            <Chip
+              label="🔁 Recurring"
+              size="small"
+              variant="outlined"
+              sx={{ fontSize: 11, height: 22 }}
+            />
           )}
           {hasReceipt && (
             <Chip
@@ -316,6 +325,9 @@ export default function ExpenseCard({
               variant="outlined"
             />
             {tag && <Chip label={tag} size="small" variant="outlined" sx={{ fontSize: 11 }} />}
+            {isRecurring && (
+              <Chip label="🔁 Recurring" size="small" variant="outlined" sx={{ fontSize: 11 }} />
+            )}
             {hasReceipt && (
               <Chip label="📎 Receipt" size="small" variant="outlined" sx={{ fontSize: 11 }} />
             )}
