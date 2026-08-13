@@ -42,7 +42,9 @@ import { CURRENCIES, getSortedCurrencies } from '@/lib/utils/currency';
 import { formatDate } from '@/lib/utils/date';
 import { fetcher } from '@/lib/utils/fetcher';
 import { validateTripDates } from '@/lib/utils/trip-setup';
-import { GROUP_THEME_LIST } from '@/lib/group-themes';
+import { GROUP_THEME_LIST, getGroupTheme } from '@/lib/group-themes';
+import RecurringExpensesSection from '@/components/groups/RecurringExpensesSection';
+import type { GroupCategory } from '@/types';
 
 interface GroupSettingsViewProps {
   groupId: string;
@@ -168,6 +170,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
 
   const currencies = getSortedCurrencies(group.defaultCurrency, group.alternateCurrencies || []);
   const tripDateError = validateTripDates(startDate || null, endDate || null);
+  const theme = getGroupTheme(group.category as GroupCategory);
 
   const handleSaveGeneral = async () => {
     if (tripDateError) return;
@@ -736,6 +739,17 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
             </Button>
           </DialogActions>
         </Dialog>
+
+        {/* ─── Recurring (Household only) ──────────── */}
+        {theme.recurringExpenses && (
+          <RecurringExpensesSection
+            groupId={groupId}
+            tags={tags}
+            members={members}
+            defaultCurrency={group.defaultCurrency}
+            onNotify={(message) => setSnackbar({ open: true, message })}
+          />
+        )}
 
         {/* ─── Members ─────────────────────────────── */}
         <Paper variant="outlined" sx={{ p: 3 }}>

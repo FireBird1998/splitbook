@@ -33,6 +33,10 @@ export interface IExpenseDocument {
   predefinedItem?: string | null;
   receiptUrl?: string | null;
   notes?: string;
+  /** Set when the expense was materialized from a recurring template. */
+  recurringExpense?: mongoose.Types.ObjectId | null;
+  /** The template period (`YYYY-MM`) this expense was generated for. */
+  period?: string | null;
   createdBy: mongoose.Types.ObjectId;
   isDeleted: boolean;
   deletedAt?: Date | null;
@@ -108,6 +112,8 @@ const ExpenseSchema = new Schema<IExpenseDocument>(
     predefinedItem: { type: String, default: null },
     receiptUrl: { type: String, default: null },
     notes: { type: String, trim: true, maxlength: 500 },
+    recurringExpense: { type: Schema.Types.ObjectId, ref: 'RecurringExpense', default: null },
+    period: { type: String, default: null },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
@@ -125,8 +131,19 @@ ExpenseSchema.index({ group: 1, isDeleted: 1 });
 ExpenseSchema.index({ group: 1, tag: 1 });
 ExpenseSchema.index({ group: 1, category: 1 });
 ExpenseSchema.index({ description: 'text' });
+// Idempotent recurring generation: one expense per (template, period).
+// Partial because most expenses have `recurringExpense: null` — a plain unique
+// index would collide on the nulls (same reason as Group.inviteCode).
+ExpenseSchema.index(
+  { recurringExpense: 1, period: 1 },
+  { unique: true, partialFilterExpression: { recurringExpense: { $type: 'objectId' } } },
+);
 
-const Expense: Model<IExpenseDocument> =
-  mongoose.models.Expense || mongoose.model<IExpenseDocument>('Expense', ExpenseSchema);
+// In development, Mongoose models persist across hot reloads but schema changes
+// are not picked up. Force re-registration so new/modified fields are recognised.
+if (mongoose.models.Expense) {
+  mongoose.deleteModel('Expense');
+}
+const Expense: Model<IExpenseDocument> = mongoose.model<IExpenseDocument>('Expense', ExpenseSchema);
 
 export default Expense;

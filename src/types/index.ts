@@ -83,11 +83,39 @@ export interface IExpense {
   predefinedItem?: string | null;
   receiptUrl?: string | null;
   notes?: string;
+  /** Set when the expense was materialized from a recurring template. */
+  recurringExpense?: string | null;
+  /** The template period (`YYYY-MM`) this expense was generated for. */
+  period?: string | null;
   createdBy: string | IUser;
   isDeleted: boolean;
   deletedAt?: Date | null;
   deletedBy?: string | IUser | null;
   editHistory: IExpenseEditEntry[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// ─── Recurring Expense Templates ────────────────────────
+export interface IRecurringExpense {
+  _id: string;
+  group: string | IGroup;
+  description: string;
+  amount: number;
+  currency: string;
+  category: string;
+  tag: string;
+  paidBy: IExpensePayer[];
+  splitMethod: SplitMethod;
+  splitBetween: IExpenseSplit[];
+  /** 1–31; clamped to the last day of short months at generation time. */
+  dayOfMonth: number;
+  startsOn: Date | string;
+  endsOn?: Date | string | null;
+  isPaused: boolean;
+  /** Last materialized period (`YYYY-MM`). */
+  lastGeneratedFor?: string | null;
+  createdBy: string | IUser;
   createdAt: Date;
   updatedAt: Date;
 }

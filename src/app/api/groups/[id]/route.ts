@@ -8,6 +8,7 @@ import {
   validationError,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
+import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { updateGroupSchema } from '@/lib/validators/group.validator';
 
 // GET /api/groups/[id] — Get group detail
@@ -26,6 +27,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       return memberUser._id.toString() === user.id;
     });
     if (!isMember) return forbidden();
+
+    // Lazy-on-read: materialize due recurring expenses (no-op for
+    // non-Household themes and when nothing is due).
+    await recurringExpenseService.generateDueExpenses(id);
 
     return success(group);
   } catch (err) {

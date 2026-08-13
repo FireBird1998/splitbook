@@ -33,6 +33,13 @@ describe('getGroupTheme', () => {
     expect(getGroupTheme('home').signature).toBe('monthCycle');
   });
 
+  it('gates recurring expense templates to Household only', () => {
+    expect(getGroupTheme('home').recurringExpenses).toBe(true);
+    for (const category of ALL_CATEGORIES.filter((c) => c !== 'home')) {
+      expect(getGroupTheme(category).recurringExpenses).toBe(false);
+    }
+  });
+
   it('keeps "General" in every theme’s default tags so the first expense is never blocked', () => {
     for (const category of ALL_CATEGORIES) {
       expect(getGroupTheme(category).defaultTags).toContain('General');
