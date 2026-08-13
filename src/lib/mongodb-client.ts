@@ -2,6 +2,7 @@
 // It's separate from Mongoose connection to avoid conflicts.
 // Uses lazy initialization to avoid build-time errors.
 
+import 'server-only';
 import { MongoClient, MongoClientOptions } from 'mongodb';
 
 const globalWithMongo = global as typeof globalThis & {
