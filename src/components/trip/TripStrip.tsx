@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Box from '@mui/material/Box';
 import { deriveTripCodes } from '@/lib/utils/trip-codes';
-import { formatSignedCurrency, getMoneyTone } from '@/lib/utils/money';
+import { getMoneyTone } from '@/lib/utils/money';
 import { formatCurrency } from '@/lib/utils/currency';
 
 export interface TripStripAmount {
@@ -104,10 +104,12 @@ export default function TripStrip({
   const isFull = variant === 'full';
 
   const tone = balance ? getMoneyTone(balance.amount) : 'neutral';
+  // Unsigned on purpose — direction is carried by color, and by the aria-label
+  // for anyone who can't rely on it.
   const balanceText =
     !balance || tone === 'neutral'
       ? 'Settled'
-      : formatSignedCurrency(balance.amount, balance.currency);
+      : formatCurrency(Math.abs(balance.amount), balance.currency);
   const balanceDescription =
     !balance || tone === 'neutral'
       ? 'Settled up'
@@ -280,9 +282,29 @@ export default function TripStrip({
           <Box
             sx={(theme) => ({
               ...(theme.typography.money as React.CSSProperties),
-              fontSize: '1.125rem',
-              fontWeight: 600,
+              display: 'inline-block',
+              // 20px @ 700 clears the WCAG "large text" threshold (18.66px
+              // bold), where the tint pairs below meet contrast in both modes.
+              fontSize: '1.25rem',
+              fontWeight: 700,
               animation: 'balance-settle 400ms ease-out both',
+              // Green when you're owed, red when you owe. The tinted pill keeps
+              // the hue readable — these greens and reds do not carry enough
+              // contrast directly against the strip's indigo gradient.
+              ...(tone === 'neutral'
+                ? { color: 'strip.text' }
+                : {
+                    color:
+                      tone === 'positive' ? theme.palette.success.main : theme.palette.error.main,
+                    backgroundColor:
+                      tone === 'positive'
+                        ? theme.palette.tint.positive
+                        : theme.palette.tint.negative,
+                    borderRadius: '8px',
+                    px: 1,
+                    py: 0.25,
+                    mt: 0.25,
+                  }),
             })}
           >
             {balanceText}
