@@ -133,13 +133,19 @@ describe('demo seed integration', () => {
     await seedDemoData();
 
     const samBalances = await balanceService.getUserBalances(DEMO_PERSONA_IDS.sam);
-    expect(samBalances.buckets).toEqual([
+    expect(samBalances.buckets).toMatchObject([
       { currency: 'INR', youOwe: 1480, youAreOwed: 0, net: -1480 },
     ]);
 
     const alexBalances = await balanceService.getUserBalances(DEMO_PERSONA_IDS.alex);
-    expect(alexBalances.buckets).toEqual([
+    expect(alexBalances.buckets).toMatchObject([
       { currency: 'INR', youOwe: 0, youAreOwed: 6160, net: 6160 },
     ]);
+
+    // The per-person breakdown behind the dashboard must reconcile to the total.
+    const [alexBucket] = alexBalances.buckets;
+    const owedTotal = alexBucket.owedBreakdown.reduce((sum, entry) => sum + entry.amount, 0);
+    expect(owedTotal).toBeCloseTo(alexBucket.youAreOwed, 2);
+    expect(alexBucket.oweBreakdown).toEqual([]);
   });
 });

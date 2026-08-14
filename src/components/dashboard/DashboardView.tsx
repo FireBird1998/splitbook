@@ -1,8 +1,10 @@
 'use client';
 
+import { useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import Box from '@mui/material/Box';
+import ButtonBase from '@mui/material/ButtonBase';
 import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -16,15 +18,81 @@ import AddIcon from '@mui/icons-material/Add';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import GroupCard from '@/components/groups/GroupCard';
 import InvitationCard from '@/components/dashboard/InvitationCard';
+import BalanceBreakdownDialog, {
+  type BreakdownDirection,
+} from '@/components/dashboard/BalanceBreakdownDialog';
 import MoneyText from '@/components/common/MoneyText';
 import { formatRelativeTime } from '@/lib/utils/date';
 import { selectNextAction } from '@/lib/utils/dashboard';
 import { fetcher } from '@/lib/utils/fetcher';
-import type { UserBalancesResponse } from '@/types';
+import type { CurrencyBreakdownEntry, UserBalancesResponse } from '@/types';
 
 interface DashboardViewProps {
   userId: string;
   userName: string;
+}
+
+interface BreakdownState {
+  direction: BreakdownDirection;
+  currency: string;
+  total: number;
+  entries: CurrencyBreakdownEntry[];
+}
+
+interface BalanceHalfProps {
+  label: string;
+  direction: BreakdownDirection;
+  amount: number;
+  currency: string;
+  entries: CurrencyBreakdownEntry[];
+  onOpen: (state: BreakdownState) => void;
+}
+
+/**
+ * One side of a currency bucket. Opens the per-person breakdown when there is
+ * something to break down, and stays inert (plain text) when there isn't.
+ */
+function BalanceHalf({ label, direction, amount, currency, entries, onOpen }: BalanceHalfProps) {
+  const tone = amount > 0.005 ? (direction === 'owe' ? 'negative' : 'positive') : 'neutral';
+  const interactive = entries.length > 0;
+
+  const content = (
+    <>
+      <Typography variant="caption" color="text.secondary">
+        {label}
+      </Typography>
+      <MoneyText
+        amount={amount}
+        currency={currency}
+        tone={tone}
+        variant="h6"
+        sx={{ display: 'block', fontWeight: 600 }}
+      />
+    </>
+  );
+
+  if (!interactive) {
+    return <Box sx={{ flex: 1 }}>{content}</Box>;
+  }
+
+  return (
+    <ButtonBase
+      onClick={() => onOpen({ direction, currency, total: amount, entries })}
+      aria-label={`${label} ${amount} ${currency} — show the breakdown by person`}
+      sx={{
+        flex: 1,
+        display: 'block',
+        textAlign: 'left',
+        borderRadius: '10px',
+        px: 1,
+        mx: -1,
+        py: 0.5,
+        '&:hover': { bgcolor: 'action.hover' },
+      }}
+    >
+      {content}
+    </ButtonBase>
+  );
 }
 
 function getGreeting(): string {
@@ -40,6 +108,7 @@ const panelIn = (delayMs = 0) => ({
 });
 
 export default function DashboardView({ userId, userName }: DashboardViewProps) {
+  const [breakdown, setBreakdown] = useState<BreakdownState | null>(null);
   const {
     data: groupsData,
     isLoading: groupsLoading,
@@ -195,31 +264,23 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
                     </Typography>
                   </Stack>
                   <Stack direction="row" spacing={2} sx={{ mt: 1.5 }} alignItems="center">
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        You owe
-                      </Typography>
-                      <MoneyText
-                        amount={bucket.youOwe}
-                        currency={bucket.currency}
-                        tone={bucket.youOwe > 0.005 ? 'negative' : 'neutral'}
-                        variant="h6"
-                        sx={{ display: 'block', fontWeight: 600 }}
-                      />
-                    </Box>
+                    <BalanceHalf
+                      label="You owe"
+                      direction="owe"
+                      amount={bucket.youOwe}
+                      currency={bucket.currency}
+                      entries={bucket.oweBreakdown}
+                      onOpen={setBreakdown}
+                    />
                     <Divider orientation="vertical" flexItem />
-                    <Box sx={{ flex: 1 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        You&apos;re owed
-                      </Typography>
-                      <MoneyText
-                        amount={bucket.youAreOwed}
-                        currency={bucket.currency}
-                        tone={bucket.youAreOwed > 0.005 ? 'positive' : 'neutral'}
-                        variant="h6"
-                        sx={{ display: 'block', fontWeight: 600 }}
-                      />
-                    </Box>
+                    <BalanceHalf
+                      label="You're owed"
+                      direction="owed"
+                      amount={bucket.youAreOwed}
+                      currency={bucket.currency}
+                      entries={bucket.owedBreakdown}
+                      onOpen={setBreakdown}
+                    />
                   </Stack>
                 </Paper>
               ))}
@@ -469,6 +530,15 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
           )}
         </Box>
       </Stack>
+
+      <BalanceBreakdownDialog
+        open={breakdown !== null}
+        onClose={() => setBreakdown(null)}
+        direction={breakdown?.direction ?? 'owe'}
+        currency={breakdown?.currency ?? ''}
+        total={breakdown?.total ?? 0}
+        entries={breakdown?.entries ?? []}
+      />
     </Container>
   );
 }

@@ -198,7 +198,7 @@ describe('balance integrity integration', () => {
 
     const result = await balanceService.getUserBalances(alice);
 
-    expect(result.buckets).toEqual([
+    expect(result.buckets).toMatchObject([
       { currency: 'INR', youOwe: 0, youAreOwed: 50, net: 50 },
       { currency: 'USD', youOwe: 20, youAreOwed: 0, net: -20 },
     ]);
@@ -239,7 +239,7 @@ describe('balance integrity integration', () => {
 
     const userBalances = await balanceService.getUserBalances(alice);
     expect(userBalances.hasMixedCurrencies).toBe(true);
-    expect(userBalances.buckets).toEqual([
+    expect(userBalances.buckets).toMatchObject([
       { currency: 'EUR', youOwe: 30, youAreOwed: 0, net: -30 },
       { currency: 'INR', youOwe: 0, youAreOwed: 50, net: 50 },
     ]);

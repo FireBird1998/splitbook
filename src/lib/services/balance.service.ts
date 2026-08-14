@@ -4,7 +4,7 @@ import Settlement from '@/lib/models/Settlement';
 import Group from '@/lib/models/Group';
 import { calculateNetBalances, simplifyDebts } from '@/lib/utils/debt-simplifier';
 import { aggregateCurrencyBalances } from '@/lib/utils/dashboard';
-import type { DashboardGroupBalance, GroupCategory } from '@/types';
+import type { DashboardCounterparty, DashboardGroupBalance, GroupCategory } from '@/types';
 
 export class BalanceService {
   /**
@@ -170,28 +170,36 @@ export class BalanceService {
 
         if (!userBalance || Math.abs(userBalance.amount) < 0.01) return [];
 
-        const settlement = simplifyDebts(netBalances)
+        const userDebts = simplifyDebts(netBalances)
           .filter(
             (debt) =>
               (userBalance.amount < 0 && debt.from === userId) ||
               (userBalance.amount > 0 && debt.to === userId),
           )
-          .sort((a, b) => b.amount - a.amount)[0];
-        const counterpartyId = settlement
-          ? settlement.from === userId
-            ? settlement.to
-            : settlement.from
-          : undefined;
+          .sort((a, b) => b.amount - a.amount);
+
+        const counterparties: DashboardCounterparty[] = userDebts.map((debt) => {
+          const counterpartyId = debt.from === userId ? debt.to : debt.from;
+          return {
+            counterpartyId,
+            counterpartyName: memberNames.get(counterpartyId) || 'Unknown',
+            amount: debt.amount,
+            direction: debt.from === userId ? 'owe' : 'owed',
+          };
+        });
+
+        const [settlement] = counterparties;
 
         return [
           {
             currency,
             balance: userBalance.amount,
-            ...(settlement && counterpartyId
+            counterparties,
+            ...(settlement
               ? {
                   settlement: {
-                    counterpartyId,
-                    counterpartyName: memberNames.get(counterpartyId) || 'Unknown',
+                    counterpartyId: settlement.counterpartyId,
+                    counterpartyName: settlement.counterpartyName,
                     amount: settlement.amount,
                   },
                 }

@@ -126,8 +126,36 @@ describe('BalanceService', () => {
 
     await expect(new BalanceService().getUserBalances('user-1')).resolves.toEqual({
       buckets: [
-        { currency: 'EUR', youOwe: 0, youAreOwed: 30, net: 30 },
-        { currency: 'USD', youOwe: 10, youAreOwed: 0, net: -10 },
+        {
+          currency: 'EUR',
+          youOwe: 0,
+          youAreOwed: 30,
+          net: 30,
+          oweBreakdown: [],
+          owedBreakdown: [
+            {
+              counterpartyId: 'user-2',
+              counterpartyName: 'Sam',
+              amount: 30,
+              groups: [{ groupId: 'group-1', groupName: 'Mixed trip', amount: 30 }],
+            },
+          ],
+        },
+        {
+          currency: 'USD',
+          youOwe: 10,
+          youAreOwed: 0,
+          net: -10,
+          oweBreakdown: [
+            {
+              counterpartyId: 'user-2',
+              counterpartyName: 'Sam',
+              amount: 10,
+              groups: [{ groupId: 'group-1', groupName: 'Mixed trip', amount: 10 }],
+            },
+          ],
+          owedBreakdown: [],
+        },
       ],
       groups: [
         {
@@ -145,6 +173,14 @@ describe('BalanceService', () => {
                 counterpartyName: 'Sam',
                 amount: 30,
               },
+              counterparties: [
+                {
+                  counterpartyId: 'user-2',
+                  counterpartyName: 'Sam',
+                  amount: 30,
+                  direction: 'owed',
+                },
+              ],
             },
             {
               currency: 'USD',
@@ -154,6 +190,14 @@ describe('BalanceService', () => {
                 counterpartyName: 'Sam',
                 amount: 10,
               },
+              counterparties: [
+                {
+                  counterpartyId: 'user-2',
+                  counterpartyName: 'Sam',
+                  amount: 10,
+                  direction: 'owe',
+                },
+              ],
             },
           ],
         },

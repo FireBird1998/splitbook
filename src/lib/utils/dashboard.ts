@@ -1,9 +1,48 @@
-import type { CurrencyBalanceBucket, DashboardGroupBalance, DashboardNextAction } from '@/types';
+import type {
+  CurrencyBalanceBucket,
+  CurrencyBreakdownEntry,
+  DashboardGroupBalance,
+  DashboardNextAction,
+} from '@/types';
 
 const roundMoney = (amount: number) => {
   const sign = Math.sign(amount) || 1;
   return (sign * Math.round((Math.abs(amount) + Number.EPSILON) * 100)) / 100;
 };
+
+/**
+ * Fold one person's position in one trip into the running breakdown for a
+ * currency, merging trips when the same person appears in more than one.
+ */
+function addToBreakdown(
+  breakdown: CurrencyBreakdownEntry[],
+  group: DashboardGroupBalance,
+  counterparty: { counterpartyId: string; counterpartyName: string; amount: number },
+): void {
+  const existing = breakdown.find((entry) => entry.counterpartyId === counterparty.counterpartyId);
+  const entry = existing || {
+    counterpartyId: counterparty.counterpartyId,
+    counterpartyName: counterparty.counterpartyName,
+    amount: 0,
+    groups: [],
+  };
+
+  entry.amount = roundMoney(entry.amount + counterparty.amount);
+  entry.groups.push({
+    groupId: group.groupId,
+    groupName: group.name,
+    amount: counterparty.amount,
+  });
+
+  if (!existing) breakdown.push(entry);
+}
+
+/** Largest first, then by name so equal amounts stay in a stable order. */
+function sortBreakdown(breakdown: CurrencyBreakdownEntry[]): CurrencyBreakdownEntry[] {
+  return [...breakdown].sort(
+    (a, b) => b.amount - a.amount || a.counterpartyName.localeCompare(b.counterpartyName),
+  );
+}
 
 export function aggregateCurrencyBalances(
   groups: DashboardGroupBalance[],
@@ -17,6 +56,8 @@ export function aggregateCurrencyBalances(
         youOwe: 0,
         youAreOwed: 0,
         net: 0,
+        oweBreakdown: [],
+        owedBreakdown: [],
       };
 
       if (item.balance < 0) {
@@ -25,11 +66,26 @@ export function aggregateCurrencyBalances(
         bucket.youAreOwed = roundMoney(bucket.youAreOwed + item.balance);
       }
       bucket.net = roundMoney(bucket.youAreOwed - bucket.youOwe);
+
+      for (const counterparty of item.counterparties ?? []) {
+        addToBreakdown(
+          counterparty.direction === 'owe' ? bucket.oweBreakdown : bucket.owedBreakdown,
+          group,
+          counterparty,
+        );
+      }
+
       buckets.set(item.currency, bucket);
     }
   }
 
-  return [...buckets.values()].sort((a, b) => a.currency.localeCompare(b.currency));
+  return [...buckets.values()]
+    .map((bucket) => ({
+      ...bucket,
+      oweBreakdown: sortBreakdown(bucket.oweBreakdown),
+      owedBreakdown: sortBreakdown(bucket.owedBreakdown),
+    }))
+    .sort((a, b) => a.currency.localeCompare(b.currency));
 }
 
 export function selectNextAction(

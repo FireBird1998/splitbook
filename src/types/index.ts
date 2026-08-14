@@ -251,10 +251,21 @@ export interface DashboardSettlement {
   amount: number;
 }
 
+/** One person the user owes, or is owed by, within a single group + currency. */
+export interface DashboardCounterparty {
+  counterpartyId: string;
+  counterpartyName: string;
+  /** Always positive — read the direction from `direction`. */
+  amount: number;
+  direction: 'owe' | 'owed';
+}
+
 export interface DashboardBalanceAmount {
   currency: string;
   balance: number;
   settlement?: DashboardSettlement;
+  /** Every open position for the user, largest first. */
+  counterparties: DashboardCounterparty[];
 }
 
 export interface DashboardGroupBalance {
@@ -266,11 +277,30 @@ export interface DashboardGroupBalance {
   balances: DashboardBalanceAmount[];
 }
 
+/** Per-trip contribution to one person's line in a bucket breakdown. */
+export interface CurrencyBreakdownGroup {
+  groupId: string;
+  groupName: string;
+  amount: number;
+}
+
+/** One person aggregated across every trip sharing a currency. */
+export interface CurrencyBreakdownEntry {
+  counterpartyId: string;
+  counterpartyName: string;
+  amount: number;
+  groups: CurrencyBreakdownGroup[];
+}
+
 export interface CurrencyBalanceBucket {
   currency: string;
   youOwe: number;
   youAreOwed: number;
   net: number;
+  /** Who you owe, largest first — sums to `youOwe`. */
+  oweBreakdown: CurrencyBreakdownEntry[];
+  /** Who owes you, largest first — sums to `youAreOwed`. */
+  owedBreakdown: CurrencyBreakdownEntry[];
 }
 
 export type DashboardNextAction =
