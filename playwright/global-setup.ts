@@ -13,5 +13,8 @@ export default function globalSetup(): void {
   execFileSync('pnpm', ['run', 'demo:reset'], {
     env: { ...process.env, MONGODB_URI: DEMO_MONGODB_URI },
     stdio: 'inherit',
+    // On Windows `pnpm` resolves to a .cmd shim, which execFileSync cannot
+    // spawn directly.
+    shell: process.platform === 'win32',
   });
 }
