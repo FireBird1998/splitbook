@@ -7,7 +7,17 @@
 
 ## Purpose
 
-Dedicated login page for users who need to authenticate. Single option: Google OAuth.
+Dedicated login page for users who need to authenticate.
+
+Which control renders depends on `AUTH_MODE` (see [`../auth.md`](../auth.md)):
+
+- **`google`** (default) — a "Sign in with Google" button (`LoginForm`)
+- **`demo`** (private beta) — a persona picker for Alex, Sam and Priya
+  (`DemoLoginClient`). Demo auth fails closed in production unless
+  `ALLOW_DEMO_AUTH=true`.
+
+Both providers are registered at all times, so switching modes needs only an env
+change and a restart.
 
 ---
 

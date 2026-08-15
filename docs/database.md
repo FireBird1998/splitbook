@@ -2,6 +2,12 @@
 
 All models use MongoDB via Mongoose. Timestamps (`createdAt`, `updatedAt`) are auto-managed.
 
+> **Enforcement note.** This document distinguishes what the *schema* enforces
+> from what a *service* enforces from what nothing enforces. Constraints marked
+> **(service)** live in `src/lib/services/` and apply only to writes that go
+> through the API; constraints marked **(unenforced)** are conventions that no
+> code checks. See §Invariants at the end.
+
 ---
 
 ## User
@@ -11,9 +17,9 @@ Managed by Auth.js + extended with app-specific fields.
 ```typescript
 {
   _id: ObjectId,
-  name: string,                       // From Google profile
-  email: string,                      // Unique, from Google
-  image: string,                      // Google avatar URL
+  name: string,                       // Required, trimmed
+  email: string,                      // Required, lowercased, unique
+  image: string,                      // Optional avatar URL
   emailVerified: Date | null,         // Auth.js field
   preferredCurrency: string,          // Default: "INR"
   createdAt: Date,
@@ -27,6 +33,7 @@ Managed by Auth.js + extended with app-specific fields.
 
 - Auth.js creates `users`, `accounts`, and `sessions` collections automatically.
 - We extend the `users` collection with `preferredCurrency`.
+- Demo-mode personas are ordinary `users` rows seeded by `pnpm demo:seed`.
 
 ---
 
@@ -36,19 +43,27 @@ Managed by Auth.js + extended with app-specific fields.
 {
   _id: ObjectId,
   name: string,                       // Required, 1-100 chars
-  description: string,                // Optional
+  description: string,                // Optional, max 500
   image: string,                      // Optional group image URL
   createdBy: ObjectId (ref User),     // Group creator
-  members: [{
-    user: ObjectId (ref User),        // Member reference
-    role: "admin" | "member",         // Creator is always admin
+  members: [{                         // Subdocument, _id: false
+    user: ObjectId (ref User),
+    role: "admin" | "member",         // Default: "member"; creator is admin
     joinedAt: Date
   }],
+  tags: [{                            // Group-scoped expense labels
+    _id: ObjectId,
+    name: string,                     // Required, trimmed, max 50
+    isArchived: boolean,              // Default: false
+    createdAt: Date
+  }],
   defaultCurrency: string,            // Required, e.g. "INR"
-  alternateCurrencies: [string],      // Max 2 items, e.g. ["USD", "EUR"]
-  category: "trip" | "home" | "couple" | "work" | "other",
+  alternateCurrencies: [string],      // Max 2 items — persisted but unused
+  category: "trip" | "home" | "couple" | "work" | "other",   // Default: "other"
+  startDate: Date | null,             // Default: null
+  endDate: Date | null,               // Default: null
   isArchived: boolean,                // Default: false
-  inviteCode: string | null,          // Unique 8-char code for invite links
+  inviteCode: string | null,          // 8-char hex code for invite links
   inviteCodeExpiresAt: Date | null,   // Optional expiry
   createdAt: Date,
   updatedAt: Date
@@ -58,14 +73,32 @@ Managed by Auth.js + extended with app-specific fields.
 **Indexes**:
 
 - `{ "members.user": 1 }` — fast lookup of user's groups
-- `{ inviteCode: 1 }` — unique sparse (only when set)
 - `{ createdBy: 1 }`
+- `{ inviteCode: 1 }` — **unique partial**, `partialFilterExpression: { inviteCode: { $type: 'string' } }`
+
+  Partial, **not sparse**: `inviteCode` has `default: null`, and a sparse unique
+  index still indexes explicit nulls, so every null-coded group would collide on
+  the second insert.
 
 **Validation**:
 
 - `name`: required, trimmed, 1-100 chars
-- `alternateCurrencies`: max 2 items, each must be valid ISO 4217 code
-- `members`: at least 1 member (the creator)
+- `alternateCurrencies`: max 2 items (schema); each must be a valid ISO 4217 code (Zod)
+- `startDate` / `endDate`: end must not precede start (Zod `superRefine`)
+- `members`: the array defaults to `[]` — "at least one member" is a **(service)**
+  guarantee of `groupService.create`, not a schema validator
+
+**Notes**:
+
+- `category` is the group's **theme** key. It drives chrome, default tags, date
+  semantics and whether recurring expenses are offered. Resolved through
+  `src/lib/group-themes.ts`; `"home"` displays as "Household". Note the default
+  differs by entry point: the schema defaults to `"other"`, the create validator
+  to `"trip"`.
+- `tags` are seeded per theme on creation. `Expense.tag` references a tag by
+  **name**, not by `_id` — see the caveat under [Expense](#expense).
+- `alternateCurrencies` is modelled, validated and accepted by the API, but no
+  read or write path consults it.
 
 ---
 
@@ -76,33 +109,35 @@ Managed by Auth.js + extended with app-specific fields.
   _id: ObjectId,
   group: ObjectId (ref Group),        // Which group this belongs to
   description: string,                // Required, 1-200 chars
-  amount: number,                     // Total amount (positive)
-  currency: string,                   // ISO 4217 code
-  category: string,                   // e.g. "food", "transport", "entertainment"
+  amount: number,                     // Required, min 0.01, max 10,000,000
+  currency: string,                   // Required — must equal group.defaultCurrency (service)
+  category: string,                   // Default: "other"; free-form, not enum-checked
   date: Date,                         // When expense occurred (not createdAt)
 
   // Who paid
-  paidBy: [{
+  paidBy: [{                          // Subdocument, _id: false; at least 1 entry
     user: ObjectId (ref User),
-    amount: number                    // How much this person paid
+    amount: number                    // min 0 — sum is NOT checked (unenforced)
   }],
-  // paidBy amounts must sum to `amount`
 
   // How to split
   splitMethod: "equal" | "unequal" | "percentage" | "shares" | "exact",
-  splitBetween: [{
+  splitBetween: [{                    // Subdocument, _id: false; at least 1 entry
     user: ObjectId (ref User),
-    amount: number,                   // Calculated share for this person
+    amount: number,                   // min 0 — sum is NOT checked (unenforced)
     percentage: number,               // Only for percentage split (optional)
     shares: number                    // Only for shares split (optional)
   }],
-  // splitBetween amounts must sum to `amount`
 
-  tags: [string],                     // User-defined tags, e.g. ["dinner", "birthday"]
+  tag: string,                        // Required — exactly one, by tag NAME
   predefinedItem: string | null,      // From predefined items list
 
-  receiptUrl: string | null,          // Uploaded receipt image URL
-  notes: string,                      // Optional notes
+  // Set when materialized from a recurring template
+  recurringExpense: ObjectId | null,  // ref RecurringExpense, default: null
+  period: string | null,              // "YYYY-MM", default: null
+
+  receiptUrl: string | null,          // Modelled but unwritable — see note
+  notes: string,                      // Optional, max 500
 
   createdBy: ObjectId (ref User),
   isDeleted: boolean,                 // Soft delete, default: false
@@ -110,10 +145,10 @@ Managed by Auth.js + extended with app-specific fields.
   deletedBy: ObjectId (ref User) | null,
 
   // Audit trail for edits
-  editHistory: [{
+  editHistory: [{                     // Subdocument, _id: false
     editedBy: ObjectId (ref User),
     editedAt: Date,
-    changes: object                   // What changed (diff)
+    changes: object                   // { field: { old, new } }
   }],
 
   createdAt: Date,
@@ -125,16 +160,89 @@ Managed by Auth.js + extended with app-specific fields.
 
 - `{ group: 1, date: -1 }` — list expenses by date
 - `{ group: 1, isDeleted: 1 }` — filter out deleted
-- `{ group: 1, tags: 1 }` — filter by tag
+- `{ group: 1, tag: 1 }` — filter by tag
 - `{ group: 1, category: 1 }` — filter by category
-- `{ description: "text" }` — text search for regex-like queries
+- `{ description: "text" }` — **declared but unused**: expense search runs as
+  `$regex` with `$options: 'i'`, which cannot use a text index
+- `{ recurringExpense: 1, period: 1 }` — **unique partial**,
+  `partialFilterExpression: { recurringExpense: { $type: 'objectId' } }`
+
+  Guarantees one expense per (template, period) so recurring generation is
+  idempotent under concurrent readers. Partial for the same reason as
+  `Group.inviteCode`: most expenses have `recurringExpense: null`.
 
 **Validation**:
 
-- `amount`: positive number
-- `paidBy`: at least 1 entry, amounts sum to `amount`
-- `splitBetween`: at least 1 entry, amounts sum to `amount`
-- All users in `paidBy` and `splitBetween` must be group members
+- `amount`: 0.01 – 10,000,000 (schema)
+- `paidBy`: at least 1 entry (schema)
+- `splitBetween`: at least 1 entry (schema)
+- `tag`: required, and must name a currently **active** tag on the group **(service)**
+- `currency`: must equal `group.defaultCurrency` **(service)** — 422 `CURRENCY_MISMATCH`
+- all users in `paidBy` and `splitBetween` must be group members **(service)**
+- `paidBy` amounts sum to `amount` — **(unenforced)**
+- `splitBetween` amounts sum to `amount` — **(unenforced)**
+- `percentage` values sum to 100 — **(unenforced)**
+
+**Notes**:
+
+- **`tag` is a single required string, not an array.** It stores the tag's
+  *name*. Renaming a group tag rewrites only the `Group.tags` subdocument, so
+  historical expenses keep pointing at the previous name.
+- **`receiptUrl` cannot be set through the API.** It is absent from both
+  `createExpenseSchema` and `updateExpenseSchema`, and Zod strips unrecognized
+  keys, so no request can populate it — despite `ExpenseCard` rendering a chip
+  for it.
+- Deletion is soft (`isDeleted`), and `PATCH` with `isDeleted: false` restores.
+  Balance and summary queries filter on `isDeleted: false`.
+
+---
+
+## RecurringExpense
+
+Templates that materialize monthly expenses. **Household groups only**
+(`Group.category === "home"`), admin-managed.
+
+```typescript
+{
+  _id: ObjectId,
+  group: ObjectId (ref Group),
+  description: string,                // Required, 1-200 chars
+  amount: number,                     // Required, min 0.01, max 10,000,000
+  currency: string,                   // Must equal group.defaultCurrency (service)
+  category: string,                   // Default: "other"
+  tag: string,                        // Required, must be an active group tag (service)
+  paidBy: [{ user, amount }],         // Same shape as Expense
+  splitMethod: "equal" | "unequal" | "percentage" | "shares" | "exact",
+  splitBetween: [{ user, amount, percentage?, shares? }],
+  dayOfMonth: number,                 // 1-31; clamped to last day of short months
+  startsOn: Date,                     // Required
+  endsOn: Date | null,                // Default: null; must not precede startsOn
+  isPaused: boolean,                  // Default: false
+  lastGeneratedFor: string | null,    // "YYYY-MM"; advanced monotonically via $max
+  createdBy: ObjectId (ref User),
+  createdAt: Date,
+  updatedAt: Date
+}
+```
+
+**Indexes**: `{ group: 1 }`
+
+**Generation model** — lazy on read. `generateDueExpenses` runs from
+`GET /api/groups/[id]` and `GET /api/groups/[id]/expenses`, after the membership
+check. Safety rests on four things:
+
+1. the unique partial index on `Expense.{recurringExpense, period}`,
+2. duplicate-key errors being absorbed as "a concurrent reader already did this",
+3. `lastGeneratedFor` advancing only through the unbroken materialized prefix, via `$max`,
+4. templates that no longer validate against group state being **skipped
+   silently** without advancing their marker.
+
+Deleting a template never touches the expenses it already generated; those are
+ordinary expenses. Edits apply to future periods only.
+
+> The index is created by Mongoose `autoIndex`, which is asynchronous and not
+> awaited. The integration suite forces `Expense.createIndexes()` first;
+> production does not.
 
 ---
 
@@ -146,9 +254,9 @@ Managed by Auth.js + extended with app-specific fields.
   group: ObjectId (ref Group),
   paidBy: ObjectId (ref User),        // Person who paid to settle
   paidTo: ObjectId (ref User),        // Person who received the payment
-  amount: number,                     // Settlement amount (positive)
-  currency: string,
-  note: string,                       // Optional note, e.g. "Paid via UPI"
+  amount: number,                     // Required, min 0.01
+  currency: string,                   // Must equal group.defaultCurrency (service)
+  note: string,                       // Optional, max 500
   createdBy: ObjectId (ref User),     // Who recorded this settlement
   createdAt: Date,
   updatedAt: Date
@@ -160,6 +268,15 @@ Managed by Auth.js + extended with app-specific fields.
 - `{ group: 1, createdAt: -1 }`
 - `{ group: 1, paidBy: 1 }`
 - `{ group: 1, paidTo: 1 }`
+
+**Validation** — all **(service)**: payer and recipient must both be members and
+must differ; only the payer or the recipient may record the settlement
+(`FORBIDDEN_SETTLEMENT`).
+
+**Note**: there is **no `date` field**. A settlement is timestamped by
+`createdAt` only, so it cannot be back-dated or attributed to an earlier month.
+This is the reason monthly views are read-only lenses rather than ledger
+boundaries — see [`v4/README.md`](v4/README.md) §3.
 
 ---
 
@@ -175,17 +292,20 @@ Managed by Auth.js + extended with app-specific fields.
       | "group_created" | "group_updated",
   actor: ObjectId (ref User),         // Who performed the action
   metadata: {
-    // Flexible based on type:
+    // Flexible based on type — what the code actually writes:
     // expense_added:    { expenseId, description, amount, currency }
+    //                   plus { recurring: true, recurringExpenseId, period }
+    //                   when generated from a template
     // expense_updated:  { expenseId, changes: { field: { old, new } } }
     // expense_deleted:  { expenseId, description }
     // settlement:       { settlementId, paidTo, amount, currency }
-    // member_joined:    { userId, userName, method: "invite" | "link" }
-    // member_left:      { userId, userName }
+    // member_joined:    { userId, method: "invite" | "link" }
+    //                   — via invitation accept, only { method: "invite" }
+    // member_left:      { userId, method }
     // group_created:    { groupName }
     // group_updated:    { changes: { field: { old, new } } }
   },
-  createdAt: Date
+  createdAt: Date                     // updatedAt disabled
 }
 ```
 
@@ -196,7 +316,12 @@ Managed by Auth.js + extended with app-specific fields.
 **Notes**:
 
 - Activity records are append-only, never updated or deleted.
-- Used for the group activity feed and audit trail.
+- **Names are not denormalized.** Member events store `userId` only; the feed
+  resolves display names by populating `actor` and by looking members up in the
+  group.
+- Logging is on the critical path — every mutation `await`s the write, and there
+  are no transactions anywhere in the codebase, so a logging failure fails the
+  request *after* the primary write has committed.
 
 ---
 
@@ -207,10 +332,10 @@ Managed by Auth.js + extended with app-specific fields.
   _id: ObjectId,
   group: ObjectId (ref Group),
   invitedBy: ObjectId (ref User),
-  invitedEmail: string,               // Email of invited person
-  status: "pending" | "accepted" | "declined" | "expired",
-  token: string,                      // Unique token for accept/decline URL
-  expiresAt: Date,                    // Invitation expiry (e.g. 7 days)
+  invitedEmail: string,               // Required, lowercased
+  status: "pending" | "accepted" | "declined" | "expired",  // Default: "pending"
+  token: string,                      // Required, unique — generated, never read
+  expiresAt: Date,                    // Required
   createdAt: Date,
   updatedAt: Date
 }
@@ -219,8 +344,42 @@ Managed by Auth.js + extended with app-specific fields.
 **Indexes**:
 
 - `{ token: 1 }` (unique)
-- `{ invitedEmail: 1, group: 1 }` — prevent duplicate invites
-- `{ status: 1, expiresAt: 1 }` — cleanup expired invitations
+- `{ invitedEmail: 1, group: 1 }` — non-unique; does **not** prevent duplicate invites
+- `{ status: 1, expiresAt: 1 }` — for expiry sweeps (no sweep job exists)
+
+**Note**: `token` is generated but no route accepts it. Accept and decline are
+keyed on the invitation `_id` plus a match against the caller's email; a
+mismatch returns 404 rather than 403.
+
+---
+
+## Model registration
+
+Two patterns coexist. `Settlement`, `Activity`, `Invitation` and `User` use the
+conventional `mongoose.models.X || mongoose.model(...)` guard. `Group`,
+`Expense` and `RecurringExpense` instead `deleteModel` and re-register so schema
+edits are picked up across hot reloads — **note the accompanying comment says
+"in development" but the code has no `NODE_ENV` guard and runs everywhere.**
+
+---
+
+## Invariants
+
+| Invariant | Enforced by |
+| --- | --- |
+| Expense/settlement currency equals `group.defaultCurrency` | service (422) |
+| All participants are group members | service (422) |
+| `tag` names an active group tag | service (422) |
+| Only payer or recipient records a settlement | service (422) |
+| One expense per (template, period) | unique partial index |
+| One group per invite code | unique partial index |
+| Recurring writes are admin-only, Household-only | service (403 / 422) |
+| Expense edit/delete restricted to creator or admin | **nothing** — any member may |
+| Expense scoped to the group in the URL | **nothing** — resolved by `_id` alone |
+| `sum(paidBy.amount) == amount` | **nothing** — client dialogs only |
+| `sum(splitBetween.amount) == amount` | **nothing** — client dialogs only |
+| Percentages sum to 100 | **nothing** — client dialogs only |
+| Tag names unique within a group | read-then-write check, no index (racy) |
 
 ---
 
@@ -232,7 +391,9 @@ User ──────── creates ──────── Group
   │ (member of)                  │ (has many)
   │                              │
   ├──── Expense ◄────────────────┤
-  │     (paidBy, splitBetween)   │
+  │       ▲   (paidBy, splitBetween)
+  │       │                      │
+  │       └── generates ── RecurringExpense
   │                              │
   ├──── Settlement ◄─────────────┤
   │     (paidBy, paidTo)         │
@@ -244,6 +405,8 @@ User ──────── creates ──────── Group
         (invitedBy, invitedEmail)
 ```
 
+Tags are not a collection — they are a subdocument array on `Group`.
+
 ---
 
 ## Auth.js Collections (Auto-managed)
@@ -253,6 +416,6 @@ Auth.js with the MongoDB adapter automatically creates and manages:
 - **users** — User records (we extend this with `preferredCurrency`)
 - **accounts** — OAuth provider accounts linked to users
 - **sessions** — Active sessions (if using database sessions)
-- **verification_tokens** — Email verification tokens (not used with Google-only)
+- **verification_tokens** — Email verification tokens (not used)
 
 We use JWT strategy for sessions (no `sessions` collection needed).

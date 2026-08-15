@@ -1,5 +1,11 @@
 # V2: Receipt Upload
 
+> **Status: never implemented.** No upload route, storage integration or upload
+> UI exists, and `receiptUrl` is absent from both expense Zod schemas, so no
+> request can populate it. The endpoint named below (`POST /api/upload/receipt`)
+> does not exist — nor does the one in `docs/api.md` drafts. See
+> [`../features/receipts.md`](../features/receipts.md).
+
 ## Problem
 
 The `receiptUrl` field exists in the Expense schema, the `ExpenseCard` shows a receipt chip when present, but there's no upload API, no file storage, and no upload UI in the form.

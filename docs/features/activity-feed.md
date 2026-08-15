@@ -123,7 +123,9 @@ async createExpense(data, userId) {
 ## Pagination
 
 - Default: 20 items per page
-- "Load More" button (not infinite scroll for simplicity)
+- **Not implemented.** The endpoint paginates (`?page=&limit=`), but
+  `ActivityView` requests `page=1&limit=50` once and renders the result — there
+  is no Load More button and no infinite scroll.
 - Sorted by `createdAt` descending (newest first)
 - Grouped by date in the UI (Today, Yesterday, Feb 8, etc.)
 
@@ -139,8 +141,15 @@ See [api.md](../api.md#activity-feed) for full documentation.
 
 - Activity collection is append-only → good for performance
 - Index on `{ group: 1, createdAt: -1 }` for fast paginated queries
-- No joins needed — metadata is denormalized (stores names/amounts inline)
-- Metadata denormalization means activity text stays accurate even if expense is later edited
+- Expense and settlement metadata **is** denormalized (description, amount and
+  currency are stored inline), so that text stays accurate even if the expense is
+  later edited or deleted
+- Member events are **not** — `member_joined` / `member_left` store `userId` and
+  `method` only, with no `userName`. Display names come from populating `actor`
+  and from the group's member list
+- Logging is synchronous and on the critical path: every mutation awaits the
+  activity write, and there are no transactions, so a failed log fails the
+  request after the primary write has already committed
 
 ---
 

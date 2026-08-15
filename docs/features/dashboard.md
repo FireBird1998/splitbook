@@ -32,7 +32,7 @@ Each group has an expense dashboard as its primary view. It shows a filterable, 
 │                                                      │
 │ ── Advanced Filters ──                        [▼]    │
 │ Date: [Feb 1] → [Feb 10]                            │
-│ Category: [All ▾]  Tags: [dinner ✕] [+ Add]        │
+│ Category: [All ▾]  Tag: [All ▾]                    │
 │ Search: [🔍 Search expenses...              ]       │
 │ Sort: [Date ▾] [Newest first ▾]                     │
 │                                                      │
@@ -149,39 +149,19 @@ Expandable section (collapsed by default on mobile).
 Filters are stored in URL search params for shareability and back-button support.
 
 ```
-/groups/abc123?quickFilter=thisWeek&category=food&tags=dinner&search=rest&sortBy=date&sortOrder=desc&page=1
+/api/groups/abc123/expenses?quickFilter=thisWeek&category=food&tag=Food&search=rest&sortBy=date&sortOrder=desc&page=1
 ```
 
-### Hook: useExpenseFilters
+### Filter state
 
-```typescript
-function useExpenseFilters() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
+There is **no `useExpenseFilters` hook** and no `src/hooks` directory. Filters
+are local React state inside `ExpenseListView`, which builds the query string and
+passes it to `useSWR` directly. Note also that the tag param is singular
+(`tag=Food`), not a comma-separated `tags` list.
 
-  const filters = {
-    quickFilter: searchParams.get('quickFilter') ?? 'all',
-    dateFrom: searchParams.get('dateFrom'),
-    dateTo: searchParams.get('dateTo'),
-    category: searchParams.get('category'),
-    tags: searchParams.get('tags')?.split(',').filter(Boolean) ?? [],
-    search: searchParams.get('search') ?? '',
-    sortBy: searchParams.get('sortBy') ?? 'date',
-    sortOrder: searchParams.get('sortOrder') ?? 'desc',
-    page: parseInt(searchParams.get('page') ?? '1'),
-  };
-
-  const setFilter = (key: string, value: string | null) => {
-    const params = new URLSearchParams(searchParams);
-    if (value) params.set(key, value);
-    else params.delete(key);
-    params.set('page', '1'); // Reset to page 1 on filter change
-    router.push(`?${params.toString()}`);
-  };
-
-  return { filters, setFilter };
-}
-```
+The one filter that *is* URL-backed is the Household month lens: `MonthCycleBar`
+reads and writes `?month=YYYY-MM` so a month view is linkable and survives
+refresh. Its parser, `parseMonthParam`, is exported from the component.
 
 ---
 
@@ -206,22 +186,27 @@ function useExpenseFilters() {
 
 ## API Query
 
-```typescript
-// Client-side SWR hook
-function useExpenses(groupId: string, filters: ExpenseFilters) {
-  const params = new URLSearchParams();
-  if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
-  if (filters.dateTo) params.set('dateTo', filters.dateTo);
-  if (filters.category) params.set('category', filters.category);
-  if (filters.tags.length) params.set('tags', filters.tags.join(','));
-  if (filters.search) params.set('search', filters.search);
-  params.set('sortBy', filters.sortBy);
-  params.set('sortOrder', filters.sortOrder);
-  params.set('page', String(filters.page));
-  params.set('limit', '20');
+`ExpenseListView` builds the query string from its local filter state and calls
+SWR inline — there is no wrapper hook:
 
-  return useSWR(`/api/groups/${groupId}/expenses?${params}`);
-}
+```typescript
+// src/components/expenses/ExpenseListView.tsx
+const params = new URLSearchParams();
+if (filters.dateFrom) params.set('dateFrom', filters.dateFrom);
+if (filters.dateTo) params.set('dateTo', filters.dateTo);
+if (filters.category) params.set('category', filters.category);
+if (filters.tag) params.set('tag', filters.tag); // singular
+if (filters.search) params.set('search', filters.search);
+params.set('sortBy', filters.sortBy);
+params.set('sortOrder', filters.sortOrder);
+params.set('page', String(filters.page));
+params.set('limit', '20');
+
+const { data, isLoading, isValidating, error, mutate } = useSWR(
+  `/api/groups/${groupId}/expenses?${params}`,
+  fetcher,
+  { refreshInterval: 10_000, keepPreviousData: true },
+);
 ```
 
 ---

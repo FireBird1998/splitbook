@@ -4,15 +4,21 @@ Overview of changes in this iteration. Focus on reducing friction, improving inf
 
 ## Changes
 
-| #   | Feature                                             | Doc                                                        | Status  |
-| --- | --------------------------------------------------- | ---------------------------------------------------------- | ------- |
-| 1   | Simplified Expense Form (two-tier UX)               | [simplified-expense-form.md](./simplified-expense-form.md) | Pending |
-| 2   | Inline Expandable Expense Detail                    | [inline-expense-detail.md](./inline-expense-detail.md)     | Pending |
-| 3   | Group Settings Page                                 | [group-settings.md](./group-settings.md)                   | Pending |
-| 4   | Custom Date Range Filter (max 31 days)              | [custom-date-range.md](./custom-date-range.md)             | Pending |
-| 5   | Expense Summary Bar (total + owe)                   | [expense-summary.md](./expense-summary.md)                 | Pending |
-| 6   | Non-blocking Filter Loading                         | [non-blocking-filters.md](./non-blocking-filters.md)       | Pending |
-| 7   | Tag Management (group-scoped, mandatory single tag) | [tag-management.md](./tag-management.md)                   | Pending |
+**All seven shipped.**
+
+| #   | Feature                                             | Doc                                                        | Status |
+| --- | --------------------------------------------------- | ---------------------------------------------------------- | ------ |
+| 1   | Simplified Expense Form (two-tier UX)               | [simplified-expense-form.md](./simplified-expense-form.md) | Done   |
+| 2   | Inline Expandable Expense Detail                    | [inline-expense-detail.md](./inline-expense-detail.md)     | Done   |
+| 3   | Group Settings Page                                 | [group-settings.md](./group-settings.md)                   | Done   |
+| 4   | Custom Date Range Filter (max 31 days)              | [custom-date-range.md](./custom-date-range.md)             | Done   |
+| 5   | Expense Summary Bar (total + owe)                   | [expense-summary.md](./expense-summary.md)                 | Done   |
+| 6   | Non-blocking Filter Loading                         | [non-blocking-filters.md](./non-blocking-filters.md)       | Done   |
+| 7   | Tag Management (group-scoped, mandatory single tag) | [tag-management.md](./tag-management.md)                   | Done   |
+
+[tag-management.md](./tag-management.md) describes the tag model that is actually
+in the code — a single required, group-scoped tag per expense. Prefer it over any
+older doc that shows a `tags` array.
 
 ## Key Principles
 

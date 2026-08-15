@@ -78,27 +78,26 @@ The main home page after login. Shows an overview of the user's groups, overall 
 - Each card shows: category icon, group name, member count, user's balance
 - Click → navigate to group detail page
 - "New Group" button to create a group
-- Show archived groups behind a toggle (collapsed by default)
+
+There is no archived-groups toggle: `GET /api/groups` accepts no query params and
+returns all of the user's groups.
 
 ---
 
 ## Data Fetching
 
+`DashboardView` is a **client component** driven by three SWR calls, not a server
+component with pre-fetched props:
+
 ```typescript
-// Server component
-export default async function DashboardPage() {
-  const session = await auth();
-
-  // Parallel data fetching
-  const [groups, balances, invitations] = await Promise.all([
-    groupService.getUserGroups(session.user.id),
-    balanceService.getUserBalances(session.user.id),
-    invitationService.getPendingInvitations(session.user.email),
-  ]);
-
-  return <DashboardView groups={groups} balances={balances} invitations={invitations} />;
-}
+// src/components/dashboard/DashboardView.tsx
+const { data: groups } = useSWR('/api/groups', fetcher, { refreshInterval: 30_000 });
+const { data: balances } = useSWR('/api/user/balances', fetcher, { refreshInterval: 30_000 });
+const { data: invitations } = useSWR('/api/invitations', fetcher, { refreshInterval: 30_000 });
 ```
+
+(The service method for pending invitations is `getPendingByEmail`, not
+`getPendingInvitations`.)
 
 ---
 
@@ -114,9 +113,12 @@ export default async function DashboardPage() {
 
 ## Components Used
 
-- `GroupCard` — Group grid cards
-- `BalanceSummary` — Overall balance display
-- `InviteCard` — Pending invitation card with accept/decline
-- `EmptyState` — For no-groups state
+- `DashboardView` — the whole page (client component)
+- `GroupCard` — Group grid cards; branches on the group's theme
+- `InvitationCard` — Pending invitation card with accept/decline
+- `MoneyText` — Balance figures
 - `Sidebar` — Navigation sidebar
 - `Navbar` — Top navigation bar
+
+There are no `BalanceSummary` or `EmptyState` components — balances are rendered
+inline by `DashboardView`, and empty states are inline JSX.

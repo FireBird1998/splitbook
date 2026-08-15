@@ -1,6 +1,6 @@
 # V4 — Category as Theme (Groups, Not Only Trips)
 
-**Status:** Proposed  
+**Status:** Shipped — all three phases  
 **Decisions:** theme derived from `Group.category` (no schema change in Phase 1) · `home` renamed to "Household" in copy only · balances stay **running**, months are a **view** · trip chrome is trip-only
 
 ## Why
@@ -19,7 +19,7 @@ V4 turns `category` into a **theme** chosen at creation, and adds the long-runni
 | 2   | Category-aware chrome (trip strip vs neutral header) | this doc, §2                           | 1     | Done    |
 | 3   | Theme picker at group creation                       | this doc, §4                           | 1     | Done    |
 | 4   | Terminology pass ("trips" → "groups" where generic)  | this doc, §4                           | 1     | Done    |
-| 5   | Household month switcher + monthly summary           | [monthly-views.md](./monthly-views.md) | 2     | Pending |
+| 5   | Household month switcher + monthly summary           | [monthly-views.md](./monthly-views.md) | 2     | Done    |
 | 6   | Recurring expense templates for Household            | this doc, §4                           | 3     | Done    |
 
 ## Key Principles
@@ -189,13 +189,13 @@ No schema change. No new endpoints. Pure derivation plus branching.
 
 Reuses the existing expense filter API. One additive, opt-in response field. Full contract in [monthly-views.md](./monthly-views.md).
 
-- [ ] **Fix the inclusive `dateTo` boundary.** `expense.service.ts` does `$lte: new Date(filters.dateTo)`, and a date-only string parses to UTC midnight — so expenses later on the final day are silently excluded. This already affects the Custom Range filter and would make every month total wrong by up to a day. Fix in the service (treat a date-only `dateTo` as end-of-day) and cover it with a unit test.
-- [ ] **Per-member breakdown.** Extend the existing summary in `expenseService.getGroupExpenses` with an opt-in `byMember` array (member, `paid`, `share`, `net`) behind a query flag, so the default expense-list payload does not grow. The service already loads the full filtered set to compute `userOwes` / `userGetsBack`; the breakdown reuses that pass rather than adding a second aggregation.
-- [ ] **Month switcher.** Add `src/components/groups/MonthCycleBar.tsx`: month stepping with `date-fns` `startOfMonth` / `endOfMonth`, forward capped at the current month, "This month" and "All time" actions, `?month=YYYY-MM` in the URL, and the month summary line.
-- [ ] **Wire into the Household group page.** Render the bar when `theme.signature === 'monthCycle'`. Pass the active range into `ExpenseListView` as a controlled date range and suppress its quick-filter chips while a month is active.
-- [ ] **Per-member table.** Render fronted / share / net for the active month, labelled as monthly figures and visually separated from the running balance. Include the end-of-month "Settle August?" prompt linking to the Balances tab.
-- [ ] **Household dashboard card.** Show this month's spend alongside the running balance, using the same date-ranged summary.
-- [ ] **Verify.** Unit tests for the date boundary and the breakdown maths; integration coverage that a month's `byMember` nets sum to zero.
+- [x] **Fix the inclusive `dateTo` boundary.** `expense.service.ts` did `$lte: new Date(filters.dateTo)`, and a date-only string parses to UTC midnight — so expenses later on the final day were silently excluded. Landed as `toInclusiveDateToBound` in `src/lib/utils/date.ts`, covered by `expense-date-filter.integration.test.ts`.
+- [x] **Per-member breakdown.** Extend the existing summary in `expenseService.getGroupExpenses` with an opt-in `byMember` array (member, `paid`, `share`, `net`) behind a query flag, so the default expense-list payload does not grow. The service already loads the full filtered set to compute `userOwes` / `userGetsBack`; the breakdown reuses that pass rather than adding a second aggregation.
+- [x] **Month switcher.** Add `src/components/groups/MonthCycleBar.tsx`: month stepping with `date-fns` `startOfMonth` / `endOfMonth`, forward capped at the current month, "This month" and "All time" actions, `?month=YYYY-MM` in the URL, and the month summary line.
+- [x] **Wire into the Household group page.** Render the bar when `theme.signature === 'monthCycle'`. Pass the active range into `ExpenseListView` as a controlled date range and suppress its quick-filter chips while a month is active.
+- [x] **Per-member table.** Render fronted / share / net for the active month, labelled as monthly figures and visually separated from the running balance. Include the end-of-month "Settle August?" prompt linking to the Balances tab.
+- [x] **Household dashboard card.** Show this month's spend alongside the running balance, using the same date-ranged summary.
+- [x] **Verify.** Unit tests for the date boundary and the breakdown maths; integration coverage that a month's `byMember` nets sum to zero.
 
 ### Phase 3 — Recurring expense templates (Household)
 

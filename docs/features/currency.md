@@ -1,18 +1,38 @@
-# Feature: Multi-Currency Support
+# Feature: Currency
+
+> **Status.** The multi-currency design below was **not** built. Each group is
+> **single-currency**: every expense and settlement must match the group's
+> `defaultCurrency` or the request is rejected with **422 `CURRENCY_MISMATCH`**
+> (enforced in `expense.service.ts`, `settlement.service.ts` and
+> `recurring-expense.service.ts`). `alternateCurrencies` is persisted and
+> API-accepted but no read or write path consults it.
+>
+> Cross-group aggregation *is* multi-currency: the dashboard buckets balances per
+> currency and never sums across them. That part is live — see
+> [Currency in balances](#currency-in-balances).
 
 ## Overview
 
-Each group has a **default currency** and up to **2 alternate currencies**. This allows quick selection when adding expenses — especially useful for travel groups where you switch between local and home currencies.
+Each group has a **default currency**, fixed at creation and changeable by an
+admin in group settings. Every amount recorded in that group uses it.
+
+A user also has a `preferredCurrency` on their profile (default `INR`). It is a
+display preference for currency pickers and does not affect any group's ledger.
 
 ---
 
 ## User Stories
 
-1. **As a group creator**, I can set a default currency when creating the group.
-2. **As a group admin**, I can add up to 2 alternate currencies for the group.
-3. **As a user**, when adding an expense, I see the group's 3 currencies first in the dropdown.
-4. **As a user**, I can still select any currency for an expense (not limited to group currencies).
-5. **As a user**, I can set my preferred currency in my profile.
+1. **As a group creator**, I set the currency when creating the group. ✅
+2. **As a group admin**, I can change the group's default currency later. ✅
+3. **As a user**, every expense I add uses the group's currency — there is no
+   per-expense currency choice. ✅
+4. **As a user**, I can set my preferred currency in my profile. ✅
+5. **As a user**, my dashboard shows what I owe and am owed **per currency**,
+   never merged into one number. ✅
+
+Not built: per-expense currency selection, alternate-currency quick-pick, and
+any form of FX conversion.
 
 ---
 
@@ -117,21 +137,38 @@ function formatCurrency(amount: number, currencyCode: string): string {
 
 ## Currency in Balances
 
-**Important**: Balances are calculated **per-currency**, NOT converted.
+**Important**: balances are bucketed **per-currency** and never converted.
+
+Because a group is single-currency, the multi-currency case arises **across**
+groups, on the dashboard:
 
 ```
-Group: Europe Trip
-  Expenses in EUR: 3
-  Expenses in USD: 1
-  Expenses in INR: 1
+Alex belongs to:
+  Europe Trip   (EUR)  → owed  €50.00
+  Flat 302      (INR)  → owes  ₹500.00
+  Tokyo 2027    (JPY)  → owed  ¥1,200
 
-Balance display:
+Dashboard display — one bucket per currency, never summed:
   You are owed:
     €50.00
-    $12.00
+    ¥1,200
   You owe:
     ₹500.00
 ```
+
+`GET /api/user/balances` returns these as `buckets`, computed by
+`aggregateCurrencyBalances`. Each group's contribution is calculated separately
+per currency before bucketing.
+
+### Within a group
+
+`GET /api/groups/[id]/balances` returns a single number per member, labelled with
+the group's default currency, plus a `hasMixedCurrencies` flag.
+
+⚠️ If a group somehow *does* contain mixed currencies — only reachable through
+legacy data, since the write path forbids it — that endpoint **sums the amounts
+anyway** and merely raises the flag. The number would be meaningless. The
+dashboard endpoint does not have this problem.
 
 ### Why No Auto-Conversion?
 
@@ -148,8 +185,16 @@ Optional "estimated total" that converts everything to user's preferred currency
 
 ## Validation
 
-- Currency code must be valid ISO 4217 code from our supported list
-- Default currency is required when creating a group
-- Alternate currencies are optional (0, 1, or 2)
-- Alternate currencies must be different from default and from each other
-- User's preferred currency defaults to "INR" (configurable)
+Enforced:
+
+- Currency code must be a valid ISO 4217 code from `CURRENCY_CODES` (Zod)
+- Default currency is required when creating a group (Zod)
+- `alternateCurrencies`: at most 2 entries, each a valid code (Zod + schema)
+- Expense, settlement and recurring-template currency must equal the group's
+  `defaultCurrency` — 422 otherwise (service)
+- User's preferred currency defaults to `"INR"`
+
+Not enforced:
+
+- Alternate currencies being distinct from the default or from each other —
+  `["EUR", "EUR"]` on a EUR group is accepted

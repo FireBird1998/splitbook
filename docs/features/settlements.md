@@ -185,8 +185,15 @@ See [api.md](../api.md#settlements) and [api.md](../api.md#balances) for full do
 ## Edge Cases
 
 - Partial settlement: User can pay less than the full debt amount
-- Over-settlement: User pays more than owed → the other person now owes them (allowed, but show warning)
-- Self-settlement: Cannot settle with yourself
-- Settlement on archived group: Not allowed
-- Currency mismatch: Settlement currency should match group default or alternate currencies (warn but allow)
+- Over-settlement: User pays more than owed → the other person now owes them (allowed)
+- Self-settlement: Cannot settle with yourself — 422 `SAME_PARTY`
+- **Authorization**: only the payer or the recipient may record a settlement —
+  422 `FORBIDDEN_SETTLEMENT`. A third member cannot record one on their behalf.
+- `paidBy` is optional in the request and defaults to the recording user
+- **Currency mismatch: rejected.** Settlement currency must equal the group's
+  `defaultCurrency` — 422 `CURRENCY_MISMATCH`
+- Settlement on archived group: not blocked by any check
 - Concurrent expenses: Balance calculation must include all expenses up to current moment
+- **No `date` field.** A settlement carries only `createdAt`, so it cannot be
+  back-dated. This is why monthly views are read-only lenses rather than ledger
+  boundaries — see [`../v4/README.md`](../v4/README.md) §3.

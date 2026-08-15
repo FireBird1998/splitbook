@@ -36,11 +36,15 @@ Add a `summary` field to the response from `GET /api/groups/[id]/expenses`:
     "totalAmount": 12450.00,
     "count": 8,
     "userOwes": 3200.00,
-    "userGetsBack": 1100.00,
-    "currency": "INR"
+    "userGetsBack": 1100.00
   }
 }
 ```
+
+> As shipped, `summary` carries no `currency` field — the group is
+> single-currency, so the caller already knows it from the group. A later
+> addition, `byMember`, appears when the request passes
+> `includeMemberBreakdown=1`. See [`../api.md`](../api.md#expenses).
 
 The summary is computed from the **full filtered set** (not just the current page), so it reflects all matching expenses regardless of pagination.
 
