@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { CURRENCY_CODES } from '@/lib/utils/currency';
+import { CATEGORY_IDS } from '@/lib/constants/categories';
 
 export const createRecurringExpenseSchema = z.object({
   description: z.string().min(1, 'Description is required').max(200).trim(),
@@ -7,7 +8,10 @@ export const createRecurringExpenseSchema = z.object({
   currency: z.string().refine((val) => CURRENCY_CODES.includes(val), {
     message: 'Invalid currency code',
   }),
-  category: z.string().default('other'),
+  category: z
+    .string()
+    .refine((val) => CATEGORY_IDS.includes(val), { message: 'Invalid category' })
+    .default('other'),
   tag: z.string().min(1, 'Tag is required').trim(),
   paidBy: z
     .array(

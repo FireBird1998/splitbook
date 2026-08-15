@@ -146,15 +146,15 @@ function useGroupEvents(groupId: string) {
 
 ## Refresh Intervals Summary
 
-| Data            | Interval | Trigger                     |
-| ----------- | -------- | --------------------------- |
-| Expenses        | 10s      | Polling + focus + reconnect |
-| Balances tab    | 15s      | Polling + focus             |
-| Activity        | 10s      | Polling + focus             |
-| Group info      | 30s      | Polling + focus             |
-| Groups list     | 30s      | Polling + focus             |
-| User balances   | 30s      | Polling + focus             |
-| Invitations     | 30s      | Polling + focus             |
+| Data          | Interval | Trigger                     |
+| ------------- | -------- | --------------------------- |
+| Expenses      | 10s      | Polling + focus + reconnect |
+| Balances tab  | 15s      | Polling + focus             |
+| Activity      | 10s      | Polling + focus             |
+| Group info    | 30s      | Polling + focus             |
+| Groups list   | 30s      | Polling + focus             |
+| User balances | 30s      | Polling + focus             |
+| Invitations   | 30s      | Polling + focus             |
 
 > **Polling drives writes.** `GET /api/groups/[id]` and
 > `GET /api/groups/[id]/expenses` both materialize due recurring expenses before

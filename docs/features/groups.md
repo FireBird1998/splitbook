@@ -89,23 +89,23 @@ Only accessible to group admins.
 This table reflects **what the code enforces today**, which is not the same as
 what it ideally should.
 
-| Action               | Admin | Member | Enforced where |
-| -------------------- | ----- | ------ | -------------- |
-| View group           | ✅    | ✅     | `isMember` |
-| Add expense          | ✅    | ✅     | `isMember` |
-| Edit own expense     | ✅    | ✅     | `isMember` |
-| Delete own expense   | ✅    | ✅     | `isMember` |
-| Edit others' expense | ✅    | ✅ ⚠️  | **nothing** |
-| Delete others' exp.  | ✅    | ✅ ⚠️  | **nothing** |
+| Action               | Admin | Member | Enforced where          |
+| -------------------- | ----- | ------ | ----------------------- |
+| View group           | ✅    | ✅     | `isMember`              |
+| Add expense          | ✅    | ✅     | `isMember`              |
+| Edit own expense     | ✅    | ✅     | `isMember`              |
+| Delete own expense   | ✅    | ✅     | `isMember`              |
+| Edit others' expense | ✅    | ✅ ⚠️  | **nothing**             |
+| Delete others' exp.  | ✅    | ✅ ⚠️  | **nothing**             |
 | Record settlement    | ✅    | ✅     | payer or recipient only |
-| Edit group settings  | ✅    | ❌     | `assertAdmin` |
-| Manage tags          | ✅    | ❌     | `assertAdmin` |
-| Manage recurring     | ✅    | ❌     | `assertAdmin` |
-| Invite members       | ✅    | ✅     | `isMember` |
-| Generate invite link | ✅    | ✅     | `isMember` |
-| Remove members       | ✅    | ❌     | `assertAdmin` |
-| Change member roles  | ✅    | ❌     | `assertAdmin` |
-| Archive group        | ✅    | ❌     | `assertAdmin` |
+| Edit group settings  | ✅    | ❌     | `assertAdmin`           |
+| Manage tags          | ✅    | ❌     | `assertAdmin`           |
+| Manage recurring     | ✅    | ❌     | `assertAdmin`           |
+| Invite members       | ✅    | ✅     | `isMember`              |
+| Generate invite link | ✅    | ✅     | `isMember`              |
+| Remove members       | ✅    | ❌     | `assertAdmin`           |
+| Change member roles  | ✅    | ❌     | `assertAdmin`           |
+| Archive group        | ✅    | ❌     | `assertAdmin`           |
 
 > ⚠️ **Expense mutation is membership-gated only.** No route or service checks
 > who created an expense, so any member can edit or delete any other member's

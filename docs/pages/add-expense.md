@@ -75,10 +75,10 @@ Form to create a new expense or edit an existing one. This is the most complex f
 
 ### Optional Fields
 
-| Field          | Type         | Default | Notes                                          |
-| -------------- | ------------ | ------- | ---------------------------------------------- |
-| predefinedItem | quick select | null    | Auto-fills description, category and tag       |
-| notes          | textarea     | ""      | Max 500 chars                                  |
+| Field          | Type         | Default | Notes                                    |
+| -------------- | ------------ | ------- | ---------------------------------------- |
+| predefinedItem | quick select | null    | Auto-fills description, category and tag |
+| notes          | textarea     | ""      | Max 500 chars                            |
 
 **`tag` is required, not optional** — exactly one, chosen from the group's active
 tags. See [Required fields](#required-fields).

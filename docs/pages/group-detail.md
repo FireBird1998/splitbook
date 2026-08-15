@@ -150,7 +150,7 @@ if (!isMember) redirect('/dashboard');
 - `MonthCycleBar` + `MonthMemberTable` (Household theme only)
 - MUI `Tabs` for tab navigation
 - `ExpenseListView` (Expenses tab)
-- `BalancesView` (Balances tab — balances *and* simplified debts in one component)
+- `BalancesView` (Balances tab — balances _and_ simplified debts in one component)
 - `ActivityView` (Activity tab)
 - MUI `Fab` for add expense button
 

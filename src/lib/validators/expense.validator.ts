@@ -8,7 +8,10 @@ export const createExpenseSchema = z.object({
   currency: z.string().refine((val) => CURRENCY_CODES.includes(val), {
     message: 'Invalid currency code',
   }),
-  category: z.string().default('other'),
+  category: z
+    .string()
+    .refine((val) => CATEGORY_IDS.includes(val), { message: 'Invalid category' })
+    .default('other'),
   date: z.coerce.date(),
   paidBy: z
     .array(

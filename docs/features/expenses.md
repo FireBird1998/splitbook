@@ -135,26 +135,26 @@ Quick-select common expenses instead of typing description manually.
 Each item maps to exactly **one** `defaultTag`, matching the capitalized default
 tag names seeded on groups (see [`../v3/tag-management.md`](../v3/tag-management.md)).
 
-| Item           | Category      | Default tag |
-| -------------- | ------------- | ----------- |
-| Groceries      | food          | Food        |
-| Restaurant     | food          | Food        |
-| Taxi / Uber    | transport     | Transport   |
-| Gas / Fuel     | transport     | Transport   |
-| Hotel          | accommodation | Stay        |
-| Airbnb         | accommodation | Stay        |
-| Flight         | travel        | Transport   |
-| Train Ticket   | travel        | Transport   |
-| Movie Tickets  | entertainment | Activities  |
-| Rent           | housing       | General     |
-| Utilities      | housing       | General     |
-| Internet       | housing       | General     |
-| Coffee         | food          | Food        |
-| Drinks / Bar   | food          | Food        |
-| Shopping       | shopping      | Activities  |
-| Medical        | health        | General     |
-| Parking        | transport     | Transport   |
-| Bus            | transport     | Transport   |
+| Item          | Category      | Default tag |
+| ------------- | ------------- | ----------- |
+| Groceries     | food          | Food        |
+| Restaurant    | food          | Food        |
+| Taxi / Uber   | transport     | Transport   |
+| Gas / Fuel    | transport     | Transport   |
+| Hotel         | accommodation | Stay        |
+| Airbnb        | accommodation | Stay        |
+| Flight        | travel        | Transport   |
+| Train Ticket  | travel        | Transport   |
+| Movie Tickets | entertainment | Activities  |
+| Rent          | housing       | General     |
+| Utilities     | housing       | General     |
+| Internet      | housing       | General     |
+| Coffee        | food          | Food        |
+| Drinks / Bar  | food          | Food        |
+| Shopping      | shopping      | Activities  |
+| Medical       | health        | General     |
+| Parking       | transport     | Transport   |
+| Bus           | transport     | Transport   |
 
 When a user selects a predefined item:
 

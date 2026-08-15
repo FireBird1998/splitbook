@@ -159,7 +159,7 @@ are local React state inside `ExpenseListView`, which builds the query string an
 passes it to `useSWR` directly. Note also that the tag param is singular
 (`tag=Food`), not a comma-separated `tags` list.
 
-The one filter that *is* URL-backed is the Household month lens: `MonthCycleBar`
+The one filter that _is_ URL-backed is the Household month lens: `MonthCycleBar`
 reads and writes `?month=YYYY-MM` so a month view is linkable and survives
 refresh. Its parser, `parseMonthParam`, is exported from the component.
 

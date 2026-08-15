@@ -1,0 +1,19 @@
+{
+  // TypeScript config for the `tsx`-run CLI scripts (demo:seed / demo:reset).
+  //
+  // These import the app's service layer, which reaches `src/lib/db.ts` and its
+  // `import 'server-only'` tripwire. That package throws unless the bundler
+  // resolves it under the `react-server` export condition — Next.js does, plain
+  // Node under tsx does not. Alias it to the same no-op stub Vitest uses so the
+  // CLI can run, without weakening the tripwire in the app build.
+  //
+  // `paths` is replaced (not merged) by `extends`, and entries resolve relative
+  // to the file declaring them, so `@/*` is restated here.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["../src/*"],
+      "server-only": ["../src/lib/test-utils/stubs/server-only.ts"]
+    }
+  }
+}
