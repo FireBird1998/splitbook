@@ -32,88 +32,49 @@ For v1, SWR's built-in polling (`refreshInterval`) is sufficient and simple.
 
 ### SWR Auto-Refresh
 
-```typescript
-// Expenses list — auto-refresh every 10 seconds when tab is focused
-function useExpenses(groupId: string, filters: ExpenseFilters) {
-  return useSWR(`/api/groups/${groupId}/expenses?${buildParams(filters)}`, fetcher, {
-    refreshInterval: 10_000, // Poll every 10s
-    revalidateOnFocus: true, // Refresh when tab gets focus
-    revalidateOnReconnect: true, // Refresh after network recovery
-    dedupingInterval: 5_000, // Dedupe requests within 5s
-  });
-}
-
-// Balances — auto-refresh every 15 seconds
-function useBalances(groupId: string) {
-  return useSWR(`/api/groups/${groupId}/balances`, fetcher, {
-    refreshInterval: 15_000,
-    revalidateOnFocus: true,
-  });
-}
-
-// Activity feed — auto-refresh every 10 seconds
-function useActivity(groupId: string, page: number) {
-  return useSWR(`/api/groups/${groupId}/activity?page=${page}`, fetcher, {
-    refreshInterval: 10_000,
-    revalidateOnFocus: true,
-  });
-}
-```
-
-### Optimistic Updates
-
-When the current user adds an expense, update the UI immediately before the server responds:
+**There is no hooks layer.** `useSWR` is called directly in each component —
+there is no `src/hooks` directory and no `useExpenses` / `useBalances` /
+`useActivity` wrapper. The pattern is:
 
 ```typescript
-async function addExpense(groupId: string, data: CreateExpenseInput) {
-  // Optimistically add to SWR cache
-  mutate(
-    `/api/groups/${groupId}/expenses`,
-    async (current) => {
-      const response = await fetch(`/api/groups/${groupId}/expenses`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-      });
-      const result = await response.json();
-      return {
-        ...current,
-        expenses: [result.data, ...(current?.expenses ?? [])],
-      };
-    },
-    {
-      optimisticData: (current) => ({
-        ...current,
-        expenses: [{ ...data, _id: 'temp', createdAt: new Date() }, ...(current?.expenses ?? [])],
-      }),
-      rollbackOnError: true,
-    },
-  );
-}
+// src/components/expenses/ExpenseListView.tsx
+const { data, isLoading, isValidating, error, mutate } = useSWR(
+  `/api/groups/${groupId}/expenses?${params}`,
+  fetcher,
+  { refreshInterval: 10_000, keepPreviousData: true },
+);
 ```
 
----
+`keepPreviousData` is what makes filtering non-blocking — the previous page stays
+on screen while the new query resolves, with `isValidating` driving a subtle
+loading affordance rather than a full skeleton.
 
-## New Data Notification
+`fetcher` (`src/lib/utils/fetcher.ts`) is a thin wrapper over `fetch` that
+returns `res.json()`, falling back to `{}` when the body will not parse. Note the
+consequence: an expired session is redirected to `/login` as HTML, which parses
+as a failure and surfaces as **empty data rather than an error**.
 
-When polling detects new data that the user didn't create:
+### Refresh after mutation
 
-```
-┌──────────────────────────────────────────┐
-│ 🔔 Jane added a new expense             │
-│ [View] [Dismiss]                         │
-└──────────────────────────────────────────┘
-```
-
-### Detection Logic
+There are **no optimistic updates** — no call site passes `optimisticData` or
+`rollbackOnError`. After a successful write the component simply calls `mutate()`
+and waits for the revalidated response:
 
 ```typescript
-// Compare previous and new data
-function detectNewItems(prev: Expense[], next: Expense[], currentUserId: string) {
-  const prevIds = new Set(prev.map((e) => e._id));
-  const newItems = next.filter((e) => !prevIds.has(e._id) && e.createdBy !== currentUserId);
-  return newItems;
-}
+// src/components/expenses/ExpenseListView.tsx
+await fetch(`/api/groups/${groupId}/expenses`, { method: 'POST', body: JSON.stringify(data) });
+mutate();
 ```
+
+The UI therefore lags a write by one round-trip. Adding optimistic updates would
+be a real change, not a documentation fix.
+
+### Not implemented
+
+- **"New data" notification** ("🔔 Jane added a new expense"). Polling replaces
+  the data silently; nothing diffs successive responses or attributes changes to
+  another user.
+- Server-Sent Events / WebSockets (see below).
 
 ---
 
@@ -185,10 +146,18 @@ function useGroupEvents(groupId: string) {
 
 ## Refresh Intervals Summary
 
-| Data        | Interval | Trigger                     |
+| Data            | Interval | Trigger                     |
 | ----------- | -------- | --------------------------- |
-| Expenses    | 10s      | Polling + focus + reconnect |
-| Balances    | 15s      | Polling + focus             |
-| Activity    | 10s      | Polling + focus             |
-| Group info  | 30s      | Polling + focus             |
-| Groups list | 30s      | Polling + focus             |
+| Expenses        | 10s      | Polling + focus + reconnect |
+| Balances tab    | 15s      | Polling + focus             |
+| Activity        | 10s      | Polling + focus             |
+| Group info      | 30s      | Polling + focus             |
+| Groups list     | 30s      | Polling + focus             |
+| User balances   | 30s      | Polling + focus             |
+| Invitations     | 30s      | Polling + focus             |
+
+> **Polling drives writes.** `GET /api/groups/[id]` and
+> `GET /api/groups/[id]/expenses` both materialize due recurring expenses before
+> responding. An open Household group page therefore issues a write-capable
+> request every 10–30 seconds. Generation is idempotent, so this is safe, but it
+> means these polls are not read-only.

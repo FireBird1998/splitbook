@@ -43,6 +43,14 @@ through the actual service layer (no mocked models):
 - `services/expense-settlement.integration.test.ts` — participant/tag/
   currency validation, edit history, soft delete + restore, duplicate
   detection, settlement authorization boundaries.
+- `services/expense-date-filter.integration.test.ts` — inclusive `dateTo`
+  boundary, so an expense late on the final day of a range is not dropped.
+- `services/expense-member-breakdown.integration.test.ts` — the opt-in
+  `summary.byMember` rows; monthly nets sum to zero.
+- `services/recurring-expense.integration.test.ts` — due-period materialization,
+  pause/resume, problem-state skipping, and that two concurrent generations
+  produce exactly one expense. Note this suite forces `Expense.createIndexes()`
+  in setup; production relies on Mongoose `autoIndex` instead.
 - `services/balance-integrity.integration.test.ts` — zero-sum balances, debt
   reduction/clearing via settlements, per-currency dashboard buckets, legacy
   mixed-currency flagging, archived-trip exclusion.
@@ -95,4 +103,26 @@ Two jobs, each with a `mongo:7` service container:
 - **verify** — install, lint, `pnpm test` (unit + integration against the
   service MongoDB), typecheck, build.
 - **playwright** — install, Chromium, build, `pnpm test:e2e` (webServer runs
-  `next start` on 3100), uploads the report and review screenshots.
+  `next start` on 3100), then `pnpm test:e2e:google`, and uploads the report and
+  review screenshots.
+
+Because the Playwright webServer runs a **production** build, its env must set
+`ALLOW_DEMO_AUTH=true` (demo auth fails closed in production) and
+`AUTH_TRUST_HOST=true` (Auth.js otherwise throws `UntrustedHost`).
+
+## Coverage shape
+
+Worth knowing where the safety net is and is not:
+
+- **Strong** on pure logic (split maths, debt simplification, currency bucketing,
+  date bounds, auth-mode guards) and on service-level invariants exercised
+  through a real database.
+- **Absent above the service layer.** No test invokes a route handler, so status
+  codes, Zod wiring and the guard order in routes are unverified.
+- **No component tests are collectable at all** — `vitest.config.ts` includes
+  only `src/**/*.test.ts`, so a `.tsx` test would be ignored. That matters
+  because split-total validation, month-range parsing and the recurring
+  problem-state heuristic currently live only in components.
+- `playwright.google.config.ts` points at the same `splitwise-demo` database as
+  the demo suite and has no global setup of its own. Nothing is written by it in
+  practice, since no OAuth flow completes.

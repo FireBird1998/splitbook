@@ -97,44 +97,72 @@ or paid APIs are required.
 
 ### 2. Auth.js Configuration
 
-File: `src/lib/auth.ts`
+The config is deliberately **split across two files**, because middleware runs in
+the Edge runtime and cannot load the MongoDB adapter.
+
+#### `src/lib/auth.config.ts` — Edge-compatible
+
+Holds everything except the adapter: both providers, the session strategy, the
+callbacks, and the `authorized` route-protection logic. It must not import
+`mongodb`, `mongoose`, or anything else Node-only.
+
+```typescript
+export const authConfig: NextAuthConfig = {
+  providers: [
+    Credentials({
+      id: 'demo',
+      name: 'Demo',
+      credentials: { personaId: { label: 'Persona', type: 'text' } },
+      authorize(credentials) {
+        // Env is read at authorize-time so the production guard stays effective.
+        return authorizeDemoPersona({ personaId: ... });
+      },
+    }),
+    Google({
+      clientId: process.env.AUTH_GOOGLE_ID!,
+      clientSecret: process.env.AUTH_GOOGLE_SECRET!,
+    }),
+  ],
+  session: { strategy: 'jwt' },
+  callbacks: {
+    async jwt({ token, user }) { if (user) token.id = user.id; return token; },
+    async session({ session, token }) {
+      if (session.user) session.user.id = token.id as string;
+      return session;
+    },
+    authorized({ auth, request }) { /* route protection — see §4 */ },
+  },
+  pages: { signIn: '/login' },
+};
+```
+
+**Both providers are always registered**, so `AUTH_MODE` can switch the active
+sign-in path without a rebuild. The demo `authorize()` reads env at call time and
+fails closed — see [Demo mode](#demo-mode).
+
+#### `src/lib/auth.ts` — Node runtime
+
+Fourteen lines. It adds the MongoDB adapter and nothing else:
 
 ```typescript
 import NextAuth from 'next-auth';
-import Google from 'next-auth/providers/google';
 import { MongoDBAdapter } from '@auth/mongodb-adapter';
 import clientPromise from './mongodb-client';
+import { authConfig } from './auth.config';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  ...authConfig,
   adapter: MongoDBAdapter(clientPromise),
-  providers: [
-    Google({
-      clientId: process.env.AUTH_GOOGLE_ID,
-      clientSecret: process.env.AUTH_GOOGLE_SECRET,
-    }),
-  ],
-  session: {
-    strategy: 'jwt',
-  },
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-      }
-      return session;
-    },
-  },
-  pages: {
-    signIn: '/login',
-  },
 });
 ```
+
+Import this one from API routes and server components. `src/middleware.ts`
+imports `auth.config.ts` instead.
+
+> **Why the split still matters.** Next.js 16 introduced a Node-runtime `proxy`
+> as an alternative to `middleware`, but this repo keeps `middleware.ts` — so the
+> Edge constraint on `auth.config.ts` is live. Adding a Node-only import there
+> will break the build.
 
 ### 3. Route Handler
 
@@ -160,6 +188,29 @@ export const config = {
 };
 ```
 
+The matcher excludes Next internals and anything containing a dot (i.e. static
+files), so it runs on every page **and** every `/api/*` route.
+
+**Public paths**, per the `authorized` callback:
+
+| Path | Why |
+| --- | --- |
+| `/api/auth/*` | Auth.js itself |
+| `/` | Landing / persona picker |
+| `/login` | Sign-in |
+| `/join/*` | Invite landing page |
+| `GET /api/join/[code]` | Invite preview, so the join page can render its sign-in CTA before the visitor has an account. `POST` stays protected. |
+
+> Two things worth knowing:
+>
+> 1. `/` , `/login` and `/join` are matched with `startsWith`, so any path
+>    *beginning* with those strings is public — not only those segments.
+> 2. **Middleware does not return 401.** Auth.js converts an `authorized` return
+>    of `false` into a **302 redirect to `/login`**, including for `/api/*`. An
+>    unauthenticated API client receives an HTML sign-in page, not JSON. The 401s
+>    documented below come from each route's own `getAuthUser` guard, which runs
+>    after middleware has let the request through.
+
 ---
 
 ## Session Access
@@ -177,17 +228,21 @@ export default async function Page() {
 
 ### In API Routes
 
+Routes use the `getAuthUser` helper rather than calling `auth()` directly:
+
 ```typescript
-import { auth } from '@/lib/auth';
+import { getAuthUser, unauthorized } from '@/lib/utils/api-response';
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user) {
-    return Response.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-  // Use session.user.id
+  const user = await getAuthUser();
+  if (!user) return unauthorized();
+  // Use user.id
 }
 ```
+
+Authentication is only the first gate. Most routes then check group membership
+via `groupService.isMember`, and admin-only routes check role inside the service.
+See the permission matrix in [`features/groups.md`](features/groups.md).
 
 ### In Client Components
 

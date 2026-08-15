@@ -1,6 +1,21 @@
 # Feature: Receipt Attachment
 
-## Overview
+> **Status: not implemented.** This document is a design sketch, not a
+> description of working behaviour. Nothing below exists in the codebase:
+>
+> - No upload route (`.../receipt` is not a route), no storage integration, no
+>   upload component.
+> - `Expense.receiptUrl` exists on the Mongoose model and `ExpenseCard` renders a
+>   receipt chip when it is set — but the field is **absent from both
+>   `createExpenseSchema` and `updateExpenseSchema`**, and Zod strips unrecognized
+>   keys, so **no API request can ever populate it**. The chip is unreachable.
+> - `docs/v2/receipt-upload.md` describes a different endpoint again
+>   (`POST /api/upload/receipt`); neither exists.
+>
+> Implementing this needs, at minimum: a storage provider, an upload route, and
+> `receiptUrl` added to the expense validators.
+
+## Overview (proposed)
 
 Users can attach a receipt image to any expense for record-keeping and transparency. One image per expense.
 

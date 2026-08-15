@@ -86,19 +86,31 @@ Only accessible to group admins.
 
 ## Roles & Permissions
 
-| Action               | Admin | Member |
-| -------------------- | ----- | ------ |
-| View group           | ✅    | ✅     |
-| Add expense          | ✅    | ✅     |
-| Edit own expense     | ✅    | ✅     |
-| Delete own expense   | ✅    | ✅     |
-| Edit others' expense | ✅    | ❌     |
-| Delete others' exp.  | ✅    | ❌     |
-| Record settlement    | ✅    | ✅     |
-| Edit group settings  | ✅    | ❌     |
-| Invite members       | ✅    | ✅     |
-| Remove members       | ✅    | ❌     |
-| Archive group        | ✅    | ❌     |
+This table reflects **what the code enforces today**, which is not the same as
+what it ideally should.
+
+| Action               | Admin | Member | Enforced where |
+| -------------------- | ----- | ------ | -------------- |
+| View group           | ✅    | ✅     | `isMember` |
+| Add expense          | ✅    | ✅     | `isMember` |
+| Edit own expense     | ✅    | ✅     | `isMember` |
+| Delete own expense   | ✅    | ✅     | `isMember` |
+| Edit others' expense | ✅    | ✅ ⚠️  | **nothing** |
+| Delete others' exp.  | ✅    | ✅ ⚠️  | **nothing** |
+| Record settlement    | ✅    | ✅     | payer or recipient only |
+| Edit group settings  | ✅    | ❌     | `assertAdmin` |
+| Manage tags          | ✅    | ❌     | `assertAdmin` |
+| Manage recurring     | ✅    | ❌     | `assertAdmin` |
+| Invite members       | ✅    | ✅     | `isMember` |
+| Generate invite link | ✅    | ✅     | `isMember` |
+| Remove members       | ✅    | ❌     | `assertAdmin` |
+| Change member roles  | ✅    | ❌     | `assertAdmin` |
+| Archive group        | ✅    | ❌     | `assertAdmin` |
+
+> ⚠️ **Expense mutation is membership-gated only.** No route or service checks
+> who created an expense, so any member can edit or delete any other member's
+> expense in the group. Restricting this was noted as a future option in
+> [`../v2/edit-expense.md`](../v2/edit-expense.md).
 
 ---
 
@@ -110,9 +122,18 @@ See [api.md](../api.md#groups) for full endpoint documentation.
 
 ## Edge Cases
 
-- Creator cannot leave group unless they transfer admin to someone else
-- Cannot archive group if there are unsettled balances (show warning, allow override)
-- Group name must be unique per user (prevent confusion)
-- Deleting last admin → must promote another member first
-- Max group members: 50 (reasonable limit)
-- Archived groups appear in a separate "Archived" section
+Enforced today:
+
+- Cannot demote or remove the last admin — but the error currently surfaces as a
+  **500** with a generic message, not a clear 4xx
+- Cannot remove yourself (same caveat)
+- An invite code resolves to at most one group (unique partial index)
+
+**Not implemented** — described in earlier drafts, no code behind them:
+
+- Leave group — there is no leave endpoint at all, so "creator cannot leave
+  unless they transfer admin" is moot
+- Blocking archive when balances are unsettled
+- Group name uniqueness per user
+- A maximum member count
+- A separate "Archived" section — `GET /api/groups` takes no `archived` param

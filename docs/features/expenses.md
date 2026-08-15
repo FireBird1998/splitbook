@@ -117,7 +117,7 @@ Same as unequal — user enters exact amounts per person.
 │ ☑ Jane        €40.00                    │
 │ ☑ Bob         €40.00                    │
 │                                          │
-│ Tags: [dinner] [birthday] [+ Add]       │
+│ Tag: [Food ▾]  (required, one)           │
 │                                          │
 │ 📎 Attach receipt                        │
 │ Notes: [Optional notes...            ]   │
@@ -132,31 +132,36 @@ Same as unequal — user enters exact amounts per person.
 
 Quick-select common expenses instead of typing description manually.
 
-| Item          | Category      | Default Tags       |
-| ------------- | ------------- | ------------------ |
-| Groceries     | food          | groceries          |
-| Restaurant    | food          | dining             |
-| Taxi / Uber   | transport     | taxi               |
-| Gas / Fuel    | transport     | fuel               |
-| Hotel         | accommodation | hotel              |
-| Airbnb        | accommodation | airbnb             |
-| Flight        | travel        | flight             |
-| Train ticket  | travel        | train              |
-| Movie tickets | entertainment | movie              |
-| Rent          | housing       | rent, monthly      |
-| Utilities     | housing       | utilities, monthly |
-| Internet      | housing       | internet, monthly  |
-| Coffee        | food          | coffee             |
-| Drinks / Bar  | food          | drinks, bar        |
-| Shopping      | shopping      | -                  |
-| Medical       | health        | medical            |
-| Parking       | transport     | parking            |
+Each item maps to exactly **one** `defaultTag`, matching the capitalized default
+tag names seeded on groups (see [`../v3/tag-management.md`](../v3/tag-management.md)).
 
-When user selects a predefined item:
+| Item           | Category      | Default tag |
+| -------------- | ------------- | ----------- |
+| Groceries      | food          | Food        |
+| Restaurant     | food          | Food        |
+| Taxi / Uber    | transport     | Transport   |
+| Gas / Fuel     | transport     | Transport   |
+| Hotel          | accommodation | Stay        |
+| Airbnb         | accommodation | Stay        |
+| Flight         | travel        | Transport   |
+| Train Ticket   | travel        | Transport   |
+| Movie Tickets  | entertainment | Activities  |
+| Rent           | housing       | General     |
+| Utilities      | housing       | General     |
+| Internet       | housing       | General     |
+| Coffee         | food          | Food        |
+| Drinks / Bar   | food          | Food        |
+| Shopping       | shopping      | Activities  |
+| Medical        | health        | General     |
+| Parking        | transport     | Transport   |
+| Bus            | transport     | Transport   |
 
-- Description auto-fills with item name
-- Category auto-fills
-- Tags auto-fill (user can modify)
+When a user selects a predefined item:
+
+- Description auto-fills with the item label
+- Category is derived from the item — there is no manual category select in the form
+- The tag auto-fills from `defaultTag` (user can change it, but must pick an
+  active group tag)
 
 ---
 
@@ -220,12 +225,27 @@ See [api.md](../api.md#expenses) for full endpoint documentation.
 
 ## Edge Cases
 
-- Rounding: When splitting €10 three ways → €3.34, €3.33, €3.33 (extra cent to first person)
-- Zero amount: Not allowed
+- Rounding: When splitting €10 three ways → €3.34, €3.33, €3.33 (extra cent to
+  the first participant). Amounts are JavaScript floats, so a stored share can be
+  a value like `3.3400000000000003`; `shares` and `percentage` splits can drift by
+  a cent against the total.
+- Zero amount: Not allowed (minimum 0.01)
 - Negative amount: Not allowed (use settlements for payments)
 - Expense with 0 people in split: Not allowed
 - User not in group trying to add expense: 403 Forbidden
-- Currency mismatch: Expense currency doesn't have to match group default (any currency allowed, group currencies are just shortcuts)
+- **Currency mismatch: rejected.** Expense currency must equal the group's
+  `defaultCurrency` — 422 `CURRENCY_MISMATCH`. There is no per-expense currency
+  choice.
+- **Tag**: exactly one, required, and it must name a currently active group tag —
+  422 `INVALID_TAG`
 - Very large amounts: Cap at 10,000,000 per expense
 - Empty description: Not allowed
-- Duplicate detection: If same description + amount + date exists, show warning (not blocker)
+- Duplicate detection: If same description + amount + date exists, show warning
+  (not a blocker). Day bounds here use the server's local timezone, unlike the
+  UTC-based list filters.
+- **Split totals are not checked server-side.** Nothing verifies that `paidBy` or
+  `splitBetween` amounts sum to `amount`, or that percentages sum to 100 — those
+  checks live only in the form dialog. A direct API call can create an
+  inconsistent expense.
+- **Any member can edit or delete any expense** in a group they belong to;
+  creator/admin is not checked.

@@ -1,6 +1,7 @@
 # Page: Add / Edit Expense
 
-**Route**: Modal overlay on `/groups/[id]` (desktop) or `/groups/[id]/expenses/new` (mobile)
+**Route**: Modal overlay on `/groups/[id]` at every breakpoint — `ExpenseFormDialog`.
+There is no `/groups/[id]/expenses/new` route.
 **Auth**: Required (must be group member)
 
 ---
@@ -50,8 +51,6 @@ Form to create a new expense or edit an existing one. This is the most complex f
 │ Total: €120.00 ✓                                │
 │                                                  │
 │ ── Optional ──                                   │
-│ Tags: [dinner ✕] [birthday ✕] [+ Add]          │
-│ 📎 Attach receipt                                │
 │ Notes: [John's birthday dinner            ]     │
 │                                                  │
 │              [Cancel]       [Save Expense]       │
@@ -76,13 +75,17 @@ Form to create a new expense or edit an existing one. This is the most complex f
 
 ### Optional Fields
 
-| Field          | Type         | Default | Notes                        |
-| -------------- | ------------ | ------- | ---------------------------- |
-| category       | select       | "other" | From predefined categories   |
-| tags           | chip input   | []      | Autocomplete from group tags |
-| predefinedItem | quick select | null    | Auto-fills description+tags  |
-| receiptUrl     | file upload  | null    | Image, max 5MB               |
-| notes          | textarea     | ""      | Max 500 chars                |
+| Field          | Type         | Default | Notes                                          |
+| -------------- | ------------ | ------- | ---------------------------------------------- |
+| predefinedItem | quick select | null    | Auto-fills description, category and tag       |
+| notes          | textarea     | ""      | Max 500 chars                                  |
+
+**`tag` is required, not optional** — exactly one, chosen from the group's active
+tags. See [Required fields](#required-fields).
+
+`category` is not a form control: it is derived from the selected quick-pick item
+and defaults to `"other"`. `receiptUrl` has no control — receipt upload is not
+implemented (see [`../features/receipts.md`](../features/receipts.md)).
 
 ---
 
@@ -145,10 +148,10 @@ Top of the form — horizontal scrollable row of common expense types:
 
 Clicking one:
 
-1. Sets `description` to item name
-2. Sets `category` to item's category
-3. Sets `tags` to item's default tags
-4. User can still modify all fields
+1. Sets `description` to the item label
+2. Sets `category` to the item's category (there is no manual category control)
+3. Sets `tag` to the item's single `defaultTag`
+4. User can still modify description, tag, amount and split
 
 ---
 
@@ -194,31 +197,46 @@ const schema = z.object({
       }),
     )
     .min(1),
-  tags: z.array(z.string()),
-  notes: z.string().max(500).optional(),
+  tag: z.string().min(1, 'Tag is required').trim(),
+  predefinedItem: z.string().nullable().optional(),
+  notes: z.string().max(500).trim().optional(),
 });
 ```
+
+Beyond Zod, the service enforces that `tag` names an **active** group tag, that
+`currency` equals the group's default, and that every participant is a member —
+each a 422. It does **not** check that split amounts sum to the total; that check
+exists only in this dialog.
 
 ---
 
 ## Responsive Behavior
 
-- **Desktop**: Opens as a centered modal dialog (MUI Dialog, max-width 600px)
+- **Desktop**: Opens as a centered modal dialog (MUI Dialog)
 - **Tablet**: Same modal but wider
-- **Mobile**: Full-screen page (`/groups/[id]/expenses/new`)
+- **Mobile**: The same dialog, full-screen — not a separate route
 - Form layout: Single column on all sizes for simplicity
 
 ---
 
 ## Components Used
 
-- MUI `Dialog` (desktop modal)
+Everything lives in `ExpenseFormDialog`, built from MUI primitives — there are no
+`CurrencySelect`, `ReceiptUpload` or `PredefinedItemPicker` components.
+
+- MUI `Dialog`
 - MUI `TextField` for text inputs
 - MUI `Select` for dropdowns
-- MUI `DatePicker` for date
 - MUI `ToggleButtonGroup` for split method
 - MUI `Checkbox` for member selection
-- MUI `Chip` + `Autocomplete` for tags
-- `CurrencySelect` custom component
-- `ReceiptUpload` custom component
-- `PredefinedItemPicker` custom component
+- Quick-pick chips for predefined items — selecting one sets the description,
+  derives the category, and pre-fills the tag
+- A single tag `Select` (exactly one active group tag, required)
+
+There is no currency control: the group's currency is fixed and shown as static
+text. There is no receipt upload.
+
+Pure logic extracted for testing lives in `expense-form-helpers.ts` and
+`expense-duplicate-check.ts`. Note that split-total validation (percentages sum
+to 100, exact amounts sum to the total) currently lives **only** in this dialog
+and is not mirrored server-side.

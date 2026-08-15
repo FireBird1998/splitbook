@@ -79,9 +79,10 @@ Today
 
 Yesterday
 ● Bob added "Taxi to airport" €45.00 — 3:20 PM
-
-[Load More]
 ```
+
+`ActivityView` fetches a single page of 50 and renders it — there is no Load More
+control, despite the endpoint supporting pagination.
 
 ---
 
@@ -144,10 +145,15 @@ if (!isMember) redirect('/dashboard');
 
 ## Components Used
 
-- `Navbar` with breadcrumb
-- `AvatarStack` for member display
+- `GroupDetailView` — owns the tabs and the theme branch
+- `TripStrip` (trip theme) **or** `GroupHeader` (all other themes)
+- `MonthCycleBar` + `MonthMemberTable` (Household theme only)
 - MUI `Tabs` for tab navigation
-- `ExpenseDashboard` (Expenses tab)
-- `BalanceSummary` + `SimplifiedDebts` (Balances tab)
-- `ActivityFeed` (Activity tab)
+- `ExpenseListView` (Expenses tab)
+- `BalancesView` (Balances tab — balances *and* simplified debts in one component)
+- `ActivityView` (Activity tab)
 - MUI `Fab` for add expense button
+
+Which header renders is decided by `theme.header`, and the month bar by
+`theme.signature === 'monthCycle'` — never by switching on the raw category
+string. See [`../v4/README.md`](../v4/README.md).

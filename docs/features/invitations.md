@@ -96,12 +96,34 @@ Shown in the navbar as a badge/bell icon, or on the dashboard.
 
 ## Validation Rules
 
-- Cannot invite someone already in the group
-- Cannot invite someone who already has a pending invitation to this group
-- Invite link must be valid and not expired
-- User cannot join an archived group
-- Email must be a valid email format
-- Max pending invitations per group: 20
+Enforced:
+
+- Email must be a valid email format (Zod)
+- Invite link must resolve to a group and not be expired
+- Accept/decline requires the invitation's email to match the caller's — a
+  mismatch returns **404** (not 403), deliberately, to resist enumeration
+- Joining a group you are already in is a no-op that returns "Already a member"
+
+**Not implemented** — described in earlier drafts, no code behind them:
+
+- Blocking an invite to someone already in the group
+- Blocking a duplicate pending invitation (the
+  `{ invitedEmail, group }` index is not unique)
+- Blocking joins to an archived group
+- A cap on pending invitations per group
+
+## Known gaps
+
+- **`Invitation.token` is generated but never read.** It is a unique-indexed
+  32-hex-char secret, yet no route accepts it; accept and decline are keyed on
+  the invitation `_id` plus the email match.
+- **Invite codes are 8 hex characters (32 bits)** and any member — not only an
+  admin — can mint one. `expiresInDays` is taken from the request body with no
+  validation or cap.
+- `GET /api/join/[code]` is **public** and returns group name, category and
+  member count to anyone with a code.
+- No email is ever sent. An invitation is a database record the invitee sees on
+  their dashboard.
 
 ---
 

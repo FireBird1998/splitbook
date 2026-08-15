@@ -126,15 +126,13 @@ On the main dashboard, show aggregate balance:
 
 ### GET /api/groups/[id]/balances
 
-Returns net balance for each member + pair-wise debts.
-
-### GET /api/groups/[id]/balances/simplified
-
-Returns minimized transactions (simplified debts).
+Returns net balance for each member **and** the simplified (minimum-transfer)
+debt list, in one response. There is no separate `/simplified` endpoint.
 
 ### GET /api/user/balances
 
-Returns user's net balance per group.
+Returns the user's balances across all their groups, bucketed per currency and
+never summed across currencies.
 
 See [api.md](../api.md#balances) for full documentation.
 
