@@ -12,10 +12,10 @@ Light and dark modes are both first-class and are designed together — see [The
 
 Two distinct things are called "theme" in this codebase. Keep them apart:
 
-| | What it is | Where |
-| --- | --- | --- |
-| **Visual theme** | MUI palette, typography, radii — light and dark | `src/lib/theme/` |
-| **Group theme** | A group's shape and identity, derived from `Group.category` | `src/lib/group-themes.ts` |
+|                  | What it is                                                  | Where                     |
+| ---------------- | ----------------------------------------------------------- | ------------------------- |
+| **Visual theme** | MUI palette, typography, radii — light and dark             | `src/lib/theme/`          |
+| **Group theme**  | A group's shape and identity, derived from `Group.category` | `src/lib/group-themes.ts` |
 
 This section covers the visual theme. For group themes see
 [`v4/README.md`](v4/README.md).
@@ -34,17 +34,17 @@ This section covers the visual theme. For group themes see
 
 Colours are named by **role**, not by hue, and the role names are what components use.
 
-| Role | Meaning | Light | Dark |
-| --- | --- | --- | --- |
-| `brand` | Identity, primary actions (indigo) | `#3d4fcf` | `#7b8cff` |
-| `info` | Informational actions (sky) | `#0b8fd9` | `#4db4ef` |
-| `positive` | Settled / owed **to** you (mint) | `#1a9a6e` | `#3dca96` |
-| `negative` | Attention / **you** owe (coral) | `#e04f3d` | `#f07162` |
-| `warning` | Caution | `#c47a0a` | `#e0a73a` |
-| `bg` | Page background | `#f4f5f9` | `#0e1016` |
-| `surface` | Cards and panels | `#ffffff` | `#181b26` |
-| `text` | Primary text | `#151828` | `#f0f2f8` |
-| `textSecondary` | Secondary text | `#4a5168` | `#b4bace` |
+| Role            | Meaning                            | Light     | Dark      |
+| --------------- | ---------------------------------- | --------- | --------- |
+| `brand`         | Identity, primary actions (indigo) | `#3d4fcf` | `#7b8cff` |
+| `info`          | Informational actions (sky)        | `#0b8fd9` | `#4db4ef` |
+| `positive`      | Settled / owed **to** you (mint)   | `#1a9a6e` | `#3dca96` |
+| `negative`      | Attention / **you** owe (coral)    | `#e04f3d` | `#f07162` |
+| `warning`       | Caution                            | `#c47a0a` | `#e0a73a` |
+| `bg`            | Page background                    | `#f4f5f9` | `#0e1016` |
+| `surface`       | Cards and panels                   | `#ffffff` | `#181b26` |
+| `text`          | Primary text                       | `#151828` | `#f0f2f8` |
+| `textSecondary` | Secondary text                     | `#4a5168` | `#b4bace` |
 
 Plus a `strip` group — the boarding-pass gradient, perforation and stub colours
 used only by `TripStrip`.
@@ -55,13 +55,13 @@ Standard MUI keys work as usual (`primary.main`, `text.primary`,
 `background.default`, `background.paper`, `divider`, `error.main`,
 `success.main`). The augmented app-specific keys are:
 
-| Token | Usage |
-| --- | --- |
-| `"surface.muted"` / `"surface.elevated"` | Recessed and raised surfaces |
-| `"border.strong"` | Emphasised borders |
+| Token                                                             | Usage                                 |
+| ----------------------------------------------------------------- | ------------------------------------- |
+| `"surface.muted"` / `"surface.elevated"`                          | Recessed and raised surfaces          |
+| `"border.strong"`                                                 | Emphasised borders                    |
 | `"tint.brand"` / `.info` / `.positive` / `.negative` / `.warning` | Low-emphasis fills behind status text |
-| `"strip.bg"` / `.text` / `.muted` / `.perforation` / `.stub` | Trip strip only |
-| `"focus.main"` / `"focus.ring"` | Focus indicator and ring |
+| `"strip.bg"` / `.text` / `.muted` / `.perforation` / `.stub`      | Trip strip only                       |
+| `"focus.main"` / `"focus.ring"`                                   | Focus indicator and ring              |
 
 ### Typography
 
@@ -171,22 +171,22 @@ xl: 1536px    — Large desktop
 
 ### Groups (`src/components/groups/`)
 
-| Component                  | Description                                            |
-| -------------------------- | ------------------------------------------------------ |
-| `GroupCard`                | Card with group name, theme, members, balance          |
-| `GroupsListView`           | Grid of GroupCards + create button                     |
-| `GroupDetailView`          | Tabs (expenses, balances, activity) + FAB              |
-| `GroupHeader`              | Neutral header for non-trip themes                     |
-| `GroupSettingsView`        | Admin page: info, currency, members, tags, recurring   |
-| `MonthCycleBar`            | Household month switcher (`?month=YYYY-MM`)            |
-| `MonthMemberTable`         | Per-member fronted / share / net for the active month  |
-| `RecurringExpensesSection` | Household recurring templates: list, add, edit, pause  |
-| `InviteDialog`             | Email invite + copy invite link                        |
+| Component                  | Description                                           |
+| -------------------------- | ----------------------------------------------------- |
+| `GroupCard`                | Card with group name, theme, members, balance         |
+| `GroupsListView`           | Grid of GroupCards + create button                    |
+| `GroupDetailView`          | Tabs (expenses, balances, activity) + FAB             |
+| `GroupHeader`              | Neutral header for non-trip themes                    |
+| `GroupSettingsView`        | Admin page: info, currency, members, tags, recurring  |
+| `MonthCycleBar`            | Household month switcher (`?month=YYYY-MM`)           |
+| `MonthMemberTable`         | Per-member fronted / share / net for the active month |
+| `RecurringExpensesSection` | Household recurring templates: list, add, edit, pause |
+| `InviteDialog`             | Email invite + copy invite link                       |
 
 ### Trip (`src/components/trip/`)
 
-| Component   | Description                                                     |
-| ----------- | --------------------------------------------------------------- |
+| Component   | Description                                                       |
+| ----------- | ----------------------------------------------------------------- |
 | `TripStrip` | Boarding-pass header with derived airport codes — trip theme only |
 
 Gated on `theme.header === 'strip'`. Never render it for other themes: the
@@ -220,24 +220,24 @@ unit-tested logic extracted from the dialog.
 
 ### Activity (`src/components/activity/`)
 
-| Component      | Description                                           |
-| -------------- | ----------------------------------------------------- |
+| Component      | Description                                                   |
+| -------------- | ------------------------------------------------------------- |
 | `ActivityView` | Activity feed timeline — fetches one page of 50, no Load More |
 
 ### Auth & demo
 
-| Component           | Description                                     |
-| ------------------- | ----------------------------------------------- |
-| `LoginForm`         | Google sign-in button                           |
-| `DemoLoginClient`   | Demo persona sign-in                            |
-| `DemoPersonaPicker` | Persona cards (Alex, Sam, Priya)                |
-| `DemoModeBadge`     | Navbar badge shown while demo auth is active    |
+| Component           | Description                                  |
+| ------------------- | -------------------------------------------- |
+| `LoginForm`         | Google sign-in button                        |
+| `DemoLoginClient`   | Demo persona sign-in                         |
+| `DemoPersonaPicker` | Persona cards (Alex, Sam, Priya)             |
+| `DemoModeBadge`     | Navbar badge shown while demo auth is active |
 
 ### Common
 
-| Component   | Description                                                    |
-| ----------- | -------------------------------------------------------------- |
-| `MoneyText` | Money in IBM Plex Mono, coloured by sign via semantic tokens   |
+| Component   | Description                                                  |
+| ----------- | ------------------------------------------------------------ |
+| `MoneyText` | Money in IBM Plex Mono, coloured by sign via semantic tokens |
 
 ---
 

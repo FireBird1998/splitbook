@@ -7,7 +7,7 @@
 > `recurring-expense.service.ts`). `alternateCurrencies` is persisted and
 > API-accepted but no read or write path consults it.
 >
-> Cross-group aggregation *is* multi-currency: the dashboard buckets balances per
+> Cross-group aggregation _is_ multi-currency: the dashboard buckets balances per
 > currency and never sums across them. That part is live — see
 > [Currency in balances](#currency-in-balances).
 
@@ -165,7 +165,7 @@ per currency before bucketing.
 `GET /api/groups/[id]/balances` returns a single number per member, labelled with
 the group's default currency, plus a `hasMixedCurrencies` flag.
 
-⚠️ If a group somehow *does* contain mixed currencies — only reachable through
+⚠️ If a group somehow _does_ contain mixed currencies — only reachable through
 legacy data, since the write path forbids it — that endpoint **sums the amounts
 anyway** and merely raises the flag. The number would be meaningless. The
 dashboard endpoint does not have this problem.

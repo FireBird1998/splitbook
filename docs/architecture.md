@@ -231,8 +231,8 @@ Client Component
 ```
 
 Guards are layered, and the layers are not equivalent: `getAuthUser` establishes
-*who*, `isMember` establishes *access to this group*, and only some services then
-check *role*. Expense mutation stops at membership.
+_who_, `isMember` establishes _access to this group_, and only some services then
+check _role_. Expense mutation stops at membership.
 
 > **Two GET routes write.** `GET /api/groups/[id]` and
 > `GET /api/groups/[id]/expenses` call `recurringExpenseService.generateDueExpenses`

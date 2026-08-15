@@ -73,6 +73,24 @@ through the actual service layer (no mocked models):
    `splitwise-test-` or resembles a demo/production database — the demo
    database (`splitwise-demo`) is never touched by integration tests.
 
+### The `server-only` tripwire and non-Next runtimes
+
+`src/lib/db.ts` and `src/lib/mongodb-client.ts` open with `import 'server-only'`,
+which throws unless the bundler resolves it under the `react-server` export
+condition. Next.js provides that; plain Node does not. Anything that loads those
+modules outside Next therefore needs the package aliased to the no-op stub in
+[`src/lib/test-utils/stubs/server-only.ts`](../src/lib/test-utils/stubs/server-only.ts):
+
+- **Vitest** — via `resolve.alias` in [`vitest.config.ts`](../vitest.config.ts).
+- **`tsx` CLI scripts** (`demo:seed`, `demo:reset`) — via a `paths` mapping in
+  [`scripts/tsconfig.json`](../scripts/tsconfig.json), which the `package.json`
+  scripts select with `tsx --tsconfig`.
+
+Never fix a "cannot be imported from a Client Component" error by removing the
+`import 'server-only'` line — it is a deliberate control that makes a client-side
+import of a DB module fail the build instead of leaking credentials. Alias it for
+the new runtime instead.
+
 ## Browser journeys (Playwright)
 
 Configured in [`playwright.config.ts`](../playwright.config.ts); specs and

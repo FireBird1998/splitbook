@@ -2,8 +2,8 @@
 
 All models use MongoDB via Mongoose. Timestamps (`createdAt`, `updatedAt`) are auto-managed.
 
-> **Enforcement note.** This document distinguishes what the *schema* enforces
-> from what a *service* enforces from what nothing enforces. Constraints marked
+> **Enforcement note.** This document distinguishes what the _schema_ enforces
+> from what a _service_ enforces from what nothing enforces. Constraints marked
 > **(service)** live in `src/lib/services/` and apply only to writes that go
 > through the API; constraints marked **(unenforced)** are conventions that no
 > code checks. See §Invariants at the end.
@@ -186,7 +186,7 @@ Managed by Auth.js + extended with app-specific fields.
 **Notes**:
 
 - **`tag` is a single required string, not an array.** It stores the tag's
-  *name*. Renaming a group tag rewrites only the `Group.tags` subdocument, so
+  _name_. Renaming a group tag rewrites only the `Group.tags` subdocument, so
   historical expenses keep pointing at the previous name.
 - **`receiptUrl` cannot be set through the API.** It is absent from both
   `createExpenseSchema` and `updateExpenseSchema`, and Zod strips unrecognized
@@ -321,7 +321,7 @@ boundaries — see [`v4/README.md`](v4/README.md) §3.
   group.
 - Logging is on the critical path — every mutation `await`s the write, and there
   are no transactions anywhere in the codebase, so a logging failure fails the
-  request *after* the primary write has committed.
+  request _after_ the primary write has committed.
 
 ---
 
@@ -365,21 +365,21 @@ edits are picked up across hot reloads — **note the accompanying comment says
 
 ## Invariants
 
-| Invariant | Enforced by |
-| --- | --- |
-| Expense/settlement currency equals `group.defaultCurrency` | service (422) |
-| All participants are group members | service (422) |
-| `tag` names an active group tag | service (422) |
-| Only payer or recipient records a settlement | service (422) |
-| One expense per (template, period) | unique partial index |
-| One group per invite code | unique partial index |
-| Recurring writes are admin-only, Household-only | service (403 / 422) |
-| Expense edit/delete restricted to creator or admin | **nothing** — any member may |
-| Expense scoped to the group in the URL | **nothing** — resolved by `_id` alone |
-| `sum(paidBy.amount) == amount` | **nothing** — client dialogs only |
-| `sum(splitBetween.amount) == amount` | **nothing** — client dialogs only |
-| Percentages sum to 100 | **nothing** — client dialogs only |
-| Tag names unique within a group | read-then-write check, no index (racy) |
+| Invariant                                                  | Enforced by                            |
+| ---------------------------------------------------------- | -------------------------------------- |
+| Expense/settlement currency equals `group.defaultCurrency` | service (422)                          |
+| All participants are group members                         | service (422)                          |
+| `tag` names an active group tag                            | service (422)                          |
+| Only payer or recipient records a settlement               | service (422)                          |
+| One expense per (template, period)                         | unique partial index                   |
+| One group per invite code                                  | unique partial index                   |
+| Recurring writes are admin-only, Household-only            | service (403 / 422)                    |
+| Expense edit/delete restricted to creator or admin         | **nothing** — any member may           |
+| Expense scoped to the group in the URL                     | **nothing** — resolved by `_id` alone  |
+| `sum(paidBy.amount) == amount`                             | **nothing** — client dialogs only      |
+| `sum(splitBetween.amount) == amount`                       | **nothing** — client dialogs only      |
+| Percentages sum to 100                                     | **nothing** — client dialogs only      |
+| Tag names unique within a group                            | read-then-write check, no index (racy) |
 
 ---
 

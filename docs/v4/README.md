@@ -13,14 +13,14 @@ V4 turns `category` into a **theme** chosen at creation, and adds the long-runni
 
 ## Changes
 
-| #   | Feature                                              | Doc                                    | Phase | Status  |
-| --- | ---------------------------------------------------- | -------------------------------------- | ----- | ------- |
-| 1   | Theme registry derived from `Group.category`         | this doc, §1                           | 1     | Done    |
-| 2   | Category-aware chrome (trip strip vs neutral header) | this doc, §2                           | 1     | Done    |
-| 3   | Theme picker at group creation                       | this doc, §4                           | 1     | Done    |
-| 4   | Terminology pass ("trips" → "groups" where generic)  | this doc, §4                           | 1     | Done    |
-| 5   | Household month switcher + monthly summary           | [monthly-views.md](./monthly-views.md) | 2     | Done    |
-| 6   | Recurring expense templates for Household            | this doc, §4                           | 3     | Done    |
+| #   | Feature                                              | Doc                                    | Phase | Status |
+| --- | ---------------------------------------------------- | -------------------------------------- | ----- | ------ |
+| 1   | Theme registry derived from `Group.category`         | this doc, §1                           | 1     | Done   |
+| 2   | Category-aware chrome (trip strip vs neutral header) | this doc, §2                           | 1     | Done   |
+| 3   | Theme picker at group creation                       | this doc, §4                           | 1     | Done   |
+| 4   | Terminology pass ("trips" → "groups" where generic)  | this doc, §4                           | 1     | Done   |
+| 5   | Household month switcher + monthly summary           | [monthly-views.md](./monthly-views.md) | 2     | Done   |
+| 6   | Recurring expense templates for Household            | this doc, §4                           | 3     | Done   |
 
 ## Key Principles
 

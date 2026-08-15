@@ -44,10 +44,10 @@ Credentials provider — and `AUTH_MODE` selects which the UI offers. See
 
 ## User
 
-| Method | Path                 | Description                    |
-| ------ | -------------------- | ------------------------------ |
-| GET    | `/api/user/profile`  | Get current user               |
-| PATCH  | `/api/user/profile`  | Update profile                 |
+| Method | Path                 | Description                      |
+| ------ | -------------------- | -------------------------------- |
+| GET    | `/api/user/profile`  | Get current user                 |
+| PATCH  | `/api/user/profile`  | Update profile                   |
 | GET    | `/api/user/balances` | Cross-group balances by currency |
 
 ### GET /api/user/profile
@@ -203,10 +203,10 @@ create expenses (see [Recurring expenses](#recurring-expenses)).
 
 ## Members
 
-| Method | Path                                | Description         |
-| ------ | ----------------------------------- | ------------------- |
-| PATCH  | `/api/groups/[id]/members/[userId]` | Change member role  |
-| DELETE | `/api/groups/[id]/members/[userId]` | Remove from group   |
+| Method | Path                                | Description        |
+| ------ | ----------------------------------- | ------------------ |
+| PATCH  | `/api/groups/[id]/members/[userId]` | Change member role |
+| DELETE | `/api/groups/[id]/members/[userId]` | Remove from group  |
 
 Both are admin-only. **Body** for PATCH is `{ "role": "admin" | "member" }`.
 
@@ -220,11 +220,11 @@ endpoint.
 
 ## Tags
 
-| Method | Path                           | Description                 |
-| ------ | ------------------------------ | --------------------------- |
-| POST   | `/api/groups/[id]/tags`        | Create tag                  |
-| PATCH  | `/api/groups/[id]/tags/[tagId]`| Rename or archive/unarchive |
-| DELETE | `/api/groups/[id]/tags/[tagId]`| Delete (only if unused)     |
+| Method | Path                            | Description                 |
+| ------ | ------------------------------- | --------------------------- |
+| POST   | `/api/groups/[id]/tags`         | Create tag                  |
+| PATCH  | `/api/groups/[id]/tags/[tagId]` | Rename or archive/unarchive |
+| DELETE | `/api/groups/[id]/tags/[tagId]` | Delete (only if unused)     |
 
 All admin-only. A tag is a group-scoped label; every expense carries **exactly
 one, required**. See [`v3/tag-management.md`](v3/tag-management.md).
@@ -343,14 +343,14 @@ No body needed. Adds the current user to the group. Returns `201` on join, or
 
 ## Expenses
 
-| Method | Path                                       | Description             |
-| ------ | ------------------------------------------ | ----------------------- |
-| POST   | `/api/groups/[id]/expenses`                | Add expense             |
-| GET    | `/api/groups/[id]/expenses`                | List (with filters)     |
-| GET    | `/api/groups/[id]/expenses/check-duplicate`| Pre-submit duplicate check |
-| GET    | `/api/groups/[id]/expenses/[expenseId]`    | Get single expense      |
-| PATCH  | `/api/groups/[id]/expenses/[expenseId]`    | Update expense          |
-| DELETE | `/api/groups/[id]/expenses/[expenseId]`    | Soft delete             |
+| Method | Path                                        | Description                |
+| ------ | ------------------------------------------- | -------------------------- |
+| POST   | `/api/groups/[id]/expenses`                 | Add expense                |
+| GET    | `/api/groups/[id]/expenses`                 | List (with filters)        |
+| GET    | `/api/groups/[id]/expenses/check-duplicate` | Pre-submit duplicate check |
+| GET    | `/api/groups/[id]/expenses/[expenseId]`     | Get single expense         |
+| PATCH  | `/api/groups/[id]/expenses/[expenseId]`     | Update expense             |
+| DELETE | `/api/groups/[id]/expenses/[expenseId]`     | Soft delete                |
 
 **Authorization is group-membership only.** No route or service checks who
 created an expense, so any member can edit or delete any expense in the group.
@@ -485,12 +485,12 @@ soft-deleted expense. Each edit appends a diff to the expense's `editHistory`.
 Household-themed groups only (`category: "home"`). Templates materialize
 expenses lazily when the group or its expense list is read.
 
-| Method | Path                                        | Description        |
-| ------ | ------------------------------------------- | ------------------ |
-| POST   | `/api/groups/[id]/recurring`                | Create template    |
-| GET    | `/api/groups/[id]/recurring`                | List templates     |
-| PATCH  | `/api/groups/[id]/recurring/[recurringId]`  | Edit or pause      |
-| DELETE | `/api/groups/[id]/recurring/[recurringId]`  | Delete template    |
+| Method | Path                                       | Description     |
+| ------ | ------------------------------------------ | --------------- |
+| POST   | `/api/groups/[id]/recurring`               | Create template |
+| GET    | `/api/groups/[id]/recurring`               | List templates  |
+| PATCH  | `/api/groups/[id]/recurring/[recurringId]` | Edit or pause   |
+| DELETE | `/api/groups/[id]/recurring/[recurringId]` | Delete template |
 
 **Authorization:** GET requires membership; POST, PATCH and DELETE require
 **admin**. Creating one in a non-Household group returns 422 `NOT_HOUSEHOLD`.
@@ -576,8 +576,8 @@ back-dated or attributed to a past month.
 
 ## Balances
 
-| Method | Path                        | Description                            |
-| ------ | --------------------------- | -------------------------------------- |
+| Method | Path                        | Description                             |
+| ------ | --------------------------- | --------------------------------------- |
 | GET    | `/api/groups/[id]/balances` | Group balances **and** simplified debts |
 
 There is no `/balances/simplified` route — the single endpoint returns both the

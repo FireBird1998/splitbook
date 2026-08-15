@@ -2,7 +2,6 @@ import {
   getAuthUser,
   unauthorized,
   notFound,
-  error,
   success,
   serverError,
 } from '@/lib/utils/api-response';

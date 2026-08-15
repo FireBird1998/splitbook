@@ -193,18 +193,18 @@ files), so it runs on every page **and** every `/api/*` route.
 
 **Public paths**, per the `authorized` callback:
 
-| Path | Why |
-| --- | --- |
-| `/api/auth/*` | Auth.js itself |
-| `/` | Landing / persona picker |
-| `/login` | Sign-in |
-| `/join/*` | Invite landing page |
+| Path                   | Why                                                                                                                    |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `/api/auth/*`          | Auth.js itself                                                                                                         |
+| `/`                    | Landing / persona picker                                                                                               |
+| `/login`               | Sign-in                                                                                                                |
+| `/join/*`              | Invite landing page                                                                                                    |
 | `GET /api/join/[code]` | Invite preview, so the join page can render its sign-in CTA before the visitor has an account. `POST` stays protected. |
 
 > Two things worth knowing:
 >
 > 1. `/` , `/login` and `/join` are matched with `startsWith`, so any path
->    *beginning* with those strings is public — not only those segments.
+>    _beginning_ with those strings is public — not only those segments.
 > 2. **Middleware does not return 401.** Auth.js converts an `authorized` return
 >    of `false` into a **302 redirect to `/login`**, including for `/api/*`. An
 >    unauthenticated API client receives an HTML sign-in page, not JSON. The 401s
