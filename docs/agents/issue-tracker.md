@@ -1,6 +1,6 @@
 # Issue tracker: GitHub
 
-Issues and PRDs for this repo live as GitHub issues on `ankit-thesys/splitwise-beta`. Use the `gh` CLI for all operations.
+Issues and PRDs for this repo live as GitHub issues on `FireBird1998/splitbook`. Use the `gh` CLI for all operations.
 
 ## Conventions
 

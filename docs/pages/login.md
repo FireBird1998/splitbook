@@ -26,7 +26,7 @@ change and a restart.
 ```
 ┌──────────────────────────────────────────┐
 │                                          │
-│              💰 SplitWise                │
+│              💰 Splitbook                │
 │                                          │
 │         Welcome back!                    │
 │         Sign in to continue.             │
@@ -65,7 +65,7 @@ export default function LoginPage() {
   return (
     <Box sx={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", bgcolor: "background.default" }}>
       <Box sx={{ textAlign: "center" }}>
-        <Typography variant="h4">SplitWise</Typography>
+        <Typography variant="h4">Splitbook</Typography>
         <Typography sx={{ mt: 1, color: "text.secondary" }}>Welcome back! Sign in to continue.</Typography>
         <Button variant="contained" sx={{ mt: 3 }} onClick={() => signIn("google", { callbackUrl: "/dashboard" })}>
           Sign in with Google

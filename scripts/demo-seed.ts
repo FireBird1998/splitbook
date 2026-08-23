@@ -53,7 +53,7 @@ MongoDB is not reachable. Start it locally, then re-run:
   docker start split-mongo
 
 Point MONGODB_URI at a dedicated demo database, e.g.:
-  mongodb://localhost:27017/splitwise-demo?directConnection=true
+  mongodb://localhost:27017/splitbook-demo?directConnection=true
 `);
   }
   console.error(err);

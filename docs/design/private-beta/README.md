@@ -1,4 +1,4 @@
-# SplitWise Private Beta — Visual Prototype (Phase 1)
+# Splitbook Private Beta — Visual Prototype (Phase 1)
 
 Standalone HTML/CSS mockups for design approval before the Phase 5 MUI theme rebuild.
 

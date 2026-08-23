@@ -1,6 +1,6 @@
 /**
  * Integration tests for recurring expense templates (v4 Phase 3) against a
- * real, isolated MongoDB database (`splitwise-test-recurring`).
+ * real, isolated MongoDB database (`splitbook-test-recurring`).
  *
  * Covers the spec's core guarantees: idempotent generation under concurrency
  * (unique (recurringExpense, period) index), lazy-on-read catch-up, pause /

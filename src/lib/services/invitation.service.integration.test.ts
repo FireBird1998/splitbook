@@ -1,6 +1,6 @@
 /**
  * Integration tests for InvitationService against a real, isolated MongoDB
- * database (`splitwise-test-invitation-service`). Covers invitation
+ * database (`splitbook-test-invitation-service`). Covers invitation
  * ownership boundaries: only the invited email may accept or decline.
  */
 
@@ -16,8 +16,8 @@ import { createTestUsers, TEST_USER_IDS } from '@/lib/test-utils/fixtures';
 const db = integrationTestDb('invitation-service');
 const { alice, bob, carol } = TEST_USER_IDS;
 
-const BOB_EMAIL = 'bob.test@splitwise-test.local';
-const CAROL_EMAIL = 'carol.test@splitwise-test.local';
+const BOB_EMAIL = 'bob.test@splitbook-test.local';
+const CAROL_EMAIL = 'carol.test@splitbook-test.local';
 
 beforeAll(db.connect);
 beforeEach(async () => {
@@ -40,7 +40,7 @@ describe('InvitationService integration', () => {
 
     const invitation = await invitationService.create(
       groupId,
-      'Bob.Test@Splitwise-Test.LOCAL',
+      'Bob.Test@Splitbook-Test.LOCAL',
       alice,
     );
 
@@ -70,7 +70,7 @@ describe('InvitationService integration', () => {
     expect(forBob[0].invitedEmail).toBe(BOB_EMAIL);
 
     // Case-insensitive lookup
-    const forBobUpper = await invitationService.getPendingByEmail('BOB.TEST@SPLITWISE-TEST.LOCAL');
+    const forBobUpper = await invitationService.getPendingByEmail('BOB.TEST@SPLITBOOK-TEST.LOCAL');
     expect(forBobUpper).toHaveLength(1);
 
     await expect(invitationService.getPendingByEmail('nobody@example.com')).resolves.toHaveLength(
@@ -85,7 +85,7 @@ describe('InvitationService integration', () => {
     const accepted = await invitationService.accept(
       invitation._id.toString(),
       bob,
-      'Bob.Test@Splitwise-Test.Local', // case variants still match
+      'Bob.Test@Splitbook-Test.Local', // case variants still match
     );
 
     expect(accepted?.status).toBe('accepted');

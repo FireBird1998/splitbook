@@ -1,6 +1,6 @@
 /**
  * Integration tests for balance integrity against a real, isolated MongoDB
- * database (`splitwise-test-balance-integrity`). Verifies that balances
+ * database (`splitbook-test-balance-integrity`). Verifies that balances
  * derived from stored expenses/settlements stay zero-sum, respect soft
  * deletes, and never mix currencies into one number.
  */

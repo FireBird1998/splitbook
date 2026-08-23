@@ -1,6 +1,6 @@
 /**
  * Integration tests for the demo seed/reset lifecycle against a real,
- * isolated MongoDB database (`splitwise-test-seed-lifecycle`). Proves the seed
+ * isolated MongoDB database (`splitbook-test-seed-lifecycle`). Proves the seed
  * is idempotent end-to-end and that seeded persona balances are exactly
  * the numbers the private-beta UI promises.
  */

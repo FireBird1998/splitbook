@@ -17,6 +17,8 @@ import {
 test('persona entry respects the project theme and is accessible', async ({ page }, testInfo) => {
   await page.goto('/');
 
+  await expect(page.getByText('Splitbook', { exact: true })).toBeVisible();
+
   // Persona cards are keyboard-focusable buttons with accessible names.
   const alexCard = page.getByRole('button', { name: /Enter as Alex Rivera/ });
   await expect(alexCard).toBeVisible();
@@ -32,6 +34,7 @@ test('dashboard respects the project theme and is accessible', async ({ page }, 
   await enterAsPersona(page, 'alex');
   await expectThemeApplied(page, testInfo);
 
+  await expect(page.getByText('Splitbook', { exact: true })).toBeVisible();
   await expect(page.getByText('Current balance')).toBeVisible();
   await expect(page.getByText('Next best action')).toBeVisible();
 

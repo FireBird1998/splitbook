@@ -20,7 +20,7 @@ export function useThemeMode() {
   return useContext(ThemeContext);
 }
 
-const STORAGE_KEY = 'splitwise-theme-mode';
+const STORAGE_KEY = 'splitbook-theme-mode';
 
 function getInitialMode(): ThemeMode {
   if (typeof window === 'undefined') return 'light';

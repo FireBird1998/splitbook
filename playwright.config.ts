@@ -4,7 +4,7 @@ import { defineConfig, devices } from '@playwright/test';
  * Playwright E2E suite for the private beta.
  *
  * - Runs against the app on port 3100 with AUTH_MODE=demo and the
- *   `splitwise-demo` database (reset + reseeded in global setup).
+ *   `splitbook-demo` database (reset + reseeded in global setup).
  * - Four projects cover desktop/mobile × light/dark. The app derives its
  *   initial theme from `prefers-color-scheme`, so `colorScheme` emulation
  *   drives the theme per project.
@@ -15,7 +15,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 3100;
 const baseURL = `http://localhost:${PORT}`;
-const DEMO_MONGODB_URI = 'mongodb://127.0.0.1:27017/splitwise-demo?directConnection=true';
+const DEMO_MONGODB_URI = 'mongodb://127.0.0.1:27017/splitbook-demo?directConnection=true';
 
 export default defineConfig({
   testDir: './playwright',

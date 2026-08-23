@@ -80,7 +80,7 @@ export default function DemoPersonaPicker({
                 color: 'text.primary',
               }}
             >
-              SplitWise
+              Splitbook
             </Typography>
           </Stack>
           <DemoModeBadge />

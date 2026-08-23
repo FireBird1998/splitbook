@@ -108,7 +108,7 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
                   color: 'text.primary',
                 }}
               >
-                SplitWise
+                Splitbook
               </Typography>
             </Box>
           </Stack>
@@ -211,7 +211,7 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
                 color: 'text.primary',
               }}
             >
-              SplitWise
+              Splitbook
             </Typography>
           </Stack>
           <List>

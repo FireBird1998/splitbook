@@ -1,6 +1,6 @@
-# SplitWise
+# Splitbook
 
-SplitWise is an expense-splitting app for shared groups — track who paid, split costs fairly, and settle up when balances are due.
+Splitbook is an expense-splitting app for shared groups — track who paid, split costs fairly, and settle up when balances are due.
 
 ## Tech stack
 
@@ -17,8 +17,8 @@ SplitWise is an expense-splitting app for shared groups — track who paid, spli
 1. Clone the repository and install dependencies:
 
    ```bash
-   git clone <repo-url>
-   cd split
+   git clone https://github.com/FireBird1998/splitbook.git
+   cd splitbook
    pnpm install
    ```
 
@@ -30,10 +30,11 @@ SplitWise is an expense-splitting app for shared groups — track who paid, spli
 
    | Variable              | Description                                                                                       |
    | --------------------- | ------------------------------------------------------------------------------------------------- |
-   | `MONGODB_URI`         | MongoDB connection string (use a dedicated DB for demo, e.g. `splitwise-demo`)                    |
+   | `MONGODB_URI`         | MongoDB connection string (use a dedicated DB for demo, e.g. `splitbook-demo`)                    |
    | `AUTH_SECRET`         | Random secret for Auth.js session signing ([generate one](https://generate-secret.vercel.app/32)) |
    | `AUTH_GOOGLE_ID`      | Google OAuth client ID (required when `AUTH_MODE=google`)                                         |
    | `AUTH_GOOGLE_SECRET`  | Google OAuth client secret (required when `AUTH_MODE=google`)                                     |
+   | `AUTH_ALLOWED_EMAILS` | Comma-separated Google emails invited to the private beta; missing/empty fails closed             |
    | `NEXT_PUBLIC_APP_URL` | App URL (e.g. `http://localhost:3000`)                                                            |
    | `AUTH_MODE`           | `google` (default) or `demo` for private-beta personas                                            |
    | `ALLOW_DEMO_AUTH`     | Must be `true` to allow demo auth when `NODE_ENV=production`                                      |
@@ -73,7 +74,7 @@ Demo mode uses real Auth.js JWT sessions with three fixed seeded personas (Alex,
 1. Point `MONGODB_URI` at a **dedicated demo database**, for example:
 
    ```bash
-   MONGODB_URI=mongodb://localhost:27017/splitwise-demo?directConnection=true
+   MONGODB_URI=mongodb://localhost:27017/splitbook-demo?directConnection=true
    AUTH_MODE=demo
    ```
 
@@ -101,7 +102,12 @@ Google sign-in is the default whenever demo mode is not explicitly enabled:
 
 1. Set `AUTH_MODE=google` (or remove `AUTH_MODE`)
 2. Ensure `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` are set
-3. Restart the app — `/` shows the marketing landing and `/login` the Google button
+3. Set `AUTH_ALLOWED_EMAILS` to the invited Google addresses
+4. Restart the app — `/` shows the marketing landing and `/login` the Google button
+
+Google email matching is trimmed and case-insensitive. An address not on the
+allowlist is sent back to `/login` with a clear invite-only message. A missing
+or empty allowlist denies every Google sign-in.
 
 The Google Cloud OAuth client needs the consent screen configured and
 `<origin>/api/auth/callback/google` whitelisted as an authorized redirect URI
@@ -131,7 +137,7 @@ setup steps and a non-interactive smoke test (`pnpm test:e2e:google`) are in
 
 ## Testing
 
-SplitWise has three layers of tests; all of them run in CI.
+Splitbook has three layers of tests; all of them run in CI.
 
 ### Unit tests (no database)
 
@@ -151,10 +157,10 @@ settlement authorization, invitation ownership, balance integrity, and demo
 seed idempotency.
 
 - Each test file gets its **own database** on the shared MongoDB instance,
-  named `splitwise-test-<file>` (dropped on teardown), so files can run in
+  named `splitbook-test-<file>` (dropped on teardown), so files can run in
   parallel without clobbering each other.
 - The helper refuses to run against anything resembling the demo/production
-  databases — `splitwise-demo` is never touched.
+  databases — `splitbook-demo` is never touched.
 - Requires MongoDB running locally (the `split-mongo` container works).
   Override the base connection with `TEST_MONGODB_URI` (any database segment
   is replaced with the per-file test name).
@@ -170,7 +176,7 @@ create a trip, add/edit an expense, switch persona, record a settlement, and
 verify balances update — plus theme and accessibility checks.
 
 - Runs the app on **port 3100** with `AUTH_MODE=demo`; global setup resets and
-  reseeds the `splitwise-demo` database before the run.
+  reseeds the `splitbook-demo` database before the run.
 - Four projects cover **desktop (1280×800) and mobile (390×844)** in **light
   and dark** themes; axe-core checks for critical accessibility violations.
 - Review screenshots are written to `playwright/artifacts/<project>/`
@@ -182,11 +188,10 @@ pnpm test:e2e
 ```
 
 A separate google-mode smoke suite (`pnpm test:e2e:google`) runs the app with
-`AUTH_MODE=google` on port 3101 and verifies the real OAuth entry points —
-marketing landing vs. persona picker, the `/login` Google button, and the
-redirect to `accounts.google.com` with the configured `client_id` and
-`/api/auth/callback/google` redirect URI. The Google endpoint is intercepted,
-so no real login happens and no secrets are needed.
+`AUTH_MODE=google` on port 3101 and verifies the OAuth entry points, configured
+client/callback, approved login, and invite-only denial. A local OIDC stand-in
+drives the complete Auth.js callback, so no live Google login or secrets are
+needed.
 
 ## Notes
 

@@ -1,5 +1,5 @@
 /**
- * SplitWise private-beta semantic design tokens.
+ * Splitbook private-beta semantic design tokens.
  * Source of truth: docs/design/private-beta/css/tokens.css
  * Light and dark are designed together — every semantic key exists in both.
  */

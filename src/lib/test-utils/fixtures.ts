@@ -29,7 +29,7 @@ export async function createTestUsers(...keys: TestUserKey[]): Promise<void> {
     keys.map((key) => ({
       _id: new mongoose.Types.ObjectId(TEST_USER_IDS[key]),
       name: TEST_USER_NAMES[key],
-      email: `${key}.test@splitwise-test.local`,
+      email: `${key}.test@splitbook-test.local`,
       preferredCurrency: 'INR',
     })),
   );

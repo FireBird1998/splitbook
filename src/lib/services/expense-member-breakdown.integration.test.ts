@@ -1,7 +1,7 @@
 /**
  * Integration tests for the opt-in per-member expense summary breakdown
  * (`includeMemberBreakdown`) in `expenseService.getGroupExpenses`, against a
- * real, isolated MongoDB database (`splitwise-test-member-breakdown`).
+ * real, isolated MongoDB database (`splitbook-test-member-breakdown`).
  *
  * The breakdown powers the Household month view's member table: for the
  * filtered window, each member's fronted (`paid`), `share`, and `net` —

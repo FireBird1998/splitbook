@@ -373,7 +373,7 @@ NEXT_PUBLIC_APP_URL=           # Public app URL (for invite links) — no fallba
 
 # Testing (optional)
 TEST_MONGODB_URI=              # Base URI for integration tests; each file derives
-                               # its own splitwise-test-<file> database
+                               # its own splitbook-test-<file> database
 ```
 
 `.env.example` is the authoritative list. There is no file-upload integration —

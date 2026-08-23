@@ -17,7 +17,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'SplitWise - Split Expenses with Friends',
+  title: 'Splitbook - Shared Expenses, Settled Fairly',
   description:
     'Track group expenses, settle debts with minimal transactions, and never argue about money again.',
 };
@@ -32,7 +32,7 @@ export default function RootLayout({
       <head>
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var m=localStorage.getItem('splitwise-theme-mode');if(!m)m=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.style.colorScheme=m;document.documentElement.setAttribute('data-theme',m)}catch(e){}})()`,
+            __html: `(function(){try{var m=localStorage.getItem('splitbook-theme-mode');if(!m)m=window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.style.colorScheme=m;document.documentElement.setAttribute('data-theme',m)}catch(e){}})()`,
           }}
         />
       </head>

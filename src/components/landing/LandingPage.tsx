@@ -79,7 +79,7 @@ export default function LandingPage() {
                 color: 'text.primary',
               }}
             >
-              SplitWise
+              Splitbook
             </Typography>
           </Stack>
           <Button
@@ -173,7 +173,7 @@ export default function LandingPage() {
       {/* Footer */}
       <Box sx={{ textAlign: 'center', py: 4 }}>
         <Typography variant="body2" color="text.secondary">
-          SplitWise — trip expenses, settled fairly.
+          Splitbook — shared expenses, settled fairly.
         </Typography>
       </Box>
     </Box>

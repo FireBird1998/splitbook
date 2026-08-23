@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, feat/private-beta]
+    branches: [main]
   pull_request:
 
 jobs:
@@ -36,7 +36,7 @@ jobs:
       - name: Test (unit + integration)
         run: pnpm test
         env:
-          # Integration suites derive per-file splitwise-test-* databases from
+          # Integration suites derive per-file splitbook-test-* databases from
           # this base URI; the demo database is never touched.
           TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
 
@@ -47,7 +47,7 @@ jobs:
         run: pnpm build
         env:
           AUTH_SECRET: test
-          MONGODB_URI: mongodb://127.0.0.1:27017/split-test
+          MONGODB_URI: mongodb://127.0.0.1:27017/splitbook-build
           NEXT_PUBLIC_APP_URL: http://localhost:3000
           AUTH_GOOGLE_ID: test
           AUTH_GOOGLE_SECRET: test
@@ -83,7 +83,7 @@ jobs:
         run: pnpm build
         env:
           AUTH_SECRET: test
-          MONGODB_URI: mongodb://127.0.0.1:27017/split-test
+          MONGODB_URI: mongodb://127.0.0.1:27017/splitbook-build
           NEXT_PUBLIC_APP_URL: http://localhost:3100
           AUTH_GOOGLE_ID: test
           AUTH_GOOGLE_SECRET: test
@@ -91,7 +91,7 @@ jobs:
       - name: Run browser journeys (demo mode, seeded)
         run: pnpm test:e2e
 
-      - name: Run Google OAuth smoke tests (google mode, intercepted)
+      - name: Run Google OAuth journeys (google mode, local OIDC)
         run: pnpm test:e2e:google
 
       - name: Upload Playwright report and review screenshots
