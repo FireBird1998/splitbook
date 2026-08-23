@@ -115,15 +115,15 @@ async function handleRequest(request: IncomingMessage, response: ServerResponse)
       return;
     }
 
-    const common = { clientId, codeChallenge, ...(nonce ? { nonce } : {}) };
+    const commonGrantFields = { clientId, codeChallenge, ...(nonce ? { nonce } : {}) };
     const approved = callbackLink(callbackUrl, state, {
-      ...common,
+      ...commonGrantFields,
       subject: 'approved-playwright-user',
       email: 'approved.playwright@splitbook.local',
       name: 'Approved Playwright User',
     });
     const unapproved = callbackLink(callbackUrl, state, {
-      ...common,
+      ...commonGrantFields,
       subject: 'unapproved-playwright-user',
       email: 'unapproved.playwright@splitbook.local',
       name: 'Unapproved Playwright User',

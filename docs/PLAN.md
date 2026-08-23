@@ -1,4 +1,4 @@
-# SplitWise Clone — Master Plan
+# Splitbook — Historical Master Plan
 
 ## Overview
 

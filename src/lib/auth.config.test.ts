@@ -40,7 +40,7 @@ describe('authConfig providers', () => {
 type SignIn = NonNullable<NonNullable<typeof authConfig.callbacks>['signIn']>;
 type SignInParams = Parameters<SignIn>[0];
 
-async function callSignIn(provider: string, email: string | null) {
+async function callSignIn(provider: 'google' | 'demo', email: string | null) {
   const signIn = authConfig.callbacks?.signIn as SignIn;
   return signIn({
     user: { id: 'user-1', email },

@@ -28,6 +28,7 @@ import { usePathname } from 'next/navigation';
 import { useThemeMode } from '@/providers/ThemeProvider';
 import DemoModeBadge from '@/components/demo/DemoModeBadge';
 import BrandMark from '@/components/layout/BrandMark';
+import { PRODUCT_NAME } from '@/lib/product';
 
 interface NavbarProps {
   user: {
@@ -108,7 +109,7 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
                   color: 'text.primary',
                 }}
               >
-                Splitbook
+                {PRODUCT_NAME}
               </Typography>
             </Box>
           </Stack>
@@ -211,7 +212,7 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
                 color: 'text.primary',
               }}
             >
-              Splitbook
+              {PRODUCT_NAME}
             </Typography>
           </Stack>
           <List>
