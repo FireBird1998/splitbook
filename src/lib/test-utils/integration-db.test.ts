@@ -5,8 +5,8 @@ describe('integrationTestDb', () => {
   it('derives a per-file test database name from the file key', () => {
     const db = integrationTestDb('Expense Ownership');
 
-    expect(db.dbName).toBe('splitwise-test-expense-ownership');
-    expect(db.uri).toContain('/splitwise-test-expense-ownership?');
+    expect(db.dbName).toBe('splitbook-test-expense-ownership');
+    expect(db.uri).toContain('/splitbook-test-expense-ownership?');
   });
 
   it('replaces any database segment in TEST_MONGODB_URI with the per-file name', () => {
@@ -16,7 +16,7 @@ describe('integrationTestDb', () => {
       const db = integrationTestDb('groups');
 
       expect(db.uri).toBe(
-        'mongodb://mongo.internal:27017/splitwise-test-groups?directConnection=true',
+        'mongodb://mongo.internal:27017/splitbook-test-groups?directConnection=true',
       );
     } finally {
       if (previous === undefined) delete process.env.TEST_MONGODB_URI;
@@ -28,6 +28,6 @@ describe('integrationTestDb', () => {
     const db = integrationTestDb('seed');
 
     expect(db.dbName).not.toContain('demo');
-    expect(db.uri).not.toContain('splitwise-demo');
+    expect(db.uri).not.toContain('splitbook-demo');
   });
 });

@@ -10,6 +10,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import { DEMO_PERSONAS, type DemoPersonaKey } from '@/lib/demo-personas';
 import DemoModeBadge from '@/components/demo/DemoModeBadge';
 import BrandMark from '@/components/layout/BrandMark';
+import { PRODUCT_NAME } from '@/lib/product';
 
 interface DemoPersonaPickerProps {
   callbackUrl?: string;
@@ -80,7 +81,7 @@ export default function DemoPersonaPicker({
                 color: 'text.primary',
               }}
             >
-              SplitWise
+              {PRODUCT_NAME}
             </Typography>
           </Stack>
           <DemoModeBadge />

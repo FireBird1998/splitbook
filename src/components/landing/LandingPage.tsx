@@ -10,6 +10,7 @@ import Button from '@mui/material/Button';
 import GoogleIcon from '@mui/icons-material/Google';
 import BrandMark from '@/components/layout/BrandMark';
 import { getSignInProvider } from '@/lib/auth-sign-in';
+import { PRODUCT_NAME } from '@/lib/product';
 
 const SIGN_IN_PROVIDER = getSignInProvider('google');
 
@@ -79,7 +80,7 @@ export default function LandingPage() {
                 color: 'text.primary',
               }}
             >
-              SplitWise
+              {PRODUCT_NAME}
             </Typography>
           </Stack>
           <Button
@@ -173,7 +174,7 @@ export default function LandingPage() {
       {/* Footer */}
       <Box sx={{ textAlign: 'center', py: 4 }}>
         <Typography variant="body2" color="text.secondary">
-          SplitWise — trip expenses, settled fairly.
+          {PRODUCT_NAME} — shared expenses, settled fairly.
         </Typography>
       </Box>
     </Box>

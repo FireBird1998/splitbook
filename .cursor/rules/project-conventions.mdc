@@ -1,9 +1,9 @@
 ---
-description: Project architecture and coding conventions for the SplitWise app
+description: Project architecture and coding conventions for the Splitbook app
 alwaysApply: true
 ---
 
-# SplitWise Project Conventions
+# Splitbook Project Conventions
 
 ## Tech Stack
 

@@ -1,6 +1,6 @@
 /**
  * Integration tests for expense and settlement services against a real,
- * isolated MongoDB database (`splitwise-test-expense-settlement`).
+ * isolated MongoDB database (`splitbook-test-expense-settlement`).
  * Covers participant/currency/tag validation, edit history, soft delete,
  * and settlement authorization boundaries.
  */

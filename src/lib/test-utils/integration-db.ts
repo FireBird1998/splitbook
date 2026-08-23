@@ -2,12 +2,12 @@
  * Isolated MongoDB wiring for integration tests.
  *
  * Strategy: every integration test file gets its OWN database on the shared
- * local/CI MongoDB instance, named `splitwise-test-<file key>`. Per-file
+ * local/CI MongoDB instance, named `splitbook-test-<file key>`. Per-file
  * databases let Vitest run files in parallel without cross-file clobbering,
  * and each file drops its database on teardown.
  *
- * The demo database (`splitwise-demo`) is never touched: the resolved
- * database name must carry the `splitwise-test` prefix and the helper
+ * The demo database (`splitbook-demo`) is never touched: the resolved
+ * database name must carry the `splitbook-test` prefix and the helper
  * hard-fails on lookalike names (anything containing "demo"/"prod").
  *
  * Connection string comes from TEST_MONGODB_URI (any database segment is
@@ -18,13 +18,13 @@ import mongoose from 'mongoose';
 import connectDB from '@/lib/db';
 
 const DEFAULT_BASE_URI = 'mongodb://127.0.0.1:27017/?directConnection=true';
-const TEST_DB_PREFIX = 'splitwise-test';
+const TEST_DB_PREFIX = 'splitbook-test';
 const FORBIDDEN_NAME_PATTERN = /demo|prod|live|stage/i;
 
 export interface IntegrationTestDb {
   /** Fully resolved connection string including the per-file database. */
   uri: string;
-  /** Per-file database name, e.g. `splitwise-test-expense`. */
+  /** Per-file database name, e.g. `splitbook-test-expense`. */
   dbName: string;
   /** Point MONGODB_URI at the test database and open the Mongoose connection. */
   connect: () => Promise<void>;

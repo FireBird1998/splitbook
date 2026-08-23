@@ -30,6 +30,7 @@ function buildProviders(): NextAuthConfig['providers'] {
     Google({
       clientId: process.env.AUTH_GOOGLE_ID!,
       clientSecret: process.env.AUTH_GOOGLE_SECRET!,
+      ...(process.env.AUTH_GOOGLE_ISSUER ? { issuer: process.env.AUTH_GOOGLE_ISSUER } : {}),
     }),
   ];
 }
@@ -40,6 +41,19 @@ export const authConfig: NextAuthConfig = {
     strategy: 'jwt',
   },
   callbacks: {
+    async signIn({ user, account }) {
+      if (account?.provider !== 'google') return true;
+
+      const allowedEmails = new Set(
+        (process.env.AUTH_ALLOWED_EMAILS ?? '')
+          .split(',')
+          .map((email) => email.trim().toLowerCase())
+          .filter(Boolean),
+      );
+      const email = user.email?.trim().toLowerCase();
+
+      return Boolean(email && allowedEmails.has(email));
+    },
     async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
@@ -93,5 +107,6 @@ export const authConfig: NextAuthConfig = {
   },
   pages: {
     signIn: '/login',
+    error: '/login',
   },
 };

@@ -1,6 +1,6 @@
 /**
  * Integration tests for GroupService against a real, isolated MongoDB
- * database (`splitwise-test-group-service`). Covers membership enforcement
+ * database (`splitbook-test-group-service`). Covers membership enforcement
  * and admin boundaries that unit tests cannot reach.
  */
 

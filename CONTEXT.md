@@ -1,4 +1,4 @@
-# SplitWise Beta
+# Splitbook
 
 Shared-expense ledger for personal groups and trips. This file is the project's ubiquitous language — the glossary every doc, variable, and UI string should agree with.
 

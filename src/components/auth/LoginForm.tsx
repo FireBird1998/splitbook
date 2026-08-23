@@ -10,6 +10,7 @@ import GoogleIcon from '@mui/icons-material/Google';
 import BrandMark from '@/components/layout/BrandMark';
 import type { AuthMode } from '@/lib/auth-mode';
 import { getSignInProvider } from '@/lib/auth-sign-in';
+import { PRODUCT_NAME } from '@/lib/product';
 
 interface LoginFormProps {
   authMode: AuthMode;
@@ -19,6 +20,7 @@ export default function LoginForm({ authMode }: LoginFormProps) {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
   const error = searchParams.get('error');
+  const isAccessDenied = error === 'AccessDenied';
   const provider = getSignInProvider(authMode);
 
   const handleSignIn = () => {
@@ -40,7 +42,7 @@ export default function LoginForm({ authMode }: LoginFormProps) {
           <Stack direction="row" alignItems="center" justifyContent="center" spacing={1.5}>
             <BrandMark size={44} fontSize={20} />
             <Typography variant="h4" fontWeight={700} color="text.primary">
-              SplitWise
+              {PRODUCT_NAME}
             </Typography>
           </Stack>
         </Box>
@@ -64,7 +66,18 @@ export default function LoginForm({ authMode }: LoginFormProps) {
               mb: 4,
             }}
           >
-            Something went wrong. Please try again.
+            {isAccessDenied ? (
+              <Stack spacing={0.5}>
+                <Typography component="span" fontWeight={600}>
+                  {PRODUCT_NAME} is invite-only right now.
+                </Typography>
+                <Typography component="span" variant="body2">
+                  Ask the owner to add your Google email to the beta.
+                </Typography>
+              </Stack>
+            ) : (
+              'Something went wrong. Please try again.'
+            )}
           </Box>
         )}
 

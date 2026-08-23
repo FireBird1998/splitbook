@@ -43,7 +43,7 @@ describe('demo persona allowlist', () => {
   it('gives every persona a name, email, and role headline', () => {
     for (const persona of DEMO_PERSONAS) {
       expect(persona.name.length).toBeGreaterThan(0);
-      expect(persona.email).toMatch(/@splitwise\.local$/);
+      expect(persona.email).toMatch(/@splitbook\.local$/);
       expect(persona.headline.length).toBeGreaterThan(0);
       expect(persona.id).toBe(DEMO_PERSONA_IDS[persona.key]);
     }
@@ -59,7 +59,7 @@ describe('authorizeDemoPersona', () => {
     expect(user).toEqual({
       id: DEMO_PERSONA_IDS.alex,
       name: 'Alex Rivera',
-      email: 'alex.demo@splitwise.local',
+      email: 'alex.demo@splitbook.local',
       image: null,
     });
   });

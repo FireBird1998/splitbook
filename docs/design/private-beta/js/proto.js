@@ -1,5 +1,5 @@
 (function () {
-  const STORAGE_KEY = 'splitwise-proto-theme';
+  const STORAGE_KEY = 'splitbook-proto-theme';
   const params = new URLSearchParams(window.location.search);
   const fromQuery = params.get('theme');
   const stored = localStorage.getItem(STORAGE_KEY);

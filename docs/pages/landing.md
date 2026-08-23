@@ -15,7 +15,7 @@ The first page visitors see. Communicates the app's value proposition and has a 
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│  💰 SplitWise                          [Sign In] button  │
+│  💰 Splitbook                          [Sign In] button  │
 ├──────────────────────────────────────────────────────────┤
 │                                                          │
 │              Split expenses with friends,                │

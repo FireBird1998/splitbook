@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { authConfig } from '@/lib/auth.config';
 
 interface ProviderLike {
@@ -30,6 +30,58 @@ describe('authConfig providers', () => {
 
   it('routes sign-in through the custom /login page', () => {
     expect(authConfig.pages?.signIn).toBe('/login');
+  });
+
+  it('routes authentication errors through the custom /login page', () => {
+    expect(authConfig.pages?.error).toBe('/login');
+  });
+});
+
+type SignIn = NonNullable<NonNullable<typeof authConfig.callbacks>['signIn']>;
+type SignInParams = Parameters<SignIn>[0];
+
+async function callSignIn(provider: 'google' | 'demo', email: string | null) {
+  const signIn = authConfig.callbacks?.signIn as SignIn;
+  return signIn({
+    user: { id: 'user-1', email },
+    account: { provider, type: provider === 'google' ? 'oidc' : 'credentials' },
+  } as unknown as SignInParams);
+}
+
+describe('authConfig signIn callback', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('accepts an allowlisted Google identity after normalizing case and whitespace', async () => {
+    vi.stubEnv('AUTH_ALLOWED_EMAILS', ' owner@example.com, Invited@Example.COM ');
+
+    await expect(callSignIn('google', 'invited@example.com')).resolves.toBe(true);
+  });
+
+  it('rejects a Google identity that is not allowlisted', async () => {
+    vi.stubEnv('AUTH_ALLOWED_EMAILS', 'owner@example.com');
+
+    await expect(callSignIn('google', 'stranger@example.com')).resolves.toBe(false);
+  });
+
+  it.each([undefined, '', ' , '])(
+    'fails closed for Google sign-in when AUTH_ALLOWED_EMAILS is %s',
+    async (allowedEmails) => {
+      if (allowedEmails === undefined) {
+        delete process.env.AUTH_ALLOWED_EMAILS;
+      } else {
+        vi.stubEnv('AUTH_ALLOWED_EMAILS', allowedEmails);
+      }
+
+      await expect(callSignIn('google', 'owner@example.com')).resolves.toBe(false);
+    },
+  );
+
+  it('does not apply the Google allowlist to demo credentials', async () => {
+    delete process.env.AUTH_ALLOWED_EMAILS;
+
+    await expect(callSignIn('demo', 'alex.demo@splitbook.local')).resolves.toBe(true);
   });
 });
 

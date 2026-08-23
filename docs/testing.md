@@ -6,7 +6,7 @@ Three layers of tests, all wired into CI (`.github/workflows/ci.yml`).
 | ----------- | ---------- | ----------------------------------- | ----------------------- |
 | Unit        | Vitest     | none (mocked models / pure helpers) | `pnpm test:unit`        |
 | Integration | Vitest     | real MongoDB, isolated per file     | `pnpm test:integration` |
-| Browser     | Playwright | seeded `splitwise-demo`             | `pnpm test:e2e`         |
+| Browser     | Playwright | seeded `splitbook-demo`             | `pnpm test:e2e`         |
 
 `pnpm test` runs unit + integration together and requires MongoDB running
 locally (the `split-mongo` Docker container works).
@@ -64,14 +64,14 @@ through the actual service layer (no mocked models):
 [`src/lib/test-utils/integration-db.ts`](../src/lib/test-utils/integration-db.ts):
 
 1. Every test file derives **its own database** named
-   `splitwise-test-<file-key>` from `TEST_MONGODB_URI` (default
+   `splitbook-test-<file-key>` from `TEST_MONGODB_URI` (default
    `mongodb://127.0.0.1:27017/?directConnection=true`); any database segment
    in the URI is replaced.
 2. Per-file databases let Vitest run files in parallel without clobbering.
 3. Each file drops its database on teardown, so nothing accumulates locally.
 4. A guard hard-fails if the resolved name does not start with
-   `splitwise-test-` or resembles a demo/production database — the demo
-   database (`splitwise-demo`) is never touched by integration tests.
+   `splitbook-test-` or resembles a demo/production database — the demo
+   database (`splitbook-demo`) is never touched by integration tests.
 
 ### The `server-only` tripwire and non-Next runtimes
 
@@ -97,7 +97,7 @@ Configured in [`playwright.config.ts`](../playwright.config.ts); specs and
 helpers live in [`playwright/`](../playwright/).
 
 - The app runs on **port 3100** with `AUTH_MODE=demo`; global setup resets
-  and reseeds the `splitwise-demo` database (`pnpm demo:reset`) so every run
+  and reseeds the `splitbook-demo` database (`pnpm demo:reset`) so every run
   starts from the known seeded state.
 - **Journeys** (`demo-journeys.spec.ts`, serial): Alex enters and inspects
   her seeded balance (exact amounts asserted once, on desktop-light, before
@@ -141,6 +141,7 @@ Worth knowing where the safety net is and is not:
   only `src/**/*.test.ts`, so a `.tsx` test would be ignored. That matters
   because split-total validation, month-range parsing and the recurring
   problem-state heuristic currently live only in components.
-- `playwright.google.config.ts` points at the same `splitwise-demo` database as
-  the demo suite and has no global setup of its own. Nothing is written by it in
-  practice, since no OAuth flow completes.
+- `playwright.google.config.ts` uses an isolated `splitbook-google-e2e`
+  database and a local OIDC stand-in. It completes both approved and denied
+  Auth.js callbacks without live Google access; only the approved test identity
+  is persisted.

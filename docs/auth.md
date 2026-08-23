@@ -4,7 +4,7 @@
 
 We use **Auth.js v5** (formerly NextAuth.js) with **JWT sessions** and the **MongoDB adapter**. Two providers are registered side by side in [`src/lib/auth.config.ts`](../src/lib/auth.config.ts) so the mode can switch without a rebuild:
 
-- **Google OAuth** — the real sign-in path, and the default whenever demo mode is not explicitly enabled.
+- **Google OAuth** — the real sign-in path, restricted by the `AUTH_ALLOWED_EMAILS` private-beta allowlist.
 - **Demo Credentials** — private-beta personas (Alex, Sam, Priya), guarded by `AUTH_MODE`.
 
 The active mode resolves through [`src/lib/auth-mode.ts`](../src/lib/auth-mode.ts):
@@ -43,9 +43,10 @@ is active. See the README for seeding (`pnpm demo:seed` / `pnpm demo:reset`).
 4. User authorizes the app
 5. Google redirects back with auth code
 6. Auth.js exchanges code for tokens
-7. Auth.js creates/updates user in MongoDB (via MongoDB adapter)
-8. JWT session cookie is set (httpOnly, secure)
-9. User is redirected to /dashboard
+7. The `signIn` callback normalizes the email and checks `AUTH_ALLOWED_EMAILS`
+8. Auth.js creates/updates an approved user in MongoDB (via MongoDB adapter)
+9. JWT session cookie is set (httpOnly, secure)
+10. User is redirected to /dashboard; denied users return to `/login?error=AccessDenied`
 ```
 
 ---
@@ -125,6 +126,12 @@ export const authConfig: NextAuthConfig = {
   ],
   session: { strategy: 'jwt' },
   callbacks: {
+    async signIn({ user, account }) {
+      if (account?.provider !== 'google') return true;
+      const allowed = new Set((process.env.AUTH_ALLOWED_EMAILS ?? '')
+        .split(',').map((email) => email.trim().toLowerCase()).filter(Boolean));
+      return Boolean(user.email && allowed.has(user.email.trim().toLowerCase()));
+    },
     async jwt({ token, user }) { if (user) token.id = user.id; return token; },
     async session({ session, token }) {
       if (session.user) session.user.id = token.id as string;
@@ -132,7 +139,7 @@ export const authConfig: NextAuthConfig = {
     },
     authorized({ auth, request }) { /* route protection — see §4 */ },
   },
-  pages: { signIn: '/login' },
+  pages: { signIn: '/login', error: '/login' },
 };
 ```
 
@@ -288,7 +295,9 @@ export function forbidden() {
 AUTH_SECRET=your-random-secret-min-32-chars
 AUTH_GOOGLE_ID=your-google-client-id.apps.googleusercontent.com
 AUTH_GOOGLE_SECRET=your-google-client-secret
-MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/splitwise
+# Comma-separated invited Google addresses; missing/empty denies every Google login
+AUTH_ALLOWED_EMAILS=owner@example.com,tester@example.com
+MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/splitbook
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # Auth mode: google (default when unset) | demo
@@ -313,6 +322,8 @@ ALLOW_DEMO_AUTH=
   just redirects back to `/login` with an error and sets no session.
 - Production is fail closed: `AUTH_MODE=demo` is ignored when
   `NODE_ENV=production` unless `ALLOW_DEMO_AUTH=true` is also set.
+- Google sign-in is also fail closed: matching is trimmed and case-insensitive,
+  and a missing or empty `AUTH_ALLOWED_EMAILS` denies every Google identity.
 
 ---
 
@@ -339,9 +350,9 @@ AUTH_MODE=google pnpm dev   # or: pnpm test:e2e:google for the automated version
 The automated equivalent is `pnpm test:e2e:google`
 ([`playwright.google.config.ts`](../playwright.google.config.ts) +
 [`playwright-google/google-auth.spec.ts`](../playwright-google/google-auth.spec.ts)),
-which runs the app in google mode on port 3101, intercepts the
-`accounts.google.com` navigation, and asserts the request shape without
-completing a real login.
+which runs the app in google mode on port 3101 against a local OIDC stand-in.
+It verifies the request shape and completes approved and denied callbacks
+without contacting Google or using real credentials.
 
 ---
 

@@ -1,4 +1,7 @@
-# SplitWise — Source-Derived Codebase Reference
+# Splitbook — Source-Derived Codebase Reference
+
+> Historical pre-rebrand snapshot. Legacy SplitWise names below are preserved
+> where they describe the source exactly as it existed when this audit ran.
 
 **Date:** 2026-08-16
 **Scope:** The whole application in this worktree — build surface, request lifecycle, Mongoose domain model, services and business logic, recurring-expense generation (v4 phase 3), auth, theming/UI, SWR data fetching, the three test layers, and currency handling. Written so a reader can predict what the code does without opening it.

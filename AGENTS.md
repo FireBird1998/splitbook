@@ -7,15 +7,16 @@
 
 ## Learned Workspace Facts
 
-- Git remotes: `origin` only — `ankit-thesys/splitwise-beta`. The `upstream` remote (tipra34/split) was removed on 2026-08-05; the project is now fully standalone.
+- Repository migration target: private `FireBird1998/splitbook`, with `main` as the default branch and sole source of authority. Transfer and cutover work is tracked under GitHub issue #3 and must not be described as complete until the destination repository is reachable.
 - `main` is fully merged and stable: the duplicate-index fix, `feat/app-hardening`, and `feat/private-beta` were merged on 2026-08-05; GitHub Actions CI (verify + playwright jobs) is green.
 - Feature worktrees: `.worktrees/private-beta` tracks `feat/private-beta`; `.worktrees/app-hardening` tracks `feat/app-hardening`.
-- On `feat/private-beta`, `AUTH_MODE=demo` enables Credentials-based personas (Alex, Sam, Priya); seed/reset with `pnpm demo:seed` / `pnpm demo:reset`. Demo auth is blocked in production.
-- Standalone private-beta visual prototypes live under `.worktrees/private-beta/docs/design/private-beta/` (HTML/CSS mockups with light/dark tokens).
+- `AUTH_MODE=demo` enables Credentials-based personas (Alex, Sam, Priya); seed/reset with `pnpm demo:seed` / `pnpm demo:reset`. Demo auth is blocked in production.
+- Standalone private-beta visual prototypes live under `docs/design/private-beta/` (HTML/CSS mockups with light/dark tokens).
 - Local MongoDB is commonly run via Docker (container name often `split-mongo`) on `localhost:27017`.
-- The app DB moved to a MongoDB Atlas cluster (`SplidWiseMain`, database `splitwise`); `.env.local` points at Atlas with the local Docker URI kept commented for switching back. Local dev runs on port 3000 in demo mode against Atlas.
+- The production data target is a fresh MongoDB Atlas database named `splitbook` with a least-privilege application user; provisioning and cutover are tracked under issue #9. Local development can use Docker container `split-mongo` at `mongodb://localhost:27017/splitbook?directConnection=true`.
 - `mongodb+srv://` (Atlas) URIs must not get `directConnection: true` — `src/lib/mongodb-client.ts` applies it only for non-SRV local URIs; hardcoding it 500s every page.
-- Vercel hosting prepared but not deployed: project `splitwise-beta` (scope `ankit-das-projects`) linked via `.vercel/`; env vars pushed to production + preview; production intentionally has no `AUTH_MODE`/`ALLOW_DEMO_AUTH` so it defaults to Google OAuth.
+- Vercel project `splitbook` (scope `ankit-das-projects`) preserves the existing project ID, deployment history, environment variables, and old aliases. Its Git connection and `main` production-branch setting still await the GitHub repository transfer.
+- Google mode requires a normalized `AUTH_ALLOWED_EMAILS` allowlist and fails closed when it is missing or empty. Demo mode does not use this allowlist.
 - Playwright CI runs `next start` (production mode), so the webServer env sets `ALLOW_DEMO_AUTH=true` and `AUTH_TRUST_HOST=true`; without them demo auth fails closed and Auth.js throws UntrustedHost.
 - Product direction v4 (docs in `docs/v4/`): the app is not just trips — group category acts as a theme (Trip/Household/Couple/Work/General); Household groups are long-running with month-on-month expense cycles.
 
@@ -23,7 +24,7 @@
 
 ### Issue tracker
 
-Issues are tracked as GitHub issues on `ankit-thesys/splitwise-beta` via the `gh` CLI. See `docs/agents/issue-tracker.md`.
+Issues are tracked as GitHub issues on `FireBird1998/splitbook` via the `gh` CLI. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 

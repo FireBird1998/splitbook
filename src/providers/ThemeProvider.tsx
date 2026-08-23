@@ -5,6 +5,7 @@ import { ThemeProvider as MUIThemeProvider, CssBaseline } from '@mui/material';
 import { AppRouterCacheProvider } from '@mui/material-nextjs/v15-appRouter';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import type { ThemeMode } from '@/lib/theme/tokens';
+import { THEME_STORAGE_KEY } from '@/lib/product';
 
 interface ThemeContextValue {
   mode: ThemeMode;
@@ -20,11 +21,9 @@ export function useThemeMode() {
   return useContext(ThemeContext);
 }
 
-const STORAGE_KEY = 'splitwise-theme-mode';
-
 function getInitialMode(): ThemeMode {
   if (typeof window === 'undefined') return 'light';
-  const stored = localStorage.getItem(STORAGE_KEY);
+  const stored = localStorage.getItem(THEME_STORAGE_KEY);
   if (stored === 'light' || stored === 'dark') return stored;
   if (window.matchMedia('(prefers-color-scheme: dark)').matches) return 'dark';
   return 'light';
@@ -51,7 +50,7 @@ export default function ThemeProvider({ children }: ThemeProviderProps) {
   const toggleTheme = () => {
     setMode((prev) => {
       const next = prev === 'light' ? 'dark' : 'light';
-      localStorage.setItem(STORAGE_KEY, next);
+      localStorage.setItem(THEME_STORAGE_KEY, next);
       return next;
     });
   };

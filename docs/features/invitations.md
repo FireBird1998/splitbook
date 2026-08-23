@@ -79,7 +79,7 @@ Shown in the navbar as a badge/bell icon, or on the dashboard.
 
 ```
 ┌──────────────────────────────────┐
-│           SplitWise              │
+│           Splitbook              │
 │                                  │
 │ You've been invited to join:     │
 │                                  │
