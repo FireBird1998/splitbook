@@ -35,7 +35,7 @@ Splitbook is an expense-splitting app for shared groups — track who paid, spli
    | `AUTH_GOOGLE_ID`      | Google OAuth client ID (required when `AUTH_MODE=google`)                                         |
    | `AUTH_GOOGLE_SECRET`  | Google OAuth client secret (required when `AUTH_MODE=google`)                                     |
    | `AUTH_ALLOWED_EMAILS` | Comma-separated Google emails invited to the private beta; missing/empty fails closed             |
-   | `NEXT_PUBLIC_APP_URL` | App URL (e.g. `http://localhost:3000`)                                                            |
+   | `NEXT_PUBLIC_APP_URL` | App URL (e.g. `http://localhost:4127`)                                                            |
    | `AUTH_MODE`           | `google` (default) or `demo` for private-beta personas                                            |
    | `ALLOW_DEMO_AUTH`     | Must be `true` to allow demo auth when `NODE_ENV=production`                                      |
 
@@ -53,7 +53,7 @@ Splitbook is an expense-splitting app for shared groups — track who paid, spli
    pnpm dev
    ```
 
-   Open [http://localhost:3000](http://localhost:3000).
+   Open [http://localhost:4127](http://localhost:4127).
 
 ## Authentication modes
 
@@ -111,7 +111,7 @@ or empty allowlist denies every Google sign-in.
 
 The Google Cloud OAuth client needs the consent screen configured and
 `<origin>/api/auth/callback/google` whitelisted as an authorized redirect URI
-(e.g. `http://localhost:3000/api/auth/callback/google` for local dev). Full
+(e.g. `http://localhost:4127/api/auth/callback/google` for local dev). Full
 setup steps and a non-interactive smoke test (`pnpm test:e2e:google`) are in
 [`docs/auth.md`](docs/auth.md).
 

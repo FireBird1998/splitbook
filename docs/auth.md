@@ -77,16 +77,18 @@ or paid APIs are required.
 2. Application type: **Web application**.
 3. **Authorized JavaScript origins are not required** — Auth.js uses a
    server-side authorization-code flow, not the Google Sign-In JS SDK. (Adding
-   `http://localhost:3000` etc. is harmless but unused.)
+   `http://localhost:4127` etc. is harmless but unused.)
 
 4. Add the matching **Authorized redirect URIs** — always
    `<origin>/api/auth/callback/google`:
 
-   | Environment                         | Redirect URI                                     |
-   | ----------------------------------- | ------------------------------------------------ |
-   | Local dev (default port)            | `http://localhost:3000/api/auth/callback/google` |
-   | Local dev (private-beta / e2e port) | `http://localhost:3100/api/auth/callback/google` |
-   | Production                          | `https://<your-domain>/api/auth/callback/google` |
+   | Environment | Redirect URI                                     |
+   | ----------- | ------------------------------------------------ |
+   | Local dev   | `http://localhost:4127/api/auth/callback/google` |
+   | Production  | `https://<your-domain>/api/auth/callback/google` |
+
+   The automated Google-mode browser suite uses its own local OIDC stand-in
+   on dedicated test ports and does not require a Google Console redirect.
 
    The redirect URI must match **exactly** (scheme, host, port, path) or Google
    shows `redirect_uri_mismatch`. Auth.js always uses
@@ -298,7 +300,7 @@ AUTH_GOOGLE_SECRET=your-google-client-secret
 # Comma-separated invited Google addresses; missing/empty denies every Google login
 AUTH_ALLOWED_EMAILS=owner@example.com,tester@example.com
 MONGODB_URI=mongodb+srv://user:pass@cluster.mongodb.net/splitbook
-NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_APP_URL=http://localhost:4127
 
 # Auth mode: google (default when unset) | demo
 AUTH_MODE=

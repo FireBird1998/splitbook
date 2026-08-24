@@ -26,7 +26,7 @@ async function main() {
     if (result.skippedTransactions) {
       console.log('  (expenses/settlements already present — skipped to stay idempotent)');
     }
-    console.log('\nStart the app with AUTH_MODE=demo and open http://localhost:3000');
+    console.log('\nStart the app with AUTH_MODE=demo and open http://localhost:4127');
   } finally {
     await disconnectDemoDb();
   }
