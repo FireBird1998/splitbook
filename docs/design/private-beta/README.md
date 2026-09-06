@@ -2,6 +2,11 @@
 
 Standalone HTML/CSS mockups for design approval before the Phase 5 MUI theme rebuild.
 
+**Historical reference:** Production tokens now live in the runtime TypeScript
+theme. These mockups are retained for design history, not maintained as a second
+source of truth. Use the [current UI guide](../../ui.md) and local component lab
+for implemented patterns.
+
 **Open:** [`index.html`](./index.html) in a browser. Use the Light / Dark toggles; resize for mobile.
 
 ## Screens

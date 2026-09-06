@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { NAV_HEIGHT, SIDEBAR_WIDTH, RADIUS } from '@/lib/theme/tokens';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -23,9 +24,9 @@ export default function Sidebar() {
       sx={{
         display: { xs: 'none', lg: 'flex' },
         flexDirection: 'column',
-        width: 240,
+        width: SIDEBAR_WIDTH,
         position: 'fixed',
-        top: 56,
+        top: NAV_HEIGHT,
         bottom: 0,
         borderRight: 1,
         borderColor: 'divider',
@@ -51,7 +52,7 @@ export default function Sidebar() {
                 gap: 1.5,
                 px: 2,
                 minHeight: 44,
-                borderRadius: '8px',
+                borderRadius: `${RADIUS.sm}px`,
                 fontSize: '0.875rem',
                 fontWeight: isActive ? 600 : 500,
                 textDecoration: 'none',

@@ -1,7 +1,6 @@
 import type { Metadata } from 'next';
 import { Outfit, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
-import AuthProvider from '@/providers/AuthProvider';
 import ThemeProvider from '@/providers/ThemeProvider';
 import { PRODUCT_NAME, THEME_STORAGE_KEY } from '@/lib/product';
 
@@ -38,9 +37,7 @@ export default function RootLayout({
         />
       </head>
       <body className={`${outfit.variable} ${plexMono.variable}`}>
-        <AuthProvider>
-          <ThemeProvider>{children}</ThemeProvider>
-        </AuthProvider>
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

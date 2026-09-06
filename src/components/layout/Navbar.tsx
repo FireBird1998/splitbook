@@ -29,6 +29,7 @@ import { useThemeMode } from '@/providers/ThemeProvider';
 import DemoModeBadge from '@/components/demo/DemoModeBadge';
 import BrandMark from '@/components/layout/BrandMark';
 import { PRODUCT_NAME } from '@/lib/product';
+import { NAV_HEIGHT } from '@/lib/theme/tokens';
 
 interface NavbarProps {
   user: {
@@ -63,7 +64,7 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
           top: 0,
           left: 0,
           right: 0,
-          height: 56,
+          height: NAV_HEIGHT,
           display: 'flex',
           alignItems: 'center',
           zIndex: (theme) => theme.zIndex.appBar,

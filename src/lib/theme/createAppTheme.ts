@@ -1,8 +1,9 @@
-import { createTheme, type Shadows, type Theme } from '@mui/material/styles';
+import { createTheme, darken, lighten, type Shadows, type Theme } from '@mui/material/styles';
 import { FONT_MONO, FONT_UI, RADIUS, getSemanticTokens, type ThemeMode } from './tokens';
 
 declare module '@mui/material/styles' {
   interface Palette {
+    status: { positive: string; negative: string; warning: string; info: string };
     surface: { muted: string; elevated: string };
     border: { strong: string };
     tint: {
@@ -23,6 +24,7 @@ declare module '@mui/material/styles' {
   }
 
   interface PaletteOptions {
+    status?: { positive?: string; negative?: string; warning?: string; info?: string };
     surface?: { muted?: string; elevated?: string };
     border?: { strong?: string };
     tint?: {
@@ -104,6 +106,7 @@ export function createAppTheme(mode: ThemeMode): Theme {
       },
       strip: { ...tokens.strip },
       focus: { main: tokens.focus, ring: tokens.focusRing },
+      status: { ...tokens.status },
     },
     typography: {
       fontFamily: FONT_UI,
@@ -141,8 +144,10 @@ export function createAppTheme(mode: ThemeMode): Theme {
           '@media (prefers-reduced-motion: reduce)': {
             '*, *::before, *::after': {
               animationDuration: '0.01ms !important',
+              animationDelay: '0ms !important',
               animationIterationCount: '1 !important',
               transitionDuration: '0.01ms !important',
+              transitionDelay: '0ms !important',
               scrollBehavior: 'auto !important',
             },
           },
@@ -154,6 +159,21 @@ export function createAppTheme(mode: ThemeMode): Theme {
           root: {
             borderRadius: RADIUS.sm,
             minHeight: 44,
+            variants: [
+              {
+                props: { variant: 'contained', color: 'info' },
+                style: {
+                  backgroundColor: tokens.status.info,
+                  color: tokens.info.contrastText,
+                  '&:hover': {
+                    backgroundColor:
+                      mode === 'light'
+                        ? darken(tokens.status.info, 0.15)
+                        : lighten(tokens.status.info, 0.1),
+                  },
+                },
+              },
+            ],
           },
           sizeSmall: { minHeight: 36 },
           sizeLarge: { minHeight: 48 },
@@ -251,6 +271,12 @@ export function createAppTheme(mode: ThemeMode): Theme {
             borderRadius: RADIUS.sm,
           },
         },
+      },
+      MuiFormLabel: {
+        styleOverrides: { root: { '&.Mui-error': { color: tokens.status.negative } } },
+      },
+      MuiFormHelperText: {
+        styleOverrides: { root: { '&.Mui-error': { color: tokens.status.negative } } },
       },
       MuiAlert: {
         styleOverrides: {

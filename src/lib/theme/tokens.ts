@@ -1,6 +1,6 @@
 /**
  * Splitbook private-beta semantic design tokens.
- * Source of truth: docs/design/private-beta/css/tokens.css
+ * Runtime source of truth. Prototype CSS is a historical visual reference.
  * Light and dark are designed together — every semantic key exists in both.
  */
 
@@ -17,6 +17,8 @@ export interface SemanticTokens {
   /** Attention / you owe (coral) */
   negative: { main: string; bg: string };
   warning: { main: string; bg: string };
+  /** Readable status foregrounds on both tinted and ordinary surfaces. */
+  status: { positive: string; negative: string; warning: string; info: string };
   bg: string;
   bgElevated: string;
   surface: string;
@@ -48,6 +50,7 @@ export const lightTokens: SemanticTokens = {
   positive: { main: '#1a9a6e', bg: '#e3f7ef' },
   negative: { main: '#e04f3d', bg: '#fde9e6' },
   warning: { main: '#c47a0a', bg: '#fef3e0' },
+  status: { positive: '#0d7654', negative: '#b93628', warning: '#875407', info: '#086ba8' },
   bg: '#f4f5f9',
   bgElevated: '#ffffff',
   surface: '#ffffff',
@@ -78,6 +81,7 @@ export const darkTokens: SemanticTokens = {
   positive: { main: '#3dca96', bg: '#17362b' },
   negative: { main: '#f07162', bg: '#3a221f' },
   warning: { main: '#e0a73a', bg: '#322614' },
+  status: { positive: '#3dca96', negative: '#f07162', warning: '#e0a73a', info: '#4db4ef' },
   bg: '#0e1016',
   bgElevated: '#161922',
   surface: '#181b26',

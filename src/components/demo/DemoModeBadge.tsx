@@ -26,7 +26,7 @@ export default function DemoModeBadge({ compact = false }: DemoModeBadgeProps) {
           fontWeight: 600,
           fontSize: '0.7rem',
           bgcolor: 'tint.warning',
-          color: 'warning.main',
+          color: 'status.warning',
           '& .MuiChip-icon': { ml: 1 },
         }}
       />

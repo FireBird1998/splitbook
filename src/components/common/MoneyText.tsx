@@ -14,8 +14,8 @@ interface MoneyTextProps extends Omit<TypographyProps, 'children'> {
 }
 
 const TONE_COLORS: Record<MoneyTone, string> = {
-  positive: 'success.main',
-  negative: 'error.main',
+  positive: 'status.positive',
+  negative: 'status.negative',
   neutral: 'text.primary',
 };
 
@@ -42,7 +42,7 @@ export default function MoneyText({
       variant={variant}
       color={color ?? TONE_COLORS[resolvedTone]}
       sx={[
-        (theme) => ({ ...(theme.typography.money as React.CSSProperties) }),
+        (theme) => ({ ...theme.typography.money, overflowWrap: 'anywhere' }),
         ...(Array.isArray(sx) ? sx : [sx]),
       ]}
       {...props}

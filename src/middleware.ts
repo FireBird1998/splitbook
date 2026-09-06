@@ -8,5 +8,7 @@ import { authConfig } from '@/lib/auth.config';
 export default NextAuth(authConfig).auth;
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)'],
+  // Only this exact catalogue URL skips Auth.js. Its server page rejects
+  // production requests; no other /dev page or API gains an auth exception.
+  matcher: ['/((?!dev/design-system/?$|_next/static|_next/image|favicon.ico|.*\\..*).*)'],
 };

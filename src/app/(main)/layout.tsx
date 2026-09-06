@@ -4,6 +4,8 @@ import Box from '@mui/material/Box';
 import Sidebar from '@/components/layout/Sidebar';
 import Navbar from '@/components/layout/Navbar';
 import { isDemoMode } from '@/lib/auth-mode';
+import AuthProvider from '@/providers/AuthProvider';
+import { NAV_HEIGHT, SIDEBAR_WIDTH } from '@/lib/theme/tokens';
 
 export default async function MainLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -13,31 +15,33 @@ export default async function MainLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        bgcolor: 'background.default',
-        overflowX: 'hidden',
-      }}
-    >
-      <Navbar user={session.user} demoMode={isDemoMode()} />
-      {/* Spacer for fixed navbar */}
-      <Box sx={{ height: 56 }} />
-      <Box sx={{ display: 'flex' }}>
-        <Sidebar />
-        <Box
-          component="main"
-          sx={{
-            flex: 1,
-            p: { xs: 2, sm: 3 },
-            ml: { xs: 0, lg: '240px' },
-            minWidth: 0,
-            maxWidth: '100%',
-          }}
-        >
-          {children}
+    <AuthProvider>
+      <Box
+        sx={{
+          minHeight: '100vh',
+          bgcolor: 'background.default',
+          overflowX: 'hidden',
+        }}
+      >
+        <Navbar user={session.user} demoMode={isDemoMode()} />
+        {/* Spacer for fixed navbar */}
+        <Box sx={{ height: NAV_HEIGHT }} />
+        <Box sx={{ display: 'flex' }}>
+          <Sidebar />
+          <Box
+            component="main"
+            sx={{
+              flex: 1,
+              p: { xs: 2, sm: 3 },
+              ml: { xs: 0, lg: `${SIDEBAR_WIDTH}px` },
+              minWidth: 0,
+              maxWidth: '100%',
+            }}
+          >
+            {children}
+          </Box>
         </Box>
       </Box>
-    </Box>
+    </AuthProvider>
   );
 }

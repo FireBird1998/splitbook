@@ -497,7 +497,7 @@ export default function ExpenseFormDialog({
           {error && (
             <Box
               sx={{
-                bgcolor: 'error.lighter',
+                bgcolor: 'tint.negative',
                 color: 'error.main',
                 px: 2,
                 py: 1.5,
