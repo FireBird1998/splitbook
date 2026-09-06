@@ -17,7 +17,7 @@ test('shared theme preserves Household header, Settings, and Recurring dialog', 
   await page.goto(`/groups/${DEMO_GROUP_ID}/settings`);
   await expect(page.getByRole('heading', { name: 'Group Settings' })).toBeVisible();
   await expect(page.getByText('Recurring', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await page.getByRole('button', { name: 'Add', exact: true, disabled: false }).click();
   const dialog = page.getByRole('dialog', { name: 'Add recurring expense' });
   await expect(dialog).toBeVisible();
   await dialog.getByLabel('Description', { exact: false }).fill('Synthetic rent example');
