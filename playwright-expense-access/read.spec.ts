@@ -19,12 +19,3 @@ test('non-admin non-creator member reads the existing populated expense shape', 
     editHistory: [],
   });
 });
-
-test('cross-group read does not disclose an expense from a disjoint group', async ({ ledger }) => {
-  const { alex, priya, groupA, groupB, expenseB } = ledger;
-  const ownRead = await dataOf(await priya.get(expensePath(groupB, expenseB)));
-  expect(ownRead.description).toBe('Private rent');
-  const denied = await alex.get(expensePath(groupA, expenseB));
-  expect(denied.status()).toBe(404);
-  expect(await denied.json()).toEqual({ error: 'Expense not found', status: 404 });
-});

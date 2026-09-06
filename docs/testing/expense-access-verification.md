@@ -2,7 +2,9 @@
 
 Implementation of private Splitbook spec #16 and tickets #17–#19.
 Verified locally on 6 September 2026; starting checkout was `684bff7`.
-Final two-axis code review and commit are pending confirmation of the review baseline.
+The user confirmed `684bff7` as the review baseline. Implementation checkpoint:
+`5ebfc3a`. Two-axis review and follow-up review are complete; both findings below
+were addressed before the final follow-up commit.
 No push, deployment or working-data reset is included.
 
 ## Red before green
@@ -23,14 +25,37 @@ Denied-write assertions read the Expense (including edit history) and both
 Groups' activity feeds through authorized HTTP requests before and afterward.
 No assertions depend on query shape, mocked membership or private helper calls.
 
+## Review
+
+### Standards
+
+One low-severity Duplicated Code finding: three standalone regression tests
+repeated the shared matrix. Removed the duplicates without dropping their
+rejection or unchanged-ledger assertions. Follow-up review: no hard violations
+or actionable heuristic findings remain.
+
+### Spec
+
+One P2 compatibility finding: moving PATCH validation ahead of membership changed
+outsider/revoked-member responses from 403 to 422 for invalid payloads and 500 for
+malformed JSON. Four new authenticated request tests reproduced those failures
+before the fix. Restored the PATCH adapter's membership preflight solely for
+response ordering; the expense module still independently enforces membership
+and Group/Expense binding. All four new cases pass, including unchanged ledger,
+history and activity. Follow-up review: no remaining spec findings.
+
+Initial findings: Standards 1 (low-severity duplication), Spec 1 (P2 response
+compatibility). Remaining findings after fixes: Standards 0, Spec 0.
+
 ## Passing checks
 
-- `pnpm test:expense-access`: **53 passed**, covering the four operations with
+- `pnpm test:expense-access`: **54 passed after review fixes**, covering the four operations with
   manual and genuinely generated recurring Expenses; disjoint/overlapping
   membership; outsiders; same-session membership revocation; anonymous redirects;
   identical missing-resource responses; successful non-admin/non-creator actions;
-  validation, unchanged archived Tags, attribution, restoration and repeated deletion.
-- `pnpm test`: **264 passed in 37 files**, including expense/history, balance,
+  validation, forbidden-before-invalid-body responses, unchanged archived Tags,
+  attribution, restoration and repeated deletion.
+- `pnpm test`: **264 passed in 37 files after review fixes**, including expense/history, balance,
   recurring, arithmetic, demo/Google auth and design-system regressions.
 - `pnpm typecheck`: passed.
 - `pnpm lint`: passed.

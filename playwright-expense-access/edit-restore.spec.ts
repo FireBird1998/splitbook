@@ -2,6 +2,32 @@ import { test, expect, dataOf, expensePath, observeLedger, generatedExpense } fr
 import { accessMatrix } from './access-matrix';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
+for (const membership of ['outsider', 'removed'] as const) {
+  for (const body of ['invalid shape', 'malformed JSON'] as const) {
+    test(`PATCH preserves forbidden precedence for ${membership} with ${body}`, async ({
+      ledger,
+    }) => {
+      const actor = membership === 'outsider' ? ledger.alex : ledger.sam;
+      if (membership === 'removed') {
+        await dataOf(
+          await ledger.priya.delete(`/api/groups/${ledger.groupB}/members/${DEMO_PERSONA_IDS.sam}`),
+        );
+        expect((await (await actor.get('/api/auth/session')).json()).user.id).toBe(
+          DEMO_PERSONA_IDS.sam,
+        );
+      }
+      const before = await observeLedger(ledger, ledger.expenseB);
+      const response = await actor.patch(expensePath(ledger.groupB, ledger.expenseB), {
+        data: body === 'invalid shape' ? { amount: -1 } : Buffer.from('{'),
+        headers: { 'Content-Type': 'application/json' },
+      });
+      expect.soft(response.status()).toBe(403);
+      expect.soft(await response.json()).toEqual({ error: 'Forbidden', status: 403 });
+      expect(await observeLedger(ledger, ledger.expenseB)).toEqual(before);
+    });
+  }
+}
+
 accessMatrix({
   name: 'edit',
   request: (actor, path) =>
@@ -108,21 +134,4 @@ test('an unchanged archived Tag remains editable', async ({ ledger }) => {
     }),
   );
   expect(updated).toMatchObject({ description: 'Corrected rent', tag: 'Rent' });
-});
-
-test('cross-group PATCH cannot edit or restore an expense', async ({ ledger }) => {
-  const actual = expensePath(ledger.groupB, ledger.expenseB);
-  const wrong = expensePath(ledger.groupA, ledger.expenseB);
-  const beforeEdit = await observeLedger(ledger, ledger.expenseB);
-  const edit = await ledger.alex.patch(wrong, { data: { description: 'Unauthorized change' } });
-  expect.soft(edit.status()).toBe(404);
-  expect.soft(await edit.json()).toEqual({ error: 'Expense not found', status: 404 });
-  expect.soft(await observeLedger(ledger, ledger.expenseB)).toEqual(beforeEdit);
-
-  await dataOf(await ledger.priya.delete(actual));
-  const beforeRestore = await observeLedger(ledger, ledger.expenseB);
-  const restore = await ledger.alex.patch(wrong, { data: { isDeleted: false } });
-  expect.soft(restore.status()).toBe(404);
-  expect.soft(await restore.json()).toEqual({ error: 'Expense not found', status: 404 });
-  expect.soft(await observeLedger(ledger, ledger.expenseB)).toEqual(beforeRestore);
 });

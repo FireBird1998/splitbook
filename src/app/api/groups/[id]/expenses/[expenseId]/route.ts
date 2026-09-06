@@ -9,6 +9,7 @@ import {
   error,
 } from '@/lib/utils/api-response';
 import { expenseService } from '@/lib/services/expense.service';
+import { groupService } from '@/lib/services/group.service';
 import { updateExpenseSchema } from '@/lib/validators/expense.validator';
 
 const expenseValidationMessages: Record<string, string> = {
@@ -48,6 +49,10 @@ export async function PATCH(
     if (!user) return unauthorized();
 
     const { id, expenseId } = await params;
+
+    // Preserve forbidden-before-invalid-body response ordering. The expense
+    // module independently enforces access; this preflight is not its guard.
+    if (!(await groupService.isMember(id, user.id!))) return forbidden();
 
     const body = await req.json();
     const parsed = updateExpenseSchema.safeParse(body);

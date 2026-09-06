@@ -1,4 +1,4 @@
-import { test, expect, dataOf, expensePath, observeLedger, generatedExpense } from './fixtures';
+import { test, expect, dataOf, expensePath, generatedExpense } from './fixtures';
 import { accessMatrix } from './access-matrix';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
@@ -38,11 +38,3 @@ for (const origin of ['manual', 'recurring'] as const) {
     expect(list.expenses.map((expense: { _id: string }) => expense._id)).not.toContain(id);
   });
 }
-
-test('cross-group deletion cannot change the expense or its audit trail', async ({ ledger }) => {
-  const before = await observeLedger(ledger, ledger.expenseB);
-  const response = await ledger.alex.delete(expensePath(ledger.groupA, ledger.expenseB));
-  expect.soft(response.status()).toBe(404);
-  expect.soft(await response.json()).toEqual({ error: 'Expense not found', status: 404 });
-  expect(await observeLedger(ledger, ledger.expenseB)).toEqual(before);
-});
