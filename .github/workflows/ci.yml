@@ -107,7 +107,7 @@ jobs:
             mcr.microsoft.com/playwright:v1.62.1-noble \
             /bin/sh -c 'npx -y playwright@1.62.1 run-server --port 9323 --host 0.0.0.0'
           for attempt in $(seq 1 30); do
-            if docker logs splitbook-design-browser 2>&1 | rg -q 'Listening on'; then exit 0; fi
+            if docker logs splitbook-design-browser 2>&1 | grep -Fq 'Listening on'; then exit 0; fi
             sleep 1
           done
           docker logs splitbook-design-browser
