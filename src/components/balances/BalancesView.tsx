@@ -72,6 +72,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
   });
   const {
     data: settlementsData,
+    isLoading: settlementsLoading,
     error: settlementsError,
     mutate: mutateSettlements,
   } = useSWR(`/api/groups/${groupId}/settlements`, fetcher);
@@ -112,6 +113,11 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
         {settlements.length > 0 && <StatusLabel label="Settled" tone="positive" />}
       </Stack>
       <Stack spacing={1.25}>
+        {settlementsLoading && !settlementsData && (
+          <Box role="status" aria-label="Loading settlement history" aria-busy="true">
+            <Skeleton variant="rounded" height={64} />
+          </Box>
+        )}
         {settlementsError && (
           <ErrorState
             severity="warning"
@@ -119,7 +125,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
             onRetry={() => void mutateSettlements()}
           />
         )}
-        {!settlementsError && settlements.length === 0 && (
+        {!settlementsLoading && !settlementsError && settlements.length === 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
             No settlements yet — record one when someone pays.
           </Typography>

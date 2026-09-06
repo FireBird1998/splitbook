@@ -410,10 +410,18 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
               message="Pending actions could not be loaded."
               onRetry={() => void mutateInvitations()}
             />
-          ) : invitationsLoading && groupsLoading && !invitationsData && !groupsData ? (
-            <Skeleton variant="rounded" height={120} />
           ) : (
             <Stack spacing={1.5}>
+              {invitationsLoading && !invitationsData && (
+                <Box role="status" aria-label="Loading pending actions" aria-busy="true">
+                  <Skeleton variant="rounded" height={64} />
+                </Box>
+              )}
+              {groupsLoading && !groupsData && (
+                <Box role="status" aria-label="Loading recent activity" aria-busy="true">
+                  <Skeleton variant="rounded" height={64} />
+                </Box>
+              )}
               {invitations.map((invitation) => (
                 <InvitationCard
                   key={invitation._id as string}
@@ -448,13 +456,16 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
                   <ArrowForwardIcon fontSize="small" color="action" />
                 </Paper>
               ))}
-              {invitations.length === 0 && recentGroups.length === 0 && (
-                <Paper variant="outlined" sx={{ p: 3 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    No recent activity or pending actions.
-                  </Typography>
-                </Paper>
-              )}
+              {!invitationsLoading &&
+                !groupsLoading &&
+                invitations.length === 0 &&
+                recentGroups.length === 0 && (
+                  <Paper variant="outlined" sx={{ p: 3 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      No recent activity or pending actions.
+                    </Typography>
+                  </Paper>
+                )}
             </Stack>
           )}
         </Box>

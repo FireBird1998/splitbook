@@ -4,6 +4,7 @@ import { checkStyles } from '../src/lib/theme/style-policy';
 // Explicit adoption list. Extend it with each migration; do not silently exempt
 // new violations. Dynamic styles still require theme and browser verification.
 const adoptedFiles = [
+  'src/lib/theme/createAppTheme.ts',
   'src/components/common/MoneyText.tsx',
   'src/components/common/StatusLabel.tsx',
   'src/components/common/ErrorState.tsx',

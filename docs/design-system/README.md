@@ -39,6 +39,17 @@ them through the MUI theme. `status.*` foregrounds are measured against `tint.*`
 paper, and page backgrounds. Decorative accent colors are not automatically safe
 for small text. Keep money formatting, currency separation, and precision unchanged.
 
+Measured status contrast (tint / paper / page background; minimum required 4.5:1):
+
+| Mode  | Positive           | Negative           | Warning            | Information        |
+| ----- | ------------------ | ------------------ | ------------------ | ------------------ |
+| Light | 5.03 / 5.61 / 5.16 | 4.97 / 5.80 / 5.33 | 5.79 / 6.36 / 5.84 | 5.06 / 5.71 / 5.24 |
+| Dark  | 6.30 / 8.26 / 9.16 | 5.10 / 5.93 / 6.58 | 6.87 / 8.00 / 8.87 | 5.76 / 7.46 / 8.27 |
+
+Trip and non-trip headers accept `balanceUnavailable` for a pending or failed
+initial balance request. Missing data must not appear as “Settled.” This optional
+presentation input preserves the existing zero/null contract for loaded callers.
+
 Use Outfit for UI and IBM Plex Mono for amounts. Preserve semantic HTML headings
 independently of visual variants. Use the existing MUI 8px spacing scale and
 600/900/1200/1536px breakpoints. Navigation height and sidebar width share runtime
@@ -107,7 +118,9 @@ journeys remain required; skipped/environment-blocked checks are not passes.
 The style checker contains an explicit list of adopted files. Extend it whenever
 a screen or shared pattern migrates. It checks literal style colors and static
 palette references against the actual runtime theme, without confusing user
-content with colors. Dynamic expressions and arbitrary computed keys still need
+content with colors. Inline `createTheme` configuration is also checked; token
+definitions are the intentional source of literal colors. Extracted style objects,
+dynamic expressions and arbitrary computed keys still need
 type and browser checks; this is not a proof of every possible `sx` expression.
 
 No new style-policy exceptions are currently registered. To request one, record

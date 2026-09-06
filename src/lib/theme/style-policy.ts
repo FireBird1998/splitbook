@@ -65,6 +65,16 @@ export function checkStyles(source: string): StyleFinding[] {
     ts.forEachChild(node, checkLiterals);
   }
   function visit(node: ts.Node, inStyle = false) {
+    // The theme owns palette values and override/variant styles, not user data.
+    // Follow inline configuration; extracted or computed values remain dynamic.
+    if (
+      ts.isCallExpression(node) &&
+      ts.isIdentifier(node.expression) &&
+      node.expression.text === 'createTheme'
+    ) {
+      node.arguments.forEach(checkLiterals);
+      return;
+    }
     if (ts.isJsxAttribute(node)) {
       const name = node.name.getText(file);
       if (colorProperties.has(name) && node.initializer) checkLiterals(node.initializer);

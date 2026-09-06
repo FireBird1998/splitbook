@@ -2,6 +2,18 @@ import { describe, expect, it } from 'vitest';
 import { checkStyles } from './style-policy';
 
 describe('adopted UI style policy', () => {
+  it('checks theme construction as well as JSX style contexts', () => {
+    expect(
+      checkStyles(
+        `createTheme({components:{MuiButton:{styleOverrides:{root:{color:'#fff',backgroundColor:'error.lighter'}}}}})`,
+      ).map((finding) => finding.message),
+    ).toEqual(['Use a semantic color instead of: #fff', 'Unknown palette token: error.lighter']);
+    expect(
+      checkStyles(
+        `createTheme({palette:{primary:{main:tokens.brand.main}},components:{MuiButton:{styleOverrides:{root:{color:tokens.text}}}}})`,
+      ),
+    ).toEqual([]);
+  });
   it('rejects unsupported palette paths and literal style colors, not user content', () => {
     const findings = checkStyles(`
       const label = '#123456';

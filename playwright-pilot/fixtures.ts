@@ -19,10 +19,10 @@ export const group = {
   createdBy: alex._id,
   inviteCode: 'sample-goa-trip',
   members: [
-    { user: alex, role: 'admin' },
-    { user: sam, role: 'member' },
+    { user: alex, role: 'admin', joinedAt: FIXED_TIME },
+    { user: sam, role: 'member', joinedAt: FIXED_TIME },
   ],
-  tags: [{ name: 'Food', isArchived: false }],
+  tags: [{ _id: 'sample-tag', name: 'Food', isArchived: false, createdAt: FIXED_TIME }],
 };
 const summary: UserBalancesResponse = {
   buckets: [{ currency: 'INR', youOwe: 1480, youAreOwed: 0, net: -1480 }],

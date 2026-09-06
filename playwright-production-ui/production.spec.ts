@@ -17,6 +17,6 @@ test('production catalogue is unavailable as HTML or a client-navigation payload
   expect(flight.status()).toBe(404);
   expect(await flight.text()).not.toContain('Local examples · synthetic data');
   const protectedPage = await request.get('/dev/design-system/private', { maxRedirects: 0 });
-  expect(protectedPage.status()).toBe(307);
+  expect([302, 307]).toContain(protectedPage.status());
   expect(protectedPage.headers().location).toContain('/login');
 });

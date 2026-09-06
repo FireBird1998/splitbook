@@ -2,6 +2,52 @@ import { expect, test } from '@playwright/test';
 import { DEMO_GROUP_ID, enterAsPersona } from '../playwright/fixtures';
 import { installPilotFixtures, expectAccessible, groupBalances } from './fixtures';
 
+test('pending invitations do not claim there are no pending actions', async ({ page }) => {
+  await installPilotFixtures(page, { '/api/groups': [] });
+  await enterAsPersona(page, 'alex');
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/invitations', async (route) => {
+    await pending;
+    await route.fallback();
+  });
+  try {
+    await page.reload();
+    await expect(page.getByRole('heading', { name: 'No groups yet' })).toBeVisible();
+    await expect(page.getByRole('status', { name: 'Loading pending actions' })).toBeVisible();
+    await expect(page.getByText('No recent activity or pending actions.')).toHaveCount(0);
+  } finally {
+    release();
+  }
+  await expect(page.getByText('No recent activity or pending actions.')).toBeVisible();
+});
+
+test('pending settlement history is loading, not an empty result', async ({ page }) => {
+  await installPilotFixtures(page);
+  await enterAsPersona(page, 'alex');
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**/api/groups/${DEMO_GROUP_ID}/settlements`, async (route) => {
+    await pending;
+    await route.fulfill({ json: { data: [] } });
+  });
+  try {
+    await page.goto(`/groups/${DEMO_GROUP_ID}?tab=balances`);
+    await expect(page.getByText('Who pays whom', { exact: true })).toBeVisible();
+    await expect(page.getByRole('status', { name: 'Loading settlement history' })).toBeVisible();
+    await expect(page.getByText('No settlements yet — record one when someone pays.')).toHaveCount(
+      0,
+    );
+  } finally {
+    release();
+  }
+  await expect(page.getByText('No settlements yet — record one when someone pays.')).toBeVisible();
+});
+
 for (const section of [
   { path: '/api/groups', message: 'Groups could not be loaded.' },
   { path: '/api/invitations', message: 'Pending actions could not be loaded.' },
@@ -139,6 +185,10 @@ test('narrow and breakpoint layouts keep settlement controls reachable and retur
   for (const width of [320, 600, 1199, 1200]) {
     await page.setViewportSize({ width, height: 844 });
     await expect(record).toBeVisible();
+    await record.scrollIntoViewIfNeeded();
+    await expect(record).toBeInViewport();
+    // A visible DOM node can still sit behind a fixed navigation/action bar.
+    await record.click({ trial: true });
     const bounds = await record.boundingBox();
     expect(bounds).not.toBeNull();
     expect(bounds!.x).toBeGreaterThanOrEqual(0);
