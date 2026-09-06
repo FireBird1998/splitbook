@@ -21,7 +21,21 @@ import {
 import { calculateSplitAmounts } from './split-calculation';
 import mongoose from 'mongoose';
 
+/** Single-expense access always pairs a trusted session actor with its requested group. */
+export interface ExpenseAccess {
+  actorId: string;
+  groupId: string;
+  expenseId: string;
+}
+
 export class ExpenseService {
+  private async requireAccessGroup({ actorId, groupId }: ExpenseAccess) {
+    await connectDB();
+    const group = await Group.findOne({ _id: groupId, 'members.user': actorId });
+    if (!group) throw new Error('FORBIDDEN');
+    return group;
+  }
+
   /**
    * Create a new expense.
    */
@@ -226,11 +240,11 @@ export class ExpenseService {
   }
 
   /**
-   * Get a single expense by ID.
+   * Read an expense only through its group and a current group member.
    */
-  async getById(expenseId: string) {
-    await connectDB();
-    return Expense.findById(expenseId)
+  async getById(access: ExpenseAccess) {
+    await this.requireAccessGroup(access);
+    return Expense.findOne({ _id: access.expenseId, group: access.groupId })
       .populate('paidBy.user', 'name email image')
       .populate('splitBetween.user', 'name email image')
       .populate('createdBy', 'name email image')
@@ -241,14 +255,11 @@ export class ExpenseService {
   /**
    * Update an expense. Handles both edits and restore (isDeleted: false).
    */
-  async update(expenseId: string, data: UpdateExpenseInput, userId: string) {
-    await connectDB();
-
-    const expense = await Expense.findById(expenseId);
+  async update(access: ExpenseAccess, data: UpdateExpenseInput) {
+    const group = await this.requireAccessGroup(access);
+    const userId = access.actorId;
+    const expense = await Expense.findOne({ _id: access.expenseId, group: access.groupId });
     if (!expense) return null;
-
-    const group = await Group.findById(expense.group);
-    if (!group) throw new Error('Group not found');
 
     const memberIds = new Set(group.members.map((member) => member.user.toString()));
     const activeTagNames = new Set(
@@ -331,10 +342,10 @@ export class ExpenseService {
   /**
    * Soft delete an expense.
    */
-  async delete(expenseId: string, userId: string) {
-    await connectDB();
-
-    const expense = await Expense.findById(expenseId);
+  async delete(access: ExpenseAccess) {
+    await this.requireAccessGroup(access);
+    const userId = access.actorId;
+    const expense = await Expense.findOne({ _id: access.expenseId, group: access.groupId });
     if (!expense) return null;
 
     expense.isDeleted = true;

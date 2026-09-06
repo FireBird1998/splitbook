@@ -1,12 +1,13 @@
 # Testing
 
-Three layers of tests, all wired into CI (`.github/workflows/ci.yml`).
+Four layers of tests, all wired into CI (`.github/workflows/ci.yml`).
 
-| Layer       | Runner     | Database                            | Command                 |
-| ----------- | ---------- | ----------------------------------- | ----------------------- |
-| Unit        | Vitest     | none (mocked models / pure helpers) | `pnpm test:unit`        |
-| Integration | Vitest     | real MongoDB, isolated per file     | `pnpm test:integration` |
-| Browser     | Playwright | seeded `splitbook-demo`             | `pnpm test:e2e`         |
+| Layer            | Runner          | Database                            | Command                    |
+| ---------------- | --------------- | ----------------------------------- | -------------------------- |
+| Unit             | Vitest          | none (mocked models / pure helpers) | `pnpm test:unit`           |
+| Integration      | Vitest          | real MongoDB, isolated per file     | `pnpm test:integration`    |
+| Expense requests | Playwright HTTP | real MongoDB, unique per run        | `pnpm test:expense-access` |
+| Browser          | Playwright      | seeded `splitbook-demo`             | `pnpm test:e2e`            |
 
 `pnpm test` runs unit + integration together and requires MongoDB running
 locally (the `split-mongo` Docker container works).
@@ -91,6 +92,41 @@ Never fix a "cannot be imported from a Client Component" error by removing the
 import of a DB module fail the build instead of leaking credentials. Alias it for
 the new runtime instead.
 
+## Authenticated expense requests
+
+Run `pnpm test:expense-access` with MongoDB listening on `127.0.0.1:27017`.
+No browser installation or Google credentials are needed. To run one slice,
+append `read.spec.ts`, `edit-restore.spec.ts`, or `delete.spec.ts`.
+
+The suite exercises actual HTTP requests through Auth.js, the route adapter,
+the expense module, and MongoDB. It verifies reads, edits, soft deletion and
+restoration for disjoint and overlapping Groups, outsiders, revoked members
+with still-valid sessions, and anonymous callers. Both manual Expenses and
+Expenses generated through the recurring-template request are covered.
+Authorized non-admin/non-creator controls preserve population, history,
+activity attribution, validation, archived Tags and repeat deletion.
+Denied writes are checked through subsequent authorized Expense/history and
+both Groups' activity requests, not database queries or mocked helpers.
+
+Isolation is deliberately stricter than the older browser suites:
+
+- A fresh `splitbook-test-access-<uuid>` database is minted for each run,
+  always on loopback; caller-provided MongoDB URIs and app URLs are not used.
+- A temporary source snapshot includes only app source, public assets and
+  the required build configuration. No `.env` files are copied. The child
+  process receives an allowlisted environment with synthetic auth settings.
+- The suite starts its own Next app on an allocated port and waits for that
+  child to report readiness. It never reuses a running app or its `.next` lock.
+- Teardown stops the owned app, drops only the minted test database and removes
+  the temporary snapshot. The working ledger and persistent demo are untouched.
+- Tests use the existing guarded demo personas; no production auth bypass is
+  introduced. Fixture Groups, memberships and Expenses are created via requests.
+
+The single-expense module interface requires `{ actorId, groupId, expenseId }`.
+The actor comes from the session; current membership and group-scoped lookup
+are enforced inside the module before reads or writes. This does not promise
+transactional protection against revocation racing an already-authorized write.
+
 ## Browser journeys (Playwright)
 
 Configured in [`playwright.config.ts`](../playwright.config.ts); specs and
@@ -135,8 +171,10 @@ Worth knowing where the safety net is and is not:
 - **Strong** on pure logic (split maths, debt simplification, currency bucketing,
   date bounds, auth-mode guards) and on service-level invariants exercised
   through a real database.
-- **Absent above the service layer.** No test invokes a route handler, so status
-  codes, Zod wiring and the guard order in routes are unverified.
+- **Request coverage for single-expense access.** The authenticated expense
+  suite covers route translation, validation and access enforcement end to end.
+  It is not a codebase-wide authorization audit; other routes do not inherit
+  these guarantees merely because this suite passes.
 - **No component tests are collectable at all** — `vitest.config.ts` includes
   only `src/**/*.test.ts`, so a `.tsx` test would be ignored. That matters
   because split-total validation, month-range parsing and the recurring

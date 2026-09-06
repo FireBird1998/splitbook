@@ -164,7 +164,7 @@ describe('balance integrity integration', () => {
     await groupService.addMember(groupId, bob);
 
     const expense = await addEqualExpense(groupId, alice, 100, [alice, bob]);
-    await expenseService.delete(expense._id.toString(), alice);
+    await expenseService.delete({ actorId: alice, groupId, expenseId: expense._id.toString() });
 
     const result = await balanceService.getGroupBalances(groupId);
     const balances = result!.balances as LeanBalance[];

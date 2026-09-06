@@ -8,7 +8,6 @@ import {
   validationError,
   error,
 } from '@/lib/utils/api-response';
-import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { updateExpenseSchema } from '@/lib/validators/expense.validator';
 
@@ -29,14 +28,12 @@ export async function GET(
 
     const { id, expenseId } = await params;
 
-    const isMember = await groupService.isMember(id, user.id!);
-    if (!isMember) return forbidden();
-
-    const expense = await expenseService.getById(expenseId);
+    const expense = await expenseService.getById({ actorId: user.id!, groupId: id, expenseId });
     if (!expense) return notFound('Expense');
 
     return success(expense);
   } catch (err) {
+    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
     return serverError(err);
   }
 }
@@ -52,18 +49,19 @@ export async function PATCH(
 
     const { id, expenseId } = await params;
 
-    const isMember = await groupService.isMember(id, user.id!);
-    if (!isMember) return forbidden();
-
     const body = await req.json();
     const parsed = updateExpenseSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error);
 
-    const expense = await expenseService.update(expenseId, parsed.data, user.id!);
+    const expense = await expenseService.update(
+      { actorId: user.id!, groupId: id, expenseId },
+      parsed.data,
+    );
     if (!expense) return notFound('Expense');
 
     return success(expense);
   } catch (err) {
+    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
     if (err instanceof Error && err.message in expenseValidationMessages) {
       return error(expenseValidationMessages[err.message], 422);
     }
@@ -83,14 +81,12 @@ export async function DELETE(
 
     const { id, expenseId } = await params;
 
-    const isMember = await groupService.isMember(id, user.id!);
-    if (!isMember) return forbidden();
-
-    const expense = await expenseService.delete(expenseId, user.id!);
+    const expense = await expenseService.delete({ actorId: user.id!, groupId: id, expenseId });
     if (!expense) return notFound('Expense');
 
     return success({ message: 'Expense deleted' });
   } catch (err) {
+    if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
     return serverError(err);
   }
 }

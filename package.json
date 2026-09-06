@@ -14,6 +14,7 @@
     "test:unit": "vitest run --exclude \"src/**/*.integration.test.ts\"",
     "test:integration": "vitest run integration",
     "test:e2e": "playwright test",
+    "test:expense-access": "playwright test --config playwright.expense-access.config.ts",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:google": "playwright test --config playwright.google.config.ts",
     "test:design-system": "playwright test --config playwright.design-system.config.ts",

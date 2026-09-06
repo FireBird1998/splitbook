@@ -175,9 +175,8 @@ describe('ExpenseService integration', () => {
 
     // The existing expense can be edited without changing its archived tag
     const updated = await expenseService.update(
-      expense._id.toString(),
+      { actorId: bob, groupId, expenseId: expense._id.toString() },
       { description: 'Dinner (renamed)' },
-      bob,
     );
     expect(updated?.description).toBe('Dinner (renamed)');
     expect(updated?.tag).toBe('Food');
@@ -195,7 +194,10 @@ describe('ExpenseService integration', () => {
       alice,
     );
 
-    await expenseService.update(expense._id.toString(), { amount: 330 }, bob);
+    await expenseService.update(
+      { actorId: bob, groupId, expenseId: expense._id.toString() },
+      { amount: 330 },
+    );
 
     const stored = await Expense.findById(expense._id);
     expect(stored!.amount).toBe(330);
@@ -216,7 +218,7 @@ describe('ExpenseService integration', () => {
       alice,
     );
 
-    await expenseService.delete(expense._id.toString(), alice);
+    await expenseService.delete({ actorId: alice, groupId, expenseId: expense._id.toString() });
 
     let stored = await Expense.findById(expense._id);
     expect(stored!.isDeleted).toBe(true);
@@ -225,7 +227,10 @@ describe('ExpenseService integration', () => {
     const list = await expenseService.getGroupExpenses(groupId, {}, alice);
     expect(list.expenses).toHaveLength(0);
 
-    await expenseService.update(expense._id.toString(), { isDeleted: false }, alice);
+    await expenseService.update(
+      { actorId: alice, groupId, expenseId: expense._id.toString() },
+      { isDeleted: false },
+    );
     stored = await Expense.findById(expense._id);
     expect(stored!.isDeleted).toBe(false);
     expect(stored!.deletedBy).toBeNull();

@@ -46,6 +46,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Authenticated expense access (isolated app and database)
+        run: pnpm test:expense-access
+
       - name: Build
         run: pnpm build
         env:
