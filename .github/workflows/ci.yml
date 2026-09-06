@@ -33,6 +33,9 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Adopted design-system style policy
+        run: pnpm check:design-system
+
       - name: Test (unit + integration)
         run: pnpm test
         env:
@@ -94,6 +97,36 @@ jobs:
       - name: Run Google OAuth journeys (google mode, local OIDC)
         run: pnpm test:e2e:google
 
+      - name: Start reproducible Linux visual-test browser
+        run: |
+          docker run --name splitbook-design-browser --platform linux/amd64 --rm -d --init \
+            --ipc=host -p 127.0.0.1:9323:9323 \
+            mcr.microsoft.com/playwright:v1.62.1-noble \
+            /bin/sh -c 'npx -y playwright@1.62.1 run-server --port 9323 --host 0.0.0.0'
+          for attempt in $(seq 1 30); do
+            if docker logs splitbook-design-browser 2>&1 | rg -q 'Listening on'; then exit 0; fi
+            sleep 1
+          done
+          docker logs splitbook-design-browser
+          exit 1
+
+      - name: Component lab (no auth or database dependencies)
+        run: pnpm test:design-system
+        env:
+          DESIGN_BROWSER_WS: ws://127.0.0.1:9323/
+
+      - name: Pilot behavior, accessibility, and visual comparisons
+        run: pnpm test:pilot
+        env:
+          DESIGN_BROWSER_WS: ws://127.0.0.1:9323/
+
+      - name: Production lab exclusion
+        run: pnpm test:production-ui
+
+      - name: Stop visual-test browser
+        if: always()
+        run: docker stop splitbook-design-browser
+
       - name: Upload Playwright report and review screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -105,4 +138,8 @@ jobs:
             playwright/results/
             playwright-google/report/
             playwright-google/results/
+            playwright-design-system/results/
+            playwright-pilot/report/
+            playwright-pilot/results/
+            playwright-production-ui/results/
           retention-days: 7

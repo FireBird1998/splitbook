@@ -39,11 +39,19 @@ interface GroupHeaderProps {
   inviteCode?: string | null;
   /** Signed personal balance; null/undefined or ~0 renders "Settled". */
   balance?: GroupHeaderAmount | null;
+  /** Data has not loaded; never describe an unknown balance as settled. */
+  balanceUnavailable?: boolean;
   /** Square off the bottom corners when content sits directly below (group cards). */
   joinedBottom?: boolean;
 }
 
-function BalanceBlock({ balance }: { balance?: GroupHeaderAmount | null }) {
+function BalanceBlock({
+  balance,
+  unavailable,
+}: {
+  balance?: GroupHeaderAmount | null;
+  unavailable: boolean;
+}) {
   const tone = balance ? getMoneyTone(balance.amount) : 'neutral';
   return (
     <Box>
@@ -60,7 +68,7 @@ function BalanceBlock({ balance }: { balance?: GroupHeaderAmount | null }) {
       >
         Your balance
       </Typography>
-      {!balance || tone === 'neutral' ? (
+      {unavailable || !balance || tone === 'neutral' ? (
         <Typography
           sx={(theme) => ({
             ...(theme.typography.money as React.CSSProperties),
@@ -69,7 +77,7 @@ function BalanceBlock({ balance }: { balance?: GroupHeaderAmount | null }) {
             color: 'text.primary',
           })}
         >
-          Settled
+          {unavailable ? 'Balance unavailable' : 'Settled'}
         </Typography>
       ) : (
         <MoneyText
@@ -101,13 +109,15 @@ export default function GroupHeader({
   userId,
   inviteCode,
   balance,
+  balanceUnavailable = false,
   joinedBottom = false,
 }: GroupHeaderProps) {
   const isFull = variant === 'full';
 
   const tone = balance ? getMoneyTone(balance.amount) : 'neutral';
-  const balanceDescription =
-    !balance || tone === 'neutral'
+  const balanceDescription = balanceUnavailable
+    ? 'Balance unavailable'
+    : !balance || tone === 'neutral'
       ? 'Settled up'
       : tone === 'positive'
         ? `You're owed ${formatCurrency(balance.amount, balance.currency)}`
@@ -172,7 +182,7 @@ export default function GroupHeader({
           </Typography>
         </Box>
         <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
-          <BalanceBlock balance={balance} />
+          <BalanceBlock balance={balance} unavailable={balanceUnavailable} />
         </Box>
       </Box>
     );
@@ -300,7 +310,7 @@ export default function GroupHeader({
           justifyContent: 'center',
         }}
       >
-        <BalanceBlock balance={balance} />
+        <BalanceBlock balance={balance} unavailable={balanceUnavailable} />
       </Box>
     </Paper>
   );

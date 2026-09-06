@@ -4,13 +4,16 @@ import useSWR from 'swr';
 import { useState } from 'react';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
-import Chip from '@mui/material/Chip';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Skeleton from '@mui/material/Skeleton';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
 import MoneyText from '@/components/common/MoneyText';
+import StatusLabel from '@/components/common/StatusLabel';
+import ErrorState from '@/components/common/ErrorState';
+import EmptyState from '@/components/common/EmptyState';
+import { RADIUS } from '@/lib/theme/tokens';
 import { formatDate } from '@/lib/utils/date';
 import SettleUpDialog from '@/components/settlements/SettleUpDialog';
 import { fetcher } from '@/lib/utils/fetcher';
@@ -85,7 +88,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
 
   if (isLoading) {
     return (
-      <Stack spacing={1.5}>
+      <Stack spacing={1.5} role="status" aria-label="Loading balances" aria-busy="true">
         {[1, 2, 3].map((i) => (
           <Skeleton key={i} variant="rounded" height={64} />
         ))}
@@ -94,7 +97,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
   }
 
   if (error) {
-    return <Alert severity="error">{error.message}</Alert>;
+    return <ErrorState message="Balances could not be loaded." onRetry={() => void mutate()} />;
   }
 
   const displayName = (user: { _id: string; name: string }) =>
@@ -106,16 +109,16 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
         <Typography variant="body2" fontWeight={600} color="text.primary">
           Settlement history
         </Typography>
-        {settlements.length > 0 && (
-          <Chip
-            label="Settled"
-            size="small"
-            sx={{ height: 22, fontSize: '0.7rem', bgcolor: 'tint.positive', color: 'success.main' }}
-          />
-        )}
+        {settlements.length > 0 && <StatusLabel label="Settled" tone="positive" />}
       </Stack>
       <Stack spacing={1.25}>
-        {settlementsError && <Alert severity="warning">Could not load settlement history.</Alert>}
+        {settlementsError && (
+          <ErrorState
+            severity="warning"
+            message="Could not load settlement history."
+            onRetry={() => void mutateSettlements()}
+          />
+        )}
         {!settlementsError && settlements.length === 0 && (
           <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
             No settlements yet — record one when someone pays.
@@ -173,15 +176,10 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     return (
       <Stack spacing={3}>
         {hasMixedCurrencies && <Alert severity="warning">{MIXED_CURRENCY_WARNING}</Alert>}
-        <Box sx={{ py: { xs: 4, sm: 6 }, textAlign: 'center' }}>
-          <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
-            All settled up
-          </Typography>
-          <Typography color="text.secondary">
-            No one owes anyone in this{' '}
-            {getGroupTheme(group.category as GroupCategory).nouns.singular} right now.
-          </Typography>
-        </Box>
+        <EmptyState
+          title="All settled up"
+          description={`No one owes anyone in this ${getGroupTheme(group.category as GroupCategory).nouns.singular} right now.`}
+        />
         {settlementHistory}
       </Stack>
     );
@@ -225,11 +223,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
             <Typography variant="body2" fontWeight={600} color="text.primary">
               Who pays whom
             </Typography>
-            <Chip
-              label={`${debts.length} open`}
-              size="small"
-              sx={{ height: 22, fontSize: '0.7rem', bgcolor: 'tint.negative', color: 'error.main' }}
-            />
+            <StatusLabel label={`${debts.length} open`} tone="negative" />
           </Stack>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
             {debts.length} payment{debts.length !== 1 ? 's' : ''} to settle · either person can
@@ -252,7 +246,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                     sx={{
                       border: '1px solid',
                       borderColor: 'divider',
-                      borderRadius: '12px',
+                      borderRadius: `${RADIUS.md}px`,
                       px: 2,
                       py: 1.75,
                       bgcolor: 'background.paper',
@@ -334,7 +328,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                   {b.user._id === userId ? 'You' : b.user.name}
                 </Typography>
                 {Math.abs(b.balance) < 0.005 ? (
-                  <Typography variant="body2" fontWeight={600} color="text.disabled">
+                  <Typography variant="body2" fontWeight={600} color="status.positive">
                     Settled
                   </Typography>
                 ) : (

@@ -6,6 +6,12 @@ The app uses **Material UI (MUI) v7** exclusively for all styling and components
 
 Light and dark modes are both first-class and are designed together — see [Theme](#theme).
 
+The runtime TypeScript theme is the sole production token authority. Static
+private-beta prototypes are historical references. See the
+[v1 usage and verification guide](design-system/README.md) for the component lab,
+adoption scope, and review requirements. V1's pilot still requires owner visual
+approval before broader screen migration.
+
 ---
 
 ## Theme
@@ -55,13 +61,14 @@ Standard MUI keys work as usual (`primary.main`, `text.primary`,
 `background.default`, `background.paper`, `divider`, `error.main`,
 `success.main`). The augmented app-specific keys are:
 
-| Token                                                             | Usage                                 |
-| ----------------------------------------------------------------- | ------------------------------------- |
-| `"surface.muted"` / `"surface.elevated"`                          | Recessed and raised surfaces          |
-| `"border.strong"`                                                 | Emphasised borders                    |
-| `"tint.brand"` / `.info` / `.positive` / `.negative` / `.warning` | Low-emphasis fills behind status text |
-| `"strip.bg"` / `.text` / `.muted` / `.perforation` / `.stub`      | Trip strip only                       |
-| `"focus.main"` / `"focus.ring"`                                   | Focus indicator and ring              |
+| Token                                                             | Usage                                        |
+| ----------------------------------------------------------------- | -------------------------------------------- |
+| `"surface.muted"` / `"surface.elevated"`                          | Recessed and raised surfaces                 |
+| `"border.strong"`                                                 | Emphasised borders                           |
+| `"tint.brand"` / `.info` / `.positive` / `.negative` / `.warning` | Low-emphasis fills behind status text        |
+| `"strip.bg"` / `.text` / `.muted` / `.perforation` / `.stub`      | Trip strip only                              |
+| `"focus.main"` / `"focus.ring"`                                   | Focus indicator and ring                     |
+| `"status.positive"` / `.negative` / `.warning` / `.info`          | Readable text on tints and ordinary surfaces |
 
 ### Typography
 
@@ -85,6 +92,12 @@ Add the key to `SemanticTokens`, then give it a value in **both** `lightTokens`
 and `darkTokens` — the type makes omitting one a compile error. If components
 need it through `sx`, extend the MUI palette augmentation in `createAppTheme.ts`
 too. Never hardcode a hex in a component.
+
+Use the status foregrounds for money and status labels, rather than assuming an
+accent's `main` value works for small text. Light-mode readable foregrounds are
+mint `#0d7654`, coral `#b93628`, warning `#875407`, and sky `#086ba8`; decorative
+accent values above remain available. Form-error labels/helpers and contained
+informational buttons also use readable theme defaults.
 
 ---
 

@@ -1,0 +1,4 @@
+/* Exclude Next.js development tools, never application content or actions. */
+nextjs-portal {
+  display: none !important;
+}

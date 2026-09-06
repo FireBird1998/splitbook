@@ -18,6 +18,12 @@
 /playwright/artifacts/
 /playwright-google/results/
 /playwright-google/report/
+/playwright-design-system/results/
+/playwright-design-system/report/
+/playwright-pilot/results/
+/playwright-pilot/report/
+/playwright-production-ui/results/
+/output/playwright/
 
 # next.js
 /.next/

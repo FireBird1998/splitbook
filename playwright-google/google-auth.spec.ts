@@ -35,6 +35,12 @@ test.describe('google auth mode', () => {
 
     await expect(page).toHaveURL(/\/dashboard$/);
     await expect(page.getByText('Splitbook', { exact: true })).toBeVisible();
+    // CI runs next start: a real authenticated session must not reveal the lab.
+    if (process.env.CI) {
+      const catalogue = await page.request.get('/dev/design-system');
+      expect(catalogue.status()).toBe(404);
+      expect(await catalogue.text()).not.toContain('Local examples · synthetic data');
+    }
   });
 
   test('an unapproved Google identity sees the invite-only access result', async ({ page }) => {

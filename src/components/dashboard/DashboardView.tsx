@@ -17,6 +17,8 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import GroupCard from '@/components/groups/GroupCard';
 import InvitationCard from '@/components/dashboard/InvitationCard';
 import MoneyText from '@/components/common/MoneyText';
+import ErrorState from '@/components/common/ErrorState';
+import EmptyState from '@/components/common/EmptyState';
 import { formatRelativeTime } from '@/lib/utils/date';
 import { selectNextAction } from '@/lib/utils/dashboard';
 import { fetcher } from '@/lib/utils/fetcher';
@@ -78,7 +80,13 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
 
   if (initialLoading) {
     return (
-      <Container maxWidth="lg" disableGutters>
+      <Container
+        maxWidth="lg"
+        disableGutters
+        role="status"
+        aria-label="Loading dashboard"
+        aria-busy="true"
+      >
         <Stack spacing={3}>
           <Skeleton variant="text" width={240} height={40} />
           <Box
@@ -106,7 +114,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
           <Typography
             variant="overline"
             component="p"
-            color="text.disabled"
+            color="text.secondary"
             sx={{ display: 'block' }}
           >
             Your money
@@ -136,7 +144,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
             {balanceSummary?.buckets.length ? (
               <Typography
                 variant="caption"
-                color="text.disabled"
+                color="text.secondary"
                 sx={(theme) => ({ ...(theme.typography.money as React.CSSProperties) })}
               >
                 {balanceSummary.buckets.map((bucket) => bucket.currency).join(' · ')} kept separate
@@ -156,16 +164,10 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
               ))}
             </Box>
           ) : balancesError && !balanceSummary ? (
-            <Alert
-              severity="error"
-              action={
-                <Button color="inherit" size="small" onClick={() => void mutateBalances()}>
-                  Retry
-                </Button>
-              }
-            >
-              {balancesError.message || 'Balances could not be loaded.'}
-            </Alert>
+            <ErrorState
+              message="Balances could not be loaded."
+              onRetry={() => void mutateBalances()}
+            />
           ) : balanceSummary?.buckets.length ? (
             <Box
               sx={{
@@ -180,7 +182,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
                     <Typography
                       variant="caption"
                       fontWeight={600}
-                      color="text.disabled"
+                      color="text.secondary"
                       sx={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}
                     >
                       Balance
@@ -188,7 +190,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
                     <Typography
                       component="span"
                       variant="caption"
-                      color="text.disabled"
+                      color="text.secondary"
                       sx={(theme) => ({ ...(theme.typography.money as React.CSSProperties) })}
                     >
                       {bucket.currency}
@@ -226,7 +228,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
             </Box>
           ) : (
             <Paper variant="outlined" sx={{ p: 3 }}>
-              <Typography fontWeight={700} color="success.main">
+              <Typography fontWeight={700} color="status.positive">
                 You&apos;re all settled up
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
@@ -244,7 +246,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
 
         {balancesLoading && !balanceSummary ? (
           <Skeleton variant="rounded" height={128} />
-        ) : (
+        ) : balancesError && !balanceSummary ? null : (
           <Paper
             component="section"
             variant="outlined"
@@ -275,7 +277,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
                 <Typography
                   variant="caption"
                   fontWeight={600}
-                  color="text.disabled"
+                  color="text.secondary"
                   sx={{ textTransform: 'uppercase', letterSpacing: '0.04em' }}
                 >
                   Next best action
@@ -333,16 +335,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
           </Stack>
 
           {groupsError && !groupsData ? (
-            <Alert
-              severity="error"
-              action={
-                <Button color="inherit" size="small" onClick={() => void mutateGroups()}>
-                  Retry
-                </Button>
-              }
-            >
-              {groupsError.message || 'Groups could not be loaded.'}
-            </Alert>
+            <ErrorState message="Groups could not be loaded." onRetry={() => void mutateGroups()} />
           ) : groupsLoading && !groupsData ? (
             <Box
               sx={{
@@ -356,19 +349,21 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
               ))}
             </Box>
           ) : groups.length === 0 ? (
-            <Paper variant="outlined" sx={{ p: 5, textAlign: 'center' }}>
-              <Typography variant="h6">No groups yet</Typography>
-              <Typography color="text.secondary" sx={{ mt: 1, mb: 2 }}>
-                Create a group to start tracking shared expenses.
-              </Typography>
-              <Button
-                component={Link}
-                href="/groups/new"
-                variant="contained"
-                startIcon={<AddIcon />}
-              >
-                Create your first group
-              </Button>
+            <Paper variant="outlined">
+              <EmptyState
+                title="No groups yet"
+                description="Create a group to start tracking shared expenses."
+                action={
+                  <Button
+                    component={Link}
+                    href="/groups/new"
+                    variant="contained"
+                    startIcon={<AddIcon />}
+                  >
+                    Create your first group
+                  </Button>
+                }
+              />
             </Paper>
           ) : (
             <Box
@@ -386,6 +381,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
                     group={group}
                     userId={userId}
                     balances={groupBalance?.balances}
+                    balanceUnavailable={!balanceSummary}
                     hasMixedCurrencies={groupBalance?.hasMixedCurrencies}
                   />
                 );
@@ -410,16 +406,10 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
           </Stack>
 
           {invitationsError && !invitationsData ? (
-            <Alert
-              severity="error"
-              action={
-                <Button color="inherit" size="small" onClick={() => void mutateInvitations()}>
-                  Retry
-                </Button>
-              }
-            >
-              {invitationsError.message || 'Pending actions could not be loaded.'}
-            </Alert>
+            <ErrorState
+              message="Pending actions could not be loaded."
+              onRetry={() => void mutateInvitations()}
+            />
           ) : invitationsLoading && groupsLoading && !invitationsData && !groupsData ? (
             <Skeleton variant="rounded" height={120} />
           ) : (

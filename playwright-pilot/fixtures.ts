@@ -1,0 +1,109 @@
+import { expect, type Page, type TestInfo } from '@playwright/test';
+import { AxeBuilder } from '@axe-core/playwright';
+import { DEMO_GROUP_ID, DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
+import type { UserBalancesResponse } from '../src/types';
+
+export const FIXED_TIME = '2026-09-06T09:00:00.000Z';
+const alex = { _id: DEMO_PERSONA_IDS.alex, name: 'Alex Rivera' };
+const sam = { _id: DEMO_PERSONA_IDS.sam, name: 'Sam Chen' };
+export const group = {
+  _id: DEMO_GROUP_ID,
+  name: 'Goa Friends Trip',
+  category: 'trip',
+  defaultCurrency: 'INR',
+  alternateCurrencies: [],
+  startDate: '2026-09-01T00:00:00.000Z',
+  endDate: '2026-09-10T00:00:00.000Z',
+  createdAt: FIXED_TIME,
+  updatedAt: FIXED_TIME,
+  createdBy: alex._id,
+  inviteCode: 'sample-goa-trip',
+  members: [
+    { user: alex, role: 'admin' },
+    { user: sam, role: 'member' },
+  ],
+  tags: [{ name: 'Food', isArchived: false }],
+};
+const summary: UserBalancesResponse = {
+  buckets: [{ currency: 'INR', youOwe: 1480, youAreOwed: 0, net: -1480 }],
+  hasMixedCurrencies: false,
+  groups: [
+    {
+      groupId: DEMO_GROUP_ID,
+      name: group.name,
+      category: 'trip',
+      updatedAt: FIXED_TIME,
+      hasMixedCurrencies: false,
+      balances: [
+        {
+          currency: 'INR',
+          balance: -1480,
+          settlement: { counterpartyId: sam._id, counterpartyName: sam.name, amount: 1480 },
+        },
+      ],
+    },
+  ],
+};
+export const groupBalances = {
+  balances: [
+    { user: alex, balance: -1480 },
+    { user: sam, balance: 1480 },
+  ],
+  debts: [{ from: alex, to: sam, amount: 1480 }],
+  currency: 'INR',
+  hasMixedCurrencies: false,
+};
+
+/** Fixture only public HTTP responses; real demo authentication stays in place. */
+export async function installPilotFixtures(page: Page, overrides: Record<string, unknown> = {}) {
+  await page.clock.setFixedTime(new Date(FIXED_TIME));
+  const responses: Record<string, unknown> = {
+    '/api/groups': [group],
+    '/api/user/balances': summary,
+    '/api/invitations': [],
+    [`/api/groups/${DEMO_GROUP_ID}`]: group,
+    [`/api/groups/${DEMO_GROUP_ID}/balances`]: groupBalances,
+    [`/api/groups/${DEMO_GROUP_ID}/settlements`]: [
+      {
+        _id: 'sample-settlement',
+        paidBy: alex,
+        paidTo: sam,
+        amount: 100,
+        currency: 'INR',
+        note: 'Dinner contribution',
+        createdAt: FIXED_TIME,
+        createdBy: alex,
+      },
+    ],
+    [`/api/groups/${DEMO_GROUP_ID}/expenses`]: {
+      expenses: [],
+      pagination: { total: 1, page: 1, limit: 20, totalPages: 1 },
+      summary: { totalAmount: 2500, count: 1, byCategory: [], byMember: [] },
+    },
+    ...overrides,
+  };
+  await page.route('**/api/**', async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    if (route.request().method() === 'GET' && pathname in responses) {
+      await route.fulfill({ json: { success: true, data: responses[pathname] } });
+    } else await route.continue();
+  });
+}
+
+export async function expectAccessible(page: Page, testInfo: TestInfo) {
+  const results = await new AxeBuilder({ page })
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  await testInfo.attach('accessibility', {
+    body: JSON.stringify(results.violations, null, 2),
+    contentType: 'application/json',
+  });
+  expect(
+    results.violations
+      .filter((v) => v.impact === 'serious' || v.impact === 'critical')
+      .map((v) => ({
+        id: v.id,
+        nodes: v.nodes.map((node) => ({ target: node.target, summary: node.failureSummary })),
+      })),
+  ).toEqual([]);
+}

@@ -16,6 +16,10 @@
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:google": "playwright test --config playwright.google.config.ts",
+    "test:design-system": "playwright test --config playwright.design-system.config.ts",
+    "test:pilot": "playwright test --config playwright.pilot.config.ts",
+    "test:production-ui": "playwright test --config playwright.production-ui.config.ts",
+    "check:design-system": "tsx --tsconfig scripts/tsconfig.json scripts/check-design-system.ts",
     "typecheck": "tsc --noEmit",
     "demo:seed": "tsx --tsconfig scripts/tsconfig.json scripts/demo-seed.ts",
     "demo:reset": "tsx --tsconfig scripts/tsconfig.json scripts/demo-reset.ts"

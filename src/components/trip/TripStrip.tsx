@@ -24,6 +24,8 @@ interface TripStripProps {
   inviteCode?: string | null;
   /** Signed personal balance; null/undefined or ~0 renders "Settled". */
   balance?: TripStripAmount | null;
+  /** Data has not loaded; never describe an unknown balance as settled. */
+  balanceUnavailable?: boolean;
   /** Trip-wide spend total shown on the full variant stub. */
   tripTotal?: TripStripAmount | null;
   /** Square off the bottom corners when content sits directly below (trip cards). */
@@ -97,6 +99,7 @@ export default function TripStrip({
   memberNames,
   inviteCode,
   balance,
+  balanceUnavailable = false,
   tripTotal,
   joinedBottom = false,
 }: TripStripProps) {
@@ -104,12 +107,14 @@ export default function TripStrip({
   const isFull = variant === 'full';
 
   const tone = balance ? getMoneyTone(balance.amount) : 'neutral';
-  const balanceText =
-    !balance || tone === 'neutral'
+  const balanceText = balanceUnavailable
+    ? 'Balance unavailable'
+    : !balance || tone === 'neutral'
       ? 'Settled'
       : formatSignedCurrency(balance.amount, balance.currency);
-  const balanceDescription =
-    !balance || tone === 'neutral'
+  const balanceDescription = balanceUnavailable
+    ? 'Balance unavailable'
+    : !balance || tone === 'neutral'
       ? 'Settled up'
       : tone === 'positive'
         ? `You're owed ${formatCurrency(balance.amount, balance.currency)}`

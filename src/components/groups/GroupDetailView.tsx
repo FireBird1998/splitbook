@@ -253,6 +253,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
             )}
             inviteCode={(group.inviteCode as string | null | undefined) ?? null}
             balance={userBalance ? { amount: userBalance.balance, currency } : null}
+            balanceUnavailable={!balancesData}
             tripTotal={typeof tripTotal === 'number' ? { amount: tripTotal, currency } : null}
           />
         ) : (
@@ -267,6 +268,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
             userId={userId}
             inviteCode={(group.inviteCode as string | null | undefined) ?? null}
             balance={userBalance ? { amount: userBalance.balance, currency } : null}
+            balanceUnavailable={!balancesData}
           />
         )}
       </Box>

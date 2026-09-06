@@ -29,6 +29,7 @@ interface GroupCardProps {
   userId: string;
   balances?: DashboardBalanceAmount[];
   hasMixedCurrencies?: boolean;
+  balanceUnavailable?: boolean;
   mode?: 'dashboard' | 'management';
 }
 
@@ -69,6 +70,7 @@ export default function GroupCard({
   userId,
   balances = [],
   hasMixedCurrencies = false,
+  balanceUnavailable = false,
   mode = 'dashboard',
 }: GroupCardProps) {
   const members = [
@@ -119,6 +121,7 @@ export default function GroupCard({
             dateLabel={dateLabel}
             memberCount={members.length}
             joinedBottom
+            balanceUnavailable={balanceUnavailable}
             balance={
               dominantBalance
                 ? { amount: dominantBalance.balance, currency: dominantBalance.currency }
@@ -135,6 +138,7 @@ export default function GroupCard({
             href={`/groups/${groupId}`}
             members={members.map((member) => member.user)}
             joinedBottom
+            balanceUnavailable={balanceUnavailable}
             balance={
               dominantBalance
                 ? { amount: dominantBalance.balance, currency: dominantBalance.currency }
