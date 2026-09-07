@@ -2,9 +2,9 @@ import connectDB from '@/lib/db';
 import Expense from '@/lib/models/Expense';
 import Settlement from '@/lib/models/Settlement';
 import Group from '@/lib/models/Group';
-import { calculateNetBalances, simplifyDebts } from '@/lib/utils/debt-simplifier';
-import { aggregateCurrencyBalances } from '@/lib/utils/dashboard';
-import type { DashboardGroupBalance, GroupCategory } from '@/types';
+import { calculateNetBalances, simplifyDebts } from '@splitbook/shared/debt-simplifier';
+import { aggregateCurrencyBalances } from '@splitbook/shared/dashboard';
+import type { DashboardGroupBalance, GroupCategory } from '@splitbook/shared/types';
 
 export class BalanceService {
   /**

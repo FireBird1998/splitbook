@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { CURRENCY_CODES } from '@/lib/utils/currency';
+import { CURRENCY_CODES } from '../currency';
 
 export const createSettlementSchema = z.object({
   /** Who paid. Defaults to the recording user when omitted. */

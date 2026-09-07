@@ -2,7 +2,7 @@
  * Pure helpers for the expense form fast path and progressive split UI.
  */
 
-import { getPredefinedItem } from '@/lib/constants/predefined-items';
+import { getPredefinedItem } from '@splitbook/shared/predefined-items';
 
 export interface GroupTagOption {
   _id?: string;

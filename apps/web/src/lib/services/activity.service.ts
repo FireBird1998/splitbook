@@ -1,6 +1,6 @@
 import connectDB from '@/lib/db';
 import Activity from '@/lib/models/Activity';
-import type { ActivityType } from '@/types';
+import type { ActivityType } from '@splitbook/shared/types';
 
 export class ActivityService {
   /**

@@ -1,4 +1,4 @@
-import type { GroupCategory } from '@/types';
+import type { GroupCategory } from './types';
 
 /**
  * Trip-themed default tags. Kept as the canonical trip list — the demo seed

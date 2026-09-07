@@ -10,8 +10,8 @@ import {
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
-import { createExpenseSchema } from '@/lib/validators/expense.validator';
-import type { ExpenseFilters } from '@/types';
+import { createExpenseSchema } from '@splitbook/shared/validators/expense';
+import type { ExpenseFilters } from '@splitbook/shared/types';
 
 const expenseValidationMessages: Record<string, string> = {
   INVALID_MEMBERS: 'All payers and split participants must be group members',

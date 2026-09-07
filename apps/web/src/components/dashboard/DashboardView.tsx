@@ -19,10 +19,10 @@ import InvitationCard from '@/components/dashboard/InvitationCard';
 import MoneyText from '@/components/common/MoneyText';
 import ErrorState from '@/components/common/ErrorState';
 import EmptyState from '@/components/common/EmptyState';
-import { formatRelativeTime } from '@/lib/utils/date';
-import { selectNextAction } from '@/lib/utils/dashboard';
+import { formatRelativeTime } from '@splitbook/shared/date';
+import { selectNextAction } from '@splitbook/shared/dashboard';
 import { fetcher } from '@/lib/utils/fetcher';
-import type { UserBalancesResponse } from '@/types';
+import type { UserBalancesResponse } from '@splitbook/shared/types';
 
 interface DashboardViewProps {
   userId: string;

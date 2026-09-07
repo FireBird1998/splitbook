@@ -16,14 +16,14 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Autocomplete from '@mui/material/Autocomplete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import { CURRENCIES } from '@/lib/utils/currency';
+import { CURRENCIES } from '@splitbook/shared/currency';
 import {
   isValidParticipantEmail,
   normalizeParticipantEmails,
   validateTripDates,
-} from '@/lib/utils/trip-setup';
-import { GROUP_THEME_LIST, getGroupTheme } from '@/lib/group-themes';
-import type { GroupCategory } from '@/types';
+} from '@splitbook/shared/trip-setup';
+import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
+import type { GroupCategory } from '@splitbook/shared/types';
 
 export default function NewGroupPage() {
   const router = useRouter();

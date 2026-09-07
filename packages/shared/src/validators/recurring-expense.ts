@@ -1,8 +1,8 @@
 import { z } from 'zod/v4';
-import { CURRENCY_CODES } from '@/lib/utils/currency';
-import { CATEGORY_IDS } from '@/lib/constants/categories';
+import { CURRENCY_CODES } from '../currency';
+import { CATEGORY_IDS } from '../categories';
 
-export const createExpenseSchema = z.object({
+export const createRecurringExpenseSchema = z.object({
   description: z.string().min(1, 'Description is required').max(200).trim(),
   amount: z.number().positive('Amount must be positive').max(10_000_000),
   currency: z.string().refine((val) => CURRENCY_CODES.includes(val), {
@@ -12,7 +12,7 @@ export const createExpenseSchema = z.object({
     .string()
     .refine((val) => CATEGORY_IDS.includes(val), { message: 'Invalid category' })
     .default('other'),
-  date: z.coerce.date(),
+  tag: z.string().min(1, 'Tag is required').trim(),
   paidBy: z
     .array(
       z.object({
@@ -32,14 +32,15 @@ export const createExpenseSchema = z.object({
       }),
     )
     .min(1, 'At least one person must be in the split'),
-  tag: z.string().min(1, 'Tag is required').trim(),
-  predefinedItem: z.string().nullable().optional(),
-  notes: z.string().max(500).trim().optional(),
+  /** 1–31; clamped to the last day of short months at generation time. */
+  dayOfMonth: z.number().int().min(1).max(31),
+  startsOn: z.coerce.date(),
+  endsOn: z.coerce.date().nullable().optional(),
 });
 
-export const updateExpenseSchema = createExpenseSchema.partial().extend({
-  isDeleted: z.literal(false).optional(),
+export const updateRecurringExpenseSchema = createRecurringExpenseSchema.partial().extend({
+  isPaused: z.boolean().optional(),
 });
 
-export type CreateExpenseInput = z.infer<typeof createExpenseSchema>;
-export type UpdateExpenseInput = z.infer<typeof updateExpenseSchema>;
+export type CreateRecurringExpenseInput = z.infer<typeof createRecurringExpenseSchema>;
+export type UpdateRecurringExpenseInput = z.infer<typeof updateRecurringExpenseSchema>;

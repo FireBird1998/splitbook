@@ -1,8 +1,8 @@
 'use client';
 
 import Typography, { type TypographyProps } from '@mui/material/Typography';
-import { formatCurrency } from '@/lib/utils/currency';
-import { formatSignedCurrency, getMoneyTone, type MoneyTone } from '@/lib/utils/money';
+import { formatCurrency } from '@splitbook/shared/currency';
+import { formatSignedCurrency, getMoneyTone, type MoneyTone } from '@splitbook/shared/money';
 
 interface MoneyTextProps extends Omit<TypographyProps, 'children'> {
   amount: number;

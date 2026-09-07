@@ -30,10 +30,10 @@ import ActivityView from '@/components/activity/ActivityView';
 import ExpenseFormDialog from '@/components/expenses/ExpenseFormDialog';
 import InviteDialog from '@/components/groups/InviteDialog';
 import { fetcher } from '@/lib/utils/fetcher';
-import { formatDate } from '@/lib/utils/date';
-import { buildTripChecklist, shouldShowTripChecklist } from '@/lib/utils/trip-setup';
-import { getGroupTheme } from '@/lib/group-themes';
-import type { ExpenseMemberBreakdownRow, GroupCategory } from '@/types';
+import { formatDate } from '@splitbook/shared/date';
+import { buildTripChecklist, shouldShowTripChecklist } from '@splitbook/shared/trip-setup';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import type { ExpenseMemberBreakdownRow, GroupCategory } from '@splitbook/shared/types';
 
 interface GroupDetailViewProps {
   groupId: string;

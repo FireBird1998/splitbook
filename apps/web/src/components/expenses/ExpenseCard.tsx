@@ -21,8 +21,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import MoneyText from '@/components/common/MoneyText';
-import { formatCurrency } from '@/lib/utils/currency';
-import { formatDateTime } from '@/lib/utils/date';
+import { formatCurrency } from '@splitbook/shared/currency';
+import { formatDateTime } from '@splitbook/shared/date';
 
 const CATEGORY_ICONS: Record<string, string> = {
   food: '🍕',

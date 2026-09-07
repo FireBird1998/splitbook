@@ -6,7 +6,7 @@ import {
   defaultTagsForCategory,
   mergeMissingDefaultTags,
 } from './default-tags';
-import type { GroupCategory } from '@/types';
+import type { GroupCategory } from './types';
 
 describe('default group tags', () => {
   it('keeps the five trip-ready default tags as the canonical trip list', () => {

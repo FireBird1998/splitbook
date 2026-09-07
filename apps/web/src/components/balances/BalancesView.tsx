@@ -14,12 +14,12 @@ import StatusLabel from '@/components/common/StatusLabel';
 import ErrorState from '@/components/common/ErrorState';
 import EmptyState from '@/components/common/EmptyState';
 import { RADIUS } from '@/lib/theme/tokens';
-import { formatDate } from '@/lib/utils/date';
+import { formatDate } from '@splitbook/shared/date';
 import SettleUpDialog from '@/components/settlements/SettleUpDialog';
 import { fetcher } from '@/lib/utils/fetcher';
-import { canRecordSettlement } from '@/lib/utils/settlement-authorization';
-import { getGroupTheme } from '@/lib/group-themes';
-import type { GroupCategory } from '@/types';
+import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import type { GroupCategory } from '@splitbook/shared/types';
 
 const MIXED_CURRENCY_WARNING =
   "Some expenses or settlements use a different currency than this group's default. Balances may be inaccurate until those are updated.";

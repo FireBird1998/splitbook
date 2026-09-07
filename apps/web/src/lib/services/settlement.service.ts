@@ -6,8 +6,8 @@ import {
   assertGroupCurrency,
   assertSettlementAuthorization,
   assertSettlementMembers,
-} from './expense-validation';
-import type { CreateSettlementInput } from '@/lib/validators/settlement.validator';
+} from '@splitbook/shared/expense-validation';
+import type { CreateSettlementInput } from '@splitbook/shared/validators/settlement';
 
 export class SettlementService {
   /**

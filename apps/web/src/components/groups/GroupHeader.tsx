@@ -8,8 +8,8 @@ import Typography from '@mui/material/Typography';
 import Avatar from '@mui/material/Avatar';
 import AvatarGroup from '@mui/material/AvatarGroup';
 import MoneyText from '@/components/common/MoneyText';
-import { getMoneyTone } from '@/lib/utils/money';
-import { formatCurrency } from '@/lib/utils/currency';
+import { getMoneyTone } from '@splitbook/shared/money';
+import { formatCurrency } from '@splitbook/shared/currency';
 
 export interface GroupHeaderAmount {
   amount: number;

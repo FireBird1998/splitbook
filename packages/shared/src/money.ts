@@ -1,4 +1,4 @@
-import { formatCurrency } from '@/lib/utils/currency';
+import { formatCurrency } from './currency';
 
 export type MoneyTone = 'positive' | 'negative' | 'neutral';
 

@@ -2,8 +2,8 @@ import connectDB from '@/lib/db';
 import Group from '@/lib/models/Group';
 import '@/lib/models/User'; // Ensure User model is registered for populate()
 import { activityService } from './activity.service';
-import { buildDefaultGroupTags } from '@/lib/constants/default-tags';
-import type { CreateGroupInput, UpdateGroupInput } from '@/lib/validators/group.validator';
+import { buildDefaultGroupTags } from '@splitbook/shared/default-tags';
+import type { CreateGroupInput, UpdateGroupInput } from '@splitbook/shared/validators/group';
 import crypto from 'crypto';
 
 export class GroupService {

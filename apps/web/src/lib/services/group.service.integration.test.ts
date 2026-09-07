@@ -10,7 +10,7 @@ import Activity from '@/lib/models/Activity';
 import { groupService } from '@/lib/services/group.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { createTestUsers, TEST_USER_IDS } from '@/lib/test-utils/fixtures';
-import { DEFAULT_GROUP_TAGS } from '@/lib/constants/default-tags';
+import { DEFAULT_GROUP_TAGS } from '@splitbook/shared/default-tags';
 
 const db = integrationTestDb('group-service');
 const { alice, bob, carol, dave } = TEST_USER_IDS;

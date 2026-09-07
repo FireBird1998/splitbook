@@ -18,8 +18,8 @@ import { expenseService } from '@/lib/services/expense.service';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { createTestUsers, TEST_USER_IDS } from '@/lib/test-utils/fixtures';
-import { previousPeriod, toPeriod } from '@/lib/recurring-due-periods';
-import type { CreateRecurringExpenseInput } from '@/lib/validators/recurring-expense.validator';
+import { previousPeriod, toPeriod } from '@splitbook/shared/recurring-due-periods';
+import type { CreateRecurringExpenseInput } from '@splitbook/shared/validators/recurring-expense';
 
 const db = integrationTestDb('recurring');
 const { alice, bob, carol } = TEST_USER_IDS;

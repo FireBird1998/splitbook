@@ -14,7 +14,7 @@ import Avatar from '@mui/material/Avatar';
 import CircularProgress from '@mui/material/CircularProgress';
 import Snackbar from '@mui/material/Snackbar';
 import LogoutIcon from '@mui/icons-material/Logout';
-import { CURRENCIES } from '@/lib/utils/currency';
+import { CURRENCIES } from '@splitbook/shared/currency';
 
 export default function SettingsPage() {
   const { data: session } = useSession();

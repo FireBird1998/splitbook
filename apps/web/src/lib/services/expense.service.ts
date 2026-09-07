@@ -3,22 +3,22 @@ import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
 import '@/lib/models/User'; // Ensure User model is registered for populate()
 import { activityService } from './activity.service';
-import type { CreateExpenseInput, UpdateExpenseInput } from '@/lib/validators/expense.validator';
-import type { ExpenseFilters } from '@/types';
-import { getQuickFilterDates, toInclusiveDateToBound } from '@/lib/utils/date';
-import { escapeRegex } from '@/lib/utils/escape-regex';
+import type { CreateExpenseInput, UpdateExpenseInput } from '@splitbook/shared/validators/expense';
+import type { ExpenseFilters } from '@splitbook/shared/types';
+import { getQuickFilterDates, toInclusiveDateToBound } from '@splitbook/shared/date';
+import { escapeRegex } from '@splitbook/shared/escape-regex';
 import {
   assertActiveTag,
   assertExpenseParticipants,
   assertGroupCurrency,
   shouldValidateExpenseTag,
-} from './expense-validation';
+} from '@splitbook/shared/expense-validation';
 import {
   computeMemberBreakdown,
   computeUserOweGetBack,
   type LeanExpenseContribution,
-} from './expense-summary';
-import { calculateSplitAmounts } from './split-calculation';
+} from '@splitbook/shared/expense-summary';
+import { calculateSplitAmounts } from '@splitbook/shared/split-calculation';
 import mongoose from 'mongoose';
 
 /** Single-expense access always pairs a trusted session actor with its requested group. */
@@ -177,7 +177,7 @@ export class ExpenseService {
     // same pass over the full filtered set (not just the current page).
     let userOwes = 0;
     let userGetsBack = 0;
-    let byMember: import('@/types').ExpenseMemberBreakdownRow[] | undefined;
+    let byMember: import('@splitbook/shared/types').ExpenseMemberBreakdownRow[] | undefined;
 
     if (userId || filters.includeMemberBreakdown) {
       // For efficiency, if total <= limit we already have all. Otherwise run a lean query.

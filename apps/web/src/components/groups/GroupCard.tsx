@@ -20,9 +20,9 @@ import TripStrip from '@/components/trip/TripStrip';
 import GroupHeader from '@/components/groups/GroupHeader';
 import MoneyText from '@/components/common/MoneyText';
 import { fetcher } from '@/lib/utils/fetcher';
-import { formatDate, formatRelativeTime } from '@/lib/utils/date';
-import { getGroupTheme } from '@/lib/group-themes';
-import type { DashboardBalanceAmount, GroupCategory } from '@/types';
+import { formatDate, formatRelativeTime } from '@splitbook/shared/date';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import type { DashboardBalanceAmount, GroupCategory } from '@splitbook/shared/types';
 
 interface GroupCardProps {
   group: Record<string, unknown>;
