@@ -14,7 +14,7 @@ Splitbook is an expense-splitting app for shared groups — track who paid, spli
 
 ## Repository layout
 
-Splitbook is a pnpm workspace so the web app, a future mobile app, and shared domain code can live side by side. The Next.js app is the `apps/web` package (`@splitbook/web`); the full tree is in [`docs/architecture.md`](docs/architecture.md#folder-structure).
+Splitbook is a pnpm workspace so the web app, a future mobile app, and shared domain code can live side by side. The Next.js app is the `apps/web` package (`@splitbook/web`), and `packages/shared` (`@splitbook/shared`) holds the types, Zod validators and pure domain logic every app shares; the full tree is in [`docs/architecture.md`](docs/architecture.md#folder-structure).
 
 Scripts follow one rule:
 

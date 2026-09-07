@@ -11,7 +11,7 @@ Technical spec for Phase 2 of [V4](./README.md). Covers what is reused, the one 
 | Capability                                                | Where                                                              |
 | --------------------------------------------------------- | ------------------------------------------------------------------ |
 | Arbitrary date range filter (`dateFrom`, `dateTo`)        | `ExpenseFilters` → `expenseService.getGroupExpenses`               |
-| Named ranges (`quickFilter`: `thisMonth`, `lastMonth`, …) | `getQuickFilterDates` in `src/lib/utils/date.ts`                   |
+| Named ranges (`quickFilter`: `thisMonth`, `lastMonth`, …) | `getQuickFilterDates` in `packages/shared/src/date.ts`             |
 | Total and count **across the whole filtered set**         | `summary.totalAmount`, `summary.count` (aggregation, not the page) |
 | Current user's owe / get-back for the filtered set        | `summary.userOwes`, `summary.userGetsBack`                         |
 | `yyyy-MM-dd` formatting for query params                  | `toDateParam`                                                      |
@@ -112,7 +112,7 @@ Extend that single loop to accumulate a `Map<userId, { paid, share }>` for all m
 
 The volume is bounded — a household month is tens of expenses — so the in-memory pass is the right shape. If a group ever gets large enough for this to matter, the same numbers are expressible as an `$unwind` + `$group` pipeline, and the extracted pure reducer makes that swap a drop-in.
 
-**Extract the maths.** Put the accumulation in a pure helper (e.g. `src/lib/services/expense-summary.ts`) taking `{ paidBy, splitBetween }[]` and a member ID list, returning the breakdown. Pure, unit-testable with no DB, and consistent with how `split-calculation` and `debt-simplifier` are factored.
+**Extract the maths.** Put the accumulation in a pure helper (e.g. `packages/shared/src/expense-summary.ts`) taking `{ paidBy, splitBetween }[]` and a member ID list, returning the breakdown. Pure, unit-testable with no DB, and consistent with how `split-calculation` and `debt-simplifier` are factored.
 
 **Tests:** multi-payer expenses split unevenly; a member in `splitBetween` who never paid; a member who paid but is not in the split; nets summing to zero; an empty window returning all-zero rows.
 
