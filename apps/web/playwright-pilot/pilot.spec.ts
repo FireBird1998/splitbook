@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { DEMO_GROUP_ID, enterAsPersona } from '../playwright/fixtures';
+import { DEMO_GROUP_ID, enterAsPersona, expectThemeApplied } from '../playwright/fixtures';
 import { installPilotFixtures, expectAccessible, groupBalances } from './fixtures';
 
 test('pending invitations do not claim there are no pending actions', async ({ page }) => {
@@ -238,9 +238,7 @@ for (const screen of ['dashboard', 'balances'] as const) {
     await expect(
       page.getByText(screen === 'balances' ? 'Who pays whom' : 'Current balance', { exact: true }),
     ).toBeVisible();
-    await expect
-      .poll(() => page.locator('html').getAttribute('data-theme'))
-      .toBe(testInfo.project.name.endsWith('dark') ? 'dark' : 'light');
+    await expectThemeApplied(page, testInfo);
     await expectAccessible(page, testInfo);
     await page.evaluate(() => document.fonts.ready);
     expect(
