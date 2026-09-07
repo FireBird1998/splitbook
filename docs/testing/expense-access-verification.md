@@ -51,7 +51,7 @@ compatibility). Remaining findings after fixes: Standards 0, Spec 0.
 
 - `pnpm web test:expense-access`: **54 passed after review fixes**, covering the four operations with
   manual and genuinely generated recurring Expenses; disjoint/overlapping
-  membership; outsiders; same-session membership revocation; anonymous redirects;
+  membership; outsiders; same-session membership revocation; anonymous requests (401);
   identical missing-resource responses; successful non-admin/non-creator actions;
   validation, forbidden-before-invalid-body responses, unchanged archived Tags,
   attribution, restoration and repeated deletion.

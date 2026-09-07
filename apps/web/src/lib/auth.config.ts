@@ -92,8 +92,12 @@ export const authConfig: NextAuthConfig = {
       // Allow public pages and login page
       if (isPublicPage || isAuthPage) return true;
 
-      // Protect API routes — return false (will return 401)
-      if (isApi && !isLoggedIn) return false;
+      // Protect API routes with the same 401 JSON shape the route helpers use
+      // (see api-response.ts). Returning false here would make Auth.js answer
+      // with a redirect to /login, which API clients cannot follow.
+      if (isApi && !isLoggedIn) {
+        return Response.json({ error: 'Unauthorized', status: 401 }, { status: 401 });
+      }
 
       // Protect all other pages — redirect to login
       if (!isLoggedIn) {

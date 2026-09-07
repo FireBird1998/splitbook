@@ -16,10 +16,12 @@ Helpers in `src/lib/utils/api-response.ts` produce this shape. Two exceptions ex
 today: the tag handlers hand-roll `new Response(JSON.stringify(...))` for their
 `TAG_EXISTS` / `TAG_IN_USE` cases and omit the `status` field.
 
-**Unauthenticated requests are redirected, not rejected.** Route protection lives in
-the `authorized` callback (`src/lib/auth.config.ts`), and Auth.js turns a `false`
-return into a **302 to `/login`** — including for `/api/*`. Clients should treat a
-non-JSON response as "session expired" rather than expecting a 401.
+**Unauthenticated `/api/*` requests get `401` JSON, never a redirect.** Route
+protection lives in the `authorized` callback (`src/lib/auth.config.ts`); for API
+paths it answers `{ "error": "Unauthorized", "status": 401 }`, the same shape the
+route helpers use, so browser and native clients can detect an expired session.
+Pages still redirect to `/login?callbackUrl=…`. The web client's SWR `fetcher`
+sends a 401 to `/login` with the current page as `callbackUrl`.
 
 **Common status codes:** `401` unauthenticated (from a route's own `getAuthUser`
 guard), `403` not a group member or not an admin, `404` not found, `422` Zod

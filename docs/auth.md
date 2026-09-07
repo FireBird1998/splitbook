@@ -197,6 +197,9 @@ export const config = {
 };
 ```
 
+Anonymous requests to `/api/*` receive `401` JSON (`{ error: 'Unauthorized', status: 401 }`)
+from this callback; anonymous page visits are redirected to `/login?callbackUrl=…`.
+
 The matcher excludes Next internals and anything containing a dot (i.e. static
 files), so it runs on every page **and** every `/api/*` route.
 

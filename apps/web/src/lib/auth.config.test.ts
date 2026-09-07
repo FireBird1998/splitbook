@@ -117,8 +117,13 @@ describe('authConfig authorized callback', () => {
     expect(callAuthorized('/login', false)).toBe(true);
   });
 
-  it('rejects anonymous API calls (returns false -> 401)', () => {
-    expect(callAuthorized('/api/groups', false)).toBe(false);
+  it('rejects anonymous API calls with 401 JSON instead of a redirect', async () => {
+    const result = callAuthorized('/api/groups', false);
+    expect(result).toBeInstanceOf(Response);
+    const response = result as Response;
+    expect(response.status).toBe(401);
+    expect(response.headers.get('content-type')).toContain('application/json');
+    await expect(response.json()).resolves.toEqual({ error: 'Unauthorized', status: 401 });
   });
 
   it('allows anonymous GET invite previews so the join page can render', () => {
@@ -126,7 +131,9 @@ describe('authConfig authorized callback', () => {
   });
 
   it('rejects anonymous join POSTs (joining requires a session)', () => {
-    expect(callAuthorized('/api/join/ABC123', false, 'POST')).toBe(false);
+    const result = callAuthorized('/api/join/ABC123', false, 'POST');
+    expect(result).toBeInstanceOf(Response);
+    expect((result as Response).status).toBe(401);
   });
 
   it('redirects anonymous page visits to /login with callbackUrl', () => {
