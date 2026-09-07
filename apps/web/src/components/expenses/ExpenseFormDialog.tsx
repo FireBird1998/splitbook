@@ -24,8 +24,8 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useSWRConfig } from 'swr';
-import { PREDEFINED_ITEMS } from '@/lib/constants/predefined-items';
-import { getCurrency, formatCurrency } from '@/lib/utils/currency';
+import { PREDEFINED_ITEMS } from '@splitbook/shared/predefined-items';
+import { getCurrency, formatCurrency } from '@splitbook/shared/currency';
 import { buildDuplicateCheckUrl } from './expense-duplicate-check';
 import {
   getDefaultExpenseTag,
@@ -35,8 +35,8 @@ import {
   resolvePredefinedTag,
   type GroupTagOption,
 } from './expense-form-helpers';
-import { getGroupTheme } from '@/lib/group-themes';
-import type { GroupCategory } from '@/types';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import type { GroupCategory } from '@splitbook/shared/types';
 
 // ─── Types ─────────────────────────────────────────────
 interface Member {

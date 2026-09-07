@@ -9,7 +9,7 @@ import {
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { settlementService } from '@/lib/services/settlement.service';
-import { createSettlementSchema } from '@/lib/validators/settlement.validator';
+import { createSettlementSchema } from '@splitbook/shared/validators/settlement';
 
 const settlementValidationMessages: Record<string, string> = {
   INVALID_MEMBERS: 'Both payer and recipient must be group members',

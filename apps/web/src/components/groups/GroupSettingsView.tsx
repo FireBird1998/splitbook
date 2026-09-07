@@ -38,13 +38,13 @@ import ArchiveIcon from '@mui/icons-material/Archive';
 import UnarchiveIcon from '@mui/icons-material/Unarchive';
 import DeleteIcon from '@mui/icons-material/Delete';
 import LabelIcon from '@mui/icons-material/Label';
-import { CURRENCIES, getSortedCurrencies } from '@/lib/utils/currency';
-import { formatDate } from '@/lib/utils/date';
+import { CURRENCIES, getSortedCurrencies } from '@splitbook/shared/currency';
+import { formatDate } from '@splitbook/shared/date';
 import { fetcher } from '@/lib/utils/fetcher';
-import { validateTripDates } from '@/lib/utils/trip-setup';
-import { GROUP_THEME_LIST, getGroupTheme } from '@/lib/group-themes';
+import { validateTripDates } from '@splitbook/shared/trip-setup';
+import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
 import RecurringExpensesSection from '@/components/groups/RecurringExpensesSection';
-import type { GroupCategory } from '@/types';
+import type { GroupCategory } from '@splitbook/shared/types';
 
 interface GroupSettingsViewProps {
   groupId: string;

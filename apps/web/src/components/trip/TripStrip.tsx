@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import Box from '@mui/material/Box';
-import { deriveTripCodes } from '@/lib/utils/trip-codes';
-import { formatSignedCurrency, getMoneyTone } from '@/lib/utils/money';
-import { formatCurrency } from '@/lib/utils/currency';
+import { deriveTripCodes } from '@splitbook/shared/trip-codes';
+import { formatSignedCurrency, getMoneyTone } from '@splitbook/shared/money';
+import { formatCurrency } from '@splitbook/shared/currency';
 
 export interface TripStripAmount {
   amount: number;

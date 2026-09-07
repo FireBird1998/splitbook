@@ -9,19 +9,19 @@ import {
   assertActiveTag,
   assertExpenseParticipants,
   assertGroupCurrency,
-} from './expense-validation';
-import { calculateSplitAmounts } from './split-calculation';
-import { getGroupTheme } from '@/lib/group-themes';
+} from '@splitbook/shared/expense-validation';
+import { calculateSplitAmounts } from '@splitbook/shared/split-calculation';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
 import {
   expenseDateForPeriod,
   getDuePeriods,
   previousPeriod,
   toPeriod,
-} from '@/lib/recurring-due-periods';
+} from '@splitbook/shared/recurring-due-periods';
 import type {
   CreateRecurringExpenseInput,
   UpdateRecurringExpenseInput,
-} from '@/lib/validators/recurring-expense.validator';
+} from '@splitbook/shared/validators/recurring-expense';
 import type { IGroupDocument } from '@/lib/models/Group';
 
 type TemplateData = {

@@ -6,7 +6,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Avatar from '@mui/material/Avatar';
 import MoneyText from '@/components/common/MoneyText';
-import type { ExpenseMemberBreakdownRow } from '@/types';
+import type { ExpenseMemberBreakdownRow } from '@splitbook/shared/types';
 
 interface MonthMemberTableProps {
   rows: ExpenseMemberBreakdownRow[];

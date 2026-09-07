@@ -8,7 +8,7 @@ import {
 import connectDB from '@/lib/db';
 import User from '@/lib/models/User';
 import { z } from 'zod/v4';
-import { CURRENCY_CODES } from '@/lib/utils/currency';
+import { CURRENCY_CODES } from '@splitbook/shared/currency';
 
 const updateProfileSchema = z.object({
   name: z.string().min(1).max(100).trim().optional(),

@@ -1,5 +1,5 @@
-import { formatCurrency } from '@/lib/utils/currency';
-import { formatDate, formatDateTime } from '@/lib/utils/date';
+import { formatCurrency } from './currency';
+import { formatDate, formatDateTime } from './date';
 
 export interface ActivityLike {
   _id: string;

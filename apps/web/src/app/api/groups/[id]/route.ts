@@ -9,7 +9,7 @@ import {
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
-import { updateGroupSchema } from '@/lib/validators/group.validator';
+import { updateGroupSchema } from '@splitbook/shared/validators/group';
 
 // GET /api/groups/[id] — Get group detail
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {

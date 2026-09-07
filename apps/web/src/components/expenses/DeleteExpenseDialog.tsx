@@ -9,7 +9,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
-import { formatCurrency } from '@/lib/utils/currency';
+import { formatCurrency } from '@splitbook/shared/currency';
 
 interface DeleteExpenseDialogProps {
   open: boolean;

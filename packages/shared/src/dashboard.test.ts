@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { aggregateCurrencyBalances, selectNextAction } from './dashboard';
-import type { DashboardGroupBalance } from '@/types';
+import type { DashboardGroupBalance } from './types';
 
 const group = (
   overrides: Partial<DashboardGroupBalance> & Pick<DashboardGroupBalance, 'groupId' | 'name'>,

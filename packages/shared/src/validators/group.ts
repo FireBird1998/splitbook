@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
-import { CURRENCY_CODES } from '@/lib/utils/currency';
-import { validateTripDates } from '@/lib/utils/trip-setup';
+import { CURRENCY_CODES } from '../currency';
+import { validateTripDates } from '../trip-setup';
 
 const optionalDate = z.preprocess(
   (value) => (value === '' || value === undefined ? null : value),

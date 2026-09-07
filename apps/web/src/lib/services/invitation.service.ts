@@ -2,7 +2,7 @@ import connectDB from '@/lib/db';
 import Invitation from '@/lib/models/Invitation';
 import Group from '@/lib/models/Group';
 import { activityService } from './activity.service';
-import { invitationEmailMatches } from './invitation-ownership';
+import { invitationEmailMatches } from '@splitbook/shared/invitation-ownership';
 import crypto from 'crypto';
 
 export class InvitationService {

@@ -10,7 +10,7 @@ import {
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
-import { createRecurringExpenseSchema } from '@/lib/validators/recurring-expense.validator';
+import { createRecurringExpenseSchema } from '@splitbook/shared/validators/recurring-expense';
 
 const recurringValidationMessages: Record<string, string> = {
   INVALID_MEMBERS: 'All payers and split participants must be group members',

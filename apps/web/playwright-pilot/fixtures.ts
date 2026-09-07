@@ -1,7 +1,7 @@
 import { expect, type Page, type TestInfo } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 import { DEMO_GROUP_ID, DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
-import type { UserBalancesResponse } from '../src/types';
+import type { UserBalancesResponse } from '@splitbook/shared/types';
 
 export const FIXED_TIME = '2026-09-06T09:00:00.000Z';
 const alex = { _id: DEMO_PERSONA_IDS.alex, name: 'Alex Rivera' };

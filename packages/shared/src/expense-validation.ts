@@ -1,4 +1,4 @@
-import { canRecordSettlement } from '@/lib/utils/settlement-authorization';
+import { canRecordSettlement } from './settlement-authorization';
 
 type Participant = {
   user: unknown;

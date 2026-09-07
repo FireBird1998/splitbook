@@ -14,8 +14,8 @@ import BrandMark from '@/components/layout/BrandMark';
 import type { AuthMode } from '@/lib/auth-mode';
 import { getSignInProvider } from '@/lib/auth-sign-in';
 import DemoPersonaPicker from '@/components/demo/DemoPersonaPicker';
-import { getGroupTheme } from '@/lib/group-themes';
-import type { GroupCategory } from '@/types';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import type { GroupCategory } from '@splitbook/shared/types';
 
 interface JoinGroupClientProps {
   code: string;

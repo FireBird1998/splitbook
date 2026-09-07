@@ -12,7 +12,7 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import CircularProgress from '@mui/material/CircularProgress';
-import { getCurrency } from '@/lib/utils/currency';
+import { getCurrency } from '@splitbook/shared/currency';
 
 interface SettleUpDialogProps {
   open: boolean;

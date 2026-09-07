@@ -1,4 +1,4 @@
-import type { CurrencyBalanceBucket, DashboardGroupBalance, DashboardNextAction } from '@/types';
+import type { CurrencyBalanceBucket, DashboardGroupBalance, DashboardNextAction } from './types';
 
 const roundMoney = (amount: number) => {
   const sign = Math.sign(amount) || 1;

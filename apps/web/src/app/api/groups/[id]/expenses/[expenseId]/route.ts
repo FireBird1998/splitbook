@@ -10,7 +10,7 @@ import {
 } from '@/lib/utils/api-response';
 import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
-import { updateExpenseSchema } from '@/lib/validators/expense.validator';
+import { updateExpenseSchema } from '@splitbook/shared/validators/expense';
 
 const expenseValidationMessages: Record<string, string> = {
   INVALID_MEMBERS: 'All payers and split participants must be group members',

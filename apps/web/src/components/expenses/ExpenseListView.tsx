@@ -25,11 +25,11 @@ import ExpenseCard from './ExpenseCard';
 import ExpenseFormDialog from './ExpenseFormDialog';
 import DeleteExpenseDialog from './DeleteExpenseDialog';
 import MoneyText from '@/components/common/MoneyText';
-import { formatDate } from '@/lib/utils/date';
-import { EXPENSE_CATEGORIES } from '@/lib/constants/categories';
+import { formatDate } from '@splitbook/shared/date';
+import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import { fetcher } from '@/lib/utils/fetcher';
-import { getGroupTheme } from '@/lib/group-themes';
-import type { GroupCategory } from '@/types';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import type { GroupCategory } from '@splitbook/shared/types';
 
 const QUICK_FILTERS = [
   { id: 'all', label: 'All' },

@@ -3,7 +3,7 @@
  */
 
 import { DEMO_GROUP_ID, DEMO_PERSONA_IDS } from '@/lib/demo-personas';
-import { DEFAULT_GROUP_TAGS } from '@/lib/constants/default-tags';
+import { DEFAULT_GROUP_TAGS } from '@splitbook/shared/default-tags';
 
 export const DEMO_TRIP_NAME = 'Goa Friends Trip';
 export const DEMO_CURRENCY = 'INR';

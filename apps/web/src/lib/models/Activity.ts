@@ -1,5 +1,5 @@
 import mongoose, { Schema, Model } from 'mongoose';
-import type { ActivityType } from '@/types';
+import type { ActivityType } from '@splitbook/shared/types';
 
 export interface IActivityDocument {
   _id: mongoose.Types.ObjectId;

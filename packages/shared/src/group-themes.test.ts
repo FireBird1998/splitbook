@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getGroupTheme, GROUP_THEMES, GROUP_THEME_LIST } from './group-themes';
-import type { GroupCategory } from '@/types';
+import type { GroupCategory } from './types';
 
 const ALL_CATEGORIES: GroupCategory[] = ['trip', 'home', 'couple', 'work', 'other'];
 

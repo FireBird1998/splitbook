@@ -31,10 +31,10 @@ import PauseIcon from '@mui/icons-material/Pause';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import MoneyText from '@/components/common/MoneyText';
-import { EXPENSE_CATEGORIES } from '@/lib/constants/categories';
-import { formatDate } from '@/lib/utils/date';
+import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
+import { formatDate } from '@splitbook/shared/date';
 import { fetcher } from '@/lib/utils/fetcher';
-import type { IRecurringExpense, SplitMethod } from '@/types';
+import type { IRecurringExpense, SplitMethod } from '@splitbook/shared/types';
 
 interface MemberLike {
   user: { _id: string; name: string; image?: string };

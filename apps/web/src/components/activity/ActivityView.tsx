@@ -11,7 +11,7 @@ import {
   formatActivityTimestamp,
   groupActivitiesByDay,
   type ActivityLike,
-} from '@/lib/utils/activity-timeline';
+} from '@splitbook/shared/activity-timeline';
 import { fetcher } from '@/lib/utils/fetcher';
 
 const ACTIVITY_ICONS: Record<string, string> = {

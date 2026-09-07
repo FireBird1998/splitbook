@@ -7,8 +7,8 @@
  * reading this one file.
  */
 
-import type { GroupCategory } from '@/types';
-import { DEFAULT_GROUP_TAGS_BY_CATEGORY } from '@/lib/constants/default-tags';
+import type { GroupCategory } from './types';
+import { DEFAULT_GROUP_TAGS_BY_CATEGORY } from './default-tags';
 
 export interface GroupTheme {
   /** Stored `Group.category` value — unchanged. */
