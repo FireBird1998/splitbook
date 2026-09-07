@@ -23,9 +23,9 @@ alwaysApply: true
 - **API routes**: RESTful, nested under group — `/api/groups/[id]/expenses`
 - **Services**: Business logic in `src/lib/services/`, never in route handlers
 - **Models**: Mongoose models in `src/lib/models/`
-- **Validators**: Zod schemas in `packages/shared/src/validators/`
+- **Validators**: Zod schemas come from the shared package, `@splitbook/shared/validators/*`
 - **Components**: Feature-scoped in `src/components/{feature}/`
-- **Types**: Shared interfaces in `packages/shared/src/types.ts`
+- **Types**: Shared interfaces come from `@splitbook/shared/types`
 - **Path alias**: `@/*` maps to `src/*`
 - **Shared package**: `@splitbook/shared` (`packages/shared`) owns the types, the Zod validators and all pure domain logic; import subpaths (`@splitbook/shared/currency`, `@splitbook/shared/validators/expense`). Nothing in it may import Next, React, MUI, Mongoose, the DB or DOM APIs.
 

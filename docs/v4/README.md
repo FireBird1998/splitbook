@@ -176,7 +176,7 @@ Repo conventions apply throughout: pnpm only, `{ data }` / `{ error }` responses
 
 No schema change. No new endpoints. Pure derivation plus branching.
 
-- [x] **Theme registry.** Create `packages/shared/src/group-themes.ts` with `GroupTheme` and `getGroupTheme`, plus `src/lib/group-themes.test.ts` covering every category, the `home → "Household"` label, and a fallback for unknown values (defensive: old documents).
+- [x] **Theme registry.** Create `packages/shared/src/group-themes.ts` with `GroupTheme` and `getGroupTheme`, plus `packages/shared/src/group-themes.test.ts` covering every category, the `home → "Household"` label, and a fallback for unknown values (defensive: old documents).
 - [x] **Neutral header.** Add `src/components/groups/GroupHeader.tsx` — name, member avatars, currency, personal balance, invite code — reusing `MoneyText` and the `typography.money` treatment. Leave `TripStrip` and `deriveTripCodes` untouched.
 - [x] **Gate the trip chrome.** In `GroupDetailView`, render `TripStrip` when `theme.header === 'strip'` and `GroupHeader` otherwise. Move the checklist behind `theme.signature === 'checklist'`. Replace the hardcoded "Trip not found" / "Trip settings" / "Trip sections" strings with theme nouns.
 - [x] **Dashboard cards adapt.** In `GroupCard` (dashboard mode), branch the header the same way. Show the date range only for bounded themes; show "Last activity" for open-ended ones. The management mode already uses a neutral layout with a category icon — align its icon and label with the registry.
