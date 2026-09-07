@@ -2,12 +2,12 @@
 
 ## Overview
 
-We use **Auth.js v5** (formerly NextAuth.js) with **JWT sessions** and the **MongoDB adapter**. Two providers are registered side by side in [`src/lib/auth.config.ts`](../src/lib/auth.config.ts) so the mode can switch without a rebuild:
+We use **Auth.js v5** (formerly NextAuth.js) with **JWT sessions** and the **MongoDB adapter**. Two providers are registered side by side in [`src/lib/auth.config.ts`](../apps/web/src/lib/auth.config.ts) so the mode can switch without a rebuild:
 
 - **Google OAuth** — the real sign-in path, restricted by the `AUTH_ALLOWED_EMAILS` private-beta allowlist.
 - **Demo Credentials** — private-beta personas (Alex, Sam, Priya), guarded by `AUTH_MODE`.
 
-The active mode resolves through [`src/lib/auth-mode.ts`](../src/lib/auth-mode.ts):
+The active mode resolves through [`src/lib/auth-mode.ts`](../apps/web/src/lib/auth-mode.ts):
 
 | `AUTH_MODE`                      | `NODE_ENV`       | `ALLOW_DEMO_AUTH` | Effective mode           |
 | -------------------------------- | ---------------- | ----------------- | ------------------------ |
@@ -17,15 +17,15 @@ The active mode resolves through [`src/lib/auth-mode.ts`](../src/lib/auth-mode.t
 | unset / `google` / anything else | any              | any               | **google**               |
 
 Demo sign-in goes through the Credentials `authorize()` in
-[`src/lib/demo-credentials.ts`](../src/lib/demo-credentials.ts), which only
+[`src/lib/demo-credentials.ts`](../apps/web/src/lib/demo-credentials.ts), which only
 returns one of the three allowlisted personas from
-[`src/lib/demo-personas.ts`](../src/lib/demo-personas.ts). Sessions are real
+[`src/lib/demo-personas.ts`](../apps/web/src/lib/demo-personas.ts). Sessions are real
 Auth.js JWTs, so every API route keeps receiving a real `session.user.id`
 ObjectId string — the authorization path is identical in both modes.
 
 In demo mode `/` renders the persona picker; in Google mode it renders the
 marketing landing. A **Demo mode** badge shows in the navbar while demo auth
-is active. See the README for seeding (`pnpm demo:seed` / `pnpm demo:reset`).
+is active. See the README for seeding (`pnpm web demo:seed` / `pnpm web demo:reset`).
 
 > Middleware note: route protection lives in the `authorized` callback of
 > `auth.config.ts` (edge-safe, no Node/Mongo imports); `src/middleware.ts`
@@ -95,7 +95,7 @@ or paid APIs are required.
    `/api/auth/callback/google` — it is derived from the route handler in
    `src/app/api/auth/[...nextauth]/route.ts`, not from configuration.
 
-5. Copy the **Client ID** and **Client Secret** into `.env.local` as
+5. Copy the **Client ID** and **Client Secret** into `apps/web/.env.local` as
    `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`. Never commit these values.
 
 ### 2. Auth.js Configuration
@@ -312,7 +312,7 @@ ALLOW_DEMO_AUTH=
 
 ## Switching between Google and demo mode
 
-| Goal                   | `.env.local`                | Entry UI                                  |
+| Goal                   | `apps/web/.env.local`       | Entry UI                                  |
 | ---------------------- | --------------------------- | ----------------------------------------- |
 | Real sign-in (default) | `AUTH_MODE=google` or unset | Marketing landing + "Sign in with Google" |
 | Private-beta personas  | `AUTH_MODE=demo`            | Persona picker (Alex / Sam / Priya)       |
@@ -334,7 +334,7 @@ ALLOW_DEMO_AUTH=
 No interactive Google login is needed to verify the wiring:
 
 ```bash
-AUTH_MODE=google pnpm dev   # or: pnpm test:e2e:google for the automated version
+AUTH_MODE=google pnpm dev   # or: pnpm web test:e2e:google for the automated version
 ```
 
 1. `/` shows the marketing landing with **Sign in with Google** (not the
@@ -349,9 +349,9 @@ AUTH_MODE=google pnpm dev   # or: pnpm test:e2e:google for the automated version
    `auth.config.ts`), so the MongoDB adapter only persists users/accounts
    while session state lives in the httpOnly cookie.
 
-The automated equivalent is `pnpm test:e2e:google`
-([`playwright.google.config.ts`](../playwright.google.config.ts) +
-[`playwright-google/google-auth.spec.ts`](../playwright-google/google-auth.spec.ts)),
+The automated equivalent is `pnpm web test:e2e:google`
+([`playwright.google.config.ts`](../apps/web/playwright.google.config.ts) +
+[`playwright-google/google-auth.spec.ts`](../apps/web/playwright-google/google-auth.spec.ts)),
 which runs the app in google mode on port 3101 against a local OIDC stand-in.
 It verifies the request shape and completes approved and denied callbacks
 without contacting Google or using real credentials.

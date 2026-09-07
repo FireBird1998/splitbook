@@ -2,12 +2,12 @@
 
 Four layers of tests, all wired into CI (`.github/workflows/ci.yml`).
 
-| Layer            | Runner          | Database                            | Command                    |
-| ---------------- | --------------- | ----------------------------------- | -------------------------- |
-| Unit             | Vitest          | none (mocked models / pure helpers) | `pnpm test:unit`           |
-| Integration      | Vitest          | real MongoDB, isolated per file     | `pnpm test:integration`    |
-| Expense requests | Playwright HTTP | real MongoDB, unique per run        | `pnpm test:expense-access` |
-| Browser          | Playwright      | seeded `splitbook-demo`             | `pnpm test:e2e`            |
+| Layer            | Runner          | Database                            | Command                        |
+| ---------------- | --------------- | ----------------------------------- | ------------------------------ |
+| Unit             | Vitest          | none (mocked models / pure helpers) | `pnpm test:unit`               |
+| Integration      | Vitest          | real MongoDB, isolated per file     | `pnpm test:integration`        |
+| Expense requests | Playwright HTTP | real MongoDB, unique per run        | `pnpm web test:expense-access` |
+| Browser          | Playwright      | seeded `splitbook-demo`             | `pnpm web test:e2e`            |
 
 `pnpm test` runs unit + integration together and requires MongoDB running
 locally (the `split-mongo` Docker container works).
@@ -62,7 +62,7 @@ through the actual service layer (no mocked models):
 
 ### Database isolation strategy
 
-[`src/lib/test-utils/integration-db.ts`](../src/lib/test-utils/integration-db.ts):
+[`src/lib/test-utils/integration-db.ts`](../apps/web/src/lib/test-utils/integration-db.ts):
 
 1. Every test file derives **its own database** named
    `splitbook-test-<file-key>` from `TEST_MONGODB_URI` (default
@@ -80,11 +80,11 @@ through the actual service layer (no mocked models):
 which throws unless the bundler resolves it under the `react-server` export
 condition. Next.js provides that; plain Node does not. Anything that loads those
 modules outside Next therefore needs the package aliased to the no-op stub in
-[`src/lib/test-utils/stubs/server-only.ts`](../src/lib/test-utils/stubs/server-only.ts):
+[`src/lib/test-utils/stubs/server-only.ts`](../apps/web/src/lib/test-utils/stubs/server-only.ts):
 
-- **Vitest** — via `resolve.alias` in [`vitest.config.ts`](../vitest.config.ts).
+- **Vitest** — via `resolve.alias` in [`vitest.config.ts`](../apps/web/vitest.config.ts).
 - **`tsx` CLI scripts** (`demo:seed`, `demo:reset`) — via a `paths` mapping in
-  [`scripts/tsconfig.json`](../scripts/tsconfig.json), which the `package.json`
+  [`scripts/tsconfig.json`](../apps/web/scripts/tsconfig.json), which the `package.json`
   scripts select with `tsx --tsconfig`.
 
 Never fix a "cannot be imported from a Client Component" error by removing the
@@ -94,7 +94,7 @@ the new runtime instead.
 
 ## Authenticated expense requests
 
-Run `pnpm test:expense-access` with MongoDB listening on `127.0.0.1:27017`.
+Run `pnpm web test:expense-access` with MongoDB listening on `127.0.0.1:27017`.
 No browser installation or Google credentials are needed. To run one slice,
 append `read.spec.ts`, `edit-restore.spec.ts`, or `delete.spec.ts`.
 
@@ -129,11 +129,11 @@ transactional protection against revocation racing an already-authorized write.
 
 ## Browser journeys (Playwright)
 
-Configured in [`playwright.config.ts`](../playwright.config.ts); specs and
-helpers live in [`playwright/`](../playwright/).
+Configured in [`playwright.config.ts`](../apps/web/playwright.config.ts); specs and
+helpers live in [`playwright/`](../apps/web/playwright/).
 
 - The app runs on **port 3100** with `AUTH_MODE=demo`; global setup resets
-  and reseeds the `splitbook-demo` database (`pnpm demo:reset`) so every run
+  and reseeds the `splitbook-demo` database (`pnpm web demo:reset`) so every run
   starts from the known seeded state.
 - **Journeys** (`demo-journeys.spec.ts`, serial): Alex enters and inspects
   her seeded balance (exact amounts asserted once, on desktop-light, before
@@ -145,7 +145,7 @@ helpers live in [`playwright/`](../playwright/).
   **light and dark** (driven by `prefers-color-scheme` emulation), plus the
   navbar theme toggle with persistence. axe-core fails the test on critical
   violations; the full report attaches to the test.
-- Review screenshots are saved to `playwright/artifacts/<project>/`
+- Review screenshots are saved to `apps/web/playwright/artifacts/<project>/`
   (gitignored, uploaded as CI artifacts).
 - Journeys share one demo database, so the suite runs with `workers: 1` and
   assertions on mutable balances are relative to what the journey observed.
@@ -156,8 +156,8 @@ Two jobs, each with a `mongo:7` service container:
 
 - **verify** — install, lint, `pnpm test` (unit + integration against the
   service MongoDB), typecheck, build.
-- **playwright** — install, Chromium, build, `pnpm test:e2e` (webServer runs
-  `next start` on 3100), then `pnpm test:e2e:google`, and uploads the report and
+- **playwright** — install, Chromium, build, `pnpm web test:e2e` (webServer runs
+  `next start` on 3100), then `pnpm web test:e2e:google`, and uploads the report and
   review screenshots.
 
 Because the Playwright webServer runs a **production** build, its env must set

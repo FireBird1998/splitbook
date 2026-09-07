@@ -63,9 +63,9 @@ Useful focused commands:
 
 ```sh
 pnpm typecheck
-pnpm check:design-system
-pnpm exec vitest run src/lib/theme/createAppTheme.test.ts src/lib/theme/style-policy.test.ts
-pnpm test:design-system --grep-invert 'visual baseline'
+pnpm web check:design-system
+pnpm web exec vitest run src/lib/theme/createAppTheme.test.ts src/lib/theme/style-policy.test.ts
+pnpm web test:design-system --grep-invert 'visual baseline'
 ```
 
 The catalogue suite starts its own credential-free dev server on 4128, does not
@@ -87,8 +87,8 @@ docker run --name splitbook-design-browser --platform linux/amd64 --rm -d --init
   mcr.microsoft.com/playwright:v1.62.1-noble \
   /bin/sh -c 'npx -y playwright@1.62.1 run-server --port 9323 --host 0.0.0.0'
 
-DESIGN_BROWSER_WS=ws://127.0.0.1:9323/ pnpm test:design-system
-DESIGN_BROWSER_WS=ws://127.0.0.1:9323/ pnpm test:pilot
+DESIGN_BROWSER_WS=ws://127.0.0.1:9323/ pnpm web test:design-system
+DESIGN_BROWSER_WS=ws://127.0.0.1:9323/ pnpm web test:pilot
 
 docker stop splitbook-design-browser
 ```
@@ -108,7 +108,7 @@ Initial baselines are review candidates until the owner approves the pilot.
 Intentional later changes require an explanation, before/after images, and review
 before using Playwright's `--update-snapshots`. CI never updates baselines.
 
-After building, `pnpm test:production-ui` checks lab exclusion on port 4129. The
+After building, `pnpm web test:production-ui` checks lab exclusion on port 4129. The
 Google suite also checks exclusion after a real successful test-provider login
 when run against a production build. Full unit/integration and existing browser
 journeys remain required; skipped/environment-blocked checks are not passes.

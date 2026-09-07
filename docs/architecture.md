@@ -18,6 +18,27 @@
 
 ## Folder Structure
 
+Splitbook is a pnpm workspace. The Next.js app is the `apps/web` package
+(`@splitbook/web`). Workspace-wide scripts (`lint`, `typecheck`, `test`, `format`)
+run at the root across every package; other app scripts run as `pnpm web <script>`
+(the rule is spelled out in the [README](../README.md#repository-layout)).
+Future clients go under `apps/*` and shared code under `packages/*`
+(see [ADR 0001](adr/0001-pnpm-workspace-monorepo.md)).
+
+```
+splitbook/
+├── package.json            # workspace root: delegating scripts, packageManager pin, Prettier
+├── pnpm-workspace.yaml     # apps/*, packages/*
+├── pnpm-lock.yaml
+├── .github/workflows/      # CI runs the app steps inside apps/web
+├── docs/                   # this documentation
+├── apps/
+│   └── web/                # the Next.js app — the tree below
+└── packages/               # shared packages (none yet)
+```
+
+Everything below is relative to `apps/web/`.
+
 ```
 src/
 ├── app/

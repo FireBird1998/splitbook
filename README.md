@@ -12,6 +12,16 @@ Splitbook is an expense-splitting app for shared groups — track who paid, spli
 - **Zod v4** for request validation
 - **pnpm** as the package manager
 
+## Repository layout
+
+Splitbook is a pnpm workspace so the web app, a future mobile app, and shared domain code can live side by side. The Next.js app is the `apps/web` package (`@splitbook/web`); the full tree is in [`docs/architecture.md`](docs/architecture.md#folder-structure).
+
+Scripts follow one rule:
+
+- **Workspace scripts run at the root** and cover every package: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:unit`, `pnpm test:integration`, `pnpm format`, `pnpm format:check`.
+- **`pnpm dev`, `pnpm build` and `pnpm start` at the root point at the web app** while it is the only app.
+- **Every other app script runs as `pnpm web <script>`** from the root (`pnpm web test:pilot`), or bare from inside `apps/web`. App binaries follow the same pattern: `pnpm web exec playwright install chromium`.
+
 ## Setup
 
 1. Clone the repository and install dependencies:
@@ -25,7 +35,7 @@ Splitbook is an expense-splitting app for shared groups — track who paid, spli
 2. Copy the environment template and fill in values:
 
    ```bash
-   cp .env.example .env.local
+   cp apps/web/.env.example apps/web/.env.local
    ```
 
    | Variable              | Description                                                                                       |
@@ -64,7 +74,7 @@ The app runs in one of two auth modes, selected by `AUTH_MODE` (default: `google
 | Google OAuth  | `google` (or unset) | Marketing landing + "Sign in with Google"                 |
 | Demo personas | `demo`              | Persona picker (Alex, Sam, Priya) — no OAuth setup needed |
 
-Switch modes by editing `AUTH_MODE` in `.env.local` and restarting the dev server.
+Switch modes by editing `AUTH_MODE` in `apps/web/.env.local` and restarting the dev server.
 Both providers stay registered, so no code change or rebuild is required.
 
 ## Demo mode (private beta)
@@ -81,8 +91,8 @@ Demo mode uses real Auth.js JWT sessions with three fixed seeded personas (Alex,
 2. Seed (or reset) the trip:
 
    ```bash
-   pnpm demo:seed    # idempotent — safe to re-run
-   pnpm demo:reset   # wipe demo trip data, then reseed
+   pnpm web demo:seed    # idempotent — safe to re-run
+   pnpm web demo:reset   # wipe demo trip data, then reseed
    ```
 
 3. Run the app (`pnpm dev`) and open `/`. Pick **Alex** (organizer), **Sam**, or **Priya**.
@@ -112,28 +122,28 @@ or empty allowlist denies every Google sign-in.
 The Google Cloud OAuth client needs the consent screen configured and
 `<origin>/api/auth/callback/google` whitelisted as an authorized redirect URI
 (e.g. `http://localhost:4127/api/auth/callback/google` for local dev). Full
-setup steps and a non-interactive smoke test (`pnpm test:e2e:google`) are in
+setup steps and a non-interactive smoke test (`pnpm web test:e2e:google`) are in
 [`docs/auth.md`](docs/auth.md).
 
 ## Scripts
 
-| Command                 | Description                                               |
-| ----------------------- | --------------------------------------------------------- |
-| `pnpm dev`              | Start the development server                              |
-| `pnpm build`            | Production build                                          |
-| `pnpm start`            | Run the production server                                 |
-| `pnpm lint`             | Run ESLint                                                |
-| `pnpm test`             | Run all Vitest tests (unit + integration; needs MongoDB)  |
-| `pnpm test:unit`        | Run only DB-free unit tests                               |
-| `pnpm test:integration` | Run only MongoDB integration tests                        |
-| `pnpm test:e2e`         | Run Playwright browser journeys (demo mode)               |
-| `pnpm test:e2e:headed`  | Run Playwright journeys with a visible browser            |
-| `pnpm test:e2e:google`  | Run Google OAuth smoke tests (google mode, no real login) |
-| `pnpm typecheck`        | Run TypeScript without emitting files                     |
-| `pnpm format`           | Format code with Prettier                                 |
-| `pnpm format:check`     | Check formatting without writing                          |
-| `pnpm demo:seed`        | Idempotently seed demo personas + Goa friends trip        |
-| `pnpm demo:reset`       | Wipe demo trip data and reseed                            |
+| Command                    | Description                                               |
+| -------------------------- | --------------------------------------------------------- |
+| `pnpm dev`                 | Start the development server                              |
+| `pnpm build`               | Production build                                          |
+| `pnpm start`               | Run the production server                                 |
+| `pnpm lint`                | Run ESLint                                                |
+| `pnpm test`                | Run all Vitest tests (unit + integration; needs MongoDB)  |
+| `pnpm test:unit`           | Run only DB-free unit tests                               |
+| `pnpm test:integration`    | Run only MongoDB integration tests                        |
+| `pnpm web test:e2e`        | Run Playwright browser journeys (demo mode)               |
+| `pnpm web test:e2e:headed` | Run Playwright journeys with a visible browser            |
+| `pnpm web test:e2e:google` | Run Google OAuth smoke tests (google mode, no real login) |
+| `pnpm typecheck`           | Run TypeScript without emitting files                     |
+| `pnpm format`              | Format code with Prettier                                 |
+| `pnpm format:check`        | Check formatting without writing                          |
+| `pnpm web demo:seed`       | Idempotently seed demo personas + Goa friends trip        |
+| `pnpm web demo:reset`      | Wipe demo trip data and reseed                            |
 
 ## Testing
 
@@ -179,15 +189,15 @@ verify balances update — plus theme and accessibility checks.
   reseeds the `splitbook-demo` database before the run.
 - Four projects cover **desktop (1280×800) and mobile (390×844)** in **light
   and dark** themes; axe-core checks for critical accessibility violations.
-- Review screenshots are written to `playwright/artifacts/<project>/`
+- Review screenshots are written to `apps/web/playwright/artifacts/<project>/`
   (gitignored).
 
 ```bash
-pnpm exec playwright install chromium   # one-time browser install
-pnpm test:e2e
+pnpm web exec playwright install chromium   # one-time browser install
+pnpm web test:e2e
 ```
 
-A separate google-mode smoke suite (`pnpm test:e2e:google`) runs the app with
+A separate google-mode smoke suite (`pnpm web test:e2e:google`) runs the app with
 `AUTH_MODE=google` on port 3101 and verifies the OAuth entry points, configured
 client/callback, approved login, and invite-only denial. A local OIDC stand-in
 drives the complete Auth.js callback, so no live Google login or secrets are

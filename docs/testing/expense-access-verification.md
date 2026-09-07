@@ -49,7 +49,7 @@ compatibility). Remaining findings after fixes: Standards 0, Spec 0.
 
 ## Passing checks
 
-- `pnpm test:expense-access`: **54 passed after review fixes**, covering the four operations with
+- `pnpm web test:expense-access`: **54 passed after review fixes**, covering the four operations with
   manual and genuinely generated recurring Expenses; disjoint/overlapping
   membership; outsiders; same-session membership revocation; anonymous redirects;
   identical missing-resource responses; successful non-admin/non-creator actions;

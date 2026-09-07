@@ -140,7 +140,7 @@ currencies** (see [`features/currency.md`](features/currency.md)).
 `category` is one of `trip | home | couple | work | other` and **defaults to
 `trip`** in the validator. It drives the group's theme — chrome, default tags,
 date semantics, and whether recurring expenses are available. See
-[`../src/lib/group-themes.ts`](../src/lib/group-themes.ts) and
+[`../src/lib/group-themes.ts`](../apps/web/src/lib/group-themes.ts) and
 [`v4/README.md`](v4/README.md).
 
 `alternateCurrencies` accepts up to 2 codes and is persisted, but **no read or

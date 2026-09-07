@@ -5,6 +5,10 @@ alwaysApply: true
 
 # Splitbook Project Conventions
 
+## Repository layout
+
+- pnpm workspace: the Next.js app is `apps/web` (package `@splitbook/web`); every path below is relative to it. Root scripts are only `lint`, `typecheck`, `test`, `test:unit`, `test:integration`, `format`, `format:check` plus the `dev`/`build`/`start` shortcuts; run any other app script as `pnpm web <script>`.
+
 ## Tech Stack
 
 - Next.js 16 (App Router) + TypeScript + React 19

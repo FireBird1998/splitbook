@@ -33,7 +33,7 @@ Managed by Auth.js + extended with app-specific fields.
 
 - Auth.js creates `users`, `accounts`, and `sessions` collections automatically.
 - We extend the `users` collection with `preferredCurrency`.
-- Demo-mode personas are ordinary `users` rows seeded by `pnpm demo:seed`.
+- Demo-mode personas are ordinary `users` rows seeded by `pnpm web demo:seed`.
 
 ---
 
