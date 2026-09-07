@@ -299,9 +299,10 @@ onto the token and the `session` callback copies it back onto `session.user.id`,
 which is what every service treats as the actor.
 
 Route protection lives in the `authorized` callback in `auth.config.ts`. Note
-that Auth.js converts a `false` return into a **302 redirect to `/login`**,
-including for `/api/*` requests — API clients do not receive a 401 from
-middleware.
+that the callback answers anonymous `/api/*` requests with **401 JSON**
+(`{ error: 'Unauthorized', status: 401 }`) instead of returning `false`, because
+Auth.js would turn `false` into a redirect to `/login`, which API clients cannot
+follow.
 
 ---
 

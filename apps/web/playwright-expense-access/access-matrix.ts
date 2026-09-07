@@ -61,8 +61,9 @@ export function accessMatrix(operation: Operation) {
         const before = await observeLedger(ledger, expense);
         const response = await operation.request(actor, expensePath(requestedGroup, expense));
         if (scenario === 'anonymous') {
-          expect.soft(response.status()).toBe(307);
-          expect.soft(new URL(response.headers().location, response.url()).pathname).toBe('/login');
+          expect.soft(response.status()).toBe(401);
+          expect.soft(await response.json()).toEqual({ error: 'Unauthorized', status: 401 });
+          expect.soft(response.headers().location, 'API 401s carry no redirect').toBeUndefined();
         } else {
           const status = scenario === 'outsider' || scenario === 'removed' ? 403 : 404;
           expect.soft(response.status()).toBe(status);
