@@ -1,5 +1,6 @@
 import { expect, type Page, type TestInfo } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
+import { darkTokens, lightTokens } from '../src/lib/theme/tokens';
 
 /** Demo personas rendered by the persona picker. */
 export const PERSONAS = {
@@ -43,10 +44,29 @@ export function expectedTheme(testInfo: TestInfo): 'light' | 'dark' {
   return testInfo.project.name.endsWith('-dark') ? 'dark' : 'light';
 }
 
-/** Assert the document carries the project's expected theme. */
+/** CSS `rgb()` form of a `#rrggbb` token, as getComputedStyle reports it. */
+function hexToRgb(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgb(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255})`;
+}
+
+/**
+ * Assert the document carries the project's expected theme.
+ *
+ * Two things flip independently: the inline script in the root layout sets
+ * `data-theme` before hydration, while the MUI palette (body colour and
+ * background, owned by ThemeProvider) follows one frame after hydration. In
+ * between, token-driven dark surfaces meet light-palette text, and an axe scan
+ * that only waited for the attribute reports contrast violations (#22). Wait
+ * for the palette as well.
+ */
 export async function expectThemeApplied(page: Page, testInfo: TestInfo): Promise<void> {
   const theme = expectedTheme(testInfo);
+  const tokens = theme === 'dark' ? darkTokens : lightTokens;
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe(theme);
+  await expect
+    .poll(() => page.evaluate(() => getComputedStyle(document.body).color))
+    .toBe(hexToRgb(tokens.text));
 }
 
 /** Save a full-page screenshot for design review under playwright/artifacts/. */

@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
+import { expectThemeApplied } from '../playwright/fixtures';
 
 test('feedback visual baseline protects error and recovered states', async ({ page }, testInfo) => {
   expect(
@@ -7,9 +8,7 @@ test('feedback visual baseline protects error and recovered states', async ({ pa
     'Visual baselines require the documented Linux browser.',
   ).toBe(true);
   await page.goto('/dev/design-system');
-  await expect
-    .poll(() => page.locator('html').getAttribute('data-theme'))
-    .toBe(testInfo.project.name.endsWith('dark') ? 'dark' : 'light');
+  await expectThemeApplied(page, testInfo);
   await page.evaluate(() => document.fonts.ready);
   const feedback = page.getByRole('region', { name: 'Feedback states' });
   await expect(feedback).toHaveScreenshot('feedback-error.png', { animations: 'disabled' });
@@ -33,9 +32,7 @@ test('catalogue renders with no auth, database, or application API requests', as
     page.getByRole('heading', { name: 'Splitbook design system', exact: true }),
   ).toBeVisible();
   await expect(page.getByText('You owe', { exact: true })).toBeVisible();
-  await expect
-    .poll(() => page.locator('html').getAttribute('data-theme'))
-    .toBe(testInfo.project.name.endsWith('dark') ? 'dark' : 'light');
+  await expectThemeApplied(page, testInfo);
   expect(apiRequests).toEqual([]);
   expect(pageErrors).toEqual([]);
 });
@@ -44,9 +41,7 @@ test('catalogue has no serious accessibility findings or narrow-screen overflow'
   page,
 }, testInfo) => {
   await page.goto('/dev/design-system');
-  await expect
-    .poll(() => page.locator('html').getAttribute('data-theme'))
-    .toBe(testInfo.project.name.endsWith('dark') ? 'dark' : 'light');
+  await expectThemeApplied(page, testInfo);
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();
