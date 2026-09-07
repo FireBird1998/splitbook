@@ -67,12 +67,12 @@ capture at the viewport boundary. Tests also scroll the settlement action into
 view and check that it is not blocked by an overlay. Only the Next.js development
 overlay is excluded from comparisons; money, status and actions are not masked.
 
-| Mode / size   | Dashboard                                                             | Balances                                                             |
-| ------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Desktop light | [Image](../../playwright-pilot/snapshots/desktop-light/dashboard.png) | [Image](../../playwright-pilot/snapshots/desktop-light/balances.png) |
-| Desktop dark  | [Image](../../playwright-pilot/snapshots/desktop-dark/dashboard.png)  | [Image](../../playwright-pilot/snapshots/desktop-dark/balances.png)  |
-| Mobile light  | [Image](../../playwright-pilot/snapshots/mobile-light/dashboard.png)  | [Image](../../playwright-pilot/snapshots/mobile-light/balances.png)  |
-| Mobile dark   | [Image](../../playwright-pilot/snapshots/mobile-dark/dashboard.png)   | [Image](../../playwright-pilot/snapshots/mobile-dark/balances.png)   |
+| Mode / size   | Dashboard                                                                      | Balances                                                                      |
+| ------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| Desktop light | [Image](../../apps/web/playwright-pilot/snapshots/desktop-light/dashboard.png) | [Image](../../apps/web/playwright-pilot/snapshots/desktop-light/balances.png) |
+| Desktop dark  | [Image](../../apps/web/playwright-pilot/snapshots/desktop-dark/dashboard.png)  | [Image](../../apps/web/playwright-pilot/snapshots/desktop-dark/balances.png)  |
+| Mobile light  | [Image](../../apps/web/playwright-pilot/snapshots/mobile-light/dashboard.png)  | [Image](../../apps/web/playwright-pilot/snapshots/mobile-light/balances.png)  |
+| Mobile dark   | [Image](../../apps/web/playwright-pilot/snapshots/mobile-dark/dashboard.png)   | [Image](../../apps/web/playwright-pilot/snapshots/mobile-dark/balances.png)   |
 
 Eight additional focused catalogue images cover error and recovered feedback.
 Pre-change local captures remain under `output/playwright/design-system-before/`;
