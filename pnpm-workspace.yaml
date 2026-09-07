@@ -1,0 +1,13 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm 10 skips dependency install scripts by default and would nag about these
+# three on every install. They are safe to skip: esbuild, sharp and
+# unrs-resolver ship prebuilt binaries as optional dependencies and load them at
+# runtime; their scripts only pre-copy a binary, fall back to a from-source
+# build, or exist for legacy npm.
+ignoredBuiltDependencies:
+  - esbuild
+  - sharp
+  - unrs-resolver

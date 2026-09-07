@@ -1,5 +1,5 @@
 {
-  "name": "splitbook",
+  "name": "@splitbook/web",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -7,8 +7,6 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:unit": "vitest run --exclude \"src/**/*.integration.test.ts\"",
@@ -47,13 +45,12 @@
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
     "@playwright/test": "^1.62.1",
-    "@types/node": "^20",
+    "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
-    "prettier": "^3.8.1",
     "tsx": "^4.23.1",
     "typescript": "^5",
     "vitest": "^4.1.10"

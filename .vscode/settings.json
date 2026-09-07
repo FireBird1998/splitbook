@@ -1,0 +1,5 @@
+{
+  // The Next.js app and its eslint.config.mjs live in apps/web; let the ESLint
+  // extension pick the nearest package as its working directory.
+  "eslint.workingDirectories": [{ "mode": "auto" }]
+}

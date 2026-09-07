@@ -1,9 +1,1 @@
-node_modules
-.next
-out
-build
-coverage
 pnpm-lock.yaml
-playwright*/results
-playwright*/report
-output/playwright
