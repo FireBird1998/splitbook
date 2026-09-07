@@ -46,7 +46,7 @@ A **theme** is a pure, derived descriptor keyed by that value. Nothing new is st
 
 ### The registry
 
-New pure module, e.g. `src/lib/group-themes.ts`, unit-testable with no DB:
+New pure module, e.g. `packages/shared/src/group-themes.ts`, unit-testable with no DB:
 
 ```ts
 export interface GroupTheme {
@@ -176,12 +176,12 @@ Repo conventions apply throughout: pnpm only, `{ data }` / `{ error }` responses
 
 No schema change. No new endpoints. Pure derivation plus branching.
 
-- [x] **Theme registry.** Create `src/lib/group-themes.ts` with `GroupTheme` and `getGroupTheme`, plus `src/lib/group-themes.test.ts` covering every category, the `home → "Household"` label, and a fallback for unknown values (defensive: old documents).
+- [x] **Theme registry.** Create `packages/shared/src/group-themes.ts` with `GroupTheme` and `getGroupTheme`, plus `src/lib/group-themes.test.ts` covering every category, the `home → "Household"` label, and a fallback for unknown values (defensive: old documents).
 - [x] **Neutral header.** Add `src/components/groups/GroupHeader.tsx` — name, member avatars, currency, personal balance, invite code — reusing `MoneyText` and the `typography.money` treatment. Leave `TripStrip` and `deriveTripCodes` untouched.
 - [x] **Gate the trip chrome.** In `GroupDetailView`, render `TripStrip` when `theme.header === 'strip'` and `GroupHeader` otherwise. Move the checklist behind `theme.signature === 'checklist'`. Replace the hardcoded "Trip not found" / "Trip settings" / "Trip sections" strings with theme nouns.
 - [x] **Dashboard cards adapt.** In `GroupCard` (dashboard mode), branch the header the same way. Show the date range only for bounded themes; show "Last activity" for open-ended ones. The management mode already uses a neutral layout with a category icon — align its icon and label with the registry.
 - [x] **Theme picker at creation.** In `src/app/(main)/groups/new/page.tsx`, promote category from an advanced-settings dropdown to the **first** field: five selectable cards showing icon, label, tagline, and a one-line "what you get" (e.g. Household → "Month-by-month totals and a running balance"). Selecting a theme relabels the form live — title, name-field label and placeholder, date fields per §2, and the submit button.
-- [x] **Theme-aware default tags.** Add a category parameter to `buildDefaultGroupTags` / `mergeMissingDefaultTags` and per-theme lists to `src/lib/constants/default-tags.ts`; pass `category` from `groupService.create`. Update `default-tags.test.ts` (it currently asserts the five trip tags exactly). Existing groups are untouched — the merge helper only ever appends.
+- [x] **Theme-aware default tags.** Add a category parameter to `buildDefaultGroupTags` / `mergeMissingDefaultTags` and per-theme lists to `packages/shared/src/default-tags.ts`; pass `category` from `groupService.create`. Update `default-tags.test.ts` (it currently asserts the five trip tags exactly). Existing groups are untouched — the merge helper only ever appends.
 - [x] **Terminology pass.** Generic surfaces become group-language; trip surfaces keep trip language via `theme.nouns`. At minimum: dashboard "Your trips" → "Your groups", its subtitle and empty state, "New trip" → "New group"; `selectNextAction`'s `'create-trip'` kind → `'create-group'` with group copy (update `dashboard.test.ts` and the `DashboardNextAction` type); "Review your trip invitation" → group wording; `ExpenseListView`'s "everything on this trip" empty-state copy; `GroupSettingsView` labels; the mixed-currency alert's "A trip contains…". Sweep with `rg -i '\btrip' src` and treat every hit outside `src/components/trip/`, `trip-codes`, and trip-themed copy as a candidate.
 - [x] **Verify.** `pnpm test && pnpm lint && pnpm typecheck`. Manually: create one group per theme and confirm only the trip shows the strip and checklist, and that no non-trip surface says "trip".
 
@@ -189,7 +189,7 @@ No schema change. No new endpoints. Pure derivation plus branching.
 
 Reuses the existing expense filter API. One additive, opt-in response field. Full contract in [monthly-views.md](./monthly-views.md).
 
-- [x] **Fix the inclusive `dateTo` boundary.** `expense.service.ts` did `$lte: new Date(filters.dateTo)`, and a date-only string parses to UTC midnight — so expenses later on the final day were silently excluded. Landed as `toInclusiveDateToBound` in `src/lib/utils/date.ts`, covered by `expense-date-filter.integration.test.ts`.
+- [x] **Fix the inclusive `dateTo` boundary.** `expense.service.ts` did `$lte: new Date(filters.dateTo)`, and a date-only string parses to UTC midnight — so expenses later on the final day were silently excluded. Landed as `toInclusiveDateToBound` in `packages/shared/src/date.ts`, covered by `expense-date-filter.integration.test.ts`.
 - [x] **Per-member breakdown.** Extend the existing summary in `expenseService.getGroupExpenses` with an opt-in `byMember` array (member, `paid`, `share`, `net`) behind a query flag, so the default expense-list payload does not grow. The service already loads the full filtered set to compute `userOwes` / `userGetsBack`; the breakdown reuses that pass rather than adding a second aggregation.
 - [x] **Month switcher.** Add `src/components/groups/MonthCycleBar.tsx`: month stepping with `date-fns` `startOfMonth` / `endOfMonth`, forward capped at the current month, "This month" and "All time" actions, `?month=YYYY-MM` in the URL, and the month summary line.
 - [x] **Wire into the Household group page.** Render the bar when `theme.signature === 'monthCycle'`. Pass the active range into `ExpenseListView` as a controlled date range and suppress its quick-filter chips while a month is active.

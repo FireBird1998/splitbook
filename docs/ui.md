@@ -18,10 +18,10 @@ approval before broader screen migration.
 
 Two distinct things are called "theme" in this codebase. Keep them apart:
 
-|                  | What it is                                                  | Where                     |
-| ---------------- | ----------------------------------------------------------- | ------------------------- |
-| **Visual theme** | MUI palette, typography, radii — light and dark             | `src/lib/theme/`          |
-| **Group theme**  | A group's shape and identity, derived from `Group.category` | `src/lib/group-themes.ts` |
+|                  | What it is                                                  | Where                                 |
+| ---------------- | ----------------------------------------------------------- | ------------------------------------- |
+| **Visual theme** | MUI palette, typography, radii — light and dark             | `src/lib/theme/`                      |
+| **Group theme**  | A group's shape and identity, derived from `Group.category` | `packages/shared/src/group-themes.ts` |
 
 This section covers the visual theme. For group themes see
 [`v4/README.md`](v4/README.md).

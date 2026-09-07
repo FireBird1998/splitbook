@@ -92,7 +92,7 @@ Managed by Auth.js + extended with app-specific fields.
 
 - `category` is the group's **theme** key. It drives chrome, default tags, date
   semantics and whether recurring expenses are offered. Resolved through
-  `src/lib/group-themes.ts`; `"home"` displays as "Household". Note the default
+  `packages/shared/src/group-themes.ts`; `"home"` displays as "Household". Note the default
   differs by entry point: the schema defaults to `"other"`, the create validator
   to `"trip"`.
 - `tags` are seeded per theme on creation. `Expense.tag` references a tag by

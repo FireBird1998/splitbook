@@ -140,7 +140,7 @@ currencies** (see [`features/currency.md`](features/currency.md)).
 `category` is one of `trip | home | couple | work | other` and **defaults to
 `trip`** in the validator. It drives the group's theme — chrome, default tags,
 date semantics, and whether recurring expenses are available. See
-[`../src/lib/group-themes.ts`](../apps/web/src/lib/group-themes.ts) and
+[`../packages/shared/src/group-themes.ts`](../packages/shared/src/group-themes.ts) and
 [`v4/README.md`](v4/README.md).
 
 `alternateCurrencies` accepts up to 2 codes and is persisted, but **no read or
@@ -386,7 +386,7 @@ created an expense, so any member can edit or delete any expense in the group.
 - `amount` — positive, at most 10,000,000.
 
 `category` is a free string defaulting to `"other"`; the category list in
-`src/lib/constants/categories.ts` is **not** enforced by the validator.
+`packages/shared/src/categories.ts` is **not** enforced by the validator.
 
 `receiptUrl` is present on the model but absent from both expense schemas, so no
 API path can set it.

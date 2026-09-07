@@ -34,7 +34,7 @@ splitbook/
 ├── docs/                   # this documentation
 ├── apps/
 │   └── web/                # the Next.js app — the tree below
-└── packages/               # shared packages (none yet)
+└── packages/shared/        # @splitbook/shared: types, validators, pure domain logic
 ```
 
 Everything below is relative to `apps/web/`.
@@ -165,8 +165,6 @@ src/
 │   ├── auth-sign-in.ts
 │   ├── demo-credentials.ts         # Demo authorize() — fails closed in prod
 │   ├── demo-personas.ts
-│   ├── group-themes.ts             # category → theme registry (v4)
-│   ├── recurring-due-periods.ts    # Pure due-period math
 │   ├── db.ts                       # Mongoose connection singleton (server-only)
 │   ├── mongodb-client.ts           # MongoDB client for Auth.js adapter (server-only)
 │   ├── models/
@@ -180,20 +178,11 @@ src/
 │   ├── services/
 │   │   ├── group.service.ts        # Includes tag CRUD + member management
 │   │   ├── expense.service.ts      # Includes summary aggregation
-│   │   ├── expense-validation.ts   # Shared assert* invariants
-│   │   ├── expense-summary.ts
-│   │   ├── split-calculation.ts
 │   │   ├── recurring-expense.service.ts
 │   │   ├── settlement.service.ts
 │   │   ├── balance.service.ts
 │   │   ├── invitation.service.ts
-│   │   ├── invitation-ownership.ts
 │   │   └── activity.service.ts
-│   ├── validators/                 # Zod v4 schemas
-│   │   ├── group.validator.ts
-│   │   ├── expense.validator.ts
-│   │   ├── recurring-expense.validator.ts
-│   │   └── settlement.validator.ts
 │   ├── theme/
 │   │   ├── tokens.ts               # Semantic light/dark design tokens
 │   │   └── createAppTheme.ts       # MUI theme + palette augmentation
@@ -204,30 +193,51 @@ src/
 │   │   ├── integration-db.ts       # Per-file isolated test database
 │   │   ├── fixtures.ts
 │   │   └── stubs/server-only.ts    # No-op stand-in under Vitest
-│   ├── utils/
-│   │   ├── currency.ts             # Currency helpers + formatting
-│   │   ├── money.ts
-│   │   ├── debt-simplifier.ts      # Min-transaction algorithm
-│   │   ├── dashboard.ts            # Cross-group currency bucketing
-│   │   ├── api-response.ts         # Consistent API response helpers
-│   │   ├── fetcher.ts              # SWR fetcher
-│   │   ├── date.ts                 # Date helpers (UTC-inclusive bounds)
-│   │   ├── settlement-authorization.ts
-│   │   ├── activity-timeline.ts
-│   │   ├── trip-codes.ts           # Airport-code derivation — trip theme only
-│   │   ├── trip-setup.ts
-│   │   └── escape-regex.ts
-│   └── constants/
-│       ├── categories.ts           # Expense categories
-│       ├── default-tags.ts         # Per-theme default tags
-│       └── predefined-items.ts     # Predefined expense items
+│   └── utils/
+│       ├── api-response.ts         # Consistent API response helpers
+│       └── fetcher.ts              # SWR fetcher
 ├── types/
-│   ├── index.ts                    # Shared TypeScript interfaces
 │   └── next-auth.d.ts              # Session type augmentation
 ├── providers/
 │   ├── AuthProvider.tsx            # NextAuth SessionProvider
 │   └── ThemeProvider.tsx           # MUI ThemeProvider + CssBaseline
 └── middleware.ts                   # Auth middleware for route protection
+```
+
+### `packages/shared` (`@splitbook/shared`)
+
+Types, Zod validators and pure domain logic shared by every app. TypeScript
+source exported as `@splitbook/shared/<module>` (see
+[ADR 0002](adr/0002-shared-domain-package.md)); nothing here imports Next,
+React, MUI, Mongoose, the database or DOM APIs.
+
+```
+packages/shared/src/
+├── types.ts                    # Shared TypeScript interfaces (API + domain)
+├── validators/                 # Zod v4 request schemas
+│   ├── group.ts
+│   ├── expense.ts
+│   ├── recurring-expense.ts
+│   └── settlement.ts
+├── currency.ts                 # Currency helpers + formatting
+├── money.ts
+├── date.ts                     # Date helpers (UTC-inclusive bounds)
+├── split-calculation.ts
+├── debt-simplifier.ts          # Min-transaction algorithm
+├── expense-summary.ts          # Per-member breakdown maths
+├── expense-validation.ts       # Shared assert* invariants
+├── settlement-authorization.ts
+├── invitation-ownership.ts
+├── dashboard.ts                # Cross-group currency bucketing
+├── activity-timeline.ts
+├── recurring-due-periods.ts    # Pure due-period math
+├── group-themes.ts             # category → theme registry (v4)
+├── trip-codes.ts               # Airport-code derivation — trip theme only
+├── trip-setup.ts
+├── escape-regex.ts
+├── categories.ts               # Expense categories
+├── default-tags.ts             # Per-theme default tags
+└── predefined-items.ts         # Predefined expense items
 ```
 
 There is **no `src/hooks` directory** — SWR is called directly in components.

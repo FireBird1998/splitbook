@@ -5,9 +5,10 @@ on:
     branches: [main]
   pull_request:
 
-# The Next.js app lives in apps/web, so every app step runs there. pnpm's
-# version comes from the packageManager field in the root package.json and
-# Node's from .nvmrc; `pnpm install` inside apps/web installs the whole workspace.
+# The Next.js app lives in apps/web, so app steps run there; the workspace-wide
+# scripts (lint, typecheck, test) run at the root so packages/* are covered too.
+# pnpm's version comes from the packageManager field in the root package.json
+# and Node's from .nvmrc; `pnpm install` inside apps/web installs the workspace.
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -35,20 +36,23 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Lint
+      - name: Lint (workspace)
+        working-directory: .
         run: pnpm lint
 
       - name: Adopted design-system style policy
         run: pnpm check:design-system
 
-      - name: Test (unit + integration)
+      - name: Test (workspace, unit + integration)
+        working-directory: .
         run: pnpm test
         env:
           # Integration suites derive per-file splitbook-test-* databases from
           # this base URI; the demo database is never touched.
           TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
 
-      - name: Typecheck
+      - name: Typecheck (workspace)
+        working-directory: .
         run: pnpm typecheck
 
       - name: Authenticated expense access (isolated app and database)
