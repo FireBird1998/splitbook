@@ -1,0 +1,40 @@
+# dependencies
+node_modules
+
+# build output and caches (any package)
+.next/
+out/
+dist/
+coverage/
+test-results/
+*.tsbuildinfo
+next-env.d.ts
+
+# Playwright output (any app)
+**/playwright*/results/
+**/playwright*/report/
+**/playwright*/artifacts/
+**/output/playwright/
+
+# env files (can opt-in for committing if needed)
+.env*
+!.env.example
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# vercel
+.vercel
+
+# git worktrees
+.worktrees/
+
+# agent progress ledger
+.superpowers/
