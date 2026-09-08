@@ -68,6 +68,9 @@ async function main() {
       const report = await migrateAuthData(db, { dryRun });
       console.log(`  users:                          ${report.users.total}`);
       console.log(`  emailVerified Date → true:      ${report.users.emailVerifiedFromDate}`);
+      console.log(
+        `  emailVerified via Google row:   ${report.users.emailVerifiedFromGoogleAccount}`,
+      );
       console.log(`  emailVerified empty → false:    ${report.users.emailVerifiedFromEmpty}`);
       console.log(`  timestamps added:               ${report.users.timestampsAdded}`);
       console.log(
