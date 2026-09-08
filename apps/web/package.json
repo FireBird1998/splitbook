@@ -21,7 +21,8 @@
     "check:design-system": "tsx --tsconfig scripts/tsconfig.json scripts/check-design-system.ts",
     "typecheck": "tsc --noEmit",
     "demo:seed": "tsx --tsconfig scripts/tsconfig.json scripts/demo-seed.ts",
-    "demo:reset": "tsx --tsconfig scripts/tsconfig.json scripts/demo-reset.ts"
+    "demo:reset": "tsx --tsconfig scripts/tsconfig.json scripts/demo-reset.ts",
+    "migrate:auth": "tsx --tsconfig scripts/tsconfig.json scripts/migrate-auth.ts"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.11.1",
