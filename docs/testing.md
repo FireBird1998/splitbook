@@ -27,8 +27,15 @@ without I/O:
   with mocked models) — currencies never combine into one number.
 - **Auth-mode guards** (`lib/auth-mode.ts`) — fail-closed in production,
   exact case-sensitive env parsing.
-- **Demo personas** (`lib/demo-personas.ts`, `lib/demo-credentials.ts`) —
-  allowlist, lookup normalisation, authorize() guard rails.
+- **Better Auth wiring** (`lib/auth/*`) — the allowlist gate, the proxy
+  decision table (401 JSON, `callbackUrl` redirects), callback-URL safety,
+  the test ID-token verifier and its production gate, and the instance
+  options run on Better Auth's memory adapter: session policy, rate-limit
+  storage, plugin registration, and the Google ID-token path (approved,
+  denied, re-linked to an existing user, allowlist re-checked on sign-in).
+- **Demo personas** (`lib/demo-personas.ts`, `lib/auth/demo-persona-plugin.ts`) —
+  lookup normalisation, and the plugin end to end on the memory adapter:
+  absent outside demo mode, unknown/unseeded personas, session cookie.
 - **Seed plan invariants** (`demo/seed-plan.ts`) — idempotency decision,
   members/tags/currency consistency of the seeded trip.
 - **Settlement authorization** (`utils/settlement-authorization.ts`) — only
@@ -59,6 +66,9 @@ through the actual service layer (no mocked models):
   (only the invited email may accept/decline), expiry, duplicates.
 - `demo/seed.integration.test.ts` — end-to-end seed idempotency, reset, and
   the exact persona balances the private-beta UI promises.
+- `auth/migrate-auth.integration.test.ts` — the Auth.js → Better Auth data
+  migration (`pnpm web migrate:auth`): forward run, idempotent re-run, dry
+  run, a database without the legacy index, and `--revert`.
 
 ### Database isolation strategy
 
@@ -83,7 +93,7 @@ modules outside Next therefore needs the package aliased to the no-op stub in
 [`src/lib/test-utils/stubs/server-only.ts`](../apps/web/src/lib/test-utils/stubs/server-only.ts):
 
 - **Vitest** — via `resolve.alias` in [`vitest.config.ts`](../apps/web/vitest.config.ts).
-- **`tsx` CLI scripts** (`demo:seed`, `demo:reset`) — via a `paths` mapping in
+- **`tsx` CLI scripts** (`demo:seed`, `demo:reset`, `migrate:auth`) — via a `paths` mapping in
   [`scripts/tsconfig.json`](../apps/web/scripts/tsconfig.json), which the `package.json`
   scripts select with `tsx --tsconfig`.
 
@@ -98,10 +108,12 @@ Run `pnpm web test:expense-access` with MongoDB listening on `127.0.0.1:27017`.
 No browser installation or Google credentials are needed. To run one slice,
 append `read.spec.ts`, `edit-restore.spec.ts`, or `delete.spec.ts`.
 
-The suite exercises actual HTTP requests through Auth.js, the route adapter,
-the expense module, and MongoDB. It verifies reads, edits, soft deletion and
-restoration for disjoint and overlapping Groups, outsiders, revoked members
-with still-valid sessions, and anonymous callers. Both manual Expenses and
+The suite exercises actual HTTP requests through Better Auth, the route
+adapter, the expense module, and MongoDB. Each persona context signs in
+through `POST /api/auth/demo-persona/sign-in` and keeps the session cookie.
+It verifies reads, edits, soft deletion and restoration for disjoint and
+overlapping Groups, outsiders, revoked members with still-valid sessions, and
+anonymous callers. Both manual Expenses and
 Expenses generated through the recurring-template request are covered.
 Authorized non-admin/non-creator controls preserve population, history,
 activity attribution, validation, archived Tags and repeat deletion.
@@ -161,8 +173,11 @@ Two jobs, each with a `mongo:7` service container:
   review screenshots.
 
 Because the Playwright webServer runs a **production** build, its env must set
-`ALLOW_DEMO_AUTH=true` (demo auth fails closed in production) and
-`AUTH_TRUST_HOST=true` (Auth.js otherwise throws `UntrustedHost`).
+`ALLOW_DEMO_AUTH=true` (demo auth fails closed in production),
+`AUTH_RATE_LIMIT_ENABLED=false` (Better Auth rate-limits production builds per
+client IP, and behind `next start` on loopback every request would share one
+bucket), and for the Google suite `ALLOW_TEST_ID_TOKEN=true` (the test
+ID-token verifier is refused in production without it).
 
 ## Coverage shape
 
@@ -180,6 +195,7 @@ Worth knowing where the safety net is and is not:
   because split-total validation, month-range parsing and the recurring
   problem-state heuristic currently live only in components.
 - `playwright.google.config.ts` uses an isolated `splitbook-google-e2e`
-  database and a local OIDC stand-in. It completes both approved and denied
-  Auth.js callbacks without live Google access; only the approved test identity
-  is persisted.
+  database. It intercepts the redirect to Google and asserts its parameters,
+  then proves the approved and denied outcomes through Better Auth's ID-token
+  sign-in endpoint with locally signed tokens (`AUTH_TEST_ID_TOKEN_SECRET`);
+  Google is never contacted and only the approved test identity is persisted.

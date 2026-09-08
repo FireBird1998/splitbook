@@ -1,5 +1,5 @@
 {
-  // TypeScript config for the `tsx`-run CLI scripts (demo:seed / demo:reset).
+  // TypeScript config for the `tsx`-run CLI scripts (demo:seed / demo:reset / migrate:auth).
   //
   // These import the app's service layer, which reaches `src/lib/db.ts` and its
   // `import 'server-only'` tripwire. That package throws unless the bundler
