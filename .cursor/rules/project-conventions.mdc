@@ -14,7 +14,7 @@ alwaysApply: true
 - Next.js 16 (App Router) + TypeScript + React 19
 - MUI v7 (Material UI) + Emotion — sole styling system, no Tailwind
 - MongoDB + Mongoose v9 — database
-- Auth.js v5 (NextAuth) — Google OAuth, JWT sessions
+- Better Auth — Google OAuth (allowlisted) + demo persona plugin, database sessions; `src/proxy.ts` protects routes
 - SWR — client-side data fetching (used directly in components, no custom hooks layer)
 - Zod v4 — request validation
 

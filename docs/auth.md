@@ -2,10 +2,18 @@
 
 ## Overview
 
-We use **Auth.js v5** (formerly NextAuth.js) with **JWT sessions** and the **MongoDB adapter**. Two providers are registered side by side in [`src/lib/auth.config.ts`](../apps/web/src/lib/auth.config.ts) so the mode can switch without a rebuild:
+We use **Better Auth** (1.7) with **database sessions** stored in MongoDB
+through its MongoDB adapter. One instance, built in
+[`src/lib/auth/create-auth.ts`](../apps/web/src/lib/auth/create-auth.ts) and
+exported from [`src/lib/auth.ts`](../apps/web/src/lib/auth.ts), serves two
+sign-in paths:
 
-- **Google OAuth** — the real sign-in path, restricted by the `AUTH_ALLOWED_EMAILS` private-beta allowlist.
-- **Demo Credentials** — private-beta personas (Alex, Sam, Priya), guarded by `AUTH_MODE`.
+- **Google OAuth** — the real sign-in path, restricted by the
+  `AUTH_ALLOWED_EMAILS` private-beta allowlist through Better Auth's
+  `user.validateUserInfo` gate.
+- **Demo personas** — private-beta personas (Alex, Sam, Priya) through a
+  custom plugin endpoint, registered only while demo auth is allowed by
+  `AUTH_MODE`.
 
 The active mode resolves through [`src/lib/auth-mode.ts`](../apps/web/src/lib/auth-mode.ts):
 
@@ -16,38 +24,47 @@ The active mode resolves through [`src/lib/auth-mode.ts`](../apps/web/src/lib/au
 | `demo`                           | production       | anything else     | **google** (fail closed) |
 | unset / `google` / anything else | any              | any               | **google**               |
 
-Demo sign-in goes through the Credentials `authorize()` in
-[`src/lib/demo-credentials.ts`](../apps/web/src/lib/demo-credentials.ts), which only
-returns one of the three allowlisted personas from
-[`src/lib/demo-personas.ts`](../apps/web/src/lib/demo-personas.ts). Sessions are real
-Auth.js JWTs, so every API route keeps receiving a real `session.user.id`
-ObjectId string — the authorization path is identical in both modes.
-
 In demo mode `/` renders the persona picker; in Google mode it renders the
 marketing landing. A **Demo mode** badge shows in the navbar while demo auth
 is active. See the README for seeding (`pnpm web demo:seed` / `pnpm web demo:reset`).
 
-> Middleware note: route protection lives in the `authorized` callback of
-> `auth.config.ts` (edge-safe, no Node/Mongo imports); `src/middleware.ts`
-> just re-exports it. The examples below show the Google flow and session
-> usage.
+Both modes produce the same session: a `sessions` row referencing the user,
+exposed to the app as `user.id` — the 24-hex string of the stored `ObjectId`,
+which is what every service treats as the actor. The persona ids are fixed
+(`a0000000000000000000000{1,2,3}`), so demo sessions carry real ids too.
+
+> **Why Better Auth.** [ADR 0003](adr/0003-better-auth.md). The migration from
+> Auth.js is specified in
+> [`superpowers/specs/2026-09-08-better-auth-migration.md`](superpowers/specs/2026-09-08-better-auth-migration.md).
 
 ---
 
 ## Google OAuth Flow
 
 ```
-1. User visits /login
-2. Clicks "Sign in with Google"
-3. Auth.js redirects to Google OAuth consent screen
-4. User authorizes the app
-5. Google redirects back with auth code
-6. Auth.js exchanges code for tokens
-7. The `signIn` callback normalizes the email and checks `AUTH_ALLOWED_EMAILS`
-8. Auth.js creates/updates an approved user in MongoDB (via MongoDB adapter)
-9. JWT session cookie is set (httpOnly, secure)
-10. User is redirected to /dashboard; denied users return to `/login?error=AccessDenied`
+1. User visits /login (or the landing page)
+2. Clicks "Sign in with Google" → authClient.signIn.social({ provider: 'google', callbackURL })
+3. Better Auth stores the OAuth state and redirects to Google's consent screen
+   (prompt=select_account, scope openid profile email, PKCE S256)
+4. User authorizes
+5. Google redirects back to /api/auth/callback/google with an auth code
+6. Better Auth exchanges the code for tokens and reads the Google profile
+7. validateUserInfo normalises the email and checks AUTH_ALLOWED_EMAILS
+8. Better Auth creates the user (first visit) or links the Google account to the
+   existing user with that email, then creates a session row
+9. Session cookie set (httpOnly, secure in production) plus a signed cookie cache
+10. Redirect to callbackURL (default /dashboard); denied identities return to
+    /login?error=email_not_allowed
 ```
+
+### Native clients (mobile readiness)
+
+The same instance accepts a Google **ID token** obtained from the device's
+native sign-in: `POST /api/auth/sign-in/social` with
+`{ provider: 'google', idToken: { token } }` verifies the token against
+Google's keys and the configured client id(s), runs the same allowlist gate,
+and answers with the session. Ticket #36 turns `clientId` into the array of
+web, iOS and Android ids and adds the Expo client wiring.
 
 ---
 
@@ -75,9 +92,8 @@ or paid APIs are required.
 
 1. Go to **Credentials** → **Create Credentials** → **OAuth client ID**.
 2. Application type: **Web application**.
-3. **Authorized JavaScript origins are not required** — Auth.js uses a
-   server-side authorization-code flow, not the Google Sign-In JS SDK. (Adding
-   `http://localhost:4127` etc. is harmless but unused.)
+3. **Authorized JavaScript origins are not required** — Better Auth uses a
+   server-side authorization-code flow, not the Google Sign-In JS SDK.
 
 4. Add the matching **Authorized redirect URIs** — always
    `<origin>/api/auth/callback/google`:
@@ -87,160 +103,141 @@ or paid APIs are required.
    | Local dev   | `http://localhost:4127/api/auth/callback/google` |
    | Production  | `https://<your-domain>/api/auth/callback/google` |
 
-   The automated Google-mode browser suite uses its own local OIDC stand-in
-   on dedicated test ports and does not require a Google Console redirect.
+   The automated Google-mode browser suite never contacts Google and needs
+   no Console entry.
 
    The redirect URI must match **exactly** (scheme, host, port, path) or Google
-   shows `redirect_uri_mismatch`. Auth.js always uses
-   `/api/auth/callback/google` — it is derived from the route handler in
-   `src/app/api/auth/[...nextauth]/route.ts`, not from configuration.
+   shows `redirect_uri_mismatch`. Better Auth derives it from `baseURL`
+   (`NEXT_PUBLIC_APP_URL`) plus `/api/auth/callback/google`.
 
 5. Copy the **Client ID** and **Client Secret** into `apps/web/.env.local` as
    `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET`. Never commit these values.
 
-### 2. Auth.js Configuration
+### 2. Configuration
 
-The config is deliberately **split across two files**, because middleware runs in
-the Edge runtime and cannot load the MongoDB adapter.
-
-#### `src/lib/auth.config.ts` — Edge-compatible
-
-Holds everything except the adapter: both providers, the session strategy, the
-callbacks, and the `authorized` route-protection logic. It must not import
-`mongodb`, `mongoose`, or anything else Node-only.
+Everything lives in [`src/lib/auth/create-auth.ts`](../apps/web/src/lib/auth/create-auth.ts),
+which returns the options so tests can build the same instance on Better
+Auth's memory adapter:
 
 ```typescript
-export const authConfig: NextAuthConfig = {
-  providers: [
-    Credentials({
-      id: 'demo',
-      name: 'Demo',
-      credentials: { personaId: { label: 'Persona', type: 'text' } },
-      authorize(credentials) {
-        // Env is read at authorize-time so the production guard stays effective.
-        return authorizeDemoPersona({ personaId: ... });
-      },
-    }),
-    Google({
-      clientId: process.env.AUTH_GOOGLE_ID!,
-      clientSecret: process.env.AUTH_GOOGLE_SECRET!,
-    }),
-  ],
-  session: { strategy: 'jwt' },
-  callbacks: {
-    async signIn({ user, account }) {
-      if (account?.provider !== 'google') return true;
-      const allowed = new Set((process.env.AUTH_ALLOWED_EMAILS ?? '')
-        .split(',').map((email) => email.trim().toLowerCase()).filter(Boolean));
-      return Boolean(user.email && allowed.has(user.email.trim().toLowerCase()));
+export function buildAuthOptions({ database, env = process.env }) {
+  return {
+    baseURL: env.NEXT_PUBLIC_APP_URL,
+    secret: env.AUTH_SECRET,
+    database,
+    trustedOrigins: [env.NEXT_PUBLIC_APP_URL],
+    session: {
+      expiresIn: 30 days, updateAge: 1 day,
+      cookieCache: { enabled: true, maxAge: 5 minutes },
     },
-    async jwt({ token, user }) { if (user) token.id = user.id; return token; },
-    async session({ session, token }) {
-      if (session.user) session.user.id = token.id as string;
-      return session;
+    rateLimit: { storage: 'database' },          // on in production by default
+    account: { accountLinking: { trustedProviders: ['google'] } },
+    socialProviders: {
+      google: { clientId, clientSecret, prompt: 'select_account' /* + test verifier */ },
     },
-    authorized({ auth, request }) { /* route protection — see §4 */ },
-  },
-  pages: { signIn: '/login', error: '/login' },
-};
+    user: {
+      validateUserInfo: (data) => validateAllowedUser(data, env),   // the allowlist
+      additionalFields: { preferredCurrency: { type: 'string', defaultValue: 'INR', input: false } },
+    },
+    plugins: [...(demo allowed ? [demoPersona()] : []), nextCookies()],
+  };
+}
 ```
 
-**Both providers are always registered**, so `AUTH_MODE` can switch the active
-sign-in path without a rebuild. The demo `authorize()` reads env at call time and
-fails closed — see [Demo mode](#demo-mode).
-
-#### `src/lib/auth.ts` — Node runtime
-
-Fourteen lines. It adds the MongoDB adapter and nothing else:
+[`src/lib/auth.ts`](../apps/web/src/lib/auth.ts) adds the database and nothing else:
 
 ```typescript
-import NextAuth from 'next-auth';
-import { MongoDBAdapter } from '@auth/mongodb-adapter';
-import clientPromise from './mongodb-client';
-import { authConfig } from './auth.config';
-
-export const { handlers, auth, signIn, signOut } = NextAuth({
-  ...authConfig,
-  adapter: MongoDBAdapter(clientPromise),
+export const auth = createSplitbookAuth({
+  database: mongodbAdapter(getAuthDb(), { usePlural: true, transaction: false }),
 });
 ```
 
-Import this one from API routes and server components. `src/middleware.ts`
-imports `auth.config.ts` instead.
-
-> **Why the split still matters.** Next.js 16 introduced a Node-runtime `proxy`
-> as an alternative to `middleware`, but this repo keeps `middleware.ts` — so the
-> Edge constraint on `auth.config.ts` is live. Adding a Node-only import there
-> will break the build.
+- **Collections.** `usePlural` keeps the application's `users` collection as the
+  user model; `sessions`, `accounts`, `verifications` and `rateLimits` are Better
+  Auth's own. Ids are ObjectIds through the adapter default (no custom id
+  generator — that would store plain strings). `transaction: false` because
+  local and CI run a standalone `mongod`.
+- **Sessions.** Database-backed, 30 days, refreshed after a day of use. The
+  cookie cache lets `getSession` answer from a signed cookie for up to five
+  minutes before re-reading the database, so a revoked session can stay valid
+  on another device for at most five minutes (decision Q21).
+- **Allowlist.** [`src/lib/auth/allowlist.ts`](../apps/web/src/lib/auth/allowlist.ts).
+  Better Auth calls the gate before it creates a user, links an account and on
+  every OAuth sign-in of an existing user, so removing an address from
+  `AUTH_ALLOWED_EMAILS` locks that person out at their next Google sign-in.
+  Matching is trimmed and case-insensitive; an empty or missing list denies
+  everyone. Rejections carry the code `email_not_allowed`.
+- **Account linking.** A Google login for an email that already belongs to a
+  user links to that user (keeping the id) when the user row is verified.
+  Better Auth refuses to link into an unverified row (a takeover guard), which
+  is why the migration marks users with an Auth.js Google account as verified.
+- **Secret and base URL.** `AUTH_SECRET` is Better Auth's documented fallback
+  variable, so the existing secret stays. `baseURL` and the trusted origin come
+  from `NEXT_PUBLIC_APP_URL`.
+- **`preferredCurrency`** is declared as an additional user field so users
+  Better Auth creates get the same default the Mongoose model applies.
 
 ### 3. Route Handler
 
-File: `src/app/api/auth/[...nextauth]/route.ts`
+File: `src/app/api/auth/[...all]/route.ts`
 
 ```typescript
-import { handlers } from '@/lib/auth';
-export const { GET, POST } = handlers;
+import { toNextJsHandler } from 'better-auth/next-js';
+import { auth } from '@/lib/auth';
+
+export const { GET, POST } = toNextJsHandler(auth);
 ```
 
-### 4. Middleware (Route Protection)
+Every Better Auth route lives under `/api/auth/*`: `sign-in/social`,
+`callback/google`, `get-session`, `sign-out`, and in demo mode
+`demo-persona/sign-in`.
 
-File: `src/middleware.ts` (delegates to the `authorized` callback in `src/lib/auth.config.ts`)
+### 4. Proxy (Route Protection)
+
+File: `src/proxy.ts` (Next.js 16's name for middleware). It delegates to the
+pure decision table in
+[`src/lib/auth/proxy-rules.ts`](../apps/web/src/lib/auth/proxy-rules.ts):
 
 ```typescript
-import NextAuth from 'next-auth';
-import { authConfig } from '@/lib/auth.config';
-
-export default NextAuth(authConfig).auth;
-
-export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)'],
-};
+export default function proxy(request: NextRequest) {
+  return resolveProxyResponse({
+    url: request.url,
+    pathname: request.nextUrl.pathname,
+    method: request.method,
+    hasSessionCookie: getSessionCookie(request) !== null,
+  });
+}
 ```
 
-Anonymous requests to `/api/*` receive `401` JSON (`{ error: 'Unauthorized', status: 401 }`)
-from this callback; anonymous page visits are redirected to `/login?callbackUrl=…`.
+The rules, in order:
 
-The matcher excludes Next internals and anything containing a dot (i.e. static
-files), so it runs on every page **and** every `/api/*` route.
+| Rule | Path                   | Anonymous                                    | With session cookie |
+| ---- | ---------------------- | -------------------------------------------- | ------------------- |
+| 1    | `/api/auth/*`          | allowed                                      | allowed             |
+| 2    | `GET /api/join/[code]` | allowed (invite preview)                     | allowed             |
+| 3    | `/login*`              | allowed                                      | → `/dashboard`      |
+| 4    | `/`, `/join*`          | allowed                                      | allowed             |
+| 5    | other `/api/*`         | `401 { error: 'Unauthorized', status: 401 }` | allowed             |
+| 6    | everything else        | → `/login?callbackUrl=<pathname>`            | allowed             |
 
-**Public paths**, per the `authorized` callback:
+The matcher excludes Next internals, static files and the design-system lab
+URL, so it runs on every page **and** every `/api/*` route.
 
-| Path                   | Why                                                                                                                    |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `/api/auth/*`          | Auth.js itself                                                                                                         |
-| `/`                    | Landing / persona picker                                                                                               |
-| `/login`               | Sign-in                                                                                                                |
-| `/join/*`              | Invite landing page                                                                                                    |
-| `GET /api/join/[code]` | Invite preview, so the join page can render its sign-in CTA before the visitor has an account. `POST` stays protected. |
-
-> Two things worth knowing:
->
-> 1. `/` , `/login` and `/join` are matched with `startsWith`, so any path
->    _beginning_ with those strings is public — not only those segments.
-> 2. **Middleware does not return 401.** Auth.js converts an `authorized` return
->    of `false` into a **302 redirect to `/login`**, including for `/api/*`. An
->    unauthenticated API client receives an HTML sign-in page, not JSON. The 401s
->    documented below come from each route's own `getAuthUser` guard, which runs
->    after middleware has let the request through.
+> **The proxy is optimistic.** `getSessionCookie` only proves a session cookie
+> exists; it never touches the database. An expired or revoked session passes
+> the proxy and is rejected where validation lives: `getAuthUser()` answers
+> 401 for API routes, and the authenticated layout redirects to `/login` for
+> pages. `/`, `/login` and `/join` are matched with `startsWith`, so any path
+> _beginning_ with those strings is public.
 
 ---
 
 ## Session Access
 
-### In Server Components
+### In Server Components and API Routes
 
-```typescript
-import { auth } from '@/lib/auth';
-
-export default async function Page() {
-  const session = await auth();
-  // session.user.id, session.user.name, session.user.email, session.user.image
-}
-```
-
-### In API Routes
-
-Routes use the `getAuthUser` helper rather than calling `auth()` directly:
+Both use the same helper, which validates the session (database or cookie
+cache) and returns `{ id, name, email, image }` or `null`:
 
 ```typescript
 import { getAuthUser, unauthorized } from '@/lib/utils/api-response';
@@ -252,6 +249,13 @@ export async function GET() {
 }
 ```
 
+```typescript
+export default async function Page() {
+  const user = await getAuthUser();
+  if (!user) redirect('/login');
+}
+```
+
 Authentication is only the first gate. Most routes then check group membership
 via `groupService.isMember`, and admin-only routes check role inside the service.
 See the permission matrix in [`features/groups.md`](features/groups.md).
@@ -260,13 +264,40 @@ See the permission matrix in [`features/groups.md`](features/groups.md).
 
 ```typescript
 'use client';
-import { useSession } from 'next-auth/react';
+import { authClient, signInWithGoogle, signOutToHome } from '@/lib/auth-client';
 
 export function UserMenu() {
-  const { data: session, status } = useSession();
-  // status: "loading" | "authenticated" | "unauthenticated"
+  const { data: session, isPending } = authClient.useSession();
+  // session?.user.{id,name,email,image}
 }
 ```
+
+`signInWithGoogle(callbackURL)` starts the redirect flow with
+`errorCallbackURL: '/login'`; `signOutToHome()` revokes the session and reloads
+at `/`. The Navbar receives the user from the server layout rather than the
+hook.
+
+`callbackUrl` values from the query string pass through
+[`resolveCallbackUrl`](../apps/web/src/lib/auth/callback-url.ts), which only
+honours same-origin paths.
+
+---
+
+## Demo mode
+
+[`src/lib/auth/demo-persona-plugin.ts`](../apps/web/src/lib/auth/demo-persona-plugin.ts)
+adds `POST /api/auth/demo-persona/sign-in` with body `{ personaId }` — a
+persona key (`alex`, `sam`, `priya`) or its fixed ObjectId, normalised by
+`getDemoPersona`. The handler finds the seeded user by id, creates a session
+and sets the cookie; unknown or unseeded personas answer 404. The client
+plugin types it as `authClient.demoPersona.signIn({ personaId })`, which the
+persona picker calls before navigating to the validated `callbackUrl`.
+
+Fail closed, twice: the plugin is registered only while `isDemoAuthAllowed()`
+holds, so outside demo mode the route **does not exist** (404), and the handler
+re-reads the environment on every call. Persona sign-ins never provision users,
+so the Google allowlist is not involved. The endpoint is rate limited to ten
+entries per minute per client.
 
 ---
 
@@ -275,20 +306,19 @@ export function UserMenu() {
 File: `src/lib/utils/api-response.ts`
 
 ```typescript
-import { auth } from '@/lib/auth';
-
-export async function getAuthUser() {
-  const session = await auth();
+export async function getAuthUser(): Promise<AuthUser | null> {
+  const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.id) return null;
-  return session.user;
+  const { id, name, email, image } = session.user;
+  return { id, name, email, image: image ?? null };
 }
 
 export function unauthorized() {
-  return Response.json({ error: 'Unauthorized' }, { status: 401 });
+  return NextResponse.json({ error: 'Unauthorized', status: 401 }, { status: 401 });
 }
 
 export function forbidden() {
-  return Response.json({ error: 'Forbidden' }, { status: 403 });
+  return NextResponse.json({ error: 'Forbidden', status: 403 }, { status: 403 });
 }
 ```
 
@@ -309,7 +339,18 @@ NEXT_PUBLIC_APP_URL=http://localhost:4127
 AUTH_MODE=
 # Required to use demo auth when NODE_ENV=production (fail closed otherwise)
 ALLOW_DEMO_AUTH=
+
+# Test-only (never on a real deployment): locally signed Google ID tokens for
+# the browser suite; refused under NODE_ENV=production unless ALLOW_TEST_ID_TOKEN=true
+AUTH_TEST_ID_TOKEN_SECRET=
+ALLOW_TEST_ID_TOKEN=
+# Optional override of the rate-limit default (on in production only)
+AUTH_RATE_LIMIT_ENABLED=
 ```
+
+The variable names did not change in the migration, so a deployment that
+worked with Auth.js needs no new secrets. `AUTH_TRUST_HOST` and
+`AUTH_GOOGLE_ISSUER` are no longer read.
 
 ---
 
@@ -320,11 +361,10 @@ ALLOW_DEMO_AUTH=
 | Real sign-in (default) | `AUTH_MODE=google` or unset | Marketing landing + "Sign in with Google" |
 | Private-beta personas  | `AUTH_MODE=demo`            | Persona picker (Alex / Sam / Priya)       |
 
-- Restart the dev server after changing `AUTH_MODE` — it is read server-side.
-- Both providers stay registered either way; the mode only chooses which one
-  the UI offers. The demo Credentials `authorize()` fails closed whenever demo
-  mode is not allowed, so a direct POST to the demo callback in google mode
-  just redirects back to `/login` with an error and sets no session.
+- Restart the dev server after changing `AUTH_MODE` — it is read when the
+  auth instance is built.
+- Google stays configured either way; the mode only decides whether the
+  persona endpoint exists and which entry the UI offers.
 - Production is fail closed: `AUTH_MODE=demo` is ignored when
   `NODE_ENV=production` unless `ALLOW_DEMO_AUTH=true` is also set.
 - Google sign-in is also fail closed: matching is trimmed and case-insensitive,
@@ -332,7 +372,31 @@ ALLOW_DEMO_AUTH=
 
 ---
 
-## Verifying Google mode (OAuth smoke test)
+## Migrating a database from Auth.js
+
+Run once per database after deploying this version (also on local
+development databases created before it):
+
+```bash
+pnpm web migrate:auth --dry-run   # report the plan
+pnpm web migrate:auth             # apply
+pnpm web migrate:auth --revert    # rollback path
+```
+
+The script ([`scripts/migrate-auth.ts`](../apps/web/scripts/migrate-auth.ts) over
+[`src/lib/auth/migrate-auth.ts`](../apps/web/src/lib/auth/migrate-auth.ts)) is
+idempotent and refuses `splitbook-test-*` databases. It converts
+`users.emailVerified` to a boolean (true for a stored Date or for users with an
+Auth.js Google account row), ensures `createdAt`/`updatedAt`, renames the
+Auth.js `accounts` collection to `accounts_authjs_backup`, and moves the unique
+`users.email` index to the name Better Auth's adapter expects
+(`users_email_uidx`). Ids never change. Google logins re-link to the same user
+on their first sign-in after cutover; everyone signs in once more because the
+cookie names changed. See the spec for the cutover checklist.
+
+---
+
+## Verifying Google mode
 
 No interactive Google login is needed to verify the wiring:
 
@@ -342,29 +406,37 @@ AUTH_MODE=google pnpm dev   # or: pnpm web test:e2e:google for the automated ver
 
 1. `/` shows the marketing landing with **Sign in with Google** (not the
    persona picker); `/login` shows the Google button.
-2. `GET /api/auth/providers` lists `google` with callback URL
-   `<origin>/api/auth/callback/google`.
-3. Clicking the button (or POSTing `/api/auth/signin/google` with a CSRF
-   token) redirects to
-   `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=<AUTH_GOOGLE_ID>&redirect_uri=<origin>%2Fapi%2Fauth%2Fcallback%2Fgoogle&scope=openid+profile+email&code_challenge=...&code_challenge_method=S256`.
+2. Clicking the button redirects to
+   `https://accounts.google.com/o/oauth2/v2/auth?response_type=code&client_id=<AUTH_GOOGLE_ID>&redirect_uri=<origin>%2Fapi%2Fauth%2Fcallback%2Fgoogle&scope=…openid…&code_challenge=…&code_challenge_method=S256&prompt=select_account`.
    Confirm `client_id` and `redirect_uri` match the Google Cloud client.
-4. `AUTH_SECRET` must be set — sessions are JWT (`session.strategy: 'jwt'` in
-   `auth.config.ts`), so the MongoDB adapter only persists users/accounts
-   while session state lives in the httpOnly cookie.
+3. `AUTH_SECRET` must be set — it signs the session cookie and the cookie cache.
 
 The automated equivalent is `pnpm web test:e2e:google`
 ([`playwright.google.config.ts`](../apps/web/playwright.google.config.ts) +
 [`playwright-google/google-auth.spec.ts`](../apps/web/playwright-google/google-auth.spec.ts)),
-which runs the app in google mode on port 3101 against a local OIDC stand-in.
-It verifies the request shape and completes approved and denied callbacks
-without contacting Google or using real credentials.
+which runs the app in Google mode on port 3101. It intercepts the redirect to
+Google and asserts its parameters, then proves the approved and denied
+outcomes through the ID-token sign-in endpoint with tokens it signs locally
+under `AUTH_TEST_ID_TOKEN_SECRET`
+([`src/lib/auth/test-id-token.ts`](../apps/web/src/lib/auth/test-id-token.ts)).
+When that variable is set, the Google provider's `verifyIdToken` is replaced
+by the test verifier; the code refuses the override under
+`NODE_ENV=production` unless `ALLOW_TEST_ID_TOKEN=true` is also set (CI runs
+the suite against a production build). Neither variable belongs on a real
+deployment.
 
 ---
 
 ## Security Notes
 
-- JWT tokens are stored in httpOnly cookies (not accessible via JS)
-- CSRF protection is built into Auth.js
-- Google OAuth handles password security — we never store passwords
-- All API routes must check session before processing
-- MongoDB adapter stores only public Google profile info (name, email, image)
+- Session tokens live in httpOnly cookies; the cookie cache is signed with
+  `AUTH_SECRET`.
+- Better Auth validates the `Origin` of cookie-bearing POSTs against
+  `trustedOrigins` (the app URL) and checks `callbackURL` values, so a
+  cross-site page cannot start a sign-in for a victim.
+- Google OAuth handles password security — we never store passwords.
+- The allowlist runs on every Google sign-in, not only at first registration.
+- All API routes must check the session before processing; the proxy alone
+  only proves a cookie exists.
+- The `users` collection stores only public Google profile info (name, email,
+  image) plus app fields; `accounts` stores the Google subject and tokens.

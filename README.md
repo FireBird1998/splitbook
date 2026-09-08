@@ -7,7 +7,7 @@ Splitbook is an expense-splitting app for shared groups — track who paid, spli
 - **Next.js 16** (App Router) + **React 19** + **TypeScript**
 - **MUI v7** (Material UI + Emotion) for UI
 - **MongoDB** + **Mongoose v9** for data
-- **Auth.js v5** (NextAuth) with Google OAuth or temporary demo personas
+- **Better Auth** with Google OAuth or temporary demo personas
 - **SWR** for client-side data fetching
 - **Zod v4** for request validation
 - **pnpm** as the package manager
@@ -38,16 +38,16 @@ Scripts follow one rule:
    cp apps/web/.env.example apps/web/.env.local
    ```
 
-   | Variable              | Description                                                                                       |
-   | --------------------- | ------------------------------------------------------------------------------------------------- |
-   | `MONGODB_URI`         | MongoDB connection string (use a dedicated DB for demo, e.g. `splitbook-demo`)                    |
-   | `AUTH_SECRET`         | Random secret for Auth.js session signing ([generate one](https://generate-secret.vercel.app/32)) |
-   | `AUTH_GOOGLE_ID`      | Google OAuth client ID (required when `AUTH_MODE=google`)                                         |
-   | `AUTH_GOOGLE_SECRET`  | Google OAuth client secret (required when `AUTH_MODE=google`)                                     |
-   | `AUTH_ALLOWED_EMAILS` | Comma-separated Google emails invited to the private beta; missing/empty fails closed             |
-   | `NEXT_PUBLIC_APP_URL` | App URL (e.g. `http://localhost:4127`)                                                            |
-   | `AUTH_MODE`           | `google` (default) or `demo` for private-beta personas                                            |
-   | `ALLOW_DEMO_AUTH`     | Must be `true` to allow demo auth when `NODE_ENV=production`                                      |
+   | Variable              | Description                                                                               |
+   | --------------------- | ----------------------------------------------------------------------------------------- |
+   | `MONGODB_URI`         | MongoDB connection string (use a dedicated DB for demo, e.g. `splitbook-demo`)            |
+   | `AUTH_SECRET`         | Random secret that signs sessions ([generate one](https://generate-secret.vercel.app/32)) |
+   | `AUTH_GOOGLE_ID`      | Google OAuth client ID (required when `AUTH_MODE=google`)                                 |
+   | `AUTH_GOOGLE_SECRET`  | Google OAuth client secret (required when `AUTH_MODE=google`)                             |
+   | `AUTH_ALLOWED_EMAILS` | Comma-separated Google emails invited to the private beta; missing/empty fails closed     |
+   | `NEXT_PUBLIC_APP_URL` | App URL (e.g. `http://localhost:4127`)                                                    |
+   | `AUTH_MODE`           | `google` (default) or `demo` for private-beta personas                                    |
+   | `ALLOW_DEMO_AUTH`     | Must be `true` to allow demo auth when `NODE_ENV=production`                              |
 
 3. Start MongoDB locally (if needed):
 
@@ -75,11 +75,11 @@ The app runs in one of two auth modes, selected by `AUTH_MODE` (default: `google
 | Demo personas | `demo`              | Persona picker (Alex, Sam, Priya) — no OAuth setup needed |
 
 Switch modes by editing `AUTH_MODE` in `apps/web/.env.local` and restarting the dev server.
-Both providers stay registered, so no code change or rebuild is required.
+No code change or rebuild is required; demo mode only adds the persona endpoint.
 
 ## Demo mode (private beta)
 
-Demo mode uses real Auth.js JWT sessions with three fixed seeded personas (Alex, Sam, Priya). Downstream APIs still receive a real `session.user.id` ObjectId string.
+Demo mode uses real Better Auth sessions with three fixed seeded personas (Alex, Sam, Priya). Downstream APIs still receive a real `user.id` ObjectId string.
 
 1. Point `MONGODB_URI` at a **dedicated demo database**, for example:
 
@@ -115,9 +115,13 @@ Google sign-in is the default whenever demo mode is not explicitly enabled:
 3. Set `AUTH_ALLOWED_EMAILS` to the invited Google addresses
 4. Restart the app — `/` shows the marketing landing and `/login` the Google button
 
-Google email matching is trimmed and case-insensitive. An address not on the
-allowlist is sent back to `/login` with a clear invite-only message. A missing
-or empty allowlist denies every Google sign-in.
+Google email matching is trimmed and case-insensitive and is re-checked on
+every sign-in. An address not on the allowlist is sent back to `/login` with a
+clear invite-only message. A missing or empty allowlist denies every Google
+sign-in.
+
+Databases created before the Better Auth migration need `pnpm web migrate:auth`
+once (see [`docs/auth.md`](docs/auth.md#migrating-a-database-from-authjs)).
 
 The Google Cloud OAuth client needs the consent screen configured and
 `<origin>/api/auth/callback/google` whitelisted as an authorized redirect URI
@@ -144,6 +148,7 @@ setup steps and a non-interactive smoke test (`pnpm web test:e2e:google`) are in
 | `pnpm format:check`        | Check formatting without writing                          |
 | `pnpm web demo:seed`       | Idempotently seed demo personas + Goa friends trip        |
 | `pnpm web demo:reset`      | Wipe demo trip data and reseed                            |
+| `pnpm web migrate:auth`    | Prepare an Auth.js-era database for Better Auth           |
 
 ## Testing
 
@@ -199,9 +204,9 @@ pnpm web test:e2e
 
 A separate google-mode smoke suite (`pnpm web test:e2e:google`) runs the app with
 `AUTH_MODE=google` on port 3101 and verifies the OAuth entry points, configured
-client/callback, approved login, and invite-only denial. A local OIDC stand-in
-drives the complete Auth.js callback, so no live Google login or secrets are
-needed.
+client/callback, approved login, and invite-only denial. The redirect to Google
+is intercepted and the outcomes run through the ID-token sign-in endpoint with
+locally signed tokens, so no live Google login or secrets are needed.
 
 ## Notes
 

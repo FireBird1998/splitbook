@@ -1,7 +1,7 @@
 # Splitbook authentication migration to Better Auth — specification
 
 **Date:** 2026-09-08  
-**Status:** Decisions accepted (Q1–Q21 below); specification complete for implementation. No application code changed yet.  
+**Status:** Implemented in PR A (web parity). Three amendments found during implementation are recorded inline and marked **Amendment**.  
 **Tracking:** Spec issue [#26](https://github.com/FireBird1998/splitbook/issues/26) with tickets #27–#36.  
 **Decision record:** [ADR 0003](../../adr/0003-better-auth.md).  
 **Baseline:** Canonical `main` at commit `bd42d15` (pnpm workspace; app in `apps/web`, shared code in `packages/shared`). Recheck the checkout before implementation.
@@ -47,28 +47,28 @@ native Google prompt and stays signed in for 30 days of use.
 
 ## 3. Decision log
 
-| #      | Decision                 | Choice                                                                                                                                                                                                               |
-| ------ | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Q1     | Session strategy         | Database sessions with the cookie cache enabled                                                                                                                                                                      |
-| Q2     | Identity continuity      | Users migrated in place; ids stay ObjectIds (adapter default)                                                                                                                                                        |
-| Q3     | Demo personas            | One-click picker via a custom plugin endpoint, same guard semantics                                                                                                                                                  |
-| Q4     | Allowlist                | Re-checked on every Google sign-in; stays an environment variable                                                                                                                                                    |
-| Q5     | Session lifetime         | 30 days, refreshed on activity after one day, 5-minute cookie cache                                                                                                                                                  |
-| Q6     | Mobile platforms         | iOS and Android from day one; the owner creates the OAuth clients                                                                                                                                                    |
-| Q7/Q18 | Google test coverage     | Redirect parameters asserted without contacting Google; approved and denied outcomes through the ID-token path with a locally signed token behind an environment-gated `verifyIdToken` override; mock issuer removed |
-| Q8     | Rollout                  | PR A web parity, PR B mobile readiness                                                                                                                                                                               |
-| Q9     | Tickets                  | Spec issue plus child tickets, `ready-for-agent` / `ready-for-human`                                                                                                                                                 |
-| Q10    | Cutover settings         | Parity needs none; non-secret mobile ids may be set via the Vercel CLI                                                                                                                                               |
-| Q11    | Old Auth.js data         | Backed up at migration, dropped in a cleanup ticket                                                                                                                                                                  |
-| Q12    | Sign-in methods          | Google only                                                                                                                                                                                                          |
-| Q13    | Middleware file          | Renamed to `proxy.ts`                                                                                                                                                                                                |
-| Q14    | Mobile identifiers       | Scheme `splitbook`; bundle id and package `com.splitbook.app`                                                                                                                                                        |
-| Q15    | Auth.js account rows     | Renamed to a backup collection; Google logins re-link on next sign-in                                                                                                                                                |
-| Q16    | Rate limiting            | Better Auth defaults with database storage                                                                                                                                                                           |
-| Q17    | Middleware depth         | Optimistic session-cookie check; routes and pages validate                                                                                                                                                           |
-| Q19    | Mobile session transport | Cookies through the Expo client; no bearer plugin                                                                                                                                                                    |
-| Q20    | Environment variables    | Names kept; base URL derived from `NEXT_PUBLIC_APP_URL`                                                                                                                                                              |
-| Q21    | Cookie cache trade-off   | Up to five minutes of stale validity after revocation accepted                                                                                                                                                       |
+| #      | Decision                 | Choice                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ------ | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Q1     | Session strategy         | Database sessions with the cookie cache enabled                                                                                                                                                                                                                                                                                                                                                                        |
+| Q2     | Identity continuity      | Users migrated in place; ids stay ObjectIds (adapter default)                                                                                                                                                                                                                                                                                                                                                          |
+| Q3     | Demo personas            | One-click picker via a custom plugin endpoint, same guard semantics                                                                                                                                                                                                                                                                                                                                                    |
+| Q4     | Allowlist                | Re-checked on every Google sign-in; stays an environment variable                                                                                                                                                                                                                                                                                                                                                      |
+| Q5     | Session lifetime         | 30 days, refreshed on activity after one day, 5-minute cookie cache                                                                                                                                                                                                                                                                                                                                                    |
+| Q6     | Mobile platforms         | iOS and Android from day one; the owner creates the OAuth clients                                                                                                                                                                                                                                                                                                                                                      |
+| Q7/Q18 | Google test coverage     | Redirect parameters asserted without contacting Google; approved and denied outcomes through the ID-token path with a locally signed token behind an environment-gated `verifyIdToken` override; mock issuer removed. **Amendment:** under `NODE_ENV=production` the override needs `ALLOW_TEST_ID_TOKEN=true` as well (CI runs the suite against a production build), the same two-variable rule as `ALLOW_DEMO_AUTH` |
+| Q8     | Rollout                  | PR A web parity, PR B mobile readiness                                                                                                                                                                                                                                                                                                                                                                                 |
+| Q9     | Tickets                  | Spec issue plus child tickets, `ready-for-agent` / `ready-for-human`                                                                                                                                                                                                                                                                                                                                                   |
+| Q10    | Cutover settings         | Parity needs none; non-secret mobile ids may be set via the Vercel CLI                                                                                                                                                                                                                                                                                                                                                 |
+| Q11    | Old Auth.js data         | Backed up at migration, dropped in a cleanup ticket                                                                                                                                                                                                                                                                                                                                                                    |
+| Q12    | Sign-in methods          | Google only                                                                                                                                                                                                                                                                                                                                                                                                            |
+| Q13    | Middleware file          | Renamed to `proxy.ts`                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Q14    | Mobile identifiers       | Scheme `splitbook`; bundle id and package `com.splitbook.app`                                                                                                                                                                                                                                                                                                                                                          |
+| Q15    | Auth.js account rows     | Renamed to a backup collection; Google logins re-link on next sign-in                                                                                                                                                                                                                                                                                                                                                  |
+| Q16    | Rate limiting            | Better Auth defaults with database storage. **Amendment:** `AUTH_RATE_LIMIT_ENABLED` overrides the default; the browser suites set it to `false` because behind `next start` on loopback no client IP is resolvable and every request would share one bucket                                                                                                                                                           |
+| Q17    | Middleware depth         | Optimistic session-cookie check; routes and pages validate                                                                                                                                                                                                                                                                                                                                                             |
+| Q19    | Mobile session transport | Cookies through the Expo client; no bearer plugin                                                                                                                                                                                                                                                                                                                                                                      |
+| Q20    | Environment variables    | Names kept; base URL derived from `NEXT_PUBLIC_APP_URL`                                                                                                                                                                                                                                                                                                                                                                |
+| Q21    | Cookie cache trade-off   | Up to five minutes of stale validity after revocation accepted                                                                                                                                                                                                                                                                                                                                                         |
 
 ## 4. Server architecture
 
@@ -87,7 +87,8 @@ native Google prompt and stays signed in for 30 days of use.
   generator (a custom function would store plain strings).
 - **Session:** `expiresIn` 30 days, `updateAge` 1 day, `cookieCache` enabled
   with `maxAge` 300 seconds.
-- **Rate limiting:** enabled in production by default, `storage: 'database'`.
+- **Rate limiting:** enabled in production by default, `storage: 'database'`;
+  `AUTH_RATE_LIMIT_ENABLED=true|false` overrides the default (see Q16).
 - **Base URL and secret:** `baseURL` from `NEXT_PUBLIC_APP_URL`; the secret is
   read from `AUTH_SECRET` (Better Auth's documented fallback), so the existing
   Vercel secret stays.
@@ -155,12 +156,20 @@ and the Navbar's server-provided user are unchanged.
 `apps/web/scripts/migrate-auth.ts` (`pnpm web migrate:auth`) is idempotent and
 supports `--dry-run` and `--revert`:
 
-- `users.emailVerified`: Date or null becomes boolean (true when a Date was
-  set). No other user field changes; `createdAt`/`updatedAt` are ensured.
+- `users.emailVerified`: Date or null becomes boolean — true when a Date was
+  set **or when the user owns an Auth.js Google account row** (**Amendment:**
+  Better Auth only links a Google login to an existing user whose row is
+  verified, a takeover guard; Auth.js proved these emails through Google but
+  stored `null`). No other user field changes; `createdAt`/`updatedAt` are
+  ensured.
 - The Auth.js `accounts` collection is renamed to `accounts_authjs_backup` when
   its documents carry `provider`/`providerAccountId`. Better Auth creates fresh
   account rows and links them to the existing user on the next Google sign-in,
-  because Google reports verified emails.
+  because Google reports verified emails and the user row is marked verified.
+- **Amendment:** the unique `users.email` index moves from Mongoose's `email_1`
+  to `users_email_uidx`, the name Better Auth's adapter generates before it
+  writes to a collection; MongoDB refuses a second index with the same keys
+  under a different name. The Mongoose schema declares the same name.
 - Any Auth.js `sessions` or `verification_tokens` collections are left in place
   for the cleanup ticket; none exist under the current JWT strategy.
 - The script refuses databases whose name matches the test-database pattern and
@@ -198,7 +207,8 @@ isolated database (forward, idempotent re-run, revert).
   sign-in endpoint with a token signed locally under `AUTH_TEST_ID_TOKEN_SECRET`;
   when that variable is set the Google provider's `verifyIdToken` is replaced by
   a verifier for those tokens, and the code refuses to enable the override when
-  `NODE_ENV=production`.
+  `NODE_ENV=production` unless `ALLOW_TEST_ID_TOKEN=true` is also set (see the
+  Q18 amendment).
 
 ### CI
 

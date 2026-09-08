@@ -12,7 +12,7 @@ All models use MongoDB via Mongoose. Timestamps (`createdAt`, `updatedAt`) are a
 
 ## User
 
-Managed by Auth.js + extended with app-specific fields.
+Better Auth's user model (plural collection name) + app-specific fields.
 
 ```typescript
 {
@@ -20,19 +20,22 @@ Managed by Auth.js + extended with app-specific fields.
   name: string,                       // Required, trimmed
   email: string,                      // Required, lowercased, unique
   image: string,                      // Optional avatar URL
-  emailVerified: Date | null,         // Auth.js field
+  emailVerified: boolean,             // Better Auth field (Google reports verified emails)
   preferredCurrency: string,          // Default: "INR"
   createdAt: Date,
   updatedAt: Date
 }
 ```
 
-**Indexes**: `{ email: 1 }` (unique)
+**Indexes**: `{ email: 1 }` (unique, named `users_email_uidx` — the name Better
+Auth's adapter generates, declared on the Mongoose schema so both agree)
 
 **Notes**:
 
-- Auth.js creates `users`, `accounts`, and `sessions` collections automatically.
-- We extend the `users` collection with `preferredCurrency`.
+- Better Auth creates users on their first Google sign-in and manages the
+  `sessions`, `accounts`, `verifications` and `rateLimits` collections (below).
+- We extend the `users` collection with `preferredCurrency` (also declared to
+  Better Auth as an additional field with the same default).
 - Demo-mode personas are ordinary `users` rows seeded by `pnpm web demo:seed`.
 
 ---
@@ -409,13 +412,18 @@ Tags are not a collection — they are a subdocument array on `Group`.
 
 ---
 
-## Auth.js Collections (Auto-managed)
+## Better Auth Collections (Auto-managed)
 
-Auth.js with the MongoDB adapter automatically creates and manages:
+Better Auth's MongoDB adapter (plural names, ObjectId ids, indexes created on
+first write) manages:
 
 - **users** — User records (we extend this with `preferredCurrency`)
-- **accounts** — OAuth provider accounts linked to users
-- **sessions** — Active sessions (if using database sessions)
-- **verification_tokens** — Email verification tokens (not used)
+- **sessions** — `{ userId, token, expiresAt, ipAddress, userAgent, createdAt, updatedAt }`;
+  30-day database sessions, refreshed after a day of use
+- **accounts** — `{ userId, providerId: 'google', accountId (Google subject), tokens… }`
+- **verifications** — OAuth state during a redirect flow
+- **rateLimits** — `{ key, count, lastRequest }` counters (rate limiting is
+  stored in the database)
 
-We use JWT strategy for sessions (no `sessions` collection needed).
+`accounts_authjs_backup` holds the Auth.js account rows parked by
+`pnpm web migrate:auth` until the cleanup ticket drops it.

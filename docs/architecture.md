@@ -10,7 +10,7 @@
 | Material UI  | v7 (Emotion)    | Full design system — layout, styling, and components |
 | MongoDB      | Atlas (cloud)   | Flexible schema, good for nested expense data        |
 | Mongoose     | v9              | Schema validation, middleware, population            |
-| Auth.js v5   | MongoDB adapter | Self-hosted auth; Google OAuth + demo personas       |
+| Better Auth  | MongoDB adapter | Self-hosted auth; Google OAuth + demo personas       |
 | Zod          | v4              | Type-safe validation with TS inference               |
 | SWR          | v2              | Client data fetching, caching, revalidation          |
 
@@ -61,8 +61,8 @@ src/
 │   │       └── page.tsx            # User settings
 │   ├── api/
 │   │   ├── auth/
-│   │   │   └── [...nextauth]/
-│   │   │       └── route.ts        # Auth.js catch-all
+│   │   │   └── [...all]/
+│   │   │       └── route.ts        # Better Auth catch-all
 │   │   ├── groups/
 │   │   │   ├── route.ts            # POST (create), GET (list — no query params)
 │   │   │   └── [id]/
@@ -158,15 +158,15 @@ src/
 │   └── common/
 │       └── MoneyText.tsx           # Money typography treatment
 ├── lib/
-│   ├── auth.ts                     # Auth.js + MongoDB adapter (Node runtime)
-│   ├── auth.config.ts              # Auth.js config (Edge-compatible) — providers,
+│   ├── auth.ts                     # Better Auth instance + MongoDB adapter (Node runtime)
+│   ├── auth-client.ts              # Browser client (signInWithGoogle, signOutToHome)
+│   ├── auth/                       # allowlist, proxy-rules, create-auth, demo persona
+│   │                               # plugin (+ client), test-id-token, migrate-auth
 │   │                               #   callbacks, route protection
 │   ├── auth-mode.ts                # AUTH_MODE resolution + production guard
-│   ├── auth-sign-in.ts
-│   ├── demo-credentials.ts         # Demo authorize() — fails closed in prod
 │   ├── demo-personas.ts
 │   ├── db.ts                       # Mongoose connection singleton (server-only)
-│   ├── mongodb-client.ts           # MongoDB client for Auth.js adapter (server-only)
+│   ├── mongodb-client.ts           # Native driver Db for Better Auth's adapter (server-only)
 │   ├── models/
 │   │   ├── User.ts
 │   │   ├── Group.ts                # Includes tags subdocument array
@@ -197,11 +197,9 @@ src/
 │       ├── api-response.ts         # Consistent API response helpers
 │       └── fetcher.ts              # SWR fetcher
 ├── types/
-│   └── next-auth.d.ts              # Session type augmentation
 ├── providers/
-│   ├── AuthProvider.tsx            # NextAuth SessionProvider
 │   └── ThemeProvider.tsx           # MUI ThemeProvider + CssBaseline
-└── middleware.ts                   # Auth middleware for route protection
+└── proxy.ts                        # Route protection (optimistic session-cookie check)
 ```
 
 ### `packages/shared` (`@splitbook/shared`)
@@ -251,7 +249,7 @@ There is **no `src/hooks` directory** — SWR is called directly in components.
 ```
 Client Component
   → fetch / SWR (called directly — there is no hooks layer)
-    → middleware (authorized callback — redirects anonymous requests)
+    → proxy (session-cookie check — 401 JSON for anonymous /api/*)
       → Next.js API Route (/api/...)
         → Auth guard (getAuthUser)
           → Membership / admin guard (groupService.isMember, or service-side assertAdmin)
@@ -285,34 +283,35 @@ There are no optimistic updates — no call site passes `optimisticData` or
 
 ### Auth Flow
 
-Two providers are registered simultaneously; `AUTH_MODE` decides which the UI
-offers, so switching needs no rebuild.
+One Better Auth instance; `AUTH_MODE` decides whether the demo persona plugin
+is registered and which entry the UI offers, so switching needs no rebuild.
 
 ```
 AUTH_MODE=google (default)
   User clicks "Sign in with Google"
-    → Auth.js redirects to Google OAuth
+    → Better Auth redirects to Google OAuth
       → User authorizes
-        → Auth.js callback creates/updates User in MongoDB (adapter)
-          → JWT session cookie set (id copied onto the token)
-            → Redirect to /dashboard
+        → callback: validateUserInfo checks AUTH_ALLOWED_EMAILS
+          → user created, or Google account linked to the existing user (same _id)
+            → session row + httpOnly cookie (+ 5-minute signed cookie cache)
+              → Redirect to callbackURL (/dashboard)
 
 AUTH_MODE=demo (private beta)
   User picks a persona (Alex / Sam / Priya)
-    → Credentials provider authorize() resolves the seeded user
-      → fails closed unless NODE_ENV!=production or ALLOW_DEMO_AUTH=true
-        → same JWT session shape, real ObjectId as session.user.id
+    → POST /api/auth/demo-persona/sign-in (plugin, absent outside demo mode)
+      → seeded user found by its fixed ObjectId → session row + cookie
+        → same session shape, real ObjectId as user.id
 ```
 
-Sessions are **JWT**, not database-backed. The `jwt` callback copies `user.id`
-onto the token and the `session` callback copies it back onto `session.user.id`,
-which is what every service treats as the actor.
+Sessions are **database-backed** (30 days, refreshed after a day of use).
+`getAuthUser()` reads `auth.api.getSession`, and `user.id` is what every
+service treats as the actor.
 
-Route protection lives in the `authorized` callback in `auth.config.ts`. Note
-that the callback answers anonymous `/api/*` requests with **401 JSON**
-(`{ error: 'Unauthorized', status: 401 }`) instead of returning `false`, because
-Auth.js would turn `false` into a redirect to `/login`, which API clients cannot
-follow.
+Route protection lives in `src/proxy.ts`, backed by the pure decision table in
+`src/lib/auth/proxy-rules.ts`. It only checks that a session cookie exists;
+anonymous `/api/*` requests get **401 JSON** (`{ error: 'Unauthorized', status: 401 }`),
+anonymous pages redirect to `/login?callbackUrl=…`, and expired sessions are
+rejected by `getAuthUser` (401) or the authenticated layout (redirect).
 
 ---
 
@@ -390,18 +389,22 @@ const { data, isLoading, isValidating, mutate } = useSWR(
 ## Environment Variables
 
 ```env
-# Auth
-AUTH_SECRET=                   # Random secret for Auth.js
+# Auth (Better Auth)
+AUTH_SECRET=                   # Signs sessions and the cookie cache
 AUTH_GOOGLE_ID=                # Google OAuth Client ID (required when AUTH_MODE=google)
 AUTH_GOOGLE_SECRET=            # Google OAuth Client Secret
+AUTH_ALLOWED_EMAILS=           # Invited Google addresses; empty denies everyone
 AUTH_MODE=                     # google (default) | demo
 ALLOW_DEMO_AUTH=               # Must be "true" to allow demo auth when NODE_ENV=production
+AUTH_TEST_ID_TOKEN_SECRET=     # Test-only: locally signed Google ID tokens (browser suite)
+ALLOW_TEST_ID_TOKEN=           # Test-only: honour the above under NODE_ENV=production
+AUTH_RATE_LIMIT_ENABLED=       # Optional override; default on in production only
 
 # Database
 MONGODB_URI=                   # MongoDB connection string
 
 # App
-NEXT_PUBLIC_APP_URL=           # Public app URL (for invite links) — no fallback in code
+NEXT_PUBLIC_APP_URL=           # Public app URL (invite links, Better Auth baseURL + trusted origin)
 
 # Testing (optional)
 TEST_MONGODB_URI=              # Base URI for integration tests; each file derives

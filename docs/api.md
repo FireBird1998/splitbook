@@ -17,9 +17,10 @@ today: the tag handlers hand-roll `new Response(JSON.stringify(...))` for their
 `TAG_EXISTS` / `TAG_IN_USE` cases and omit the `status` field.
 
 **Unauthenticated `/api/*` requests get `401` JSON, never a redirect.** Route
-protection lives in the `authorized` callback (`src/lib/auth.config.ts`); for API
-paths it answers `{ "error": "Unauthorized", "status": 401 }`, the same shape the
-route helpers use, so browser and native clients can detect an expired session.
+protection lives in `src/proxy.ts` (rules in `src/lib/auth/proxy-rules.ts`); for
+API paths without a session cookie it answers `{ "error": "Unauthorized", "status": 401 }`,
+the same shape the route helpers use, so browser and native clients can detect
+an expired session.
 Pages still redirect to `/login?callbackUrl=…`. The web client's SWR `fetcher`
 sends a 401 to `/login` with the current page as `callbackUrl`.
 
@@ -32,15 +33,19 @@ validation failure or a service invariant (`CURRENCY_MISMATCH`, `INVALID_TAG`,
 
 ## Auth
 
-Handled entirely by Auth.js. No custom endpoints needed.
+Handled by Better Auth under one catch-all route. The paths a client uses:
 
-| Method | Path                      | Description       | Auth |
-| ------ | ------------------------- | ----------------- | ---- |
-| \*     | `/api/auth/[...nextauth]` | Auth.js catch-all | 🔓   |
+| Method | Path                             | Description                                                                                                                           | Auth |
+| ------ | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| POST   | `/api/auth/sign-in/social`       | `{ provider: 'google', callbackURL }` starts the redirect flow; `{ provider: 'google', idToken: { token } }` signs a native client in | 🔓   |
+| GET    | `/api/auth/callback/google`      | Google redirect target                                                                                                                | 🔓   |
+| GET    | `/api/auth/get-session`          | `{ session, user }` or `null`                                                                                                         | 🔓   |
+| POST   | `/api/auth/sign-out`             | Revoke the session                                                                                                                    | 🔓   |
+| POST   | `/api/auth/demo-persona/sign-in` | `{ personaId }` — demo mode only; the route is absent otherwise                                                                       | 🔓   |
 
-Two providers are registered simultaneously — Google and a demo-persona
-Credentials provider — and `AUTH_MODE` selects which the UI offers. See
-[`auth.md`](auth.md).
+Google sign-ins are gated by `AUTH_ALLOWED_EMAILS` (rejections carry the code
+`email_not_allowed`); `AUTH_MODE` decides whether the persona endpoint exists.
+See [`auth.md`](auth.md).
 
 ---
 
