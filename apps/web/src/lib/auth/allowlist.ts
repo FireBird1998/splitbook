@@ -12,6 +12,7 @@
 
 export interface AllowlistEnv {
   AUTH_ALLOWED_EMAILS?: string | undefined;
+  [key: string]: string | undefined;
 }
 
 /** Error code Better Auth appends to the login page as `?error=<code>`. */

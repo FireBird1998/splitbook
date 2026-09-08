@@ -30,7 +30,7 @@ export default function LoginPage() {
         </Box>
       }
     >
-      {demo ? <DemoLoginClient /> : <LoginForm authMode="google" />}
+      {demo ? <DemoLoginClient /> : <LoginForm />}
     </Suspense>
   );
 }

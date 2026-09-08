@@ -5,7 +5,6 @@ import {
   getDemoPersona,
   isDemoPersonaId,
 } from '@/lib/demo-personas';
-import { authorizeDemoPersona } from '@/lib/demo-credentials';
 
 describe('demo persona allowlist', () => {
   it('exposes exactly three fixed personas with stable ObjectIds', () => {
@@ -47,44 +46,5 @@ describe('demo persona allowlist', () => {
       expect(persona.headline.length).toBeGreaterThan(0);
       expect(persona.id).toBe(DEMO_PERSONA_IDS[persona.key]);
     }
-  });
-});
-
-describe('authorizeDemoPersona', () => {
-  it('returns a session-shaped user for allowlisted personas in demo mode', () => {
-    const user = authorizeDemoPersona(
-      { personaId: 'alex' },
-      { AUTH_MODE: 'demo', NODE_ENV: 'development' },
-    );
-    expect(user).toEqual({
-      id: DEMO_PERSONA_IDS.alex,
-      name: 'Alex Rivera',
-      email: 'alex.demo@splitbook.local',
-      image: null,
-    });
-  });
-
-  it('rejects unknown personas', () => {
-    expect(
-      authorizeDemoPersona({ personaId: 'hacker' }, { AUTH_MODE: 'demo', NODE_ENV: 'development' }),
-    ).toBeNull();
-  });
-
-  it('rejects missing or malformed credentials', () => {
-    const env = { AUTH_MODE: 'demo', NODE_ENV: 'development' };
-
-    expect(authorizeDemoPersona(undefined, env)).toBeNull();
-    expect(authorizeDemoPersona(null, env)).toBeNull();
-    expect(authorizeDemoPersona({}, env)).toBeNull();
-    expect(authorizeDemoPersona({ personaId: '' }, env)).toBeNull();
-  });
-
-  it('fails closed when demo auth is not allowed', () => {
-    expect(
-      authorizeDemoPersona({ personaId: 'alex' }, { AUTH_MODE: 'google', NODE_ENV: 'development' }),
-    ).toBeNull();
-    expect(
-      authorizeDemoPersona({ personaId: 'alex' }, { AUTH_MODE: 'demo', NODE_ENV: 'production' }),
-    ).toBeNull();
   });
 });

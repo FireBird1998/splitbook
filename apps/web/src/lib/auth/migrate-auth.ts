@@ -4,9 +4,13 @@
  * the CLI (`pnpm web migrate:auth`) and the integration test share it.
  *
  * Forward (`migrateAuthData`):
- * 1. `users.emailVerified` becomes a boolean — `true` when a Date was stored,
- *    `false` for null or a missing field. Every other user field, including
- *    `_id`, is untouched.
+ * 1. `users.emailVerified` becomes a boolean — `true` when a Date was stored
+ *    or when the user owns an Auth.js Google account row (Auth.js only ever
+ *    created a user after a successful Google sign-in, and Google reports
+ *    verified emails, but the adapter stored `null`), `false` otherwise.
+ *    Better Auth refuses to link a Google login to an existing user whose
+ *    row is not verified, so without this step migrated users could not sign
+ *    in again. Every other user field, including `_id`, is untouched.
  * 2. `users.createdAt` / `users.updatedAt` are ensured, because Better Auth
  *    treats them as required. `createdAt` falls back to the ObjectId timestamp
  *    (or to now for synthetic ids whose timestamp bits predate 1970).
@@ -24,7 +28,7 @@
  * Both directions are idempotent: re-running reports zero changes.
  */
 
-import type { Db } from 'mongodb';
+import { ObjectId, type Db } from 'mongodb';
 import {
   ACCOUNTS_AUTHJS_BACKUP_COLLECTION,
   ACCOUNTS_BETTER_AUTH_BACKUP_COLLECTION,
@@ -47,6 +51,8 @@ export interface MigrateAuthReport {
     total: number;
     /** Documents whose `emailVerified` was a Date and became `true`. */
     emailVerifiedFromDate: number;
+    /** Documents verified through their Auth.js Google account row and became `true`. */
+    emailVerifiedFromGoogleAccount: number;
     /** Documents whose `emailVerified` was null/missing/other and became `false`. */
     emailVerifiedFromEmpty: number;
     /** Documents that were missing `createdAt` or `updatedAt`. */
@@ -100,6 +106,27 @@ async function isAuthJsAccountsCollection(db: Db): Promise<boolean> {
 }
 
 /**
+ * Ids of users that Auth.js linked to a Google account. Read from the live
+ * `accounts` collection when it still carries the Auth.js shape, otherwise
+ * from the backup, so a re-run sees the same evidence. Auth.js stored
+ * `userId` as an ObjectId; hex strings are accepted too.
+ */
+async function authJsGoogleUserIds(db: Db): Promise<ObjectId[]> {
+  const source = (await isAuthJsAccountsCollection(db))
+    ? ACCOUNTS_COLLECTION
+    : (await collectionExists(db, ACCOUNTS_AUTHJS_BACKUP_COLLECTION))
+      ? ACCOUNTS_AUTHJS_BACKUP_COLLECTION
+      : null;
+  if (!source) return [];
+  const ids = await db.collection(source).distinct('userId', { provider: 'google' });
+  return ids.flatMap((id) => {
+    if (id instanceof ObjectId) return [id];
+    if (typeof id === 'string' && ObjectId.isValid(id)) return [new ObjectId(id)];
+    return [];
+  });
+}
+
+/**
  * Move the unique `users.email` index from `from` to `to`. Creating the target
  * first would fail with IndexOptionsConflict, so the legacy index is dropped
  * before the new one is created; the unique constraint is re-established in
@@ -131,24 +158,37 @@ export async function migrateAuthData(
   const users = db.collection(USERS_COLLECTION);
 
   const fromDateFilter = { emailVerified: { $type: 'date' } };
-  const fromEmptyFilter = { emailVerified: { $not: { $type: 'bool' } } };
+  const notBooleanFilter = { emailVerified: { $not: { $type: 'bool' } } };
+  const googleUserIds = await authJsGoogleUserIds(db);
+  const fromGoogleAccountFilter = { ...notBooleanFilter, _id: { $in: googleUserIds } };
+  const fromEmptyFilter = notBooleanFilter;
   const timestampsFilter = {
     $or: [{ createdAt: { $exists: false } }, { updatedAt: { $exists: false } }],
   };
 
   const total = await users.countDocuments({});
   let emailVerifiedFromDate: number;
+  let emailVerifiedFromGoogleAccount: number;
   let emailVerifiedFromEmpty: number;
   let timestampsAdded: number;
 
   if (dryRun) {
     emailVerifiedFromDate = await users.countDocuments(fromDateFilter);
-    // Everything that is neither a boolean nor a Date.
-    emailVerifiedFromEmpty = (await users.countDocuments(fromEmptyFilter)) - emailVerifiedFromDate;
+    emailVerifiedFromGoogleAccount =
+      (await users.countDocuments(fromGoogleAccountFilter)) -
+      (await users.countDocuments({ ...fromDateFilter, _id: { $in: googleUserIds } }));
+    // Everything that is neither a boolean nor a Date nor Google-linked.
+    emailVerifiedFromEmpty =
+      (await users.countDocuments(fromEmptyFilter)) -
+      emailVerifiedFromDate -
+      emailVerifiedFromGoogleAccount;
     timestampsAdded = await users.countDocuments(timestampsFilter);
   } else {
     emailVerifiedFromDate = (
       await users.updateMany(fromDateFilter, { $set: { emailVerified: true } })
+    ).modifiedCount;
+    emailVerifiedFromGoogleAccount = (
+      await users.updateMany(fromGoogleAccountFilter, { $set: { emailVerified: true } })
     ).modifiedCount;
     emailVerifiedFromEmpty = (
       await users.updateMany(fromEmptyFilter, { $set: { emailVerified: false } })
@@ -203,7 +243,13 @@ export async function migrateAuthData(
 
   return {
     dryRun,
-    users: { total, emailVerifiedFromDate, emailVerifiedFromEmpty, timestampsAdded },
+    users: {
+      total,
+      emailVerifiedFromDate,
+      emailVerifiedFromGoogleAccount,
+      emailVerifiedFromEmpty,
+      timestampsAdded,
+    },
     accounts: { renamedToBackup, backedUp },
     emailIndex,
   };

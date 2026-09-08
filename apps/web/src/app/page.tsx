@@ -1,28 +1,19 @@
-import { auth } from '@/lib/auth';
+import { getAuthUser } from '@/lib/utils/api-response';
 import { redirect } from 'next/navigation';
 import LandingPage from '@/components/landing/LandingPage';
 import DemoPersonaPicker from '@/components/demo/DemoPersonaPicker';
 import { isDemoMode } from '@/lib/auth-mode';
-import AuthProvider from '@/providers/AuthProvider';
 
 export default async function Home() {
-  const session = await auth();
+  const user = await getAuthUser();
 
-  if (session?.user) {
+  if (user) {
     redirect('/dashboard');
   }
 
   if (isDemoMode()) {
-    return (
-      <AuthProvider>
-        <DemoPersonaPicker />
-      </AuthProvider>
-    );
+    return <DemoPersonaPicker />;
   }
 
-  return (
-    <AuthProvider>
-      <LandingPage />
-    </AuthProvider>
-  );
+  return <LandingPage />;
 }

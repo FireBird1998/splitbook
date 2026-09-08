@@ -1,14 +1,25 @@
-import { auth } from '@/lib/auth';
+import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { auth } from '@/lib/auth';
+
+export interface AuthUser {
+  /** 24-hex user id, byte-for-byte the stored ObjectId string. */
+  id: string;
+  name: string;
+  email: string;
+  image: string | null;
+}
 
 /**
- * Get authenticated user from session.
- * Returns null if not authenticated.
+ * Get the authenticated user from the Better Auth session (validated against
+ * the database, or the five-minute cookie cache). Returns null if not
+ * authenticated. Works in API routes and server components.
  */
-export async function getAuthUser() {
-  const session = await auth();
+export async function getAuthUser(): Promise<AuthUser | null> {
+  const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.id) return null;
-  return session.user;
+  const { id, name, email, image } = session.user;
+  return { id, name, email, image: image ?? null };
 }
 
 /**

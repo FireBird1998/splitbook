@@ -1,6 +1,5 @@
 'use client';
 
-import { signIn } from 'next-auth/react';
 import { useSearchParams } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
@@ -8,23 +7,21 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import GoogleIcon from '@mui/icons-material/Google';
 import BrandMark from '@/components/layout/BrandMark';
-import type { AuthMode } from '@/lib/auth-mode';
-import { getSignInProvider } from '@/lib/auth-sign-in';
+import { EMAIL_NOT_ALLOWED } from '@/lib/auth/allowlist';
+import { resolveCallbackUrl } from '@/lib/auth/callback-url';
+import { signInWithGoogle } from '@/lib/auth-client';
 import { PRODUCT_NAME } from '@/lib/product';
 
-interface LoginFormProps {
-  authMode: AuthMode;
-}
-
-export default function LoginForm({ authMode }: LoginFormProps) {
+/** Google sign-in; demo mode renders the persona picker instead (see the login page). */
+export default function LoginForm() {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
+  const callbackUrl = resolveCallbackUrl(searchParams.get('callbackUrl'));
+  // Better Auth appends `?error=<code>` after a rejected callback.
   const error = searchParams.get('error');
-  const isAccessDenied = error === 'AccessDenied';
-  const provider = getSignInProvider(authMode);
+  const isAccessDenied = error === EMAIL_NOT_ALLOWED;
 
   const handleSignIn = () => {
-    void signIn(provider, { callbackUrl });
+    void signInWithGoogle(callbackUrl);
   };
 
   return (

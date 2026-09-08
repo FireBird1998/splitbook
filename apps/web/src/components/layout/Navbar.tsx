@@ -1,7 +1,6 @@
 'use client';
 
 import Link from 'next/link';
-import { signOut } from 'next-auth/react';
 import { useState } from 'react';
 import Avatar from '@mui/material/Avatar';
 import Box from '@mui/material/Box';
@@ -29,6 +28,7 @@ import { useThemeMode } from '@/providers/ThemeProvider';
 import DemoModeBadge from '@/components/demo/DemoModeBadge';
 import BrandMark from '@/components/layout/BrandMark';
 import { PRODUCT_NAME } from '@/lib/product';
+import { signOutToHome } from '@/lib/auth-client';
 import { NAV_HEIGHT } from '@/lib/theme/tokens';
 
 interface NavbarProps {
@@ -189,7 +189,7 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
         <MenuItem
           onClick={() => {
             setAnchorEl(null);
-            signOut({ callbackUrl: '/' });
+            void signOutToHome();
           }}
         >
           <ListItemIcon>

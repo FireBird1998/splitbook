@@ -79,13 +79,22 @@ beforeEach(async () => {
   await db
     .collection(USERS_COLLECTION)
     .createIndex({ email: 1 }, { unique: true, name: LEGACY_USERS_EMAIL_INDEX });
-  await db.collection(ACCOUNTS_COLLECTION).insertOne({
-    userId: VERIFIED_ID,
-    type: 'oidc',
-    provider: 'google',
-    providerAccountId: '1234567890',
-    access_token: 'ya29.example',
-  });
+  await db.collection(ACCOUNTS_COLLECTION).insertMany([
+    {
+      userId: VERIFIED_ID,
+      type: 'oidc',
+      provider: 'google',
+      providerAccountId: '1234567890',
+      access_token: 'ya29.example',
+    },
+    {
+      // Auth.js left emailVerified null even though this user signed in with Google.
+      userId: UNVERIFIED_ID,
+      type: 'oidc',
+      provider: 'google',
+      providerAccountId: '2345678901',
+    },
+  ]);
 });
 
 afterAll(async () => {
@@ -113,10 +122,11 @@ describe('migrateAuthData', () => {
       users: {
         total: 4,
         emailVerifiedFromDate: 1,
-        emailVerifiedFromEmpty: 3,
+        emailVerifiedFromGoogleAccount: 1,
+        emailVerifiedFromEmpty: 2,
         timestampsAdded: 2,
       },
-      accounts: { renamedToBackup: true, backedUp: 1 },
+      accounts: { renamedToBackup: true, backedUp: 2 },
       emailIndex: 'renamed',
     });
 
@@ -126,7 +136,8 @@ describe('migrateAuthData', () => {
     const legacy = await byId(LEGACY_ID);
     const real = await byId(REAL_ID);
     expect(verified?.emailVerified).toBe(true);
-    expect(unverified?.emailVerified).toBe(false);
+    // Proven by the Auth.js Google account row; Better Auth needs this to re-link.
+    expect(unverified?.emailVerified).toBe(true);
     expect(legacy?.emailVerified).toBe(false);
     expect(real?.emailVerified).toBe(false);
     // Ids, names and app fields are untouched.
@@ -166,8 +177,14 @@ describe('migrateAuthData', () => {
 
     expect(second).toEqual({
       dryRun: false,
-      users: { total: 4, emailVerifiedFromDate: 0, emailVerifiedFromEmpty: 0, timestampsAdded: 0 },
-      accounts: { renamedToBackup: false, backedUp: 1 },
+      users: {
+        total: 4,
+        emailVerifiedFromDate: 0,
+        emailVerifiedFromGoogleAccount: 0,
+        emailVerifiedFromEmpty: 0,
+        timestampsAdded: 0,
+      },
+      accounts: { renamedToBackup: false, backedUp: 2 },
       emailIndex: 'unchanged',
     });
   });
@@ -177,8 +194,14 @@ describe('migrateAuthData', () => {
 
     expect(report).toEqual({
       dryRun: true,
-      users: { total: 4, emailVerifiedFromDate: 1, emailVerifiedFromEmpty: 3, timestampsAdded: 2 },
-      accounts: { renamedToBackup: true, backedUp: 1 },
+      users: {
+        total: 4,
+        emailVerifiedFromDate: 1,
+        emailVerifiedFromGoogleAccount: 1,
+        emailVerifiedFromEmpty: 2,
+        timestampsAdded: 2,
+      },
+      accounts: { renamedToBackup: true, backedUp: 2 },
       emailIndex: 'renamed',
     });
     const verified = await db.collection(USERS_COLLECTION).findOne({ _id: VERIFIED_ID });
@@ -226,15 +249,17 @@ describe('revertAuthMigration', () => {
 
     expect(report).toEqual({
       dryRun: false,
-      users: { total: 4, emailVerifiedToDate: 1, emailVerifiedToNull: 3 },
+      users: { total: 4, emailVerifiedToDate: 2, emailVerifiedToNull: 2 },
       accounts: { betterAuthRowsMovedAside: true, backupRestored: true },
       emailIndex: 'renamed',
     });
 
-    const verified = await db.collection(USERS_COLLECTION).findOne({ _id: VERIFIED_ID });
-    expect(verified?.emailVerified).toBeInstanceOf(Date);
-    expect((verified?.emailVerified as Date).getTime()).toBeGreaterThanOrEqual(before - 1000);
-    for (const id of [UNVERIFIED_ID, LEGACY_ID, REAL_ID]) {
+    for (const id of [VERIFIED_ID, UNVERIFIED_ID]) {
+      const user = await db.collection(USERS_COLLECTION).findOne({ _id: id });
+      expect(user?.emailVerified).toBeInstanceOf(Date);
+      expect((user?.emailVerified as Date).getTime()).toBeGreaterThanOrEqual(before - 1000);
+    }
+    for (const id of [LEGACY_ID, REAL_ID]) {
       const user = await db.collection(USERS_COLLECTION).findOne({ _id: id });
       expect(user?.emailVerified).toBeNull();
     }

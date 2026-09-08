@@ -1,10 +1,10 @@
-import { auth } from '@/lib/auth';
+import { getAuthUser } from '@/lib/utils/api-response';
 import { redirect } from 'next/navigation';
 import DashboardView from '@/components/dashboard/DashboardView';
 
 export default async function DashboardPage() {
-  const session = await auth();
-  if (!session?.user) redirect('/login');
+  const user = await getAuthUser();
+  if (!user) redirect('/login');
 
-  return <DashboardView userId={session.user.id!} userName={session.user.name || 'User'} />;
+  return <DashboardView userId={user.id} userName={user.name || 'User'} />;
 }
