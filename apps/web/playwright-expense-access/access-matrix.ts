@@ -48,7 +48,7 @@ export function accessMatrix(operation: Operation) {
               `/api/groups/${ledger.groupB}/members/${DEMO_PERSONA_IDS.sam}`,
             ),
           );
-          expect((await (await ledger.sam.get('/api/auth/session')).json()).user.id).toBe(
+          expect((await (await ledger.sam.get('/api/auth/get-session')).json()).user.id).toBe(
             DEMO_PERSONA_IDS.sam,
           );
           requestedGroup = ledger.groupB;

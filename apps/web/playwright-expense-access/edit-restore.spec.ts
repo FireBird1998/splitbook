@@ -12,7 +12,7 @@ for (const membership of ['outsider', 'removed'] as const) {
         await dataOf(
           await ledger.priya.delete(`/api/groups/${ledger.groupB}/members/${DEMO_PERSONA_IDS.sam}`),
         );
-        expect((await (await actor.get('/api/auth/session')).json()).user.id).toBe(
+        expect((await (await actor.get('/api/auth/get-session')).json()).user.id).toBe(
           DEMO_PERSONA_IDS.sam,
         );
       }

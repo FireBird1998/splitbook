@@ -12,15 +12,15 @@ export async function dataOf(response: APIResponse, status = 200) {
   return (await response.json()).data;
 }
 
+/** Enter as a demo persona through the Better Auth plugin endpoint; the context keeps the session cookie. */
 async function login(baseURL: string, persona: DemoPersonaKey) {
   const context = await request.newContext({ baseURL });
-  const { csrfToken } = await (await context.get('/api/auth/csrf')).json();
-  await context.post('/api/auth/callback/demo', {
-    form: { csrfToken, personaId: persona, callbackUrl: `${baseURL}/dashboard` },
-    maxRedirects: 0,
+  const entered = await context.post('/api/auth/demo-persona/sign-in', {
+    data: { personaId: persona },
   });
-  const session = await (await context.get('/api/auth/session')).json();
-  expect(session.user.id).toBe(DEMO_PERSONA_IDS[persona]);
+  expect(entered.status(), await entered.text()).toBe(200);
+  const session = await (await context.get('/api/auth/get-session')).json();
+  expect(session?.user?.id).toBe(DEMO_PERSONA_IDS[persona]);
   return context;
 }
 

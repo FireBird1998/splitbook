@@ -108,7 +108,7 @@ jobs:
       - name: Run browser journeys (demo mode, seeded)
         run: pnpm test:e2e
 
-      - name: Run Google OAuth journeys (google mode, local OIDC)
+      - name: Run Google OAuth journeys (google mode, intercepted redirect and ID-token sign-in)
         run: pnpm test:e2e:google
 
       - name: Start reproducible Linux visual-test browser

@@ -84,10 +84,14 @@ export default defineConfig({
     env: {
       AUTH_MODE: 'demo',
       // CI serves a production build (`next start`), where demo auth fails
-      // closed without ALLOW_DEMO_AUTH and Auth.js no longer auto-trusts the
-      // host. `next dev` (local) implies both via NODE_ENV=development.
+      // closed without ALLOW_DEMO_AUTH; `next dev` (local) implies it via
+      // NODE_ENV=development.
       ALLOW_DEMO_AUTH: 'true',
-      AUTH_TRUST_HOST: 'true',
+      // Better Auth rate-limits production builds per client IP. Behind
+      // `next start` on loopback no IP is resolvable, so every persona entry
+      // in the run would share one bucket; the suites are deterministic
+      // without it.
+      AUTH_RATE_LIMIT_ENABLED: 'false',
       AUTH_SECRET: 'playwright-demo-secret',
       AUTH_GOOGLE_ID: 'unused-in-demo-mode',
       AUTH_GOOGLE_SECRET: 'unused-in-demo-mode',
