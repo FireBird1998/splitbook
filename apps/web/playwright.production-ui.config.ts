@@ -16,7 +16,6 @@ export default defineConfig({
       AUTH_GOOGLE_SECRET: '',
       AUTH_ALLOWED_EMAILS: '',
       MONGODB_URI: '',
-      AUTH_TRUST_HOST: 'true',
     },
   },
 });

@@ -63,7 +63,10 @@ export default async function globalSetup() {
           name: persona.name,
           email: persona.email,
           image: persona.image,
+          emailVerified: false,
           preferredCurrency: 'INR',
+          createdAt: new Date(),
+          updatedAt: new Date(),
         })),
       );
 
@@ -95,9 +98,7 @@ export default async function globalSetup() {
           NEXT_TELEMETRY_DISABLED: '1',
           AUTH_MODE: 'demo',
           ALLOW_DEMO_AUTH: 'true',
-          AUTH_TRUST_HOST: 'true',
           AUTH_SECRET: randomUUID(),
-          AUTH_URL: baseURL,
           AUTH_GOOGLE_ID: 'unused-synthetic-client',
           AUTH_GOOGLE_SECRET: 'unused-synthetic-secret',
           AUTH_ALLOWED_EMAILS: '',
