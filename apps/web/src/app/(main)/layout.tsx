@@ -1,21 +1,20 @@
-import { auth } from '@/lib/auth';
+import { getAuthUser } from '@/lib/utils/api-response';
 import { redirect } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Sidebar from '@/components/layout/Sidebar';
 import Navbar from '@/components/layout/Navbar';
 import { isDemoMode } from '@/lib/auth-mode';
-import AuthProvider from '@/providers/AuthProvider';
 import { NAV_HEIGHT, SIDEBAR_WIDTH } from '@/lib/theme/tokens';
 
 export default async function MainLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth();
+  const user = await getAuthUser();
 
-  if (!session?.user) {
+  if (!user) {
     redirect('/login');
   }
 
   return (
-    <AuthProvider>
+    <>
       <Box
         sx={{
           minHeight: '100vh',
@@ -23,7 +22,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
           overflowX: 'hidden',
         }}
       >
-        <Navbar user={session.user} demoMode={isDemoMode()} />
+        <Navbar user={user} demoMode={isDemoMode()} />
         {/* Spacer for fixed navbar */}
         <Box sx={{ height: NAV_HEIGHT }} />
         <Box sx={{ display: 'flex' }}>
@@ -42,6 +41,6 @@ export default async function MainLayout({ children }: { children: React.ReactNo
           </Box>
         </Box>
       </Box>
-    </AuthProvider>
+    </>
   );
 }

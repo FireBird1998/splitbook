@@ -1,10 +1,10 @@
-import { auth } from '@/lib/auth';
+import { getAuthUser } from '@/lib/utils/api-response';
 import { redirect } from 'next/navigation';
 import GroupsListView from '@/components/groups/GroupsListView';
 
 export default async function GroupsPage() {
-  const session = await auth();
-  if (!session?.user) redirect('/login');
+  const user = await getAuthUser();
+  if (!user) redirect('/login');
 
-  return <GroupsListView userId={session.user.id!} />;
+  return <GroupsListView userId={user.id} />;
 }

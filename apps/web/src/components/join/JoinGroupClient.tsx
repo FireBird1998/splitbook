@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSession, signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
@@ -12,7 +11,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import GoogleIcon from '@mui/icons-material/Google';
 import BrandMark from '@/components/layout/BrandMark';
 import type { AuthMode } from '@/lib/auth-mode';
-import { getSignInProvider } from '@/lib/auth-sign-in';
+import { authClient, signInWithGoogle } from '@/lib/auth-client';
 import DemoPersonaPicker from '@/components/demo/DemoPersonaPicker';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupCategory } from '@splitbook/shared/types';
@@ -24,8 +23,8 @@ interface JoinGroupClientProps {
 
 export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps) {
   const router = useRouter();
-  const { status } = useSession();
-  const provider = getSignInProvider(authMode);
+  const { data: session } = authClient.useSession();
+  const authenticated = Boolean(session?.user);
 
   const [group, setGroup] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,7 +74,7 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
       setShowPersonaPicker(true);
       return;
     }
-    void signIn(provider, { callbackUrl: `/join/${code}` });
+    void signInWithGoogle(`/join/${code}`);
   };
 
   if (showPersonaPicker && authMode === 'demo') {
@@ -175,7 +174,7 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
             </Typography>
           )}
 
-          {status === 'authenticated' ? (
+          {authenticated ? (
             <Button
               variant="contained"
               fullWidth

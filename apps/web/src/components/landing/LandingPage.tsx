@@ -1,6 +1,5 @@
 'use client';
 
-import { signIn } from 'next-auth/react';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
@@ -9,10 +8,8 @@ import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import GoogleIcon from '@mui/icons-material/Google';
 import BrandMark from '@/components/layout/BrandMark';
-import { getSignInProvider } from '@/lib/auth-sign-in';
 import { PRODUCT_NAME } from '@/lib/product';
-
-const SIGN_IN_PROVIDER = getSignInProvider('google');
+import { signInWithGoogle } from '@/lib/auth-client';
 
 const features = [
   {
@@ -86,7 +83,7 @@ export default function LandingPage() {
           <Button
             variant="outlined"
             size="small"
-            onClick={() => signIn(SIGN_IN_PROVIDER, { callbackUrl: '/dashboard' })}
+            onClick={() => void signInWithGoogle('/dashboard')}
             sx={{ borderColor: 'primary.main', color: 'primary.main' }}
           >
             Sign In
@@ -124,7 +121,7 @@ export default function LandingPage() {
             variant="contained"
             size="large"
             startIcon={<GoogleIcon />}
-            onClick={() => signIn(SIGN_IN_PROVIDER, { callbackUrl: '/dashboard' })}
+            onClick={() => void signInWithGoogle('/dashboard')}
             sx={{
               fontSize: '1.1rem',
               py: 1.5,

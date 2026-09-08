@@ -1,6 +1,5 @@
 'use client';
 
-import { signIn } from 'next-auth/react';
 import { useState } from 'react';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
@@ -8,6 +7,8 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import { DEMO_PERSONAS, type DemoPersonaKey } from '@/lib/demo-personas';
+import { authClient } from '@/lib/auth-client';
+import { resolveCallbackUrl } from '@/lib/auth/callback-url';
 import DemoModeBadge from '@/components/demo/DemoModeBadge';
 import BrandMark from '@/components/layout/BrandMark';
 import { PRODUCT_NAME } from '@/lib/product';
@@ -40,10 +41,10 @@ export default function DemoPersonaPicker({
     setLoadingKey(personaKey);
     setError('');
     try {
-      await signIn('demo', {
-        personaId: personaKey,
-        callbackUrl,
-      });
+      const result = await authClient.demoPersona.signIn({ personaId: personaKey });
+      if (result.error) throw result.error;
+      // Full navigation so the server layout reads the new session cookie.
+      window.location.assign(resolveCallbackUrl(callbackUrl));
     } catch {
       setError('Something went wrong signing in.');
       setLoadingKey(null);

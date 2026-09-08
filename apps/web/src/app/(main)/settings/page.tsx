@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useSession, signOut } from 'next-auth/react';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
@@ -15,9 +14,10 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Snackbar from '@mui/material/Snackbar';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { CURRENCIES } from '@splitbook/shared/currency';
+import { authClient, signOutToHome } from '@/lib/auth-client';
 
 export default function SettingsPage() {
-  const { data: session } = useSession();
+  const { data: session } = authClient.useSession();
   const [name, setName] = useState('');
   const [preferredCurrency, setPreferredCurrency] = useState('INR');
   const [loading, setLoading] = useState(false);
@@ -137,7 +137,7 @@ export default function SettingsPage() {
             variant="outlined"
             color="error"
             startIcon={<LogoutIcon />}
-            onClick={() => signOut({ callbackUrl: '/' })}
+            onClick={() => void signOutToHome()}
           >
             Sign Out
           </Button>

@@ -2,10 +2,11 @@
 
 import { useSearchParams } from 'next/navigation';
 import DemoPersonaPicker from '@/components/demo/DemoPersonaPicker';
+import { resolveCallbackUrl } from '@/lib/auth/callback-url';
 
 export default function DemoLoginClient() {
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') || '/dashboard';
+  const callbackUrl = resolveCallbackUrl(searchParams.get('callbackUrl'));
 
   return (
     <DemoPersonaPicker
