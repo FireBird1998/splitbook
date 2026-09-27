@@ -27,7 +27,9 @@ adb reverse tcp:8081 tcp:8081
 pnpm mobile android
 ```
 
-The development build uses `com.splitbook.app.dev`. Subsequent sessions can use `pnpm mobile start --localhost`; open SplitBook Dev and connect to `http://127.0.0.1:8081`. A debug APK is generated at `apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk`. Generated `android/` and `ios/` projects are ignored and regenerated from `app.config.ts`.
+The development build uses `com.splitbook.app.dev`. Subsequent sessions can use `NODE_OPTIONS=--dns-result-order=ipv4first pnpm mobile start --localhost --port 8081`; open SplitBook Dev and connect to `http://127.0.0.1:8081`. A debug APK is generated at `apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk`. Generated `android/` and `ios/` projects are ignored and regenerated from `app.config.ts`.
+
+Reapply both `adb reverse` commands after restarting the emulator. The IPv4 option above keeps Metro on the same loopback address as the forwarded connection on macOS.
 
 Choose Sam or Priya for the Trip and Household fixtures; Alex additionally has a private authorization-test Group. Only identity is fictional: the sign-in and Group data travel through the actual backend and database.
 

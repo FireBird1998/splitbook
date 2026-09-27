@@ -117,7 +117,7 @@ export function GroupCard({ group, onPress }: { group: MobileGroup; onPress: () 
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Open ${group.name}, ${descriptor.label}, ${group.members.length} members`}
+      accessibilityLabel={`Open ${group.name}, ${descriptor.label}, ${group.members.length} ${group.members.length === 1 ? 'member' : 'members'}`}
       style={({ pressed }) => ({
         borderRadius: 18,
         overflow: 'hidden',
@@ -193,7 +193,7 @@ export function GroupCard({ group, onPress }: { group: MobileGroup; onPress: () 
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
           <Icon name="people-outline" size={18} />
           <Copy style={{ fontSize: 14, color: theme.textSecondary }}>
-            {group.members.length} members
+            {group.members.length} {group.members.length === 1 ? 'member' : 'members'}
           </Copy>
         </View>
         <Copy style={{ fontFamily: fonts.mono, fontSize: 12, color: theme.textSecondary }}>
@@ -263,7 +263,7 @@ export function GroupDetail({
           >
             <Copy style={{ color: theme.strip.text, fontSize: 14 }}>{dateRange(group)}</Copy>
             <Copy style={{ color: theme.strip.text, fontFamily: fonts.mono, fontSize: 12 }}>
-              {group.members.length} MEMBERS
+              {group.members.length} {group.members.length === 1 ? 'MEMBER' : 'MEMBERS'}
             </Copy>
           </View>
         </LinearGradient>
@@ -314,7 +314,7 @@ export function GroupDetail({
         <View style={styles.between}>
           <Copy style={{ fontFamily: fonts.semibold, fontSize: 22 }}>The people</Copy>
           <Copy style={{ fontSize: 13, color: theme.textSecondary }}>
-            {group.members.length} members
+            {group.members.length} {group.members.length === 1 ? 'member' : 'members'}
           </Copy>
         </View>
         <Panel>
