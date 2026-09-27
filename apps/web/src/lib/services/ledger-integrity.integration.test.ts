@@ -71,6 +71,74 @@ describe('ledger integrity at the persistence boundary', () => {
     expect(result!.splitMethod).toBe('equal');
   });
 
+  it('preserves historical allocations when a metadata edit reorders payers and split participants', async () => {
+    const { expense, access, command } = await fixture();
+    await Expense.collection.updateOne(
+      { _id: expense._id },
+      {
+        $set: {
+          paidBy: [
+            { user: new Types.ObjectId(bob), amount: 40, amountMinor: 4000 },
+            { user: new Types.ObjectId(alice), amount: 60, amountMinor: 6000 },
+          ],
+          splitBetween: [
+            { user: new Types.ObjectId(carol), amount: 33.34, amountMinor: 3334 },
+            { user: new Types.ObjectId(bob), amount: 33.33, amountMinor: 3333 },
+            { user: new Types.ObjectId(alice), amount: 33.33, amountMinor: 3333 },
+          ],
+        },
+      },
+    );
+
+    await expenseService.update(
+      access,
+      {
+        ...command,
+        description: 'Reordered metadata only',
+        paidBy: [
+          { user: alice, amount: 60 },
+          { user: bob, amount: 40 },
+        ],
+      },
+      0,
+    );
+
+    const stored = await Expense.findById(expense._id);
+    expect(stored!.splitBetween.map((row) => [String(row.user), row.amountMinor])).toEqual([
+      [carol, 3334],
+      [bob, 3333],
+      [alice, 3333],
+    ]);
+    expect(stored!.paidBy.map((row) => [String(row.user), row.amountMinor])).toEqual([
+      [alice, 6000],
+      [bob, 4000],
+    ]);
+    expect(stored!.revision).toBe(1);
+    expect(stored!.editHistory).toHaveLength(1);
+    expect(stored!.editHistory[0].changes).toEqual({
+      description: { old: 'Old allocation', new: 'Reordered metadata only' },
+    });
+
+    // A changed payment is still a financial edit when participant IDs match.
+    await expenseService.update(
+      access,
+      {
+        paidBy: [
+          { user: bob, amount: 35 },
+          { user: alice, amount: 65 },
+        ],
+      },
+      1,
+    );
+    const changedPayments = await Expense.findById(expense._id);
+    expect(changedPayments!.paidBy.map((row) => [String(row.user), row.amountMinor])).toEqual([
+      [bob, 3500],
+      [alice, 6500],
+    ]);
+    expect(changedPayments!.editHistory).toHaveLength(2);
+    expect(changedPayments!.editHistory[1].changes).toHaveProperty('paidBy');
+  });
+
   it('allows exactly one concurrent mutation of a legacy record without a revision', async () => {
     const { expense, access } = await fixture();
     await Expense.collection.updateOne({ _id: expense._id }, { $unset: { revision: '' } });

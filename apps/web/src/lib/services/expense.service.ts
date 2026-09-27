@@ -388,16 +388,23 @@ export class ExpenseService {
       next: typeof data.paidBy | typeof data.splitBetween,
       previous: typeof original.paidBy | typeof original.splitBetween,
       keys: string[],
-    ) =>
-      next === undefined ||
-      (next.length === previous.length &&
-        next.every((row, index) =>
-          keys.every(
-            (key) =>
-              String(Reflect.get(row, key) ?? '') ===
-              String(Reflect.get(previous[index], key) ?? ''),
-          ),
-        ));
+    ) => {
+      if (next === undefined) return true;
+      if (next.length !== previous.length) return false;
+      // Form order is not a financial change. Sort copies so the stored
+      // participant order and historical allocation remain intact.
+      const byUser = (left: { user: unknown }, right: { user: unknown }) =>
+        String(left.user).localeCompare(String(right.user));
+      const nextRows = [...next].sort(byUser);
+      const previousRows = [...previous].sort(byUser);
+      return nextRows.every((row, index) =>
+        keys.every(
+          (key) =>
+            String(Reflect.get(row, key) ?? '') ===
+            String(Reflect.get(previousRows[index], key) ?? ''),
+        ),
+      );
+    };
     const allocationKeys =
       original.splitMethod === 'percentage'
         ? ['user', 'percentage']

@@ -1,8 +1,20 @@
 import mongoose from 'mongoose';
 import type { Db } from 'mongodb';
 
-/** Explicit index creation is part of rollout, not an assumption about autoIndex settings. */
-export async function createLedgerIndexes(db: Db): Promise<void> {
+/** Both MongoDB driver instances provide this index-creation surface. */
+interface LedgerIndexDatabase {
+  collection(name: string): {
+    createIndex(
+      keys: Record<string, 1 | -1>,
+      options: {
+        unique: boolean;
+        partialFilterExpression: Record<string, { $type: 'string' | 'objectId' }>;
+      },
+    ): Promise<string>;
+  };
+}
+
+async function createLedgerWriteIndexes(db: LedgerIndexDatabase): Promise<void> {
   for (const collection of ['expenses', 'settlements']) {
     await db
       .collection(collection)
@@ -11,15 +23,20 @@ export async function createLedgerIndexes(db: Db): Promise<void> {
         { unique: true, partialFilterExpression: { 'creationRequest.key': { $type: 'string' } } },
       );
   }
-  await db.collection('expenses').createIndex({ group: 1, isDeleted: 1, date: -1, createdAt: -1 });
-  await db.collection('expenses').createIndex({ group: 1, tagId: 1 });
-  await db.collection('activities').createIndex({ group: 1, createdAt: -1, _id: -1 });
   await db
     .collection('expenses')
     .createIndex(
       { recurringExpense: 1, period: 1 },
       { unique: true, partialFilterExpression: { recurringExpense: { $type: 'objectId' } } },
     );
+}
+
+/** Explicit index creation is part of rollout, not an assumption about autoIndex settings. */
+export async function createLedgerIndexes(db: Db): Promise<void> {
+  await createLedgerWriteIndexes(db);
+  await db.collection('expenses').createIndex({ group: 1, isDeleted: 1, date: -1, createdAt: -1 });
+  await db.collection('expenses').createIndex({ group: 1, tagId: 1 });
+  await db.collection('activities').createIndex({ group: 1, createdAt: -1, _id: -1 });
 }
 
 let indexedDatabase: unknown;
@@ -33,23 +50,7 @@ export async function ensureLedgerWriteIndexes(): Promise<void> {
     promise = undefined;
   }
   if (!promise)
-    promise = (async () => {
-      for (const collection of ['expenses', 'settlements']) {
-        await db.collection(collection).createIndex(
-          { group: 1, createdBy: 1, 'creationRequest.key': 1 },
-          {
-            unique: true,
-            partialFilterExpression: { 'creationRequest.key': { $type: 'string' } },
-          },
-        );
-      }
-      await db
-        .collection('expenses')
-        .createIndex(
-          { recurringExpense: 1, period: 1 },
-          { unique: true, partialFilterExpression: { recurringExpense: { $type: 'objectId' } } },
-        );
-    })().catch((error) => {
+    promise = createLedgerWriteIndexes(db).catch((error) => {
       promise = undefined;
       throw error;
     });
