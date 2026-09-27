@@ -2,7 +2,7 @@
 
 Expo + React Native, TypeScript, Android first. The foundation implements [ticket #50](https://github.com/FireBird1998/splitbook/issues/50): guarded local persona sign-in, API-backed Group browsing, Theme-specific headers, member lists, session restoration, foreground revalidation, and sign-out. [Ticket #52](https://github.com/FireBird1998/splitbook/issues/52) adds Group creation, Android sharing, invitation preview, and explicit joining. [The approved spec](https://github.com/FireBird1998/splitbook/issues/49) tracks the remaining native app.
 
-This is a **development client**. It requires Metro and a local fictional backend. The staging APK, real Google callback, financial screens, drafts, offline views, and iOS validation have separate tickets; they are not included here.
+This is a **development client**. It requires Metro and a local fictional backend. The staging APK, real Google callback, financial editing, drafts, offline views, and iOS validation have separate tickets; they are not included here.
 
 ## Run locally
 
@@ -42,6 +42,7 @@ pnpm test:unit
 pnpm mobile verify:api
 pnpm mobile verify:groups
 pnpm mobile verify:settings
+TZ=Asia/Kolkata pnpm mobile verify:financial
 ```
 
 `verify:api` uses the actual mobile controller and HTTP server. It checks session creation/restoration, normalized Group/member dates, authorization denial, server logout, local purge, and disabled development authentication. It never accepts a remote server or prints session values.
@@ -72,6 +73,18 @@ No real staging domain or certificate is configured here. Ticket [#60](https://g
 - Native demo entry requires both `__DEV__` and explicit `EXPO_PUBLIC_APP_ENV=development`; the server independently enforces its existing demo guard. A production bundle cannot use this adapter. Cleartext Android traffic is configured only for the development variant.
 - Display tokens live in `@splitbook/shared/design-tokens`; the old web import re-exports that source. Both clients share the semantic light/dark colors and Group Theme registry. Only the required Outfit/IBM Plex Mono weights are bundled.
 - Financial writes, offline caches, native Google integration, and production configuration are intentionally handled by the remaining approved tickets. The data boundary is the extension point for those changes.
+
+## Home and Group financial views
+
+[Ticket #51](https://github.com/FireBird1998/splitbook/issues/51) adds server-provided Home obligations with **You owe** and **You are owed** shown separately for each currency. It does not combine currencies or replace obligations with a net number. Loading and failed reads remain distinct from a confirmed empty ledger.
+
+Opening a Group loads its expenses and all-time running balances. Expenses show their recorded date, payers, amount, currency, and Tag, with refresh and explicit pagination. Trip keeps its itinerary strip; Household uses the neutral header and a Month selector. Household defaults to the viewer's current Month and supports previous Months and All time.
+
+A Month is only an expense window. The client sends full ISO bounds for local calendar-month start and end, asks for the backend's summary and member contributions, and keeps running balances separate. Monthly contributions are scoped to the Group's default currency; expense totals and running balances preserve every currency returned by the backend. Changing Month neither resets the ledger nor records a Settlement.
+
+The expense read can materialize due recurring entries on the backend, so the controller reads expenses before refreshing Group balances. The native app validates the returned money with shared exact-money helpers but does not compute its own balances. These reads remain memory-only and join the existing session/navigation invalidation and sign-out cleanup boundaries.
+
+`verify:financial` exercises the public mobile controller against the real local HTTP backend with uniquely named fictional Groups, known obligations in INR/EUR, local Month boundaries, an empty Month, and more than one expense page. Run it with `TZ=Asia/Kolkata` for a reproducible non-UTC fixture; the app itself follows the device timezone. The verifier archives its own Groups afterward. Native checks separately cover rendering, controls, refresh, light/dark appearance, and enlarged text.
 
 ## Create and join a Group
 

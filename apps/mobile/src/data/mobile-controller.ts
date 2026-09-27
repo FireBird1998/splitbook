@@ -13,15 +13,50 @@ import {
   parseSignIn,
 } from './dto';
 import { parseInvitationLink } from './invitation-links';
+import { parseExpensePage, parseGroupBalances, parseHomeBalances } from './financial-dto';
 import type {
   AccountStorageLease,
   FetchResponse,
   GroupCreation,
   GroupDraft,
+  GroupFinancialState,
   MobileConfig,
   MobileDependencies,
   MobileSnapshot,
 } from './types';
+
+function monthDate(month: string): Date {
+  if (!/^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Choose a valid Month.');
+  const [year, number] = month.split('-').map(Number);
+  return new Date(year, number - 1, 1);
+}
+
+export function currentMonthKey(date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+export function shiftMonthKey(month: string, offset: number): string {
+  const date = monthDate(month);
+  date.setMonth(date.getMonth() + offset);
+  return currentMonthKey(date);
+}
+
+function emptyFinancial(): GroupFinancialState {
+  return {
+    groupId: null,
+    month: null,
+    expenses: {
+      status: 'idle',
+      data: [],
+      summary: null,
+      pagination: null,
+      message: null,
+      moreStatus: 'idle',
+      moreMessage: null,
+    },
+    balances: { status: 'idle', data: null, message: null },
+  };
+}
 
 const expiredMessage = 'Your session has expired. Sign in again to continue.';
 const storageMessage = 'Could not safely save your session. Please try signing in again.';
@@ -46,6 +81,8 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
   return {
     auth,
     screen: 'groups',
+    home: { status: 'idle', data: null, message: null },
+    financial: emptyFinancial(),
     creation: {
       draft: {
         name: '',
@@ -81,7 +118,7 @@ function origin(value: string): string {
 }
 
 /**
- * Development-persona transport and memory-only Group reads. Secure credential
+ * Development-persona transport and memory-only Group and financial reads. Secure credential
  * persistence is injected by the native runtime. It never imports React or a
  * native SDK, and it never treats a raw Better Auth token as a signed cookie.
  */
@@ -97,6 +134,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let cookie: string | null = null;
   let generation = 0;
   let viewRequest = 0;
+  let homeRequest = 0;
+  let financialRequest = 0;
+  let balancesRequest = 0;
   let storeQueue: Promise<unknown> = Promise.resolve();
   let cleanupRequired = false;
   let accountCleanupRequired = false;
@@ -448,6 +488,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     publish(cleanSnapshot({ status: 'authenticated', user: session.user, message: null }));
     await loadGroups(owner);
+    if (current(owner)) await refreshHome();
     if (!current(owner)) return;
     if (creationRecovery?.ownerId === session.user.id) {
       publish({
@@ -458,6 +499,28 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     creationRecovery = null;
     if (current(owner) && pendingCode) await previewInvitation(pendingCode);
+  };
+
+  const refreshHome = async () => {
+    if (snapshot.auth.status !== 'authenticated') return;
+    const owner = generation;
+    const read = ++homeRequest;
+    publish({ ...snapshot, home: { status: 'loading', data: null, message: null } });
+    try {
+      const data = parseHomeBalances(await request('/api/user/balances', owner));
+      if (!current(owner) || read !== homeRequest) return;
+      publish({ ...snapshot, home: { status: 'ready', data, message: null } });
+    } catch (error) {
+      if (!current(owner) || read !== homeRequest || error instanceof Superseded) return;
+      publish({
+        ...snapshot,
+        home: {
+          status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
+          data: null,
+          message: 'Could not load your balances. Please try again.',
+        },
+      });
+    }
   };
 
   const restore = async () => {
@@ -542,12 +605,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const openGroup = async (id: string) => {
     if (snapshot.auth.status !== 'authenticated') return;
     const owner = generation;
+    const previousMonth = snapshot.financial.groupId === id ? snapshot.financial.month : undefined;
     const view = ++viewRequest;
     publish({
       ...snapshot,
       screen: 'group',
       share: { status: 'idle', url: null, message: null },
       detail: { status: 'loading', id, data: null, message: null },
+      financial: { ...emptyFinancial(), groupId: id },
     });
     try {
       if (!objectId.safeParse(id).success)
@@ -561,15 +626,25 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ) {
         throw new RequestError('You no longer have access to this group.', 403);
       }
-      publish({ ...snapshot, detail: { status: 'ready', id, data: group, message: null } });
-    } catch (error) {
-      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
-      const denied = error instanceof RequestError && [403, 404].includes(error.status);
       publish({
         ...snapshot,
-        groups: denied
-          ? { ...snapshot.groups, data: snapshot.groups.data.filter((group) => group.id !== id) }
-          : snapshot.groups,
+        detail: { status: 'ready', id, data: group, message: null },
+        financial: {
+          ...snapshot.financial,
+          month:
+            group.category === 'home'
+              ? previousMonth === undefined
+                ? currentMonthKey(new Date(now()))
+                : previousMonth
+              : null,
+        },
+      });
+      await refreshExpenses();
+    } catch (error) {
+      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      if (dropDeniedGroup(id, error)) return;
+      publish({
+        ...snapshot,
         detail: {
           status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
           id,
@@ -578,6 +653,263 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             error instanceof RequestError
               ? error.message
               : 'The server returned invalid group data. Please try again.',
+        },
+      });
+    }
+  };
+
+  const dropDeniedGroup = (id: string, error: unknown): boolean => {
+    if (!(error instanceof RequestError) || ![403, 404].includes(error.status)) return false;
+    viewRequest += 1;
+    homeRequest += 1;
+    publish({
+      ...snapshot,
+      groups: { ...snapshot.groups, data: snapshot.groups.data.filter((group) => group.id !== id) },
+      detail: {
+        status: error.status === 403 ? 'denied' : 'error',
+        id,
+        data: null,
+        message: error.message,
+      },
+      financial: emptyFinancial(),
+      home: { status: 'idle', data: null, message: null },
+      share: { status: 'idle', url: null, message: null },
+    });
+    return true;
+  };
+
+  const refreshBalances = async () => {
+    const group = snapshot.detail.data;
+    if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'group' || !group) return;
+    const owner = generation;
+    const view = viewRequest;
+    if (
+      snapshot.financial.expenses.status === 'loading' ||
+      snapshot.financial.expenses.moreStatus === 'loading'
+    )
+      return;
+    const read = ++balancesRequest;
+    publish({
+      ...snapshot,
+      financial: {
+        ...snapshot.financial,
+        balances: { status: 'loading', data: null, message: null },
+      },
+    });
+    try {
+      const data = parseGroupBalances(await request(`/api/groups/${group.id}/balances`, owner));
+      if (!current(owner) || view !== viewRequest || read !== balancesRequest) return;
+      publish({
+        ...snapshot,
+        financial: { ...snapshot.financial, balances: { status: 'ready', data, message: null } },
+      });
+    } catch (error) {
+      if (
+        !current(owner) ||
+        view !== viewRequest ||
+        read !== balancesRequest ||
+        error instanceof Superseded
+      )
+        return;
+      if (dropDeniedGroup(group.id, error)) return;
+      publish({
+        ...snapshot,
+        financial: {
+          ...snapshot.financial,
+          balances: {
+            status: 'error',
+            data: null,
+            message: 'Could not load running balances. Please try again.',
+          },
+        },
+      });
+    }
+  };
+
+  const expensePath = (groupId: string, category: string, month: string | null, page: number) => {
+    const params = new URLSearchParams({ page: String(page), limit: '20' });
+    if (category === 'home') {
+      params.set('includeMemberBreakdown', '1');
+      if (month) {
+        const start = monthDate(month);
+        const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+        params.set('dateFrom', start.toISOString());
+        params.set('dateTo', new Date(end.getTime() - 1).toISOString());
+      }
+    }
+    return `/api/groups/${groupId}/expenses?${params}`;
+  };
+
+  const selectMonth = async (month: string | null) => {
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.screen !== 'group' ||
+      snapshot.detail.data?.category !== 'home'
+    )
+      return;
+    if (month !== null) monthDate(month);
+    publish({ ...snapshot, financial: { ...snapshot.financial, month } });
+    await refreshExpenses();
+  };
+
+  const beginExpenseRead = () => {
+    // Expense reads can materialize due recurring entries. Older Home responses
+    // no longer describe the same ledger, even while the Group read is pending.
+    homeRequest += 1;
+    balancesRequest += 1;
+    publish({
+      ...snapshot,
+      home: { status: 'idle', data: null, message: null },
+      financial: {
+        ...snapshot.financial,
+        balances: { status: 'loading', data: null, message: null },
+      },
+    });
+  };
+
+  const refreshExpenses = async () => {
+    const group = snapshot.detail.data;
+    if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'group' || !group) return;
+    const owner = generation;
+    const view = viewRequest;
+    const read = ++financialRequest;
+    beginExpenseRead();
+    publish({
+      ...snapshot,
+      financial: {
+        ...snapshot.financial,
+        expenses: { ...emptyFinancial().expenses, status: 'loading' },
+      },
+    });
+    try {
+      const page = parseExpensePage(
+        await request(expensePath(group.id, group.category, snapshot.financial.month, 1), owner),
+        group.id,
+        group.defaultCurrency,
+      );
+      if (!current(owner) || view !== viewRequest || read !== financialRequest) return;
+      if (page.pagination.page !== 1) throw new Error('Unexpected expense page.');
+      publish({
+        ...snapshot,
+        financial: {
+          ...snapshot.financial,
+          expenses: {
+            status: 'ready',
+            data: page.expenses,
+            summary: page.summary,
+            pagination: page.pagination,
+            message: null,
+            moreStatus: 'idle',
+            moreMessage: null,
+          },
+        },
+      });
+      await refreshBalances();
+    } catch (error) {
+      if (
+        !current(owner) ||
+        view !== viewRequest ||
+        read !== financialRequest ||
+        error instanceof Superseded
+      )
+        return;
+      if (dropDeniedGroup(group.id, error)) return;
+      publish({
+        ...snapshot,
+        financial: {
+          ...snapshot.financial,
+          balances: {
+            status: 'error',
+            data: null,
+            message: 'Could not update running balances. Please try again.',
+          },
+          expenses: {
+            ...emptyFinancial().expenses,
+            status: 'error',
+            message: 'Could not load expenses. Please try again.',
+          },
+        },
+      });
+    }
+  };
+
+  const loadMoreExpenses = async () => {
+    const group = snapshot.detail.data;
+    const expenses = snapshot.financial.expenses;
+    const pagination = expenses.pagination;
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.screen !== 'group' ||
+      !group ||
+      expenses.status !== 'ready' ||
+      expenses.moreStatus === 'loading' ||
+      !pagination ||
+      pagination.page >= pagination.totalPages
+    )
+      return;
+    const owner = generation;
+    const view = viewRequest;
+    const read = ++financialRequest;
+    beginExpenseRead();
+    const nextPage = pagination.page + 1;
+    publish({
+      ...snapshot,
+      financial: {
+        ...snapshot.financial,
+        expenses: { ...expenses, moreStatus: 'loading', moreMessage: null },
+      },
+    });
+    try {
+      const page = parseExpensePage(
+        await request(
+          expensePath(group.id, group.category, snapshot.financial.month, nextPage),
+          owner,
+        ),
+        group.id,
+        group.defaultCurrency,
+      );
+      if (!current(owner) || view !== viewRequest || read !== financialRequest) return;
+      if (page.pagination.page !== nextPage) throw new Error('Unexpected expense page.');
+      const seen = new Set(expenses.data.map((expense) => expense.id));
+      publish({
+        ...snapshot,
+        financial: {
+          ...snapshot.financial,
+          expenses: {
+            status: 'ready',
+            data: [...expenses.data, ...page.expenses.filter((expense) => !seen.has(expense.id))],
+            summary: page.summary,
+            pagination: page.pagination,
+            message: null,
+            moreStatus: 'idle',
+            moreMessage: null,
+          },
+        },
+      });
+      await refreshBalances();
+    } catch (error) {
+      if (
+        !current(owner) ||
+        view !== viewRequest ||
+        read !== financialRequest ||
+        error instanceof Superseded
+      )
+        return;
+      if (dropDeniedGroup(group.id, error)) return;
+      publish({
+        ...snapshot,
+        financial: {
+          ...snapshot.financial,
+          balances: {
+            status: 'error',
+            data: null,
+            message: 'Could not update running balances. Please try again.',
+          },
+          expenses: {
+            ...snapshot.financial.expenses,
+            moreStatus: 'error',
+            moreMessage: 'Could not load more expenses. Please try again.',
+          },
         },
       });
     }
@@ -969,7 +1301,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ...snapshot,
       screen: 'groups',
       detail: { status: 'idle', id: null, data: null, message: null },
+      financial: emptyFinancial(),
     });
+    return refreshHome();
   };
 
   const refresh = async () => {
@@ -1006,7 +1340,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return;
     }
     if (snapshot.screen === 'group' && snapshot.detail.id) return openGroup(snapshot.detail.id);
-    return loadGroups(generation);
+    const owner = generation;
+    await loadGroups(owner);
+    if (current(owner)) await refreshHome();
   };
 
   const signOut = async () => {
@@ -1072,6 +1408,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openGroup,
     back,
     refresh,
+    refreshHome,
+    refreshExpenses,
+    refreshBalances,
+    selectMonth,
+    loadMoreExpenses,
     signOut,
     getSnapshot: () => snapshot,
     subscribe: (listener: () => void) => {

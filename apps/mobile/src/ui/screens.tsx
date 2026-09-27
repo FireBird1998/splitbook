@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -207,9 +208,11 @@ export function GroupCard({ group, onPress }: { group: MobileGroup; onPress: () 
 export function GroupDetail({
   group,
   currentUserId,
+  children,
 }: {
   group: MobileGroup;
   currentUserId: string;
+  children?: ReactNode;
 }) {
   const theme = useTheme();
   const descriptor = getGroupTheme(group.category);
@@ -304,6 +307,7 @@ export function GroupDetail({
       {descriptor.header === 'strip' && group.description ? (
         <Copy style={{ color: theme.textSecondary }}>{group.description}</Copy>
       ) : null}
+      {children}
       <Panel>
         <View style={styles.between}>
           <Copy style={{ color: theme.textSecondary }}>Default currency</Copy>
@@ -360,7 +364,7 @@ export function EmptyGroups({ onRefresh }: { onRefresh: () => void }) {
         A shared space starts here.
       </Copy>
       <Copy style={{ color: theme.textSecondary }}>
-        You haven’t joined any Groups yet. Create or join one on SplitBook web, then refresh here.
+        You haven’t joined any Groups yet. Create a Group or open an invitation to get started.
       </Copy>
       <Button label="Refresh Groups" secondary onPress={onRefresh} icon="refresh-outline" />
     </Panel>
