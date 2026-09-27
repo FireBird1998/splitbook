@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMobileController } from './mobile-controller';
-import type { CredentialStore, FetchResponse, MobileFetch } from './types';
+import type { AccountLocalStorage, CredentialStore, FetchResponse, MobileFetch } from './types';
 
 const alex = {
   id: 'a00000000000000000000001',
@@ -73,12 +73,26 @@ function memoryCredentials(initial: string | null = null) {
   return { credentials, read: () => value };
 }
 
+function memoryAccountOwner(initial: string | null = null): AccountLocalStorage['owner'] {
+  let accountId = initial;
+  return {
+    load: async () => accountId,
+    save: async (value) => {
+      accountId = value;
+    },
+    clear: async () => {
+      accountId = null;
+    },
+  };
+}
+
 function setup(
   options: {
     saved?: string;
     pending?: CredentialStore;
     enabled?: boolean;
     store?: ReturnType<typeof memoryCredentials>;
+    accountLocal?: AccountLocalStorage;
     intercept?: (
       path: string,
       init: RequestInit,
@@ -116,12 +130,308 @@ function setup(
       authOrigin: 'http://localhost:4127',
       developmentPersonaEnabled: options.enabled ?? true,
     },
-    { fetch, credentials: store.credentials, pendingInvitation: options.pending, now: () => now },
+    {
+      fetch,
+      credentials: store.credentials,
+      pendingInvitation: options.pending,
+      accountLocal: options.accountLocal,
+      now: () => now,
+    },
   );
   return { controller, fetch, store };
 }
 
 describe('native session and Group boundary', () => {
+  it('persists logout intent before waiting for a held account write', async () => {
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    let cleanupPending = false;
+    let value: string | null = null;
+    const accountLocal: AccountLocalStorage = {
+      owner: memoryAccountOwner(),
+      cleanupMarker: {
+        load: async () => cleanupPending,
+        mark: async () => {
+          cleanupPending = true;
+        },
+        clear: async () => {
+          cleanupPending = false;
+        },
+      },
+      stores: [
+        {
+          clear: async () => {
+            value = null;
+          },
+        },
+      ],
+    };
+    const store = memoryCredentials();
+    const first = setup({ store, accountLocal }).controller;
+    await first.signIn('alex');
+    const lease = first.accountStorage();
+    if (!lease) throw new Error('Expected an authenticated storage lease');
+    const writing = lease.write(async () => {
+      entered.resolve();
+      await release.promise;
+      value = 'Old account data';
+    });
+    const rejectedWrite = expect(writing).rejects.toThrow();
+    await entered.promise;
+    const loggingOut = first.signOut();
+    try {
+      await vi.waitFor(() => expect(cleanupPending).toBe(true), { timeout: 50, interval: 5 });
+      const restarted = setup({ store, accountLocal }).controller;
+      await restarted.restore();
+      expect(restarted.getSnapshot().auth).toMatchObject({ status: 'signed-out', user: null });
+      expect(store.read()).toBeNull();
+    } finally {
+      release.resolve();
+      await Promise.all([loggingOut, rejectedWrite]);
+    }
+    expect(value).toBeNull();
+  });
+
+  it('preserves the same account after expiry and purges unknown or different stored owners', async () => {
+    let cleanupPending = false;
+    let cachedData: string | null = 'Unknown account data';
+    let expired = false;
+    const owner = memoryAccountOwner();
+    const { controller } = setup({
+      accountLocal: {
+        owner,
+        cleanupMarker: {
+          load: async () => cleanupPending,
+          mark: async () => {
+            cleanupPending = true;
+          },
+          clear: async () => {
+            cleanupPending = false;
+          },
+        },
+        stores: [
+          {
+            clear: async () => {
+              cachedData = null;
+            },
+          },
+        ],
+      },
+      intercept: (path) =>
+        expired && path === `/api/groups/${groupId}` ? json({}, 401) : undefined,
+    });
+    await controller.signIn('alex');
+    expect(cachedData).toBeNull();
+    cachedData = 'Alex recoverable entry';
+    expired = true;
+    await controller.openGroup(groupId);
+    expect(controller.getSnapshot().auth.status).toBe('signed-out');
+    await controller.signIn('alex');
+    expect(cachedData).toBe('Alex recoverable entry');
+    expect(await owner.load()).toBe(alex.id);
+    await controller.signIn('sam');
+    expect(controller.getSnapshot().auth.user?.id).toBe(sam.id);
+    expect(cachedData).toBeNull();
+    expect(await owner.load()).toBe(sam.id);
+  });
+
+  it('drains an old account write before purge and rejects its retired storage lease', async () => {
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    let value: string | null = null;
+    let cleanupPending = false;
+    const { controller } = setup({
+      accountLocal: {
+        owner: memoryAccountOwner(),
+        cleanupMarker: {
+          load: async () => cleanupPending,
+          mark: async () => {
+            cleanupPending = true;
+          },
+          clear: async () => {
+            cleanupPending = false;
+          },
+        },
+        stores: [
+          {
+            clear: async () => {
+              value = null;
+            },
+          },
+        ],
+      },
+    });
+    await controller.signIn('alex');
+    const oldAccount = controller.accountStorage();
+    if (!oldAccount) throw new Error('Expected an authenticated storage lease');
+    const writing = oldAccount.write(async () => {
+      entered.resolve();
+      await release.promise;
+      value = 'Alex cached Group';
+    });
+    const rejectedWrite = expect(writing).rejects.toThrow();
+    await entered.promise;
+    const signingOut = controller.signOut();
+    expect(controller.accountStorage()).toBeNull();
+    release.resolve();
+    await Promise.all([signingOut, rejectedWrite]);
+    expect(value).toBeNull();
+    await controller.signIn('sam');
+    await expect(
+      oldAccount.write(async () => {
+        value = 'Late Alex data';
+      }),
+    ).rejects.toThrow();
+    const samAccount = controller.accountStorage();
+    if (!samAccount) throw new Error('Expected the new authenticated storage lease');
+    expect(samAccount.accountId).toBe(sam.id);
+    await samAccount.write(async () => {
+      value = 'Sam cached Group';
+    });
+    expect(value).toBe('Sam cached Group');
+  });
+
+  it('finishes a persisted failed purge before restoring or signing in after restart', async () => {
+    let cleanupPending = false;
+    let failing = false;
+    let cachedData: string | null = null;
+    const accountLocal: AccountLocalStorage = {
+      owner: memoryAccountOwner(),
+      cleanupMarker: {
+        load: async () => cleanupPending,
+        mark: async () => {
+          cleanupPending = true;
+        },
+        clear: async () => {
+          cleanupPending = false;
+        },
+      },
+      stores: [
+        {
+          clear: async () => {
+            if (failing) throw new Error('storage unavailable');
+            cachedData = null;
+          },
+        },
+      ],
+    };
+    const store = memoryCredentials();
+    const first = setup({ store, accountLocal }).controller;
+    await first.signIn('alex');
+    cachedData = 'Alex cached Group';
+    failing = true;
+    await first.signOut();
+    expect(cleanupPending).toBe(true);
+    const restarted = setup({ store, accountLocal });
+    await restarted.controller.restore();
+    expect(restarted.controller.getSnapshot().auth).toMatchObject({ status: 'error', user: null });
+    await restarted.controller.signIn('sam');
+    expect(restarted.controller.getSnapshot().auth.status).toBe('error');
+    expect(restarted.fetch).not.toHaveBeenCalled();
+    expect(cleanupPending).toBe(true);
+    failing = false;
+    await restarted.controller.restore();
+    expect(restarted.controller.getSnapshot().auth.status).toBe('signed-out');
+    expect(cachedData).toBeNull();
+    expect(cleanupPending).toBe(false);
+    await restarted.controller.signIn('sam');
+    expect(restarted.controller.getSnapshot().auth.user?.id).toBe(sam.id);
+  });
+
+  it('attempts every account purge even when the cleanup marker and another store fail', async () => {
+    let failing = false;
+    let cachedData: string | null = null;
+    const pending = memoryCredentials();
+    const { controller, store } = setup({
+      pending: pending.credentials,
+      accountLocal: {
+        owner: memoryAccountOwner(),
+        cleanupMarker: {
+          load: async () => false,
+          mark: async () => {
+            if (failing) throw new Error('marker unavailable');
+          },
+          clear: async () => {},
+        },
+        stores: [
+          {
+            clear: async () => {
+              if (failing) throw new Error('one store unavailable');
+            },
+          },
+          {
+            clear: async () => {
+              cachedData = null;
+            },
+          },
+        ],
+      },
+    });
+    await controller.signIn('alex');
+    cachedData = 'Alex cached Group';
+    await pending.credentials.save('deadbeef');
+    failing = true;
+    await controller.signOut();
+    expect(controller.getSnapshot().auth.status).toBe('error');
+    expect(store.read()).toBeNull();
+    expect(pending.read()).toBeNull();
+    expect(cachedData).toBeNull();
+  });
+
+  it('clears every registered account store together with authentication on sign-out', async () => {
+    let cleanupPending = false;
+    let cachedData: string | null = null;
+    let draft: string | null = null;
+    const { controller, store } = setup({
+      accountLocal: {
+        owner: memoryAccountOwner(),
+        cleanupMarker: {
+          load: async () => cleanupPending,
+          mark: async () => {
+            cleanupPending = true;
+          },
+          clear: async () => {
+            cleanupPending = false;
+          },
+        },
+        stores: [
+          {
+            clear: async () => {
+              cachedData = null;
+            },
+          },
+          {
+            clear: async () => {
+              draft = null;
+            },
+          },
+        ],
+      },
+    });
+    await controller.signIn('alex');
+    cachedData = 'Alex cached Group';
+    draft = 'Alex unfinished entry';
+    await controller.signOut();
+    expect(controller.getSnapshot().auth.status).toBe('signed-out');
+    expect(store.read()).toBeNull();
+    expect(cachedData).toBeNull();
+    expect(draft).toBeNull();
+    expect(cleanupPending).toBe(false);
+  });
+
+  it('revalidates Settings without navigating away from the signed-in account', async () => {
+    const { controller } = setup();
+    await controller.signIn('alex');
+    controller.openSettings();
+    await controller.refresh();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settings',
+      auth: { status: 'authenticated', user: { id: alex.id } },
+    });
+    controller.back();
+    expect(controller.getSnapshot().screen).toBe('groups');
+  });
+
   it('keeps a new invitation visible when an earlier Group create finishes', async () => {
     const reply = deferred<FetchResponse>();
     const { controller } = setup({
@@ -846,7 +1156,8 @@ describe('native session and Group boundary', () => {
 
     // Retrying the session error must not bring the signed-out account back.
     await controller.restore();
-    expect(controller.getSnapshot().auth).toMatchObject({ status: 'signed-out', user: null });
+    // Cleanup remains blocked until every local store can be cleared.
+    expect(controller.getSnapshot().auth).toMatchObject({ status: 'error', user: null });
     expect(controller.getSnapshot().groups.data).toEqual([]);
     expect(store.read()).toBeNull();
   });

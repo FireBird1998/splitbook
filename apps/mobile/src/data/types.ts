@@ -60,7 +60,7 @@ export interface MobileSnapshot {
     user: SessionUser | null;
     message: string | null;
   };
-  screen: 'groups' | 'group' | 'create' | 'invite';
+  screen: 'groups' | 'group' | 'create' | 'invite' | 'settings';
   creation: GroupCreation;
   share: {
     status: 'idle' | 'loading' | 'ready' | 'error';
@@ -100,6 +100,28 @@ export interface CredentialStore {
   clear(): Promise<void>;
 }
 
+export interface AccountLocalStorage {
+  owner: {
+    load(): Promise<string | null>;
+    save(accountId: string): Promise<void>;
+    clear(): Promise<void>;
+  };
+  /** Backend-scoped tombstone: a restart must finish cleanup before restoring a session. */
+  cleanupMarker: {
+    load(): Promise<boolean>;
+    mark(): Promise<void>;
+    clear(): Promise<void>;
+  };
+  /** Register at startup. Each store clears all its account keys for this backend. */
+  stores: readonly { clear(): Promise<void> }[];
+}
+
+/** Capture before asynchronous work. Retired sessions cannot read or write account data. */
+export interface AccountStorageLease {
+  accountId: string;
+  write<T>(operation: () => Promise<T>): Promise<T>;
+}
+
 export interface CookieHeaders {
   get(name: string): string | null;
   getSetCookie?(): string[];
@@ -118,5 +140,6 @@ export interface MobileDependencies {
   fetch: MobileFetch;
   credentials: CredentialStore;
   pendingInvitation?: PendingInvitationStore;
+  accountLocal?: AccountLocalStorage;
   now?: () => number;
 }
