@@ -28,7 +28,22 @@ for (const colorScheme of ['light', 'dark'] as const) {
     if (!baseURL || !/^http:\/\/127\.0\.0\.1:\d+$/.test(baseURL))
       throw new Error('Isolated app required');
     await page.context().addCookies((await ledger.sam.storageState()).cookies);
+    // Route compilation and data loading can outlast the UI assertion budget.
+    // Start observing before navigation so even a cached response is included.
+    const groupPath = `/api/groups/${ledger.groupB}`;
+    const loaded = Promise.all(
+      [groupPath, `${groupPath}/balances`, `${groupPath}/settlements`].map((pathname) =>
+        page.waitForResponse(
+          (response) =>
+            new URL(response.url()).pathname === pathname && response.request().method() === 'GET',
+        ),
+      ),
+    );
     await page.goto(`${baseURL}/groups/${ledger.groupB}?tab=balances`);
+    for (const response of await loaded) {
+      expect(response.status()).toBe(200);
+      await response.finished();
+    }
     const positions = page.getByText('Net positions', { exact: true }).locator('..');
     const amounts = positions.getByText(/₹100\.00/);
     await expect(amounts).toHaveCount(2);

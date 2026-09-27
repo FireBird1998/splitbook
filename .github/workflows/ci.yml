@@ -73,6 +73,16 @@ jobs:
           AUTH_GOOGLE_ID: test
           AUTH_GOOGLE_SECRET: test
 
+      - name: Upload authenticated test failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-test-failures
+          path: |
+            apps/web/output/playwright/expense-access/
+            apps/web/output/playwright/auth-recovery/
+          retention-days: 7
+
   playwright:
     runs-on: ubuntu-latest
 

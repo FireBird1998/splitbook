@@ -21,11 +21,26 @@ test('a lost create response preserves the draft and retries the same submission
     }
     return route.continue();
   });
+  // The real write must finish and the intercepted response must be lost before
+  // the UI can show its retryable error; the click alone does not await either.
+  const createPath = `/api/groups/${ledger.groupB}/expenses`;
+  const responseLost = page.waitForEvent(
+    'requestfailed',
+    (request) => new URL(request.url()).pathname === createPath && request.method() === 'POST',
+  );
   await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+  await responseLost;
   await expect(dialog.getByRole('alert')).toBeVisible();
   await expect(dialog.getByLabel('What was it for?')).toHaveValue('Lost response retry');
   await expect(dialog.getByLabel('Amount')).toHaveValue('101.01');
+  const retried = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === createPath && response.request().method() === 'POST',
+  );
   await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+  const created = await retried;
+  expect(created.status()).toBe(201);
+  await created.finished();
   await expect(dialog).toBeHidden();
   expect(keys).toHaveLength(2);
   expect(keys[0]).toBeTruthy();
