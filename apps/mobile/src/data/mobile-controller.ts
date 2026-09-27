@@ -1,6 +1,8 @@
 import { readSessionCookie, validSessionCookie } from './cookies';
 import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
+import { currentMonthKey, getLocalMonthIsoRange } from '@splitbook/shared/date';
+
 import {
   objectId,
   parseCreatedGroup,
@@ -25,21 +27,7 @@ import type {
   MobileSnapshot,
 } from './types';
 
-function monthDate(month: string): Date {
-  if (!/^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Choose a valid Month.');
-  const [year, number] = month.split('-').map(Number);
-  return new Date(year, number - 1, 1);
-}
-
-export function currentMonthKey(date = new Date()): string {
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-}
-
-export function shiftMonthKey(month: string, offset: number): string {
-  const date = monthDate(month);
-  date.setMonth(date.getMonth() + offset);
-  return currentMonthKey(date);
-}
+export { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
 
 function emptyFinancial(): GroupFinancialState {
   return {
@@ -731,10 +719,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (category === 'home') {
       params.set('includeMemberBreakdown', '1');
       if (month) {
-        const start = monthDate(month);
-        const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
-        params.set('dateFrom', start.toISOString());
-        params.set('dateTo', new Date(end.getTime() - 1).toISOString());
+        const { dateFrom, dateTo } = getLocalMonthIsoRange(month);
+        params.set('dateFrom', dateFrom);
+        params.set('dateTo', dateTo);
       }
     }
     return `/api/groups/${groupId}/expenses?${params}`;
@@ -747,7 +734,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.detail.data?.category !== 'home'
     )
       return;
-    if (month !== null) monthDate(month);
+    if (month !== null) getLocalMonthIsoRange(month);
     publish({ ...snapshot, financial: { ...snapshot.financial, month } });
     await refreshExpenses();
   };
@@ -767,117 +754,55 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
   };
 
-  const refreshExpenses = async () => {
+  const readExpenses = async (append: boolean) => {
     const group = snapshot.detail.data;
     if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'group' || !group) return;
-    const owner = generation;
-    const view = viewRequest;
-    const read = ++financialRequest;
-    beginExpenseRead();
-    publish({
-      ...snapshot,
-      financial: {
-        ...snapshot.financial,
-        expenses: { ...emptyFinancial().expenses, status: 'loading' },
-      },
-    });
-    try {
-      const page = parseExpensePage(
-        await request(expensePath(group.id, group.category, snapshot.financial.month, 1), owner),
-        group.id,
-        group.defaultCurrency,
-      );
-      if (!current(owner) || view !== viewRequest || read !== financialRequest) return;
-      if (page.pagination.page !== 1) throw new Error('Unexpected expense page.');
-      publish({
-        ...snapshot,
-        financial: {
-          ...snapshot.financial,
-          expenses: {
-            status: 'ready',
-            data: page.expenses,
-            summary: page.summary,
-            pagination: page.pagination,
-            message: null,
-            moreStatus: 'idle',
-            moreMessage: null,
-          },
-        },
-      });
-      await refreshBalances();
-    } catch (error) {
-      if (
-        !current(owner) ||
-        view !== viewRequest ||
-        read !== financialRequest ||
-        error instanceof Superseded
-      )
-        return;
-      if (dropDeniedGroup(group.id, error)) return;
-      publish({
-        ...snapshot,
-        financial: {
-          ...snapshot.financial,
-          balances: {
-            status: 'error',
-            data: null,
-            message: 'Could not update running balances. Please try again.',
-          },
-          expenses: {
-            ...emptyFinancial().expenses,
-            status: 'error',
-            message: 'Could not load expenses. Please try again.',
-          },
-        },
-      });
-    }
-  };
-
-  const loadMoreExpenses = async () => {
-    const group = snapshot.detail.data;
     const expenses = snapshot.financial.expenses;
     const pagination = expenses.pagination;
-    if (
-      snapshot.auth.status !== 'authenticated' ||
-      snapshot.screen !== 'group' ||
-      !group ||
-      expenses.status !== 'ready' ||
-      expenses.moreStatus === 'loading' ||
-      !pagination ||
-      pagination.page >= pagination.totalPages
-    )
-      return;
+    let pageNumber = 1;
+    if (append) {
+      if (
+        expenses.status !== 'ready' ||
+        expenses.moreStatus === 'loading' ||
+        !pagination ||
+        pagination.page >= pagination.totalPages
+      )
+        return;
+      pageNumber = pagination.page + 1;
+    }
     const owner = generation;
     const view = viewRequest;
     const read = ++financialRequest;
     beginExpenseRead();
-    const nextPage = pagination.page + 1;
     publish({
       ...snapshot,
       financial: {
         ...snapshot.financial,
-        expenses: { ...expenses, moreStatus: 'loading', moreMessage: null },
+        expenses: append
+          ? { ...expenses, moreStatus: 'loading', moreMessage: null }
+          : { ...emptyFinancial().expenses, status: 'loading' },
       },
     });
     try {
       const page = parseExpensePage(
         await request(
-          expensePath(group.id, group.category, snapshot.financial.month, nextPage),
+          expensePath(group.id, group.category, snapshot.financial.month, pageNumber),
           owner,
         ),
         group.id,
         group.defaultCurrency,
       );
       if (!current(owner) || view !== viewRequest || read !== financialRequest) return;
-      if (page.pagination.page !== nextPage) throw new Error('Unexpected expense page.');
-      const seen = new Set(expenses.data.map((expense) => expense.id));
+      if (page.pagination.page !== pageNumber) throw new Error('Unexpected expense page.');
+      const existing = append ? expenses.data : [];
+      const seen = new Set(existing.map((expense) => expense.id));
       publish({
         ...snapshot,
         financial: {
           ...snapshot.financial,
           expenses: {
             status: 'ready',
-            data: [...expenses.data, ...page.expenses.filter((expense) => !seen.has(expense.id))],
+            data: [...existing, ...page.expenses.filter((expense) => !seen.has(expense.id))],
             summary: page.summary,
             pagination: page.pagination,
             message: null,
@@ -905,15 +830,24 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             data: null,
             message: 'Could not update running balances. Please try again.',
           },
-          expenses: {
-            ...snapshot.financial.expenses,
-            moreStatus: 'error',
-            moreMessage: 'Could not load more expenses. Please try again.',
-          },
+          expenses: append
+            ? {
+                ...snapshot.financial.expenses,
+                moreStatus: 'error',
+                moreMessage: 'Could not load more expenses. Please try again.',
+              }
+            : {
+                ...emptyFinancial().expenses,
+                status: 'error',
+                message: 'Could not load expenses. Please try again.',
+              },
         },
       });
     }
   };
+
+  const refreshExpenses = () => readExpenses(false);
+  const loadMoreExpenses = () => readExpenses(true);
 
   const startCreate = () => {
     if (snapshot.auth.status !== 'authenticated') return;
@@ -1141,10 +1075,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({
       ...snapshot,
       screen: 'groups',
+      detail: { status: 'idle', id: null, data: null, message: null },
+      financial: emptyFinancial(),
       invitation: { code: null, status: 'idle', preview: null, message: null },
     });
     try {
       await savePending(null);
+      if (current(owner) && view === viewRequest) await refreshHome();
     } catch {
       if (!current(owner) || view !== viewRequest) return;
       publish({

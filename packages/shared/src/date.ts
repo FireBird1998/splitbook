@@ -96,3 +96,34 @@ const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 export function toInclusiveDateToBound(dateTo: string): Date {
   return DATE_ONLY_PATTERN.test(dateTo) ? new Date(`${dateTo}T23:59:59.999Z`) : new Date(dateTo);
 }
+
+function monthDate(month: string): Date {
+  if (!/^[1-9]\d{3}-(0[1-9]|1[0-2])$/.test(month)) throw new Error('Choose a valid Month.');
+  const [year, number] = month.split('-').map(Number);
+  return new Date(year, number - 1, 1);
+}
+
+/** The calendar Month containing a date in the device's local timezone. */
+export function currentMonthKey(date = new Date()): string {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Move a Month key by a number of calendar months, including across years. */
+export function shiftMonthKey(month: string, offset: number): string {
+  const date = monthDate(month);
+  date.setMonth(date.getMonth() + offset);
+  return currentMonthKey(date);
+}
+
+/**
+ * Inclusive ISO bounds for a local calendar Month. Construct both midnights in
+ * local time so the window follows calendar days across daylight-saving changes.
+ */
+export function getLocalMonthIsoRange(month: string): { dateFrom: string; dateTo: string } {
+  const start = monthDate(month);
+  const next = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+  return {
+    dateFrom: start.toISOString(),
+    dateTo: new Date(next.getTime() - 1).toISOString(),
+  };
+}

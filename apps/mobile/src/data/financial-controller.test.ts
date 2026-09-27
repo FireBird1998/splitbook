@@ -352,6 +352,34 @@ describe('native financial views', () => {
     expect(controller.getSnapshot().home).toMatchObject({ status: 'error', data: null });
   });
 
+  it('reloads Home after cancelling an invitation opened from a Group', async () => {
+    let owe = 0;
+    const { controller, calls } = setup((path) => {
+      if (path.includes('/expenses?')) owe = 30;
+      if (path === '/api/user/balances')
+        return json({
+          data: { buckets: [{ currency: 'INR', youOwe: owe, youAreOwed: 50 }] },
+          status: 200,
+        });
+    });
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    expect(controller.getSnapshot().home.status).toBe('idle');
+    await controller.openInvitation('https://wrong-origin.test/invalid');
+    await controller.cancelInvitation();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'groups',
+      home: { status: 'ready', data: [{ currency: 'INR', youOwe: 30, youAreOwed: 50 }] },
+      detail: { status: 'idle', id: null, data: null },
+      financial: {
+        groupId: null,
+        expenses: { status: 'idle', data: [], summary: null },
+        balances: { status: 'idle', data: null },
+      },
+    });
+    expect(calls.filter((path) => path === '/api/user/balances')).toHaveLength(2);
+  });
+
   it.each(['expenses', 'balances'])(
     'drops all protected Group information after a denied %s refresh',
     async (endpoint) => {

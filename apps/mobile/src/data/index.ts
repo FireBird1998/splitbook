@@ -1,4 +1,5 @@
-export { createMobileController, currentMonthKey, shiftMonthKey } from './mobile-controller';
+export { createMobileController } from './mobile-controller';
+export { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
 export type { MobileController } from './mobile-controller';
 export type {
   CredentialStore,

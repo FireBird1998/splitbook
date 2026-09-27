@@ -471,6 +471,35 @@ export function GroupFinancialViews({
                   No outstanding balances in {bucket.currency}.
                 </Copy>
               )}
+              {bucket.debts.length > 0 && (
+                <View
+                  style={{ gap: 14, borderTopWidth: 1, borderColor: theme.border, paddingTop: 16 }}
+                >
+                  <Label>WHO OWES WHOM</Label>
+                  {bucket.debts.map((debt, index) => (
+                    <View
+                      key={`${debt.from.id ?? 'former'}:${debt.to.id ?? 'former'}:${index}`}
+                      style={{ gap: 5 }}
+                    >
+                      <Copy style={{ fontFamily: fonts.medium }}>
+                        {debt.from.id === currentUserId ? 'You owe' : `${debt.from.name} owes`}{' '}
+                        {debt.to.id === currentUserId ? 'you' : debt.to.name}
+                      </Copy>
+                      <Amount
+                        value={debt.amount}
+                        currency={bucket.currency}
+                        tone={
+                          debt.from.id === currentUserId
+                            ? 'negative'
+                            : debt.to.id === currentUserId
+                              ? 'positive'
+                              : 'neutral'
+                        }
+                      />
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
           ))}
         {balances.status === 'ready' && balances.data?.length === 0 && (
