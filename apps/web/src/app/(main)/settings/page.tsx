@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
 import Paper from '@mui/material/Paper';
@@ -13,7 +13,8 @@ import Avatar from '@mui/material/Avatar';
 import CircularProgress from '@mui/material/CircularProgress';
 import Snackbar from '@mui/material/Snackbar';
 import LogoutIcon from '@mui/icons-material/Logout';
-import { CURRENCIES } from '@splitbook/shared/currency';
+import { CURRENCIES, CURRENCY_CODES } from '@splitbook/shared/currency';
+import { updateProfileSchema } from '@splitbook/shared/validators/profile';
 import { authClient, signOutToHome } from '@/lib/auth-client';
 
 export default function SettingsPage() {
@@ -22,33 +23,73 @@ export default function SettingsPage() {
   const [preferredCurrency, setPreferredCurrency] = useState('INR');
   const [loading, setLoading] = useState(false);
   const [snackbar, setSnackbar] = useState('');
+  const [error, setError] = useState('');
+  const [nameError, setNameError] = useState('');
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [profileLoadError, setProfileLoadError] = useState('');
+  const [profileLoadAttempt, setProfileLoadAttempt] = useState(0);
+  const edited = useRef({ name: false, currency: false });
 
   useEffect(() => {
+    const controller = new AbortController();
     async function loadProfile() {
-      const res = await fetch('/api/user/profile');
-      const data = await res.json();
-      if (data.data) {
-        setName(data.data.name || '');
-        setPreferredCurrency(data.data.preferredCurrency || 'INR');
+      try {
+        const res = await fetch('/api/user/profile', { signal: controller.signal });
+        const data = await res.json();
+        if (!res.ok || !data.data)
+          throw new Error('Could not load your profile. Please try again.');
+        if (controller.signal.aborted) return;
+        if (!edited.current.name) setName(data.data.name || '');
+        if (!edited.current.currency) {
+          setPreferredCurrency(
+            CURRENCY_CODES.includes(data.data.preferredCurrency)
+              ? data.data.preferredCurrency
+              : 'INR',
+          );
+        }
+        setProfileLoaded(true);
+      } catch {
+        if (!controller.signal.aborted) {
+          setProfileLoadError('Could not load your profile. Please try again.');
+        }
       }
     }
-    loadProfile();
-  }, []);
+    void loadProfile();
+    return () => controller.abort();
+  }, [profileLoadAttempt]);
 
   const handleSave = async () => {
+    if (!profileLoaded) return;
+    setError('');
+    setSnackbar('');
+    const parsed = updateProfileSchema.safeParse({ name, preferredCurrency });
+    if (!parsed.success) {
+      const firstError = parsed.error.issues[0];
+      if (firstError.path[0] === 'name') setNameError(firstError.message);
+      setError(firstError.message);
+      return;
+    }
+    setNameError('');
     setLoading(true);
     try {
       const res = await fetch('/api/user/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, preferredCurrency }),
+        body: JSON.stringify(parsed.data),
       });
-
-      if (res.ok) {
-        setSnackbar('Settings saved!');
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(
+          typeof data?.error === 'string'
+            ? data.error
+            : 'Failed to save settings. Please try again.',
+        );
+        return;
       }
+      setName(parsed.data.name ?? name);
+      setSnackbar('Settings saved!');
     } catch {
-      setSnackbar('Failed to save settings.');
+      setError('Failed to save settings. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -84,10 +125,32 @@ export default function SettingsPage() {
           </Stack>
 
           <Stack spacing={2}>
+            {(error || profileLoadError) && (
+              <Box role="alert" sx={{ color: 'status.negative' }}>
+                {error || profileLoadError}
+                {profileLoadError && (
+                  <Button
+                    onClick={() => {
+                      setProfileLoadError('');
+                      setProfileLoadAttempt((attempt) => attempt + 1);
+                    }}
+                  >
+                    Retry loading profile
+                  </Button>
+                )}
+              </Box>
+            )}
             <TextField
               label="Name"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                edited.current.name = true;
+                setName(e.target.value);
+                setNameError('');
+              }}
+              error={!!nameError}
+              helperText={nameError}
+              disabled={loading}
               fullWidth
               slotProps={{ htmlInput: { maxLength: 100 } }}
             />
@@ -96,18 +159,29 @@ export default function SettingsPage() {
               select
               label="Preferred Currency"
               value={preferredCurrency}
-              onChange={(e) => setPreferredCurrency(e.target.value)}
+              onChange={(e) => {
+                edited.current.currency = true;
+                setPreferredCurrency(e.target.value);
+              }}
+              disabled={loading}
               fullWidth
               helperText="Used as default when creating new groups"
             >
               {CURRENCIES.map((c) => (
-                <MenuItem key={c.code} value={c.code}>
+                <MenuItem
+                  key={c.code}
+                  value={c.code}
+                  onClick={() => {
+                    edited.current.currency = true;
+                    setPreferredCurrency(c.code);
+                  }}
+                >
                   {c.flag} {c.code} — {c.name}
                 </MenuItem>
               ))}
             </TextField>
 
-            <Button variant="contained" onClick={handleSave} disabled={loading}>
+            <Button variant="contained" onClick={handleSave} disabled={loading || !profileLoaded}>
               {loading ? <CircularProgress size={20} /> : 'Save Changes'}
             </Button>
           </Stack>
@@ -129,13 +203,14 @@ export default function SettingsPage() {
                 {session?.user?.email}
               </Typography>
             </Box>
-            <Typography variant="body2" color="success.main">
+            <Typography variant="body2" color="status.positive">
               ✓ Active session
             </Typography>
           </Stack>
           <Button
             variant="outlined"
             color="error"
+            sx={{ color: 'status.negative', borderColor: 'status.negative' }}
             startIcon={<LogoutIcon />}
             onClick={() => void signOutToHome()}
           >

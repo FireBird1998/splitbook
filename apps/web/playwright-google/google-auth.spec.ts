@@ -6,7 +6,6 @@ import {
 } from '../playwright.google.config';
 import { signTestIdToken } from '../src/lib/auth/test-id-token';
 
-const EXPECTED_REDIRECT_URI = 'http://localhost:3101/api/auth/callback/google';
 const GOOGLE_AUTHORIZE = 'https://accounts.google.com/o/oauth2/v2/auth';
 
 /**
@@ -120,6 +119,7 @@ test.describe('google auth mode', () => {
 
   test('Google sign-in redirects to Google OAuth with the configured client and callback', async ({
     page,
+    baseURL,
   }) => {
     let authorizeUrl: URL | null = null;
     await page.route('https://accounts.google.com/**', async (route) => {
@@ -141,7 +141,9 @@ test.describe('google auth mode', () => {
     const url = authorizeUrl as unknown as URL;
     expect(url.origin + url.pathname).toBe(GOOGLE_AUTHORIZE);
     expect(url.searchParams.get('client_id')).toBe(GOOGLE_MODE_CLIENT_ID);
-    expect(url.searchParams.get('redirect_uri')).toBe(EXPECTED_REDIRECT_URI);
+    expect(url.searchParams.get('redirect_uri')).toBe(
+      new URL('/api/auth/callback/google', baseURL).href,
+    );
     expect(url.searchParams.get('response_type')).toBe('code');
     expect(url.searchParams.get('scope')).toContain('openid');
     expect(url.searchParams.get('code_challenge_method')).toBe('S256');

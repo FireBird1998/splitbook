@@ -11,6 +11,7 @@ import {
 import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
 import { updateExpenseSchema } from '@splitbook/shared/validators/expense';
+import { requestRevision } from '@/lib/ledger-revision';
 
 const expenseValidationMessages: Record<string, string> = {
   INVALID_MEMBERS: 'All payers and split participants must be group members',
@@ -61,6 +62,7 @@ export async function PATCH(
     const expense = await expenseService.update(
       { actorId: user.id!, groupId: id, expenseId },
       parsed.data,
+      requestRevision(req),
     );
     if (!expense) return notFound('Expense');
 
@@ -86,10 +88,13 @@ export async function DELETE(
 
     const { id, expenseId } = await params;
 
-    const expense = await expenseService.delete({ actorId: user.id!, groupId: id, expenseId });
+    const expense = await expenseService.delete(
+      { actorId: user.id!, groupId: id, expenseId },
+      requestRevision(req),
+    );
     if (!expense) return notFound('Expense');
 
-    return success({ message: 'Expense deleted' });
+    return success({ message: 'Expense deleted', revision: expense.revision ?? 0 });
   } catch (err) {
     if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
     return serverError(err);

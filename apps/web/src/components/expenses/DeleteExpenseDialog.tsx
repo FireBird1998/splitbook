@@ -16,7 +16,7 @@ interface DeleteExpenseDialogProps {
   onClose: () => void;
   expense: Record<string, unknown> | null;
   groupId: string;
-  onDeleted: (expenseId: string) => void;
+  onDeleted: (expenseId: string, revision: number) => void;
 }
 
 export default function DeleteExpenseDialog({
@@ -38,6 +38,7 @@ export default function DeleteExpenseDialog({
     try {
       const res = await fetch(`/api/groups/${groupId}/expenses/${expense._id}`, {
         method: 'DELETE',
+        headers: { 'If-Match': String(expense.revision ?? 0) },
       });
 
       if (!res.ok) {
@@ -46,7 +47,8 @@ export default function DeleteExpenseDialog({
         return;
       }
 
-      onDeleted(expense._id as string);
+      const result = await res.json();
+      onDeleted(expense._id as string, result.data.revision);
       onClose();
     } catch {
       setError('Something went wrong.');
@@ -61,6 +63,7 @@ export default function DeleteExpenseDialog({
       <DialogContent>
         {error && (
           <Box
+            role="alert"
             sx={{
               bgcolor: (theme) => `${theme.palette.error.main}12`,
               color: 'error.main',

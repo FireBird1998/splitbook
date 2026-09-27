@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useEffectEvent, useCallback, useMemo, useRef } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -25,10 +25,24 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useSWRConfig } from 'swr';
 import { PREDEFINED_ITEMS } from '@splitbook/shared/predefined-items';
-import { getCurrency, formatCurrency } from '@splitbook/shared/currency';
+import { getCurrency, formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
+import {
+  normalizeExpenseMoney,
+  parseAmountMinor,
+  parseDecimalUnits,
+  sumMinorAmounts,
+  toMajorAmount,
+} from '@splitbook/shared/exact-money';
+import {
+  calculateSplitAmounts,
+  type SplitParticipantInput,
+  type ExpenseSplitMethod,
+} from '@splitbook/shared/split-calculation';
 import { buildDuplicateCheckUrl } from './expense-duplicate-check';
 import {
   getDefaultExpenseTag,
+  getStoredExpenseMoneyFields,
+  tagOptionValue,
   getSelectableExpenseTags,
   isAdvancedSplit,
   resolveExpenseCategory,
@@ -71,19 +85,31 @@ export default function ExpenseFormDialog({
   groupId,
   group,
   userId,
-  expense = null,
+  expense: initialExpense = null,
   defaultDate = null,
 }: ExpenseFormDialogProps) {
   const { mutate } = useSWRConfig();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [invalidStoredMoney, setInvalidStoredMoney] = useState(false);
+  const [reloadedExpense, setReloadedExpense] = useState<Record<string, unknown> | null>(null);
+  const expense =
+    reloadedExpense?._id === initialExpense?._id
+      ? (reloadedExpense ?? initialExpense)
+      : initialExpense;
+  const submission = useRef<{ payload: string; key: string; attempted: boolean } | null>(null);
+  const [conflict, setConflict] = useState(false);
+  useEffect(() => {
+    setReloadedExpense(null);
+    submission.current = null;
+    setConflict(false);
+  }, [open, initialExpense?._id]);
 
   const isEditMode = !!expense;
 
   const members = useMemo(() => (group.members || []) as Member[], [group.members]);
   const groupTags = useMemo(() => (group.tags || []) as GroupTagOption[], [group.tags]);
   const defaultCurrency = group.defaultCurrency as string;
-  const defaultCurrencyDetails = getCurrency(defaultCurrency);
   const groupNoun = getGroupTheme(group.category as GroupCategory).nouns.singular;
   const groupNounTitle = groupNoun.charAt(0).toUpperCase() + groupNoun.slice(1);
 
@@ -131,60 +157,82 @@ export default function ExpenseFormDialog({
     setShowSplitOptions(false);
     setShowMoreOptions(false);
     setError('');
+    setInvalidStoredMoney(false);
   }, [defaultCurrency, defaultDate, groupTags, members, userId]);
 
-  // Pre-fill form when editing
-  useEffect(() => {
-    if (!open) return;
-
+  // Read current defaults on initialization without subscribing the draft to
+  // background Group refreshes (Tag/member changes must not discard input).
+  const initializeForm = useEffectEvent(() => {
+    setError('');
+    setInvalidStoredMoney(false);
     if (expense) {
+      const expenseCurrency = (expense.currency as string) || defaultCurrency;
+      const expPayers = (expense.paidBy || []) as Array<{
+        user: { _id: string } | string;
+        amount?: number;
+        amountMinor?: number;
+      }>;
+      const expSplit = (expense.splitBetween || []) as Array<{
+        user: { _id: string } | string;
+        amount?: number;
+        amountMinor?: number;
+        percentage?: number;
+        shares?: number;
+      }>;
+      let moneyFields: ReturnType<typeof getStoredExpenseMoneyFields>;
+      try {
+        moneyFields = getStoredExpenseMoneyFields({
+          currency: expenseCurrency,
+          amount: expense.amount as number | undefined,
+          amountMinor: expense.amountMinor as number | undefined,
+          moneyVersion: expense.moneyVersion as number | undefined,
+          paidBy: expPayers,
+          splitBetween: expSplit,
+        });
+      } catch {
+        resetForm();
+        setDescription((expense.description as string) || '');
+        setInvalidStoredMoney(true);
+        setError('This expense contains invalid stored amounts and cannot be edited.');
+        return;
+      }
       setDescription((expense.description as string) || '');
-      setAmount(String(expense.amount || ''));
-      setCurrency(defaultCurrency);
+      setAmount(moneyFields.amount);
+      setCurrency(expenseCurrency);
       setCategory((expense.category as string) || 'other');
       const expDate = expense.date
         ? new Date(expense.date as string).toISOString().split('T')[0]
         : (defaultDate ?? new Date().toISOString().split('T')[0]);
       setDate(expDate);
       setSplitMethod((expense.splitMethod as string) || 'equal');
-      setTag((expense.tag as string) || '');
+      setTag((expense.tagId as string) || (expense.tag as string) || '');
       setNotes((expense.notes as string) || '');
 
       // Payers
-      const expPayers = (expense.paidBy || []) as Array<{
-        user: { _id: string } | string;
-        amount: number;
-      }>;
       if (expPayers.length > 1) {
         setMultiPayerMode(true);
         setPayers(
-          expPayers.map((p) => ({
+          expPayers.map((p, index) => ({
             user: typeof p.user === 'string' ? p.user : p.user._id,
-            amount: String(p.amount),
+            amount: moneyFields.paidBy[index],
           })),
         );
       } else if (expPayers.length === 1) {
         const payerUser =
           typeof expPayers[0].user === 'string' ? expPayers[0].user : expPayers[0].user._id;
-        setPayers([{ user: payerUser, amount: String(expPayers[0].amount) }]);
+        setPayers([{ user: payerUser, amount: moneyFields.paidBy[0] }]);
         setMultiPayerMode(false);
       }
 
       // Split between
-      const expSplit = (expense.splitBetween || []) as Array<{
-        user: { _id: string } | string;
-        amount: number;
-        percentage?: number;
-        shares?: number;
-      }>;
       setSelectedMembers(expSplit.map((s) => (typeof s.user === 'string' ? s.user : s.user._id)));
 
       const amounts: Record<string, string> = {};
       const percentages: Record<string, string> = {};
       const shares: Record<string, string> = {};
-      for (const s of expSplit) {
+      for (const [index, s] of expSplit.entries()) {
         const uid = typeof s.user === 'string' ? s.user : s.user._id;
-        amounts[uid] = String(s.amount || '');
+        amounts[uid] = moneyFields.splitBetween[index];
         if (s.percentage !== undefined) percentages[uid] = String(s.percentage);
         if (s.shares !== undefined) shares[uid] = String(s.shares);
       }
@@ -198,13 +246,16 @@ export default function ExpenseFormDialog({
     } else {
       resetForm();
     }
-  }, [expense, open, defaultCurrency, defaultDate, resetForm]);
+  });
+
+  useEffect(() => {
+    if (open) initializeForm();
+  }, [open, initialExpense?._id, reloadedExpense]);
 
   // ─── Derived Values ────────────────────────────────
   const parsedAmount = parseFloat(amount) || 0;
 
   // Equal split calculated amount per person
-  const equalPerPerson = selectedMembers.length > 0 ? parsedAmount / selectedMembers.length : 0;
 
   // Unequal totals
   const unequalTotal = selectedMembers.reduce(
@@ -217,6 +268,32 @@ export default function ExpenseFormDialog({
     (sum, id) => sum + (parseFloat(customPercentages[id]) || 0),
     0,
   );
+
+  const exactSum = (values: string[], precision: number) => {
+    try {
+      return sumMinorAmounts(values.map((value) => parseDecimalUnits(value || '0', precision)));
+    } catch {
+      return Number.NaN;
+    }
+  };
+  const amountMinor = exactSum([amount], getCurrencyPrecision(currency));
+  const unequalMinor = exactSum(
+    selectedMembers.map((id) => customAmounts[id]),
+    getCurrencyPrecision(currency),
+  );
+  const percentageUnits = exactSum(
+    selectedMembers.map((id) => customPercentages[id]),
+    2,
+  );
+  const payerMinor = multiPayerMode
+    ? exactSum(
+        payers.map((payer) => payer.amount),
+        getCurrencyPrecision(currency),
+      )
+    : amountMinor;
+  const splitsBalanced = amountMinor > 0 && unequalMinor === amountMinor;
+  const percentagesBalanced = percentageUnits === 10000;
+  const payersBalanced = amountMinor > 0 && payerMinor === amountMinor;
 
   // Shares total
   const sharesTotal = selectedMembers.reduce(
@@ -295,13 +372,13 @@ export default function ExpenseFormDialog({
   const getSplitValidationError = (): string => {
     if (selectedMembers.length === 0) return 'Select at least one member';
     if (splitMethod === 'unequal' || splitMethod === 'exact') {
-      if (parsedAmount > 0 && Math.abs(unequalTotal - parsedAmount) > 0.01) {
+      if (parsedAmount > 0 && !splitsBalanced) {
         return `Amounts must add up to ${formatCurrency(parsedAmount, currency)} (currently ${formatCurrency(unequalTotal, currency)})`;
       }
     }
     if (splitMethod === 'percentage') {
-      if (Math.abs(percentageTotal - 100) > 0.01) {
-        return `Percentages must add up to 100% (currently ${percentageTotal.toFixed(1)}%)`;
+      if (!percentagesBalanced) {
+        return `Percentages must add up to 100% (currently ${percentageTotal.toFixed(2)}%)`;
       }
     }
     if (splitMethod === 'shares') {
@@ -311,7 +388,7 @@ export default function ExpenseFormDialog({
   };
 
   const getPayerValidationError = (): string => {
-    if (multiPayerMode && parsedAmount > 0 && Math.abs(payerTotal - parsedAmount) > 0.01) {
+    if (multiPayerMode && parsedAmount > 0 && !payersBalanced) {
       return `Payer amounts must add up to ${formatCurrency(parsedAmount, currency)} (currently ${formatCurrency(payerTotal, currency)})`;
     }
     return '';
@@ -324,17 +401,17 @@ export default function ExpenseFormDialog({
       case 'exact':
         return selectedMembers.map((id) => ({
           user: id,
-          amount: parseFloat(customAmounts[id]) || 0,
+          amount: toMajorAmount(parseAmountMinor(customAmounts[id] || '0', currency), currency),
         }));
       case 'percentage':
         return selectedMembers.map((id) => ({
           user: id,
-          percentage: parseFloat(customPercentages[id]) || 0,
+          percentage: Number(customPercentages[id] || '0'),
         }));
       case 'shares':
         return selectedMembers.map((id) => ({
           user: id,
-          shares: parseInt(customShares[id]) || 1,
+          shares: Number(customShares[id] || '1'),
         }));
       case 'equal':
       default:
@@ -343,6 +420,7 @@ export default function ExpenseFormDialog({
   };
 
   const handleSubmit = async () => {
+    if (invalidStoredMoney) return;
     if (!description.trim() || !amount || parsedAmount <= 0) {
       setError('Please fill in description and a valid amount.');
       return;
@@ -368,61 +446,76 @@ export default function ExpenseFormDialog({
     setLoading(true);
     setError('');
 
-    const payload = {
-      description,
-      amount: parsedAmount,
-      currency: defaultCurrency,
-      category,
-      date,
-      paidBy: multiPayerMode
-        ? payers.map((p) => ({
-            user: p.user,
-            amount: parseFloat(p.amount) || 0,
-          }))
-        : [{ user: payers[0].user, amount: parsedAmount }],
-      splitMethod,
-      splitBetween: buildSplitBetween(),
-      tag,
-      notes,
-    };
-
     try {
-      try {
-        const duplicateRes = await fetch(
-          buildDuplicateCheckUrl({
-            groupId,
-            description: description.trim(),
-            amount: parsedAmount,
-            date,
-            excludeId: isEditMode ? String(expense!._id) : undefined,
-          }),
-        );
+      const money = normalizeExpenseMoney({
+        amount,
+        currency,
+        paidBy: multiPayerMode ? payers : [{ user: payers[0].user, amount }],
+        splitMethod: splitMethod as ExpenseSplitMethod,
+        splitBetween: buildSplitBetween(),
+      });
+      const payload = {
+        description,
+        ...money,
+        currency,
+        category,
+        date,
+        splitMethod,
+        ...(groupTags.some((option) => option._id === tag) || expense?.tagId === tag
+          ? { tagId: tag }
+          : { tag }),
+        notes,
+      };
 
-        if (duplicateRes.ok) {
-          const duplicateData = await duplicateRes.json();
-          if (duplicateData.data?.isDuplicate) {
-            const shouldContinue = window.confirm(
-              'This looks like a duplicate expense with the same description, amount, and date. Save it anyway?',
-            );
-            if (!shouldContinue) return;
+      const body = JSON.stringify(payload);
+      const retryingCreate =
+        !isEditMode && submission.current?.payload === body && submission.current.attempted;
+      if (submission.current?.payload !== body)
+        submission.current = { payload: body, key: crypto.randomUUID(), attempted: false };
+      if (!retryingCreate)
+        try {
+          const duplicateRes = await fetch(
+            buildDuplicateCheckUrl({
+              groupId,
+              description: description.trim(),
+              amount: parsedAmount,
+              date,
+              excludeId: isEditMode ? String(expense!._id) : undefined,
+            }),
+          );
+
+          if (duplicateRes.ok) {
+            const duplicateData = await duplicateRes.json();
+            if (duplicateData.data?.isDuplicate) {
+              const shouldContinue = window.confirm(
+                'This looks like a duplicate expense with the same description, amount, and date. Save it anyway?',
+              );
+              if (!shouldContinue) return;
+            }
           }
+        } catch (duplicateErr) {
+          console.warn('Duplicate expense check failed', duplicateErr);
         }
-      } catch (duplicateErr) {
-        console.warn('Duplicate expense check failed', duplicateErr);
-      }
 
       const url = isEditMode
         ? `/api/groups/${groupId}/expenses/${expense!._id}`
         : `/api/groups/${groupId}/expenses`;
 
+      submission.current.attempted = true;
       const res = await fetch(url, {
         method: isEditMode ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(isEditMode
+            ? { 'If-Match': String(expense?.revision ?? 0) }
+            : { 'Idempotency-Key': submission.current.key }),
+        },
+        body,
       });
 
       if (!res.ok) {
         const data = await res.json();
+        setConflict(res.status === 409 || res.status === 428);
         setError(data.error || `Failed to ${isEditMode ? 'update' : 'add'} expense`);
         return;
       }
@@ -430,10 +523,36 @@ export default function ExpenseFormDialog({
       mutate((key: unknown) => typeof key === 'string' && key.startsWith(`/api/groups/${groupId}`));
       resetForm();
       onClose();
-    } catch {
-      setError('Something went wrong. Please try again.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const previewAmount = (id: string): string => {
+    try {
+      const split = calculateSplitAmounts<SplitParticipantInput>(
+        splitMethod as ExpenseSplitMethod,
+        toMajorAmount(parseAmountMinor(amount, currency), currency),
+        buildSplitBetween(),
+        currency,
+      );
+      return formatCurrency(split.find((row) => row.user === id)?.amount ?? 0, currency);
+    } catch {
+      return '—';
+    }
+  };
+  const reloadLatest = async () => {
+    if (!expense) return;
+    try {
+      const response = await fetch(`/api/groups/${groupId}/expenses/${expense._id}`);
+      if (!response.ok) throw new Error('Could not reload this Expense.');
+      setReloadedExpense((await response.json()).data);
+      setConflict(false);
+      setError('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not reload');
     }
   };
 
@@ -456,6 +575,7 @@ export default function ExpenseFormDialog({
   const selectableTags = getSelectableExpenseTags(
     groupTags,
     isEditMode ? (expense?.tag as string | undefined) : null,
+    isEditMode ? (expense?.tagId as string | undefined) : null,
   );
 
   // ─── Render ────────────────────────────────────────
@@ -496,9 +616,10 @@ export default function ExpenseFormDialog({
         <Stack spacing={2.5} sx={{ pt: 1 }}>
           {error && (
             <Box
+              role="alert"
               sx={{
                 bgcolor: 'tint.negative',
-                color: 'error.main',
+                color: 'status.negative',
                 px: 2,
                 py: 1.5,
                 borderRadius: 2,
@@ -506,6 +627,7 @@ export default function ExpenseFormDialog({
               }}
             >
               {error}
+              {conflict && <Button onClick={() => void reloadLatest()}>Reload latest</Button>}
             </Box>
           )}
 
@@ -575,7 +697,12 @@ export default function ExpenseFormDialog({
                   fontWeight: 600,
                 }),
               }}
-              slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
+              slotProps={{
+                htmlInput: {
+                  min: 10 ** -getCurrencyPrecision(currency),
+                  step: 10 ** -getCurrencyPrecision(currency),
+                },
+              }}
             />
             <TextField
               select
@@ -583,11 +710,11 @@ export default function ExpenseFormDialog({
               value={currency}
               size="small"
               disabled
-              helperText={`${groupNounTitle} currency`}
+              helperText={isEditMode ? 'Expense currency' : `${groupNounTitle} currency`}
               sx={{ width: { xs: '100%', sm: 120 } }}
             >
-              <MenuItem value={defaultCurrency}>
-                {defaultCurrencyDetails?.flag} {defaultCurrency}
+              <MenuItem value={currency}>
+                {getCurrency(currency)?.flag} {currency}
               </MenuItem>
             </TextField>
             <TextField
@@ -619,10 +746,10 @@ export default function ExpenseFormDialog({
                   label={t.isArchived ? `${t.name} (archived)` : t.name}
                   size="small"
                   clickable
-                  color={tag === t.name ? 'primary' : 'default'}
-                  variant={tag === t.name ? 'filled' : 'outlined'}
-                  onClick={() => setTag(t.name)}
-                  aria-pressed={tag === t.name}
+                  color={tag === tagOptionValue(t) ? 'primary' : 'default'}
+                  variant={tag === tagOptionValue(t) ? 'filled' : 'outlined'}
+                  onClick={() => setTag(tagOptionValue(t))}
+                  aria-pressed={tag === tagOptionValue(t)}
                 />
               ))}
             </Stack>
@@ -751,7 +878,12 @@ export default function ExpenseFormDialog({
                           size="small"
                           placeholder="Amount"
                           sx={{ width: 120 }}
-                          slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
+                          slotProps={{
+                            htmlInput: {
+                              min: 10 ** -getCurrencyPrecision(currency),
+                              step: 10 ** -getCurrencyPrecision(currency),
+                            },
+                          }}
                         />
                         <IconButton
                           size="small"
@@ -772,15 +904,12 @@ export default function ExpenseFormDialog({
                       <Box
                         sx={{
                           fontSize: 12,
-                          color:
-                            Math.abs(payerTotal - parsedAmount) > 0.01
-                              ? 'error.main'
-                              : 'success.main',
+                          color: !payersBalanced ? 'status.negative' : 'status.positive',
                         }}
                       >
                         Total: {formatCurrency(payerTotal, currency)} /{' '}
                         {formatCurrency(parsedAmount, currency)}
-                        {Math.abs(payerTotal - parsedAmount) <= 0.01 && ' ✓'}
+                        {payersBalanced && ' ✓'}
                       </Box>
                     )}
                     <Stack direction="row" spacing={1}>
@@ -896,7 +1025,7 @@ export default function ExpenseFormDialog({
                               flexShrink: 0,
                             }}
                           >
-                            {formatCurrency(equalPerPerson, currency)}
+                            {previewAmount(id)}
                           </Box>
                         )}
 
@@ -913,7 +1042,9 @@ export default function ExpenseFormDialog({
                             size="small"
                             placeholder="0.00"
                             sx={{ width: 110 }}
-                            slotProps={{ htmlInput: { min: 0, step: 0.01 } }}
+                            slotProps={{
+                              htmlInput: { min: 0, step: 10 ** -getCurrencyPrecision(currency) },
+                            }}
                           />
                         )}
 
@@ -943,11 +1074,7 @@ export default function ExpenseFormDialog({
                             <Box sx={{ fontSize: 12, color: 'text.disabled' }}>%</Box>
                             {parsedAmount > 0 && (customPercentages[id] || 0) && (
                               <Box sx={{ fontSize: 12, color: 'text.disabled' }}>
-                                ={' '}
-                                {formatCurrency(
-                                  ((parseFloat(customPercentages[id]) || 0) / 100) * parsedAmount,
-                                  currency,
-                                )}
+                                = {previewAmount(id)}
                               </Box>
                             )}
                           </Stack>
@@ -977,11 +1104,7 @@ export default function ExpenseFormDialog({
                             <Box sx={{ fontSize: 12, color: 'text.disabled' }}>shares</Box>
                             {parsedAmount > 0 && sharesTotal > 0 && (
                               <Box sx={{ fontSize: 12, color: 'text.disabled' }}>
-                                ={' '}
-                                {formatCurrency(
-                                  (parseInt(customShares[id]) || 0) * perShareAmount,
-                                  currency,
-                                )}
+                                = {previewAmount(id)}
                               </Box>
                             )}
                           </Stack>
@@ -998,27 +1121,23 @@ export default function ExpenseFormDialog({
                       <Box
                         sx={{
                           fontSize: 12,
-                          color:
-                            Math.abs(unequalTotal - parsedAmount) > 0.01
-                              ? 'error.main'
-                              : 'success.main',
+                          color: !splitsBalanced ? 'status.negative' : 'status.positive',
                         }}
                       >
                         Total: {formatCurrency(unequalTotal, currency)} /{' '}
                         {formatCurrency(parsedAmount, currency)}
-                        {Math.abs(unequalTotal - parsedAmount) <= 0.01 && ' ✓'}
+                        {splitsBalanced && ' ✓'}
                       </Box>
                     )}
                     {splitMethod === 'percentage' && (
                       <Box
                         sx={{
                           fontSize: 12,
-                          color:
-                            Math.abs(percentageTotal - 100) > 0.01 ? 'error.main' : 'success.main',
+                          color: !percentagesBalanced ? 'status.negative' : 'status.positive',
                         }}
                       >
-                        Total: {percentageTotal.toFixed(1)}% / 100%
-                        {Math.abs(percentageTotal - 100) <= 0.01 && ' ✓'}
+                        Total: {percentageTotal.toFixed(2)}% / 100%
+                        {percentagesBalanced && ' ✓'}
                       </Box>
                     )}
                     {splitMethod === 'shares' && sharesTotal > 0 && (
@@ -1095,7 +1214,7 @@ export default function ExpenseFormDialog({
         <Button
           onClick={handleSubmit}
           variant="contained"
-          disabled={loading || !description.trim() || !amount || !tag}
+          disabled={loading || invalidStoredMoney || !description.trim() || !amount || !tag}
           sx={{
             minHeight: 40,
             textTransform: 'none',

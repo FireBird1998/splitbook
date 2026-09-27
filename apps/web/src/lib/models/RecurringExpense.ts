@@ -1,14 +1,23 @@
 import mongoose, { Schema, Model } from 'mongoose';
 import type { IExpensePayerDocument, IExpenseSplitDocument } from '@/lib/models/Expense';
+import {
+  MoneyValidationError,
+  readStoredAmountMinor,
+  sumMinorAmounts,
+} from '@splitbook/shared/exact-money';
 
 export interface IRecurringExpenseDocument {
   _id: mongoose.Types.ObjectId;
   group: mongoose.Types.ObjectId;
   description: string;
   amount: number;
+  amountMinor?: number;
+  moneyVersion?: number;
+  revision?: number;
   currency: string;
   category: string;
   tag: string;
+  tagId?: mongoose.Types.ObjectId | null;
   paidBy: IExpensePayerDocument[];
   splitMethod: 'equal' | 'unequal' | 'percentage' | 'shares' | 'exact';
   splitBetween: IExpenseSplitDocument[];
@@ -28,6 +37,7 @@ const RecurringPayerSchema = new Schema<IExpensePayerDocument>(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     amount: { type: Number, required: true, min: 0 },
+    amountMinor: { type: Number, min: 0, validate: Number.isSafeInteger },
   },
   { _id: false },
 );
@@ -36,6 +46,7 @@ const RecurringSplitSchema = new Schema<IExpenseSplitDocument>(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     amount: { type: Number, required: true, min: 0 },
+    amountMinor: { type: Number, min: 0, validate: Number.isSafeInteger },
     percentage: { type: Number },
     shares: { type: Number },
   },
@@ -53,9 +64,12 @@ const RecurringExpenseSchema = new Schema<IRecurringExpenseDocument>(
       maxlength: 200,
     },
     amount: { type: Number, required: true, min: 0.01, max: 10_000_000 },
+    amountMinor: { type: Number, min: 1, validate: Number.isSafeInteger },
+    moneyVersion: { type: Number, enum: [1] },
     currency: { type: String, required: true, trim: true },
     category: { type: String, default: 'other', trim: true },
     tag: { type: String, required: true, trim: true },
+    tagId: { type: Schema.Types.ObjectId, default: null },
     paidBy: {
       type: [RecurringPayerSchema],
       required: true,
@@ -86,9 +100,41 @@ const RecurringExpenseSchema = new Schema<IRecurringExpenseDocument>(
   },
   {
     timestamps: true,
+    versionKey: 'revision',
+    optimisticConcurrency: true,
   },
 );
 
+RecurringExpenseSchema.pre('validate', function () {
+  if (this.moneyVersion !== 1) return;
+  const amountMinor = readStoredAmountMinor(this);
+  for (const rows of [this.paidBy, this.splitBetween]) {
+    if (new Set(rows.map((row) => String(row.user))).size !== rows.length) {
+      throw new MoneyValidationError(
+        'DUPLICATE_PARTICIPANTS',
+        'Each participant may appear only once',
+      );
+    }
+    const total = sumMinorAmounts(
+      rows.map((row) =>
+        readStoredAmountMinor({
+          amount: row.amount,
+          amountMinor: row.amountMinor,
+          currency: this.currency,
+          moneyVersion: 1,
+        }),
+      ),
+    );
+    if (total !== amountMinor) {
+      throw new MoneyValidationError(
+        'UNBALANCED_TEMPLATE',
+        'Recurring allocations must equal the amount',
+      );
+    }
+  }
+});
+
+RecurringExpenseSchema.index({ group: 1, tagId: 1 });
 RecurringExpenseSchema.index({ group: 1 });
 
 // In development, Mongoose models persist across hot reloads but schema changes

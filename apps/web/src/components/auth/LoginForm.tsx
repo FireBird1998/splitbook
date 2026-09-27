@@ -9,7 +9,7 @@ import GoogleIcon from '@mui/icons-material/Google';
 import BrandMark from '@/components/layout/BrandMark';
 import { EMAIL_NOT_ALLOWED } from '@/lib/auth/allowlist';
 import { resolveCallbackUrl } from '@/lib/auth/callback-url';
-import { signInWithGoogle } from '@/lib/auth-client';
+import { GOOGLE_SIGN_IN_FAILED, signInWithGoogle } from '@/lib/auth-client';
 import { PRODUCT_NAME } from '@/lib/product';
 
 /** Google sign-in; demo mode renders the persona picker instead (see the login page). */
@@ -53,9 +53,10 @@ export default function LoginForm() {
 
         {error && (
           <Box
+            role="alert"
             sx={{
               bgcolor: (theme) => `${theme.palette.error.main}12`,
-              color: 'error.main',
+              color: 'status.negative',
               px: 2,
               py: 1.5,
               borderRadius: 2,
@@ -72,6 +73,8 @@ export default function LoginForm() {
                   Ask the owner to add your Google email to the beta.
                 </Typography>
               </Stack>
+            ) : error === GOOGLE_SIGN_IN_FAILED ? (
+              'Google sign-in could not start. Please try again.'
             ) : (
               'Something went wrong. Please try again.'
             )}

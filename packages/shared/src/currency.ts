@@ -40,17 +40,24 @@ export const CURRENCIES: Currency[] = [
 
 export const CURRENCY_CODES = CURRENCIES.map((c) => c.code);
 
+/** Precision for the supported ISO currencies. Version-1 ledger money uses this registry. */
+export function getCurrencyPrecision(code: string): number {
+  if (!CURRENCY_CODES.includes(code)) throw new Error('INVALID_CURRENCY');
+  return code === 'JPY' || code === 'KRW' ? 0 : 2;
+}
+
 export function getCurrency(code: string): Currency | undefined {
   return CURRENCIES.find((c) => c.code === code);
 }
 
 export function formatCurrency(amount: number, currencyCode: string): string {
+  const precision = CURRENCY_CODES.includes(currencyCode) ? getCurrencyPrecision(currencyCode) : 2;
   try {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currencyCode,
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+      minimumFractionDigits: precision,
+      maximumFractionDigits: precision,
     }).format(amount);
   } catch {
     return `${currencyCode} ${amount.toFixed(2)}`;

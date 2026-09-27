@@ -24,6 +24,7 @@ export interface IGroupTag {
   _id: string;
   name: string;
   isArchived: boolean;
+  isDeleted?: boolean;
   createdAt: Date;
 }
 
@@ -53,11 +54,13 @@ export type SplitMethod = 'equal' | 'unequal' | 'percentage' | 'shares' | 'exact
 export interface IExpensePayer {
   user: string | IUser;
   amount: number;
+  amountMinor?: number;
 }
 
 export interface IExpenseSplit {
   user: string | IUser;
   amount: number;
+  amountMinor?: number;
   percentage?: number;
   shares?: number;
 }
@@ -73,13 +76,17 @@ export interface IExpense {
   group: string | IGroup;
   description: string;
   amount: number;
+  amountMinor?: number;
   currency: string;
+  moneyVersion?: number;
+  revision?: number;
   category: string;
   date: Date;
   paidBy: IExpensePayer[];
   splitMethod: SplitMethod;
   splitBetween: IExpenseSplit[];
   tag: string;
+  tagId?: string;
   predefinedItem?: string | null;
   receiptUrl?: string | null;
   notes?: string;
@@ -102,9 +109,13 @@ export interface IRecurringExpense {
   group: string | IGroup;
   description: string;
   amount: number;
+  amountMinor?: number;
   currency: string;
+  moneyVersion?: number;
+  revision?: number;
   category: string;
   tag: string;
+  tagId?: string;
   paidBy: IExpensePayer[];
   splitMethod: SplitMethod;
   splitBetween: IExpenseSplit[];
@@ -127,7 +138,9 @@ export interface ISettlement {
   paidBy: string | IUser;
   paidTo: string | IUser;
   amount: number;
+  amountMinor?: number;
   currency: string;
+  moneyVersion?: number;
   note?: string;
   createdBy: string | IUser;
   createdAt: Date;
@@ -195,6 +208,7 @@ export interface ExpenseFilters {
   dateTo?: string;
   category?: string;
   tag?: string;
+  tagId?: string;
   search?: string;
   paidByUser?: string;
   owedByUser?: string;
@@ -236,6 +250,7 @@ export interface Debt {
   from: IUser;
   to: IUser;
   amount: number;
+  amountMinor?: number;
 }
 
 export interface GroupBalanceResponse {
@@ -249,6 +264,7 @@ export interface DashboardSettlement {
   counterpartyId: string;
   counterpartyName: string;
   amount: number;
+  amountMinor?: number;
 }
 
 export interface DashboardBalanceAmount {
@@ -288,6 +304,7 @@ export type DashboardNextAction =
       groupId: string;
       counterpartyName: string;
       amount: number;
+      amountMinor?: number;
       currency: string;
     }
   | {

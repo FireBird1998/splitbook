@@ -40,9 +40,11 @@ describe('BalanceService', () => {
 
   it('flags balances that include expenses or settlements outside the group default currency', async () => {
     vi.mocked(Expense.find).mockReturnValue({
+      select: vi.fn().mockReturnThis(),
       lean: vi.fn().mockResolvedValue([
         {
           currency: 'EUR',
+          amount: 20,
           paidBy: [{ user: objectId('user-1'), amount: 20 }],
           splitBetween: [{ user: objectId('user-2'), amount: 20 }],
         },
@@ -50,6 +52,7 @@ describe('BalanceService', () => {
     } as unknown as ReturnType<typeof Expense.find>);
 
     vi.mocked(Settlement.find).mockReturnValue({
+      select: vi.fn().mockReturnThis(),
       lean: vi.fn().mockResolvedValue([
         {
           currency: 'USD',
@@ -62,6 +65,7 @@ describe('BalanceService', () => {
 
     vi.mocked(Group.findById).mockReturnValue({
       populate: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
       lean: vi.fn().mockResolvedValue({
         defaultCurrency: 'USD',
         members: [
@@ -80,6 +84,7 @@ describe('BalanceService', () => {
   it('keeps a user balance separated by transaction currency across groups', async () => {
     vi.mocked(Group.find).mockReturnValue({
       populate: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
       lean: vi.fn().mockResolvedValue([
         {
           _id: objectId('group-1'),
@@ -104,16 +109,19 @@ describe('BalanceService', () => {
     } as unknown as ReturnType<typeof Group.find>);
 
     vi.mocked(Expense.find).mockReturnValue({
+      select: vi.fn().mockReturnThis(),
       lean: vi.fn().mockResolvedValue([
         {
           group: objectId('group-1'),
           currency: 'EUR',
+          amount: 30,
           paidBy: [{ user: objectId('user-1'), amount: 30 }],
           splitBetween: [{ user: objectId('user-2'), amount: 30 }],
         },
         {
           group: objectId('group-1'),
           currency: 'USD',
+          amount: 10,
           paidBy: [{ user: objectId('user-2'), amount: 10 }],
           splitBetween: [{ user: objectId('user-1'), amount: 10 }],
         },
@@ -121,6 +129,7 @@ describe('BalanceService', () => {
     } as unknown as ReturnType<typeof Expense.find>);
 
     vi.mocked(Settlement.find).mockReturnValue({
+      select: vi.fn().mockReturnThis(),
       lean: vi.fn().mockResolvedValue([]),
     } as unknown as ReturnType<typeof Settlement.find>);
 
@@ -176,6 +185,7 @@ describe('BalanceService', () => {
   it('does not flag a single non-default currency as mixed', async () => {
     vi.mocked(Group.find).mockReturnValue({
       populate: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
       lean: vi.fn().mockResolvedValue([
         {
           _id: objectId('group-1'),
@@ -192,10 +202,12 @@ describe('BalanceService', () => {
     } as unknown as ReturnType<typeof Group.find>);
 
     vi.mocked(Expense.find).mockReturnValue({
+      select: vi.fn().mockReturnThis(),
       lean: vi.fn().mockResolvedValue([
         {
           group: objectId('group-1'),
           currency: 'EUR',
+          amount: 12,
           paidBy: [{ user: objectId('user-1'), amount: 12 }],
           splitBetween: [{ user: objectId('user-2'), amount: 12 }],
         },
@@ -203,6 +215,7 @@ describe('BalanceService', () => {
     } as unknown as ReturnType<typeof Expense.find>);
 
     vi.mocked(Settlement.find).mockReturnValue({
+      select: vi.fn().mockReturnThis(),
       lean: vi.fn().mockResolvedValue([]),
     } as unknown as ReturnType<typeof Settlement.find>);
 

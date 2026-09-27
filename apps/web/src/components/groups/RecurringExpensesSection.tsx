@@ -23,6 +23,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import InputAdornment from '@mui/material/InputAdornment';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Checkbox from '@mui/material/Checkbox';
+import Alert from '@mui/material/Alert';
 import AddIcon from '@mui/icons-material/Add';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import EditIcon from '@mui/icons-material/Edit';
@@ -34,7 +35,20 @@ import MoneyText from '@/components/common/MoneyText';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import { formatDate } from '@splitbook/shared/date';
 import { fetcher } from '@/lib/utils/fetcher';
+import { displayTagReference, findReferencedTag } from '@splitbook/shared/tag-identity';
+import {
+  getStoredExpenseMoneyFields,
+  getSelectableExpenseTags,
+  tagOptionValue,
+} from '@/components/expenses/expense-form-helpers';
 import type { IRecurringExpense, SplitMethod } from '@splitbook/shared/types';
+import { formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
+import {
+  assertStoredExpenseMoney,
+  normalizeExpenseMoney,
+  parseAmountMinor,
+  toMajorAmount,
+} from '@splitbook/shared/exact-money';
 
 interface MemberLike {
   user: { _id: string; name: string; image?: string };
@@ -45,6 +59,7 @@ interface TagLike {
   _id: string;
   name: string;
   isArchived: boolean;
+  isDeleted?: boolean;
 }
 
 interface RecurringExpensesSectionProps {
@@ -98,7 +113,7 @@ function emptyForm(members: MemberLike[], activeTags: TagLike[]): FormState {
     description: '',
     amount: '',
     category: 'other',
-    tag: activeTags[0]?.name ?? 'General',
+    tag: activeTags[0]?._id ?? '',
     paidByUser: members[0]?.user._id ?? '',
     splitMethod: 'equal',
     splits,
@@ -110,26 +125,36 @@ function emptyForm(members: MemberLike[], activeTags: TagLike[]): FormState {
 
 function formFromTemplate(template: IRecurringExpense, members: MemberLike[]): FormState {
   const base = emptyForm(members, []);
+  let storedMoney: ReturnType<typeof getStoredExpenseMoneyFields> | undefined;
+  try {
+    storedMoney = getStoredExpenseMoneyFields(template);
+  } catch {
+    // Invalid saved values remain visible for review; the problem badge explains
+    // why generation is stopped instead of silently repairing financial data.
+  }
   const payer = template.paidBy[0];
   const payerId = typeof payer?.user === 'object' ? payer.user._id : (payer?.user as string);
   const splits: Record<string, SplitDraft> = { ...base.splits };
   for (const member of members) {
-    const split = template.splitBetween.find((s) => {
+    const splitIndex = template.splitBetween.findIndex((s) => {
       const id = typeof s.user === 'object' ? s.user._id : (s.user as string);
       return String(id) === member.user._id;
     });
+    const split = template.splitBetween[splitIndex];
     splits[member.user._id] = {
       included: !!split,
-      amount: split?.amount != null ? String(split.amount) : '',
+      amount:
+        storedMoney?.splitBetween[splitIndex] ??
+        (split?.amount != null ? String(split.amount) : ''),
       percentage: split?.percentage != null ? String(split.percentage) : '',
       shares: split?.shares != null ? String(split.shares) : '1',
     };
   }
   return {
     description: template.description,
-    amount: String(template.amount),
+    amount: storedMoney?.amount ?? String(template.amount),
     category: template.category || 'other',
-    tag: template.tag,
+    tag: template.tagId ?? template.tag,
     paidByUser: payerId ? String(payerId) : base.paidByUser,
     splitMethod: template.splitMethod,
     splits,
@@ -149,8 +174,7 @@ export default function RecurringExpensesSection({
   const { data, mutate } = useSWR(`/api/groups/${groupId}/recurring`, fetcher);
   const templates = (data?.data ?? []) as IRecurringExpense[];
 
-  const activeTags = useMemo(() => tags.filter((tag) => !tag.isArchived), [tags]);
-  const activeTagNames = useMemo(() => new Set(activeTags.map((tag) => tag.name)), [activeTags]);
+  const activeTags = useMemo(() => tags.filter((tag) => !tag.isArchived && !tag.isDeleted), [tags]);
   const memberIds = useMemo(() => new Set(members.map((m) => m.user._id)), [members]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -158,11 +182,15 @@ export default function RecurringExpensesSection({
   const [form, setForm] = useState<FormState>(() => emptyForm(members, activeTags));
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
+  const [formConflict, setFormConflict] = useState(false);
 
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [selected, setSelected] = useState<IRecurringExpense | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [actionConflict, setActionConflict] = useState(false);
+  const precision = getCurrencyPrecision(defaultCurrency);
 
   const memberName = (id: string) =>
     members.find((m) => m.user._id === id)?.user.name ?? 'Former member';
@@ -170,7 +198,8 @@ export default function RecurringExpensesSection({
   /** A template whose tag or participants no longer match group state stops
    *  generating — surface that here instead of failing silently. */
   const problemFor = (template: IRecurringExpense): string | null => {
-    if (!activeTagNames.has(template.tag)) {
+    const tag = findReferencedTag(tags, template);
+    if (!tag || tag.isArchived || tag.isDeleted) {
       return `Tag "${template.tag}" is archived or deleted — not generating`;
     }
     const participantIds = [...template.paidBy, ...template.splitBetween].map((p) =>
@@ -179,6 +208,11 @@ export default function RecurringExpensesSection({
     if (participantIds.some((id) => !memberIds.has(id))) {
       return 'A payer or split member is no longer in the group — not generating';
     }
+    try {
+      assertStoredExpenseMoney(template);
+    } catch {
+      return 'Amounts need review — not generating';
+    }
     return null;
   };
 
@@ -186,6 +220,7 @@ export default function RecurringExpensesSection({
     setEditing(null);
     setForm(emptyForm(members, activeTags));
     setFormError('');
+    setFormConflict(false);
     setDialogOpen(true);
   };
 
@@ -193,6 +228,7 @@ export default function RecurringExpensesSection({
     setEditing(template);
     setForm(formFromTemplate(template, members));
     setFormError('');
+    setFormConflict(false);
     setDialogOpen(true);
   };
 
@@ -205,25 +241,14 @@ export default function RecurringExpensesSection({
 
   const validateForm = (): string | null => {
     if (!form.description.trim()) return 'Description is required';
-    const amount = Number(form.amount);
-    if (!Number.isFinite(amount) || amount <= 0) return 'Amount must be positive';
     if (!form.tag) return 'Tag is required';
     if (!form.paidByUser) return 'Choose who pays';
     const included = members.filter((m) => form.splits[m.user._id]?.included);
     if (included.length === 0) return 'Include at least one person in the split';
-    if (form.splitMethod === 'percentage') {
-      const total = included.reduce(
-        (sum, m) => sum + (Number(form.splits[m.user._id].percentage) || 0),
-        0,
-      );
-      if (Math.abs(total - 100) > 0.01) return 'Percentages must add up to 100';
-    }
-    if (form.splitMethod === 'exact' || form.splitMethod === 'unequal') {
-      const total = included.reduce(
-        (sum, m) => sum + (Number(form.splits[m.user._id].amount) || 0),
-        0,
-      );
-      if (Math.abs(total - amount) > 0.01) return 'Exact amounts must add up to the total';
+    try {
+      normalizeExpenseMoney(buildPayload());
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Check the amount and split';
     }
     const day = Number(form.dayOfMonth);
     if (!Number.isInteger(day) || day < 1 || day > 31) return 'Day of month must be 1–31';
@@ -234,7 +259,7 @@ export default function RecurringExpensesSection({
   };
 
   const buildPayload = () => {
-    const amount = Number(form.amount);
+    const amount = toMajorAmount(parseAmountMinor(form.amount, defaultCurrency), defaultCurrency);
     const included = members.filter((m) => form.splits[m.user._id]?.included);
     const splitBetween = included.map((m) => {
       const draft = form.splits[m.user._id];
@@ -242,7 +267,10 @@ export default function RecurringExpensesSection({
         user: m.user._id,
       };
       if (form.splitMethod === 'exact' || form.splitMethod === 'unequal') {
-        entry.amount = Number(draft.amount) || 0;
+        entry.amount = toMajorAmount(
+          parseAmountMinor(draft.amount, defaultCurrency),
+          defaultCurrency,
+        );
       } else if (form.splitMethod === 'percentage') {
         entry.percentage = Number(draft.percentage) || 0;
       } else if (form.splitMethod === 'shares') {
@@ -255,7 +283,9 @@ export default function RecurringExpensesSection({
       amount,
       currency: defaultCurrency,
       category: form.category,
-      tag: form.tag,
+      ...(tags.some((tag) => tag._id === form.tag) || editing?.tagId === form.tag
+        ? { tagId: form.tag }
+        : { tag: form.tag }),
       paidBy: [{ user: form.paidByUser, amount }],
       splitMethod: form.splitMethod,
       splitBetween,
@@ -263,6 +293,81 @@ export default function RecurringExpensesSection({
       startsOn: form.startsOn,
       endsOn: form.endsOn || null,
     };
+  };
+
+  const splitPreview = (() => {
+    try {
+      const payload = buildPayload();
+      const preview = normalizeExpenseMoney(payload);
+      // An unchanged definition retains a legacy template's existing allocation.
+      // This matches the service's metadata-only edit behavior.
+      if (editing) {
+        const original = formFromTemplate(editing, members);
+        const definition = (value: FormState) => ({
+          amount: Number(value.amount),
+          payer: value.paidByUser,
+          method: value.splitMethod,
+          splits: members
+            .filter((member) => value.splits[member.user._id]?.included)
+            .map((member) => {
+              const draft = value.splits[member.user._id];
+              return {
+                user: member.user._id,
+                value:
+                  value.splitMethod === 'exact' || value.splitMethod === 'unequal'
+                    ? Number(draft.amount)
+                    : value.splitMethod === 'percentage'
+                      ? Number(draft.percentage)
+                      : value.splitMethod === 'shares'
+                        ? Number(draft.shares)
+                        : 1,
+              };
+            }),
+        });
+        if (JSON.stringify(definition(form)) === JSON.stringify(definition(original))) {
+          const fields = getStoredExpenseMoneyFields(editing);
+          return editing.splitBetween.map((split, index) => ({
+            ...split,
+            amount: Number(fields.splitBetween[index]),
+          }));
+        }
+      }
+      return preview.splitBetween;
+    } catch {
+      return [];
+    }
+  })();
+
+  const reloadLatest = async (target: 'form' | 'action') => {
+    const id = target === 'form' ? editing?._id : selected?._id;
+    if (!id) return;
+    if (target === 'form') setSaving(true);
+    else setActionLoading(true);
+    try {
+      const refreshed = await mutate();
+      const latest = (refreshed?.data as IRecurringExpense[] | undefined)?.find(
+        (item) => item._id === id,
+      );
+      if (!latest)
+        throw new Error('This recurring expense was deleted. Close this dialog to continue.');
+      if (target === 'form') {
+        setEditing(latest);
+        setForm(formFromTemplate(latest, members));
+        setFormError('');
+        setFormConflict(false);
+      } else {
+        setSelected(latest);
+        setActionError('');
+        setActionConflict(false);
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Could not load the latest version';
+      if (target === 'form') setFormError(message);
+      else setActionError(message);
+    } finally {
+      setSaving(false);
+      setActionLoading(false);
+    }
   };
 
   const handleSave = async () => {
@@ -279,20 +384,24 @@ export default function RecurringExpensesSection({
         : `/api/groups/${groupId}/recurring`;
       const res = await fetch(url, {
         method: editing ? 'PATCH' : 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(editing ? { 'If-Match': String(editing.revision ?? 0) } : {}),
+        },
         body: JSON.stringify(buildPayload()),
       });
       const json = await res.json();
       if (!res.ok) {
         setFormError(json.error || 'Failed to save');
+        setFormConflict(res.status === 409 || res.status === 428);
         return;
       }
       mutate();
       setDialogOpen(false);
       setEditing(null);
       onNotify(editing ? 'Recurring expense updated' : 'Recurring expense added');
-    } catch {
-      setFormError('Failed to save');
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setSaving(false);
     }
@@ -301,10 +410,12 @@ export default function RecurringExpensesSection({
   const handleTogglePause = async () => {
     if (!selected) return;
     setActionLoading(true);
+    setActionError('');
+    setActionConflict(false);
     try {
       const res = await fetch(`/api/groups/${groupId}/recurring/${selected._id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'If-Match': String(selected.revision ?? 0) },
         body: JSON.stringify({ isPaused: !selected.isPaused }),
       });
       if (res.ok) {
@@ -312,7 +423,8 @@ export default function RecurringExpensesSection({
         onNotify(selected.isPaused ? 'Recurring expense resumed' : 'Recurring expense paused');
       } else {
         const json = await res.json();
-        onNotify(json.error || 'Failed to update');
+        setActionError(json.error || 'Failed to update');
+        setActionConflict(res.status === 409 || res.status === 428);
       }
     } catch {
       onNotify('Failed to update');
@@ -325,23 +437,27 @@ export default function RecurringExpensesSection({
   const handleDelete = async () => {
     if (!selected) return;
     setActionLoading(true);
+    setActionError('');
+    setActionConflict(false);
     try {
       const res = await fetch(`/api/groups/${groupId}/recurring/${selected._id}`, {
         method: 'DELETE',
+        headers: { 'If-Match': String(selected.revision ?? 0) },
       });
       if (res.ok) {
         mutate();
         onNotify('Recurring expense deleted');
         setDeleteDialogOpen(false);
+        setSelected(null);
       } else {
         const json = await res.json();
-        onNotify(json.error || 'Failed to delete');
+        setActionError(json.error || 'Failed to delete');
+        setActionConflict(res.status === 409 || res.status === 428);
       }
     } catch {
       onNotify('Failed to delete');
     } finally {
       setActionLoading(false);
-      setSelected(null);
     }
   };
 
@@ -389,6 +505,26 @@ export default function RecurringExpensesSection({
         </Button>
       </Stack>
 
+      {actionError && !deleteDialogOpen && (
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          action={
+            actionConflict ? (
+              <Button
+                color="inherit"
+                disabled={actionLoading}
+                onClick={() => reloadLatest('action')}
+              >
+                Reload latest
+              </Button>
+            ) : undefined
+          }
+        >
+          {actionError}
+        </Alert>
+      )}
+
       {templates.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 3, color: 'text.disabled' }}>
           <AutorenewIcon sx={{ fontSize: 40, mb: 1, opacity: 0.4 }} />
@@ -432,7 +568,7 @@ export default function RecurringExpensesSection({
                         fontWeight={600}
                       />
                       <Chip
-                        label={template.tag}
+                        label={displayTagReference(tags, template).tag}
                         size="small"
                         variant="outlined"
                         sx={{ fontSize: 10, height: 20 }}
@@ -550,7 +686,7 @@ export default function RecurringExpensesSection({
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
               <TextField
                 label="Amount"
-                type="number"
+                type="text"
                 value={form.amount}
                 onChange={(e) => setForm({ ...form, amount: e.target.value })}
                 fullWidth
@@ -561,8 +697,13 @@ export default function RecurringExpensesSection({
                       <InputAdornment position="start">{defaultCurrency}</InputAdornment>
                     ),
                   },
-                  htmlInput: { min: 0, step: '0.01' },
+                  htmlInput: { inputMode: precision === 0 ? 'numeric' : 'decimal' },
                 }}
+                helperText={
+                  precision === 0
+                    ? `${defaultCurrency} uses whole amounts`
+                    : `Up to ${precision} decimal places`
+                }
               />
               <TextField
                 select
@@ -588,8 +729,8 @@ export default function RecurringExpensesSection({
                 fullWidth
                 size="small"
               >
-                {activeTags.map((tag) => (
-                  <MenuItem key={tag._id} value={tag.name}>
+                {getSelectableExpenseTags(tags, editing?.tag, editing?.tagId).map((tag) => (
+                  <MenuItem key={tagOptionValue(tag)} value={tagOptionValue(tag)}>
                     {tag.name}
                   </MenuItem>
                 ))}
@@ -660,13 +801,15 @@ export default function RecurringExpensesSection({
                       {draft.included &&
                         (form.splitMethod === 'exact' || form.splitMethod === 'unequal') && (
                           <TextField
-                            type="number"
+                            type="text"
                             size="small"
                             label="Amount"
                             value={draft.amount}
                             onChange={(e) => setSplit(member.user._id, { amount: e.target.value })}
                             sx={{ width: 120 }}
-                            slotProps={{ htmlInput: { min: 0, step: '0.01' } }}
+                            slotProps={{
+                              htmlInput: { inputMode: precision === 0 ? 'numeric' : 'decimal' },
+                            }}
                           />
                         )}
                       {draft.included && form.splitMethod === 'percentage' && (
@@ -697,6 +840,19 @@ export default function RecurringExpensesSection({
                   );
                 })}
               </Stack>
+              {splitPreview.length > 0 && (
+                <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1 }}>
+                  {splitPreview
+                    .map((split) => {
+                      const id =
+                        typeof split.user === 'object' && split.user !== null && '_id' in split.user
+                          ? String(split.user._id)
+                          : String(split.user);
+                      return `${memberName(id)}: ${formatCurrency(split.amount, defaultCurrency)}`;
+                    })
+                    .join(' · ')}
+                </Typography>
+              )}
             </Box>
 
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
@@ -731,9 +887,18 @@ export default function RecurringExpensesSection({
             </Stack>
 
             {formError && (
-              <Typography variant="body2" color="error.main">
+              <Alert
+                severity="error"
+                action={
+                  formConflict ? (
+                    <Button color="inherit" disabled={saving} onClick={() => reloadLatest('form')}>
+                      Reload latest
+                    </Button>
+                  ) : undefined
+                }
+              >
                 {formError}
-              </Typography>
+              </Alert>
             )}
           </Stack>
         </DialogContent>
@@ -748,7 +913,7 @@ export default function RecurringExpensesSection({
           >
             Cancel
           </Button>
-          <Button variant="contained" onClick={handleSave} disabled={saving}>
+          <Button variant="contained" onClick={handleSave} disabled={saving || formConflict}>
             {saving ? (
               <CircularProgress size={20} />
             ) : editing ? (
@@ -776,6 +941,25 @@ export default function RecurringExpensesSection({
             Stop generating <strong>&ldquo;{selected?.description}&rdquo;</strong>? Expenses it
             already generated stay in the ledger — only future months stop.
           </Typography>
+          {actionError && (
+            <Alert
+              severity="error"
+              sx={{ mt: 2 }}
+              action={
+                actionConflict ? (
+                  <Button
+                    color="inherit"
+                    disabled={actionLoading}
+                    onClick={() => reloadLatest('action')}
+                  >
+                    Reload latest
+                  </Button>
+                ) : undefined
+              }
+            >
+              {actionError}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions sx={{ p: 2 }}>
           <Button
@@ -788,7 +972,12 @@ export default function RecurringExpensesSection({
           >
             Cancel
           </Button>
-          <Button onClick={handleDelete} variant="contained" color="error" disabled={actionLoading}>
+          <Button
+            onClick={handleDelete}
+            variant="contained"
+            color="error"
+            disabled={actionLoading || actionConflict}
+          >
             {actionLoading ? <CircularProgress size={20} /> : 'Delete'}
           </Button>
         </DialogActions>

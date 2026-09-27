@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
@@ -12,7 +12,8 @@ import TextField from '@mui/material/TextField';
 import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
 import CircularProgress from '@mui/material/CircularProgress';
-import { getCurrency } from '@splitbook/shared/currency';
+import { getCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
+import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 
 interface SettleUpDialogProps {
   open: boolean;
@@ -41,6 +42,7 @@ export default function SettleUpDialog({
   const [error, setError] = useState('');
   const [amount, setAmount] = useState(defaultAmount?.toString() || '');
   const [note, setNote] = useState('');
+  const submission = useRef<{ payload: string; key: string } | null>(null);
 
   const defaultCurrency = group.defaultCurrency as string;
   const defaultCurrencyDetails = getCurrency(defaultCurrency);
@@ -50,6 +52,7 @@ export default function SettleUpDialog({
       setAmount(defaultAmount?.toString() || '');
       setNote('');
       setError('');
+      submission.current = null;
     }
   }, [open, defaultAmount]);
 
@@ -58,25 +61,25 @@ export default function SettleUpDialog({
       setError('Missing settlement parties.');
       return;
     }
-    if (!amount || parseFloat(amount) <= 0) {
-      setError('Please enter a valid amount.');
-      return;
-    }
-
     setLoading(true);
     setError('');
 
     try {
+      const minor = parseAmountMinor(amount, defaultCurrency);
+      if (minor <= 0) throw new Error('Please enter a positive amount.');
+      const payload = JSON.stringify({
+        paidBy: fromUser._id,
+        paidTo: toUser._id,
+        amount: toMajorAmount(minor, defaultCurrency),
+        currency: defaultCurrency,
+        note,
+      });
+      if (submission.current?.payload !== payload)
+        submission.current = { payload, key: crypto.randomUUID() };
       const res = await fetch(`/api/groups/${groupId}/settlements`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paidBy: fromUser._id,
-          paidTo: toUser._id,
-          amount: parseFloat(amount),
-          currency: defaultCurrency,
-          note,
-        }),
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': submission.current.key },
+        body: payload,
       });
 
       if (!res.ok) {
@@ -89,8 +92,8 @@ export default function SettleUpDialog({
       onClose();
       setAmount('');
       setNote('');
-    } catch {
-      setError('Something went wrong.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
       setLoading(false);
     }
@@ -136,7 +139,12 @@ export default function SettleUpDialog({
               size="small"
               required
               autoFocus
-              slotProps={{ htmlInput: { min: 0.01, step: 0.01 } }}
+              slotProps={{
+                htmlInput: {
+                  min: 10 ** -getCurrencyPrecision(defaultCurrency),
+                  step: 10 ** -getCurrencyPrecision(defaultCurrency),
+                },
+              }}
             />
             <TextField
               select

@@ -1,6 +1,7 @@
 import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
+import { MoneyValidationError } from '@splitbook/shared/exact-money';
 
 export interface AuthUser {
   /** 24-hex user id, byte-for-byte the stored ObjectId string. */
@@ -61,6 +62,29 @@ export function notFound(resource: string = 'Resource') {
  * 500 Server Error response
  */
 export function serverError(err?: unknown) {
+  if (err instanceof MoneyValidationError) return error(err.message, 422);
+  if (err instanceof Error) {
+    const messages: Record<string, [string, number]> = {
+      INVALID_IDEMPOTENCY_KEY: ['Invalid submission key', 422],
+      IDEMPOTENCY_CONFLICT: [
+        'This submission key was already used for different data. Start a new submission.',
+        409,
+      ],
+      STALE_REVISION: [
+        'This record changed while you were editing. Reload the latest version before saving.',
+        409,
+      ],
+      REVISION_REQUIRED: ['Reload this record before changing it.', 428],
+      CURRENCY_LOCKED: ['Currency cannot change after this Group has financial records.', 409],
+      ACTIVITY_BACKLOG_FULL: [
+        'The audit feed is temporarily unavailable. Please retry later.',
+        503,
+      ],
+      INVALID_MONEY: ['Enter a positive amount with the currency’s supported precision.', 422],
+    };
+    if (err.name === 'VersionError') return error(messages.STALE_REVISION[0], 409);
+    if (messages[err.message]) return error(...messages[err.message]);
+  }
   console.error('Server error:', err);
   return NextResponse.json({ error: 'Internal server error', status: 500 }, { status: 500 });
 }

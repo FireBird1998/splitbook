@@ -1,9 +1,10 @@
 import { z } from 'zod/v4';
 import { CURRENCY_CODES } from '../currency';
 import { CATEGORY_IDS } from '../categories';
+import { normalizeExpenseMoney } from '../exact-money';
 
-export const createExpenseSchema = z.object({
-  description: z.string().min(1, 'Description is required').max(200).trim(),
+const expenseFields = z.object({
+  description: z.string().trim().min(1, 'Description is required').max(200),
   amount: z.number().positive('Amount must be positive').max(10_000_000),
   currency: z.string().refine((val) => CURRENCY_CODES.includes(val), {
     message: 'Invalid currency code',
@@ -32,12 +33,34 @@ export const createExpenseSchema = z.object({
       }),
     )
     .min(1, 'At least one person must be in the split'),
-  tag: z.string().min(1, 'Tag is required').trim(),
+  tag: z.string().trim().min(1, 'Tag is required').optional(),
+  tagId: z
+    .string()
+    .regex(/^[a-fA-F0-9]{24}$/, 'Invalid Tag identity')
+    .optional(),
   predefinedItem: z.string().nullable().optional(),
   notes: z.string().max(500).trim().optional(),
 });
 
-export const updateExpenseSchema = createExpenseSchema.partial().extend({
+export const createExpenseSchema = expenseFields
+  .refine((data) => Boolean(data.tagId || data.tag), {
+    message: 'Tag is required',
+    path: ['tagId'],
+  })
+  .superRefine((data, context) => {
+    try {
+      normalizeExpenseMoney(data);
+    } catch (error) {
+      context.addIssue({
+        code: 'custom',
+        message: error instanceof Error ? error.message : 'Invalid Expense allocation',
+        path: ['amount'],
+      });
+    }
+  });
+
+export const updateExpenseSchema = expenseFields.partial().extend({
+  category: expenseFields.shape.category.removeDefault().optional(),
   isDeleted: z.literal(false).optional(),
 });
 

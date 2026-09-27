@@ -12,6 +12,7 @@ import { expenseService } from '@/lib/services/expense.service';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { createExpenseSchema } from '@splitbook/shared/validators/expense';
 import type { ExpenseFilters } from '@splitbook/shared/types';
+import { parseIdempotencyKey } from '@/lib/financial-write';
 
 const expenseValidationMessages: Record<string, string> = {
   INVALID_MEMBERS: 'All payers and split participants must be group members',
@@ -35,7 +36,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const parsed = createExpenseSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error);
 
-    const expense = await expenseService.create(id, parsed.data, user.id!);
+    const expense = await expenseService.create(
+      id,
+      parsed.data,
+      user.id!,
+      parseIdempotencyKey(req.headers.get('Idempotency-Key')),
+    );
     return success(expense, 201);
   } catch (err) {
     if (err instanceof Error && err.message in expenseValidationMessages) {
@@ -69,6 +75,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       dateTo: searchParams.get('dateTo') || undefined,
       category: searchParams.get('category') || undefined,
       tag: searchParams.get('tag') || undefined,
+      tagId: searchParams.get('tagId') || undefined,
       search: searchParams.get('search') || undefined,
       paidByUser: searchParams.get('paidByUser') || undefined,
       owedByUser: searchParams.get('owedByUser') || undefined,

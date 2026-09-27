@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
@@ -16,7 +16,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Autocomplete from '@mui/material/Autocomplete';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import { CURRENCIES } from '@splitbook/shared/currency';
+import { CURRENCIES, CURRENCY_CODES } from '@splitbook/shared/currency';
 import {
   isValidParticipantEmail,
   normalizeParticipantEmails,
@@ -35,12 +35,37 @@ export default function NewGroupPage() {
   const [name, setName] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [defaultCurrency, setDefaultCurrency] = useState('INR');
+  const [preferredCurrency, setPreferredCurrency] = useState('INR');
+  const [selectedCurrency, setSelectedCurrency] = useState<string | null>(null);
+  const [loadingPreference, setLoadingPreference] = useState(true);
+  const defaultCurrency = selectedCurrency ?? preferredCurrency;
   const [participantInput, setParticipantInput] = useState('');
   const [participants, setParticipants] = useState<string[]>([]);
 
   const [description, setDescription] = useState('');
   const [alternateCurrencies, setAlternateCurrencies] = useState<string[]>([]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    async function loadPreference() {
+      try {
+        const response = await fetch('/api/user/profile', { signal: controller.signal });
+        if (!response.ok) return;
+        const profile = (await response.json()).data;
+        if (!controller.signal.aborted && CURRENCY_CODES.includes(profile?.preferredCurrency)) {
+          setPreferredCurrency(profile.preferredCurrency);
+        }
+      } catch {
+        // INR remains available when the saved preference cannot be loaded.
+      } finally {
+        if (!controller.signal.aborted) setLoadingPreference(false);
+      }
+    }
+    void loadPreference();
+    return () => controller.abort();
+  }, []);
+
+  const waitingForCurrency = loadingPreference && selectedCurrency === null;
 
   const theme = getGroupTheme(category);
   const nounTitle = theme.nouns.singular.charAt(0).toUpperCase() + theme.nouns.singular.slice(1);
@@ -61,6 +86,7 @@ export default function NewGroupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (waitingForCurrency) return;
     if (dateError) {
       setError(dateError);
       return;
@@ -244,13 +270,17 @@ export default function NewGroupPage() {
             select
             label="Currency"
             value={defaultCurrency}
-            onChange={(e) => setDefaultCurrency(e.target.value)}
+            onChange={(e) => setSelectedCurrency(e.target.value)}
             fullWidth
             required
-            helperText={`One currency per ${theme.nouns.singular}`}
+            helperText={
+              waitingForCurrency
+                ? 'Loading saved currency…'
+                : `One currency per ${theme.nouns.singular}`
+            }
           >
             {CURRENCIES.map((c) => (
-              <MenuItem key={c.code} value={c.code}>
+              <MenuItem key={c.code} value={c.code} onClick={() => setSelectedCurrency(c.code)}>
                 {c.flag} {c.code} — {c.name}
               </MenuItem>
             ))}
@@ -362,7 +392,7 @@ export default function NewGroupPage() {
             <Button
               type="submit"
               variant="contained"
-              disabled={loading || !name.trim() || Boolean(dateError)}
+              disabled={loading || waitingForCurrency || !name.trim() || Boolean(dateError)}
             >
               {loading ? <CircularProgress size={20} /> : `Create ${theme.nouns.singular}`}
             </Button>
@@ -393,7 +423,7 @@ export default function NewGroupPage() {
             fullWidth
             type="submit"
             variant="contained"
-            disabled={loading || !name.trim() || Boolean(dateError)}
+            disabled={loading || waitingForCurrency || !name.trim() || Boolean(dateError)}
           >
             {loading ? <CircularProgress size={20} /> : `Create ${theme.nouns.singular}`}
           </Button>

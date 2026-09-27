@@ -39,21 +39,17 @@ export function resolveProxyResponse({
   // 2. Allow the public invite-preview read so the join page can render its sign-in CTA.
   if (isJoinPreview) return NextResponse.next();
 
-  // 3. Send signed-in visitors away from the login page.
-  if (hasSessionCookie && isAuthPage) {
-    return NextResponse.redirect(new URL('/dashboard', url));
-  }
-
-  // 4. Public pages and the login page.
+  // 3. Login validates the session itself before redirecting. Cookie presence
+  //    alone can also mean an expired or invalid session and cause a loop.
   if (isPublicPage || isAuthPage) return NextResponse.next();
 
-  // 5. Anonymous API calls get the same 401 JSON shape the route helpers use
+  // 4. Anonymous API calls get the same 401 JSON shape the route helpers use
   //    (see api-response.ts); API clients cannot follow a redirect.
   if (isApi && !hasSessionCookie) {
     return NextResponse.json(UNAUTHORIZED_BODY, { status: 401 });
   }
 
-  // 6. Every other anonymous page visit goes to sign-in, remembering where it was headed.
+  // 5. Every other anonymous page visit goes to sign-in, remembering where it was headed.
   if (!hasSessionCookie) {
     const loginUrl = new URL('/login', url);
     loginUrl.searchParams.set('callbackUrl', pathname);

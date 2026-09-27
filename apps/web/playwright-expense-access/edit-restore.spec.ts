@@ -1,4 +1,12 @@
-import { test, expect, dataOf, expensePath, observeLedger, generatedExpense } from './fixtures';
+import {
+  test,
+  expect,
+  dataOf,
+  expensePath,
+  observeLedger,
+  generatedExpense,
+  expenseRevisionHeaders,
+} from './fixtures';
 import { accessMatrix } from './access-matrix';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
@@ -50,6 +58,7 @@ for (const origin of ['manual', 'recurring'] as const) {
     const path = expensePath(ledger.groupB, id);
     const edited = await dataOf(
       await ledger.sam.patch(path, {
+        headers: await expenseRevisionHeaders(ledger.sam, path),
         data: { description: 'Corrected rent', category: 'housing' },
       }),
     );
@@ -83,8 +92,17 @@ for (const origin of ['manual', 'recurring'] as const) {
       }),
     );
 
-    await dataOf(await ledger.priya.delete(path));
-    const restored = await dataOf(await ledger.sam.patch(path, { data: { isDeleted: false } }));
+    await dataOf(
+      await ledger.priya.delete(path, {
+        headers: await expenseRevisionHeaders(ledger.priya, path),
+      }),
+    );
+    const restored = await dataOf(
+      await ledger.sam.patch(path, {
+        headers: await expenseRevisionHeaders(ledger.sam, path),
+        data: { isDeleted: false },
+      }),
+    );
     expect(restored).toMatchObject({
       description: 'Corrected rent',
       isDeleted: false,
@@ -113,6 +131,10 @@ for (const [rule, body] of [
   test(`authorized edit preserves ${rule} validation`, async ({ ledger }) => {
     const before = await observeLedger(ledger, ledger.expenseB);
     const response = await ledger.sam.patch(expensePath(ledger.groupB, ledger.expenseB), {
+      headers: await expenseRevisionHeaders(
+        ledger.sam,
+        expensePath(ledger.groupB, ledger.expenseB),
+      ),
       data: body,
     });
     expect(response.status()).toBe(422);
@@ -130,6 +152,10 @@ test('an unchanged archived Tag remains editable', async ({ ledger }) => {
   );
   const updated = await dataOf(
     await ledger.sam.patch(expensePath(ledger.groupB, ledger.expenseB), {
+      headers: await expenseRevisionHeaders(
+        ledger.sam,
+        expensePath(ledger.groupB, ledger.expenseB),
+      ),
       data: { description: 'Corrected rent', tag: 'Rent', category: 'housing' },
     }),
   );

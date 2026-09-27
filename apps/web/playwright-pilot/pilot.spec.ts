@@ -135,7 +135,14 @@ test('settlement history failure preserves debts, warns about mixed currency, an
   page,
 }) => {
   await installPilotFixtures(page, {
-    [`/api/groups/${DEMO_GROUP_ID}/balances`]: { ...groupBalances, hasMixedCurrencies: true },
+    [`/api/groups/${DEMO_GROUP_ID}/balances`]: {
+      ...groupBalances,
+      hasMixedCurrencies: true,
+      byCurrency: [
+        { currency: 'INR', balances: groupBalances.balances, debts: groupBalances.debts },
+        { currency: 'EUR', balances: [], debts: [] },
+      ],
+    },
   });
   let failing = true;
   await page.route(`**/api/groups/${DEMO_GROUP_ID}/settlements`, async (route) => {
@@ -145,7 +152,10 @@ test('settlement history failure preserves debts, warns about mixed currency, an
   await enterAsPersona(page, 'alex');
   await page.goto(`/groups/${DEMO_GROUP_ID}?tab=balances`);
   await expect(page.getByText('Who pays whom', { exact: true })).toBeVisible();
-  await expect(page.getByRole('alert').filter({ hasText: 'different currency' })).toBeVisible();
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Each balance is shown separately' }),
+  ).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Balance currency' })).toBeVisible();
   const error = page.getByRole('alert').filter({ hasText: 'Could not load settlement history.' });
   await expect(error).toBeVisible();
   failing = false;

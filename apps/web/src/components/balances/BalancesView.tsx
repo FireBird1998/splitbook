@@ -9,6 +9,8 @@ import Typography from '@mui/material/Typography';
 import Skeleton from '@mui/material/Skeleton';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
+import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
 import MoneyText from '@/components/common/MoneyText';
 import StatusLabel from '@/components/common/StatusLabel';
 import ErrorState from '@/components/common/ErrorState';
@@ -22,7 +24,7 @@ import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupCategory } from '@splitbook/shared/types';
 
 const MIXED_CURRENCY_WARNING =
-  "Some expenses or settlements use a different currency than this group's default. Balances may be inaccurate until those are updated.";
+  'This ledger contains multiple currencies. Each balance is shown separately, without conversion.';
 
 interface BalancesViewProps {
   groupId: string;
@@ -58,6 +60,7 @@ function PersonChip({ name }: { name: string }) {
 }
 
 export default function BalancesView({ groupId, userId, group }: BalancesViewProps) {
+  const [selectedCurrency, setSelectedCurrency] = useState('');
   const [settleDialog, setSettleDialog] = useState<{
     open: boolean;
     fromUser?: { _id: string; name: string };
@@ -77,9 +80,22 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     mutate: mutateSettlements,
   } = useSWR(`/api/groups/${groupId}/settlements`, fetcher);
 
-  const balances = data?.data?.balances || [];
-  const debts = data?.data?.debts || [];
-  const currency = data?.data?.currency || (group.defaultCurrency as string);
+  const defaultCurrency = data?.data?.currency || (group.defaultCurrency as string);
+  const buckets = (data?.data?.byCurrency || []) as Array<{
+    currency: string;
+    balances: Array<{ user: { _id: string; name: string }; balance: number }>;
+    debts: Array<{
+      from: { _id: string; name: string };
+      to: { _id: string; name: string };
+      amount: number;
+    }>;
+  }>;
+  const currency = buckets.some((bucket) => bucket.currency === selectedCurrency)
+    ? selectedCurrency
+    : defaultCurrency;
+  const selectedBucket = buckets.find((bucket) => bucket.currency === currency);
+  const balances = selectedBucket?.balances || data?.data?.balances || [];
+  const debts = selectedBucket?.debts || data?.data?.debts || [];
   const hasMixedCurrencies = Boolean(data?.data?.hasMixedCurrencies);
   const settlements = (settlementsData?.data || []) as Settlement[];
 
@@ -178,10 +194,35 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     </Box>
   );
 
+  const currencySelector = hasMixedCurrencies ? (
+    <Stack spacing={1.5}>
+      <Alert severity="info">{MIXED_CURRENCY_WARNING}</Alert>
+      <TextField
+        select
+        label="Balance currency"
+        value={currency}
+        onChange={(event) => setSelectedCurrency(event.target.value)}
+        size="small"
+      >
+        {buckets.map((bucket) => (
+          <MenuItem key={bucket.currency} value={bucket.currency}>
+            {bucket.currency}
+          </MenuItem>
+        ))}
+      </TextField>
+      {currency !== defaultCurrency && (
+        <Typography variant="caption" color="text.secondary">
+          Historical balances in {currency}. New settlements use the Group currency,{' '}
+          {defaultCurrency}.
+        </Typography>
+      )}
+    </Stack>
+  ) : null;
+
   if (balances.length === 0 && debts.length === 0) {
     return (
       <Stack spacing={3}>
-        {hasMixedCurrencies && <Alert severity="warning">{MIXED_CURRENCY_WARNING}</Alert>}
+        {currencySelector}
         <EmptyState
           title="All settled up"
           description={`No one owes anyone in this ${getGroupTheme(group.category as GroupCategory).nouns.singular} right now.`}
@@ -193,7 +234,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
 
   return (
     <Stack spacing={3}>
-      {hasMixedCurrencies && <Alert severity="warning">{MIXED_CURRENCY_WARNING}</Alert>}
+      {currencySelector}
 
       {userBalance && (
         <Box sx={{ animation: 'balance-settle 400ms ease-out both' }}>
@@ -290,7 +331,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                           sx={{ ml: { sm: 'auto' } }}
                         />
                       </Stack>
-                      {involved && (
+                      {involved && currency === defaultCurrency && (
                         <Button
                           size="medium"
                           variant="contained"
@@ -333,7 +374,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                 <Typography variant="body2" color="text.primary">
                   {b.user._id === userId ? 'You' : b.user.name}
                 </Typography>
-                {Math.abs(b.balance) < 0.005 ? (
+                {b.balance === 0 ? (
                   <Typography variant="body2" fontWeight={600} color="status.positive">
                     Settled
                   </Typography>

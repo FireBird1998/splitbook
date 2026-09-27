@@ -55,8 +55,14 @@ jobs:
         working-directory: .
         run: pnpm typecheck
 
+      - name: Install Chromium for authenticated browser checks
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Authenticated expense access (isolated app and database)
         run: pnpm test:expense-access
+
+      - name: Google sign-in recovery (isolated app and database)
+        run: pnpm exec playwright test --config playwright.auth-recovery.config.ts
 
       - name: Build
         run: pnpm build

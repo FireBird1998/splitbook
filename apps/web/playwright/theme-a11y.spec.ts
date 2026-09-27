@@ -3,15 +3,15 @@ import {
   DEMO_GROUP_ID,
   enterAsPersona,
   expectedTheme,
-  expectNoCriticalA11yViolations,
+  expectNoSeriousA11yViolations,
   expectThemeApplied,
   reviewScreenshot,
 } from './fixtures';
 
 /**
  * Visual + accessibility matrix. Every project (desktop/mobile × light/dark)
- * renders the persona entry, dashboard, and trip workspace; axe-core checks
- * for critical violations and screenshots are saved for design review.
+ * renders persona entry, login, dashboard, trip workspace, and Settings;
+ * axe-core rejects serious/critical findings, with screenshots for review.
  */
 
 test('persona entry respects the project theme and is accessible', async ({ page }, testInfo) => {
@@ -26,8 +26,16 @@ test('persona entry respects the project theme and is accessible', async ({ page
   await expect(alexCard).toBeFocused();
 
   await expectThemeApplied(page, testInfo);
-  await expectNoCriticalA11yViolations(page, testInfo, 'persona-entry');
+  await expectNoSeriousA11yViolations(page, testInfo, 'persona-entry');
   await reviewScreenshot(page, testInfo, 'persona-entry');
+});
+
+test('login respects the project theme and is accessible', async ({ page }, testInfo) => {
+  await page.goto('/login');
+  await expect(page.getByRole('heading', { name: 'Continue as a demo persona' })).toBeVisible();
+  await expectThemeApplied(page, testInfo);
+  await expectNoSeriousA11yViolations(page, testInfo, 'login');
+  await reviewScreenshot(page, testInfo, 'login');
 });
 
 test('dashboard respects the project theme and is accessible', async ({ page }, testInfo) => {
@@ -38,7 +46,7 @@ test('dashboard respects the project theme and is accessible', async ({ page }, 
   await expect(page.getByText('Current balance')).toBeVisible();
   await expect(page.getByText('Next best action')).toBeVisible();
 
-  await expectNoCriticalA11yViolations(page, testInfo, 'dashboard');
+  await expectNoSeriousA11yViolations(page, testInfo, 'dashboard');
   await reviewScreenshot(page, testInfo, 'dashboard');
 });
 
@@ -52,8 +60,25 @@ test('trip workspace respects the project theme and is accessible', async ({ pag
   await page.getByRole('tab', { name: 'Balances' }).click();
   await expect(page.getByText('Who pays whom')).toBeVisible();
 
-  await expectNoCriticalA11yViolations(page, testInfo, 'trip-balances');
+  await expectNoSeriousA11yViolations(page, testInfo, 'trip-balances');
   await reviewScreenshot(page, testInfo, 'trip-balances');
+});
+
+test('Settings loaded and validation error states are accessible', async ({ page }, testInfo) => {
+  await enterAsPersona(page, 'alex');
+  await page.goto('/settings');
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('Alex Rivera');
+  await expect(page.getByText('✓ Active session', { exact: true })).toBeVisible();
+  await expectThemeApplied(page, testInfo);
+  await expectNoSeriousA11yViolations(page, testInfo, 'settings');
+  await reviewScreenshot(page, testInfo, 'settings');
+
+  await page.getByLabel('Name', { exact: true }).fill('');
+  await page.getByRole('button', { name: 'Save Changes' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Name is required' })).toBeVisible();
+  await expect(page.getByLabel('Name', { exact: true })).toHaveAttribute('aria-invalid', 'true');
+  await expectNoSeriousA11yViolations(page, testInfo, 'settings-validation');
+  await reviewScreenshot(page, testInfo, 'settings-validation');
 });
 
 test('theme toggle flips the document theme and persists', async ({ page }, testInfo) => {

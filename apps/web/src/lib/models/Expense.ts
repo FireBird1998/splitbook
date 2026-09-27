@@ -1,13 +1,22 @@
 import mongoose, { Schema, Model } from 'mongoose';
+import { readStoredAmountMinor, sumMinorAmounts } from '@splitbook/shared/exact-money';
+import {
+  CreationRequestSchema,
+  PendingActivitySchema,
+  type ICreationRequest,
+  type IPendingActivity,
+} from '@/lib/financial-write';
 
 export interface IExpensePayerDocument {
   user: mongoose.Types.ObjectId;
   amount: number;
+  amountMinor?: number;
 }
 
 export interface IExpenseSplitDocument {
   user: mongoose.Types.ObjectId;
   amount: number;
+  amountMinor?: number;
   percentage?: number;
   shares?: number;
 }
@@ -23,13 +32,19 @@ export interface IExpenseDocument {
   group: mongoose.Types.ObjectId;
   description: string;
   amount: number;
+  amountMinor?: number;
   currency: string;
+  moneyVersion?: number;
+  revision?: number;
+  creationRequest?: ICreationRequest;
+  pendingActivity: IPendingActivity[];
   category: string;
   date: Date;
   paidBy: IExpensePayerDocument[];
   splitMethod: 'equal' | 'unequal' | 'percentage' | 'shares' | 'exact';
   splitBetween: IExpenseSplitDocument[];
   tag: string;
+  tagId?: mongoose.Types.ObjectId | null;
   predefinedItem?: string | null;
   receiptUrl?: string | null;
   notes?: string;
@@ -50,6 +65,7 @@ const ExpensePayerSchema = new Schema<IExpensePayerDocument>(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     amount: { type: Number, required: true, min: 0 },
+    amountMinor: { type: Number, min: 0, validate: Number.isSafeInteger },
   },
   { _id: false },
 );
@@ -58,6 +74,7 @@ const ExpenseSplitSchema = new Schema<IExpenseSplitDocument>(
   {
     user: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     amount: { type: Number, required: true, min: 0 },
+    amountMinor: { type: Number, min: 0, validate: Number.isSafeInteger },
     percentage: { type: Number },
     shares: { type: Number },
   },
@@ -84,6 +101,15 @@ const ExpenseSchema = new Schema<IExpenseDocument>(
       maxlength: 200,
     },
     amount: { type: Number, required: true, min: 0.01, max: 10_000_000 },
+    amountMinor: { type: Number, min: 1, validate: Number.isSafeInteger },
+    moneyVersion: { type: Number, enum: [1] },
+    creationRequest: { type: CreationRequestSchema, default: undefined, select: false },
+    pendingActivity: {
+      type: [PendingActivitySchema],
+      default: [],
+      select: false,
+      validate: (events: unknown[]) => events.length <= 100,
+    },
     currency: { type: String, required: true, trim: true },
     category: { type: String, default: 'other', trim: true },
     date: { type: Date, required: true },
@@ -109,6 +135,7 @@ const ExpenseSchema = new Schema<IExpenseDocument>(
       },
     },
     tag: { type: String, required: true, trim: true },
+    tagId: { type: Schema.Types.ObjectId, default: null },
     predefinedItem: { type: String, default: null },
     receiptUrl: { type: String, default: null },
     notes: { type: String, trim: true, maxlength: 500 },
@@ -122,10 +149,46 @@ const ExpenseSchema = new Schema<IExpenseDocument>(
   },
   {
     timestamps: true,
+    versionKey: 'revision',
+    optimisticConcurrency: true,
+    toJSON: {
+      transform(_doc, value) {
+        delete value.creationRequest;
+        Reflect.deleteProperty(value, 'pendingActivity');
+        value.revision ??= 0;
+        return value;
+      },
+    },
   },
 );
 
+ExpenseSchema.pre('validate', function () {
+  if (this.moneyVersion !== 1) return;
+  const total = readStoredAmountMinor(this);
+  for (const rows of [this.paidBy, this.splitBetween]) {
+    if (new Set(rows.map((row) => String(row.user))).size !== rows.length)
+      throw new Error('Duplicate participants');
+    const sum = sumMinorAmounts(
+      rows.map((row) =>
+        readStoredAmountMinor({
+          amount: row.amount,
+          amountMinor: row.amountMinor,
+          currency: this.currency,
+          moneyVersion: 1,
+        }),
+      ),
+    );
+    if (sum !== total) throw new Error('Expense allocations must equal the amount');
+  }
+});
+
 // Indexes
+ExpenseSchema.index({ group: 1, isDeleted: 1, date: -1, createdAt: -1 });
+ExpenseSchema.index(
+  { group: 1, createdBy: 1, 'creationRequest.key': 1 },
+  { unique: true, partialFilterExpression: { 'creationRequest.key': { $type: 'string' } } },
+);
+ExpenseSchema.index({ group: 1, tagId: 1 });
 ExpenseSchema.index({ group: 1, date: -1 });
 ExpenseSchema.index({ group: 1, isDeleted: 1 });
 ExpenseSchema.index({ group: 1, tag: 1 });

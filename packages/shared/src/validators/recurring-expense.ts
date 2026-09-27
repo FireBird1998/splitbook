@@ -1,9 +1,10 @@
 import { z } from 'zod/v4';
 import { CURRENCY_CODES } from '../currency';
 import { CATEGORY_IDS } from '../categories';
+import { normalizeExpenseMoney } from '../exact-money';
 
-export const createRecurringExpenseSchema = z.object({
-  description: z.string().min(1, 'Description is required').max(200).trim(),
+const recurringexpenseFields = z.object({
+  description: z.string().trim().min(1, 'Description is required').max(200),
   amount: z.number().positive('Amount must be positive').max(10_000_000),
   currency: z.string().refine((val) => CURRENCY_CODES.includes(val), {
     message: 'Invalid currency code',
@@ -12,7 +13,11 @@ export const createRecurringExpenseSchema = z.object({
     .string()
     .refine((val) => CATEGORY_IDS.includes(val), { message: 'Invalid category' })
     .default('other'),
-  tag: z.string().min(1, 'Tag is required').trim(),
+  tag: z.string().trim().min(1, 'Tag is required').optional(),
+  tagId: z
+    .string()
+    .regex(/^[a-fA-F0-9]{24}$/, 'Invalid Tag identity')
+    .optional(),
   paidBy: z
     .array(
       z.object({
@@ -38,7 +43,25 @@ export const createRecurringExpenseSchema = z.object({
   endsOn: z.coerce.date().nullable().optional(),
 });
 
-export const updateRecurringExpenseSchema = createRecurringExpenseSchema.partial().extend({
+export const createRecurringExpenseSchema = recurringexpenseFields
+  .refine((data) => Boolean(data.tagId || data.tag), {
+    message: 'Tag is required',
+    path: ['tagId'],
+  })
+  .superRefine((data, context) => {
+    try {
+      normalizeExpenseMoney(data);
+    } catch (error) {
+      context.addIssue({
+        code: 'custom',
+        message: error instanceof Error ? error.message : 'Invalid recurring allocation',
+        path: ['amount'],
+      });
+    }
+  });
+
+export const updateRecurringExpenseSchema = recurringexpenseFields.partial().extend({
+  category: recurringexpenseFields.shape.category.removeDefault().optional(),
   isPaused: z.boolean().optional(),
 });
 

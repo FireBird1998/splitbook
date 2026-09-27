@@ -21,8 +21,8 @@ interface DemoPersonaPickerProps {
 
 const PERSONA_TINTS: Record<DemoPersonaKey, { bg: string; fg: string }> = {
   alex: { bg: 'tint.brand', fg: 'primary.main' },
-  sam: { bg: 'tint.info', fg: 'info.main' },
-  priya: { bg: 'tint.positive', fg: 'success.main' },
+  sam: { bg: 'tint.info', fg: 'status.info' },
+  priya: { bg: 'tint.positive', fg: 'status.positive' },
 };
 
 /**

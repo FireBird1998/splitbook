@@ -186,13 +186,13 @@ describe('simplifyDebts', () => {
     expect(totalTransferred).toBe(60);
   });
 
-  it('ignores near-zero amounts below 0.01', () => {
-    const transactions = simplifyDebts([
-      { userId: 'A', amount: 0.005 },
-      { userId: 'B', amount: -0.005 },
-    ]);
-
-    expect(transactions).toEqual([]);
+  it('rejects unsupported precision rather than silently dropping debt', () => {
+    expect(() =>
+      simplifyDebts([
+        { userId: 'A', amount: 0.005 },
+        { userId: 'B', amount: -0.005 },
+      ]),
+    ).toThrow('decimal places');
   });
 
   it('integrates with calculateNetBalances for end-to-end two-person flow', () => {
