@@ -624,8 +624,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ...snapshot,
         invitation: { code: null, status: 'idle', preview: null, message: null },
       });
-      await loadGroups(owner);
-      if (current(owner)) await openGroup(id);
+      const loadingGroups = loadGroups(owner);
+      const loadingView = viewRequest;
+      await loadingGroups;
+      if (current(owner) && viewRequest === loadingView) await openGroup(id);
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
       publish({
@@ -882,16 +884,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const oldCookie = cookie;
     const owner = invalidate();
     publish(cleanSnapshot({ status: 'signed-out', user: null, message: null }));
-    try {
-      await savePending(null);
-      await clearSaved(owner);
-    } catch {
+    // Independent stores must both be purged. Wait for both attempts before
+    // exposing recovery so a failed invitation clear cannot preserve a session.
+    const cleanup = await Promise.allSettled([clearSaved(owner), savePending(null)]);
+    if (cleanup.some((result) => result.status === 'rejected')) {
       if (current(owner)) {
         publish(
           cleanSnapshot({
             status: 'error',
             user: null,
-            message: 'Could not remove the saved session. Try signing out again.',
+            message:
+              cleanup[0].status === 'rejected'
+                ? 'Could not remove the saved session. Try signing out again.'
+                : 'Could not remove the saved invitation. Try signing out again.',
           }),
         );
       }

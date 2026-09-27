@@ -201,6 +201,45 @@ describe('native session and Group boundary', () => {
     });
   });
 
+  it('keeps a newer invitation open when a joined Group list finishes loading', async () => {
+    const groupsReply = deferred<FetchResponse>();
+    const groupsRequested = deferred<void>();
+    let joined = false;
+    const { controller } = setup({
+      intercept: (path, init) => {
+        if (path === '/api/join/deadbeef' && init.method === 'POST') {
+          joined = true;
+          return json({ data: { groupId }, status: 201 }, 201);
+        }
+        if (path === '/api/groups' && joined) {
+          groupsRequested.resolve();
+          return groupsReply.promise;
+        }
+        if (path.startsWith('/api/join/'))
+          return json({
+            data: {
+              _id: otherGroupId,
+              name: path.endsWith('cafebabe') ? 'New invitation' : 'First invitation',
+              category: 'home',
+              memberCount: 1,
+            },
+            status: 200,
+          });
+      },
+    });
+    await controller.signIn('alex');
+    await controller.openInvitation('http://localhost:4127/join/deadbeef');
+    const firstJoin = controller.joinInvitation();
+    await groupsRequested.promise;
+    await controller.openInvitation('http://localhost:4127/join/cafebabe');
+    groupsReply.resolve(json({ data: [group()], status: 200 }));
+    await firstJoin;
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      invitation: { code: 'cafebabe', preview: { name: 'New invitation' } },
+    });
+  });
+
   it('restores an unfinished Group form only to the same account after session expiry', async () => {
     let expired = false;
     const { controller } = setup({
@@ -793,6 +832,22 @@ describe('native session and Group boundary', () => {
       user: null,
       message: expect.stringContaining('could not confirm'),
     });
+    expect(store.read()).toBeNull();
+  });
+
+  it('cannot restore a signed-out account when clearing its saved invitation fails', async () => {
+    const pending = memoryCredentials('deadbeef');
+    pending.credentials.clear = async () => {
+      throw new Error('Invitation storage unavailable');
+    };
+    const { controller, store } = setup({ pending: pending.credentials });
+    await controller.signIn('alex');
+    await controller.signOut();
+
+    // Retrying the session error must not bring the signed-out account back.
+    await controller.restore();
+    expect(controller.getSnapshot().auth).toMatchObject({ status: 'signed-out', user: null });
+    expect(controller.getSnapshot().groups.data).toEqual([]);
     expect(store.read()).toBeNull();
   });
 });

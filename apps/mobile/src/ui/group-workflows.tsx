@@ -11,19 +11,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CURRENCIES, getCurrency } from '@splitbook/shared/currency';
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
-import type { GroupCategory } from '@splitbook/shared/types';
+import type { GroupDraft, InvitationPreview as InvitationPreviewModel } from '../data/types';
 import { Button, Copy, Icon, Label, Loading, Notice, Panel } from './primitives';
 import { fonts, useTheme } from './theme';
 
-export interface GroupCreateDraft {
-  name: string;
-  description: string;
-  category: GroupCategory;
-  defaultCurrency: string;
-  /** Calendar dates, or an empty string when no date has been chosen. */
-  startDate: string;
-  endDate: string;
-}
+export type GroupCreateDraft = GroupDraft;
 
 export interface GroupCreateFormProps {
   draft: GroupCreateDraft;
@@ -356,12 +348,7 @@ export function GroupCreateForm({
   );
 }
 
-export interface InvitationPreviewData {
-  id: string;
-  name: string;
-  category: GroupCategory;
-  memberCount: number;
-}
+export type InvitationPreviewData = InvitationPreviewModel;
 
 export interface InvitationPreviewProps {
   preview: InvitationPreviewData | null;
