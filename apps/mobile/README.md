@@ -41,6 +41,7 @@ pnpm typecheck
 pnpm test:unit
 pnpm mobile verify:api
 pnpm mobile verify:groups
+pnpm mobile verify:settings
 ```
 
 `verify:api` uses the actual mobile controller and HTTP server. It checks session creation/restoration, normalized Group/member dates, authorization denial, server logout, local purge, and disabled development authentication. It never accepts a remote server or prints session values.
@@ -79,3 +80,11 @@ Choose **Create Group**, select a Theme and currency, and enter a name. Optional
 From a Group, get its invite link and use **Share invite link** to open Android sharing. The app reuses a valid link; if generation loses its response, it reads the current link before considering another user-requested generation. Only exact configured-environment web invitations are accepted. A pending invitation is stored separately from the session, survives cold restart and sign-in, and always requires explicit joining. Success, cancellation, and explicit sign-out clear the pending destination. Opening the canonical link without the app retains the existing web join flow.
 
 `verify:groups` uses the real controller, HTTP routes, and isolated backend for creation, sharing, second-persona joining, authentication interruption, and committed-response loss. It archives only its uniquely named test Groups through authorized requests and signs out its sessions. Android verification separately checks the form/keyboard, share sheet, cold/warm link delivery, and appearance. Local HTTP links are unverified on Android: targeting the installed package exercises routing but does not prove staging App Links verification. The staging domain/certificate/device check belongs to #60.
+
+## Settings and account cleanup
+
+[Ticket #58](https://github.com/FireBird1998/splitbook/issues/58) adds Settings from the toolbar. System, Light, and Dark apply through the shared semantic tokens. The appearance preference is saved on this device and survives sign-out; a failed save restores the last confirmed choice and offers recovery. Settings shows the authenticated member and the configured development connection. Web settings open only at the configured public origin (`EXPO_PUBLIC_INVITE_ORIGIN`, falling back to the auth origin), with no native session values in the link. The browser uses its own sign-in session.
+
+Sign-out clears memory and protected session storage, cancels requests, and prevents their late responses from restoring account content. Persistent financial stores added by later tickets must register with the account-local cleanup boundary. Cleanup failures stay visible and are retried before session restoration; the device stores a cleanup marker so restarting cannot bypass an unfinished purge. Existing Group forms remain memory-only, and this ticket does not add financial caches, Expense drafts, or pending financial submissions.
+
+`verify:settings` exercises account details, sign-out, server session revocation, restart/account switching, and delayed response delivery through the real controller and isolated HTTP backend. Native checks separately verify actual SecureStore appearance persistence, system appearance changes, enlarged text, the browser destination, and sign-out/account switching.

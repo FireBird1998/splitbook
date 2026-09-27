@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import {
   AppState,
+  Appearance,
   Alert,
   KeyboardAvoidingView,
   Linking,
@@ -23,14 +24,24 @@ import { Outfit_700Bold } from '@expo-google-fonts/outfit/700Bold';
 import { IBMPlexMono_500Medium } from '@expo-google-fonts/ibm-plex-mono/500Medium';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
-import { configurationReady, controller } from './src/runtime';
+import { appearance, configurationReady, controller, environment } from './src/runtime';
 import { ThemeContext, fonts, useTheme } from './src/ui/theme';
 import { Avatar, Button, Copy, Icon, Label, Loading, Notice } from './src/ui/primitives';
 import { EmptyGroups, GroupCard, GroupDetail, SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview, InviteSharePanel } from './src/ui/group-workflows';
+import { SettingsScreen } from './src/ui/settings-screen';
 
 export default function App() {
-  const mode = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
+  const systemMode = useColorScheme() === 'dark' ? 'dark' : 'light';
+  const mode = preference.mode === 'system' ? systemMode : preference.mode;
+  useEffect(() => {
+    void appearance.restore();
+  }, []);
+  useEffect(() => {
+    // Apply the device preference to native dialogs as well as React surfaces.
+    Appearance.setColorScheme(preference.mode === 'system' ? 'unspecified' : preference.mode);
+  }, [preference.mode]);
   const [fontsLoaded, fontError] = useFonts({
     Outfit_400Regular,
     Outfit_500Medium,
@@ -52,6 +63,7 @@ export default function App() {
 function SplitBook() {
   const theme = useTheme();
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
   useEffect(() => {
     if (!configurationReady) return;
     const startup = controller.restore();
@@ -118,11 +130,15 @@ function SplitBook() {
             splitbook<Copy style={{ color: theme.brand.main, fontSize: 24 }}>.</Copy>
           </Copy>
         </View>
-        {authenticated ? (
+        {authenticated && state.screen !== 'settings' ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Sign out"
-            onPress={() => void controller.signOut()}
+            accessibilityLabel="Settings"
+            accessibilityState={{
+              disabled: state.creation.status === 'saving' || state.invitation.status === 'joining',
+            }}
+            disabled={state.creation.status === 'saving' || state.invitation.status === 'joining'}
+            onPress={controller.openSettings}
             style={{
               minHeight: 48,
               minWidth: 48,
@@ -130,7 +146,7 @@ function SplitBook() {
               alignItems: 'flex-end',
             }}
           >
-            <Icon name="log-out-outline" size={23} />
+            <Icon name="settings-outline" size={23} />
           </Pressable>
         ) : (
           <View
@@ -206,15 +222,51 @@ function SplitBook() {
             keyboardDismissMode="on-drag"
             contentContainerStyle={styles.content}
             refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={() => void controller.refresh()}
-                tintColor={theme.brand.main}
-                colors={[theme.brand.main]}
-              />
+              state.screen === 'settings' ? undefined : (
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={() => void controller.refresh()}
+                  tintColor={theme.brand.main}
+                  colors={[theme.brand.main]}
+                />
+              )
             }
           >
-            {state.screen === 'create' ? (
+            {state.screen === 'settings' ? (
+              <SettingsScreen
+                user={state.auth.user!}
+                appearance={preference.mode}
+                onAppearanceChange={(mode) => void appearance.select(mode)}
+                preferenceStatus={preference.status}
+                preferenceMessage={preference.message}
+                onRetryPreference={() => void appearance.restore()}
+                environment={environment}
+                onOpenWeb={() => {
+                  void Linking.openURL(new URL('/settings', environment.webOrigin).href).catch(
+                    () => {
+                      Alert.alert(
+                        'Couldn’t open web settings',
+                        'Check your browser and try again.',
+                      );
+                    },
+                  );
+                }}
+                onSignOut={() =>
+                  Alert.alert(
+                    'Sign out on this device?',
+                    'Your session, unsaved Group form, saved invitation, and local account data will be cleared. If a save was interrupted, check your saved history after signing in before creating it again.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Sign out',
+                        style: 'destructive',
+                        onPress: () => void controller.signOut(),
+                      },
+                    ],
+                  )
+                }
+              />
+            ) : state.screen === 'create' ? (
               <GroupCreateForm
                 draft={state.creation.draft}
                 onChange={controller.updateCreation}

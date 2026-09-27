@@ -14,6 +14,7 @@ import {
 } from './dto';
 import { parseInvitationLink } from './invitation-links';
 import type {
+  AccountStorageLease,
   FetchResponse,
   GroupCreation,
   GroupDraft,
@@ -27,6 +28,11 @@ const storageMessage = 'Could not safely save your session. Please try signing i
 const disabledMessage = 'Development persona sign-in is disabled in this build.';
 
 class Superseded extends Error {}
+class AccountCleanupError extends Error {
+  constructor() {
+    super('Could not remove this account from the device. Try signing out again.');
+  }
+}
 class RequestError extends Error {
   constructor(
     message: string,
@@ -93,6 +99,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let viewRequest = 0;
   let storeQueue: Promise<unknown> = Promise.resolve();
   let cleanupRequired = false;
+  let accountCleanupRequired = false;
+  let accountQueue: Promise<unknown> = Promise.resolve();
+  let cleanupMarkerQueue: Promise<unknown> = Promise.resolve();
+  let cleanupSequence = 0;
   let pendingCode: string | null = null;
   let pendingLoaded = false;
   let creationRecovery: { ownerId: string; creation: GroupCreation } | null = null;
@@ -156,6 +166,97 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     cleanupRequired = true;
     await store(owner, () => dependencies.credentials.clear());
     cleanupRequired = false;
+  };
+
+  const queueAccount = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = accountQueue.catch(() => undefined).then(operation);
+    accountQueue = result;
+    return result;
+  };
+
+  const accountStorage = (): AccountStorageLease | null => {
+    if (
+      !dependencies.accountLocal ||
+      snapshot.auth.status !== 'authenticated' ||
+      !snapshot.auth.user ||
+      accountCleanupRequired
+    )
+      return null;
+    const owner = generation;
+    const accountId = snapshot.auth.user.id;
+    return {
+      accountId,
+      write: <T>(operation: () => Promise<T>) =>
+        queueAccount(async () => {
+          assertCurrent(owner);
+          if (
+            snapshot.auth.status !== 'authenticated' ||
+            snapshot.auth.user?.id !== accountId ||
+            accountCleanupRequired
+          )
+            throw new Superseded();
+          const result = await operation();
+          assertCurrent(owner);
+          return result;
+        }),
+    };
+  };
+
+  const clearAccount = (owner: number, mode: 'sign-out' | 'account-change') => {
+    accountCleanupRequired = true;
+    const cleanupId = ++cleanupSequence;
+    // Persist logout intent and remove credentials before waiting for an older
+    // financial write. A terminated process must not leave a restorable account.
+    const marking = cleanupMarkerQueue
+      .catch(() => undefined)
+      .then(async () => {
+        assertCurrent(owner);
+        await dependencies.accountLocal?.cleanupMarker.mark();
+      });
+    cleanupMarkerQueue = marking;
+    const immediate = Promise.allSettled([
+      marking,
+      ...(mode === 'sign-out' ? [clearSaved(owner), savePending(null)] : []),
+    ]);
+    return queueAccount(async () => {
+      assertCurrent(owner);
+      const cleanup = await Promise.allSettled([
+        Promise.resolve().then(() => dependencies.accountLocal?.owner.clear()),
+        ...(dependencies.accountLocal?.stores.map((storage) =>
+          Promise.resolve().then(() => storage.clear()),
+        ) ?? []),
+      ]);
+      if ([...(await immediate), ...cleanup].some((result) => result.status === 'rejected')) {
+        if (mode === 'account-change') await Promise.allSettled([clearSaved(owner)]);
+        throw new AccountCleanupError();
+      }
+      try {
+        assertCurrent(owner);
+        const clearing = cleanupMarkerQueue
+          .catch(() => undefined)
+          .then(async () => {
+            assertCurrent(owner);
+            if (cleanupId !== cleanupSequence) throw new Superseded();
+            await dependencies.accountLocal?.cleanupMarker.clear();
+            if (cleanupId === cleanupSequence) accountCleanupRequired = false;
+          });
+        cleanupMarkerQueue = clearing;
+        await clearing;
+      } catch {
+        throw new AccountCleanupError();
+      }
+    });
+  };
+
+  const finishAccountCleanup = async (owner: number) => {
+    try {
+      const pending = await dependencies.accountLocal?.cleanupMarker.load();
+      assertCurrent(owner);
+      if (pending || accountCleanupRequired) await clearAccount(owner, 'sign-out');
+    } catch (error) {
+      if (error instanceof Superseded) throw error;
+      throw new AccountCleanupError();
+    }
   };
 
   const failSession = async (
@@ -328,6 +429,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await failSession(owner, expiredMessage);
       return;
     }
+    if (dependencies.accountLocal) {
+      try {
+        const savedOwner = await dependencies.accountLocal.owner.load();
+        assertCurrent(owner);
+        if (savedOwner !== session.user.id) {
+          await clearAccount(owner, 'account-change');
+          await queueAccount(async () => {
+            assertCurrent(owner);
+            await dependencies.accountLocal!.owner.save(session.user.id);
+            assertCurrent(owner);
+          });
+        }
+      } catch (error) {
+        if (error instanceof Superseded) throw error;
+        throw new AccountCleanupError();
+      }
+    }
     publish(cleanSnapshot({ status: 'authenticated', user: session.user, message: null }));
     await loadGroups(owner);
     if (!current(owner)) return;
@@ -346,6 +464,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const owner = invalidate();
     publish(cleanSnapshot({ status: 'restoring', user: null, message: null }));
     try {
+      await finishAccountCleanup(owner);
       if (!config.developmentPersonaEnabled) {
         await clearSaved(owner);
         publish(cleanSnapshot({ status: 'signed-out', user: null, message: disabledMessage }));
@@ -373,7 +492,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           status: 'error',
           user: null,
           message:
-            error instanceof RequestError
+            error instanceof RequestError || error instanceof AccountCleanupError
               ? error.message
               : 'Could not restore your session. Please try again.',
         }),
@@ -385,6 +504,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const owner = invalidate();
     publish(cleanSnapshot({ status: 'signing-in', user: null, message: null }));
     try {
+      await finishAccountCleanup(owner);
       await clearSaved(owner);
       if (!config.developmentPersonaEnabled) {
         publish(cleanSnapshot({ status: 'signed-out', user: null, message: disabledMessage }));
@@ -403,6 +523,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await verifyAndLoad(owner);
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;
+      if (error instanceof AccountCleanupError) {
+        await failSession(owner, error.message, 'error');
+        return;
+      }
       const message =
         error instanceof RequestError && error.status === 404
           ? 'Development personas are unavailable. Check that the development server is in demo mode and seeded.'
@@ -463,6 +587,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.auth.status !== 'authenticated') return;
     viewRequest += 1;
     publish({ ...snapshot, screen: 'create' });
+  };
+
+  const openSettings = () => {
+    if (snapshot.auth.status !== 'authenticated') return;
+    viewRequest += 1;
+    publish({ ...snapshot, screen: 'settings' });
   };
 
   const loadInviteLink = async (): Promise<string | null> => {
@@ -848,7 +978,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.screen === 'invite' && snapshot.auth.status !== 'authenticated')
       return retryInvitation();
     if (snapshot.auth.status !== 'authenticated') return restore();
-    if (snapshot.screen === 'create' || snapshot.screen === 'invite') {
+    if (['create', 'invite', 'settings'].includes(snapshot.screen)) {
       const owner = generation;
       try {
         const session = parseSession(await request('/api/auth/get-session', owner));
@@ -886,17 +1016,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish(cleanSnapshot({ status: 'signed-out', user: null, message: null }));
     // Independent stores must both be purged. Wait for both attempts before
     // exposing recovery so a failed invitation clear cannot preserve a session.
-    const cleanup = await Promise.allSettled([clearSaved(owner), savePending(null)]);
-    if (cleanup.some((result) => result.status === 'rejected')) {
+    try {
+      await clearAccount(owner, 'sign-out');
+    } catch {
       if (current(owner)) {
         publish(
           cleanSnapshot({
             status: 'error',
             user: null,
-            message:
-              cleanup[0].status === 'rejected'
-                ? 'Could not remove the saved session. Try signing out again.'
-                : 'Could not remove the saved invitation. Try signing out again.',
+            message: 'Could not remove this account from the device. Try signing out again.',
           }),
         );
       }
@@ -927,6 +1055,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     restore,
     signIn,
     startCreate,
+    openSettings,
+    accountStorage,
     updateCreation,
     createGroup,
     loadInviteLink,

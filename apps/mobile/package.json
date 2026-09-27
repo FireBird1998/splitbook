@@ -41,7 +41,8 @@
     "verify:api": "node --import tsx scripts/verify-api.ts",
     "backend:seed": "node scripts/dev-backend/seed.mjs",
     "backend:start": "node scripts/dev-backend/start.mjs",
-    "verify:groups": "node --import tsx scripts/verify-group-journey.ts"
+    "verify:groups": "node --import tsx scripts/verify-group-journey.ts",
+    "verify:settings": "node --import tsx scripts/verify-settings.ts"
   },
   "private": true
 }
