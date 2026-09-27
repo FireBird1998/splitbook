@@ -1,0 +1,46 @@
+{
+  "name": "@splitbook/mobile",
+  "version": "0.1.0",
+  "main": "index.ts",
+  "dependencies": {
+    "expo": "~57.0.25",
+    "expo-status-bar": "~57.0.1",
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "@splitbook/shared": "workspace:*",
+    "zod": "^4.5.4",
+    "expo-dev-client": "~57.0.19",
+    "expo-secure-store": "~57.0.4",
+    "expo-font": "~57.0.4",
+    "expo-linear-gradient": "~57.0.2",
+    "expo-build-properties": "~57.0.22",
+    "react-native-safe-area-context": "~5.7.0",
+    "@expo/vector-icons": "^15.0.2",
+    "expo-system-ui": "~57.0.4",
+    "@expo-google-fonts/outfit": "^0.4.3",
+    "@expo-google-fonts/ibm-plex-mono": "^0.4.1"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~5.9.3",
+    "vitest": "^4.1.10",
+    "eslint": "^9",
+    "@eslint/js": "^9",
+    "typescript-eslint": "^8.55.0",
+    "tsx": "^4.23.1",
+    "@types/node": "^22"
+  },
+  "scripts": {
+    "start": "expo start --dev-client",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run",
+    "lint": "eslint .",
+    "verify:api": "node --import tsx scripts/verify-api.ts",
+    "backend:seed": "node scripts/dev-backend/seed.mjs",
+    "backend:start": "node scripts/dev-backend/start.mjs"
+  },
+  "private": true
+}

@@ -38,3 +38,8 @@ yarn-error.log*
 
 # agent progress ledger
 .superpowers/
+
+# Expo generated native projects and local tooling
+apps/mobile/.expo/
+apps/mobile/android/
+apps/mobile/ios/
