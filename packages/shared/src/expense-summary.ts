@@ -1,3 +1,10 @@
+import {
+  MoneyValidationError,
+  readStoredAmountMinor,
+  sumMinorAmounts,
+  toMajorAmount,
+} from './exact-money';
+
 /**
  * Pure per-member accumulation maths for the expense summary's opt-in
  * `byMember` breakdown (v4 monthly views). No DB access — takes the lean
@@ -15,8 +22,10 @@ export interface ExpenseSummaryMemberInput {
 }
 
 export interface LeanExpenseContribution {
-  paidBy?: Array<{ user: unknown; amount?: number }> | null;
-  splitBetween?: Array<{ user: unknown; amount?: number }> | null;
+  currency?: string;
+  moneyVersion?: number;
+  paidBy?: Array<{ user: unknown; amount?: number; amountMinor?: number }> | null;
+  splitBetween?: Array<{ user: unknown; amount?: number; amountMinor?: number }> | null;
 }
 
 export interface MemberBreakdownRow {
@@ -39,8 +48,15 @@ function idString(user: unknown): string | null {
   return String(user);
 }
 
-function round2(value: number): number {
-  return Math.round(value * 100) / 100;
+function participantMinor(
+  expense: LeanExpenseContribution,
+  participant: { amount?: number; amountMinor?: number },
+  currency: string,
+): number {
+  if (expense.currency !== undefined && expense.currency !== currency) {
+    throw new MoneyValidationError('CURRENCY_MISMATCH', 'Different currencies cannot be added');
+  }
+  return readStoredAmountMinor({ ...participant, currency, moneyVersion: expense.moneyVersion });
 }
 
 /**
@@ -56,6 +72,7 @@ function round2(value: number): number {
 export function computeMemberBreakdown(
   expenses: LeanExpenseContribution[],
   memberIds: string[],
+  currency = 'INR',
 ): MemberBreakdownRow[] {
   const totals = new Map<string, { paid: number; share: number }>();
   for (const id of memberIds) totals.set(id, { paid: 0, share: 0 });
@@ -65,21 +82,25 @@ export function computeMemberBreakdown(
       const id = idString(payer.user);
       if (!id) continue;
       const row = totals.get(id);
-      if (row) row.paid += payer.amount || 0;
+      if (row) row.paid = sumMinorAmounts([row.paid, participantMinor(expense, payer, currency)]);
     }
     for (const participant of expense.splitBetween ?? []) {
       const id = idString(participant.user);
       if (!id) continue;
       const row = totals.get(id);
-      if (row) row.share += participant.amount || 0;
+      if (row)
+        row.share = sumMinorAmounts([row.share, participantMinor(expense, participant, currency)]);
     }
   }
 
   return memberIds.map((userId) => {
     const row = totals.get(userId)!;
-    const paid = round2(row.paid);
-    const share = round2(row.share);
-    return { userId, paid, share, net: round2(share - paid) };
+    return {
+      userId,
+      paid: toMajorAmount(row.paid, currency),
+      share: toMajorAmount(row.share, currency),
+      net: toMajorAmount(sumMinorAmounts([row.share, -row.paid]), currency),
+    };
   });
 }
 
@@ -90,6 +111,7 @@ export function computeMemberBreakdown(
 export function computeUserOweGetBack(
   expenses: LeanExpenseContribution[],
   userId: string,
+  currency = 'INR',
 ): { userOwes: number; userGetsBack: number } {
   let userOwes = 0;
   let userGetsBack = 0;
@@ -98,10 +120,16 @@ export function computeUserOweGetBack(
     const paidEntry = expense.paidBy?.find((p) => idString(p.user) === userId);
     const splitEntry = expense.splitBetween?.find((s) => idString(s.user) === userId);
 
-    const net = (splitEntry?.amount || 0) - (paidEntry?.amount || 0);
-    if (net > 0) userOwes += net;
-    if (net < 0) userGetsBack += Math.abs(net);
+    const net = sumMinorAmounts([
+      splitEntry ? participantMinor(expense, splitEntry, currency) : 0,
+      paidEntry ? -participantMinor(expense, paidEntry, currency) : 0,
+    ]);
+    if (net > 0) userOwes = sumMinorAmounts([userOwes, net]);
+    if (net < 0) userGetsBack = sumMinorAmounts([userGetsBack, -net]);
   }
 
-  return { userOwes: round2(userOwes), userGetsBack: round2(userGetsBack) };
+  return {
+    userOwes: toMajorAmount(userOwes, currency),
+    userGetsBack: toMajorAmount(userGetsBack, currency),
+  };
 }

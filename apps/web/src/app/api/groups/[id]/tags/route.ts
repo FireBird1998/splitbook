@@ -10,7 +10,7 @@ import { groupService } from '@/lib/services/group.service';
 import { z } from 'zod/v4';
 
 const createTagSchema = z.object({
-  name: z.string().min(1, 'Tag name is required').max(50).trim(),
+  name: z.string().trim().min(1, 'Tag name is required').max(50),
 });
 
 // POST /api/groups/[id]/tags — Create a new tag
@@ -34,6 +34,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   } catch (err) {
     if (err instanceof Error) {
       if (err.message === 'FORBIDDEN') return forbidden();
+      if (err.message === 'TAG_CHANGED' || err.message === 'AMBIGUOUS_TAG') {
+        return new Response(
+          JSON.stringify({
+            error: 'Tag changed or has ambiguous legacy references. Reload and try again.',
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       if (err.message === 'TAG_EXISTS') {
         return new Response(JSON.stringify({ error: 'A tag with this name already exists' }), {
           status: 400,

@@ -3,17 +3,49 @@
  */
 
 import { getPredefinedItem } from '@splitbook/shared/predefined-items';
+import {
+  assertStoredExpenseMoney,
+  readStoredAmountMinor,
+  toMajorAmount,
+} from '@splitbook/shared/exact-money';
+
+/** Stored amounts may carry legacy binary tails; new user input remains strict. */
+export function getStoredExpenseMoneyFields(
+  expense: Parameters<typeof assertStoredExpenseMoney>[0],
+): { amount: string; paidBy: string[]; splitBetween: string[] } {
+  assertStoredExpenseMoney(expense);
+  const inputAmount = (value: { amount?: number; amountMinor?: number }): string =>
+    String(
+      toMajorAmount(
+        readStoredAmountMinor({
+          ...value,
+          currency: expense.currency,
+          moneyVersion: expense.moneyVersion,
+        }),
+        expense.currency,
+      ),
+    );
+  return {
+    amount: inputAmount(expense),
+    paidBy: expense.paidBy.map(inputAmount),
+    splitBetween: expense.splitBetween.map(inputAmount),
+  };
+}
 
 export interface GroupTagOption {
   _id?: string;
   name: string;
   isArchived: boolean;
+  isDeleted?: boolean;
 }
 
+export const tagOptionValue = (tag: GroupTagOption): string => tag._id ?? tag.name;
+
 export function getDefaultExpenseTag(tags: GroupTagOption[]): string {
-  const active = tags.filter((tag) => !tag.isArchived);
+  const active = tags.filter((tag) => !tag.isArchived && !tag.isDeleted);
   const general = active.find((tag) => tag.name.toLowerCase() === 'general');
-  return general?.name ?? active[0]?.name ?? '';
+  const selected = general ?? active[0];
+  return selected ? tagOptionValue(selected) : '';
 }
 
 /**
@@ -23,19 +55,25 @@ export function getDefaultExpenseTag(tags: GroupTagOption[]): string {
 export function getSelectableExpenseTags(
   tags: GroupTagOption[],
   currentTag?: string | null,
+  currentTagId?: string | null,
 ): GroupTagOption[] {
-  const active = tags.filter((tag) => !tag.isArchived);
-  if (!currentTag) return active;
+  const active = tags.filter((tag) => !tag.isArchived && !tag.isDeleted);
+  if (!currentTag && !currentTagId) return active;
 
-  const hasCurrent = active.some((tag) => tag.name === currentTag);
+  const matches = (tag: GroupTagOption) =>
+    currentTagId ? tag._id === currentTagId : tag.name === currentTag;
+  const hasCurrent = active.some(matches);
   if (hasCurrent) return active;
 
-  const archivedMatch = tags.find((tag) => tag.name === currentTag);
+  const archivedMatch = tags.find(matches);
   if (archivedMatch) {
     return [...active, archivedMatch];
   }
 
-  return [...active, { name: currentTag, isArchived: true }];
+  return [
+    ...active,
+    { _id: currentTagId ?? undefined, name: currentTag ?? 'Unavailable Tag', isArchived: true },
+  ];
 }
 
 export function isAdvancedSplit(input: {
@@ -55,9 +93,9 @@ export function isAdvancedSplit(input: {
 }
 
 export function resolvePredefinedTag(tags: GroupTagOption[], preferredTag: string): string | null {
-  const active = tags.filter((tag) => !tag.isArchived);
+  const active = tags.filter((tag) => !tag.isArchived && !tag.isDeleted);
   const exact = active.find((tag) => tag.name.toLowerCase() === preferredTag.toLowerCase());
-  return exact?.name ?? null;
+  return exact ? tagOptionValue(exact) : null;
 }
 
 /**

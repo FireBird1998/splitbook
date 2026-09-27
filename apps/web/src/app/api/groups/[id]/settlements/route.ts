@@ -10,6 +10,7 @@ import {
 import { groupService } from '@/lib/services/group.service';
 import { settlementService } from '@/lib/services/settlement.service';
 import { createSettlementSchema } from '@splitbook/shared/validators/settlement';
+import { parseIdempotencyKey } from '@/lib/financial-write';
 
 const settlementValidationMessages: Record<string, string> = {
   INVALID_MEMBERS: 'Both payer and recipient must be group members',
@@ -33,7 +34,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const parsed = createSettlementSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error);
 
-    const settlement = await settlementService.create(id, parsed.data, user.id!);
+    const settlement = await settlementService.create(
+      id,
+      parsed.data,
+      user.id!,
+      parseIdempotencyKey(req.headers.get('Idempotency-Key')),
+    );
     return success(settlement, 201);
   } catch (err) {
     if (err instanceof Error && err.message in settlementValidationMessages) {

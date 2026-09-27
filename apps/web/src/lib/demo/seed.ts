@@ -151,6 +151,8 @@ async function insertTripTransactions(plan: DemoSeedPlan): Promise<{
   settlementsCreated: number;
 }> {
   let expensesCreated = 0;
+  const group = await Group.findById(plan.groupId);
+  if (!group) throw new Error('Demo group missing before transactions');
 
   for (const expense of plan.expenses) {
     await expenseService.create(
@@ -164,6 +166,9 @@ async function insertTripTransactions(plan: DemoSeedPlan): Promise<{
         paidBy: expense.paidBy,
         splitMethod: expense.splitMethod,
         splitBetween: expense.splitBetween,
+        tagId: group.tags
+          .find((tag) => tag.name === expense.tag && !tag.isArchived && !tag.isDeleted)
+          ?._id.toString(),
         tag: expense.tag,
         notes: expense.notes,
       },

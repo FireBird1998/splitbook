@@ -1,9 +1,6 @@
 import type { CurrencyBalanceBucket, DashboardGroupBalance, DashboardNextAction } from './types';
 
-const roundMoney = (amount: number) => {
-  const sign = Math.sign(amount) || 1;
-  return (sign * Math.round((Math.abs(amount) + Number.EPSILON) * 100)) / 100;
-};
+import { readLegacyAmountMinor, sumMinorAmounts, toMajorAmount } from './exact-money';
 
 export function aggregateCurrencyBalances(
   groups: DashboardGroupBalance[],
@@ -19,17 +16,25 @@ export function aggregateCurrencyBalances(
         net: 0,
       };
 
-      if (item.balance < 0) {
-        bucket.youOwe = roundMoney(bucket.youOwe + Math.abs(item.balance));
+      const balanceMinor = readLegacyAmountMinor(item.balance, item.currency);
+      if (balanceMinor < 0) {
+        bucket.youOwe = sumMinorAmounts([bucket.youOwe, -balanceMinor]);
       } else {
-        bucket.youAreOwed = roundMoney(bucket.youAreOwed + item.balance);
+        bucket.youAreOwed = sumMinorAmounts([bucket.youAreOwed, balanceMinor]);
       }
-      bucket.net = roundMoney(bucket.youAreOwed - bucket.youOwe);
+      bucket.net = sumMinorAmounts([bucket.youAreOwed, -bucket.youOwe]);
       buckets.set(item.currency, bucket);
     }
   }
 
-  return [...buckets.values()].sort((a, b) => a.currency.localeCompare(b.currency));
+  return [...buckets.values()]
+    .map((bucket) => ({
+      currency: bucket.currency,
+      youOwe: toMajorAmount(bucket.youOwe, bucket.currency),
+      youAreOwed: toMajorAmount(bucket.youAreOwed, bucket.currency),
+      net: toMajorAmount(bucket.net, bucket.currency),
+    }))
+    .sort((a, b) => a.currency.localeCompare(b.currency));
 }
 
 export function selectNextAction(

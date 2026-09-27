@@ -1,20 +1,31 @@
-import { test, expect, dataOf, expensePath, generatedExpense } from './fixtures';
+import {
+  test,
+  expect,
+  dataOf,
+  expensePath,
+  generatedExpense,
+  expenseRevisionHeaders,
+} from './fixtures';
 import { accessMatrix } from './access-matrix';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
 accessMatrix({ name: 'delete', request: (actor, path) => actor.delete(path, { maxRedirects: 0 }) });
 
 for (const origin of ['manual', 'recurring'] as const) {
-  test(`ordinary member soft-deletes ${origin} expense and preserves repeat-deletion behavior`, async ({
+  test(`ordinary member soft-deletes ${origin} expense and preserves original attribution on repeat deletion`, async ({
     ledger,
   }) => {
     const id = origin === 'recurring' ? await generatedExpense(ledger) : ledger.expenseB;
     const path = expensePath(ledger.groupB, id);
     const before = await dataOf(await ledger.sam.get(path));
     for (const actor of [ledger.sam, ledger.priya]) {
-      expect(await dataOf(await actor.delete(path))).toEqual({ message: 'Expense deleted' });
+      expect(
+        await dataOf(
+          await actor.delete(path, { headers: await expenseRevisionHeaders(actor, path) }),
+        ),
+      ).toEqual({ message: 'Expense deleted', revision: (before.revision ?? 0) + 1 });
       const stored = await dataOf(await ledger.sam.get(path));
-      const actorId = actor === ledger.sam ? DEMO_PERSONA_IDS.sam : DEMO_PERSONA_IDS.priya;
+      const actorId = DEMO_PERSONA_IDS.sam;
       expect(stored).toMatchObject({
         isDeleted: true,
         deletedBy: actorId,
@@ -26,6 +37,12 @@ for (const origin of ['manual', 'recurring'] as const) {
       const activity = await dataOf(
         await ledger.priya.get(`/api/groups/${ledger.groupB}/activity`),
       );
+      expect(
+        activity.activities.filter(
+          (event: { type: string; metadata?: { expenseId?: string } }) =>
+            event.type === 'expense_deleted' && event.metadata?.expenseId === id,
+        ),
+      ).toHaveLength(1);
       expect(activity.activities).toContainEqual(
         expect.objectContaining({
           type: 'expense_deleted',

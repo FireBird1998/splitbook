@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 4127",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
@@ -22,7 +22,8 @@
     "typecheck": "tsc --noEmit",
     "demo:seed": "tsx --tsconfig scripts/tsconfig.json scripts/demo-seed.ts",
     "demo:reset": "tsx --tsconfig scripts/tsconfig.json scripts/demo-reset.ts",
-    "migrate:auth": "tsx --tsconfig scripts/tsconfig.json scripts/migrate-auth.ts"
+    "migrate:auth": "tsx --tsconfig scripts/tsconfig.json scripts/migrate-auth.ts",
+    "migrate:ledger": "tsx --tsconfig scripts/tsconfig.json scripts/migrate-ledger.ts"
   },
   "dependencies": {
     "@emotion/cache": "^11.14.0",

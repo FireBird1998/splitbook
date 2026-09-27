@@ -37,6 +37,7 @@ import AddIcon from '@mui/icons-material/Add';
 import ArchiveIcon from '@mui/icons-material/Archive';
 import UnarchiveIcon from '@mui/icons-material/Unarchive';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 import LabelIcon from '@mui/icons-material/Label';
 import { CURRENCIES, getSortedCurrencies } from '@splitbook/shared/currency';
 import { formatDate } from '@splitbook/shared/date';
@@ -83,6 +84,9 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
   const [deleteTagDialogOpen, setDeleteTagDialogOpen] = useState(false);
   const [deleteTagError, setDeleteTagError] = useState('');
+  const [renameTagOpen, setRenameTagOpen] = useState(false);
+  const [renameTagName, setRenameTagName] = useState('');
+  const [renameTagError, setRenameTagError] = useState('');
 
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiveLoading, setArchiveLoading] = useState(false);
@@ -294,12 +298,15 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     }
   };
 
-  const tags = (group.tags || []) as Array<{
-    _id: string;
-    name: string;
-    isArchived: boolean;
-    createdAt: string;
-  }>;
+  const tags = (
+    (group.tags || []) as Array<{
+      _id: string;
+      name: string;
+      isArchived: boolean;
+      isDeleted?: boolean;
+      createdAt: string;
+    }>
+  ).filter((tag) => !tag.isDeleted);
 
   const selectedTagData = tags.find((t) => t._id === selectedTag);
 
@@ -325,6 +332,34 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
       }
     } catch {
       setSnackbar({ open: true, message: 'Failed to create tag' });
+    } finally {
+      setTagLoading(false);
+    }
+  };
+
+  const handleRenameTag = async () => {
+    if (!selectedTag || !renameTagName.trim()) return;
+    setTagLoading(true);
+    setRenameTagError('');
+    try {
+      const res = await fetch(`/api/groups/${groupId}/tags/${selectedTag}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: renameTagName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setRenameTagError(data.error || 'Failed to rename tag');
+        return;
+      }
+      await globalMutate(
+        (key) => typeof key === 'string' && key.startsWith(`/api/groups/${groupId}`),
+      );
+      setRenameTagOpen(false);
+      setSelectedTag(null);
+      setSnackbar({ open: true, message: 'Tag renamed' });
+    } catch {
+      setRenameTagError('Failed to rename tag');
     } finally {
       setTagLoading(false);
     }
@@ -669,6 +704,20 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
             }}
             slotProps={{ paper: { sx: { minWidth: 180 } } }}
           >
+            <MuiMenuItem
+              onClick={() => {
+                setRenameTagName(selectedTagData?.name ?? '');
+                setRenameTagError('');
+                setRenameTagOpen(true);
+                setTagMenuAnchor(null);
+              }}
+              disabled={tagLoading}
+            >
+              <ListItemIcon>
+                <EditIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText>Rename</ListItemText>
+            </MuiMenuItem>
             <MuiMenuItem onClick={handleToggleArchiveTag} disabled={tagLoading}>
               <ListItemIcon>
                 {selectedTagData?.isArchived ? (
@@ -695,6 +744,42 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
           </Menu>
         </Paper>
 
+        <Dialog
+          open={renameTagOpen}
+          onClose={() => {
+            if (!tagLoading) setRenameTagOpen(false);
+          }}
+          maxWidth="xs"
+          fullWidth
+        >
+          <DialogTitle>Rename Tag</DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus
+              label="Tag name"
+              fullWidth
+              value={renameTagName}
+              onChange={(event) => setRenameTagName(event.target.value)}
+              error={!!renameTagError}
+              helperText={renameTagError || 'Expenses and recurring templates keep this Tag.'}
+              slotProps={{ htmlInput: { maxLength: 50 } }}
+              sx={{ mt: 1 }}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setRenameTagOpen(false)} disabled={tagLoading}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleRenameTag}
+              disabled={tagLoading || !renameTagName.trim()}
+              variant="contained"
+            >
+              Save name
+            </Button>
+          </DialogActions>
+        </Dialog>
+
         {/* Delete Tag Confirmation Dialog */}
         <Dialog
           open={deleteTagDialogOpen}
@@ -710,7 +795,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
             <Typography variant="body2" color="text.primary">
               Are you sure you want to delete the tag{' '}
               <strong>&ldquo;{selectedTagData?.name}&rdquo;</strong>? This is only possible if no
-              expenses use this tag.
+              expenses or recurring templates use this tag.
             </Typography>
             {deleteTagError && (
               <Typography variant="body2" color="error.main" sx={{ mt: 1 }}>

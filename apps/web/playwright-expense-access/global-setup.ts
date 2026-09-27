@@ -32,7 +32,11 @@ async function stop(child: ChildProcess): Promise<void> {
   }
 }
 
-export default async function globalSetup() {
+export async function startIsolatedApp(
+  authMode: 'demo' | 'google' = 'demo',
+  googleTestIdentity?: { email: string; idTokenSecret: string },
+  production = false,
+) {
   // Never accept a caller's Mongo URI or app URL. Match the integration suite's
   // splitbook-test-* convention, but use a unique, loopback-only DB per run.
   const dbName = `splitbook-test-access-${randomUUID()}`;
@@ -78,12 +82,47 @@ export default async function globalSetup() {
     await symlink(path.join(repo, 'node_modules'), path.join(appDir, 'node_modules'), 'dir');
     const port = await unusedPort();
     const baseURL = `http://127.0.0.1:${port}`;
+    const env: NodeJS.ProcessEnv = {
+      PATH: process.env.PATH,
+      NODE_ENV: production ? 'production' : 'development',
+      NEXT_TELEMETRY_DISABLED: '1',
+      AUTH_MODE: authMode,
+      ALLOW_DEMO_AUTH: 'true',
+      AUTH_RATE_LIMIT_ENABLED: 'false',
+      AUTH_SECRET: randomUUID(),
+      AUTH_GOOGLE_ID: 'unused-synthetic-client',
+      AUTH_GOOGLE_SECRET: 'unused-synthetic-secret',
+      AUTH_ALLOWED_EMAILS: googleTestIdentity?.email ?? '',
+      ...(googleTestIdentity
+        ? {
+            AUTH_TEST_ID_TOKEN_SECRET: googleTestIdentity.idTokenSecret,
+            ALLOW_TEST_ID_TOKEN: 'true',
+          }
+        : {}),
+      MONGODB_URI: uri,
+      NEXT_PUBLIC_APP_URL: baseURL,
+    };
+    if (production) {
+      // Build only the temporary snapshot. The user's .next and environment
+      // files are never read or changed by this production verification.
+      const build = spawn(
+        process.execPath,
+        [require.resolve('next/dist/bin/next'), 'build', '--webpack'],
+        { cwd: appDir, stdio: 'inherit', env },
+      );
+      const timeout = setTimeout(() => build.kill('SIGKILL'), 240_000);
+      try {
+        const [code] = await once(build, 'exit');
+        if (code !== 0) throw new Error(`Isolated production build failed: ${code}`);
+      } finally {
+        clearTimeout(timeout);
+      }
+    }
     app = spawn(
       process.execPath,
       [
         require.resolve('next/dist/bin/next'),
-        'dev',
-        '--webpack',
+        ...(production ? ['start'] : ['dev', '--webpack']),
         '-H',
         '127.0.0.1',
         '-p',
@@ -92,19 +131,7 @@ export default async function globalSetup() {
       {
         cwd: appDir,
         stdio: ['ignore', 'pipe', 'pipe'],
-        env: {
-          PATH: process.env.PATH,
-          NODE_ENV: 'development',
-          NEXT_TELEMETRY_DISABLED: '1',
-          AUTH_MODE: 'demo',
-          ALLOW_DEMO_AUTH: 'true',
-          AUTH_SECRET: randomUUID(),
-          AUTH_GOOGLE_ID: 'unused-synthetic-client',
-          AUTH_GOOGLE_SECRET: 'unused-synthetic-secret',
-          AUTH_ALLOWED_EMAILS: '',
-          MONGODB_URI: uri,
-          NEXT_PUBLIC_APP_URL: baseURL,
-        },
+        env,
       },
     );
     const child = app;
@@ -136,9 +163,16 @@ export default async function globalSetup() {
     // Only publish the URL after our own child reports readiness. An occupied
     // port fails startup; an existing app is never reused.
     process.env.EXPENSE_ACCESS_BASE_URL = baseURL;
+    process.env.EXPENSE_ACCESS_TEST_DB = dbName;
     return cleanup;
   } catch (err) {
     await cleanup();
     throw err;
   }
+}
+
+export default async function globalSetup() {
+  // CI verifies the production server without paying route compilation costs
+  // during browser assertions. Local runs keep the faster development startup.
+  return startIsolatedApp('demo', undefined, Boolean(process.env.CI));
 }

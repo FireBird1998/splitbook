@@ -24,10 +24,8 @@ describe('proxy rules', () => {
     expect(passesThrough(decide('/api/auth/sign-in/social', false, 'POST'))).toBe(true);
   });
 
-  it('redirects visitors with a session cookie away from /login to the dashboard', () => {
-    const response = decide('/login', true);
-    expect(response.status).toBe(307);
-    expect(response.headers.get('location')).toBe(`${ORIGIN}/dashboard`);
+  it('lets login validate a session cookie before deciding whether to redirect', () => {
+    expect(passesThrough(decide('/login', true))).toBe(true);
   });
 
   it('allows public pages for anonymous visitors', () => {

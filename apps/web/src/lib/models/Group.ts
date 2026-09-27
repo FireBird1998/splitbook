@@ -10,6 +10,7 @@ export interface IGroupTagDocument {
   _id: mongoose.Types.ObjectId;
   name: string;
   isArchived: boolean;
+  isDeleted?: boolean;
   createdAt: Date;
 }
 
@@ -22,6 +23,7 @@ export interface IGroupDocument {
   members: IGroupMemberDocument[];
   tags: IGroupTagDocument[];
   defaultCurrency: string;
+  currencyLocked: boolean;
   alternateCurrencies: string[];
   category: 'trip' | 'home' | 'couple' | 'work' | 'other';
   startDate?: Date | null;
@@ -45,6 +47,7 @@ const GroupMemberSchema = new Schema<IGroupMemberDocument>(
 const GroupTagSchema = new Schema<IGroupTagDocument>({
   name: { type: String, required: true, trim: true, maxlength: 50 },
   isArchived: { type: Boolean, default: false },
+  isDeleted: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
 });
 
@@ -63,6 +66,7 @@ const GroupSchema = new Schema<IGroupDocument>(
     members: { type: [GroupMemberSchema], default: [] },
     tags: { type: [GroupTagSchema], default: [] },
     defaultCurrency: { type: String, required: true, trim: true },
+    currencyLocked: { type: Boolean, default: false },
     alternateCurrencies: {
       type: [String],
       default: [],

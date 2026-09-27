@@ -166,7 +166,7 @@ describe('ExpenseService integration', () => {
         {
           ...expenseInput,
           description: 'Another dinner',
-          paidBy: [{ user: alice, amount: 100 }],
+          paidBy: [{ user: alice, amount: 300 }],
           splitBetween: [{ user: alice }],
         },
         alice,
@@ -196,7 +196,7 @@ describe('ExpenseService integration', () => {
 
     await expenseService.update(
       { actorId: bob, groupId, expenseId: expense._id.toString() },
-      { amount: 330 },
+      { amount: 330, paidBy: [{ user: alice, amount: 330 }] },
     );
 
     const stored = await Expense.findById(expense._id);

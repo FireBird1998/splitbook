@@ -215,7 +215,7 @@ The rules, in order:
 | ---- | ---------------------- | -------------------------------------------- | ------------------- |
 | 1    | `/api/auth/*`          | allowed                                      | allowed             |
 | 2    | `GET /api/join/[code]` | allowed (invite preview)                     | allowed             |
-| 3    | `/login*`              | allowed                                      | → `/dashboard`      |
+| 3    | `/login*`              | allowed                                      | allowed             |
 | 4    | `/`, `/join*`          | allowed                                      | allowed             |
 | 5    | other `/api/*`         | `401 { error: 'Unauthorized', status: 401 }` | allowed             |
 | 6    | everything else        | → `/login?callbackUrl=<pathname>`            | allowed             |
@@ -223,12 +223,16 @@ The rules, in order:
 The matcher excludes Next internals, static files and the design-system lab
 URL, so it runs on every page **and** every `/api/*` route.
 
+The `/login` server page calls `getAuthUser()` and redirects to `/dashboard`
+only for a valid session. Invalid or expired cookies leave the login page
+accessible, avoiding a redirect loop with the authenticated layout.
+
 > **The proxy is optimistic.** `getSessionCookie` only proves a session cookie
 > exists; it never touches the database. An expired or revoked session passes
 > the proxy and is rejected where validation lives: `getAuthUser()` answers
 > 401 for API routes, and the authenticated layout redirects to `/login` for
-> pages. `/`, `/login` and `/join` are matched with `startsWith`, so any path
-> _beginning_ with those strings is public.
+> pages. `/` is matched exactly; `/login` and `/join` use `startsWith`, so paths
+> _beginning_ with either of those two strings pass the proxy.
 
 ---
 

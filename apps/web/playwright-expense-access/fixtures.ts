@@ -39,6 +39,12 @@ export async function joinGroup(
 export const expensePath = (group: string, expense: string) =>
   `/api/groups/${group}/expenses/${expense}`;
 
+/** Read the version before an authorized mutation; contexts remain unmodified. */
+export async function expenseRevisionHeaders(actor: APIRequestContext, path: string) {
+  const expense = await dataOf(await actor.get(path));
+  return { 'If-Match': String(expense.revision ?? 0) };
+}
+
 export type Ledger = {
   alex: APIRequestContext;
   sam: APIRequestContext;

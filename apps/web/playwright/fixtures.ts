@@ -82,39 +82,52 @@ export async function reviewScreenshot(
 }
 
 /**
- * Run an axe-core scan and fail on critical violations. The full violation
- * list (including serious/minor, e.g. contrast suggestions) is attached to
- * the test report for review.
+ * Check the fully rendered presentation, including serious contrast findings.
+ * Wait for fonts and finite entrance animations so an intermediate opacity
+ * frame is not mistaken for the screen's final text/background contrast.
+ * Keep complete node diagnostics in the report to make failures actionable.
  */
-export async function expectNoCriticalA11yViolations(
+export async function expectNoSeriousA11yViolations(
   page: Page,
   testInfo: TestInfo,
   name: string,
 ): Promise<void> {
+  await page.evaluate(async () => {
+    await document.fonts.ready;
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter(
+          (animation) =>
+            animation.playState === 'running' &&
+            Number.isFinite(animation.effect?.getTiming().iterations ?? 1),
+        )
+        .map((animation) => animation.finished.catch(() => undefined)),
+    );
+  });
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
     .analyze();
 
   await testInfo.attach(`axe-${name}`, {
-    body: JSON.stringify(
-      results.violations.map((violation) => ({
-        id: violation.id,
-        impact: violation.impact,
-        description: violation.description,
-        nodes: violation.nodes.length,
-      })),
-      null,
-      2,
-    ),
+    body: JSON.stringify(results.violations, null, 2),
     contentType: 'application/json',
   });
 
-  const critical = results.violations.filter((violation) => violation.impact === 'critical');
+  const blocking = results.violations
+    .filter((violation) => violation.impact === 'critical' || violation.impact === 'serious')
+    .map((violation) => ({
+      id: violation.id,
+      impact: violation.impact,
+      nodes: violation.nodes.map((node) => ({
+        target: node.target,
+        html: node.html,
+        summary: node.failureSummary,
+      })),
+    }));
   expect(
-    critical,
-    `Critical accessibility violations on ${name}: ${JSON.stringify(
-      critical.map((violation) => violation.id),
-    )}`,
+    blocking,
+    `Serious or critical accessibility violations on ${name}: ${JSON.stringify(blocking)}`,
   ).toEqual([]);
 }
 

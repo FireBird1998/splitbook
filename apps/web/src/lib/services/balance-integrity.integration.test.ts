@@ -236,6 +236,13 @@ describe('balance integrity integration', () => {
 
     const groupBalances = await balanceService.getGroupBalances(groupId);
     expect(groupBalances!.hasMixedCurrencies).toBe(true);
+    expect(groupBalances!.byCurrency).toHaveLength(2);
+    const euro = groupBalances!.byCurrency.find((bucket) => bucket.currency === 'EUR')!;
+    const rupees = groupBalances!.byCurrency.find((bucket) => bucket.currency === 'INR')!;
+    expect(balanceOf(euro.balances, alice)).toBe(-30);
+    expect(balanceOf(rupees.balances, alice)).toBe(50);
+    expect(euro.debts).toMatchObject([{ from: { _id: alice }, to: { _id: bob }, amount: 30 }]);
+    expect(groupBalances!.balances).toEqual(rupees.balances);
 
     const userBalances = await balanceService.getUserBalances(alice);
     expect(userBalances.hasMixedCurrencies).toBe(true);
@@ -255,5 +262,83 @@ describe('balance integrity integration', () => {
     const result = await balanceService.getUserBalances(alice);
     expect(result.groups).toHaveLength(0);
     expect(result.buckets).toHaveLength(0);
+  });
+
+  it('rejects a legacy expense whose paid and split totals agree with each other but not its amount', async () => {
+    const groupId = await createTrip();
+    await groupService.addMember(groupId, bob);
+    const expense = await addEqualExpense(groupId, alice, 100, [alice, bob]);
+    await Expense.collection.updateOne(
+      { _id: expense._id },
+      {
+        $unset: { amountMinor: '', moneyVersion: '' },
+        $set: {
+          paidBy: [{ user: new mongoose.Types.ObjectId(alice), amount: 1 }],
+          splitBetween: [
+            { user: new mongoose.Types.ObjectId(alice), amount: 0.5 },
+            { user: new mongoose.Types.ObjectId(bob), amount: 0.5 },
+          ],
+        },
+      },
+    );
+    await expect(balanceService.getGroupBalances(groupId)).rejects.toThrow('Expense amount');
+    await expect(balanceService.getUserBalances(alice)).rejects.toThrow('Expense amount');
+  });
+
+  it('rejects canonical root drift before deriving either group or dashboard balances', async () => {
+    const groupId = await createTrip();
+    await groupService.addMember(groupId, bob);
+    const expense = await addEqualExpense(groupId, alice, 100, [alice, bob]);
+    await Expense.collection.updateOne({ _id: expense._id }, { $set: { amountMinor: 1 } });
+    await expect(balanceService.getGroupBalances(groupId)).rejects.toThrow('disagree');
+    await expect(balanceService.getUserBalances(alice)).rejects.toThrow('disagree');
+  });
+
+  it('rejects duplicated legacy participants even when their sums balance', async () => {
+    const groupId = await createTrip();
+    const expense = await addEqualExpense(groupId, alice, 100, [alice]);
+    await Expense.collection.updateOne(
+      { _id: expense._id },
+      {
+        $unset: { amountMinor: '', moneyVersion: '' },
+        $set: {
+          paidBy: [
+            { user: new mongoose.Types.ObjectId(alice), amount: 50 },
+            { user: new mongoose.Types.ObjectId(alice), amount: 50 },
+          ],
+          splitBetween: [{ user: new mongoose.Types.ObjectId(alice), amount: 100 }],
+        },
+      },
+    );
+    await expect(balanceService.getGroupBalances(groupId)).rejects.toThrow('only once');
+  });
+
+  it('reads valid legacy binary tails exactly without rewriting historical allocations', async () => {
+    const groupId = await createTrip();
+    await groupService.addMember(groupId, bob);
+    await groupService.addMember(groupId, carol);
+    const expense = await addEqualExpense(groupId, alice, 100, [alice, bob, carol]);
+    const oldSplits = [
+      { user: new mongoose.Types.ObjectId(alice), amount: 33.33 + 0.01 },
+      { user: new mongoose.Types.ObjectId(bob), amount: 33.33 },
+      { user: new mongoose.Types.ObjectId(carol), amount: 33.33 },
+    ];
+    await Expense.collection.updateOne(
+      { _id: expense._id },
+      {
+        $unset: { amountMinor: '', moneyVersion: '' },
+        $set: {
+          paidBy: [{ user: new mongoose.Types.ObjectId(alice), amount: 100 }],
+          splitBetween: oldSplits,
+        },
+      },
+    );
+    const balances = await balanceService.getGroupBalances(groupId);
+    expect(balanceOf(balances!.balances, alice)).toBe(66.66);
+    expect(balanceOf(balances!.balances, bob)).toBe(-33.33);
+    expect(balanceOf(balances!.balances, carol)).toBe(-33.33);
+    const stored = await Expense.collection.findOne({ _id: expense._id });
+    expect(stored?.moneyVersion).toBeUndefined();
+    expect(stored?.splitBetween).toEqual(oldSplits);
   });
 });

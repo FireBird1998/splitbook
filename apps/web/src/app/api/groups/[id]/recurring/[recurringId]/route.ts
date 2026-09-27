@@ -10,6 +10,7 @@ import {
 } from '@/lib/utils/api-response';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { updateRecurringExpenseSchema } from '@splitbook/shared/validators/recurring-expense';
+import { requestRevision } from '@/lib/ledger-revision';
 
 const recurringValidationMessages: Record<string, string> = {
   INVALID_MEMBERS: 'All payers and split participants must be group members',
@@ -42,7 +43,13 @@ export async function PATCH(
     const parsed = updateRecurringExpenseSchema.safeParse(body);
     if (!parsed.success) return validationError(parsed.error);
 
-    const template = await recurringExpenseService.update(id, recurringId, parsed.data, user.id!);
+    const template = await recurringExpenseService.update(
+      id,
+      recurringId,
+      parsed.data,
+      user.id!,
+      requestRevision(req),
+    );
     if (!template) return notFound('Recurring expense');
 
     return success(template);
@@ -54,7 +61,7 @@ export async function PATCH(
 // DELETE /api/groups/[id]/recurring/[recurringId] — Delete a template (admin only).
 // Expenses the template already generated are never touched.
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string; recurringId: string }> },
 ) {
   try {
@@ -63,7 +70,12 @@ export async function DELETE(
 
     const { id, recurringId } = await params;
 
-    const template = await recurringExpenseService.remove(id, recurringId, user.id!);
+    const template = await recurringExpenseService.remove(
+      id,
+      recurringId,
+      user.id!,
+      requestRevision(req),
+    );
     if (!template) return notFound('Recurring expense');
 
     return success({ message: 'Recurring expense deleted' });

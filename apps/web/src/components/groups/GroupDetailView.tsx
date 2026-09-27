@@ -12,7 +12,6 @@ import Skeleton from '@mui/material/Skeleton';
 import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import IconButton from '@mui/material/IconButton';
-import Fab from '@mui/material/Fab';
 import Button from '@mui/material/Button';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
@@ -222,6 +221,14 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
           Dashboard
         </Button>
         <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => setExpenseDialogOpen(true)}
+            sx={{ display: { xs: 'none', sm: 'inline-flex' }, mr: 1 }}
+          >
+            Add expense
+          </Button>
           <IconButton
             onClick={() => setInviteDialogOpen(true)}
             size="small"
@@ -431,23 +438,6 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
       )}
       {tab === 1 && <BalancesView groupId={groupId} userId={userId} group={group} />}
       {tab === 2 && <ActivityView groupId={groupId} />}
-
-      <Fab
-        color="primary"
-        onClick={() => setExpenseDialogOpen(true)}
-        aria-label="Add expense"
-        sx={{
-          position: 'fixed',
-          right: 24,
-          bottom: {
-            xs: 'calc(24px + env(safe-area-inset-bottom, 0px))',
-            sm: 24,
-          },
-          display: { xs: 'none', sm: 'flex' },
-        }}
-      >
-        <AddIcon />
-      </Fab>
 
       <Box
         sx={{

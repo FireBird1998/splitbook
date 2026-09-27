@@ -7,16 +7,7 @@ import {
 } from '@/lib/utils/api-response';
 import connectDB from '@/lib/db';
 import User from '@/lib/models/User';
-import { z } from 'zod/v4';
-import { CURRENCY_CODES } from '@splitbook/shared/currency';
-
-const updateProfileSchema = z.object({
-  name: z.string().min(1).max(100).trim().optional(),
-  preferredCurrency: z
-    .string()
-    .refine((val) => CURRENCY_CODES.includes(val))
-    .optional(),
-});
+import { updateProfileSchema } from '@splitbook/shared/validators/profile';
 
 // GET /api/user/profile
 export async function GET() {
@@ -27,7 +18,7 @@ export async function GET() {
     await connectDB();
     const dbUser = await User.findById(user.id).lean();
     if (!dbUser) {
-      // User exists in Auth.js but not yet in our User model — create it
+      // A valid session may predate the application's profile record.
       const newUser = await User.create({
         _id: user.id,
         name: user.name || 'User',
@@ -56,6 +47,7 @@ export async function PATCH(req: Request) {
     await connectDB();
     const updated = await User.findByIdAndUpdate(user.id, parsed.data, {
       returnDocument: 'after',
+      runValidators: true,
     }).lean();
 
     return success(updated);

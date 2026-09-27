@@ -4,6 +4,7 @@ import Settlement from '@/lib/models/Settlement';
 import Group from '@/lib/models/Group';
 import { calculateNetBalances, simplifyDebts } from '@splitbook/shared/debt-simplifier';
 import { aggregateCurrencyBalances } from '@splitbook/shared/dashboard';
+import { assertStoredExpenseMoney } from '@splitbook/shared/exact-money';
 import type { DashboardGroupBalance, GroupCategory } from '@splitbook/shared/types';
 
 export class BalanceService {
@@ -15,36 +16,26 @@ export class BalanceService {
 
     // Get all non-deleted expenses and settlements
     const [expenses, settlements, group] = await Promise.all([
-      Expense.find({ group: groupId, isDeleted: false }).lean(),
-      Settlement.find({ group: groupId }).lean(),
+      Expense.find({ group: groupId, isDeleted: false })
+        .select('group currency moneyVersion amount amountMinor paidBy splitBetween')
+        .lean(),
+      Settlement.find({ group: groupId })
+        .select('group currency moneyVersion amount amountMinor paidBy paidTo')
+        .lean(),
       Group.findById(groupId).populate('members.user', 'name email image').lean(),
     ]);
 
     if (!group) return null;
 
-    const hasMixedCurrencies =
-      expenses.some((e) => e.currency !== group.defaultCurrency) ||
-      settlements.some((s) => s.currency !== group.defaultCurrency);
-
-    // Calculate net balances
-    const expenseData = expenses.map((e) => ({
-      paidBy: e.paidBy.map((p) => ({
-        user: p.user.toString(),
-        amount: p.amount,
-      })),
-      splitBetween: e.splitBetween.map((s) => ({
-        user: s.user.toString(),
-        amount: s.amount,
-      })),
-    }));
-
-    const settlementData = settlements.map((s) => ({
-      paidBy: s.paidBy.toString(),
-      paidTo: s.paidTo.toString(),
-      amount: s.amount,
-    }));
-
-    const netBalances = calculateNetBalances(expenseData, settlementData);
+    for (const expense of expenses) assertStoredExpenseMoney(expense);
+    const currencies = [
+      ...new Set([
+        group.defaultCurrency,
+        ...expenses.map((expense) => expense.currency),
+        ...settlements.map((settlement) => settlement.currency),
+      ]),
+    ].sort();
+    const hasMixedCurrencies = currencies.some((currency) => currency !== group.defaultCurrency);
 
     // Build user info map
     const userMap = new Map<string, { _id: string; name: string; email: string; image?: string }>();
@@ -63,28 +54,52 @@ export class BalanceService {
       });
     }
 
-    // Map balances to include user info
-    const balances = netBalances.map((b) => ({
-      user: userMap.get(b.userId) || {
-        _id: b.userId,
-        name: 'Unknown',
-        email: '',
-      },
-      balance: b.amount,
-    }));
-
-    // Calculate simplified debts
-    const simplifiedTransactions = simplifyDebts(netBalances);
-    const debts = simplifiedTransactions.map((t) => ({
-      from: userMap.get(t.from) || { _id: t.from, name: 'Unknown', email: '' },
-      to: userMap.get(t.to) || { _id: t.to, name: 'Unknown', email: '' },
-      amount: t.amount,
-    }));
-
+    const userInfo = (id: string) => userMap.get(id) || { _id: id, name: 'Unknown', email: '' };
+    const byCurrency = currencies.map((currency) => {
+      const expenseData = expenses
+        .filter((expense) => expense.currency === currency)
+        .map((expense) => ({
+          currency: expense.currency,
+          moneyVersion: expense.moneyVersion,
+          paidBy: expense.paidBy.map((payer) => ({
+            user: String(payer.user),
+            amount: payer.amount,
+            amountMinor: payer.amountMinor,
+          })),
+          splitBetween: expense.splitBetween.map((participant) => ({
+            user: String(participant.user),
+            amount: participant.amount,
+            amountMinor: participant.amountMinor,
+          })),
+        }));
+      const settlementData = settlements
+        .filter((settlement) => settlement.currency === currency)
+        .map((settlement) => ({
+          currency: settlement.currency,
+          moneyVersion: settlement.moneyVersion,
+          paidBy: String(settlement.paidBy),
+          paidTo: String(settlement.paidTo),
+          amount: settlement.amount,
+          amountMinor: settlement.amountMinor,
+        }));
+      const netBalances = calculateNetBalances(expenseData, settlementData, currency);
+      return {
+        currency,
+        balances: netBalances.map((balance) => ({
+          user: userInfo(balance.userId),
+          balance: balance.amount,
+        })),
+        debts: simplifyDebts(netBalances, currency).map((debt) => ({
+          from: userInfo(debt.from),
+          to: userInfo(debt.to),
+          amount: debt.amount,
+        })),
+      };
+    });
+    const defaultBalances = byCurrency.find((bucket) => bucket.currency === group.defaultCurrency)!;
     return {
-      balances,
-      debts,
-      currency: group.defaultCurrency,
+      ...defaultBalances,
+      byCurrency,
       hasMixedCurrencies,
     };
   }
@@ -104,10 +119,15 @@ export class BalanceService {
 
     const groupIds = groups.map((group) => group._id);
     const [allExpenses, allSettlements] = await Promise.all([
-      Expense.find({ group: { $in: groupIds }, isDeleted: false }).lean(),
-      Settlement.find({ group: { $in: groupIds } }).lean(),
+      Expense.find({ group: { $in: groupIds }, isDeleted: false })
+        .select('group currency moneyVersion amount amountMinor paidBy splitBetween')
+        .lean(),
+      Settlement.find({ group: { $in: groupIds } })
+        .select('group currency moneyVersion amount amountMinor paidBy paidTo')
+        .lean(),
     ]);
 
+    for (const expense of allExpenses) assertStoredExpenseMoney(expense);
     const expensesByGroup = new Map<string, typeof allExpenses>();
     for (const expense of allExpenses) {
       const key = expense.group.toString();
@@ -149,28 +169,35 @@ export class BalanceService {
         const expenseData = expenses
           .filter((expense) => expense.currency === currency)
           .map((expense) => ({
+            currency: expense.currency,
+            moneyVersion: expense.moneyVersion,
             paidBy: expense.paidBy.map((payer) => ({
               user: payer.user.toString(),
               amount: payer.amount,
+              amountMinor: payer.amountMinor,
             })),
             splitBetween: expense.splitBetween.map((split) => ({
               user: split.user.toString(),
               amount: split.amount,
+              amountMinor: split.amountMinor,
             })),
           }));
         const settlementData = settlements
           .filter((settlement) => settlement.currency === currency)
           .map((settlement) => ({
+            currency: settlement.currency,
+            moneyVersion: settlement.moneyVersion,
+            amountMinor: settlement.amountMinor,
             paidBy: settlement.paidBy.toString(),
             paidTo: settlement.paidTo.toString(),
             amount: settlement.amount,
           }));
-        const netBalances = calculateNetBalances(expenseData, settlementData);
+        const netBalances = calculateNetBalances(expenseData, settlementData, currency);
         const userBalance = netBalances.find((balance) => balance.userId === userId);
 
-        if (!userBalance || Math.abs(userBalance.amount) < 0.01) return [];
+        if (!userBalance || userBalance.amount === 0) return [];
 
-        const settlement = simplifyDebts(netBalances)
+        const settlement = simplifyDebts(netBalances, currency)
           .filter(
             (debt) =>
               (userBalance.amount < 0 && debt.from === userId) ||

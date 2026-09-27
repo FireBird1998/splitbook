@@ -5,6 +5,7 @@ import {
   expect,
   dataOf,
   expensePath,
+  expenseRevisionHeaders,
   generatedExpense,
   joinGroup,
   observeLedger,
@@ -31,7 +32,12 @@ export function accessMatrix(operation: Operation) {
       }) => {
         const expense = origin === 'recurring' ? await generatedExpense(ledger) : ledger.expenseB;
         const actualPath = expensePath(ledger.groupB, expense);
-        if (operation.restore) await dataOf(await ledger.priya.delete(actualPath));
+        if (operation.restore)
+          await dataOf(
+            await ledger.priya.delete(actualPath, {
+              headers: await expenseRevisionHeaders(ledger.priya, actualPath),
+            }),
+          );
 
         let actor = ledger.alex;
         let requestedGroup = ledger.groupA;

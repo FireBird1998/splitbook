@@ -91,6 +91,7 @@ export default function ExpenseListView({
     open: boolean;
     message: string;
     expenseId?: string;
+    revision?: number;
   }>({
     open: false,
     message: '',
@@ -121,7 +122,7 @@ export default function ExpenseListView({
   }
   if (search) params.set('search', search);
   if (category) params.set('category', category);
-  if (tagFilter) params.set('tag', tagFilter);
+  if (tagFilter) params.set('tagId', tagFilter);
   params.set('sortBy', sortBy);
   params.set('sortOrder', sortOrder);
   params.set('page', String(page));
@@ -136,6 +137,10 @@ export default function ExpenseListView({
   );
 
   const expenses = data?.data?.expenses || [];
+  const { data: detail, error: detailError } = useSWR(
+    expandedExpenseId ? `/api/groups/${groupId}/expenses/${expandedExpenseId}` : null,
+    fetcher,
+  );
   const pagination = data?.data?.pagination;
   const summary = data?.data?.summary;
 
@@ -161,23 +166,29 @@ export default function ExpenseListView({
     groupedExpenses[dateKey].push(expense);
   }
 
-  const handleDeleted = (expenseId: string) => {
+  const handleDeleted = (expenseId: string, revision: number) => {
     mutate();
     if (expandedExpenseId === expenseId) setExpandedExpenseId(null);
-    setSnackbar({ open: true, message: 'Expense deleted', expenseId });
+    setSnackbar({ open: true, message: 'Expense deleted', expenseId, revision });
   };
 
   const handleUndo = async () => {
     if (!snackbar.expenseId) return;
     try {
-      await fetch(`/api/groups/${groupId}/expenses/${snackbar.expenseId}`, {
+      const response = await fetch(`/api/groups/${groupId}/expenses/${snackbar.expenseId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'If-Match': String(snackbar.revision) },
         body: JSON.stringify({ isDeleted: false }),
       });
+      if (!response.ok) {
+        const result = await response.json();
+        setSnackbar({ open: true, message: result.error || 'Could not restore this Expense.' });
+        return;
+      }
       mutate();
     } catch {
-      // silently fail
+      setSnackbar({ open: true, message: 'Could not restore this Expense. Please retry.' });
+      return;
     }
     setSnackbar({ open: false, message: '' });
   };
@@ -197,6 +208,11 @@ export default function ExpenseListView({
 
   return (
     <Stack spacing={2}>
+      {detailError && (
+        <Typography role="alert" color="error.main">
+          Could not load Expense details. Close and reopen the row to retry.
+        </Typography>
+      )}
       {error && <Typography color="error.main">{error.message}</Typography>}
 
       {/* Quick Filters — hidden while a month view drives the date range */}
@@ -403,23 +419,24 @@ export default function ExpenseListView({
                     _id: string;
                     name: string;
                     isArchived: boolean;
+                    isDeleted?: boolean;
                   }>
                 )
-                  .filter((t) => !t.isArchived)
+                  .filter((t) => !t.isDeleted)
                   .map((t) => (
                     <Chip
                       key={t._id}
                       label={t.name}
                       size="small"
-                      variant={tagFilter === t.name ? 'filled' : 'outlined'}
+                      variant={tagFilter === t._id ? 'filled' : 'outlined'}
                       onClick={() => {
-                        setTagFilter(tagFilter === t.name ? '' : t.name);
+                        setTagFilter(tagFilter === t._id ? '' : t._id);
                         setPage(1);
                       }}
                       sx={{
                         flexShrink: 0,
                         fontSize: 12,
-                        ...(tagFilter === t.name
+                        ...(tagFilter === t._id
                           ? { backgroundColor: 'primary.main', color: 'primary.contrastText' }
                           : {}),
                       }}
@@ -491,13 +508,25 @@ export default function ExpenseListView({
                 fontWeight={700}
                 sx={{ display: 'block', fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
               />
+              {(summary.totalsByCurrency || [])
+                .filter((total: { currency: string }) => total.currency !== currency)
+                .map((total: { currency: string; totalAmount: number }) => (
+                  <MoneyText
+                    key={total.currency}
+                    amount={total.totalAmount}
+                    currency={total.currency}
+                    tone="neutral"
+                    variant="body2"
+                    sx={{ display: 'block' }}
+                  />
+                ))}
               <Typography variant="caption" color="text.disabled">
                 {summary.count || 0} expense
                 {(summary.count || 0) !== 1 ? 's' : ''}
               </Typography>
             </Box>
             <Box sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
-              {(summary.userOwes || 0) > 0.01 && (
+              {(summary.userOwes || 0) > 0 && (
                 <Box sx={{ mb: 0.5 }}>
                   <Typography
                     variant="caption"
@@ -516,7 +545,7 @@ export default function ExpenseListView({
                   />
                 </Box>
               )}
-              {(summary.userGetsBack || 0) > 0.01 && (
+              {(summary.userGetsBack || 0) > 0 && (
                 <Box>
                   <Typography
                     variant="caption"
@@ -597,7 +626,9 @@ export default function ExpenseListView({
                 {exps.map((expense) => (
                   <ExpenseCard
                     key={expense._id as string}
-                    expense={expense}
+                    expense={
+                      expandedExpenseId === expense._id && detail?.data ? detail.data : expense
+                    }
                     userId={userId}
                     isExpanded={expandedExpenseId === (expense._id as string)}
                     onToggleExpand={() =>

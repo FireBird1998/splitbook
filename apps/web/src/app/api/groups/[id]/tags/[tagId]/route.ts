@@ -11,7 +11,7 @@ import { groupService } from '@/lib/services/group.service';
 import { z } from 'zod/v4';
 
 const updateTagSchema = z.object({
-  name: z.string().min(1).max(50).trim().optional(),
+  name: z.string().trim().min(1).max(50).optional(),
   isArchived: z.boolean().optional(),
 });
 
@@ -36,6 +36,14 @@ export async function PATCH(
   } catch (err) {
     if (err instanceof Error) {
       if (err.message === 'FORBIDDEN') return forbidden();
+      if (err.message === 'TAG_CHANGED' || err.message === 'AMBIGUOUS_TAG') {
+        return new Response(
+          JSON.stringify({
+            error: 'Tag changed or has ambiguous legacy references. Reload and try again.',
+          }),
+          { status: 409, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
       if (err.message === 'TAG_EXISTS') {
         return new Response(JSON.stringify({ error: 'A tag with this name already exists' }), {
           status: 400,
@@ -66,10 +74,10 @@ export async function DELETE(
     if (err instanceof Error) {
       if (err.message === 'FORBIDDEN') return forbidden();
       if (err.message.startsWith('TAG_IN_USE:')) {
-        const count = err.message.split(':')[1];
+        const [, expenseCount, templateCount = '0'] = err.message.split(':');
         return new Response(
           JSON.stringify({
-            error: `Cannot delete tag — it is used by ${count} expense${count === '1' ? '' : 's'}`,
+            error: `Cannot delete tag — it is used by ${expenseCount} expense(s) and ${templateCount} recurring template(s)`,
           }),
           { status: 400, headers: { 'Content-Type': 'application/json' } },
         );

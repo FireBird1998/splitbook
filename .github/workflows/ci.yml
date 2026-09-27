@@ -55,8 +55,14 @@ jobs:
         working-directory: .
         run: pnpm typecheck
 
+      - name: Install Chromium for authenticated browser checks
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Authenticated expense access (isolated app and database)
         run: pnpm test:expense-access
+
+      - name: Google sign-in recovery (isolated app and database)
+        run: pnpm exec playwright test --config playwright.auth-recovery.config.ts
 
       - name: Build
         run: pnpm build
@@ -66,6 +72,16 @@ jobs:
           NEXT_PUBLIC_APP_URL: http://localhost:3000
           AUTH_GOOGLE_ID: test
           AUTH_GOOGLE_SECRET: test
+
+      - name: Upload authenticated test failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: authenticated-test-failures
+          path: |
+            apps/web/output/playwright/expense-access/
+            apps/web/output/playwright/auth-recovery/
+          retention-days: 7
 
   playwright:
     runs-on: ubuntu-latest

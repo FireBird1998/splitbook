@@ -5,6 +5,10 @@ import { activityService } from './activity.service';
 import { buildDefaultGroupTags } from '@splitbook/shared/default-tags';
 import type { CreateGroupInput, UpdateGroupInput } from '@splitbook/shared/validators/group';
 import crypto from 'crypto';
+import { escapeRegex } from '@splitbook/shared/escape-regex';
+import Expense from '@/lib/models/Expense';
+import RecurringExpense from '@/lib/models/RecurringExpense';
+import Settlement from '@/lib/models/Settlement';
 
 export class GroupService {
   /**
@@ -86,6 +90,32 @@ export class GroupService {
       }
     }
 
+    if (data.defaultCurrency && data.defaultCurrency !== group.defaultCurrency) {
+      const hasRecords =
+        group.currencyLocked ||
+        (
+          await Promise.all([
+            Expense.exists({ group: groupId }),
+            Settlement.exists({ group: groupId }),
+            RecurringExpense.exists({ group: groupId }),
+          ])
+        ).some(Boolean);
+      if (hasRecords) throw new Error('CURRENCY_LOCKED');
+      // First financial writes set the monotonic lock using the old currency predicate.
+      const changed = await Group.findOneAndUpdate(
+        {
+          _id: groupId,
+          defaultCurrency: group.defaultCurrency,
+          currencyLocked: { $ne: true },
+          members: { $elemMatch: { user: userId, role: 'admin' } },
+        },
+        { $set: data },
+        { returnDocument: 'after', runValidators: true },
+      );
+      if (!changed) throw new Error('CURRENCY_LOCKED');
+      await activityService.log(groupId, 'group_updated', userId, { changes });
+      return changed.populate('members.user', 'name email image');
+    }
     Object.assign(group, data);
     await group.save();
 
@@ -279,14 +309,28 @@ export class GroupService {
 
     // Check for duplicate tag name (case-insensitive)
     const normalised = name.trim().toLowerCase();
-    const exists = (group.tags || []).some((t) => t.name.toLowerCase() === normalised);
+    if (!normalised || name.trim().length > 50) throw new Error('INVALID_TAG');
+    const exists = (group.tags || []).some(
+      (t) => !t.isDeleted && t.name.toLowerCase() === normalised,
+    );
     if (exists) {
       throw new Error('TAG_EXISTS');
     }
 
     // Atomic $push directly to MongoDB
-    const updated = await Group.findByIdAndUpdate(
-      groupId,
+    const updated = await Group.findOneAndUpdate(
+      {
+        _id: groupId,
+        members: { $elemMatch: { user: userId, role: 'admin' } },
+        tags: {
+          $not: {
+            $elemMatch: {
+              name: new RegExp(`^${escapeRegex(name.trim())}$`, 'i'),
+              isDeleted: { $ne: true },
+            },
+          },
+        },
+      },
       {
         $push: {
           tags: {
@@ -299,6 +343,7 @@ export class GroupService {
       { returnDocument: 'after' },
     ).populate('members.user', 'name email image');
 
+    if (!updated) throw new Error('TAG_EXISTS');
     return updated;
   }
 
@@ -323,37 +368,79 @@ export class GroupService {
       throw new Error('FORBIDDEN');
     }
 
-    const tag = (group.tags || []).find((t) => t._id.toString() === tagId);
+    const tag = (group.tags || []).find((t) => t._id.toString() === tagId && !t.isDeleted);
     if (!tag) return null;
 
     // If renaming, check uniqueness
     if (data.name !== undefined) {
       const normalised = data.name.trim().toLowerCase();
+      if (!normalised || data.name.trim().length > 50) throw new Error('INVALID_TAG');
       const duplicate = (group.tags || []).some(
-        (t) => t._id.toString() !== tagId && t.name.toLowerCase() === normalised,
+        (t) => !t.isDeleted && t._id.toString() !== tagId && t.name.toLowerCase() === normalised,
       );
       if (duplicate) {
         throw new Error('TAG_EXISTS');
+      }
+      // Preserve unambiguous pre-migration references before changing display text.
+      // No monetary values, timestamps or audit history are rewritten.
+      if (data.name.trim() !== tag.name) {
+        const legacy = { group: group._id, tagId: null, tag: tag.name };
+        if (group.tags.filter((candidate) => candidate.name === tag.name).length !== 1) {
+          const [legacyExpense, legacyTemplate] = await Promise.all([
+            Expense.exists(legacy),
+            RecurringExpense.exists(legacy),
+          ]);
+          if (legacyExpense || legacyTemplate) throw new Error('AMBIGUOUS_TAG');
+        } else {
+          await Promise.all([
+            Expense.collection.updateMany(legacy, { $set: { tagId: tag._id } }),
+            RecurringExpense.collection.updateMany(legacy, { $set: { tagId: tag._id } }),
+          ]);
+        }
       }
     }
 
     // Build $set for the matched array element
     const setFields: Record<string, unknown> = {};
-    if (data.name !== undefined) setFields['tags.$.name'] = data.name.trim();
-    if (data.isArchived !== undefined) setFields['tags.$.isArchived'] = data.isArchived;
+    if (data.name !== undefined) setFields['tags.$[tag].name'] = data.name.trim();
+    if (data.isArchived !== undefined) setFields['tags.$[tag].isArchived'] = data.isArchived;
+
+    const noDuplicate =
+      data.name === undefined
+        ? {}
+        : {
+            tags: {
+              $not: {
+                $elemMatch: {
+                  _id: { $ne: tag._id },
+                  name: new RegExp(`^${escapeRegex(data.name.trim())}$`, 'i'),
+                  isDeleted: { $ne: true },
+                },
+              },
+            },
+          };
 
     const updated = await Group.findOneAndUpdate(
-      { _id: groupId, 'tags._id': tagId },
+      {
+        _id: groupId,
+        members: { $elemMatch: { user: userId, role: 'admin' } },
+        $and: [
+          { tags: { $elemMatch: { _id: tag._id, name: tag.name, isDeleted: { $ne: true } } } },
+          noDuplicate,
+        ],
+      },
       { $set: setFields },
-      { returnDocument: 'after' },
+      { returnDocument: 'after', arrayFilters: [{ 'tag._id': tag._id }] },
     ).populate('members.user', 'name email image');
 
+    if (!updated) throw new Error('TAG_CHANGED');
     return updated;
   }
 
   /**
-   * Delete a tag. Only allowed if no expenses reference it.
-   * Only admins can do this. Uses atomic $pull.
+   * Retire an unused Tag, retaining its identity for in-flight historical writes.
+   * Expenses (including deleted ones) and recurring templates block deletion.
+   * Only admins can do this.
    */
   async deleteTag(groupId: string, tagId: string, userId: string) {
     await connectDB();
@@ -367,24 +454,29 @@ export class GroupService {
       throw new Error('FORBIDDEN');
     }
 
-    const tag = (group.tags || []).find((t) => t._id.toString() === tagId);
+    const tag = (group.tags || []).find((t) => t._id.toString() === tagId && !t.isDeleted);
     if (!tag) return null;
 
     // Check if any expenses use this tag
-    const { default: Expense } = await import('@/lib/models/Expense');
-    const usageCount = await Expense.countDocuments({
+    const reference = {
       group: groupId,
-      tag: tag.name,
-    });
+      $or: [{ tagId: tag._id }, { tagId: null, tag: tag.name }],
+    };
+    const [expenseCount, templateCount] = await Promise.all([
+      Expense.countDocuments(reference),
+      RecurringExpense.countDocuments(reference),
+    ]);
+    const usageCount = expenseCount + templateCount;
 
     if (usageCount > 0) {
-      throw new Error(`TAG_IN_USE:${usageCount}`);
+      throw new Error(`TAG_IN_USE:${expenseCount}:${templateCount}`);
     }
 
-    // Atomic $pull directly from MongoDB
-    const updated = await Group.findByIdAndUpdate(
-      groupId,
-      { $pull: { tags: { _id: tagId } } },
+    // Retain identity even if a write admitted before deletion finishes later.
+    // Such a write keeps a readable historical Tag; subsequent selection fails.
+    const updated = await Group.findOneAndUpdate(
+      { _id: groupId, members: { $elemMatch: { user: userId, role: 'admin' } }, 'tags._id': tagId },
+      { $set: { 'tags.$.isDeleted': true, 'tags.$.isArchived': true } },
       { returnDocument: 'after' },
     ).populate('members.user', 'name email image');
 

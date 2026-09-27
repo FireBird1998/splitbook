@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getDefaultExpenseTag,
+  getStoredExpenseMoneyFields,
   getSelectableExpenseTags,
   isAdvancedSplit,
   resolveExpenseCategory,
@@ -15,7 +16,7 @@ const tags = [
 
 describe('expense form helpers', () => {
   it('defaults to General when present', () => {
-    expect(getDefaultExpenseTag(tags)).toBe('General');
+    expect(getDefaultExpenseTag(tags)).toBe('1');
   });
 
   it('falls back to the first active tag', () => {
@@ -62,7 +63,7 @@ describe('expense form helpers', () => {
   });
 
   it('resolves predefined item tags against active group tags', () => {
-    expect(resolvePredefinedTag(tags, 'food')).toBe('Food');
+    expect(resolvePredefinedTag(tags, 'food')).toBe('2');
     expect(resolvePredefinedTag(tags, 'taxi')).toBeNull();
   });
 
@@ -78,5 +79,71 @@ describe('expense form helpers', () => {
 
   it("falls back to 'other' for an unknown quick-pick id", () => {
     expect(resolveExpenseCategory('not-a-real-item')).toBe('other');
+  });
+});
+
+describe('stored expense form money', () => {
+  const legacy = {
+    currency: 'INR',
+    amount: 0.6000000000000001,
+    paidBy: [
+      { user: 'one', amount: 0.30000000000000004 },
+      { user: 'two', amount: 0.3 },
+    ],
+    splitBetween: [
+      { user: 'one', amount: 0.1 },
+      { user: 'two', amount: 0.5000000000000001 },
+    ],
+  };
+
+  it('prefills root, multiple payers and exact allocations from legacy minor values', () => {
+    expect(getStoredExpenseMoneyFields(legacy)).toEqual({
+      amount: '0.6',
+      paidBy: ['0.3', '0.3'],
+      splitBetween: ['0.1', '0.5'],
+    });
+  });
+
+  it('prefills canonical whole-yen values, including a zero allocation', () => {
+    expect(
+      getStoredExpenseMoneyFields({
+        currency: 'JPY',
+        moneyVersion: 1,
+        amountMinor: 1,
+        paidBy: [{ user: 'one', amountMinor: 1 }],
+        splitBetween: [
+          { user: 'one', amountMinor: 0 },
+          { user: 'two', amountMinor: 1 },
+        ],
+      }),
+    ).toEqual({ amount: '1', paidBy: ['1'], splitBetween: ['0', '1'] });
+  });
+
+  it('refuses true sub-minor precision instead of rounding it for editing', () => {
+    expect(() => getStoredExpenseMoneyFields({ ...legacy, amount: 0.601 })).toThrow(
+      /decimal places/,
+    );
+  });
+
+  it('refuses inconsistent canonical rows instead of substituting their major values', () => {
+    expect(() =>
+      getStoredExpenseMoneyFields({
+        currency: 'INR',
+        moneyVersion: 1,
+        amount: 1,
+        amountMinor: 100,
+        paidBy: [{ user: 'one', amount: 1, amountMinor: 99 }],
+        splitBetween: [{ user: 'two', amount: 1, amountMinor: 100 }],
+      }),
+    ).toThrow('Stored amounts disagree');
+  });
+
+  it('refuses unbalanced stored participants', () => {
+    expect(() =>
+      getStoredExpenseMoneyFields({
+        ...legacy,
+        paidBy: [{ user: 'one', amount: 0.5 }],
+      }),
+    ).toThrow('Stored allocations do not equal the Expense amount');
   });
 });

@@ -13,7 +13,7 @@ The fixed, global classification of an expense (`Expense.category`: food, transp
 _Avoid_: expense type, kind
 
 **Tag**:
-A group-scoped, user-managed label on an expense (`Expense.tag`, administered via `Group.tags`). Exactly one per expense, required.
+A Group-scoped, user-managed label with a stable identity independent of its name. Exactly one is required on each Expense; renaming or retiring a Tag preserves its historical associations.
 _Avoid_: label, expense group
 
 **Month**:

@@ -86,23 +86,24 @@ describe('calculateSplitAmounts', () => {
       expect(sumAmounts(result)).toBe(100);
     });
 
-    it('rounds each share to cents (totals may drift by a cent)', () => {
+    it('distributes remaining minor units so the shares preserve the total', () => {
       const result = calculateSplitAmounts(
         'shares',
         100,
         participants({ user: 'a', shares: 1 }, { user: 'b', shares: 1 }, { user: 'c', shares: 1 }),
       );
 
-      expect(result.map((p) => p.amount)).toEqual([33.33, 33.33, 33.33]);
+      expect(result.map((p) => p.amount)).toEqual([33.34, 33.33, 33.33]);
+      expect(sumAmounts(result)).toBe(100);
     });
 
-    it('passes participants through unchanged when total shares is zero', () => {
+    it('rejects a zero total share weight', () => {
       const input = participants(
         { user: 'a', shares: 0, amount: 70 },
         { user: 'b', shares: 0, amount: 30 },
       );
 
-      expect(calculateSplitAmounts('shares', 100, input)).toBe(input);
+      expect(() => calculateSplitAmounts('shares', 100, input)).toThrow('positive');
     });
 
     it('treats missing shares as zero', () => {
@@ -166,13 +167,13 @@ describe('calculateSplitAmounts', () => {
         { user: 'c', amount: 1000 },
       );
 
-      expect(calculateSplitAmounts('unequal', 4500, input)).toBe(input);
+      expect(calculateSplitAmounts('unequal', 4500, input)).toEqual(input);
     });
 
     it('passes caller-provided amounts through unchanged for exact', () => {
       const input = participants({ user: 'a', amount: 300 }, { user: 'b', amount: 300 });
 
-      expect(calculateSplitAmounts('exact', 600, input)).toBe(input);
+      expect(calculateSplitAmounts('exact', 600, input)).toEqual(input);
     });
   });
 });
