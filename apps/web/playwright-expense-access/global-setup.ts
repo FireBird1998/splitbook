@@ -172,5 +172,7 @@ export async function startIsolatedApp(
 }
 
 export default async function globalSetup() {
-  return startIsolatedApp();
+  // CI verifies the production server without paying route compilation costs
+  // during browser assertions. Local runs keep the faster development startup.
+  return startIsolatedApp('demo', undefined, Boolean(process.env.CI));
 }

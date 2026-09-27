@@ -71,7 +71,16 @@ test('stale expense edit keeps its draft and conflict until an explicit reload',
       headers: { 'If-Match': String(expense.revision ?? 0) },
     }),
   );
+  // Saving first checks duplicates; assert the conflict only after the stale
+  // mutation has reached the server and its response is fully received.
+  const rejected = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === path && response.request().method() === 'PATCH',
+  );
   await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+  const conflict = await rejected;
+  expect(conflict.status()).toBe(409);
+  await conflict.finished();
   await expect(dialog.getByRole('alert')).toContainText('changed while you were editing');
   await refreshGroupTags(page, ledger);
   await expect(description).toHaveValue('Draft awaiting conflict resolution');
@@ -81,7 +90,14 @@ test('stale expense edit keeps its draft and conflict until an explicit reload',
     .withRules(['color-contrast'])
     .analyze();
   expect(contrast.violations).toEqual([]);
+  const reloaded = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === path && response.request().method() === 'GET',
+  );
   await dialog.getByRole('button', { name: 'Reload latest', exact: true }).click();
+  const latest = await reloaded;
+  expect(latest.status()).toBe(200);
+  await latest.finished();
   await expect(description).toHaveValue('Saved in another browser');
   await expect(dialog.getByRole('alert')).toHaveCount(0);
 });

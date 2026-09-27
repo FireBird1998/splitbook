@@ -214,6 +214,11 @@ test('legacy currencies are individually visible and never combined into one bal
       .balances.find((row: { user: { _id: string } }) => row.user._id === sam).balance,
   ).toBe(60);
   await page.setViewportSize({ width: 1440, height: 1000 });
+  const historyLoaded = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === `/api/groups/${ledger.groupB}/settlements` &&
+      response.request().method() === 'GET',
+  );
   await enter(page, ledger.sam, `/groups/${ledger.groupB}?tab=balances`);
   const ownBalance = page.getByText('Your balance', { exact: true }).last().locator('..');
   await expect(ownBalance.getByText(/₹100\.00/)).toBeVisible();
@@ -223,6 +228,9 @@ test('legacy currencies are individually visible and never combined into one bal
   await expect(ownBalance.getByText(/€60\.00/)).toBeVisible();
   await expect(page.getByText(/Historical balances in EUR/)).toBeVisible();
   await expect(page.getByRole('button', { name: 'Record settlement' })).toHaveCount(0);
+  const history = await historyLoaded;
+  expect(history.status()).toBe(200);
+  await history.finished();
   await expect(page.getByRole('status', { name: 'Loading settlement history' })).toBeHidden();
   await page.screenshot({
     path: testInfo.outputPath('legacy-euro-balance.png'),

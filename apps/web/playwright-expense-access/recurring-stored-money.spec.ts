@@ -77,7 +77,16 @@ test('recurring legacy float tails display exact fields and allow a metadata-onl
   await expect(amounts.nth(1)).toHaveValue('0.15');
   await expect(amounts.nth(2)).toHaveValue('0.15');
   await dialog.getByLabel('Description').fill('Reviewed legacy utilities');
+  const saved = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname ===
+        `/api/groups/${ledger.groupB}/recurring/${template._id}` &&
+      response.request().method() === 'PATCH',
+  );
   await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+  const updatedResponse = await saved;
+  expect(updatedResponse.status()).toBe(200);
+  await updatedResponse.finished();
   await expect(dialog).toBeHidden();
   const templates = await dataOf(await ledger.priya.get(`/api/groups/${ledger.groupB}/recurring`));
   const updated = templates.find((row: { _id: string }) => row._id === template._id);
