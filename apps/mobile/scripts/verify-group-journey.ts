@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createMobileController, type MobileFetch } from '../src/data';
+import { localOrigin } from './verification-origin';
 
 const alexId = 'a00000000000000000000001';
 const samId = 'a00000000000000000000002';
@@ -22,21 +23,6 @@ const groupList = z.object({
     }),
   ),
 });
-
-function localOrigin(): string {
-  const url = new URL(process.env.MOBILE_VERIFY_URL ?? 'http://127.0.0.1:4138');
-  assert.ok(
-    url.protocol === 'http:' &&
-      ['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) &&
-      url.pathname === '/' &&
-      !url.username &&
-      !url.password &&
-      !url.search &&
-      !url.hash,
-    'MOBILE_VERIFY_URL must be a plain HTTP loopback origin. Remote targets are refused.',
-  );
-  return url.origin;
-}
 
 async function verify() {
   const apiBaseUrl = localOrigin();

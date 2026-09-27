@@ -116,7 +116,7 @@ export interface AccountLocalStorage {
   stores: readonly { clear(): Promise<void> }[];
 }
 
-/** Capture before asynchronous work. Retired sessions cannot read or write account data. */
+/** Capture before asynchronous work. Retired sessions cannot write account data. */
 export interface AccountStorageLease {
   accountId: string;
   write<T>(operation: () => Promise<T>): Promise<T>;

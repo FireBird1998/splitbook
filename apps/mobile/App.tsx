@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from 'react';
 import {
   AppState,
+  Appearance,
   Alert,
   KeyboardAvoidingView,
   Linking,
@@ -37,6 +38,10 @@ export default function App() {
   useEffect(() => {
     void appearance.restore();
   }, []);
+  useEffect(() => {
+    // Apply the device preference to native dialogs as well as React surfaces.
+    Appearance.setColorScheme(preference.mode === 'system' ? 'unspecified' : preference.mode);
+  }, [preference.mode]);
   const [fontsLoaded, fontError] = useFonts({
     Outfit_400Regular,
     Outfit_500Medium,
