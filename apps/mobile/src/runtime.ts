@@ -8,6 +8,7 @@ const config = developmentConfig(
     mode: process.env.EXPO_PUBLIC_APP_ENV,
     apiUrl: process.env.EXPO_PUBLIC_API_URL,
     authOrigin: process.env.EXPO_PUBLIC_AUTH_ORIGIN,
+    inviteOrigin: process.env.EXPO_PUBLIC_INVITE_ORIGIN,
   },
   __DEV__,
 );
@@ -21,11 +22,17 @@ const controllerConfig = config ?? {
 };
 // Separate credentials even when two development servers share the same device.
 const storageKey = `splitbook.session.${Array.from(controllerConfig.apiBaseUrl, (char) => char.charCodeAt(0).toString(16)).join('')}`;
+const invitationKey = `splitbook.invitation.${Array.from(controllerConfig.inviteOrigin ?? controllerConfig.authOrigin, (char) => char.charCodeAt(0).toString(16)).join('')}`;
 export const controller = createMobileController(controllerConfig, {
   fetch,
   credentials: {
     load: () => SecureStore.getItemAsync(storageKey),
     save: (cookie) => SecureStore.setItemAsync(storageKey, cookie),
     clear: () => SecureStore.deleteItemAsync(storageKey),
+  },
+  pendingInvitation: {
+    load: () => SecureStore.getItemAsync(invitationKey),
+    save: (code) => SecureStore.setItemAsync(invitationKey, code),
+    clear: () => SecureStore.deleteItemAsync(invitationKey),
   },
 });

@@ -1,6 +1,6 @@
 # SplitBook native client
 
-Expo + React Native, TypeScript, Android first. This first slice implements [ticket #50](https://github.com/FireBird1998/splitbook/issues/50): guarded local persona sign-in, API-backed Group browsing, Theme-specific headers, member lists, session restoration, foreground revalidation, and sign-out. [The approved spec](https://github.com/FireBird1998/splitbook/issues/49) tracks the remaining native app.
+Expo + React Native, TypeScript, Android first. The foundation implements [ticket #50](https://github.com/FireBird1998/splitbook/issues/50): guarded local persona sign-in, API-backed Group browsing, Theme-specific headers, member lists, session restoration, foreground revalidation, and sign-out. [Ticket #52](https://github.com/FireBird1998/splitbook/issues/52) adds Group creation, Android sharing, invitation preview, and explicit joining. [The approved spec](https://github.com/FireBird1998/splitbook/issues/49) tracks the remaining native app.
 
 This is a **development client**. It requires Metro and a local fictional backend. The staging APK, real Google callback, financial screens, drafts, offline views, and iOS validation have separate tickets; they are not included here.
 
@@ -40,6 +40,7 @@ pnpm lint
 pnpm typecheck
 pnpm test:unit
 pnpm mobile verify:api
+pnpm mobile verify:groups
 ```
 
 `verify:api` uses the actual mobile controller and HTTP server. It checks session creation/restoration, normalized Group/member dates, authorization denial, server logout, local purge, and disabled development authentication. It never accepts a remote server or prints session values.
@@ -54,6 +55,14 @@ node apps/mobile/scripts/dev-backend/control.mjs expire-sessions sam
 
 Always restore fictional membership after testing. Confirm denied/expired access removes protected content, errors can be retried, and light/dark headers preserve the Trip-only ornament. These device checks are distinct from Node HTTP tests and do not verify Google OAuth.
 
+## Android invitation links
+
+Shared invitations remain canonical web URLs so they can open in a browser when the app is absent. Set `EXPO_PUBLIC_INVITE_ORIGIN` to the backend's `NEXT_PUBLIC_APP_URL` origin; it defaults to `EXPO_PUBLIC_AUTH_ORIGIN`. The app accepts only that origin's `/join/<eight-hex-character-code>` links. Changing a native intent filter requires rebuilding the binary. Local HTTP links are development-only; they do not establish verified Android App Links.
+
+The future staging build uses `EXPO_PUBLIC_APP_ENV=staging`, an explicit HTTPS invitation origin, and the distinct `SplitBook Staging` / `com.splitbook.app.staging` / `splitbook-staging` identity. On that web host, set `ANDROID_APP_LINKS_ENV=staging` and `ANDROID_APP_LINKS_SHA256_CERT_FINGERPRINTS` to the actual APK signing certificate's SHA-256 fingerprint, or a comma-separated list during certificate rotation. Each fingerprint must contain 32 colon-separated hexadecimal bytes. The public `/.well-known/assetlinks.json` route publishes only the fixed staging package and validated fingerprints; missing or malformed settings return empty 404 JSON.
+
+No real staging domain or certificate is configured here. Ticket [#60](https://github.com/FireBird1998/splitbook/issues/60) must verify that the actual host serves the JSON over HTTPS without redirects, the installed APK uses the matching signing certificate, and Android reports the domain verified. Recheck warm and cold invitation opening plus absent-app browser fallback on that deployment. The manifest and local HTTP smoke alone do not establish domain ownership. See [Expo Android App Links](https://docs.expo.dev/linking/android-app-links/) and [Android domain verification](https://developer.android.com/training/app-links/verify-applinks).
+
 ## Boundaries
 
 - `src/data` owns authentication, JSON validation, dates, transport, and session-local Group state. UI never calls fetch directly. It reuses the shared Group Theme/currency modules; it does not calculate balances from Group-list data.
@@ -62,3 +71,11 @@ Always restore fictional membership after testing. Confirm denied/expired access
 - Native demo entry requires both `__DEV__` and explicit `EXPO_PUBLIC_APP_ENV=development`; the server independently enforces its existing demo guard. A production bundle cannot use this adapter. Cleartext Android traffic is configured only for the development variant.
 - Display tokens live in `@splitbook/shared/design-tokens`; the old web import re-exports that source. Both clients share the semantic light/dark colors and Group Theme registry. Only the required Outfit/IBM Plex Mono weights are bundled.
 - Financial writes, offline caches, native Google integration, and production configuration are intentionally handled by the remaining approved tickets. The data boundary is the extension point for those changes.
+
+## Create and join a Group
+
+Choose **Create Group**, select a Theme and currency, and enter a name. Optional dates appear only for Trip. Form input survives navigation, recoverable failures, and same-account reauthentication while the process is running; Group forms are not restart-persistent Expense drafts. After an uncertain create, the app refreshes Groups and asks you to check them before explicitly returning to the form. It never automatically repeats the create.
+
+From a Group, get its invite link and use **Share invite link** to open Android sharing. The app reuses a valid link; if generation loses its response, it reads the current link before considering another user-requested generation. Only exact configured-environment web invitations are accepted. A pending invitation is stored separately from the session, survives cold restart and sign-in, and always requires explicit joining. Success, cancellation, and explicit sign-out clear the pending destination. Opening the canonical link without the app retains the existing web join flow.
+
+`verify:groups` uses the real controller, HTTP routes, and isolated backend for creation, sharing, second-persona joining, authentication interruption, and committed-response loss. It archives only its uniquely named test Groups through authorized requests and signs out its sessions. Android verification separately checks the form/keyboard, share sheet, cold/warm link delivery, and appearance. Local HTTP links are unverified on Android: targeting the installed package exercises routing but does not prove staging App Links verification. The staging domain/certificate/device check belongs to #60.

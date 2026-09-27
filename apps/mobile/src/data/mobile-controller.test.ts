@@ -76,6 +76,7 @@ function memoryCredentials(initial: string | null = null) {
 function setup(
   options: {
     saved?: string;
+    pending?: CredentialStore;
     enabled?: boolean;
     store?: ReturnType<typeof memoryCredentials>;
     intercept?: (
@@ -115,12 +116,358 @@ function setup(
       authOrigin: 'http://localhost:4127',
       developmentPersonaEnabled: options.enabled ?? true,
     },
-    { fetch, credentials: store.credentials, now: () => now },
+    { fetch, credentials: store.credentials, pendingInvitation: options.pending, now: () => now },
   );
   return { controller, fetch, store };
 }
 
 describe('native session and Group boundary', () => {
+  it('keeps a new invitation visible when an earlier Group create finishes', async () => {
+    const reply = deferred<FetchResponse>();
+    const { controller } = setup({
+      intercept: (path, init) => {
+        if (path === '/api/groups' && init.method === 'POST') return reply.promise;
+        if (path === '/api/join/deadbeef')
+          return json({
+            data: { _id: groupId, name: 'Invited Group', category: 'home', memberCount: 2 },
+            status: 200,
+          });
+      },
+    });
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'My new Group' });
+    const saving = controller.createGroup();
+    await controller.openInvitation('http://localhost:4127/join/deadbeef');
+    reply.resolve(
+      json({ data: { ...group(alex, otherGroupId), name: 'My new Group' }, status: 201 }, 201),
+    );
+    await saving;
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      invitation: { preview: { name: 'Invited Group' } },
+    });
+    expect(controller.getSnapshot().groups.data.some((item) => item.id === otherGroupId)).toBe(
+      true,
+    );
+  });
+
+  it('rejects impossible Trip calendar dates without losing the entered fields', async () => {
+    let posted = false;
+    const { controller } = setup({
+      intercept: (path, init) => {
+        if (path === '/api/groups' && init.method === 'POST') posted = true;
+        return undefined;
+      },
+    });
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'Weekend away', startDate: '2026-02-30' });
+    await controller.createGroup();
+    expect(posted).toBe(false);
+    expect(controller.getSnapshot().creation).toMatchObject({
+      status: 'error',
+      draft: { startDate: '2026-02-30' },
+      message: 'Enter valid Trip dates as YYYY-MM-DD.',
+    });
+  });
+
+  it('does not let an older join completion replace a newly opened invitation', async () => {
+    const reply = deferred<FetchResponse>();
+    const { controller } = setup({
+      intercept: (path, init) => {
+        if (path === '/api/join/deadbeef' && init.method === 'POST') return reply.promise;
+        if (path.startsWith('/api/join/'))
+          return json({
+            data: {
+              _id: otherGroupId,
+              name: path.endsWith('cafebabe') ? 'New invitation' : 'First invitation',
+              category: 'home',
+              memberCount: 1,
+            },
+            status: 200,
+          });
+      },
+    });
+    await controller.signIn('alex');
+    await controller.openInvitation('http://localhost:4127/join/deadbeef');
+    const firstJoin = controller.joinInvitation();
+    await controller.openInvitation('http://localhost:4127/join/cafebabe');
+    reply.resolve(json({ data: { groupId }, status: 201 }, 201));
+    await firstJoin;
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      invitation: { code: 'cafebabe', preview: { name: 'New invitation' } },
+    });
+  });
+
+  it('restores an unfinished Group form only to the same account after session expiry', async () => {
+    let expired = false;
+    const { controller } = setup({
+      intercept: (path) => (path === '/api/auth/get-session' && expired ? json(null) : undefined),
+    });
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'Keep my form' });
+    expired = true;
+    await controller.refresh();
+    expect(controller.getSnapshot().auth.status).toBe('signed-out');
+    expect(controller.getSnapshot().creation.draft.name).toBe('');
+    expired = false;
+    await controller.signIn('alex');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'create',
+      creation: { draft: { name: 'Keep my form' } },
+    });
+    expired = true;
+    await controller.refresh();
+    expired = false;
+    await controller.signIn('sam');
+    expect(controller.getSnapshot().creation.draft.name).toBe('');
+  });
+
+  it('revalidates the session on foreground without leaving an unfinished Group form', async () => {
+    const { controller } = setup();
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'Still writing', description: 'Unfinished' });
+    await controller.refresh();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'create',
+      creation: { draft: { name: 'Still writing', description: 'Unfinished' } },
+    });
+  });
+
+  it('checks the current link after a lost generation response without rotating it twice', async () => {
+    let generations = 0;
+    const { controller } = setup({
+      intercept: (path, init) => {
+        if (path !== `/api/groups/${groupId}/invite-link`) return;
+        if (init.method === 'POST') {
+          generations += 1;
+          throw new Error('Response lost');
+        }
+        return json({
+          data: generations
+            ? {
+                inviteCode: 'deadbeef',
+                inviteUrl: 'http://localhost:4127/join/deadbeef',
+                expiresAt: '2030-01-01T00:00:00.000Z',
+              }
+            : { inviteCode: null, inviteUrl: null, expiresAt: null },
+          status: 200,
+        });
+      },
+    });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    expect(await controller.loadInviteLink()).toBe('http://localhost:4127/join/deadbeef');
+    expect(generations).toBe(1);
+  });
+
+  it('reuses the current authorized invite link without rotating it', async () => {
+    let rotated = false;
+    const { controller } = setup({
+      intercept: (path, init) => {
+        if (path !== `/api/groups/${groupId}/invite-link`) return;
+        if (init.method === 'POST') rotated = true;
+        return json({
+          data: {
+            inviteCode: 'deadbeef',
+            inviteUrl: 'http://localhost:4127/join/deadbeef',
+            expiresAt: '2030-01-01T00:00:00.000Z',
+          },
+          status: 200,
+        });
+      },
+    });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    expect(await controller.loadInviteLink()).toBe('http://localhost:4127/join/deadbeef');
+    expect(rotated).toBe(false);
+    expect(controller.getSnapshot().share).toMatchObject({ status: 'ready' });
+  });
+
+  it('clears a pending invitation on explicit sign-out, including after restart', async () => {
+    const pending = memoryCredentials();
+    const intercept = (path: string) =>
+      path === '/api/join/deadbeef'
+        ? json({
+            data: { _id: otherGroupId, name: 'Maple Flat', category: 'home', memberCount: 1 },
+            status: 200,
+          })
+        : undefined;
+    const first = setup({ pending: pending.credentials, intercept }).controller;
+    await first.signIn('alex');
+    await first.openInvitation('http://localhost:4127/join/deadbeef');
+    await first.signOut();
+    const second = setup({ pending: pending.credentials, intercept }).controller;
+    await second.restore();
+    expect(second.getSnapshot()).toMatchObject({
+      screen: 'groups',
+      invitation: { code: null, preview: null },
+    });
+  });
+
+  it('restores a pending invitation after process restart before signing in', async () => {
+    const pending = memoryCredentials();
+    const intercept = (path: string) =>
+      path === '/api/join/deadbeef'
+        ? json({
+            data: { _id: otherGroupId, name: 'Maple Flat', category: 'home', memberCount: 1 },
+            status: 200,
+          })
+        : undefined;
+    const first = setup({ pending: pending.credentials, intercept }).controller;
+    await first.restore();
+    await first.openInvitation('http://localhost:4127/join/deadbeef');
+    first.dispose();
+    const second = setup({ pending: pending.credentials, intercept }).controller;
+    await second.restore();
+    expect(second.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      auth: { status: 'signed-out' },
+      invitation: { status: 'ready', preview: { name: 'Maple Flat' } },
+    });
+  });
+
+  it('keeps the invitation through sign-in and joins only after an explicit action', async () => {
+    let joined = false;
+    const { controller } = setup({
+      intercept: (path, init) => {
+        if (path === '/api/join/deadbeef') {
+          if (init.method === 'POST') {
+            joined = true;
+            return json(
+              { data: { groupId: otherGroupId, message: 'Joined group' }, status: 201 },
+              201,
+            );
+          }
+          return json({
+            data: { _id: otherGroupId, name: 'Maple Flat', category: 'home', memberCount: 1 },
+            status: 200,
+          });
+        }
+        if (path === `/api/groups/${otherGroupId}` && joined)
+          return json({ data: group(sam, otherGroupId), status: 200 });
+      },
+    });
+    await controller.restore();
+    await controller.openInvitation('http://localhost:4127/join/deadbeef');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      invitation: { status: 'ready', preview: { name: 'Maple Flat', memberCount: 1 } },
+    });
+    await controller.signIn('sam');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      auth: { user: sam },
+      invitation: { status: 'ready' },
+    });
+    expect(joined).toBe(false);
+    await controller.joinInvitation();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { status: 'ready', data: { id: otherGroupId } },
+    });
+  });
+
+  it('reconciles a lost create response through Group reads and blocks another create until review', async () => {
+    const saved: ReturnType<typeof group>[] = [];
+    const { controller } = setup({
+      intercept: (path, init) => {
+        if (path !== '/api/groups') return;
+        if (init.method === 'POST') {
+          saved.push({ ...group(alex, otherGroupId), name: 'Cabin Weekend' });
+          throw new Error('Response lost after commit');
+        }
+        return json({ data: saved, status: 200 });
+      },
+    });
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'Cabin Weekend' });
+    await controller.createGroup();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'groups',
+      creation: { status: 'uncertain', draft: { name: 'Cabin Weekend' } },
+      groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+    });
+    await controller.createGroup();
+    await controller.refresh();
+    expect(controller.getSnapshot().groups.data).toHaveLength(1);
+  });
+
+  it('keeps invalid Group input editable without posting it', async () => {
+    let posted = false;
+    const { controller } = setup({
+      intercept: (path, init) => {
+        if (path === '/api/groups' && init.method === 'POST') posted = true;
+        return undefined;
+      },
+    });
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: '   ', description: 'Keep this description' });
+    await controller.createGroup();
+    expect(controller.getSnapshot().creation).toMatchObject({
+      status: 'error',
+      draft: { description: 'Keep this description' },
+      message: 'Name is required',
+    });
+    expect(posted).toBe(false);
+  });
+
+  it('creates a Household through the authenticated API and opens the persisted Group', async () => {
+    const created = {
+      ...group(alex, otherGroupId),
+      name: 'Maple Flat',
+      category: 'home',
+      defaultCurrency: 'EUR',
+      startDate: null,
+      endDate: null,
+    };
+    let submitted: unknown;
+    const { controller } = setup({
+      intercept: (path, init) => {
+        if (path === '/api/groups' && init.method === 'POST') {
+          submitted = JSON.parse(String(init.body));
+          return json({ data: created, status: 201 }, 201);
+        }
+      },
+    });
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({
+      name: ' Maple Flat ',
+      category: 'home',
+      defaultCurrency: 'EUR',
+      startDate: '2026-09-01',
+      endDate: '2026-09-30',
+    });
+    await controller.createGroup();
+    expect(submitted).toMatchObject({
+      name: 'Maple Flat',
+      category: 'home',
+      defaultCurrency: 'EUR',
+      startDate: null,
+      endDate: null,
+    });
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: {
+        status: 'ready',
+        data: {
+          id: otherGroupId,
+          name: 'Maple Flat',
+          category: 'home',
+          defaultCurrency: 'EUR',
+          members: [{ user: alex, role: 'admin' }],
+        },
+      },
+    });
+  });
+
   it('signs in through a signed cookie, verifies the session, and normalizes real Group JSON', async () => {
     const { controller, fetch, store } = setup();
     await controller.signIn('alex');

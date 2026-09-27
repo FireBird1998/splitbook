@@ -59,3 +59,51 @@ export function parseGroups(value: unknown): MobileGroup[] {
 export function parseGroup(value: unknown): MobileGroup {
   return z.object({ data: group, status: z.literal(200) }).parse(value).data;
 }
+
+export function parseCreatedGroup(value: unknown): MobileGroup {
+  return z.object({ data: group, status: z.literal(201) }).parse(value).data;
+}
+
+export function parseInvitationPreview(value: unknown) {
+  const data = z
+    .object({
+      data: z.object({
+        _id: objectId,
+        name: z.string().min(1),
+        category: z.enum(['trip', 'home', 'couple', 'work', 'other']),
+        memberCount: z.number().int().nonnegative(),
+      }),
+      status: z.literal(200),
+    })
+    .parse(value).data;
+  return { id: data._id, name: data.name, category: data.category, memberCount: data.memberCount };
+}
+
+export function parseJoinedGroup(value: unknown): string {
+  return z
+    .object({
+      data: z.object({ groupId: objectId }),
+      status: z.union([z.literal(200), z.literal(201)]),
+    })
+    .parse(value).data.groupId;
+}
+
+export function parseInviteLink(value: unknown) {
+  return z
+    .object({
+      data: z.union([
+        z.object({
+          inviteCode: z.literal(null),
+          inviteUrl: z.literal(null),
+          expiresAt: z.literal(null),
+        }),
+        z.object({
+          inviteCode: z.string().regex(/^[a-f\d]{8}$/),
+          inviteUrl: z.url(),
+          expiresAt: timestamp,
+        }),
+      ]),
+      status: z.union([z.literal(200), z.literal(201)]),
+    })
+    .parse(value).data;
+}

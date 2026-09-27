@@ -1,6 +1,26 @@
 import { readSessionCookie, validSessionCookie } from './cookies';
-import { objectId, parseGroup, parseGroups, parseSession, parseSignIn } from './dto';
-import type { FetchResponse, MobileConfig, MobileDependencies, MobileSnapshot } from './types';
+import { createGroupSchema } from '@splitbook/shared/validators/group';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import {
+  objectId,
+  parseCreatedGroup,
+  parseGroup,
+  parseGroups,
+  parseInvitationPreview,
+  parseInviteLink,
+  parseJoinedGroup,
+  parseSession,
+  parseSignIn,
+} from './dto';
+import { parseInvitationLink } from './invitation-links';
+import type {
+  FetchResponse,
+  GroupCreation,
+  GroupDraft,
+  MobileConfig,
+  MobileDependencies,
+  MobileSnapshot,
+} from './types';
 
 const expiredMessage = 'Your session has expired. Sign in again to continue.';
 const storageMessage = 'Could not safely save your session. Please try signing in again.';
@@ -20,6 +40,20 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
   return {
     auth,
     screen: 'groups',
+    creation: {
+      draft: {
+        name: '',
+        description: '',
+        category: 'trip',
+        defaultCurrency: 'INR',
+        startDate: '',
+        endDate: '',
+      },
+      status: 'editing',
+      message: null,
+    },
+    invitation: { code: null, status: 'idle', preview: null, message: null },
+    share: { status: 'idle', url: null, message: null },
     groups: { status: 'idle', data: [], message: null },
     detail: { status: 'idle', id: null, data: null, message: null },
   };
@@ -48,6 +82,7 @@ function origin(value: string): string {
 export function createMobileController(config: MobileConfig, dependencies: MobileDependencies) {
   const apiBase = origin(config.apiBaseUrl);
   const authOrigin = origin(config.authOrigin);
+  const inviteOrigin = origin(config.inviteOrigin ?? config.authOrigin);
   const secureTransport = apiBase.startsWith('https:');
   const now = dependencies.now ?? Date.now;
   const listeners = new Set<() => void>();
@@ -58,6 +93,32 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let viewRequest = 0;
   let storeQueue: Promise<unknown> = Promise.resolve();
   let cleanupRequired = false;
+  let pendingCode: string | null = null;
+  let pendingLoaded = false;
+  let creationRecovery: { ownerId: string; creation: GroupCreation } | null = null;
+  let pendingQueue: Promise<unknown> = Promise.resolve();
+
+  const savePending = (code: string | null) => {
+    pendingLoaded = true;
+    pendingCode = code;
+    const operation = pendingQueue
+      .catch(() => undefined)
+      .then(() =>
+        code ? dependencies.pendingInvitation?.save(code) : dependencies.pendingInvitation?.clear(),
+      );
+    pendingQueue = operation;
+    return operation;
+  };
+
+  const loadPending = async () => {
+    await pendingQueue.catch(() => undefined);
+    if (pendingLoaded) return;
+    const code = await dependencies.pendingInvitation?.load();
+    if (pendingLoaded) return;
+    pendingLoaded = true;
+    pendingCode = code && /^[a-f\d]{8}$/.test(code) ? code : null;
+    if (code && !pendingCode) await savePending(null);
+  };
 
   const publish = (next: MobileSnapshot) => {
     snapshot = next;
@@ -103,8 +164,24 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     status: 'signed-out' | 'error' = 'signed-out',
   ) => {
     if (!current(owner)) return;
+    if (snapshot.auth.user && (snapshot.creation.draft.name || snapshot.screen === 'create')) {
+      creationRecovery = {
+        ownerId: snapshot.auth.user.id,
+        creation: {
+          ...snapshot.creation,
+          ...(snapshot.creation.status === 'saving'
+            ? ({
+                status: 'uncertain',
+                message:
+                  'The Group may have been created. Check your Groups before creating another.',
+              } as const)
+            : {}),
+        },
+      };
+    }
     const next = invalidate();
-    publish(cleanSnapshot({ status, user: null, message }));
+    const cleared = cleanSnapshot({ status, user: null, message });
+    publish({ ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
     try {
       await clearSaved(next);
     } catch {
@@ -253,6 +330,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     publish(cleanSnapshot({ status: 'authenticated', user: session.user, message: null }));
     await loadGroups(owner);
+    if (!current(owner)) return;
+    if (creationRecovery?.ownerId === session.user.id) {
+      publish({
+        ...snapshot,
+        creation: creationRecovery.creation,
+        screen: creationRecovery.creation.status === 'uncertain' ? 'groups' : 'create',
+      });
+    }
+    creationRecovery = null;
+    if (current(owner) && pendingCode) await previewInvitation(pendingCode);
   };
 
   const restore = async () => {
@@ -265,9 +352,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return;
       }
       if (cleanupRequired) await clearSaved(owner);
+      await loadPending();
+      assertCurrent(owner);
       const saved = await store(owner, () => dependencies.credentials.load());
       if (!saved) {
         publish(cleanSnapshot({ status: 'signed-out', user: null, message: null }));
+        if (pendingCode) await previewInvitation(pendingCode);
         return;
       }
       if (!validSessionCookie(saved, secureTransport)) {
@@ -332,6 +422,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({
       ...snapshot,
       screen: 'group',
+      share: { status: 'idle', url: null, message: null },
       detail: { status: 'loading', id, data: null, message: null },
     });
     try {
@@ -368,7 +459,379 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
+  const startCreate = () => {
+    if (snapshot.auth.status !== 'authenticated') return;
+    viewRequest += 1;
+    publish({ ...snapshot, screen: 'create' });
+  };
+
+  const loadInviteLink = async (): Promise<string | null> => {
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.detail.status !== 'ready' ||
+      !snapshot.detail.id ||
+      snapshot.share.status === 'loading'
+    )
+      return null;
+    const owner = generation;
+    const view = viewRequest;
+    const id = snapshot.detail.id;
+    publish({ ...snapshot, share: { status: 'loading', url: null, message: null } });
+    try {
+      let link = parseInviteLink(await request(`/api/groups/${id}/invite-link`, owner));
+      assertCurrent(owner);
+      if (view !== viewRequest) return null;
+      if (!link.inviteUrl || !link.expiresAt || link.expiresAt.getTime() <= now()) {
+        try {
+          link = parseInviteLink(
+            await request(`/api/groups/${id}/invite-link`, owner, {
+              method: 'POST',
+              body: { expiresInDays: 7 },
+            }),
+          );
+        } catch (error) {
+          if (
+            error instanceof Superseded ||
+            (error instanceof RequestError && error.status >= 400 && error.status < 500)
+          )
+            throw error;
+          // Generation rotates the code: after uncertainty, read it instead of posting again.
+          link = parseInviteLink(await request(`/api/groups/${id}/invite-link`, owner));
+        }
+        assertCurrent(owner);
+        if (view !== viewRequest) return null;
+      }
+      if (!link.inviteUrl || !link.expiresAt || link.expiresAt.getTime() <= now())
+        throw new RequestError('There is no active invitation link.');
+      if (parseInvitationLink(link.inviteUrl, inviteOrigin) !== link.inviteCode)
+        throw new RequestError('The server returned an invitation for a different environment.');
+      publish({ ...snapshot, share: { status: 'ready', url: link.inviteUrl, message: null } });
+      return link.inviteUrl;
+    } catch (error) {
+      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return null;
+      publish({
+        ...snapshot,
+        share: {
+          status: 'error',
+          url: null,
+          message:
+            error instanceof RequestError
+              ? error.message
+              : 'Could not read the invitation link. Please try again.',
+        },
+      });
+      return null;
+    }
+  };
+
+  const previewInvitation = async (code: string) => {
+    const owner = generation;
+    const view = ++viewRequest;
+    publish({
+      ...snapshot,
+      screen: 'invite',
+      invitation: { code, status: 'loading', preview: null, message: null },
+    });
+    try {
+      const preview = parseInvitationPreview(await request(`/api/join/${code}`, owner));
+      assertCurrent(owner);
+      if (view !== viewRequest) return;
+      publish({ ...snapshot, invitation: { code, status: 'ready', preview, message: null } });
+    } catch (error) {
+      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      publish({
+        ...snapshot,
+        invitation: {
+          code,
+          status:
+            error instanceof RequestError && error.status === 404
+              ? 'invalid'
+              : error instanceof RequestError && error.status === 403
+                ? 'denied'
+                : 'error',
+          preview: null,
+          message:
+            error instanceof RequestError && error.status === 404
+              ? 'This invitation is invalid, expired, or no longer available.'
+              : error instanceof RequestError && error.status === 403
+                ? 'This account cannot access the invitation.'
+                : 'Could not load the invitation. Check your connection and try again.',
+        },
+      });
+    }
+  };
+
+  const openInvitation = async (url: string) => {
+    const code = parseInvitationLink(url, inviteOrigin);
+    const owner = generation;
+    try {
+      await savePending(code);
+    } catch {
+      if (!current(owner)) return;
+      publish({
+        ...snapshot,
+        screen: 'invite',
+        invitation: {
+          code,
+          status: 'error',
+          preview: null,
+          message: 'Could not save this invitation on the device. Open the link again to retry.',
+        },
+      });
+      return;
+    }
+    if (!current(owner) || pendingCode !== code) return;
+    if (!code) {
+      viewRequest += 1;
+      publish({
+        ...snapshot,
+        screen: 'invite',
+        invitation: {
+          code: null,
+          status: 'invalid',
+          preview: null,
+          message:
+            'This link does not belong to this SplitBook environment, or is not a valid invitation.',
+        },
+      });
+      return;
+    }
+    await previewInvitation(code);
+  };
+
+  const joinInvitation = async () => {
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.invitation.status !== 'ready' ||
+      !pendingCode
+    )
+      return;
+    const owner = generation;
+    const view = viewRequest;
+    const code = pendingCode;
+    publish({
+      ...snapshot,
+      invitation: { ...snapshot.invitation, status: 'joining', message: null },
+    });
+    try {
+      const id = parseJoinedGroup(await request(`/api/join/${code}`, owner, { method: 'POST' }));
+      assertCurrent(owner);
+      if (view !== viewRequest || pendingCode !== code) return;
+      await savePending(null);
+      assertCurrent(owner);
+      if (view !== viewRequest) return;
+      publish({
+        ...snapshot,
+        invitation: { code: null, status: 'idle', preview: null, message: null },
+      });
+      await loadGroups(owner);
+      if (current(owner)) await openGroup(id);
+    } catch (error) {
+      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      publish({
+        ...snapshot,
+        invitation: {
+          ...snapshot.invitation,
+          status:
+            error instanceof RequestError && error.status === 404
+              ? 'invalid'
+              : error instanceof RequestError && error.status === 403
+                ? 'denied'
+                : 'error',
+          message:
+            error instanceof RequestError && error.status === 404
+              ? 'This invitation is invalid, expired, or no longer available.'
+              : error instanceof RequestError && error.status === 403
+                ? 'This account is not allowed to join this Group.'
+                : 'Could not confirm joining. Check the invitation again before retrying.',
+        },
+      });
+    }
+  };
+
+  const retryInvitation = () => (pendingCode ? previewInvitation(pendingCode) : Promise.resolve());
+
+  const invitationSignIn = () => publish({ ...snapshot, screen: 'groups' });
+
+  const openInvitationGroup = async () => {
+    const id = snapshot.invitation.preview?.id;
+    if (!id || snapshot.auth.status !== 'authenticated') return;
+    const owner = generation;
+    await openGroup(id);
+    if (!current(owner) || snapshot.detail.status !== 'ready') return;
+    try {
+      await savePending(null);
+      if (current(owner))
+        publish({
+          ...snapshot,
+          invitation: { code: null, status: 'idle', preview: null, message: null },
+        });
+    } catch {
+      /* The Group is already open; a retained link never joins automatically. */
+    }
+  };
+
+  const cancelInvitation = async () => {
+    const view = ++viewRequest;
+    const owner = generation;
+    publish({
+      ...snapshot,
+      screen: 'groups',
+      invitation: { code: null, status: 'idle', preview: null, message: null },
+    });
+    try {
+      await savePending(null);
+    } catch {
+      if (!current(owner) || view !== viewRequest) return;
+      publish({
+        ...snapshot,
+        screen: 'invite',
+        invitation: {
+          code: null,
+          status: 'error',
+          preview: null,
+          message: 'Could not remove the saved invitation. Please cancel again.',
+        },
+      });
+    }
+  };
+
+  const updateCreation = (patch: Partial<GroupDraft>) => {
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      ['saving', 'uncertain'].includes(snapshot.creation.status)
+    )
+      return;
+    publish({
+      ...snapshot,
+      creation: { ...snapshot.creation, draft: { ...snapshot.creation.draft, ...patch } },
+    });
+  };
+
+  const createGroup = async () => {
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      ['saving', 'uncertain'].includes(snapshot.creation.status)
+    )
+      return;
+    const owner = generation;
+    const view = viewRequest;
+    const draft = snapshot.creation.draft;
+    const bounded = getGroupTheme(draft.category).dates === 'bounded';
+    if (
+      bounded &&
+      [draft.startDate, draft.endDate].some((value) => {
+        if (!value) return false;
+        const date = new Date(value);
+        return (
+          !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+          !Number.isFinite(date.getTime()) ||
+          date.toISOString().slice(0, 10) !== value
+        );
+      })
+    ) {
+      publish({
+        ...snapshot,
+        creation: {
+          ...snapshot.creation,
+          status: 'error',
+          message: 'Enter valid Trip dates as YYYY-MM-DD.',
+        },
+      });
+      return;
+    }
+    const payload = createGroupSchema.safeParse({
+      ...draft,
+      name: draft.name.trim(),
+      description: draft.description.trim(),
+      alternateCurrencies: [],
+      startDate: bounded && draft.startDate ? draft.startDate : null,
+      endDate: bounded && draft.endDate ? draft.endDate : null,
+    });
+    if (!payload.success) {
+      publish({
+        ...snapshot,
+        creation: {
+          ...snapshot.creation,
+          status: 'error',
+          message: payload.error.issues[0].message,
+        },
+      });
+      return;
+    }
+    publish({ ...snapshot, creation: { ...snapshot.creation, status: 'saving', message: null } });
+    try {
+      const group = parseCreatedGroup(
+        await request('/api/groups', owner, {
+          method: 'POST',
+          body: payload.data,
+        }),
+      );
+      assertCurrent(owner);
+      if (
+        !group.members.some(
+          (member) => member.user.id === snapshot.auth.user?.id && member.role === 'admin',
+        )
+      )
+        throw new RequestError('The server returned invalid creator membership.');
+      publish({
+        ...snapshot,
+        creation: cleanSnapshot(snapshot.auth).creation,
+        groups: { status: 'ready', data: [group, ...snapshot.groups.data], message: null },
+        ...(view === viewRequest
+          ? ({
+              screen: 'group',
+              detail: { status: 'ready', id: group.id, data: group, message: null },
+            } as const)
+          : {}),
+      });
+    } catch (error) {
+      if (!current(owner) || error instanceof Superseded) return;
+      const definite = error instanceof RequestError && error.status >= 400 && error.status < 500;
+      publish({
+        ...snapshot,
+        creation: {
+          ...snapshot.creation,
+          status: definite ? 'error' : 'uncertain',
+          message: definite
+            ? error.status === 422
+              ? 'Check the Group information and try again.'
+              : error.message
+            : 'The Group may have been created. Check your Groups before creating another.',
+        },
+      });
+      if (!definite && view === viewRequest) await loadGroups(owner);
+    }
+  };
+
+  const checkCreatedGroups = () =>
+    snapshot.auth.status === 'authenticated' ? loadGroups(generation) : Promise.resolve();
+
+  const resumeCreationAfterCheck = () => {
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.groups.status !== 'ready' ||
+      snapshot.creation.status !== 'uncertain'
+    )
+      return;
+    publish({
+      ...snapshot,
+      screen: 'create',
+      creation: { ...snapshot.creation, status: 'editing', message: null },
+    });
+  };
+
+  const discardCreation = () => {
+    if (snapshot.creation.status === 'saving') return;
+    publish({ ...snapshot, screen: 'groups', creation: cleanSnapshot(snapshot.auth).creation });
+  };
+
   const back = () => {
+    if (snapshot.screen === 'invite') {
+      void cancelInvitation();
+      return;
+    }
+    if (snapshot.creation.status === 'saving') return;
     viewRequest += 1;
     publish({
       ...snapshot,
@@ -379,16 +842,48 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const refresh = async () => {
     if (['restoring', 'signing-in'].includes(snapshot.auth.status)) return;
+    if (snapshot.creation.status === 'saving' || snapshot.invitation.status === 'joining') return;
+    if (snapshot.screen === 'invite' && snapshot.auth.status !== 'authenticated')
+      return retryInvitation();
     if (snapshot.auth.status !== 'authenticated') return restore();
+    if (snapshot.screen === 'create' || snapshot.screen === 'invite') {
+      const owner = generation;
+      try {
+        const session = parseSession(await request('/api/auth/get-session', owner));
+        assertCurrent(owner);
+        if (
+          !session ||
+          session.expiresAt.getTime() <= now() ||
+          session.user.id !== snapshot.auth.user?.id
+        ) {
+          await failSession(owner, expiredMessage);
+          return;
+        }
+        if (snapshot.screen === 'invite') await retryInvitation();
+      } catch (error) {
+        if (!current(owner) || error instanceof Superseded) return;
+        if (snapshot.screen === 'create')
+          publish({
+            ...snapshot,
+            creation: {
+              ...snapshot.creation,
+              message: 'Could not check your connection. Your Group information is still here.',
+            },
+          });
+      }
+      return;
+    }
     if (snapshot.screen === 'group' && snapshot.detail.id) return openGroup(snapshot.detail.id);
     return loadGroups(generation);
   };
 
   const signOut = async () => {
+    creationRecovery = null;
     const oldCookie = cookie;
     const owner = invalidate();
     publish(cleanSnapshot({ status: 'signed-out', user: null, message: null }));
     try {
+      await savePending(null);
       await clearSaved(owner);
     } catch {
       if (current(owner)) {
@@ -426,6 +921,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   return {
     restore,
     signIn,
+    startCreate,
+    updateCreation,
+    createGroup,
+    loadInviteLink,
+    openInvitation,
+    joinInvitation,
+    retryInvitation,
+    invitationSignIn,
+    openInvitationGroup,
+    cancelInvitation,
+    checkCreatedGroups,
+    resumeCreationAfterCheck,
+    discardCreation,
     openGroup,
     back,
     refresh,

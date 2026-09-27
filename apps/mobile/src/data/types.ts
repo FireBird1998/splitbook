@@ -26,13 +26,53 @@ export interface MobileGroup {
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error' | 'denied';
 
+export interface GroupDraft {
+  name: string;
+  description: string;
+  category: GroupCategory;
+  defaultCurrency: string;
+  startDate: string;
+  endDate: string;
+}
+
+export interface GroupCreation {
+  draft: GroupDraft;
+  status: 'editing' | 'saving' | 'error' | 'uncertain';
+  message: string | null;
+}
+
+export interface InvitationPreview {
+  id: string;
+  name: string;
+  category: GroupCategory;
+  memberCount: number;
+}
+
+export interface PendingInvitationStore {
+  load(): Promise<string | null>;
+  save(code: string): Promise<void>;
+  clear(): Promise<void>;
+}
+
 export interface MobileSnapshot {
   auth: {
     status: 'restoring' | 'signed-out' | 'signing-in' | 'authenticated' | 'error';
     user: SessionUser | null;
     message: string | null;
   };
-  screen: 'groups' | 'group';
+  screen: 'groups' | 'group' | 'create' | 'invite';
+  creation: GroupCreation;
+  share: {
+    status: 'idle' | 'loading' | 'ready' | 'error';
+    url: string | null;
+    message: string | null;
+  };
+  invitation: {
+    code: string | null;
+    status: 'idle' | 'loading' | 'ready' | 'joining' | 'error' | 'invalid' | 'denied';
+    preview: InvitationPreview | null;
+    message: string | null;
+  };
   groups: { status: LoadStatus; data: MobileGroup[]; message: string | null };
   detail: {
     status: LoadStatus;
@@ -47,6 +87,8 @@ export interface MobileConfig {
   apiBaseUrl: string;
   /** The origin configured as trusted by the backend, which can differ on an emulator. */
   authOrigin: string;
+  /** Exact web origin allowed to supply invitations for this build's environment. */
+  inviteOrigin?: string;
   /** The caller must combine __DEV__ with an explicit development-persona setting. */
   developmentPersonaEnabled: boolean;
 }
@@ -75,5 +117,6 @@ export type MobileFetch = (url: string, init: RequestInit) => Promise<FetchRespo
 export interface MobileDependencies {
   fetch: MobileFetch;
   credentials: CredentialStore;
+  pendingInvitation?: PendingInvitationStore;
   now?: () => number;
 }
