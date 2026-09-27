@@ -17,7 +17,8 @@
     "test:unit": "pnpm -r test:unit",
     "test:integration": "pnpm -r test:integration",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "mobile": "pnpm -C apps/mobile"
   },
   "devDependencies": {
     "prettier": "^3.8.1"
