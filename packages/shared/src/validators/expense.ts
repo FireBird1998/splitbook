@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import { CURRENCY_CODES } from '../currency';
 import { CATEGORY_IDS } from '../categories';
 import { normalizeExpenseMoney } from '../exact-money';
+import { calendarDate } from './calendar-date';
 
 const expenseFields = z.object({
   description: z.string().trim().min(1, 'Description is required').max(200),
@@ -13,7 +14,7 @@ const expenseFields = z.object({
     .string()
     .refine((val) => CATEGORY_IDS.includes(val), { message: 'Invalid category' })
     .default('other'),
-  date: z.coerce.date(),
+  date: calendarDate,
   paidBy: z
     .array(
       z.object({
