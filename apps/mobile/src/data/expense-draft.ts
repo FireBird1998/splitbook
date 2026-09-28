@@ -13,18 +13,21 @@ import { getCurrency } from '@splitbook/shared/currency';
 import { objectId, parseGroup } from './dto';
 import type { MobileGroup } from './types';
 
+// Historical missing identities are local read/delete-recovery keys, never API identities.
+const draftMemberId = z.union([objectId, z.string().regex(/^former-(payer|participant)-\d+$/)]);
+
 export const expenseDraftSchema = z.object({
   original: expenseRecordSchema.optional(),
   amount: z.string().max(40),
   currency: z.string().refine((value) => !!getCurrency(value)),
   description: z.string().max(200),
   date: z.string().max(10),
-  payerId: objectId,
+  payerId: draftMemberId,
   multiPayer: z.boolean().default(false),
-  payers: z.array(z.object({ user: objectId, amount: z.string().max(40) })).default([]),
+  payers: z.array(z.object({ user: draftMemberId, amount: z.string().max(40) })).default([]),
   splitMethod: z.enum(['equal', 'unequal', 'percentage', 'shares', 'exact']).default('equal'),
-  splitValues: z.record(objectId, z.string().max(40)).default({}),
-  participantIds: z.array(objectId),
+  splitValues: z.record(draftMemberId, z.string().max(40)).default({}),
+  participantIds: z.array(draftMemberId),
   category: z.string(),
   tagId: z.string(),
   notes: z.string().max(500),

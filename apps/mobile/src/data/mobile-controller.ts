@@ -1,4 +1,4 @@
-import { parseExpenseRecord } from './expense-record';
+import { canEditExpense, parseExpenseRecord } from './expense-record';
 import { MoneyValidationError } from '@splitbook/shared/exact-money';
 import {
   emptyExpenseEditor,
@@ -77,6 +77,18 @@ class RequestError extends Error {
   ) {
     super(message);
   }
+}
+
+function expenseRejectionMessage(error: unknown) {
+  const rejectionMessages: Record<string, string> = {
+    INVALID_TAG: 'Choose an active Tag in this Group. Your entries are kept.',
+    INVALID_MEMBERS: 'Review the payer and participants: Group membership changed.',
+    CURRENCY_MISMATCH: 'The Group currency changed. Review the currency before saving.',
+    VALIDATION_ERROR: 'Check the amount, description, date, and participants before saving.',
+  };
+  return error instanceof RequestError && error.status === 422 && error.code
+    ? rejectionMessages[error.code]
+    : undefined;
 }
 
 function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
@@ -986,7 +998,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ...snapshot,
         expense: {
           ...snapshot.expense,
-          status: snapshot.expense.draft ? 'resume' : 'blocked',
+          status:
+            error instanceof RequestError && [403, 404].includes(error.status)
+              ? 'blocked'
+              : snapshot.expense.draft
+                ? 'resume'
+                : 'blocked',
           message:
             error instanceof RequestError
               ? error.message
@@ -1103,10 +1120,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.screen !== 'expense' ||
       editor.status !== 'detail' ||
       !editor.draft?.original ||
-      editor.draft.original.isDeleted ||
-      [...editor.draft.original.paidBy, ...editor.draft.original.splitBetween].some(
-        (row) => !row.user,
-      )
+      !canEditExpense(editor.draft.original)
     )
       return;
     publish({ ...snapshot, expense: { ...editor, status: 'editing' } });
@@ -1167,7 +1181,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.screen !== 'expense' ||
       editor.status !== 'conflict' ||
       !editor.latest ||
-      editor.latest.isDeleted ||
+      !canEditExpense(editor.latest) ||
       !editor.draft ||
       !editor.groupId ||
       !lease ||
@@ -1350,6 +1364,35 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await refreshExpenseViews(groupId, owner, true);
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      const rejection = expenseRejectionMessage(error);
+      if (mutation && rejection) {
+        try {
+          await lease.write(() =>
+            storage.save(lease.accountId, groupId, {
+              version: 1,
+              accountId: lease.accountId,
+              groupId,
+              draft,
+            }),
+          );
+          mutation = null;
+          if (!current(owner) || view !== viewRequest) return;
+          publish({
+            ...snapshot,
+            expense: {
+              ...snapshot.expense,
+              mutation: null,
+              status: kind === 'delete' ? 'delete-review' : 'editing',
+              persistence: 'saved',
+              message: rejection,
+            },
+          });
+          return;
+        } catch {
+          // Keep recovery locked if the confirmed rejection cannot be persisted.
+        }
+      }
+      if (!current(owner) || view !== viewRequest) return;
       publish({
         ...snapshot,
         expense: {
@@ -1488,16 +1531,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await refreshExpenseViews(groupId, owner, true);
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
-      const rejectionMessages: Record<string, string> = {
-        INVALID_TAG: 'Choose an active Tag in this Group. Your entries are kept.',
-        INVALID_MEMBERS: 'Review the payer and participants: Group membership changed.',
-        CURRENCY_MISMATCH: 'The Group currency changed. Review the currency before saving.',
-        VALIDATION_ERROR: 'Check the amount, description, date, and participants before saving.',
-      };
-      const rejection =
-        error instanceof RequestError && error.status === 422 && error.code
-          ? rejectionMessages[error.code]
-          : undefined;
+      const rejection = expenseRejectionMessage(error);
       if (attempt && rejection) {
         try {
           await lease.write(() =>

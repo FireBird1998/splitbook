@@ -1,3 +1,4 @@
+import { canEditExpense } from '../data/expense-record';
 import { ExpenseRecordView } from './expense-record-view';
 import { useState } from 'react';
 import { View, Pressable, Modal, ScrollView, KeyboardAvoidingView } from 'react-native';
@@ -150,10 +151,14 @@ export function ExpenseEditor({
             <Button
               label="Edit Expense"
               onPress={onEdit}
-              disabled={[...draft.original.paidBy, ...draft.original.splitBetween].some(
-                (row) => !row.user,
-              )}
+              disabled={!canEditExpense(draft.original)}
             />
+            {!canEditExpense(draft.original) ? (
+              <Copy>
+                This historical Expense includes a member whose account is no longer available. It
+                can be reviewed or deleted, but not edited.
+              </Copy>
+            ) : null}
             <Button label="Delete Expense" secondary onPress={onReviewDelete} />
             <Button label="Refresh Expense" secondary onPress={onRetry} />
           </>
@@ -178,7 +183,11 @@ export function ExpenseEditor({
           <Copy>
             Your draft is shown below. Compare every field with the current record before choosing.
           </Copy>
-          <Button label="Keep my draft for review" onPress={onReviewLatest} />
+          <Button
+            label="Keep my draft for review"
+            onPress={onReviewLatest}
+            disabled={!state.latest || !canEditExpense(state.latest)}
+          />
           <Button label="Keep current saved record" secondary onPress={onAcceptCurrent} />
         </Panel>
       )}
@@ -220,7 +229,9 @@ export function ExpenseEditor({
           editable={!locked}
           onChangeText={(amount) => onChange({ amount })}
         />
-        <Copy style={{ fontFamily: fonts.mono }}>{draft.currency} · Group currency</Copy>
+        <Copy style={{ fontFamily: fonts.mono }}>
+          {draft.currency} · {draft.original ? 'Expense currency' : 'Group currency'}
+        </Copy>
         {!draft.original && context && draft.currency !== context.group.defaultCurrency && (
           <>
             <Copy accessibilityRole="alert">

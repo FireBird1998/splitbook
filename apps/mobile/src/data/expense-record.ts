@@ -83,3 +83,7 @@ export function parseExpenseRecord(value: unknown, groupId: string, expenseId: s
   readExpenseMoney(storedExpenseMoney(record));
   return record;
 }
+
+export function canEditExpense(record: ExpenseRecord) {
+  return !record.isDeleted && [...record.paidBy, ...record.splitBetween].every((row) => !!row.user);
+}

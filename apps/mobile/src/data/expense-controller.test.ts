@@ -172,7 +172,99 @@ const savedExpense = {
   ],
 };
 
-describe('native Expense creation', () => {
+describe('native Expense creation and editing', () => {
+  it('recovers a deleted historical Expense with missing member identities after restart', async () => {
+    let deleted = false,
+      offline = false,
+      writes = 0;
+    const { controller, create, records } = setup((path, init) => {
+      if (!path.endsWith(`/${expenseId}`)) return;
+      if (init.method === 'DELETE') {
+        deleted = true;
+        offline = true;
+        writes++;
+        return Promise.reject(new Error('Lost response'));
+      }
+      if (offline) return Promise.reject(new Error('Offline'));
+      return Promise.resolve(
+        json({
+          status: 200,
+          data: {
+            ...savedExpense,
+            isDeleted: deleted,
+            revision: deleted ? 4 : 3,
+            paidBy: savedExpense.paidBy.map((row) => ({ ...row, user: null })),
+            splitBetween: savedExpense.splitBetween.map((row) => ({ ...row, user: null })),
+          },
+        }),
+      );
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    controller.reviewExpenseDeletion();
+    await controller.deleteExpense();
+    offline = false;
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openExpense(groupId, expenseId);
+    expect(restarted.getSnapshot().expense.status).toBe('resume');
+    restarted.resumeExpenseDraft();
+    await restarted.reconcileExpense();
+    expect(restarted.getSnapshot().expense.latest?.isDeleted).toBe(true);
+    await restarted.acceptCurrentExpense();
+    expect(records.size).toBe(0);
+    expect(writes).toBe(1);
+  });
+  it('keeps restored drafts blocked after authoritative membership denial', async () => {
+    let denied = false,
+      writes = 0;
+    const { controller, create } = setup((path, init) => {
+      if (path === `/api/groups/${groupId}` && denied)
+        return Promise.resolve(json({ status: 403, error: 'No access' }, 403));
+      if (path.endsWith(`/${expenseId}`)) {
+        if (init.method === 'PATCH') writes++;
+        return Promise.resolve(json({ status: 200, data: savedExpense }));
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Retained input' });
+    denied = true;
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openExpense(groupId, expenseId);
+    expect(restarted.getSnapshot().expense.status).toBe('blocked');
+    restarted.resumeExpenseDraft();
+    await restarted.saveExpense();
+    expect(writes).toBe(0);
+    expect(restarted.getSnapshot().expense.draft?.notes).toBe('Retained input');
+  });
+  it('retains actionable correction and editable input after a definite edit rejection', async () => {
+    const { controller, create } = setup((path, init) => {
+      if (!path.endsWith(`/${expenseId}`)) return;
+      if (init.method === 'PATCH')
+        return Promise.resolve(
+          json({ status: 422, error: 'INVALID_TAG', code: 'INVALID_TAG' }, 422),
+        );
+      return Promise.resolve(json({ status: 200, data: savedExpense }));
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Keep my input' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.status).toBe('editing');
+    expect(controller.getSnapshot().expense.message).toContain('Choose an active Tag');
+    expect(controller.getSnapshot().expense.mutation).toBeNull();
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openExpense(groupId, expenseId);
+    restarted.resumeExpenseDraft();
+    expect(restarted.getSnapshot().expense.status).toBe('editing');
+    expect(restarted.getSnapshot().expense.draft?.notes).toBe('Keep my input');
+  });
+
   it.each(['edit', 'delete'] as const)(
     'reads the current record after a lost %s response and never repeats the mutation on restart',
     async (kind) => {
@@ -274,7 +366,7 @@ describe('native Expense creation', () => {
   it('settles edit preflight interrupted by a warm link without stranding the draft in saving', async () => {
     let block = false;
     let release!: (response: FetchResponse) => void;
-    const { controller } = setup((path, init) => {
+    const { controller } = setup((path) => {
       if (path === `/api/groups/${groupId}` && block)
         return new Promise((resolve) => {
           release = resolve;
@@ -810,6 +902,53 @@ describe('native Expense creation', () => {
     expect(controller.getSnapshot().expense.context?.tags[0].name).toBe('New name');
     expect(controller.getSnapshot().expense.draft?.tagId).toBe(tagId);
     expect(controller.getSnapshot().expense.status).toBe('editing');
+  });
+
+  it('does not restore an old edit when sign-out interrupts rejection cleanup', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const enteredCleanup = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const { controller, drafts } = setup((path, init) => {
+      if (path.endsWith(`/${expenseId}`) && init.method === 'PATCH')
+        return Promise.resolve(json({ code: 'INVALID_TAG', status: 422 }, 422));
+      if (path.endsWith(`/${expenseId}`))
+        return Promise.resolve(json({ data: savedExpense, status: 200 }));
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Private dinner', amount: '10', tagId });
+    const save = drafts.save;
+    let writes = 0;
+    drafts.save = async (...args) => {
+      writes++;
+      if (writes === 2) {
+        entered();
+        await held;
+        throw new Error('Storage failed');
+      }
+      await save(...args);
+    };
+    const saving = controller.saveExpense();
+    await enteredCleanup;
+    const leaked: unknown[] = [];
+    controller.subscribe(() => {
+      const state = controller.getSnapshot();
+      if (state.auth.status === 'signed-out' && state.expense.mutation)
+        leaked.push(state.expense.mutation);
+    });
+    const signingOut = controller.signOut();
+    release();
+    await Promise.all([saving, signingOut]);
+    expect(leaked).toEqual([]);
+    expect(controller.getSnapshot().auth.status).toBe('signed-out');
+    expect(controller.getSnapshot().expense.mutation).toBeNull();
+    expect(controller.getSnapshot().expense.draft).toBeNull();
   });
 
   it('does not restore an old attempt when sign-out interrupts rejection cleanup', async () => {

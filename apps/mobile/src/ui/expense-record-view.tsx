@@ -9,11 +9,9 @@ import { fonts } from './theme';
 export function ExpenseRecordView({
   record,
   title = 'Saved Expense',
-  history = true,
 }: {
   record: ExpenseRecord;
   title?: string;
-  history?: boolean;
 }) {
   const money = readExpenseMoney(storedExpenseMoney(record));
   const amount = (value: number) => formatCurrency(value, record.currency);
@@ -64,32 +62,30 @@ export function ExpenseRecordView({
         <Copy>Recurring Expense{record.period ? ` · ${record.period}` : ''}</Copy>
       ) : null}
       {record.deletedAt ? <Copy>Deleted {new Date(record.deletedAt).toLocaleString()}</Copy> : null}
+      <Copy>Revision {record.revision}</Copy>
       <Copy>Last updated {new Date(record.updatedAt).toLocaleString()}</Copy>
-      {history ? (
-        <View style={{ gap: 12 }}>
-          <Copy style={{ fontFamily: fonts.semibold }}>Edit history</Copy>
-          {!record.editHistory.length ? (
-            <Copy>No recorded edits.</Copy>
-          ) : (
-            record.editHistory.map((entry, index) => (
-              <View key={`${entry.editedAt}:${index}`} style={{ gap: 6 }}>
-                <Copy>
-                  {typeof entry.editedBy === 'object' && entry.editedBy
-                    ? (entry.editedBy.name ?? 'Former member')
-                    : 'Member'}{' '}
-                  · {new Date(entry.editedAt).toLocaleString()}
+      <View style={{ gap: 12 }}>
+        <Copy style={{ fontFamily: fonts.semibold }}>Edit history</Copy>
+        {!record.editHistory.length ? (
+          <Copy>No recorded edits.</Copy>
+        ) : (
+          record.editHistory.map((entry, index) => (
+            <View key={`${entry.editedAt}:${index}`} style={{ gap: 6 }}>
+              <Copy>
+                {typeof entry.editedBy === 'object' && entry.editedBy
+                  ? (entry.editedBy.name ?? 'Former member')
+                  : 'Member'}{' '}
+                · {new Date(entry.editedAt).toLocaleString()}
+              </Copy>
+              {Object.entries(entry.changes).map(([field, change]) => (
+                <Copy key={field}>
+                  {field}: {JSON.stringify(change.old) ?? '—'} → {JSON.stringify(change.new) ?? '—'}
                 </Copy>
-                {Object.entries(entry.changes).map(([field, change]) => (
-                  <Copy key={field}>
-                    {field}: {JSON.stringify(change.old) ?? '—'} →{' '}
-                    {JSON.stringify(change.new) ?? '—'}
-                  </Copy>
-                ))}
-              </View>
-            ))
-          )}
-        </View>
-      ) : null}
+              ))}
+            </View>
+          ))
+        )}
+      </View>
     </Panel>
   );
 }
