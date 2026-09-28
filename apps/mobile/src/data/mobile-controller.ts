@@ -1,6 +1,8 @@
 import { readSessionCookie, validSessionCookie } from './cookies';
 import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
+import { currentMonthKey, getLocalMonthIsoRange } from '@splitbook/shared/date';
+
 import {
   objectId,
   parseCreatedGroup,
@@ -13,15 +15,36 @@ import {
   parseSignIn,
 } from './dto';
 import { parseInvitationLink } from './invitation-links';
+import { parseExpensePage, parseGroupBalances, parseHomeBalances } from './financial-dto';
 import type {
   AccountStorageLease,
   FetchResponse,
   GroupCreation,
   GroupDraft,
+  GroupFinancialState,
   MobileConfig,
   MobileDependencies,
   MobileSnapshot,
 } from './types';
+
+export { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
+
+function emptyFinancial(): GroupFinancialState {
+  return {
+    groupId: null,
+    month: null,
+    expenses: {
+      status: 'idle',
+      data: [],
+      summary: null,
+      pagination: null,
+      message: null,
+      moreStatus: 'idle',
+      moreMessage: null,
+    },
+    balances: { status: 'idle', data: null, message: null },
+  };
+}
 
 const expiredMessage = 'Your session has expired. Sign in again to continue.';
 const storageMessage = 'Could not safely save your session. Please try signing in again.';
@@ -46,6 +69,8 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
   return {
     auth,
     screen: 'groups',
+    home: { status: 'idle', data: null, message: null },
+    financial: emptyFinancial(),
     creation: {
       draft: {
         name: '',
@@ -81,7 +106,7 @@ function origin(value: string): string {
 }
 
 /**
- * Development-persona transport and memory-only Group reads. Secure credential
+ * Development-persona transport and memory-only Group and financial reads. Secure credential
  * persistence is injected by the native runtime. It never imports React or a
  * native SDK, and it never treats a raw Better Auth token as a signed cookie.
  */
@@ -97,6 +122,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let cookie: string | null = null;
   let generation = 0;
   let viewRequest = 0;
+  let homeRequest = 0;
+  let financialRequest = 0;
+  let balancesRequest = 0;
   let storeQueue: Promise<unknown> = Promise.resolve();
   let cleanupRequired = false;
   let accountCleanupRequired = false;
@@ -448,6 +476,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     publish(cleanSnapshot({ status: 'authenticated', user: session.user, message: null }));
     await loadGroups(owner);
+    if (current(owner)) await refreshHome();
     if (!current(owner)) return;
     if (creationRecovery?.ownerId === session.user.id) {
       publish({
@@ -458,6 +487,28 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     creationRecovery = null;
     if (current(owner) && pendingCode) await previewInvitation(pendingCode);
+  };
+
+  const refreshHome = async () => {
+    if (snapshot.auth.status !== 'authenticated') return;
+    const owner = generation;
+    const read = ++homeRequest;
+    publish({ ...snapshot, home: { status: 'loading', data: null, message: null } });
+    try {
+      const data = parseHomeBalances(await request('/api/user/balances', owner));
+      if (!current(owner) || read !== homeRequest) return;
+      publish({ ...snapshot, home: { status: 'ready', data, message: null } });
+    } catch (error) {
+      if (!current(owner) || read !== homeRequest || error instanceof Superseded) return;
+      publish({
+        ...snapshot,
+        home: {
+          status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
+          data: null,
+          message: 'Could not load your balances. Please try again.',
+        },
+      });
+    }
   };
 
   const restore = async () => {
@@ -542,12 +593,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const openGroup = async (id: string) => {
     if (snapshot.auth.status !== 'authenticated') return;
     const owner = generation;
+    const previousMonth = snapshot.financial.groupId === id ? snapshot.financial.month : undefined;
     const view = ++viewRequest;
     publish({
       ...snapshot,
       screen: 'group',
       share: { status: 'idle', url: null, message: null },
       detail: { status: 'loading', id, data: null, message: null },
+      financial: { ...emptyFinancial(), groupId: id },
     });
     try {
       if (!objectId.safeParse(id).success)
@@ -561,15 +614,25 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ) {
         throw new RequestError('You no longer have access to this group.', 403);
       }
-      publish({ ...snapshot, detail: { status: 'ready', id, data: group, message: null } });
-    } catch (error) {
-      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
-      const denied = error instanceof RequestError && [403, 404].includes(error.status);
       publish({
         ...snapshot,
-        groups: denied
-          ? { ...snapshot.groups, data: snapshot.groups.data.filter((group) => group.id !== id) }
-          : snapshot.groups,
+        detail: { status: 'ready', id, data: group, message: null },
+        financial: {
+          ...snapshot.financial,
+          month:
+            group.category === 'home'
+              ? previousMonth === undefined
+                ? currentMonthKey(new Date(now()))
+                : previousMonth
+              : null,
+        },
+      });
+      await refreshExpenses();
+    } catch (error) {
+      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      if (dropDeniedGroup(id, error)) return;
+      publish({
+        ...snapshot,
         detail: {
           status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
           id,
@@ -582,6 +645,209 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
     }
   };
+
+  const dropDeniedGroup = (id: string, error: unknown): boolean => {
+    if (!(error instanceof RequestError) || ![403, 404].includes(error.status)) return false;
+    viewRequest += 1;
+    homeRequest += 1;
+    publish({
+      ...snapshot,
+      groups: { ...snapshot.groups, data: snapshot.groups.data.filter((group) => group.id !== id) },
+      detail: {
+        status: error.status === 403 ? 'denied' : 'error',
+        id,
+        data: null,
+        message: error.message,
+      },
+      financial: emptyFinancial(),
+      home: { status: 'idle', data: null, message: null },
+      share: { status: 'idle', url: null, message: null },
+    });
+    return true;
+  };
+
+  const refreshBalances = async () => {
+    const group = snapshot.detail.data;
+    if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'group' || !group) return;
+    const owner = generation;
+    const view = viewRequest;
+    if (
+      snapshot.financial.expenses.status === 'loading' ||
+      snapshot.financial.expenses.moreStatus === 'loading'
+    )
+      return;
+    const read = ++balancesRequest;
+    publish({
+      ...snapshot,
+      financial: {
+        ...snapshot.financial,
+        balances: { status: 'loading', data: null, message: null },
+      },
+    });
+    try {
+      const data = parseGroupBalances(await request(`/api/groups/${group.id}/balances`, owner));
+      if (!current(owner) || view !== viewRequest || read !== balancesRequest) return;
+      publish({
+        ...snapshot,
+        financial: { ...snapshot.financial, balances: { status: 'ready', data, message: null } },
+      });
+    } catch (error) {
+      if (
+        !current(owner) ||
+        view !== viewRequest ||
+        read !== balancesRequest ||
+        error instanceof Superseded
+      )
+        return;
+      if (dropDeniedGroup(group.id, error)) return;
+      publish({
+        ...snapshot,
+        financial: {
+          ...snapshot.financial,
+          balances: {
+            status: 'error',
+            data: null,
+            message: 'Could not load running balances. Please try again.',
+          },
+        },
+      });
+    }
+  };
+
+  const expensePath = (groupId: string, category: string, month: string | null, page: number) => {
+    const params = new URLSearchParams({ page: String(page), limit: '20' });
+    if (category === 'home') {
+      params.set('includeMemberBreakdown', '1');
+      if (month) {
+        const { dateFrom, dateTo } = getLocalMonthIsoRange(month);
+        params.set('dateFrom', dateFrom);
+        params.set('dateTo', dateTo);
+      }
+    }
+    return `/api/groups/${groupId}/expenses?${params}`;
+  };
+
+  const selectMonth = async (month: string | null) => {
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.screen !== 'group' ||
+      snapshot.detail.data?.category !== 'home'
+    )
+      return;
+    if (month !== null) getLocalMonthIsoRange(month);
+    publish({ ...snapshot, financial: { ...snapshot.financial, month } });
+    await refreshExpenses();
+  };
+
+  const beginExpenseRead = () => {
+    // Expense reads can materialize due recurring entries. Older Home responses
+    // no longer describe the same ledger, even while the Group read is pending.
+    homeRequest += 1;
+    balancesRequest += 1;
+    publish({
+      ...snapshot,
+      home: { status: 'idle', data: null, message: null },
+      financial: {
+        ...snapshot.financial,
+        balances: { status: 'loading', data: null, message: null },
+      },
+    });
+  };
+
+  const readExpenses = async (append: boolean) => {
+    const group = snapshot.detail.data;
+    if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'group' || !group) return;
+    const expenses = snapshot.financial.expenses;
+    const pagination = expenses.pagination;
+    let pageNumber = 1;
+    if (append) {
+      if (
+        expenses.status !== 'ready' ||
+        expenses.moreStatus === 'loading' ||
+        !pagination ||
+        pagination.page >= pagination.totalPages
+      )
+        return;
+      pageNumber = pagination.page + 1;
+    }
+    const owner = generation;
+    const view = viewRequest;
+    const read = ++financialRequest;
+    beginExpenseRead();
+    publish({
+      ...snapshot,
+      financial: {
+        ...snapshot.financial,
+        expenses: append
+          ? { ...expenses, moreStatus: 'loading', moreMessage: null }
+          : { ...emptyFinancial().expenses, status: 'loading' },
+      },
+    });
+    try {
+      const page = parseExpensePage(
+        await request(
+          expensePath(group.id, group.category, snapshot.financial.month, pageNumber),
+          owner,
+        ),
+        group.id,
+        group.defaultCurrency,
+      );
+      if (!current(owner) || view !== viewRequest || read !== financialRequest) return;
+      if (page.pagination.page !== pageNumber) throw new Error('Unexpected expense page.');
+      const existing = append ? expenses.data : [];
+      const seen = new Set(existing.map((expense) => expense.id));
+      publish({
+        ...snapshot,
+        financial: {
+          ...snapshot.financial,
+          expenses: {
+            status: 'ready',
+            data: [...existing, ...page.expenses.filter((expense) => !seen.has(expense.id))],
+            summary: page.summary,
+            pagination: page.pagination,
+            message: null,
+            moreStatus: 'idle',
+            moreMessage: null,
+          },
+        },
+      });
+      await refreshBalances();
+    } catch (error) {
+      if (
+        !current(owner) ||
+        view !== viewRequest ||
+        read !== financialRequest ||
+        error instanceof Superseded
+      )
+        return;
+      if (dropDeniedGroup(group.id, error)) return;
+      publish({
+        ...snapshot,
+        financial: {
+          ...snapshot.financial,
+          balances: {
+            status: 'error',
+            data: null,
+            message: 'Could not update running balances. Please try again.',
+          },
+          expenses: append
+            ? {
+                ...snapshot.financial.expenses,
+                moreStatus: 'error',
+                moreMessage: 'Could not load more expenses. Please try again.',
+              }
+            : {
+                ...emptyFinancial().expenses,
+                status: 'error',
+                message: 'Could not load expenses. Please try again.',
+              },
+        },
+      });
+    }
+  };
+
+  const refreshExpenses = () => readExpenses(false);
+  const loadMoreExpenses = () => readExpenses(true);
 
   const startCreate = () => {
     if (snapshot.auth.status !== 'authenticated') return;
@@ -809,10 +1075,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({
       ...snapshot,
       screen: 'groups',
+      detail: { status: 'idle', id: null, data: null, message: null },
+      financial: emptyFinancial(),
       invitation: { code: null, status: 'idle', preview: null, message: null },
     });
     try {
       await savePending(null);
+      if (current(owner) && view === viewRequest) await refreshHome();
     } catch {
       if (!current(owner) || view !== viewRequest) return;
       publish({
@@ -969,7 +1238,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ...snapshot,
       screen: 'groups',
       detail: { status: 'idle', id: null, data: null, message: null },
+      financial: emptyFinancial(),
     });
+    return refreshHome();
   };
 
   const refresh = async () => {
@@ -1006,7 +1277,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return;
     }
     if (snapshot.screen === 'group' && snapshot.detail.id) return openGroup(snapshot.detail.id);
-    return loadGroups(generation);
+    const owner = generation;
+    await loadGroups(owner);
+    if (current(owner)) await refreshHome();
   };
 
   const signOut = async () => {
@@ -1072,6 +1345,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openGroup,
     back,
     refresh,
+    refreshHome,
+    refreshExpenses,
+    refreshBalances,
+    selectMonth,
+    loadMoreExpenses,
     signOut,
     getSnapshot: () => snapshot,
     subscribe: (listener: () => void) => {
