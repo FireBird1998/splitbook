@@ -25,6 +25,7 @@ function group(user = alex, id = groupId) {
   const { id: userId, ...profile } = user;
   return {
     _id: id,
+    createdBy: userId,
     name: user === alex ? 'Weekend Away' : 'Shared Home',
     description: 'Fictional development data',
     category: user === alex ? 'trip' : 'home',
@@ -855,6 +856,61 @@ describe('native session and Group boundary', () => {
     expect(request.redirect).toBe('error');
   });
 
+  it('normalizes a legacy General list without optional fields and rejects malformed full Group fields', async () => {
+    const legacy = {
+      ...group(),
+      category: undefined,
+      description: undefined,
+      startDate: undefined,
+      endDate: undefined,
+    };
+    let payload: unknown[] = [legacy];
+    const { controller } = setup({
+      intercept: (path) =>
+        path === '/api/groups' ? json({ data: payload, status: 200 }) : undefined,
+    });
+    await controller.signIn('alex');
+    expect(controller.getSnapshot().groups.status).toBe('ready');
+    expect(controller.getSnapshot().groups.data[0]).toMatchObject({
+      category: 'other',
+      description: '',
+      startDate: null,
+      endDate: null,
+    });
+    payload = [{ ...group(), tags: [{ _id: 'invalid', name: 'Broken' }] }];
+    await controller.refresh();
+    expect(controller.getSnapshot().groups.status).toBe('error');
+    expect(controller.getSnapshot().groups.data[0].category).toBe('other');
+  });
+
+  it('retains the verified list after an invalid refresh and replaces it only after a successful Retry', async () => {
+    let invalid = false;
+    const { controller } = setup({
+      intercept: (path) =>
+        invalid && path === '/api/groups'
+          ? json({
+              data: [group(), { ...group(alex, otherGroupId), defaultCurrency: 'UNKNOWN' }],
+              status: 200,
+            })
+          : undefined,
+    });
+    await controller.signIn('alex');
+    const verified = controller.getSnapshot().groups.data;
+    invalid = true;
+    await controller.refresh();
+    expect(controller.getSnapshot().groups).toMatchObject({ status: 'error', data: verified });
+    expect(controller.getSnapshot().groups.message).toBeTruthy();
+    invalid = false;
+    await controller.refresh();
+    expect(controller.getSnapshot().groups).toEqual({
+      status: 'ready',
+      data: verified,
+      message: null,
+    });
+    await controller.signOut();
+    expect(controller.getSnapshot().groups.data).toEqual([]);
+  });
+
   it('restores only after server validation and shows a ready empty list distinctly', async () => {
     const { controller, fetch } = setup({
       saved: alexCookie,
@@ -912,6 +968,32 @@ describe('native session and Group boundary', () => {
     offline = false;
     await controller.refresh();
     expect(controller.getSnapshot().auth.status).toBe('authenticated');
+  });
+
+  it('retains the requested verified Group on malformed detail refresh and recovers with Retry', async () => {
+    let invalid = false;
+    const { controller } = setup({
+      intercept: (path) =>
+        invalid && path === `/api/groups/${groupId}`
+          ? json({ data: { ...group(), tags: [{ _id: 'invalid', name: 'Broken' }] }, status: 200 })
+          : undefined,
+    });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    const verified = controller.getSnapshot().detail.data;
+    expect(verified?.id).toBe(groupId);
+    invalid = true;
+    await controller.refresh();
+    expect(controller.getSnapshot().detail).toMatchObject({ status: 'error', data: verified });
+    invalid = false;
+    await controller.refresh();
+    expect(controller.getSnapshot().detail).toMatchObject({
+      status: 'ready',
+      data: verified,
+      message: null,
+    });
+    await controller.openGroup(otherGroupId);
+    expect(controller.getSnapshot().detail.data).toBeNull();
   });
 
   it('removes both detail and its Group card when access is revoked on refresh', async () => {

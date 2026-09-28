@@ -382,13 +382,18 @@ function SplitBook() {
                     {state.groups.data.length.toString().padStart(2, '0')}
                   </Copy>
                 </View>
-                {state.groups.status === 'error' || state.groups.status === 'denied' ? (
+                {(state.groups.status === 'error' || state.groups.status === 'denied') && (
                   <Notice
                     title="Couldn’t load your Groups"
-                    message={state.groups.message ?? 'Please try again.'}
+                    message={
+                      state.groups.data.length
+                        ? `${state.groups.message ?? 'Please try again.'} Showing previously verified Groups.`
+                        : (state.groups.message ?? 'Please try again.')
+                    }
                     retry={() => void controller.refresh()}
                   />
-                ) : state.groups.status === 'loading' && !state.groups.data.length ? (
+                )}
+                {state.groups.status === 'loading' && !state.groups.data.length ? (
                   <Loading label="Finding your Groups…" />
                 ) : state.groups.status === 'ready' && !state.groups.data.length ? (
                   <EmptyGroups onRefresh={() => void controller.refresh()} />
@@ -411,11 +416,20 @@ function SplitBook() {
                 retryLabel="Back to Groups"
               />
             ) : state.detail.status === 'error' ? (
-              <Notice
-                title="Couldn’t open this Group"
-                message={state.detail.message ?? 'Please try again.'}
-                retry={() => void controller.refresh()}
-              />
+              <>
+                <Notice
+                  title="Couldn’t open this Group"
+                  message={
+                    state.detail.data
+                      ? `${state.detail.message ?? 'Please try again.'} Showing previously verified Group information.`
+                      : (state.detail.message ?? 'Please try again.')
+                  }
+                  retry={() => void controller.refresh()}
+                />
+                {state.detail.data && (
+                  <GroupDetail group={state.detail.data} currentUserId={state.auth.user!.id} />
+                )}
+              </>
             ) : state.detail.data ? (
               <>
                 <GroupDetail group={state.detail.data} currentUserId={state.auth.user!.id}>

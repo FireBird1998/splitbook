@@ -22,6 +22,7 @@ import EmptyState from '@/components/common/EmptyState';
 import { formatRelativeTime } from '@splitbook/shared/date';
 import { selectNextAction } from '@splitbook/shared/dashboard';
 import { fetcher } from '@/lib/utils/fetcher';
+import { useGroups } from '@/lib/hooks/use-groups';
 import type { UserBalancesResponse } from '@splitbook/shared/types';
 
 interface DashboardViewProps {
@@ -47,7 +48,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
     isLoading: groupsLoading,
     error: groupsError,
     mutate: mutateGroups,
-  } = useSWR('/api/groups', fetcher, { refreshInterval: 30_000 });
+  } = useGroups(userId);
   const {
     data: balancesData,
     isLoading: balancesLoading,
@@ -61,7 +62,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
     mutate: mutateInvitations,
   } = useSWR('/api/invitations', fetcher, { refreshInterval: 30_000 });
 
-  const groups = (groupsData?.data || []) as Record<string, unknown>[];
+  const groups = groupsData ?? [];
   const invitations = (invitationsData?.data || []) as Record<string, unknown>[];
   const balanceSummary = balancesData?.data as UserBalancesResponse | undefined;
   const groupBalances = balanceSummary?.groups || [];
@@ -70,7 +71,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
   );
   const nextAction = selectNextAction(groupBalances, invitations.length);
   const recentGroups = [...groups]
-    .sort((a, b) => Date.parse(b.updatedAt as string) - Date.parse(a.updatedAt as string))
+    .sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
     .slice(0, 3);
   const initialLoading =
     !groupsData &&
@@ -246,7 +247,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
 
         {balancesLoading && !balanceSummary ? (
           <Skeleton variant="rounded" height={128} />
-        ) : balancesError && !balanceSummary ? null : (
+        ) : (balancesError && !balanceSummary) || (groupsError && !groupsData) ? null : (
           <Paper
             component="section"
             variant="outlined"
@@ -334,9 +335,17 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
             </Button>
           </Stack>
 
-          {groupsError && !groupsData ? (
-            <ErrorState message="Groups could not be loaded." onRetry={() => void mutateGroups()} />
-          ) : groupsLoading && !groupsData ? (
+          {groupsError && (
+            <ErrorState
+              message={
+                groupsData
+                  ? 'Groups could not be refreshed. Showing previously loaded groups.'
+                  : 'Groups could not be loaded.'
+              }
+              onRetry={() => void mutateGroups()}
+            />
+          )}
+          {groupsError && !groupsData ? null : groupsLoading && !groupsData ? (
             <Box
               sx={{
                 display: 'grid',
@@ -374,10 +383,10 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
               }}
             >
               {groups.map((group) => {
-                const groupBalance = balanceByGroupId.get(group._id as string);
+                const groupBalance = balanceByGroupId.get(group._id);
                 return (
                   <GroupCard
-                    key={group._id as string}
+                    key={group._id}
                     group={group}
                     userId={userId}
                     balances={groupBalance?.balances}
@@ -431,7 +440,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
               ))}
               {recentGroups.map((group) => (
                 <Paper
-                  key={group._id as string}
+                  key={group._id}
                   component={Link}
                   href={`/groups/${group._id}`}
                   variant="outlined"
@@ -447,10 +456,10 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
                 >
                   <Box>
                     <Typography variant="body2" fontWeight={600} color="text.primary">
-                      {group.name as string}
+                      {group.name}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      Last activity {formatRelativeTime(group.updatedAt as string)}
+                      Last activity {formatRelativeTime(group.updatedAt)}
                     </Typography>
                   </Box>
                   <ArrowForwardIcon fontSize="small" color="action" />
@@ -458,6 +467,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
               ))}
               {!invitationsLoading &&
                 !groupsLoading &&
+                !groupsError &&
                 invitations.length === 0 &&
                 recentGroups.length === 0 && (
                   <Paper variant="outlined" sx={{ p: 3 }}>
