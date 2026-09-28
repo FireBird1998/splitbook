@@ -436,6 +436,87 @@ describe('native payment recording', () => {
     expect(writes).toHaveLength(1);
   });
 
+  it.each([
+    { endpoint: 'balances', status: 503 },
+    { endpoint: 'settlements', status: 503 },
+    { endpoint: 'balances', status: 403 },
+  ])(
+    'retains confirmed payment and $endpoint refresh failure ($status)',
+    async ({ endpoint, status }) => {
+      let committed = false;
+      const { controller, records, writes } = setup((path, init) => {
+        if (path.endsWith('/settlements') && init.method === 'POST') {
+          committed = true;
+          return json({ status: 201, data: record }, 201);
+        }
+        if (committed && path === `/api/groups/${groupId}/${endpoint}`)
+          return json({ status, error: 'Payment refresh unavailable' }, status);
+      });
+      await controller.signIn('alex');
+      await controller.openSettlements(groupId);
+      controller.selectSettlement(actor, recipient, 'INR');
+      controller.updateSettlement({ amount: '10', note: 'Paid already' });
+      await controller.reviewSettlement();
+      await controller.recordSettlement();
+      expect(writes).toHaveLength(1);
+      expect(records.size).toBe(0);
+      const state = controller.getSnapshot().settlement;
+      expect(state.status).toBe(status === 403 ? 'blocked' : 'error');
+      expect(state.attempt).toBeNull();
+      expect(state.message).toContain('Payment recorded.');
+      expect(state.message).toContain(
+        status === 403
+          ? 'You no longer have access to this group.'
+          : 'The server could not complete this request. Please try again.',
+      );
+      expect(state.message).toContain('Use Refresh payments');
+      expect(state.message).not.toContain('refreshed balances show');
+      await controller.recordSettlement();
+      expect(writes).toHaveLength(1);
+    },
+  );
+
+  it('does not replace a newer payment review message when an older success refresh finishes', async () => {
+    let committed = false,
+      held = false;
+    let release!: (value: FetchResponse) => void, entered!: () => void;
+    const dispatched = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const { controller } = setup((path, init) => {
+      if (path.endsWith('/settlements') && init.method === 'POST') {
+        committed = true;
+        return json({ status: 201, data: record }, 201);
+      }
+      if (committed && path === `/api/groups/${groupId}/balances`) {
+        if (!held) {
+          held = true;
+          return new Promise((resolve) => {
+            release = resolve;
+            entered();
+          });
+        }
+        return json(balances(20));
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openSettlements(groupId);
+    controller.selectSettlement(actor, recipient, 'INR');
+    controller.updateSettlement({ amount: '10', note: 'Paid already' });
+    await controller.reviewSettlement();
+    const saving = controller.recordSettlement();
+    await dispatched;
+    controller.openSettings();
+    await controller.openSettlements(groupId);
+    controller.selectSettlement(actor, recipient, 'INR');
+    controller.updateSettlement({ amount: '5' });
+    await controller.reviewSettlement();
+    const reviewed = controller.getSnapshot().settlement;
+    release(json(balances(20)));
+    await saving;
+    expect(controller.getSnapshot().settlement).toEqual(reviewed);
+  });
+
   it('persists the exact actual payment before recording and refreshes history and balances', async () => {
     let committed = false;
     const { controller, records, writes } = setup((path, init) => {

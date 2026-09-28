@@ -2085,9 +2085,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       completed = true;
       if (!current(owner) || view !== viewRequest) return;
-      await openSettlements(groupId);
+      const refreshing = openSettlements(groupId);
+      const refreshView = viewRequest;
+      await refreshing;
       if (
         current(owner) &&
+        viewRequest === refreshView &&
         snapshot.screen === 'settlement' &&
         snapshot.settlement.groupId === groupId
       )
@@ -2096,7 +2099,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           settlement: {
             ...snapshot.settlement,
             message:
-              'Payment recorded. The refreshed balances show what remains; no money was transferred by SplitBook.',
+              snapshot.settlement.status === 'ready'
+                ? 'Payment recorded. The refreshed balances show what remains; no money was transferred by SplitBook.'
+                : `Payment recorded. ${snapshot.settlement.message ?? 'Could not refresh payments.'} Use Refresh payments to check the current result.`,
           },
         });
     } catch (error) {
