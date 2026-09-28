@@ -90,6 +90,17 @@ test('stale expense edit keeps its draft and conflict until an explicit reload',
     .withRules(['color-contrast'])
     .analyze();
   expect(contrast.violations).toEqual([]);
+  // A failed explicit reload must retain both the draft and the conflict action.
+  await page.route(`**${path}`, async (route) => {
+    if (route.request().method() === 'GET')
+      return route.fulfill({ status: 503, json: { error: 'Unavailable' } });
+    return route.continue();
+  });
+  await dialog.getByRole('button', { name: 'Reload latest', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('Could not reload this Expense');
+  await expect(description).toHaveValue('Draft awaiting conflict resolution');
+  await expect(dialog.getByRole('button', { name: 'Reload latest', exact: true })).toBeVisible();
+  await page.unroute(`**${path}`);
   const reloaded = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === path && response.request().method() === 'GET',

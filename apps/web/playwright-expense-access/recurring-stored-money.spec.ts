@@ -101,3 +101,88 @@ test('recurring legacy float tails display exact fields and allow a metadata-onl
     15, 15,
   ]);
 });
+
+test('recurring historical preview matches metadata and financial saves without rewriting generated Expenses', async ({
+  page,
+  ledger,
+}) => {
+  const root = `/api/groups/${ledger.groupB}`;
+  const now = new Date();
+  const template = await dataOf(
+    await ledger.priya.post(`${root}/recurring`, {
+      data: {
+        description: 'Historical recurring remainder',
+        amount: 0.03,
+        currency: 'INR',
+        category: 'housing',
+        tag: 'Rent',
+        paidBy: [{ user: DEMO_PERSONA_IDS.priya, amount: 0.03 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: DEMO_PERSONA_IDS.priya }, { user: DEMO_PERSONA_IDS.sam }],
+        startsOn: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString(),
+        dayOfMonth: 1,
+      },
+    }),
+    201,
+  );
+  const expenses = await dataOf(await ledger.priya.get(`${root}/expenses`));
+  const generated = expenses.expenses.find(
+    (row: { recurringExpense?: string }) => row.recurringExpense === template._id,
+  );
+  expect(generated).toBeDefined();
+  const generatedPath = `${root}/expenses/${generated._id}`;
+  const generatedBefore = await dataOf(await ledger.priya.get(generatedPath));
+  const dbName = process.env.EXPENSE_ACCESS_TEST_DB;
+  if (!dbName || !/^splitbook-test-access-[a-f0-9-]+$/.test(dbName))
+    throw new Error('Isolated database required');
+  const client = new MongoClient(`mongodb://127.0.0.1:27017/${dbName}?directConnection=true`);
+  try {
+    await client.connect();
+    await client
+      .db(dbName)
+      .collection('recurringexpenses')
+      .updateOne(
+        { _id: new ObjectId(template._id) },
+        {
+          $set: {
+            'splitBetween.0.amount': 0.02,
+            'splitBetween.0.amountMinor': 2,
+            'splitBetween.1.amount': 0.01,
+            'splitBetween.1.amountMinor': 1,
+          },
+        },
+      );
+  } finally {
+    await client.close();
+  }
+  await page.context().addCookies((await ledger.priya.storageState()).cookies);
+  await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${ledger.groupB}/settings`);
+  const editTemplate = async (description: string) => {
+    await page
+      .getByRole('button', { name: `Actions for recurring expense ${description}` })
+      .click();
+    await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+    return page.getByRole('dialog', { name: 'Edit recurring expense' });
+  };
+  let dialog = await editTemplate('Historical recurring remainder');
+  await expect(dialog.getByText(/Priya Shah: ₹0\.02.*Sam Chen: ₹0\.01/)).toBeVisible();
+  await dialog.getByLabel('Description').fill('Historical recurring corrected');
+  await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  let templates = await dataOf(await ledger.priya.get(`${root}/recurring`));
+  let updated = templates.find((row: { _id: string }) => row._id === template._id);
+  expect(updated.splitBetween.map((row: { amountMinor: number }) => row.amountMinor)).toEqual([
+    2, 1,
+  ]);
+  dialog = await editTemplate('Historical recurring corrected');
+  await dialog.getByLabel('Amount', { exact: true }).fill('0.05');
+  await expect(dialog.getByText(/Priya Shah: ₹0\.02.*Sam Chen: ₹0\.03/)).toBeVisible();
+  await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  templates = await dataOf(await ledger.priya.get(`${root}/recurring`));
+  updated = templates.find((row: { _id: string }) => row._id === template._id);
+  expect(updated.splitBetween.map((row: { amountMinor: number }) => row.amountMinor)).toEqual([
+    2, 3,
+  ]);
+  expect(await dataOf(await ledger.priya.get(generatedPath))).toEqual(generatedBefore);
+});

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useEffectEvent, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -26,22 +26,16 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useSWRConfig } from 'swr';
 import { PREDEFINED_ITEMS } from '@splitbook/shared/predefined-items';
 import { getCurrency, formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
+import { parseDecimalUnits, sumMinorAmounts } from '@splitbook/shared/exact-money';
+import type { ExpenseSplitMethod } from '@splitbook/shared/split-calculation';
 import {
-  normalizeExpenseMoney,
-  parseAmountMinor,
-  parseDecimalUnits,
-  sumMinorAmounts,
-  toMajorAmount,
-} from '@splitbook/shared/exact-money';
-import {
-  calculateSplitAmounts,
-  type SplitParticipantInput,
-  type ExpenseSplitMethod,
-} from '@splitbook/shared/split-calculation';
+  ExpenseDraft,
+  type SavedDraftExpense,
+  type ExpenseDraftValues,
+} from '@splitbook/shared/expense-draft';
 import { buildDuplicateCheckUrl } from './expense-duplicate-check';
 import {
   getDefaultExpenseTag,
-  getStoredExpenseMoneyFields,
   tagOptionValue,
   getSelectableExpenseTags,
   isAdvancedSplit,
@@ -56,11 +50,6 @@ import type { GroupCategory } from '@splitbook/shared/types';
 interface Member {
   user: { _id: string; name: string; image?: string };
   role: string;
-}
-
-interface Payer {
-  user: string;
-  amount: string;
 }
 
 interface ExpenseFormDialogProps {
@@ -79,7 +68,17 @@ interface ExpenseFormDialogProps {
 }
 
 // ─── Component ─────────────────────────────────────────
-export default function ExpenseFormDialog({
+export default function ExpenseFormDialog(props: ExpenseFormDialogProps) {
+  // The existing dialog lifetime is also the lifetime of its account/Group/Expense draft.
+  return props.open ? (
+    <ExpenseDraftDialog
+      key={JSON.stringify([props.groupId, props.userId, props.expense?._id ?? null])}
+      {...props}
+    />
+  ) : null;
+}
+
+function ExpenseDraftDialog({
   open,
   onClose,
   groupId,
@@ -89,168 +88,54 @@ export default function ExpenseFormDialog({
   defaultDate = null,
 }: ExpenseFormDialogProps) {
   const { mutate } = useSWRConfig();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [invalidStoredMoney, setInvalidStoredMoney] = useState(false);
-  const [reloadedExpense, setReloadedExpense] = useState<Record<string, unknown> | null>(null);
-  const expense =
-    reloadedExpense?._id === initialExpense?._id
-      ? (reloadedExpense ?? initialExpense)
-      : initialExpense;
-  const submission = useRef<{ payload: string; key: string; attempted: boolean } | null>(null);
-  const [conflict, setConflict] = useState(false);
-  useEffect(() => {
-    setReloadedExpense(null);
-    submission.current = null;
-    setConflict(false);
-  }, [open, initialExpense?._id]);
-
-  const isEditMode = !!expense;
-
   const members = useMemo(() => (group.members || []) as Member[], [group.members]);
   const groupTags = useMemo(() => (group.tags || []) as GroupTagOption[], [group.tags]);
   const defaultCurrency = group.defaultCurrency as string;
   const groupNoun = getGroupTheme(group.category as GroupCategory).nouns.singular;
   const groupNounTitle = groupNoun.charAt(0).toUpperCase() + groupNoun.slice(1);
 
-  // ─── Form State ────────────────────────────────────
-  const [description, setDescription] = useState('');
-  const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState(defaultCurrency);
-  const [category, setCategory] = useState('other');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [splitMethod, setSplitMethod] = useState<string>('equal');
-  const [selectedMembers, setSelectedMembers] = useState<string[]>(members.map((m) => m.user._id));
-  const [tag, setTag] = useState('');
-  const [notes, setNotes] = useState('');
-
-  // Multiple payers
-  const [payers, setPayers] = useState<Payer[]>([{ user: userId, amount: '' }]);
-  const [multiPayerMode, setMultiPayerMode] = useState(false);
-
-  // Split-method-specific per-member values
-  const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
-  const [customPercentages, setCustomPercentages] = useState<Record<string, string>>({});
-  const [customShares, setCustomShares] = useState<Record<string, string>>({});
-
-  // ─── Two-Tier Expansion State ─────────────────────
-  const [showSplitOptions, setShowSplitOptions] = useState(false);
-  const [showMoreOptions, setShowMoreOptions] = useState(false);
-
-  // ─── Reset / Prefill ───────────────────────────────
-  const resetForm = useCallback(() => {
-    setDescription('');
-    setAmount('');
-    setCurrency(defaultCurrency);
-    setCategory('other');
-    // A month view passes the month's last day; otherwise default to today.
-    setDate(defaultDate ?? new Date().toISOString().split('T')[0]);
-    setSplitMethod('equal');
-    setSelectedMembers(members.map((m) => m.user._id));
-    setTag(getDefaultExpenseTag(groupTags));
-    setNotes('');
-    setPayers([{ user: userId, amount: '' }]);
-    setMultiPayerMode(false);
-    setCustomAmounts({});
-    setCustomPercentages({});
-    setCustomShares({});
-    setShowSplitOptions(false);
-    setShowMoreOptions(false);
-    setError('');
-    setInvalidStoredMoney(false);
-  }, [defaultCurrency, defaultDate, groupTags, members, userId]);
-
-  // Read current defaults on initialization without subscribing the draft to
-  // background Group refreshes (Tag/member changes must not discard input).
-  const initializeForm = useEffectEvent(() => {
-    setError('');
-    setInvalidStoredMoney(false);
-    if (expense) {
-      const expenseCurrency = (expense.currency as string) || defaultCurrency;
-      const expPayers = (expense.paidBy || []) as Array<{
-        user: { _id: string } | string;
-        amount?: number;
-        amountMinor?: number;
-      }>;
-      const expSplit = (expense.splitBetween || []) as Array<{
-        user: { _id: string } | string;
-        amount?: number;
-        amountMinor?: number;
-        percentage?: number;
-        shares?: number;
-      }>;
-      let moneyFields: ReturnType<typeof getStoredExpenseMoneyFields>;
-      try {
-        moneyFields = getStoredExpenseMoneyFields({
-          currency: expenseCurrency,
-          amount: expense.amount as number | undefined,
-          amountMinor: expense.amountMinor as number | undefined,
-          moneyVersion: expense.moneyVersion as number | undefined,
-          paidBy: expPayers,
-          splitBetween: expSplit,
-        });
-      } catch {
-        resetForm();
-        setDescription((expense.description as string) || '');
-        setInvalidStoredMoney(true);
-        setError('This expense contains invalid stored amounts and cannot be edited.');
-        return;
-      }
-      setDescription((expense.description as string) || '');
-      setAmount(moneyFields.amount);
-      setCurrency(expenseCurrency);
-      setCategory((expense.category as string) || 'other');
-      const expDate = expense.date
-        ? new Date(expense.date as string).toISOString().split('T')[0]
-        : (defaultDate ?? new Date().toISOString().split('T')[0]);
-      setDate(expDate);
-      setSplitMethod((expense.splitMethod as string) || 'equal');
-      setTag((expense.tagId as string) || (expense.tag as string) || '');
-      setNotes((expense.notes as string) || '');
-
-      // Payers
-      if (expPayers.length > 1) {
-        setMultiPayerMode(true);
-        setPayers(
-          expPayers.map((p, index) => ({
-            user: typeof p.user === 'string' ? p.user : p.user._id,
-            amount: moneyFields.paidBy[index],
-          })),
-        );
-      } else if (expPayers.length === 1) {
-        const payerUser =
-          typeof expPayers[0].user === 'string' ? expPayers[0].user : expPayers[0].user._id;
-        setPayers([{ user: payerUser, amount: moneyFields.paidBy[0] }]);
-        setMultiPayerMode(false);
-      }
-
-      // Split between
-      setSelectedMembers(expSplit.map((s) => (typeof s.user === 'string' ? s.user : s.user._id)));
-
-      const amounts: Record<string, string> = {};
-      const percentages: Record<string, string> = {};
-      const shares: Record<string, string> = {};
-      for (const [index, s] of expSplit.entries()) {
-        const uid = typeof s.user === 'string' ? s.user : s.user._id;
-        amounts[uid] = moneyFields.splitBetween[index];
-        if (s.percentage !== undefined) percentages[uid] = String(s.percentage);
-        if (s.shares !== undefined) shares[uid] = String(s.shares);
-      }
-      setCustomAmounts(amounts);
-      setCustomPercentages(percentages);
-      setCustomShares(shares);
-
-      // In edit mode, expand sections by default
-      setShowSplitOptions(true);
-      setShowMoreOptions(true);
-    } else {
-      resetForm();
-    }
-  });
-
+  const [draft, setDraft] = useState(() =>
+    ExpenseDraft.open(
+      {
+        groupId,
+        accountId: userId,
+        memberIds: members.map((member) => member.user._id),
+        currency: defaultCurrency,
+        defaultTag: getDefaultExpenseTag(groupTags),
+        date: defaultDate ?? new Date().toISOString().split('T')[0],
+      },
+      initialExpense as unknown as SavedDraftExpense | null,
+    ),
+  );
+  const {
+    description,
+    amount,
+    currency,
+    date,
+    splitMethod,
+    selectedMembers,
+    tag,
+    notes,
+    payers,
+    multiPayerMode,
+    customAmounts,
+    customPercentages,
+    customShares,
+  } = draft.values;
+  const { error, conflict, loading, invalidStoredMoney } = draft;
+  const expense = draft.base;
+  const isEditMode = !!expense;
+  const edit = (change: Partial<ExpenseDraftValues>) => setDraft((current) => current.edit(change));
+  const [showSplitOptions, setShowSplitOptions] = useState(isEditMode);
+  const [showMoreOptions, setShowMoreOptions] = useState(isEditMode);
+  const transportBusy = useRef(false);
+  const mounted = useRef(true);
   useEffect(() => {
-    if (open) initializeForm();
-  }, [open, initialExpense?._id, reloadedExpense]);
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // ─── Derived Values ────────────────────────────────
   const parsedAmount = parseFloat(amount) || 0;
@@ -328,231 +213,150 @@ export default function ExpenseFormDialog({
   const handlePredefinedItem = (itemId: string) => {
     const item = PREDEFINED_ITEMS.find((i) => i.id === itemId);
     if (item) {
-      setDescription(item.label);
-      setCategory(resolveExpenseCategory(itemId));
       const matchingTag = resolvePredefinedTag(groupTags, item.defaultTag);
-      if (matchingTag) setTag(matchingTag);
+      edit({
+        description: item.label,
+        category: resolveExpenseCategory(itemId),
+        ...(matchingTag ? { tag: matchingTag } : {}),
+      });
     }
   };
 
   const handleMemberToggle = (memberId: string, checked: boolean) => {
-    if (checked) {
-      setSelectedMembers((prev) => [...prev, memberId]);
-    } else {
-      setSelectedMembers((prev) => prev.filter((id) => id !== memberId));
-    }
+    setDraft((current) =>
+      current.edit({
+        selectedMembers: checked
+          ? [...current.values.selectedMembers, memberId]
+          : current.values.selectedMembers.filter((id) => id !== memberId),
+      }),
+    );
   };
 
   const handleSplitMethodChange = (_: unknown, val: string | null) => {
-    if (!val) return;
-    setSplitMethod(val);
-    setCustomAmounts({});
-    setCustomPercentages({});
-    setCustomShares({});
+    if (val) setDraft((current) => current.chooseSplitMethod(val as ExpenseSplitMethod));
   };
 
   const addPayer = () => {
     const usedUsers = payers.map((p) => p.user);
     const available = members.find((m) => !usedUsers.includes(m.user._id));
     if (available) {
-      setPayers([...payers, { user: available.user._id, amount: '' }]);
+      edit({ payers: [...payers, { user: available.user._id, amount: '' }] });
     }
   };
 
   const removePayer = (index: number) => {
     if (payers.length <= 1) return;
-    setPayers(payers.filter((_, i) => i !== index));
+    edit({ payers: payers.filter((_, i) => i !== index) });
   };
 
   const updatePayer = (index: number, field: 'user' | 'amount', value: string) => {
-    setPayers(payers.map((p, i) => (i === index ? { ...p, [field]: value } : p)));
-  };
-
-  // ─── Validation ────────────────────────────────────
-  const getSplitValidationError = (): string => {
-    if (selectedMembers.length === 0) return 'Select at least one member';
-    if (splitMethod === 'unequal' || splitMethod === 'exact') {
-      if (parsedAmount > 0 && !splitsBalanced) {
-        return `Amounts must add up to ${formatCurrency(parsedAmount, currency)} (currently ${formatCurrency(unequalTotal, currency)})`;
-      }
-    }
-    if (splitMethod === 'percentage') {
-      if (!percentagesBalanced) {
-        return `Percentages must add up to 100% (currently ${percentageTotal.toFixed(2)}%)`;
-      }
-    }
-    if (splitMethod === 'shares') {
-      if (sharesTotal === 0) return 'Each member needs at least 1 share';
-    }
-    return '';
-  };
-
-  const getPayerValidationError = (): string => {
-    if (multiPayerMode && parsedAmount > 0 && !payersBalanced) {
-      return `Payer amounts must add up to ${formatCurrency(parsedAmount, currency)} (currently ${formatCurrency(payerTotal, currency)})`;
-    }
-    return '';
-  };
-
-  // ─── Build payload & submit ────────────────────────
-  const buildSplitBetween = () => {
-    switch (splitMethod) {
-      case 'unequal':
-      case 'exact':
-        return selectedMembers.map((id) => ({
-          user: id,
-          amount: toMajorAmount(parseAmountMinor(customAmounts[id] || '0', currency), currency),
-        }));
-      case 'percentage':
-        return selectedMembers.map((id) => ({
-          user: id,
-          percentage: Number(customPercentages[id] || '0'),
-        }));
-      case 'shares':
-        return selectedMembers.map((id) => ({
-          user: id,
-          shares: Number(customShares[id] || '1'),
-        }));
-      case 'equal':
-      default:
-        return selectedMembers.map((id) => ({ user: id }));
-    }
+    edit({ payers: payers.map((p, i) => (i === index ? { ...p, [field]: value } : p)) });
   };
 
   const handleSubmit = async () => {
-    if (invalidStoredMoney) return;
-    if (!description.trim() || !amount || parsedAmount <= 0) {
-      setError('Please fill in description and a valid amount.');
-      return;
-    }
-
-    if (!tag) {
-      setError('Please select a tag.');
-      return;
-    }
-
-    const splitError = getSplitValidationError();
-    if (splitError) {
-      setError(splitError);
-      return;
-    }
-
-    const payerError = getPayerValidationError();
-    if (payerError) {
-      setError(payerError);
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-
+    if (transportBusy.current) return;
+    const { draft: prepared, submission } = draft.prepare(
+      groupTags.flatMap((option) => (option._id ? [option._id] : [])),
+      crypto.randomUUID(),
+    );
+    setDraft(prepared);
+    if (!submission) return;
+    transportBusy.current = true;
     try {
-      const money = normalizeExpenseMoney({
-        amount,
-        currency,
-        paidBy: multiPayerMode ? payers : [{ user: payers[0].user, amount }],
-        splitMethod: splitMethod as ExpenseSplitMethod,
-        splitBetween: buildSplitBetween(),
-      });
-      const payload = {
-        description,
-        ...money,
-        currency,
-        category,
-        date,
-        splitMethod,
-        ...(groupTags.some((option) => option._id === tag) || expense?.tagId === tag
-          ? { tagId: tag }
-          : { tag }),
-        notes,
-      };
-
-      const body = JSON.stringify(payload);
-      const retryingCreate =
-        !isEditMode && submission.current?.payload === body && submission.current.attempted;
-      if (submission.current?.payload !== body)
-        submission.current = { payload: body, key: crypto.randomUUID(), attempted: false };
-      if (!retryingCreate)
+      if (submission.checkDuplicate) {
         try {
-          const duplicateRes = await fetch(
+          const response = await fetch(
             buildDuplicateCheckUrl({
-              groupId,
-              description: description.trim(),
-              amount: parsedAmount,
-              date,
-              excludeId: isEditMode ? String(expense!._id) : undefined,
+              groupId: submission.groupId,
+              description: submission.description,
+              amount: submission.amount,
+              date: submission.date,
+              excludeId: submission.expenseId,
             }),
           );
-
-          if (duplicateRes.ok) {
-            const duplicateData = await duplicateRes.json();
-            if (duplicateData.data?.isDuplicate) {
-              const shouldContinue = window.confirm(
+          if (!mounted.current) return;
+          if (response.ok) {
+            const duplicate = await response.json();
+            if (!mounted.current) return;
+            if (
+              duplicate.data?.isDuplicate &&
+              !window.confirm(
                 'This looks like a duplicate expense with the same description, amount, and date. Save it anyway?',
-              );
-              if (!shouldContinue) return;
+              )
+            ) {
+              setDraft((current) => current.cancel(submission));
+              return;
             }
           }
-        } catch (duplicateErr) {
-          console.warn('Duplicate expense check failed', duplicateErr);
+        } catch (error) {
+          console.warn('Duplicate expense check failed', error);
         }
-
-      const url = isEditMode
-        ? `/api/groups/${groupId}/expenses/${expense!._id}`
-        : `/api/groups/${groupId}/expenses`;
-
-      submission.current.attempted = true;
-      const res = await fetch(url, {
-        method: isEditMode ? 'PATCH' : 'POST',
+      }
+      if (!mounted.current) return;
+      setDraft((current) => current.attempt(submission));
+      const url = `/api/groups/${submission.groupId}/expenses${submission.expenseId ? `/${submission.expenseId}` : ''}`;
+      const response = await fetch(url, {
+        method: submission.expenseId ? 'PATCH' : 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(isEditMode
-            ? { 'If-Match': String(expense?.revision ?? 0) }
-            : { 'Idempotency-Key': submission.current.key }),
+          ...(submission.expenseId
+            ? { 'If-Match': String(submission.revision) }
+            : { 'Idempotency-Key': submission.key }),
         },
-        body,
+        body: submission.body,
       });
-
-      if (!res.ok) {
-        const data = await res.json();
-        setConflict(res.status === 409 || res.status === 428);
-        setError(data.error || `Failed to ${isEditMode ? 'update' : 'add'} expense`);
+      if (!mounted.current) return;
+      if (!response.ok) {
+        const result = await response.json();
+        if (mounted.current)
+          setDraft((current) =>
+            current.fail(
+              submission,
+              result.error || `Failed to ${submission.expenseId ? 'update' : 'add'} expense`,
+              response.status,
+            ),
+          );
         return;
       }
-
-      mutate((key: unknown) => typeof key === 'string' && key.startsWith(`/api/groups/${groupId}`));
-      resetForm();
+      setDraft((current) => current.complete(submission));
+      void mutate(
+        (key: unknown) =>
+          typeof key === 'string' && key.startsWith(`/api/groups/${submission.groupId}`),
+      );
       onClose();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+    } catch (error) {
+      if (mounted.current)
+        setDraft((current) =>
+          current.fail(
+            submission,
+            error instanceof Error ? error.message : 'Something went wrong. Please try again.',
+          ),
+        );
     } finally {
-      setLoading(false);
+      transportBusy.current = false;
     }
   };
 
+  const preview = draft.preview();
   const previewAmount = (id: string): string => {
-    try {
-      const split = calculateSplitAmounts<SplitParticipantInput>(
-        splitMethod as ExpenseSplitMethod,
-        toMajorAmount(parseAmountMinor(amount, currency), currency),
-        buildSplitBetween(),
-        currency,
-      );
-      return formatCurrency(split.find((row) => row.user === id)?.amount ?? 0, currency);
-    } catch {
-      return '—';
-    }
+    const row = preview.money?.splitBetween.find((row) => row.user === id);
+    return row ? formatCurrency(row.amount, currency) : '—';
   };
   const reloadLatest = async () => {
-    if (!expense) return;
+    if (!expense || transportBusy.current) return;
+    transportBusy.current = true;
     try {
       const response = await fetch(`/api/groups/${groupId}/expenses/${expense._id}`);
       if (!response.ok) throw new Error('Could not reload this Expense.');
-      setReloadedExpense((await response.json()).data);
-      setConflict(false);
-      setError('');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not reload');
+      const latest = (await response.json()).data;
+      if (mounted.current) setDraft((current) => current.reload(latest));
+    } catch (error) {
+      if (mounted.current)
+        setDraft((current) =>
+          current.reloadFailed(error instanceof Error ? error.message : 'Could not reload'),
+        );
+    } finally {
+      transportBusy.current = false;
     }
   };
 
@@ -631,6 +435,12 @@ export default function ExpenseFormDialog({
             </Box>
           )}
 
+          {amount && preview.error && preview.error !== error && (
+            <Box role="status" sx={{ color: 'status.negative' }}>
+              {preview.error}
+            </Box>
+          )}
+
           {/* ─── Quick Pick ─────────────────────────── */}
           {!isEditMode && (
             <Box
@@ -673,7 +483,7 @@ export default function ExpenseFormDialog({
           <TextField
             label="What was it for?"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(e) => edit({ description: e.target.value })}
             required
             fullWidth
             size="small"
@@ -685,7 +495,7 @@ export default function ExpenseFormDialog({
             <TextField
               label="Amount"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onChange={(e) => edit({ amount: e.target.value })}
               required
               type="number"
               size="small"
@@ -721,7 +531,7 @@ export default function ExpenseFormDialog({
               label="Date"
               type="date"
               value={date}
-              onChange={(e) => setDate(e.target.value)}
+              onChange={(e) => edit({ date: e.target.value })}
               size="small"
               sx={{ flex: 1 }}
               slotProps={{ inputLabel: { shrink: true } }}
@@ -748,7 +558,7 @@ export default function ExpenseFormDialog({
                   clickable
                   color={tag === tagOptionValue(t) ? 'primary' : 'default'}
                   variant={tag === tagOptionValue(t) ? 'filled' : 'outlined'}
-                  onClick={() => setTag(tagOptionValue(t))}
+                  onClick={() => edit({ tag: tagOptionValue(t) })}
                   aria-pressed={tag === tagOptionValue(t)}
                 />
               ))}
@@ -843,7 +653,7 @@ export default function ExpenseFormDialog({
                     </TextField>
                     <Button
                       size="small"
-                      onClick={() => setMultiPayerMode(true)}
+                      onClick={() => edit({ multiPayerMode: true })}
                       sx={{
                         textTransform: 'none',
                         fontSize: 12,
@@ -929,8 +739,10 @@ export default function ExpenseFormDialog({
                       <Button
                         size="small"
                         onClick={() => {
-                          setMultiPayerMode(false);
-                          setPayers([{ user: payers[0].user, amount: '' }]);
+                          edit({
+                            multiPayerMode: false,
+                            payers: [{ user: payers[0].user, amount: '' }],
+                          });
                         }}
                         sx={{ textTransform: 'none', fontSize: 12 }}
                         color="inherit"
@@ -1033,9 +845,11 @@ export default function ExpenseFormDialog({
                           <TextField
                             value={customAmounts[id] || ''}
                             onChange={(e) =>
-                              setCustomAmounts({
-                                ...customAmounts,
-                                [id]: e.target.value,
+                              edit({
+                                customAmounts: {
+                                  ...customAmounts,
+                                  [id]: e.target.value,
+                                },
                               })
                             }
                             type="number"
@@ -1058,9 +872,11 @@ export default function ExpenseFormDialog({
                             <TextField
                               value={customPercentages[id] || ''}
                               onChange={(e) =>
-                                setCustomPercentages({
-                                  ...customPercentages,
-                                  [id]: e.target.value,
+                                edit({
+                                  customPercentages: {
+                                    ...customPercentages,
+                                    [id]: e.target.value,
+                                  },
                                 })
                               }
                               type="number"
@@ -1090,9 +906,11 @@ export default function ExpenseFormDialog({
                             <TextField
                               value={customShares[id] || ''}
                               onChange={(e) =>
-                                setCustomShares({
-                                  ...customShares,
-                                  [id]: e.target.value,
+                                edit({
+                                  customShares: {
+                                    ...customShares,
+                                    [id]: e.target.value,
+                                  },
                                 })
                               }
                               type="number"
@@ -1185,7 +1003,7 @@ export default function ExpenseFormDialog({
               <TextField
                 label="Notes (optional)"
                 value={notes}
-                onChange={(e) => setNotes(e.target.value)}
+                onChange={(e) => edit({ notes: e.target.value })}
                 fullWidth
                 size="small"
                 multiline
