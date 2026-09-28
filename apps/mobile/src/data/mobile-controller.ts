@@ -1048,6 +1048,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
+  const refreshExpenseViews = async (groupId: string, owner: number, navigate: boolean) => {
+    if (navigate || (snapshot.screen === 'group' && snapshot.detail.id === groupId))
+      await openGroup(groupId);
+    if (current(owner)) await refreshHome();
+  };
+
   const saveExpense = async () => {
     const editor = snapshot.expense;
     const lease = accountStorage();
@@ -1067,6 +1073,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({ ...snapshot, expense: { ...editor, status: 'saving', message: null } });
     let attempt = editor.attempt;
     let storing = false;
+    let resolvedReceipt: string | null = null;
+    let successHandled = false;
     try {
       // A successful authorized read is a connection/access check, never proof a write will succeed.
       const context = parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
@@ -1108,7 +1116,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         }),
         groupId,
       );
-      await lease.write(() => storage.remove(lease.accountId, groupId));
+      await lease.write(async () => {
+        const stored = await storage.load(lease.accountId, groupId);
+        if (stored === null) return;
+        const saved = parseStoredExpenseDraft(stored, lease.accountId, groupId);
+        // Another recovery may already have confirmed this request and created a new draft.
+        if (saved.attempt?.key === attempt!.key && saved.attempt.body === attempt!.body)
+          await storage.remove(lease.accountId, groupId);
+      });
+      resolvedReceipt = receiptId;
       if (!current(owner) || view !== viewRequest) return;
       publish({
         ...snapshot,
@@ -1122,8 +1138,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           message: 'Expense saved.',
         },
       });
-      await openGroup(groupId);
-      if (current(owner)) await refreshHome();
+      successHandled = true;
+      await refreshExpenseViews(groupId, owner, true);
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
       const rejectionMessages: Record<string, string> = {
@@ -1162,6 +1178,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           /* Preserve the immutable attempt until local cleanup succeeds. */
         }
       }
+      if (!current(owner) || view !== viewRequest) return;
       publish({
         ...snapshot,
         expense: {
@@ -1178,6 +1195,37 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                 : 'Check the amount, date, participants, currency, and active Tag. Your draft is still here.',
         },
       });
+    } finally {
+      // Warm links may replace the editor while transport/storage is pending.
+      // Reconcile only this draft; never install it into a newer account or editor.
+      if (
+        current(owner) &&
+        view !== viewRequest &&
+        snapshot.expense.groupId === groupId &&
+        snapshot.expense.draft === draft &&
+        snapshot.expense.status === 'saving'
+      ) {
+        publish({
+          ...snapshot,
+          expense: {
+            ...snapshot.expense,
+            status: resolvedReceipt ? 'saved' : attempt ? 'uncertain' : 'editing',
+            attempt: resolvedReceipt ? null : attempt,
+            draft: resolvedReceipt ? null : draft,
+            preview: resolvedReceipt ? null : snapshot.expense.preview,
+            receiptId: resolvedReceipt,
+            persistence: storing ? 'error' : snapshot.expense.persistence,
+            message: resolvedReceipt
+              ? 'Expense saved.'
+              : attempt
+                ? 'Resume this draft to confirm the same submission.'
+                : 'Your draft is still here.',
+          },
+        });
+      }
+      if (current(owner) && resolvedReceipt && !successHandled && view !== viewRequest) {
+        await refreshExpenseViews(groupId, owner, false);
+      }
     }
   };
 
@@ -1580,7 +1628,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (
       snapshot.creation.status === 'saving' ||
       snapshot.invitation.status === 'joining' ||
-      snapshot.expense.status === 'saving'
+      (snapshot.screen === 'expense' && snapshot.expense.status === 'saving')
     )
       return;
     if (snapshot.screen === 'invite' && snapshot.auth.status !== 'authenticated')

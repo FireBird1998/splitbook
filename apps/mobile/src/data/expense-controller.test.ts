@@ -73,6 +73,20 @@ function setup(
       });
     if (path === '/api/groups') return json({ data: [group], status: 200 });
     if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
+    if (path.endsWith('/expenses'))
+      return json({
+        data: {
+          expenses: [],
+          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+          summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
+        },
+        status: 200,
+      });
+    if (path === `/api/groups/${groupId}/balances`)
+      return json({
+        data: { currency: 'INR', balances: [], debts: [], byCurrency: [] },
+        status: 200,
+      });
     if (path.endsWith('/user/balances')) return json({ data: { buckets: [] }, status: 200 });
     return json({ error: 'Unavailable', status: 404 }, 404);
   };
@@ -193,6 +207,172 @@ describe('native Expense creation', () => {
     expect(controller.getSnapshot().expense.context?.tags[0].name).toBe('New name');
     expect(controller.getSnapshot().expense.draft?.tagId).toBe(tagId);
     expect(controller.getSnapshot().expense.status).toBe('editing');
+  });
+
+  it('does not restore an old attempt when sign-out interrupts rejection cleanup', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const enteredCleanup = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const { controller, drafts } = setup((path, init) => {
+      if (path.endsWith('/expenses') && init.method === 'POST')
+        return Promise.resolve(json({ code: 'INVALID_TAG', status: 422 }, 422));
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Private dinner', amount: '10', tagId });
+    const save = drafts.save;
+    let writes = 0;
+    drafts.save = async (...args) => {
+      writes++;
+      if (writes === 2) {
+        entered();
+        await held;
+        throw new Error('Storage failed');
+      }
+      await save(...args);
+    };
+    const saving = controller.saveExpense();
+    await enteredCleanup;
+    const leaked: unknown[] = [];
+    controller.subscribe(() => {
+      const state = controller.getSnapshot();
+      if (state.auth.status === 'signed-out' && state.expense.attempt)
+        leaked.push(state.expense.attempt);
+    });
+    const signingOut = controller.signOut();
+    release();
+    await Promise.all([saving, signingOut]);
+    expect(leaked).toEqual([]);
+    expect(controller.getSnapshot().auth.status).toBe('signed-out');
+    expect(controller.getSnapshot().expense.attempt).toBeNull();
+    expect(controller.getSnapshot().expense.draft).toBeNull();
+  });
+
+  it('settles an interrupted save when a warm invitation replaces the editor', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const enteredPreflight = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let hold = false;
+    const { controller } = setup((path) => {
+      if (hold && path === `/api/groups/${groupId}`)
+        return (async () => {
+          entered();
+          await held;
+          return json({ data: group, status: 200 });
+        })();
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+    hold = true;
+    const saving = controller.saveExpense();
+    await enteredPreflight;
+    await controller.openInvitation('http://localhost:4138/join/abcdef12');
+    release();
+    await saving;
+    expect(controller.getSnapshot().screen).toBe('invite');
+    expect(controller.getSnapshot().expense.status).toBe('editing');
+    expect(controller.getSnapshot().expense.draft?.description).toBe('Dinner');
+  });
+
+  it.each([201, 422])(
+    'never overwrites a newer draft when the original response arrives late (%s)',
+    async (status) => {
+      let release!: () => void;
+      const held = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let entered!: () => void;
+      const submitted = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      let posts = 0;
+      const { controller, create } = setup((path, init) => {
+        if (path.endsWith('/expenses') && init.method === 'POST') {
+          posts++;
+          if (posts === 1)
+            return (async () => {
+              entered();
+              await held;
+              return status === 201
+                ? json(
+                    { data: { _id: 'a00000000000000000000030', group: groupId }, status: 201 },
+                    201,
+                  )
+                : json({ code: 'INVALID_TAG', status: 422 }, 422);
+            })();
+          return Promise.resolve(
+            json({ data: { _id: 'a00000000000000000000030', group: groupId }, status: 201 }, 201),
+          );
+        }
+      });
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'First dinner', amount: '10', tagId });
+      const first = controller.saveExpense();
+      await submitted;
+      await controller.openInvitation('http://localhost:4138/join/abcdef12');
+      await controller.openExpense(groupId);
+      controller.resumeExpenseDraft();
+      await controller.saveExpense();
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'A newer dinner', amount: '20', tagId });
+      release();
+      await first;
+      const restarted = create();
+      await restarted.restore();
+      await restarted.openExpense(groupId);
+      expect(restarted.getSnapshot().expense.draft?.description).toBe('A newer dinner');
+      expect(restarted.getSnapshot().expense.draft?.amount).toBe('20');
+    },
+  );
+
+  it('refreshes the affected visible Group when a save completes after navigation', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered!: () => void;
+    const submitted = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let reads = 0;
+    const { controller } = setup((path, init) => {
+      if (path === `/api/groups/${groupId}`) reads++;
+      if (path.endsWith('/expenses') && init.method === 'POST')
+        return (async () => {
+          entered();
+          await held;
+          return json(
+            { data: { _id: 'a00000000000000000000030', group: groupId }, status: 201 },
+            201,
+          );
+        })();
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+    const saving = controller.saveExpense();
+    await submitted;
+    await controller.openInvitation('http://localhost:4138/join/abcdef12');
+    await controller.openGroup(groupId);
+    const before = reads;
+    release();
+    await saving;
+    expect(reads).toBeGreaterThan(before);
+    expect(controller.getSnapshot().screen).toBe('group');
+    expect(controller.getSnapshot().financial.expenses.status).toBe('ready');
+    expect(controller.getSnapshot().expense.status).toBe('saved');
   });
 
   it('requires explicit discard, protects unresolved attempts, and purges drafts on sign-out', async () => {
