@@ -86,7 +86,6 @@ export function ExpenseEditor({
       <Copy style={{ color: theme.textSecondary }}>
         Split a shared cost equally. Your draft stays on this device until you save or discard it.
       </Copy>
-      {state.message && <Copy accessibilityRole="alert">{state.message}</Copy>}
       {state.status === 'resume' && (
         <Panel>
           <Copy accessibilityRole="header" style={{ fontFamily: fonts.semibold }}>
@@ -275,6 +274,7 @@ export function ExpenseEditor({
             ? 'Saving draft on this device…'
             : 'Draft has not been saved on this device'}
       </Copy>
+      {state.message && <Copy accessibilityRole="alert">{state.message}</Copy>}
       {state.persistence === 'error' && !state.attempt && (
         <Button label="Retry saving draft" secondary onPress={() => onChange({})} />
       )}
