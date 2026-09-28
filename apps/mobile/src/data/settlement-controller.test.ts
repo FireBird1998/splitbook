@@ -159,6 +159,41 @@ function setup(
   return { controller: create(), create, store, records, writes };
 }
 describe('native payment recording', () => {
+  it('unlocks a definitely rejected first submission even when a warm invitation interrupts its response', async () => {
+    let release!: (value: FetchResponse) => void, entered!: () => void;
+    const dispatched = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const { controller, records, create } = setup((path, init) =>
+      path.endsWith('/settlements') && init.method === 'POST'
+        ? new Promise((resolve) => {
+            release = resolve;
+            entered();
+          })
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.openSettlements(groupId);
+    controller.selectSettlement(actor, recipient, 'INR');
+    await controller.reviewSettlement();
+    const saving = controller.recordSettlement();
+    await dispatched;
+    await controller.openInvitation('http://localhost:4138/join/1234abcd');
+    release(json({ status: 422, code: 'VALIDATION_ERROR', error: 'Invalid payment' }, 422));
+    await saving;
+    expect(controller.getSnapshot().screen).toBe('invite');
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      attempt: null,
+      draft: { amount: '30' },
+    });
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openSettlements(groupId);
+    expect(restarted.getSnapshot().settlement.attempt).toBeNull();
+  });
+
   it('keeps an interrupted payment review usable after a warm invitation', async () => {
     let hold = false,
       release!: (value: FetchResponse) => void;

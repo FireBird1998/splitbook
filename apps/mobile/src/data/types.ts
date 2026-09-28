@@ -1,3 +1,4 @@
+import type { AccountGroupRecordStore } from './account-record-storage';
 import type { SettlementState } from './settlement';
 import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
 import type { GroupCategory } from '@splitbook/shared/types';
@@ -217,6 +218,6 @@ export interface MobileDependencies {
   accountLocal?: AccountLocalStorage;
   now?: () => number;
   expenseDrafts?: ExpenseDraftStore;
-  settlementAttempts?: ExpenseDraftStore;
+  settlementAttempts?: AccountGroupRecordStore;
   newSubmissionKey?: () => string;
 }

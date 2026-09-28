@@ -73,12 +73,7 @@ export interface ExpenseEditor {
   persistence: 'saved' | 'saving' | 'error';
   message: string | null;
 }
-export interface ExpenseDraftStore {
-  load(accountId: string, groupId: string): Promise<unknown | null>;
-  save(accountId: string, groupId: string, value: unknown): Promise<void>;
-  remove(accountId: string, groupId: string): Promise<void>;
-  clear(): Promise<void>;
-}
+export type { AccountGroupRecordStore as ExpenseDraftStore } from './account-record-storage';
 export function emptyExpenseEditor(): ExpenseEditor {
   return {
     groupId: null,

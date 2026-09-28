@@ -1930,7 +1930,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           },
         });
     } catch (error) {
-      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      if (!current(owner) || error instanceof Superseded) return;
       const correctionCodes: Record<string, string> = {
         CURRENCY_MISMATCH:
           'The Group currency changed. Return to payments and review the available currency.',

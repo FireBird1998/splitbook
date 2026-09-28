@@ -66,7 +66,7 @@ export function SettlementScreen({
       </Copy>
       <Copy>
         Record a payment that already happened. SplitBook does not transfer money or confirm a bank
-        payment.
+        payment. Recording a payment does not close a Household Month.
       </Copy>
       {state.message ? <Copy accessibilityRole="alert">{state.message}</Copy> : null}
       {state.status === 'loading' || state.status === 'saving' ? (
