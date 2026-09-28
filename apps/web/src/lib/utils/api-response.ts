@@ -33,8 +33,8 @@ export function success<T>(data: T, status: number = 200) {
 /**
  * Standard error response
  */
-export function error(message: string, status: number = 400) {
-  return NextResponse.json({ error: message, status }, { status });
+export function error(message: string, status: number = 400, code?: string) {
+  return NextResponse.json({ error: message, status, ...(code ? { code } : {}) }, { status });
 }
 
 /**
@@ -62,7 +62,7 @@ export function notFound(resource: string = 'Resource') {
  * 500 Server Error response
  */
 export function serverError(err?: unknown) {
-  if (err instanceof MoneyValidationError) return error(err.message, 422);
+  if (err instanceof MoneyValidationError) return error(err.message, 422, err.code);
   if (err instanceof Error) {
     const messages: Record<string, [string, number]> = {
       INVALID_IDEMPOTENCY_KEY: ['Invalid submission key', 422],
@@ -83,7 +83,7 @@ export function serverError(err?: unknown) {
       INVALID_MONEY: ['Enter a positive amount with the currency’s supported precision.', 422],
     };
     if (err.name === 'VersionError') return error(messages.STALE_REVISION[0], 409);
-    if (messages[err.message]) return error(...messages[err.message]);
+    if (messages[err.message]) return error(...messages[err.message], err.message);
   }
   console.error('Server error:', err);
   return NextResponse.json({ error: 'Internal server error', status: 500 }, { status: 500 });
@@ -94,7 +94,7 @@ export function serverError(err?: unknown) {
  */
 export function validationError(errors: unknown) {
   return NextResponse.json(
-    { error: 'Validation error', details: errors, status: 422 },
+    { error: 'Validation error', code: 'VALIDATION_ERROR', details: errors, status: 422 },
     { status: 422 },
   );
 }

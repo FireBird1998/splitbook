@@ -1,3 +1,4 @@
+import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
 import type { GroupCategory } from '@splitbook/shared/types';
 
 export interface SessionUser {
@@ -128,7 +129,8 @@ export interface MobileSnapshot {
     user: SessionUser | null;
     message: string | null;
   };
-  screen: 'groups' | 'group' | 'create' | 'invite' | 'settings';
+  screen: 'groups' | 'group' | 'create' | 'invite' | 'settings' | 'expense';
+  expense: ExpenseEditor;
   home: HomeFinancialState;
   financial: GroupFinancialState;
   creation: GroupCreation;
@@ -212,4 +214,6 @@ export interface MobileDependencies {
   pendingInvitation?: PendingInvitationStore;
   accountLocal?: AccountLocalStorage;
   now?: () => number;
+  expenseDrafts?: ExpenseDraftStore;
+  newSubmissionKey?: () => string;
 }

@@ -30,6 +30,7 @@ import { Avatar, Button, Copy, Icon, Label, Loading, Notice } from './src/ui/pri
 import { EmptyGroups, GroupCard, GroupDetail, SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview, InviteSharePanel } from './src/ui/group-workflows';
 import { SettingsScreen } from './src/ui/settings-screen';
+import { ExpenseEditor } from './src/ui/expense-editor';
 import { GroupFinancialViews, HomeBalances } from './src/ui/financial-views';
 
 export default function App() {
@@ -142,9 +143,18 @@ function SplitBook() {
             accessibilityRole="button"
             accessibilityLabel="Settings"
             accessibilityState={{
-              disabled: state.creation.status === 'saving' || state.invitation.status === 'joining',
+              disabled:
+                state.creation.status === 'saving' ||
+                state.invitation.status === 'joining' ||
+                (state.screen === 'expense' &&
+                  (state.expense.status === 'saving' || state.expense.persistence !== 'saved')),
             }}
-            disabled={state.creation.status === 'saving' || state.invitation.status === 'joining'}
+            disabled={
+              state.creation.status === 'saving' ||
+              state.invitation.status === 'joining' ||
+              (state.screen === 'expense' &&
+                (state.expense.status === 'saving' || state.expense.persistence !== 'saved'))
+            }
             onPress={controller.openSettings}
             style={{
               minHeight: 48,
@@ -229,7 +239,7 @@ function SplitBook() {
             keyboardDismissMode="on-drag"
             contentContainerStyle={styles.content}
             refreshControl={
-              state.screen === 'settings' ? undefined : (
+              ['settings', 'expense'].includes(state.screen) ? undefined : (
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={() => void controller.refresh()}
@@ -261,13 +271,37 @@ function SplitBook() {
                 onSignOut={() =>
                   Alert.alert(
                     'Sign out on this device?',
-                    'Your session, unsaved Group form, saved invitation, and local account data will be cleared. If a save was interrupted, check your saved history after signing in before creating it again.',
+                    'Your session, expense drafts and save recovery keys, unsaved Group form, saved invitation, and local account data will be cleared. If a save was interrupted, check your saved history after signing in before creating it again.',
                     [
                       { text: 'Cancel', style: 'cancel' },
                       {
                         text: 'Sign out',
                         style: 'destructive',
                         onPress: () => void controller.signOut(),
+                      },
+                    ],
+                  )
+                }
+              />
+            ) : state.screen === 'expense' ? (
+              <ExpenseEditor
+                state={state.expense}
+                onChange={(patch) => void controller.updateExpenseDraft(patch)}
+                onSave={() => void controller.saveExpense()}
+                onResume={controller.resumeExpenseDraft}
+                onRetry={() =>
+                  state.expense.groupId && void controller.openExpense(state.expense.groupId)
+                }
+                onDiscard={() =>
+                  Alert.alert(
+                    'Discard this expense draft?',
+                    'Your saved entries will be removed from this device.',
+                    [
+                      { text: 'Keep draft', style: 'cancel' },
+                      {
+                        text: 'Discard',
+                        style: 'destructive',
+                        onPress: () => void controller.discardExpenseDraft(),
                       },
                     ],
                   )
@@ -385,6 +419,15 @@ function SplitBook() {
             ) : state.detail.data ? (
               <>
                 <GroupDetail group={state.detail.data} currentUserId={state.auth.user!.id}>
+                  <Button
+                    label="Add expense"
+                    icon="add-outline"
+                    onPress={() => void controller.openExpense(state.detail.data!.id)}
+                  />
+                  {state.expense.status === 'saved' &&
+                    state.expense.groupId === state.detail.id && (
+                      <Copy accessibilityLiveRegion="polite">Expense saved.</Copy>
+                    )}
                   <GroupFinancialViews
                     group={state.detail.data}
                     currentUserId={state.auth.user!.id}
