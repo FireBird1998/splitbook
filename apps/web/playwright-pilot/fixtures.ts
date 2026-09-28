@@ -4,8 +4,8 @@ import { DEMO_GROUP_ID, DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import type { UserBalancesResponse } from '@splitbook/shared/types';
 
 export const FIXED_TIME = '2026-09-06T09:00:00.000Z';
-const alex = { _id: DEMO_PERSONA_IDS.alex, name: 'Alex Rivera' };
-const sam = { _id: DEMO_PERSONA_IDS.sam, name: 'Sam Chen' };
+const alex = { _id: DEMO_PERSONA_IDS.alex, name: 'Alex Rivera', email: 'alex@example.com' };
+const sam = { _id: DEMO_PERSONA_IDS.sam, name: 'Sam Chen', email: 'sam@example.com' };
 export const group = {
   _id: DEMO_GROUP_ID,
   name: 'Goa Friends Trip',
@@ -22,7 +22,9 @@ export const group = {
     { user: alex, role: 'admin', joinedAt: FIXED_TIME },
     { user: sam, role: 'member', joinedAt: FIXED_TIME },
   ],
-  tags: [{ _id: 'sample-tag', name: 'Food', isArchived: false, createdAt: FIXED_TIME }],
+  tags: [
+    { _id: 'aaaaaaaaaaaaaaaaaaaaaaaa', name: 'Food', isArchived: false, createdAt: FIXED_TIME },
+  ],
 };
 const summary: UserBalancesResponse = {
   buckets: [{ currency: 'INR', youOwe: 1480, youAreOwed: 0, net: -1480 }],
@@ -85,7 +87,7 @@ export async function installPilotFixtures(page: Page, overrides: Record<string,
   await page.route('**/api/**', async (route) => {
     const pathname = new URL(route.request().url()).pathname;
     if (route.request().method() === 'GET' && pathname in responses) {
-      await route.fulfill({ json: { success: true, data: responses[pathname] } });
+      await route.fulfill({ json: { status: 200, data: responses[pathname] } });
     } else await route.continue();
   });
 }

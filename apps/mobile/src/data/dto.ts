@@ -31,7 +31,7 @@ export function parseSignIn(value: unknown): SessionUser {
   return z.object({ user }).parse(value).user;
 }
 
-function toMobileGroup(value: GroupRead): MobileGroup {
+export function toMobileGroup(value: GroupRead): MobileGroup {
   return {
     id: value._id,
     name: value.name,
