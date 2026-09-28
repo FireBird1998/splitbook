@@ -120,6 +120,18 @@ function setup(
     if (path === '/api/auth/get-session') return json(session(selected));
     if (path === '/api/auth/sign-out')
       return json({ success: true }, 200, 'better-auth.session_token=; Max-Age=0');
+    if (path === '/api/user/balances') return json({ data: { buckets: [] }, status: 200 });
+    if (/^\/api\/groups\/[a-f0-9]{24}\/balances$/.test(path))
+      return json({ data: { byCurrency: [] }, status: 200 });
+    if (/^\/api\/groups\/[a-f0-9]{24}\/expenses$/.test(path))
+      return json({
+        data: {
+          expenses: [],
+          pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+          summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0 },
+        },
+        status: 200,
+      });
     if (path === '/api/groups') return json({ data: [group(selected)], status: 200 });
     if (path === `/api/groups/${groupId}`) return json({ data: group(selected), status: 200 });
     return json({ error: 'Not found', status: 404 }, 404);
@@ -834,6 +846,7 @@ describe('native session and Group boundary', () => {
       '/api/auth/demo-persona/sign-in',
       '/api/auth/get-session',
       '/api/groups',
+      '/api/user/balances',
     ]);
     const request = fetch.mock.calls[2][1];
     expect(new Headers(request.headers).get('Cookie')).toBe(alexCookie);
@@ -1091,7 +1104,7 @@ describe('native session and Group boundary', () => {
     response.resolve(json({ user: alex }, 200, alexCookie));
     await login;
     expect(controller.getSnapshot().auth.status).toBe('authenticated');
-    expect(fetch).toHaveBeenCalledTimes(3);
+    expect(fetch).toHaveBeenCalledTimes(4);
   });
 
   it('keeps persona retry available after the server denies development sign-in', async () => {

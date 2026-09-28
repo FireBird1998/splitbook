@@ -30,6 +30,7 @@ import { Avatar, Button, Copy, Icon, Label, Loading, Notice } from './src/ui/pri
 import { EmptyGroups, GroupCard, GroupDetail, SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview, InviteSharePanel } from './src/ui/group-workflows';
 import { SettingsScreen } from './src/ui/settings-screen';
+import { GroupFinancialViews, HomeBalances } from './src/ui/financial-views';
 
 export default function App() {
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
@@ -94,7 +95,13 @@ function SplitBook() {
   }, []);
 
   const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
-  const refreshing = state.groups.status === 'loading' || state.detail.status === 'loading';
+  const refreshing =
+    state.screen === 'groups'
+      ? state.groups.status === 'loading' || state.home.status === 'loading'
+      : state.screen === 'group' &&
+        (state.detail.status === 'loading' ||
+          state.financial.expenses.status === 'loading' ||
+          state.financial.balances.status === 'loading');
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
@@ -300,12 +307,13 @@ function SplitBook() {
                       letterSpacing: -1,
                     }}
                   >
-                    Your shared spaces
+                    Your overview
                   </Copy>
                   <Copy style={{ color: theme.textSecondary }}>
-                    Trips, home, and everything in between.
+                    Balances and shared spaces, together.
                   </Copy>
                 </View>
+                <HomeBalances state={state.home} onRefresh={() => void controller.refreshHome()} />
                 <Button
                   label={state.creation.draft.name ? 'Continue Group form' : 'Create Group'}
                   icon="add-outline"
@@ -376,7 +384,17 @@ function SplitBook() {
               />
             ) : state.detail.data ? (
               <>
-                <GroupDetail group={state.detail.data} currentUserId={state.auth.user!.id} />
+                <GroupDetail group={state.detail.data} currentUserId={state.auth.user!.id}>
+                  <GroupFinancialViews
+                    group={state.detail.data}
+                    currentUserId={state.auth.user!.id}
+                    state={state.financial}
+                    onSelectMonth={(month) => void controller.selectMonth(month)}
+                    onRefreshExpenses={() => void controller.refreshExpenses()}
+                    onRefreshBalances={() => void controller.refreshBalances()}
+                    onLoadMore={() => void controller.loadMoreExpenses()}
+                  />
+                </GroupDetail>
                 {state.detail.data.members.length === 1 && (
                   <Copy>Your Group is ready. Invite someone to start sharing it.</Copy>
                 )}

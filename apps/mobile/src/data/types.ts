@@ -26,6 +26,74 @@ export interface MobileGroup {
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error' | 'denied';
 
+export interface FinancialPerson {
+  id: string | null;
+  name: string;
+  image: string | null;
+}
+
+export interface HomeCurrencyBalance {
+  currency: string;
+  youOwe: number;
+  youAreOwed: number;
+}
+
+export interface HomeFinancialState {
+  status: LoadStatus;
+  data: HomeCurrencyBalance[] | null;
+  message: string | null;
+}
+
+export interface GroupCurrencyBalance {
+  currency: string;
+  balances: { user: FinancialPerson; balance: number }[];
+  debts: { from: FinancialPerson; to: FinancialPerson; amount: number }[];
+}
+
+export interface MobileExpense {
+  id: string;
+  groupId: string;
+  description: string;
+  currency: string;
+  amount: number;
+  amountMinor: number;
+  date: Date;
+  createdAt: Date;
+  updatedAt: Date;
+  category: string;
+  tag: string;
+  tagId: string | null;
+  paidBy: { user: FinancialPerson; amount: number; amountMinor: number }[];
+  splitBetween: { user: FinancialPerson; amount: number; amountMinor: number }[];
+  splitMethod: 'equal' | 'unequal' | 'percentage' | 'shares' | 'exact';
+}
+
+export interface ExpenseWindowSummary {
+  /** The Group's default currency applies to contribution figures only. */
+  currency: string;
+  count: number;
+  totalsByCurrency: { currency: string; totalAmount: number }[];
+  userOwes: number;
+  userGetsBack: number;
+  byMember: { user: FinancialPerson; paid: number; share: number; net: number }[];
+}
+
+export interface GroupFinancialState {
+  groupId: string | null;
+  /** Local calendar YYYY-MM, or null for all time. */
+  month: string | null;
+  expenses: {
+    status: LoadStatus;
+    data: MobileExpense[];
+    summary: ExpenseWindowSummary | null;
+    pagination: { page: number; limit: number; total: number; totalPages: number } | null;
+    message: string | null;
+    moreStatus: 'idle' | 'loading' | 'error';
+    moreMessage: string | null;
+  };
+  balances: { status: LoadStatus; data: GroupCurrencyBalance[] | null; message: string | null };
+}
+
 export interface GroupDraft {
   name: string;
   description: string;
@@ -61,6 +129,8 @@ export interface MobileSnapshot {
     message: string | null;
   };
   screen: 'groups' | 'group' | 'create' | 'invite' | 'settings';
+  home: HomeFinancialState;
+  financial: GroupFinancialState;
   creation: GroupCreation;
   share: {
     status: 'idle' | 'loading' | 'ready' | 'error';
