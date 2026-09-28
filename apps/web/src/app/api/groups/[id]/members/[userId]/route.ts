@@ -6,6 +6,7 @@ import {
   forbidden,
   serverError,
   validationError,
+  error,
 } from '@/lib/utils/api-response';
 import { groupService } from '@/lib/services/group.service';
 import { z } from 'zod/v4';
@@ -40,7 +41,7 @@ export async function PATCH(
   } catch (err) {
     if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
     if (err instanceof Error && err.message === 'LAST_ADMIN')
-      return serverError(new Error('Cannot demote the last admin. Promote another member first.'));
+      return error('Cannot demote the last admin. Promote another member first.', 409);
     return serverError(err);
   }
 }
@@ -63,9 +64,9 @@ export async function DELETE(
   } catch (err) {
     if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
     if (err instanceof Error && err.message === 'LAST_ADMIN')
-      return serverError(new Error('Cannot remove the last admin.'));
+      return error('Cannot remove the last admin.', 409);
     if (err instanceof Error && err.message === 'SELF_REMOVE')
-      return serverError(new Error('You cannot remove yourself. Use leave group instead.'));
+      return error('You cannot remove yourself. Use leave group instead.', 400);
     return serverError(err);
   }
 }
