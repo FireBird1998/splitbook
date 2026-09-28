@@ -74,6 +74,7 @@ export class FixtureActor {
     method = 'GET',
     body?: unknown,
     expectedStatus = 200,
+    revision?: number,
   ): Promise<unknown> {
     assert.ok(
       path.startsWith('/api/') && !path.includes('://'),
@@ -84,6 +85,7 @@ export class FixtureActor {
       headers: {
         Origin: this.origin,
         Accept: 'application/json',
+        ...(revision === undefined ? {} : { 'If-Match': String(revision) }),
         ...(this.cookie ? { Cookie: this.cookie } : {}),
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         ...(method === 'POST' && path.endsWith('/expenses')

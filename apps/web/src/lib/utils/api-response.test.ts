@@ -6,6 +6,14 @@ vi.mock('@/lib/auth', () => ({ auth: { api: { getSession: vi.fn() } } }));
 const { serverError } = await import('./api-response');
 
 describe('serverError', () => {
+  it('uses the same typed conflict for an optimistic database revision race', async () => {
+    const cause = new Error('Revision race');
+    cause.name = 'VersionError';
+    const response = serverError(cause);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'STALE_REVISION', status: 409 });
+  });
+
   it('answers a service access denial as 403 rather than a server failure', async () => {
     const response = serverError(new Error('FORBIDDEN'));
     expect(response.status).toBe(403);

@@ -138,7 +138,304 @@ function setup(
   return { create, controller: create(), drafts, records };
 }
 
+const expenseId = 'a00000000000000000000030';
+const savedExpense = {
+  _id: expenseId,
+  group: groupId,
+  description: 'Original dinner',
+  amount: 10,
+  currency: 'INR',
+  amountMinor: 1000,
+  moneyVersion: 1,
+  revision: 3,
+  splitMethod: 'equal',
+  paidBy: [{ user: { _id: memberIds[0], name: 'Alex' }, amount: 10, amountMinor: 1000 }],
+  splitBetween: memberIds.map((user, index) => ({
+    user: { _id: user, name: people[index].name },
+    amount: [3.33, 3.34, 3.33][index],
+    amountMinor: [333, 334, 333][index],
+  })),
+  date: iso,
+  createdAt: iso,
+  updatedAt: iso,
+  category: 'food',
+  tagId,
+  tag: 'Groceries',
+  notes: 'Keep these notes',
+  isDeleted: false,
+  editHistory: [
+    {
+      editedBy: { _id: memberIds[0], name: 'Alex' },
+      editedAt: iso,
+      changes: { description: { old: 'Dinner', new: 'Original dinner' } },
+    },
+  ],
+};
+
 describe('native Expense creation', () => {
+  it.each(['edit', 'delete'] as const)(
+    'reads the current record after a lost %s response and never repeats the mutation on restart',
+    async (kind) => {
+      let changed = false,
+        offline = false,
+        writes = 0;
+      const { controller, create, records } = setup((path, init) => {
+        if (path.endsWith(`/${expenseId}`)) {
+          if (init.method === 'PATCH' || init.method === 'DELETE') {
+            writes++;
+            changed = true;
+            offline = true;
+            return Promise.reject(new Error('Committed response lost'));
+          }
+          if (offline) return Promise.reject(new Error('Offline'));
+          return Promise.resolve(
+            json({
+              status: 200,
+              data: {
+                ...savedExpense,
+                revision: changed ? 4 : 3,
+                isDeleted: changed && kind === 'delete',
+                description: changed ? 'Saved correction' : savedExpense.description,
+              },
+            }),
+          );
+        }
+      });
+      await controller.signIn('alex');
+      await controller.openExpense(groupId, expenseId);
+      if (kind === 'edit') {
+        await controller.editExpense();
+        await controller.updateExpenseDraft({ description: 'Saved correction' });
+        await controller.saveExpense();
+      } else {
+        controller.reviewExpenseDeletion();
+        await controller.deleteExpense();
+      }
+      expect(controller.getSnapshot().expense.status).toBe('uncertain');
+      const restarted = create();
+      offline = false;
+      await restarted.restore();
+      await restarted.openExpense(groupId, expenseId);
+      restarted.resumeExpenseDraft();
+      await restarted.refresh();
+      expect(writes).toBe(1);
+      await restarted.reconcileExpense();
+      await restarted.saveExpense();
+      await restarted.deleteExpense();
+      expect(writes).toBe(1);
+      expect(restarted.getSnapshot().expense.latest?.revision).toBe(4);
+      expect(restarted.getSnapshot().expense.status).toBe(
+        kind === 'delete' ? 'blocked' : 'conflict',
+      );
+      await restarted.acceptCurrentExpense();
+      expect(records.size).toBe(0);
+      expect(restarted.getSnapshot().expense.status).toBe('detail');
+    },
+  );
+
+  it('offers the existing draft before a different Expense and replaces it only on explicit discard', async () => {
+    const { controller } = setup((path) =>
+      path.endsWith(`/${expenseId}`)
+        ? Promise.resolve(json({ status: 200, data: savedExpense }))
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Unfinished new expense', amount: '12' });
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense.status).toBe('resume');
+    expect(controller.getSnapshot().expense.draft?.description).toBe('Unfinished new expense');
+    await controller.discardExpenseDraft();
+    expect(controller.getSnapshot().expense.status).toBe('detail');
+    expect(controller.getSnapshot().expense.draft?.original?._id).toBe(expenseId);
+  });
+
+  it('disables edits after membership is revoked without sending a mutation', async () => {
+    let denied = false;
+    let writes = 0;
+    const { controller } = setup((path, init) => {
+      if (init.method === 'PATCH') writes++;
+      if (denied && path === `/api/groups/${groupId}`)
+        return Promise.resolve(json({ status: 403 }, 403));
+      if (path.endsWith(`/${expenseId}`))
+        return Promise.resolve(json({ status: 200, data: savedExpense }));
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    denied = true;
+    await controller.saveExpense();
+    expect(writes).toBe(0);
+    expect(controller.getSnapshot().expense.status).toBe('blocked');
+    await controller.saveExpense();
+    expect(writes).toBe(0);
+  });
+
+  it('settles edit preflight interrupted by a warm link without stranding the draft in saving', async () => {
+    let block = false;
+    let release!: (response: FetchResponse) => void;
+    const { controller } = setup((path, init) => {
+      if (path === `/api/groups/${groupId}` && block)
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      if (path.endsWith(`/${expenseId}`))
+        return Promise.resolve(json({ data: savedExpense, status: 200 }));
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'My note' });
+    block = true;
+    const save = controller.saveExpense();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await controller.openInvitation('http://localhost:4138/join/abcdef12');
+    release(json({ data: group, status: 200 }));
+    await save;
+    expect(controller.getSnapshot().expense.status).toBe('editing');
+    expect(controller.getSnapshot().expense.draft?.notes).toBe('My note');
+  });
+
+  it('requires delete review, uses its revision, and confirms the soft-deleted authorized record', async () => {
+    let deleted = false;
+    const writes: string[] = [];
+    const { controller } = setup((path, init) => {
+      if (path.endsWith(`/${expenseId}`)) {
+        if (init.method === 'DELETE') {
+          writes.push(new Headers(init.headers).get('If-Match')!);
+          deleted = true;
+          return Promise.resolve(
+            json({ status: 200, data: { revision: 4, message: 'Expense deleted' } }),
+          );
+        }
+        return Promise.resolve(
+          json({
+            status: 200,
+            data: { ...savedExpense, isDeleted: deleted, revision: deleted ? 4 : 3 },
+          }),
+        );
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.deleteExpense();
+    expect(writes).toEqual([]);
+    controller.reviewExpenseDeletion();
+    expect(controller.getSnapshot().expense.status).toBe('delete-review');
+    controller.cancelExpenseDeletion();
+    expect(writes).toEqual([]);
+    controller.reviewExpenseDeletion();
+    await controller.deleteExpense();
+    expect(writes).toEqual(['3']);
+    expect(controller.getSnapshot().expense.message).toBe('Expense deleted.');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    expect(controller.getSnapshot().expense.status).toBe('detail');
+    expect(controller.getSnapshot().expense.draft?.original?.isDeleted).toBe(true);
+  });
+
+  it('preserves a stale edit across restart and only rebases after explicit review', async () => {
+    let revision = 3;
+    const writes: string[] = [];
+    const { controller, create } = setup((path, init) => {
+      if (path.endsWith(`/${expenseId}`)) {
+        if (init.method === 'PATCH') {
+          writes.push(new Headers(init.headers).get('If-Match')!);
+          if (writes.length === 1) {
+            revision = 4;
+            return Promise.resolve(json({ code: 'STALE_REVISION', status: 409 }, 409));
+          }
+          return Promise.resolve(
+            json({
+              data: { ...savedExpense, description: 'My correction', revision: 5 },
+              status: 200,
+            }),
+          );
+        }
+        return Promise.resolve(
+          json({
+            data: {
+              ...savedExpense,
+              description: revision === 4 ? 'Other editor' : savedExpense.description,
+              revision,
+            },
+            status: 200,
+          }),
+        );
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'My correction' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.status).toBe('conflict');
+    expect(controller.getSnapshot().expense.latest?.description).toBe('Other editor');
+    expect(controller.getSnapshot().expense.draft?.original?.revision).toBe(3);
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openExpense(groupId, expenseId);
+    restarted.resumeExpenseDraft();
+    await restarted.reconcileExpense();
+    await restarted.saveExpense();
+    expect(writes).toEqual(['3']);
+    await restarted.reviewLatestExpense();
+    expect(restarted.getSnapshot().expense.draft?.description).toBe('My correction');
+    expect(restarted.getSnapshot().expense.draft?.original?.revision).toBe(4);
+    await restarted.saveExpense();
+    expect(writes).toEqual(['3', '4']);
+    expect(restarted.getSnapshot().expense.status).toBe('saved');
+  });
+
+  it('edits metadata with the displayed revision and preserves historical rounding and timestamp', async () => {
+    const writes: { method: string; body: unknown; revision: string | null }[] = [];
+    const { controller } = setup((path, init) => {
+      if (path.endsWith(`/${expenseId}`)) {
+        if (init.method === 'PATCH') {
+          const body = JSON.parse(String(init.body));
+          writes.push({
+            method: init.method,
+            body,
+            revision: new Headers(init.headers).get('If-Match'),
+          });
+          return Promise.resolve(
+            json({ data: { ...savedExpense, ...body, revision: 4 }, status: 200 }),
+          );
+        }
+        return Promise.resolve(json({ data: savedExpense, status: 200 }));
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Corrected dinner' });
+    await controller.saveExpense();
+    expect(writes).toEqual([
+      { method: 'PATCH', revision: '3', body: { description: 'Corrected dinner' } },
+    ]);
+    expect(controller.getSnapshot().expense.status).toBe('saved');
+  });
+
+  it('opens authorized Expense detail with historical allocations and edit history', async () => {
+    const { controller } = setup((path) =>
+      path.endsWith(`/${expenseId}`)
+        ? Promise.resolve(json({ data: savedExpense, status: 200 }))
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense.status).toBe('detail');
+    expect(controller.getSnapshot().expense.draft?.original).toMatchObject({
+      _id: expenseId,
+      revision: 3,
+      notes: 'Keep these notes',
+      editHistory: [{ changes: { description: { old: 'Dinner', new: 'Original dinner' } } }],
+    });
+    expect(controller.getSnapshot().expense.preview?.map((row) => row.amountMinor)).toEqual([
+      333, 334, 333,
+    ]);
+  });
+
   it.each([
     ['equal', {}, [334, 333, 333]],
     ['unequal', { [memberIds[0]]: '5', [memberIds[1]]: '3', [memberIds[2]]: '2' }, [500, 300, 200]],

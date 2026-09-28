@@ -70,7 +70,7 @@ export async function PATCH(
   } catch (err) {
     if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
     if (err instanceof Error && err.message in expenseValidationMessages) {
-      return error(expenseValidationMessages[err.message], 422);
+      return error(expenseValidationMessages[err.message], 422, err.message);
     }
 
     return serverError(err);
