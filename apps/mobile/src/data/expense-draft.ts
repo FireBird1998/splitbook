@@ -5,7 +5,7 @@ import {
 } from '@splitbook/shared/expense-validation';
 import { resolveTagReference } from '@splitbook/shared/tag-identity';
 import { z } from 'zod';
-import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
+import { normalizeExpenseMoney, parseDecimalUnits } from '@splitbook/shared/exact-money';
 import { getCurrency } from '@splitbook/shared/currency';
 import { objectId, parseGroup } from './dto';
 import type { MobileGroup } from './types';
@@ -111,9 +111,9 @@ export function expenseMoney(draft: ExpenseDraft) {
       ...(draft.splitMethod === 'unequal' || draft.splitMethod === 'exact'
         ? { amount: draft.splitValues[user] || '0' }
         : draft.splitMethod === 'percentage'
-          ? { percentage: Number(draft.splitValues[user] || '0') }
+          ? { percentage: parseDecimalUnits(draft.splitValues[user] || '0', 2) / 100 }
           : draft.splitMethod === 'shares'
-            ? { shares: Number(draft.splitValues[user] || '0') }
+            ? { shares: parseDecimalUnits(draft.splitValues[user] || '0', 0) }
             : {}),
     })),
   });

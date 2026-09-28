@@ -182,6 +182,17 @@ describe('native Expense creation', () => {
 
   it.each([
     [
+      { splitMethod: 'shares', splitValues: { [memberIds[0]]: '1.0000000000000001' } },
+      'Amount supports at most 0 decimal places',
+    ],
+    [
+      {
+        splitMethod: 'percentage',
+        splitValues: { [memberIds[0]]: '33.33000000000000001', [memberIds[1]]: '66.67' },
+      },
+      'Amount supports at most 2 decimal places',
+    ],
+    [
       { splitMethod: 'exact', splitValues: { [memberIds[0]]: '10.001' } },
       'Amount supports at most 2 decimal places',
     ],
@@ -192,7 +203,7 @@ describe('native Expense creation', () => {
     [{ splitMethod: 'shares', splitValues: { [memberIds[0]]: '-1' } }, 'Shares cannot be negative'],
     [
       { splitMethod: 'shares', splitValues: { [memberIds[0]]: '1.5' } },
-      'Shares must be whole numbers within the supported range',
+      'Amount supports at most 0 decimal places',
     ],
     [{ splitMethod: 'shares' }, 'Total split weight must be positive'],
     [{ participantIds: [memberIds[0], memberIds[0]] }, 'Each person can appear only once'],

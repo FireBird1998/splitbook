@@ -110,7 +110,7 @@ SQLite keeps one draft per backend, account, and Group. Every edit is serialized
 
 Run `TZ=Asia/Kolkata pnpm mobile verify:expenses` against the isolated local development backend. It verifies literal remainder allocation, corrected validation, offline prevention, real response loss after commit, disk-backed controller restart, identical retry, exactly one Expense and Activity, renamed/archived Tag replay, machine error codes, refreshed balances, and account isolation. It creates and archives only its own fictional Group. Native process-restart/SQLite and keyboard/appearance checks remain separate device checks; this verifier does not claim to run Android.
 
-For native fixtures, use `verify:expenses --seed-fixtures /absolute/path/manifest.json`, then `verify:expenses --cleanup-fixtures /absolute/path/manifest.json`. Never use fixture helpers against real user data. Advanced splits, editing/deletion, and financial read caching belong to later tickets.
+For native fixtures, use `verify:expenses --seed-fixtures /absolute/path/manifest.json`, then `verify:expenses --cleanup-fixtures /absolute/path/manifest.json`. Never use fixture helpers against real user data. Expense editing/deletion and financial read caching belong to later tickets.
 
 ### Custom splits and multiple payers
 
