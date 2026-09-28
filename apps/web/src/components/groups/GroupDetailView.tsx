@@ -28,18 +28,24 @@ import BalancesView from '@/components/balances/BalancesView';
 import ActivityView from '@/components/activity/ActivityView';
 import ExpenseFormDialog from '@/components/expenses/ExpenseFormDialog';
 import InviteDialog from '@/components/groups/InviteDialog';
+import { useGroup } from '@/lib/hooks/use-groups';
+import ErrorState from '@/components/common/ErrorState';
 import { fetcher } from '@/lib/utils/fetcher';
 import { formatDate } from '@splitbook/shared/date';
 import { buildTripChecklist, shouldShowTripChecklist } from '@splitbook/shared/trip-setup';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
-import type { ExpenseMemberBreakdownRow, GroupCategory } from '@splitbook/shared/types';
+import type { ExpenseMemberBreakdownRow } from '@splitbook/shared/types';
 
 interface GroupDetailViewProps {
   groupId: string;
   userId: string;
 }
 
-export default function GroupDetailView({ groupId, userId }: GroupDetailViewProps) {
+export default function GroupDetailView(props: GroupDetailViewProps) {
+  return <GroupDetailContent key={`${props.userId}:${props.groupId}`} {...props} />;
+}
+
+function GroupDetailContent({ groupId, userId }: GroupDetailViewProps) {
   const searchParams = useSearchParams();
   const [tab, setTab] = useState(0);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
@@ -61,13 +67,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
     return () => window.clearTimeout(timeout);
   }, [searchParams]);
 
-  const {
-    data: groupData,
-    isLoading,
-    error,
-  } = useSWR(`/api/groups/${groupId}`, fetcher, {
-    refreshInterval: 30_000,
-  });
+  const { data: group, isLoading, error, mutate } = useGroup(userId, groupId);
 
   const { data: expensesData } = useSWR(`/api/groups/${groupId}/expenses?page=1&limit=1`, fetcher, {
     refreshInterval: 30_000,
@@ -77,10 +77,8 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
     refreshInterval: 30_000,
   });
 
-  const group = groupData?.data;
-
   const checklist = useMemo(() => {
-    const memberCount = (group?.members as unknown[] | undefined)?.length ?? 1;
+    const memberCount = group?.members.length ?? 1;
     const expenseCount =
       (expensesData?.data?.pagination?.total as number | undefined) ??
       (expensesData?.data?.expenses as unknown[] | undefined)?.length ??
@@ -106,7 +104,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
     [userId],
   );
 
-  if (isLoading) {
+  if (isLoading && !group) {
     return (
       <Container maxWidth="lg" disableGutters>
         <Skeleton variant="text" width={192} height={32} sx={{ mb: 2 }} />
@@ -116,10 +114,10 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
     );
   }
 
-  if (error) {
+  if (error && !group) {
     return (
       <Container maxWidth="lg" disableGutters>
-        <Typography color="error.main">{error.message}</Typography>
+        <ErrorState message="Group could not be loaded." onRetry={() => void mutate()} />
       </Container>
     );
   }
@@ -139,14 +137,11 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
     );
   }
 
-  const members = (group.members || []) as Array<{
-    user: { _id: string; name: string; image?: string; email?: string };
-    role: string;
-  }>;
-  const theme = getGroupTheme(group.category as GroupCategory);
+  const members = group.members;
+  const theme = getGroupTheme(group.category);
   const nounTitle = theme.nouns.singular.charAt(0).toUpperCase() + theme.nouns.singular.slice(1);
-  const startDate = group.startDate as string | undefined;
-  const endDate = group.endDate as string | undefined;
+  const startDate = group.startDate;
+  const endDate = group.endDate;
   const dateLabel =
     theme.dates === 'bounded'
       ? startDate && endDate
@@ -157,8 +152,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
       : theme.signature === 'monthCycle' && startDate
         ? `Tracking since ${formatDate(startDate)}`
         : null;
-  const currency =
-    (balancesData?.data?.currency as string | undefined) ?? (group.defaultCurrency as string);
+  const currency = group.defaultCurrency;
   const userBalance = (
     (balancesData?.data?.balances || []) as Array<{
       user: { _id: string };
@@ -205,6 +199,12 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
         pb: { xs: 'calc(88px + env(safe-area-inset-bottom, 0px))', sm: 0 },
       }}
     >
+      {error && (
+        <ErrorState
+          message="Group could not be refreshed. Showing previously loaded group."
+          onRetry={() => void mutate()}
+        />
+      )}
       <Stack
         direction="row"
         alignItems="center"
@@ -250,7 +250,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
       <Box sx={{ mb: 3, animation: 'panel-in 280ms ease-out both' }}>
         {theme.header === 'strip' ? (
           <TripStrip
-            name={group.name as string}
+            name={group.name}
             currency={currency}
             variant="full"
             dateLabel={dateLabel}
@@ -258,14 +258,14 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
             memberNames={members.map((member) =>
               member.user._id === userId ? 'You' : member.user.name.split(' ')[0],
             )}
-            inviteCode={(group.inviteCode as string | null | undefined) ?? null}
+            inviteCode={group.inviteCode ?? null}
             balance={userBalance ? { amount: userBalance.balance, currency } : null}
             balanceUnavailable={!balancesData}
             tripTotal={typeof tripTotal === 'number' ? { amount: tripTotal, currency } : null}
           />
         ) : (
           <GroupHeader
-            name={group.name as string}
+            name={group.name}
             themeLabel={theme.label}
             themeIcon={theme.icon}
             currency={currency}
@@ -273,7 +273,7 @@ export default function GroupDetailView({ groupId, userId }: GroupDetailViewProp
             dateLabel={dateLabel}
             members={members.map((member) => member.user)}
             userId={userId}
-            inviteCode={(group.inviteCode as string | null | undefined) ?? null}
+            inviteCode={group.inviteCode ?? null}
             balance={userBalance ? { amount: userBalance.balance, currency } : null}
             balanceUnavailable={!balancesData}
           />
