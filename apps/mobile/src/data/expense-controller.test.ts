@@ -19,6 +19,7 @@ const people = memberIds.map((id, i) => ({
 }));
 const group = {
   _id: groupId,
+  createdBy: memberIds[0],
   name: 'Shared home',
   description: '',
   category: 'home',
@@ -28,7 +29,7 @@ const group = {
     role: 'member',
     joinedAt: iso,
   })),
-  tags: [{ _id: tagId, name: 'Groceries', isArchived: false }],
+  tags: [{ _id: tagId, name: 'Groceries', isArchived: false, createdAt: iso }],
   createdAt: iso,
   updatedAt: iso,
 };
@@ -873,6 +874,27 @@ describe('native Expense creation and editing', () => {
     expect([...records.values()][0]).toMatchObject({ attempt: expense.attempt });
   });
 
+  it.each([false, true])(
+    'opens legacy Expense context with omitted optional Tags: %s',
+    async (omitTags) => {
+      const legacy = {
+        ...group,
+        tags: omitTags ? undefined : [{ _id: tagId, name: 'Groceries', createdAt: iso }],
+      };
+      const { controller } = setup((path) =>
+        path === `/api/groups/${groupId}`
+          ? Promise.resolve(json({ data: legacy, status: 200 }))
+          : undefined,
+      );
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      expect(controller.getSnapshot().expense.status).toBe('editing');
+      expect(controller.getSnapshot().expense.context?.tags).toEqual(
+        omitTags ? [] : [{ id: tagId, name: 'Groceries', isArchived: false, isDeleted: false }],
+      );
+    },
+  );
+
   it('refreshes Tag names and refuses an archived Tag without substituting another one', async () => {
     let renamed = false;
     let archived = false;
@@ -885,7 +907,12 @@ describe('native Expense creation and editing', () => {
             data: {
               ...group,
               tags: [
-                { _id: tagId, name: renamed ? 'New name' : 'Groceries', isArchived: archived },
+                {
+                  _id: tagId,
+                  name: renamed ? 'New name' : 'Groceries',
+                  isArchived: archived,
+                  createdAt: iso,
+                },
               ],
             },
             status: 200,

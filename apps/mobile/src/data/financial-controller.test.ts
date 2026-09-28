@@ -12,6 +12,7 @@ const groupId = 'a00000000000000000000010';
 const iso = '2026-09-27T10:00:00.000Z';
 const group = {
   _id: groupId,
+  createdBy: user.id,
   name: 'Shared Home',
   category: 'home',
   defaultCurrency: 'INR',

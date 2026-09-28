@@ -10,7 +10,8 @@ import { resolveTagReference } from '@splitbook/shared/tag-identity';
 import { z } from 'zod';
 import { normalizeExpenseMoney, parseDecimalUnits } from '@splitbook/shared/exact-money';
 import { getCurrency } from '@splitbook/shared/currency';
-import { objectId, parseGroup } from './dto';
+import { parseGroupResponse } from '@splitbook/shared/group-read';
+import { objectId, toMobileGroup } from './dto';
 import type { MobileGroup } from './types';
 
 // Historical missing identities are local read/delete-recovery keys, never API identities.
@@ -95,22 +96,16 @@ export function emptyExpenseEditor(): ExpenseEditor {
   };
 }
 export function parseExpenseContext(value: unknown): ExpenseContext {
-  const group = parseGroup(value);
-  const tags = z
-    .object({
-      data: z.object({
-        tags: z.array(
-          z.object({
-            _id: objectId,
-            name: z.string().min(1),
-            isArchived: z.boolean(),
-            isDeleted: z.boolean().optional().default(false),
-          }),
-        ),
-      }),
-    })
-    .parse(value).data.tags;
-  return { group, tags: tags.map(({ _id, ...tag }) => ({ id: _id, ...tag })) };
+  const group = parseGroupResponse(value);
+  return {
+    group: toMobileGroup(group),
+    tags: group.tags.map(({ _id, name, isArchived, isDeleted }) => ({
+      id: _id,
+      name,
+      isArchived,
+      isDeleted,
+    })),
+  };
 }
 export function parseStoredExpenseDraft(value: unknown, accountId: string, groupId: string) {
   const record = z

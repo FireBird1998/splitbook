@@ -1,3 +1,13 @@
+export class HttpResponseError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = 'HttpResponseError';
+  }
+}
+
 export async function fetcher(url: string) {
   const res = await fetch(url);
   const json = await res.json().catch(() => ({}));
@@ -8,7 +18,11 @@ export async function fetcher(url: string) {
     window.location.assign(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
   }
   if (!res.ok) {
-    throw new Error((json as { error?: string }).error || res.statusText || 'Request failed');
+    const message = (json as { error?: unknown } | null)?.error;
+    throw new HttpResponseError(
+      (typeof message === 'string' && message) || res.statusText || 'Request failed',
+      res.status,
+    );
   }
   return json;
 }

@@ -1,4 +1,9 @@
-import { getCurrency } from '@splitbook/shared/currency';
+import {
+  parseGroupListResponse,
+  parseGroupResponse,
+  parseCreatedGroupResponse,
+  type GroupRead,
+} from '@splitbook/shared/group-read';
 import { z } from 'zod';
 import type { MobileGroup, SessionUser } from './types';
 
@@ -11,32 +16,6 @@ const image = z
   .transform((value) => value ?? null);
 const personFields = { name: z.string().min(1), email: z.email(), image };
 const user = z.object({ id: objectId, ...personFields });
-const memberUser = z.object({ _id: objectId, ...personFields }).transform(({ _id, ...rest }) => ({
-  id: _id,
-  ...rest,
-}));
-
-const group = z
-  .object({
-    _id: objectId,
-    name: z.string().min(1),
-    description: z.string().optional().default(''),
-    category: z.enum(['trip', 'home', 'couple', 'work', 'other']),
-    defaultCurrency: z.string().refine((value) => getCurrency(value) !== undefined),
-    members: z.array(
-      z.object({
-        user: memberUser,
-        role: z.enum(['admin', 'member']),
-        joinedAt: timestamp,
-      }),
-    ),
-    startDate: timestamp.nullish().transform((value) => value ?? null),
-    endDate: timestamp.nullish().transform((value) => value ?? null),
-    createdAt: timestamp,
-    updatedAt: timestamp,
-  })
-  .transform(({ _id, ...rest }) => ({ id: _id, ...rest }));
-
 const session = z
   .object({ user, session: z.object({ userId: objectId, expiresAt: timestamp }) })
   .refine((value) => value.session.userId === value.user.id);
@@ -52,16 +31,35 @@ export function parseSignIn(value: unknown): SessionUser {
   return z.object({ user }).parse(value).user;
 }
 
+export function toMobileGroup(value: GroupRead): MobileGroup {
+  return {
+    id: value._id,
+    name: value.name,
+    description: value.description,
+    category: value.category,
+    defaultCurrency: value.defaultCurrency,
+    members: value.members.map(({ user, role, joinedAt }) => ({
+      user: { id: user._id, name: user.name, email: user.email, image: user.image ?? null },
+      role,
+      joinedAt: new Date(joinedAt),
+    })),
+    startDate: value.startDate === null ? null : new Date(value.startDate),
+    endDate: value.endDate === null ? null : new Date(value.endDate),
+    createdAt: new Date(value.createdAt),
+    updatedAt: new Date(value.updatedAt),
+  };
+}
+
 export function parseGroups(value: unknown): MobileGroup[] {
-  return z.object({ data: z.array(group), status: z.literal(200) }).parse(value).data;
+  return parseGroupListResponse(value).map(toMobileGroup);
 }
 
 export function parseGroup(value: unknown): MobileGroup {
-  return z.object({ data: group, status: z.literal(200) }).parse(value).data;
+  return toMobileGroup(parseGroupResponse(value));
 }
 
 export function parseCreatedGroup(value: unknown): MobileGroup {
-  return z.object({ data: group, status: z.literal(201) }).parse(value).data;
+  return toMobileGroup(parseCreatedGroupResponse(value));
 }
 
 export function parseInvitationPreview(value: unknown) {

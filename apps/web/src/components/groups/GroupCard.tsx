@@ -22,10 +22,11 @@ import MoneyText from '@/components/common/MoneyText';
 import { fetcher } from '@/lib/utils/fetcher';
 import { formatDate, formatRelativeTime } from '@splitbook/shared/date';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
-import type { DashboardBalanceAmount, GroupCategory } from '@splitbook/shared/types';
+import type { DashboardBalanceAmount } from '@splitbook/shared/types';
+import type { GroupRead } from '@splitbook/shared/group-read';
 
 interface GroupCardProps {
-  group: Record<string, unknown>;
+  group: GroupRead;
   userId: string;
   balances?: DashboardBalanceAmount[];
   hasMixedCurrencies?: boolean;
@@ -73,20 +74,14 @@ export default function GroupCard({
   balanceUnavailable = false,
   mode = 'dashboard',
 }: GroupCardProps) {
-  const members = [
-    ...((group.members || []) as Array<{
-      user: { _id: string; name: string; image?: string };
-      role: string;
-    }>),
-  ].sort((a, b) => Number(b.user._id === userId) - Number(a.user._id === userId));
-  const category = group.category as string;
-  const theme = getGroupTheme(category as GroupCategory);
-  const groupId = group._id as string;
-  const groupName = group.name as string;
-  const currency = group.defaultCurrency as string;
-  const startDate = group.startDate as string | undefined;
-  const endDate = group.endDate as string | undefined;
-  const updatedAt = group.updatedAt as string | undefined;
+  const members = [...group.members].sort(
+    (a, b) => Number(b.user._id === userId) - Number(a.user._id === userId),
+  );
+  const theme = getGroupTheme(group.category);
+  const groupId = group._id;
+  const groupName = group.name;
+  const currency = group.defaultCurrency;
+  const { startDate, endDate, updatedAt } = group;
   const payableBalance = balances.find((balance) => balance.balance < 0);
   const dominantBalance = balances.reduce<DashboardBalanceAmount | null>(
     (current, item) =>

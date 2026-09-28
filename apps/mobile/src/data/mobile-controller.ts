@@ -464,7 +464,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({
       ...snapshot,
       screen: 'groups',
-      groups: { status: 'loading', data: [], message: null },
+      groups: { status: 'loading', data: snapshot.groups.data, message: null },
       detail: { status: 'idle', id: null, data: null, message: null },
     });
     try {
@@ -486,7 +486,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ...snapshot,
         groups: {
           status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
-          data: [],
+          data: error instanceof RequestError && error.status === 403 ? [] : snapshot.groups.data,
           message:
             error instanceof RequestError
               ? error.message
@@ -640,12 +640,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.auth.status !== 'authenticated') return;
     const owner = generation;
     const previousMonth = snapshot.financial.groupId === id ? snapshot.financial.month : undefined;
+    const verified = snapshot.detail.id === id ? snapshot.detail.data : null;
     const view = ++viewRequest;
     publish({
       ...snapshot,
       screen: 'group',
       share: { status: 'idle', url: null, message: null },
-      detail: { status: 'loading', id, data: null, message: null },
+      detail: { status: 'loading', id, data: verified, message: null },
       financial: { ...emptyFinancial(), groupId: id },
     });
     try {
@@ -682,7 +683,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         detail: {
           status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
           id,
-          data: null,
+          data: verified,
           message:
             error instanceof RequestError
               ? error.message
