@@ -1,7 +1,16 @@
+import {
+  emptyExpenseEditor,
+  buildExpenseBody,
+  parseCreatedExpenseId,
+  parseExpenseContext,
+  parseStoredExpenseDraft,
+  previewExpense,
+  type ExpenseDraft,
+} from './expense-draft';
 import { readSessionCookie, validSessionCookie } from './cookies';
 import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
-import { currentMonthKey, getLocalMonthIsoRange } from '@splitbook/shared/date';
+import { currentMonthKey, getLocalMonthIsoRange, toDateParam } from '@splitbook/shared/date';
 
 import {
   objectId,
@@ -60,6 +69,7 @@ class RequestError extends Error {
   constructor(
     message: string,
     readonly status = 0,
+    readonly code: string | null = null,
   ) {
     super(message);
   }
@@ -69,6 +79,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
   return {
     auth,
     screen: 'groups',
+    expense: emptyExpenseEditor(),
     home: { status: 'idle', data: null, message: null },
     financial: emptyFinancial(),
     creation: {
@@ -359,6 +370,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       body?: unknown;
       sessionCookie?: string | null;
       logout?: boolean;
+      serializedBody?: string;
+      idempotencyKey?: string;
     } = {},
   ): Promise<unknown> => {
     assertCurrent(owner);
@@ -372,13 +385,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         headers: {
           Accept: 'application/json',
           Origin: authOrigin,
-          ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }),
+          ...(options.body === undefined && options.serializedBody === undefined
+            ? {}
+            : { 'Content-Type': 'application/json' }),
+          ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
           ...(outgoingCookie ? { Cookie: outgoingCookie } : {}),
         },
         credentials: 'omit',
         redirect: 'error',
         signal: abort.signal,
-        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+        ...(options.serializedBody === undefined
+          ? options.body === undefined
+            ? {}
+            : { body: JSON.stringify(options.body) }
+          : { body: options.serializedBody }),
       });
       assertCurrent(owner);
       // Logout responses must never reinstall a cookie, even a surprising one.
@@ -397,7 +417,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               : response.status === 429
                 ? 'Too many attempts. Wait a moment and try again.'
                 : 'The server could not complete this request. Please try again.';
-        throw new RequestError(message, response.status);
+        const details: unknown = await response.json().catch(() => null);
+        const code =
+          details &&
+          typeof details === 'object' &&
+          'code' in details &&
+          typeof details.code === 'string'
+            ? details.code
+            : null;
+        throw new RequestError(message, response.status, code);
       }
       const body = await response.json();
       assertCurrent(owner);
@@ -849,6 +877,358 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const refreshExpenses = () => readExpenses(false);
   const loadMoreExpenses = () => readExpenses(true);
 
+  const expenseNavigationBlocked = () =>
+    snapshot.screen === 'expense' &&
+    (snapshot.expense.status === 'saving' || snapshot.expense.persistence !== 'saved');
+
+  const openExpense = async (groupId: string) => {
+    if (snapshot.auth.status !== 'authenticated' || !snapshot.auth.user) return;
+    const owner = generation;
+    const view = ++viewRequest;
+    const accountId = snapshot.auth.user.id;
+    const month = snapshot.financial.groupId === groupId ? snapshot.financial.month : null;
+    publish({
+      ...snapshot,
+      screen: 'expense',
+      expense: { ...emptyExpenseEditor(), groupId, status: 'loading' },
+    });
+    try {
+      const lease = accountStorage();
+      if (!lease || !dependencies.expenseDrafts) throw new Error('Draft storage is unavailable.');
+      const stored = await lease.write(() => dependencies.expenseDrafts!.load(accountId, groupId));
+      const record = stored === null ? null : parseStoredExpenseDraft(stored, accountId, groupId);
+      if (!current(owner) || view !== viewRequest) return;
+      if (record)
+        publish({
+          ...snapshot,
+          expense: {
+            ...snapshot.expense,
+            draft: record.draft,
+            attempt: record.attempt,
+            preview: previewExpense(record.draft),
+            status: 'loading',
+          },
+        });
+      const context = parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
+      if (!current(owner) || view !== viewRequest) return;
+      if (
+        context.group.id !== groupId ||
+        !context.group.members.some((member) => member.user.id === accountId)
+      )
+        throw new RequestError('You no longer have access to this Group.', 403);
+      const draft =
+        record === null
+          ? {
+              amount: '',
+              currency: context.group.defaultCurrency,
+              description: '',
+              date: toDateParam(
+                month && month < currentMonthKey(new Date(now()))
+                  ? new Date(getLocalMonthIsoRange(month).dateTo)
+                  : new Date(now()),
+              ),
+              payerId: accountId,
+              participantIds: context.group.members.map((member) => member.user.id),
+              category: 'other',
+              tagId: '',
+              notes: '',
+            }
+          : record.draft;
+      publish({
+        ...snapshot,
+        expense: {
+          groupId,
+          context,
+          draft,
+          preview: previewExpense(draft),
+          status: stored === null ? 'editing' : 'resume',
+          attempt: record?.attempt ?? null,
+          receiptId: null,
+          persistence: 'saved',
+          message: null,
+        },
+      });
+    } catch (error) {
+      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      publish({
+        ...snapshot,
+        expense: {
+          ...snapshot.expense,
+          status: snapshot.expense.draft ? 'resume' : 'blocked',
+          message:
+            error instanceof RequestError
+              ? error.message
+              : 'Could not open this Expense draft. Your saved draft has not been changed.',
+        },
+      });
+    }
+  };
+
+  const resumeExpenseDraft = () => {
+    if (snapshot.screen !== 'expense' || snapshot.expense.status !== 'resume') return;
+    publish({
+      ...snapshot,
+      expense: { ...snapshot.expense, status: snapshot.expense.attempt ? 'uncertain' : 'editing' },
+    });
+  };
+
+  const updateExpenseDraft = async (patch: Partial<ExpenseDraft>) => {
+    if (
+      snapshot.screen !== 'expense' ||
+      snapshot.expense.status !== 'editing' ||
+      !snapshot.expense.draft
+    )
+      return;
+    const lease = accountStorage();
+    const storage = dependencies.expenseDrafts;
+    if (!lease || !storage) return;
+    const owner = generation;
+    const groupId = snapshot.expense.groupId!;
+    const draft = { ...snapshot.expense.draft, ...patch };
+    publish({
+      ...snapshot,
+      expense: {
+        ...snapshot.expense,
+        draft,
+        preview: previewExpense(draft),
+        persistence: 'saving',
+        message: null,
+      },
+    });
+    try {
+      await lease.write(() =>
+        storage.save(lease.accountId, groupId, {
+          version: 1,
+          accountId: lease.accountId,
+          groupId,
+          draft,
+        }),
+      );
+      if (current(owner) && snapshot.expense.draft === draft)
+        publish({ ...snapshot, expense: { ...snapshot.expense, persistence: 'saved' } });
+    } catch {
+      if (current(owner) && snapshot.expense.draft === draft)
+        publish({
+          ...snapshot,
+          expense: {
+            ...snapshot.expense,
+            persistence: 'error',
+            message:
+              'Could not save your draft on this device. Keep this screen open and try again.',
+          },
+        });
+    }
+  };
+
+  const discardExpenseDraft = async () => {
+    const editor = snapshot.expense;
+    const lease = accountStorage();
+    const storage = dependencies.expenseDrafts;
+    if (
+      snapshot.screen !== 'expense' ||
+      !['editing', 'resume'].includes(editor.status) ||
+      editor.attempt ||
+      !editor.groupId ||
+      !lease ||
+      !storage
+    )
+      return;
+    const owner = generation;
+    const view = viewRequest;
+    publish({ ...snapshot, expense: { ...editor, status: 'loading' } });
+    try {
+      await lease.write(() => storage.remove(lease.accountId, editor.groupId!));
+      if (current(owner) && view === viewRequest) await openExpense(editor.groupId);
+    } catch {
+      if (current(owner) && view === viewRequest)
+        publish({
+          ...snapshot,
+          expense: { ...editor, message: 'Could not discard this draft. Please retry.' },
+        });
+    }
+  };
+
+  const refreshExpenseViews = async (groupId: string, owner: number, navigate: boolean) => {
+    if (navigate || (snapshot.screen === 'group' && snapshot.detail.id === groupId))
+      await openGroup(groupId);
+    if (current(owner)) await refreshHome();
+  };
+
+  const saveExpense = async () => {
+    const editor = snapshot.expense;
+    const lease = accountStorage();
+    const storage = dependencies.expenseDrafts;
+    if (
+      snapshot.screen !== 'expense' ||
+      !['editing', 'uncertain'].includes(editor.status) ||
+      !editor.draft ||
+      !editor.groupId ||
+      !lease ||
+      !storage
+    )
+      return;
+    const owner = generation;
+    const view = viewRequest;
+    const { groupId, draft } = editor;
+    publish({ ...snapshot, expense: { ...editor, status: 'saving', message: null } });
+    let attempt = editor.attempt;
+    let storing = false;
+    let resolvedReceipt: string | null = null;
+    let successHandled = false;
+    try {
+      // A successful authorized read is a connection/access check, never proof a write will succeed.
+      const context = parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
+      if (!current(owner) || view !== viewRequest) return;
+      if (
+        context.group.id !== groupId ||
+        !context.group.members.some((member) => member.user.id === lease.accountId)
+      )
+        throw new RequestError('You no longer have access to this Group.', 403);
+      publish({ ...snapshot, expense: { ...snapshot.expense, context } });
+      if (!attempt) {
+        const body = buildExpenseBody(draft, context);
+        const key = dependencies.newSubmissionKey?.();
+        if (!key) throw new Error('Could not create a submission key.');
+        const pending = { key, body };
+        storing = true;
+        await lease.write(() =>
+          storage.save(lease.accountId, groupId, {
+            version: 1,
+            accountId: lease.accountId,
+            groupId,
+            draft,
+            attempt: pending,
+          }),
+        );
+        storing = false;
+        attempt = pending;
+      }
+      if (!current(owner) || view !== viewRequest) return;
+      publish({
+        ...snapshot,
+        expense: { ...snapshot.expense, context, attempt, persistence: 'saved' },
+      });
+      const receiptId = parseCreatedExpenseId(
+        await request(`/api/groups/${groupId}/expenses`, owner, {
+          method: 'POST',
+          serializedBody: attempt.body,
+          idempotencyKey: attempt.key,
+        }),
+        groupId,
+      );
+      await lease.write(async () => {
+        const stored = await storage.load(lease.accountId, groupId);
+        if (stored === null) return;
+        const saved = parseStoredExpenseDraft(stored, lease.accountId, groupId);
+        // Another recovery may already have confirmed this request and created a new draft.
+        if (saved.attempt?.key === attempt!.key && saved.attempt.body === attempt!.body)
+          await storage.remove(lease.accountId, groupId);
+      });
+      resolvedReceipt = receiptId;
+      if (!current(owner) || view !== viewRequest) return;
+      publish({
+        ...snapshot,
+        expense: {
+          ...snapshot.expense,
+          status: 'saved',
+          receiptId,
+          attempt: null,
+          draft: null,
+          preview: null,
+          message: 'Expense saved.',
+        },
+      });
+      successHandled = true;
+      await refreshExpenseViews(groupId, owner, true);
+    } catch (error) {
+      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      const rejectionMessages: Record<string, string> = {
+        INVALID_TAG: 'Choose an active Tag in this Group. Your entries are kept.',
+        INVALID_MEMBERS: 'Review the payer and participants: Group membership changed.',
+        CURRENCY_MISMATCH: 'The Group currency changed. Review the currency before saving.',
+        VALIDATION_ERROR: 'Check the amount, description, date, and participants before saving.',
+      };
+      const rejection =
+        error instanceof RequestError && error.status === 422 && error.code
+          ? rejectionMessages[error.code]
+          : undefined;
+      if (attempt && rejection) {
+        try {
+          await lease.write(() =>
+            storage.save(lease.accountId, groupId, {
+              version: 1,
+              accountId: lease.accountId,
+              groupId,
+              draft,
+            }),
+          );
+          if (!current(owner) || view !== viewRequest) return;
+          publish({
+            ...snapshot,
+            expense: {
+              ...snapshot.expense,
+              attempt: null,
+              status: 'editing',
+              persistence: 'saved',
+              message: rejection,
+            },
+          });
+          return;
+        } catch {
+          /* Preserve the immutable attempt until local cleanup succeeds. */
+        }
+      }
+      if (!current(owner) || view !== viewRequest) return;
+      publish({
+        ...snapshot,
+        expense: {
+          ...snapshot.expense,
+          attempt,
+          persistence: storing ? 'error' : snapshot.expense.persistence,
+          status: attempt ? 'uncertain' : 'editing',
+          message: storing
+            ? 'Could not save the submission on this device. No Expense was sent. Retry local storage before saving.'
+            : attempt
+              ? `${error instanceof RequestError ? `${error.message} ` : ''}This Expense may already be saved. Retry this same submission to confirm it; its amount and participants are locked until then.`
+              : error instanceof RequestError
+                ? error.message
+                : 'Check the amount, date, participants, currency, and active Tag. Your draft is still here.',
+        },
+      });
+    } finally {
+      // Warm links may replace the editor while transport/storage is pending.
+      // Reconcile only this draft; never install it into a newer account or editor.
+      if (
+        current(owner) &&
+        view !== viewRequest &&
+        snapshot.expense.groupId === groupId &&
+        snapshot.expense.draft === draft &&
+        snapshot.expense.status === 'saving'
+      ) {
+        publish({
+          ...snapshot,
+          expense: {
+            ...snapshot.expense,
+            status: resolvedReceipt ? 'saved' : attempt ? 'uncertain' : 'editing',
+            attempt: resolvedReceipt ? null : attempt,
+            draft: resolvedReceipt ? null : draft,
+            preview: resolvedReceipt ? null : snapshot.expense.preview,
+            receiptId: resolvedReceipt,
+            persistence: storing ? 'error' : snapshot.expense.persistence,
+            message: resolvedReceipt
+              ? 'Expense saved.'
+              : attempt
+                ? 'Resume this draft to confirm the same submission.'
+                : 'Your draft is still here.',
+          },
+        });
+      }
+      if (current(owner) && resolvedReceipt && !successHandled && view !== viewRequest) {
+        await refreshExpenseViews(groupId, owner, false);
+      }
+    }
+  };
+
   const startCreate = () => {
     if (snapshot.auth.status !== 'authenticated') return;
     viewRequest += 1;
@@ -856,7 +1236,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const openSettings = () => {
-    if (snapshot.auth.status !== 'authenticated') return;
+    if (snapshot.auth.status !== 'authenticated' || expenseNavigationBlocked()) return;
     viewRequest += 1;
     publish({ ...snapshot, screen: 'settings' });
   };
@@ -1232,7 +1612,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       void cancelInvitation();
       return;
     }
-    if (snapshot.creation.status === 'saving') return;
+    if (snapshot.creation.status === 'saving' || expenseNavigationBlocked()) return;
     viewRequest += 1;
     publish({
       ...snapshot,
@@ -1245,11 +1625,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const refresh = async () => {
     if (['restoring', 'signing-in'].includes(snapshot.auth.status)) return;
-    if (snapshot.creation.status === 'saving' || snapshot.invitation.status === 'joining') return;
+    if (
+      snapshot.creation.status === 'saving' ||
+      snapshot.invitation.status === 'joining' ||
+      (snapshot.screen === 'expense' && snapshot.expense.status === 'saving')
+    )
+      return;
     if (snapshot.screen === 'invite' && snapshot.auth.status !== 'authenticated')
       return retryInvitation();
     if (snapshot.auth.status !== 'authenticated') return restore();
-    if (['create', 'invite', 'settings'].includes(snapshot.screen)) {
+    if (['create', 'invite', 'settings', 'expense'].includes(snapshot.screen)) {
       const owner = generation;
       try {
         const session = parseSession(await request('/api/auth/get-session', owner));
@@ -1325,6 +1710,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   return {
+    discardExpenseDraft,
+    saveExpense,
+    openExpense,
+    resumeExpenseDraft,
+    updateExpenseDraft,
     restore,
     signIn,
     startCreate,

@@ -105,14 +105,14 @@ export class FixtureActor {
     return response.json();
   }
 
-  async signIn(persona: 'alex' | 'sam') {
+  async signIn(persona: 'alex' | 'sam' | 'priya') {
     await this.request('/api/auth/demo-persona/sign-in', 'POST', { personaId: persona });
     const session = z
       .object({ user: z.object({ id }) })
       .parse(await this.request('/api/auth/get-session'));
     assert.equal(
       session.user.id,
-      persona === 'alex' ? alexId : samId,
+      persona === 'alex' ? alexId : persona === 'sam' ? samId : 'a00000000000000000000003',
       'The synthetic persona identity did not match.',
     );
   }
