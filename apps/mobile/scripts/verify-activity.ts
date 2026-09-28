@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { z } from 'zod';
+import { formatActivityHeadline } from '@splitbook/shared/activity-timeline';
 import { createMobileController } from '../src/data';
 import { FixtureActor, alexId, samId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
@@ -189,6 +190,21 @@ async function run() {
     console.log(
       'PASS: explicit stale/error recovery, single payment event, and foreground membership revocation.',
     );
+    await controller.signOut();
+    await controller.signIn('alex');
+    await controller.openActivity(fixture.groupId);
+    const removal = controller
+      .getSnapshot()
+      .activity.events.find((event) => event.type === 'member_left');
+    assert.ok(removal);
+    assert.equal(removal.actor?._id, alexId);
+    assert.equal(removal.metadata.userId, samId);
+    assert.equal(removal.metadata.method, 'removed');
+    assert.equal(formatActivityHeadline(removal), 'Alex Rivera removed a member from the group');
+    await controller.selectActivity(removal._id);
+    assert.equal(controller.getSnapshot().activity.selected?.metadata.userId, samId);
+    assert.equal(controller.getSnapshot().activity.target.status, 'none');
+    console.log('PASS: removal history distinguishes the acting admin from the removed member.');
   } finally {
     if (controller) await controller.signOut();
     if (fixture && !keep) await cleanup(alex, fixture);

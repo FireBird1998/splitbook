@@ -64,7 +64,9 @@ export function formatActivityHeadline(activity: ActivityLike): string {
     case 'member_joined':
       return `${actorName} joined the group`;
     case 'member_left':
-      return `${actorName} left the group`;
+      return meta.method === 'removed'
+        ? `${actorName} removed a member from the group`
+        : `${actorName} left the group`;
     case 'group_created':
       return `${actorName} created the group`;
     case 'group_updated':

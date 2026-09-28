@@ -98,6 +98,27 @@ describe('native Group Activity', () => {
       },
     });
   });
+  it('retains the historical removed member reference and action independently of current membership', async () => {
+    const removedId = 'a00000000000000000000002';
+    const controller = setup((url) =>
+      url.pathname.endsWith('/activity')
+        ? json(
+            page([
+              { ...event, type: 'member_left', metadata: { userId: removedId, method: 'removed' } },
+            ]),
+          )
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.openActivity(groupId);
+    await controller.selectActivity(eventId);
+    expect(controller.getSnapshot().activity).toMatchObject({
+      status: 'ready',
+      selected: { actor: { _id: actor }, metadata: { userId: removedId, method: 'removed' } },
+      target: { status: 'none' },
+    });
+  });
+
   it('loads older events without duplicates and replaces the timeline on refresh to include recovered events', async () => {
     const older = {
       ...event,

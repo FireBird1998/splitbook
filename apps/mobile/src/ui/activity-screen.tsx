@@ -56,7 +56,12 @@ function EventSummary({ event }: { event: ActivityEvent }) {
           name={kind.icon}
           color={event.type === 'settlement_recorded' ? theme.status.positive : theme.brand.main}
         />
-        <Label>{kind.label.toUpperCase()}</Label>
+        <Label>
+          {(event.type === 'member_left' && meta.method === 'removed'
+            ? 'Member removed'
+            : kind.label
+          ).toUpperCase()}
+        </Label>
       </View>
       <Copy style={{ fontFamily: fonts.semibold, fontSize: 20, lineHeight: 28 }}>
         {formatActivityHeadline(event)}
@@ -107,6 +112,12 @@ export function ActivityScreen({
               current editable Expense.
             </Copy>
             <Copy>Actor: {selected.actor?.name || 'Former member'}</Copy>
+            {selected.metadata.userId ? (
+              <Copy selectable>Member reference: {selected.metadata.userId}</Copy>
+            ) : null}
+            {selected.metadata.method ? (
+              <Copy>Membership action: {selected.metadata.method}</Copy>
+            ) : null}
             {selected.metadata.action ? <Copy>Action: {selected.metadata.action}</Copy> : null}
             {selected.metadata.expenseId ? (
               <Copy selectable>Expense reference: {selected.metadata.expenseId}</Copy>

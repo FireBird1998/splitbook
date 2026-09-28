@@ -5,6 +5,8 @@ import { objectId } from './dto';
 import type { LoadStatus } from './types';
 
 const metadata = z.object({
+  userId: objectId.optional(),
+  method: z.string().optional(),
   expenseId: objectId.optional(),
   settlementId: objectId.optional(),
   description: z.string().optional(),

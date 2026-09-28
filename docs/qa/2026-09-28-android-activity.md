@@ -4,8 +4,9 @@ The feature follows #57 and parent #49. Review baseline is `f81856b`, the comple
 
 ## Automated verification
 
-- Full workspace unit suite passed before the newer payment fixes: shared 257, web 137, mobile 170. After integration, all 174 mobile tests passed, including four additional payment regressions. Combined final coverage: 568 unit tests.
-- All 130 database integration tests passed, including the existing Activity outbox recovery fixtures. Total: 698 tests.
+- The independent pre-merge review reran the complete workspace suite. Before review fixes: 695 unique tests (257 shared, 264 web, 174 mobile), including database integration. The earlier 698 aggregate double-counted three web tests.
+- Final independent rerun: **698 unique tests passed** (259 shared, 264 web, 175 mobile), along with workspace typecheck, lint, and full-repository formatting. Both production-mode HTTP verifiers passed after the fix.
+- Review added three regression cases for member removal versus voluntary departure and preservation of historical member/action context. The real HTTP journey also now verifies the admin actor and removed member after account switching.
 - Workspace typecheck and lint passed; mobile typecheck/lint passed again after integration and visual adjustments. Changed-file formatting passed.
 - `MOBILE_VERIFY_URL=http://127.0.0.1:4143 pnpm mobile verify:activity` passed mixed-event pagination, original snapshot money, deleted-target status, stale/error recovery, and foreground membership denial through the real controller and authenticated backend.
 - The existing `verify:settlements` committed-response-loss/restart/retry fixture passed and now checks the recovered payment appears once in the native Activity controller after refresh.
@@ -17,7 +18,7 @@ Independent review: zero documented violations and zero actionable heuristic fin
 
 ## Spec
 
-Independent review: zero actionable findings. Historical snapshots, separate current record checks, authoritative refresh, account isolation, and current membership matched #57. Follow-up review of the visual refinements found no regressions.
+Independent pre-merge review found and fixed one issue: admin removal events claimed that the admin left and dropped the removed member reference. The parser now preserves the backend member/action fields, the shared formatter distinguishes removal from departure, and native details show the available member reference. Re-review found no unresolved issues. Historical snapshots, separate current record checks, authoritative refresh, account isolation, and current membership matched #57. Follow-up review of the visual refinements found no regressions.
 
 ## Native environment and results
 
@@ -38,3 +39,5 @@ Screenshots are local artifacts in `/Users/ankitdas/Documents/Codex/2026-09-27/s
 Activity is read-only and memory-only in this ticket. Refresh can reveal backend-recovered history; missing events never prove that a ledger write failed. Current-record checks do not treat an event snapshot as current editable financial data. Failure retains explicitly stale history; denied access removes it. Persistent offline caching remains separate work.
 
 The real HTTP verifier covers pagination and recovered-payment visibility. Existing backend integration fixtures exercise pending-event publication recovery. Native checks exercise rendering and controls; they do not claim a separate native outbox fault-injection test.
+
+Independent pre-merge QA reran production-mode isolated-app Activity and Settlement recovery journeys and inspected existing device screenshots. It did not repeat the native device session or claim a fresh Gradle build.
