@@ -114,9 +114,7 @@ function fixture() {
               cleanup = true;
             },
             clear: async () => {
-              ((cleanup = false), (sessionStatus = 200));
-              let activeUser = user;
-              const errors = new Map<string, number>();
+              cleanup = false;
             },
           },
           stores: [
@@ -473,5 +471,33 @@ describe('account-scoped offline financial views', () => {
     await restarted.openGroup(groupId);
     expect(restarted.getSnapshot().detail.data).toBeNull();
     expect(restarted.getSnapshot().detail.message).toContain('not saved');
+  });
+  it('keeps cached Groups labelled stale after Home balances reconnect', async () => {
+    const f = fixture(),
+      first = f.create();
+    await first.signIn('alex');
+    first.dispose();
+    f.goOffline();
+    const restarted = f.create();
+    await restarted.restore();
+    f.goOnline();
+    await restarted.refreshHome();
+    expect(restarted.getSnapshot().offline).toMatchObject({ active: true, refreshedAt: now });
+    await restarted.openGroup(groupId);
+    await restarted.back();
+    expect(restarted.getSnapshot().offline).toMatchObject({ active: true, refreshedAt: now });
+  });
+
+  it('removes denied Group cards from memory when opening an Expense is rejected', async () => {
+    const f = fixture(),
+      controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    f.revoke();
+    await controller.openExpense(groupId);
+    f.goOffline();
+    await controller.back();
+    expect(controller.getSnapshot().groups.data).toEqual([]);
+    expect(controller.getSnapshot().home.data).toBeNull();
   });
 });

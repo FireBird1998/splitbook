@@ -465,6 +465,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           deniedGroup
         ) {
           cacheEpoch += 1;
+          evictGroupContent(deniedGroup, response.status);
           const lease = accountStorage();
           if (lease && dependencies.readCache) {
             try {
@@ -515,19 +516,46 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const publishReadFreshness = () => {
-    const times = [...staleReads.values()].filter((value): value is number => value !== null);
+    const visible = [...staleReads.entries()].filter(([path]) => {
+      const home = path === '/api/groups' || path === '/api/user/balances';
+      return snapshot.screen === 'groups' ? home : !home;
+    });
+    const times = visible
+      .map(([, time]) => time)
+      .filter((value): value is number => value !== null);
     publish({
       ...snapshot,
       offline: {
         ...snapshot.offline,
-        active: offlineSession || staleReads.size > 0,
+        active: offlineSession || visible.length > 0,
         refreshedAt: times.length ? Math.min(...times) : null,
       },
     });
   };
   const startReadView = () => {
-    staleReads.clear();
+    // Home remains in memory while a child view is open, including its provenance.
+    for (const path of staleReads.keys())
+      if (path !== '/api/groups' && path !== '/api/user/balances') staleReads.delete(path);
     publishReadFreshness();
+  };
+
+  const saveVerifiedIdentity = async (
+    session: NonNullable<ReturnType<typeof parseSession>>,
+    owner: number,
+  ) => {
+    const lease = accountStorage();
+    if (lease && dependencies.offlineIdentity) {
+      try {
+        await lease.write(() =>
+          dependencies.offlineIdentity!.save({
+            user: session.user,
+            session: { userId: session.user.id, expiresAt: session.expiresAt.toISOString() },
+          }),
+        );
+      } catch (error) {
+        if (!current(owner) || error instanceof Superseded) throw error;
+      }
+    }
   };
 
   const revalidateSession = async (owner: number) => {
@@ -542,19 +570,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       throw new Superseded();
     }
     offlineSession = false;
-    const lease = accountStorage();
-    if (lease && dependencies.offlineIdentity) {
-      try {
-        await lease.write(() =>
-          dependencies.offlineIdentity!.save({
-            user: session.user,
-            session: { userId: session.user.id, expiresAt: session.expiresAt.toISOString() },
-          }),
-        );
-      } catch (error) {
-        if (!current(owner) || error instanceof Superseded) throw error;
-      }
-    }
+    await saveVerifiedIdentity(session, owner);
   };
 
   /** Explicitly opt in display reads only; request() and every mutation stay live. */
@@ -734,19 +750,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
     }
     publish(cleanSnapshot({ status: 'authenticated', user: session.user, message: null }));
-    const lease = accountStorage();
-    if (lease && dependencies.offlineIdentity) {
-      try {
-        await lease.write(() =>
-          dependencies.offlineIdentity!.save({
-            user: session.user,
-            session: { userId: session.user.id, expiresAt: session.expiresAt.toISOString() },
-          }),
-        );
-      } catch (error) {
-        if (!current(owner) || error instanceof Superseded) throw error;
-      }
-    }
+    await saveVerifiedIdentity(session, owner);
     await loadGroups(owner);
     if (current(owner)) await refreshHome();
     if (!current(owner)) return;
@@ -923,6 +927,34 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         },
       });
     }
+  };
+
+  const evictGroupContent = (id: string, status: number) => {
+    const message =
+      status === 403
+        ? 'You no longer have access to this group.'
+        : 'This group is no longer available.';
+    homeRequest += 1;
+    publish({
+      ...snapshot,
+      groups: { ...snapshot.groups, data: snapshot.groups.data.filter((group) => group.id !== id) },
+      home: { status: 'idle', data: null, message: null },
+      detail:
+        snapshot.detail.id === id
+          ? { ...snapshot.detail, data: null, status: status === 403 ? 'denied' : 'error', message }
+          : snapshot.detail,
+      financial: snapshot.financial.groupId === id ? emptyFinancial() : snapshot.financial,
+      activity:
+        snapshot.activity.groupId === id
+          ? { ...emptyActivity(), groupId: id, status: 'denied', message }
+          : snapshot.activity,
+      expense:
+        snapshot.expense.groupId === id ? { ...snapshot.expense, context: null } : snapshot.expense,
+      settlement:
+        snapshot.settlement.groupId === id
+          ? { ...snapshot.settlement, group: null, balances: [], history: [] }
+          : snapshot.settlement,
+    });
   };
 
   const dropDeniedGroup = (id: string, error: unknown): boolean => {
@@ -2840,7 +2872,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           offlineSession = true;
         }
         if (!current(owner) || view !== viewRequest) return;
-        staleReads.clear();
         if (dependencies.readCache && groupId) {
           const context = await readCached(`/api/groups/${groupId}`, owner, parseExpenseContext);
           if (!current(owner) || view !== viewRequest) return;
