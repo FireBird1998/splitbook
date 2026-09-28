@@ -463,7 +463,9 @@ function SplitBook() {
                   />
                   {state.expense.status === 'saved' &&
                     state.expense.groupId === state.detail.id && (
-                      <Copy accessibilityLiveRegion="polite">Expense saved.</Copy>
+                      <Copy accessibilityLiveRegion="polite">
+                        {state.expense.message ?? 'Expense saved.'}
+                      </Copy>
                     )}
                   <GroupFinancialViews
                     group={state.detail.data}
