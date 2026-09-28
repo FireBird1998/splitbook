@@ -276,6 +276,10 @@ describe('account-scoped offline financial views', () => {
       data: [{ currency: 'INR' }],
     });
     await restarted.selectMonth('2026-07');
+    expect(restarted.getSnapshot().financial.balances).toMatchObject({
+      status: 'ready',
+      data: [{ currency: 'INR' }],
+    });
     expect(restarted.getSnapshot().financial.expenses).toMatchObject({
       status: 'error',
       summary: null,
@@ -499,5 +503,24 @@ describe('account-scoped offline financial views', () => {
     await controller.back();
     expect(controller.getSnapshot().groups.data).toEqual([]);
     expect(controller.getSnapshot().home.data).toBeNull();
+  });
+  it('still evicts protected Group content when independent balances deny access after an offline Month miss', async () => {
+    const f = fixture(),
+      controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    await controller.selectMonth('2026-08');
+    f.failPath(`/api/groups/${groupId}/expenses`);
+    f.failResponse(`/api/groups/${groupId}/balances`, 403);
+    await controller.selectMonth('2026-07');
+    expect(controller.getSnapshot().detail).toMatchObject({ status: 'denied', data: null });
+    expect(controller.getSnapshot().financial.balances.data).toBeNull();
+    expect(controller.getSnapshot().groups.data).toEqual([]);
+    controller.dispose();
+    f.goOffline();
+    const restarted = f.create();
+    await restarted.restore();
+    await restarted.openGroup(groupId);
+    expect(restarted.getSnapshot().detail.data).toBeNull();
   });
 });

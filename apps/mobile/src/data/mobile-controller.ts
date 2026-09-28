@@ -1139,15 +1139,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       )
         return;
       if (dropDeniedGroup(group.id, error)) return;
+      const unavailableOffline =
+        error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
       publish({
         ...snapshot,
         financial: {
           ...snapshot.financial,
-          balances: {
-            status: 'error',
-            data: null,
-            message: 'Could not update running balances. Please try again.',
-          },
+          balances: unavailableOffline
+            ? snapshot.financial.balances
+            : {
+                status: 'error',
+                data: null,
+                message: 'Could not update running balances. Please try again.',
+              },
           expenses: append
             ? {
                 ...snapshot.financial.expenses,
@@ -1167,6 +1171,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               },
         },
       });
+      // A missing cached Month/page says nothing about all-time balances. Load
+      // their independent cache only after the expense read has settled, keeping
+      // recurring-materialization ordering and authorization checks intact.
+      if (unavailableOffline) await refreshBalances();
     }
   };
 

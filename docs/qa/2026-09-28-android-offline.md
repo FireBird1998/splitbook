@@ -35,3 +35,11 @@ Two findings were reproduced and corrected: Home's retained cached Group list lo
 ## Remaining release work
 
 Real platform OAuth configuration (#35), native auth integration (#36), and signed staging APK/install verification (#60) remain separate. No real staging host, platform OAuth audience, signing certificate, or Google callback was verified by this ticket.
+
+## Independent QA follow-up: missing Month must not hide all-time balances
+
+Independent QA reproduced a P2 against `455dafa`: after a cold offline restart, selecting unvisited July after cached August correctly marked expenses unavailable but incorrectly replaced cached running balances with `error/null`. The existing expense-error branch invalidated those balances and refreshed them only on a successful expense read.
+
+The exact public-controller assertion was added permanently and observed failing before the fix. An `OFFLINE_UNAVAILABLE` Month/page result now loads running balances through their independent authenticated/cache read after the expense request settles. Other expense failures retain the existing conservative error behavior; online recurring-materialization ordering is unchanged. A new partial-connectivity regression verifies that a denied balance read still removes protected data from memory and disk, including on the next offline restart.
+
+Verification of this follow-up: all 192 mobile tests, mobile typecheck and lint passed. The real isolated development-backend `verify:offline` journey now asserts that the balance data remains identical after choosing an unavailable Month, and passed. This follow-up did not repeat a native device session or the unchanged web/shared suites. The earlier CI verify rerun for `455dafa` completed successfully; the new pushed revision requires its own CI run.

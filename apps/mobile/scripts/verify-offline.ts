@@ -153,7 +153,10 @@ async function run() {
     await controller.selectMonth('2026-08');
     assert.equal(controller.getSnapshot().financial.expenses.status, 'ready');
     assert.equal(controller.getSnapshot().financial.balances.status, 'ready');
+    const savedBalances = controller.getSnapshot().financial.balances.data;
     await controller.selectMonth('2026-07');
+    assert.equal(controller.getSnapshot().financial.balances.status, 'ready');
+    assert.deepEqual(controller.getSnapshot().financial.balances.data, savedBalances);
     assert.equal(controller.getSnapshot().financial.expenses.status, 'error');
     assert.equal(controller.getSnapshot().financial.expenses.summary, null);
     await controller.openActivity(groupId);
