@@ -28,7 +28,11 @@ export interface GroupCreateFormProps {
   onDiscard: () => void;
 }
 
-function Field({ label, hint, ...props }: TextInputProps & { label: string; hint?: string }) {
+export function Field({
+  label,
+  hint,
+  ...props
+}: TextInputProps & { label: string; hint?: string }) {
   const theme = useTheme();
   return (
     <View style={{ gap: 7 }}>

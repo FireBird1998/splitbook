@@ -1,3 +1,5 @@
+import { randomUUID } from 'expo-crypto';
+import { createExpenseDraftStore } from './data/expense-storage';
 import { fetch } from 'expo/fetch';
 import * as SecureStore from 'expo-secure-store';
 import { createMobileController } from './data';
@@ -36,8 +38,11 @@ export const appearance = createAppearanceController({
   load: () => SecureStore.getItemAsync('splitbook.appearance'),
   save: (mode) => SecureStore.setItemAsync('splitbook.appearance', mode),
 });
+const expenseDrafts = createExpenseDraftStore(controllerConfig.apiBaseUrl);
 export const controller = createMobileController(controllerConfig, {
   fetch,
+  expenseDrafts,
+  newSubmissionKey: randomUUID,
   credentials: {
     load: () => SecureStore.getItemAsync(storageKey),
     save: (cookie) => SecureStore.setItemAsync(storageKey, cookie),
@@ -59,7 +64,6 @@ export const controller = createMobileController(controllerConfig, {
       save: (accountId) => SecureStore.setItemAsync(ownerKey, accountId),
       clear: () => SecureStore.deleteItemAsync(ownerKey),
     },
-    // Register persistent financial stores here when their tickets add them.
-    stores: [],
+    stores: [expenseDrafts],
   },
 });

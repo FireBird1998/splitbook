@@ -3,32 +3,34 @@
   "version": "0.1.0",
   "main": "index.ts",
   "dependencies": {
-    "expo": "~57.0.25",
-    "expo-status-bar": "~57.0.1",
-    "react": "19.2.3",
-    "react-native": "0.86.3",
+    "@expo-google-fonts/ibm-plex-mono": "^0.4.1",
+    "@expo-google-fonts/outfit": "^0.4.3",
+    "@expo/vector-icons": "^15.0.2",
     "@splitbook/shared": "workspace:*",
-    "zod": "^4.5.4",
+    "expo": "~57.0.25",
+    "expo-build-properties": "~57.0.22",
+    "expo-crypto": "~57.0.3",
     "expo-dev-client": "~57.0.19",
-    "expo-secure-store": "~57.0.4",
     "expo-font": "~57.0.4",
     "expo-linear-gradient": "~57.0.2",
-    "expo-build-properties": "~57.0.22",
-    "react-native-safe-area-context": "~5.7.0",
-    "@expo/vector-icons": "^15.0.2",
+    "expo-secure-store": "~57.0.4",
+    "expo-sqlite": "~57.0.3",
+    "expo-status-bar": "~57.0.1",
     "expo-system-ui": "~57.0.4",
-    "@expo-google-fonts/outfit": "^0.4.3",
-    "@expo-google-fonts/ibm-plex-mono": "^0.4.1"
+    "react": "19.2.3",
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "~5.7.0",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@types/react": "~19.2.2",
-    "typescript": "~5.9.3",
-    "vitest": "^4.1.10",
-    "eslint": "^9",
     "@eslint/js": "^9",
-    "typescript-eslint": "^8.55.0",
+    "@types/node": "^22",
+    "@types/react": "~19.2.2",
+    "eslint": "^9",
     "tsx": "^4.23.1",
-    "@types/node": "^22"
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.55.0",
+    "vitest": "^4.1.10"
   },
   "scripts": {
     "start": "expo start --dev-client",
@@ -43,7 +45,8 @@
     "backend:start": "node scripts/dev-backend/start.mjs",
     "verify:groups": "node --import tsx scripts/verify-group-journey.ts",
     "verify:settings": "node --import tsx scripts/verify-settings.ts",
-    "verify:financial": "node --import tsx scripts/verify-financial-views.ts"
+    "verify:financial": "node --import tsx scripts/verify-financial-views.ts",
+    "verify:expenses": "node --import tsx scripts/verify-expense-create.ts"
   },
   "private": true
 }

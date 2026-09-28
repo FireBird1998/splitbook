@@ -9,7 +9,7 @@ describe('serverError', () => {
   it('answers a service access denial as 403 rather than a server failure', async () => {
     const response = serverError(new Error('FORBIDDEN'));
     expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: 'Forbidden', status: 403 });
+    expect(await response.json()).toEqual({ error: 'Forbidden', code: 'FORBIDDEN', status: 403 });
   });
 
   it('keeps unknown failures as a generic 500', async () => {
