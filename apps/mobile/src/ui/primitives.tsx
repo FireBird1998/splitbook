@@ -54,12 +54,14 @@ export function Label({ children, light = false }: { children: ReactNode; light?
 }
 export function Button({
   label,
+  accessibilityLabel = label,
   onPress,
   secondary = false,
   disabled = false,
   icon,
 }: {
   label: string;
+  accessibilityLabel?: string;
   onPress: () => void;
   secondary?: boolean;
   disabled?: boolean;
@@ -70,7 +72,7 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}

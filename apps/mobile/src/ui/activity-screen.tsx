@@ -96,6 +96,7 @@ export function ActivityScreen({
         {selected ? 'Event details' : 'Activity'}
       </Copy>
       {state.message ? <Copy accessibilityRole="alert">{state.message}</Copy> : null}
+      <Button label="Refresh Activity" onPress={onRefresh} disabled={state.status === 'loading'} />
       {state.status === 'loading' ? <Loading label="Refreshing Group Activity…" /> : null}
       {selected ? (
         <>
@@ -178,7 +179,8 @@ export function ActivityScreen({
             <Panel key={event._id}>
               <EventSummary event={event} />
               <Button
-                label={`View event: ${formatActivityHeadline(event)}`}
+                label="View details"
+                accessibilityLabel={`View event: ${formatActivityHeadline(event)}`}
                 secondary
                 disabled={state.status !== 'ready'}
                 onPress={() => onSelect(event._id)}
@@ -199,7 +201,7 @@ export function ActivityScreen({
           ) : null}
         </>
       )}
-      <Button label="Refresh Activity" onPress={onRefresh} disabled={state.status === 'loading'} />
+
       <Copy style={{ color: theme.textSecondary }}>
         History comes from the shared ledger. Refresh may reveal recovered events; it never records
         another payment.
