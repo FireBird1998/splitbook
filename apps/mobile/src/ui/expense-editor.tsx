@@ -199,9 +199,11 @@ export function ExpenseEditor({
       </View>
       <View style={{ gap: 8 }} accessibilityRole="radiogroup">
         <Copy style={{ fontFamily: fonts.semibold }}>Tag · required</Copy>
-        {draft.tagId && (!tag || tag.isArchived || tag.isDeleted) ? (
+        {draft.tagId && context && (!tag || tag.isArchived || tag.isDeleted) ? (
           <Copy accessibilityRole="alert">
-            The saved Tag is unavailable or archived. Choose an active Tag before saving.
+            {state.attempt
+              ? `Submitted Tag: ${tag?.name ?? 'unavailable'}. Recovery keeps the original Tag identity.`
+              : `Saved Tag: ${tag?.name ?? 'unavailable'}. It is unavailable or archived; choose an active Tag before saving.`}
           </Copy>
         ) : null}
         {context?.tags
