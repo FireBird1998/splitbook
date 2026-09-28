@@ -1,3 +1,4 @@
+import { ActivityScreen } from './src/ui/activity-screen';
 import { SettlementScreen } from './src/ui/settlement-screen';
 import { useEffect, useSyncExternalStore } from 'react';
 import {
@@ -111,7 +112,13 @@ function SplitBook() {
           {state.screen !== 'groups' ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Back to Groups"
+              accessibilityLabel={
+                state.screen === 'activity'
+                  ? state.activity.selected
+                    ? 'Back to Activity'
+                    : 'Back to Group'
+                  : 'Back to Groups'
+              }
               onPress={controller.back}
               style={{ minWidth: 48, minHeight: 48, justifyContent: 'center' }}
             >
@@ -237,12 +244,20 @@ function SplitBook() {
           />
         ) : (
           <ScrollView
-            key={state.screen === 'group' ? `group:${state.detail.id}` : state.screen}
+            key={
+              state.screen === 'activity'
+                ? `activity:${state.activity.groupId}:${state.activity.selected?._id ?? 'list'}`
+                : state.screen === 'group'
+                  ? `group:${state.detail.id}`
+                  : state.screen
+            }
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             contentContainerStyle={styles.content}
             refreshControl={
-              ['settings', 'expense', 'settlement'].includes(state.screen) ? undefined : (
+              ['settings', 'expense', 'settlement', 'activity'].includes(
+                state.screen,
+              ) ? undefined : (
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={() => void controller.refresh()}
@@ -285,6 +300,14 @@ function SplitBook() {
                     ],
                   )
                 }
+              />
+            ) : state.screen === 'activity' ? (
+              <ActivityScreen
+                state={state.activity}
+                onRefresh={() => void controller.refreshActivity()}
+                onMore={() => void controller.loadMoreActivity()}
+                onSelect={(id) => void controller.selectActivity(id)}
+                onClose={controller.closeActivityDetail}
               />
             ) : state.screen === 'settlement' ? (
               <SettlementScreen
@@ -482,6 +505,12 @@ function SplitBook() {
                     label="Payments"
                     secondary
                     onPress={() => void controller.openSettlements(state.detail.id!)}
+                  />
+                  <Button
+                    label="Activity"
+                    secondary
+                    icon="time-outline"
+                    onPress={() => void controller.openActivity(state.detail.id!)}
                   />
                   {state.expense.status === 'saved' &&
                     state.expense.groupId === state.detail.id && (

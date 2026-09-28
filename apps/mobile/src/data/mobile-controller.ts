@@ -1,3 +1,4 @@
+import { emptyActivity, parseActivityPage, parseActivityExpense } from './activity';
 import {
   emptySettlement,
   parseRecordedSettlement,
@@ -112,6 +113,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
     screen: 'groups',
     expense: emptyExpenseEditor(),
     settlement: emptySettlement(),
+    activity: emptyActivity(),
     home: { status: 'idle', data: null, message: null },
     financial: emptyFinancial(),
     creation: {
@@ -168,6 +170,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let homeRequest = 0;
   let financialRequest = 0;
   let balancesRequest = 0;
+  let activityRequest = 0;
+  let activityDetailRequest = 0;
   let storeQueue: Promise<unknown> = Promise.resolve();
   let cleanupRequired = false;
   let accountCleanupRequired = false;
@@ -723,6 +727,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         message: error.message,
       },
       financial: emptyFinancial(),
+      activity:
+        snapshot.activity.groupId === id
+          ? { ...emptyActivity(), groupId: id, status: 'denied', message: error.message }
+          : snapshot.activity,
       home: { status: 'idle', data: null, message: null },
       share: { status: 'idle', url: null, message: null },
     });
@@ -911,6 +919,168 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const refreshExpenses = () => readExpenses(false);
   const loadMoreExpenses = () => readExpenses(true);
+
+  const readActivity = async (append: boolean) => {
+    const previous = snapshot.activity,
+      groupId = previous.groupId;
+    if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'activity' || !groupId)
+      return;
+    const pagination = previous.pagination;
+    if (
+      append &&
+      (previous.status !== 'ready' ||
+        previous.moreStatus === 'loading' ||
+        !pagination ||
+        pagination.page >= pagination.totalPages)
+    )
+      return;
+    const pageNumber = append ? pagination!.page + 1 : 1;
+    if (!append) activityDetailRequest += 1;
+    const owner = generation,
+      view = viewRequest,
+      read = ++activityRequest;
+    publish({
+      ...snapshot,
+      activity: {
+        ...previous,
+        ...(!append ? { selected: null, target: { status: 'none' as const } } : {}),
+        status: append ? 'ready' : 'loading',
+        moreStatus: append ? 'loading' : 'idle',
+        message: null,
+      },
+    });
+    try {
+      if (!objectId.safeParse(groupId).success)
+        throw new RequestError('This Group is unavailable.', 404);
+      const page = parseActivityPage(
+        await request(`/api/groups/${groupId}/activity?page=${pageNumber}&limit=20`, owner),
+        groupId,
+        pageNumber,
+      );
+      if (!current(owner) || view !== viewRequest || read !== activityRequest) return;
+      const events = [
+        ...new Map(
+          [...(append ? previous.events : []), ...page.events].map((event) => [event._id, event]),
+        ).values(),
+      ];
+      publish({
+        ...snapshot,
+        activity: {
+          ...snapshot.activity,
+          events,
+          pagination: page.pagination,
+          status: 'ready',
+          moreStatus: 'idle',
+          message: null,
+        },
+      });
+    } catch (error) {
+      if (
+        !current(owner) ||
+        view !== viewRequest ||
+        read !== activityRequest ||
+        error instanceof Superseded
+      )
+        return;
+      const denied = error instanceof RequestError && [403, 404].includes(error.status);
+      if (denied) dropDeniedGroup(groupId, error);
+      publish({
+        ...snapshot,
+        activity: denied
+          ? { ...emptyActivity(), groupId, status: 'denied', message: error.message }
+          : {
+              ...previous,
+              selected: null,
+              target: { status: 'none' },
+              status: append ? 'ready' : 'error',
+              moreStatus: append ? 'error' : 'idle',
+              message:
+                'Could not refresh Activity. Previously loaded events may be stale. A missing event does not mean the ledger change failed.',
+            },
+      });
+    }
+  };
+  const openActivity = async (groupId: string) => {
+    if (snapshot.auth.status !== 'authenticated' || expenseNavigationBlocked()) return;
+    viewRequest += 1;
+    publish({ ...snapshot, screen: 'activity', activity: { ...emptyActivity(), groupId } });
+    await readActivity(false);
+  };
+  const refreshActivity = () => readActivity(false);
+  const loadMoreActivity = () => readActivity(true);
+
+  const selectActivity = async (eventId: string) => {
+    const activity = snapshot.activity;
+    if (
+      snapshot.screen !== 'activity' ||
+      snapshot.auth.status !== 'authenticated' ||
+      activity.status !== 'ready'
+    )
+      return;
+    const event = activity.events.find((item) => item._id === eventId),
+      groupId = activity.groupId;
+    if (!event || !groupId) return;
+    const owner = generation,
+      view = viewRequest,
+      read = ++activityDetailRequest;
+    publish({
+      ...snapshot,
+      activity: { ...activity, selected: event, target: { status: 'loading' } },
+    });
+    let targetRequested = false;
+    try {
+      const group = parseGroup(await request(`/api/groups/${groupId}`, owner));
+      if (!current(owner) || view !== viewRequest || read !== activityDetailRequest) return;
+      if (
+        group.id !== groupId ||
+        !group.members.some((member) => member.user.id === snapshot.auth.user?.id)
+      )
+        throw new RequestError('You no longer have access to this Group.', 403);
+      const expenseId = event.type.startsWith('expense_') ? event.metadata.expenseId : undefined;
+      let target: typeof activity.target = { status: 'none' };
+      if (expenseId) {
+        targetRequested = true;
+        target = parseActivityExpense(
+          await request(`/api/groups/${groupId}/expenses/${expenseId}`, owner),
+          groupId,
+          expenseId,
+        );
+      }
+      if (!current(owner) || view !== viewRequest || read !== activityDetailRequest) return;
+      publish({ ...snapshot, activity: { ...snapshot.activity, target } });
+    } catch (error) {
+      if (
+        !current(owner) ||
+        view !== viewRequest ||
+        read !== activityDetailRequest ||
+        error instanceof Superseded
+      )
+        return;
+      if (
+        error instanceof RequestError &&
+        (error.status === 403 || (!targetRequested && error.status === 404))
+      ) {
+        dropDeniedGroup(groupId, error);
+        return;
+      }
+      publish({
+        ...snapshot,
+        activity: {
+          ...snapshot.activity,
+          target: {
+            status: error instanceof RequestError && error.status === 404 ? 'unavailable' : 'error',
+          },
+        },
+      });
+    }
+  };
+  const closeActivityDetail = () => {
+    activityDetailRequest += 1;
+    publish({
+      ...snapshot,
+      activity: { ...snapshot.activity, selected: null, target: { status: 'none' } },
+    });
+  };
 
   const expenseNavigationBlocked = () =>
     (snapshot.screen === 'expense' &&
@@ -2392,6 +2562,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const back = () => {
+    if (snapshot.screen === 'activity') {
+      if (snapshot.activity.selected) return closeActivityDetail();
+      if (snapshot.activity.groupId && snapshot.activity.status !== 'denied')
+        return openGroup(snapshot.activity.groupId);
+    }
     if (snapshot.screen === 'invite') {
       void cancelInvitation();
       return;
@@ -2419,6 +2594,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.screen === 'invite' && snapshot.auth.status !== 'authenticated')
       return retryInvitation();
     if (snapshot.auth.status !== 'authenticated') return restore();
+    if (snapshot.screen === 'activity') return refreshActivity();
     if (['create', 'invite', 'settings', 'expense', 'settlement'].includes(snapshot.screen)) {
       const owner = generation;
       try {
@@ -2495,6 +2671,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   return {
+    openActivity,
+    selectActivity,
+    closeActivityDetail,
+    refreshActivity,
+    loadMoreActivity,
     reviewExpenseDeletion,
     cancelExpenseDeletion,
     deleteExpense: () => saveExpenseEdit('delete'),

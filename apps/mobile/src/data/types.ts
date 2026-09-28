@@ -1,3 +1,4 @@
+import type { ActivityState } from './activity';
 import type { AccountGroupRecordStore } from './account-record-storage';
 import type { SettlementState } from './settlement';
 import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
@@ -131,9 +132,18 @@ export interface MobileSnapshot {
     user: SessionUser | null;
     message: string | null;
   };
-  screen: 'groups' | 'group' | 'create' | 'invite' | 'settings' | 'expense' | 'settlement';
+  screen:
+    | 'groups'
+    | 'group'
+    | 'create'
+    | 'invite'
+    | 'settings'
+    | 'expense'
+    | 'settlement'
+    | 'activity';
   expense: ExpenseEditor;
   settlement: SettlementState;
+  activity: ActivityState;
   home: HomeFinancialState;
   financial: GroupFinancialState;
   creation: GroupCreation;
