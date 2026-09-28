@@ -1,0 +1,132 @@
+import { z } from 'zod';
+import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
+import { createSettlementSchema } from '@splitbook/shared/validators/settlement';
+import {
+  parseAmountMinor,
+  readStoredAmountMinor,
+  toMajorAmount,
+} from '@splitbook/shared/exact-money';
+import { objectId } from './dto';
+import type { GroupCurrencyBalance, MobileGroup } from './types';
+
+export interface SettlementDraft {
+  paidBy: string;
+  paidTo: string;
+  currency: string;
+  amount: string;
+  note: string;
+}
+export interface SettlementAttempt {
+  key: string;
+  body: string;
+}
+const person = z
+  .union([objectId, z.object({ _id: objectId, name: z.string().optional() }), z.null()])
+  .transform((value) => ({
+    id: typeof value === 'string' ? value : (value?._id ?? null),
+    name: typeof value === 'object' && value ? (value.name ?? 'Former member') : 'Former member',
+  }));
+const record = z.object({
+  _id: objectId,
+  group: objectId,
+  paidBy: person,
+  paidTo: person,
+  amount: z.number(),
+  amountMinor: z.number().int().optional(),
+  moneyVersion: z.number().int().optional(),
+  currency: z.string(),
+  note: z.string().default(''),
+  createdAt: z.iso.datetime({ offset: true }),
+});
+export type SettlementRecord = z.infer<typeof record>;
+export interface SettlementState {
+  groupId: string | null;
+  group: MobileGroup | null;
+  balances: GroupCurrencyBalance[];
+  history: SettlementRecord[];
+  status:
+    | 'idle'
+    | 'loading'
+    | 'ready'
+    | 'editing'
+    | 'review'
+    | 'saving'
+    | 'uncertain'
+    | 'blocked'
+    | 'error';
+  draft: SettlementDraft | null;
+  attempt: SettlementAttempt | null;
+  suggested: number | null;
+  acknowledged: boolean;
+  message: string | null;
+}
+export const emptySettlement = (): SettlementState => ({
+  groupId: null,
+  group: null,
+  balances: [],
+  history: [],
+  status: 'idle',
+  draft: null,
+  attempt: null,
+  suggested: null,
+  acknowledged: false,
+  message: null,
+});
+export function parseSettlementHistory(value: unknown, groupId: string) {
+  const records = z.object({ status: z.literal(200), data: z.array(record) }).parse(value).data;
+  for (const item of records) {
+    if (item.group !== groupId) throw new Error('Unexpected Settlement Group');
+    readStoredAmountMinor(item);
+  }
+  return records;
+}
+export function settlementBody(draft: SettlementDraft) {
+  const amount = toMajorAmount(parseAmountMinor(draft.amount, draft.currency), draft.currency);
+  return JSON.stringify(
+    createSettlementSchema
+      .safeExtend({ paidBy: objectId, paidTo: objectId })
+      .parse({ ...draft, amount }),
+  );
+}
+export function parseSettlementAttempt(value: unknown, accountId: string, groupId: string) {
+  const stored = z
+    .object({
+      version: z.literal(1),
+      accountId: z.literal(accountId),
+      groupId: z.literal(groupId),
+      key: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/),
+      body: z.string(),
+    })
+    .parse(value);
+  const payload = createSettlementSchema
+    .safeExtend({ paidBy: objectId, paidTo: objectId })
+    .parse(JSON.parse(stored.body));
+  if (!canRecordSettlement(accountId, payload.paidBy, payload.paidTo))
+    throw new Error('Unexpected Settlement account');
+  return {
+    attempt: { key: stored.key, body: stored.body },
+    draft: { ...payload, amount: String(payload.amount), note: payload.note ?? '' },
+  };
+}
+export function settlementSuggestion(balances: GroupCurrencyBalance[], draft: SettlementDraft) {
+  return (
+    balances
+      .find((b) => b.currency === draft.currency)
+      ?.debts.find((d) => d.from.id === draft.paidBy && d.to.id === draft.paidTo)?.amount ?? 0
+  );
+}
+
+export function parseRecordedSettlement(value: unknown, groupId: string, body: string) {
+  const saved = z.object({ status: z.literal(201), data: record }).parse(value).data;
+  const expected = createSettlementSchema.safeExtend({ paidBy: objectId }).parse(JSON.parse(body));
+  if (
+    saved.group !== groupId ||
+    saved.paidBy.id !== expected.paidBy ||
+    saved.paidTo.id !== expected.paidTo ||
+    saved.currency !== expected.currency ||
+    readStoredAmountMinor(saved) !== parseAmountMinor(expected.amount, expected.currency) ||
+    saved.note !== (expected.note ?? '')
+  )
+    throw new Error('Unexpected recorded payment');
+  return saved;
+}

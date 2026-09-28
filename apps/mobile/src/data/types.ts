@@ -1,3 +1,5 @@
+import type { AccountGroupRecordStore } from './account-record-storage';
+import type { SettlementState } from './settlement';
 import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
 import type { GroupCategory } from '@splitbook/shared/types';
 
@@ -129,8 +131,9 @@ export interface MobileSnapshot {
     user: SessionUser | null;
     message: string | null;
   };
-  screen: 'groups' | 'group' | 'create' | 'invite' | 'settings' | 'expense';
+  screen: 'groups' | 'group' | 'create' | 'invite' | 'settings' | 'expense' | 'settlement';
   expense: ExpenseEditor;
+  settlement: SettlementState;
   home: HomeFinancialState;
   financial: GroupFinancialState;
   creation: GroupCreation;
@@ -215,5 +218,6 @@ export interface MobileDependencies {
   accountLocal?: AccountLocalStorage;
   now?: () => number;
   expenseDrafts?: ExpenseDraftStore;
+  settlementAttempts?: AccountGroupRecordStore;
   newSubmissionKey?: () => string;
 }

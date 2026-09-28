@@ -43,7 +43,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return success(settlement, 201);
   } catch (err) {
     if (err instanceof Error && err.message in settlementValidationMessages) {
-      return error(settlementValidationMessages[err.message], 422);
+      return error(settlementValidationMessages[err.message], 422, err.message);
     }
 
     return serverError(err);
