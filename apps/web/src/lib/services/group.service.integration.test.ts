@@ -158,6 +158,37 @@ describe('GroupService integration', () => {
       expect(stored!.members.find((m) => m.user.toString() === bob)?.role).toBe('admin');
     });
 
+    it('records the previous and new role when a member role changes', async () => {
+      const group = await createTrip();
+      const groupId = group._id.toString();
+      await groupService.addMember(groupId, bob);
+
+      await groupService.updateMemberRole(groupId, bob, 'admin', alice);
+      await groupService.updateMemberRole(groupId, alice, 'member', bob);
+
+      const changes = await Activity.find({ group: groupId, type: 'group_updated' })
+        .sort({ createdAt: 1, _id: 1 })
+        .lean();
+      expect(changes.map((activity) => activity.metadata)).toEqual([
+        {
+          changes: {
+            memberRole: {
+              old: { userId: bob, role: 'member' },
+              new: { userId: bob, role: 'admin' },
+            },
+          },
+        },
+        {
+          changes: {
+            memberRole: {
+              old: { userId: alice, role: 'admin' },
+              new: { userId: alice, role: 'member' },
+            },
+          },
+        },
+      ]);
+    });
+
     it('blocks self-removal and removal of the last admin', async () => {
       const group = await createTrip();
       const groupId = group._id.toString();

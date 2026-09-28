@@ -340,3 +340,69 @@ test('legacy binary-tail amounts remain editable without changing their exact al
     before,
   );
 });
+
+test('manual historical equal preview survives participant reorder and agrees with save and Balances', async ({
+  page,
+  ledger,
+}) => {
+  const dbName = process.env.EXPENSE_ACCESS_TEST_DB;
+  if (!dbName || !/^splitbook-test-access-[a-f0-9-]+$/.test(dbName))
+    throw new Error('Isolated database required');
+  const client = new MongoClient(`mongodb://127.0.0.1:27017/${dbName}?directConnection=true`);
+  const id = new ObjectId();
+  try {
+    await client.connect();
+    await client
+      .db(dbName)
+      .collection('expenses')
+      .insertOne({
+        _id: id,
+        group: new ObjectId(ledger.groupB),
+        description: 'Historical remainder',
+        amount: 0.03,
+        currency: 'INR',
+        category: 'other',
+        tag: 'Rent',
+        date: new Date(),
+        paidBy: [{ user: new ObjectId(sam), amount: 0.03 }],
+        splitMethod: 'equal',
+        splitBetween: [
+          { user: new ObjectId(sam), amount: 0.01 },
+          { user: new ObjectId(priya), amount: 0.02 },
+        ],
+        createdBy: new ObjectId(sam),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        isDeleted: false,
+        editHistory: [],
+      });
+  } finally {
+    await client.close();
+  }
+  const balancePath = `/api/groups/${ledger.groupB}/balances`;
+  const before = await dataOf(await ledger.sam.get(balancePath));
+  await enter(page, ledger.sam, `/groups/${ledger.groupB}`);
+  await page
+    .getByRole('button', { name: /Historical remainder, ₹0\.03/ })
+    .getByLabel('Expense actions')
+    .click();
+  await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  const samRow = dialog.getByText('You', { exact: true }).last().locator('..');
+  const priyaRow = dialog.getByText('Priya Shah', { exact: true }).last().locator('..');
+  await expect(samRow).toContainText('₹0.01');
+  await expect(priyaRow).toContainText('₹0.02');
+  // Toggling one participant off/on changes presentation order, not the definition.
+  await samRow.getByRole('checkbox').uncheck();
+  await samRow.getByRole('checkbox').check();
+  await expect(samRow).toContainText('₹0.01');
+  await expect(priyaRow).toContainText('₹0.02');
+  await dialog.getByLabel('What was it for?').fill('Historical remainder corrected');
+  await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const stored = await dataOf(await ledger.sam.get(expensePath(ledger.groupB, id.toHexString())));
+  expect(stored.splitBetween.map((row: { amountMinor: number }) => row.amountMinor)).toEqual([
+    1, 2,
+  ]);
+  expect(await dataOf(await ledger.sam.get(balancePath))).toEqual(before);
+});

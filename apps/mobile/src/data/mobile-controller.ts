@@ -1189,7 +1189,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           message: storing
             ? 'Could not save the submission on this device. No Expense was sent. Retry local storage before saving.'
             : attempt
-              ? 'This Expense may already be saved. Retry this same submission to confirm it; its amount and participants are locked until then.'
+              ? `${error instanceof RequestError ? `${error.message} ` : ''}This Expense may already be saved. Retry this same submission to confirm it; its amount and participants are locked until then.`
               : error instanceof RequestError
                 ? error.message
                 : 'Check the amount, date, participants, currency, and active Tag. Your draft is still here.',

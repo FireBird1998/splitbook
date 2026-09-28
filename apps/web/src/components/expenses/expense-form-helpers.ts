@@ -3,32 +3,19 @@
  */
 
 import { getPredefinedItem } from '@splitbook/shared/predefined-items';
-import {
-  assertStoredExpenseMoney,
-  readStoredAmountMinor,
-  toMajorAmount,
-} from '@splitbook/shared/exact-money';
+import { readExpenseMoney, type StoredExpenseMoney } from '@splitbook/shared/expense-money-edit';
 
 /** Stored amounts may carry legacy binary tails; new user input remains strict. */
-export function getStoredExpenseMoneyFields(
-  expense: Parameters<typeof assertStoredExpenseMoney>[0],
-): { amount: string; paidBy: string[]; splitBetween: string[] } {
-  assertStoredExpenseMoney(expense);
-  const inputAmount = (value: { amount?: number; amountMinor?: number }): string =>
-    String(
-      toMajorAmount(
-        readStoredAmountMinor({
-          ...value,
-          currency: expense.currency,
-          moneyVersion: expense.moneyVersion,
-        }),
-        expense.currency,
-      ),
-    );
+export function getStoredExpenseMoneyFields(expense: Omit<StoredExpenseMoney, 'splitMethod'>): {
+  amount: string;
+  paidBy: string[];
+  splitBetween: string[];
+} {
+  const money = readExpenseMoney({ ...expense, splitMethod: 'exact' });
   return {
-    amount: inputAmount(expense),
-    paidBy: expense.paidBy.map(inputAmount),
-    splitBetween: expense.splitBetween.map(inputAmount),
+    amount: String(money.amount),
+    paidBy: money.paidBy.map((row) => String(row.amount)),
+    splitBetween: money.splitBetween.map((row) => String(row.amount)),
   };
 }
 

@@ -178,6 +178,29 @@ describe('native Expense creation', () => {
     },
   );
 
+  it.each([
+    ['permission', 'You no longer have access to this group.'],
+    ['connection', 'Could not reach SplitBook. Check your connection and try again.'],
+  ])('keeps the %s failure visible alongside immutable recovery', async (failure, message) => {
+    const { controller, records } = setup((path, init) => {
+      if (path.endsWith('/expenses') && init.method === 'POST') {
+        return failure === 'permission'
+          ? Promise.resolve(json({ error: 'Forbidden', status: 403 }, 403))
+          : Promise.reject(new Error('Network unavailable'));
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+    await controller.saveExpense();
+    const expense = controller.getSnapshot().expense;
+    expect(expense.status).toBe('uncertain');
+    expect(expense.message).toContain(message);
+    expect(expense.message).toContain('Retry this same submission');
+    expect(expense.attempt).not.toBeNull();
+    expect([...records.values()][0]).toMatchObject({ attempt: expense.attempt });
+  });
+
   it('refreshes Tag names and refuses an archived Tag without substituting another one', async () => {
     let renamed = false;
     let archived = false;

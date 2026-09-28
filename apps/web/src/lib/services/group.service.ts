@@ -228,13 +228,14 @@ export class GroupService {
       }
     }
 
+    const previousRole = target.role;
     target.role = newRole;
     await group.save();
 
     await activityService.log(groupId, 'group_updated', actorId, {
       changes: {
         memberRole: {
-          old: { userId: targetUserId, role: target.role },
+          old: { userId: targetUserId, role: previousRole },
           new: { userId: targetUserId, role: newRole },
         },
       },

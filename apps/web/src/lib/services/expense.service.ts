@@ -24,6 +24,7 @@ import {
   sumMinorAmounts,
   toMajorAmount,
 } from '@splitbook/shared/exact-money';
+import { decideExpenseMoneyEdit } from '@splitbook/shared/expense-money-edit';
 import {
   assertCreateReplay,
   assertPendingActivityCapacity,
@@ -366,77 +367,15 @@ export class ExpenseService {
     if (!expense) return null;
     assertExpectedRevision(expense.revision, expectedRevision);
     const original = expense.toObject();
-    assertStoredExpenseMoney(original);
-    const storedMajor = (record: { amount: number; amountMinor?: number }) =>
-      toMajorAmount(
-        readStoredAmountMinor({
-          ...record,
-          currency: original.currency,
-          moneyVersion: original.moneyVersion,
-        }),
-        original.currency,
-      );
-    const canonicalOriginal = {
-      ...original,
-      amount: storedMajor(original),
-      paidBy: original.paidBy.map((row) => ({ ...row, amount: storedMajor(row) })),
-      splitBetween: original.splitBetween.map((row) => ({ ...row, amount: storedMajor(row) })),
-    };
-    const merged = { ...canonicalOriginal, ...data };
-    // A restore is a real write and follows the same whole-record validation as editing.
-    const sameRows = (
-      next: typeof data.paidBy | typeof data.splitBetween,
-      previous: typeof original.paidBy | typeof original.splitBetween,
-      keys: string[],
-    ) => {
-      if (next === undefined) return true;
-      if (next.length !== previous.length) return false;
-      // Form order is not a financial change. Sort copies so the stored
-      // participant order and historical allocation remain intact.
-      const byUser = (left: { user: unknown }, right: { user: unknown }) =>
-        String(left.user).localeCompare(String(right.user));
-      const nextRows = [...next].sort(byUser);
-      const previousRows = [...previous].sort(byUser);
-      return nextRows.every((row, index) =>
-        keys.every(
-          (key) =>
-            String(Reflect.get(row, key) ?? '') ===
-            String(Reflect.get(previousRows[index], key) ?? ''),
-        ),
-      );
-    };
-    const allocationKeys =
-      original.splitMethod === 'percentage'
-        ? ['user', 'percentage']
-        : original.splitMethod === 'shares'
-          ? ['user', 'shares']
-          : original.splitMethod === 'equal'
-            ? ['user']
-            : ['user', 'amount'];
-    const financialEdit =
-      (data.amount !== undefined && data.amount !== canonicalOriginal.amount) ||
-      (data.currency !== undefined && data.currency !== original.currency) ||
-      (data.splitMethod !== undefined && data.splitMethod !== original.splitMethod) ||
-      !sameRows(data.paidBy, canonicalOriginal.paidBy, ['user', 'amount']) ||
-      !sameRows(data.splitBetween, canonicalOriginal.splitBetween, allocationKeys);
+    const { financialEdit, money } = decideExpenseMoneyEdit(original, data);
     if (financialEdit)
       assertExpenseParticipants(
         new Set(group.members.map((member) => String(member.user))),
-        merged.paidBy,
-        merged.splitBetween,
+        money.paidBy,
+        money.splitBetween,
       );
     if (data.currency !== undefined && data.currency !== original.currency)
       assertGroupCurrency(group.defaultCurrency, data.currency);
-    const money = normalizeExpenseMoney({
-      ...(financialEdit ? merged : { ...merged, splitMethod: 'exact' as const }),
-      paidBy: merged.paidBy.map((row) => ({ ...row, user: String(row.user) })),
-      splitBetween: (financialEdit ? merged.splitBetween : canonicalOriginal.splitBetween).map(
-        (row) => ({
-          ...row,
-          user: String(row.user),
-        }),
-      ),
-    });
     const tagReference = resolveTagReference(group.tags, data, expense);
     const changes: Record<string, { old: unknown; new: unknown }> = {};
     const resultingChanges = { ...data, ...(financialEdit ? money : {}), ...tagReference };
