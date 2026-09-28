@@ -190,7 +190,10 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
       });
       if (res.ok) {
         mutate();
-        globalMutate((key: unknown) => typeof key === 'string' && key.includes('/api/groups'));
+        globalMutate(
+          (key: unknown) =>
+            (typeof key === 'string' && key.includes('/api/groups')) || isGroupReadKey(key),
+        );
         setSnackbar({ open: true, message: 'Group info updated' });
       }
     } catch {

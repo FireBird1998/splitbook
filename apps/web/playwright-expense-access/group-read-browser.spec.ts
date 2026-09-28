@@ -97,7 +97,9 @@ for (const path of ['/groups', '/dashboard']) {
       payload.data[0].defaultCurrency = 'UNSUPPORTED-private-payload';
       await route.fulfill({ response, json: payload });
     });
-    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/groups' && response.status() === 200);
+    const refreshed = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === '/api/groups' && response.status() === 200,
+    );
     await page.clock.runFor(31_000);
     await refreshed;
     const error = page.getByRole('alert').filter({ hasText: staleMessage });
@@ -246,7 +248,9 @@ for (const surface of ['detail', 'settings']) {
       payload.data.members[0].user = null;
       await route.fulfill({ response, json: payload });
     });
-    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname === apiPath && response.status() === 200);
+    const refreshed = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === apiPath && response.status() === 200,
+    );
     await page.clock.runFor(31_000);
     await refreshed;
     const stale = page
@@ -274,3 +278,62 @@ for (const surface of ['detail', 'settings']) {
     await expect(content).toBeVisible();
   });
 }
+
+test('saving Group settings preserves fields and updates the list, dashboard Theme and trip dates through client navigation', async ({
+  page,
+  ledger,
+}) => {
+  const apiPath = `/api/groups/${ledger.groupB}`;
+  const settingsPath = `/groups/${ledger.groupB}/settings`;
+  const before = await dataOf(await ledger.priya.get(apiPath));
+  // Warm the account-scoped list before editing so navigation also exercises invalidation.
+  await enter(page, ledger, '/groups', 'priya');
+  await page.locator(`a[href="${settingsPath}"]`).click();
+  await expect(page.getByLabel('Group Name', { exact: true })).toHaveValue(before.name);
+  const name = 'Shared contract spring trip';
+  await page.getByLabel('Group Name', { exact: true }).fill(name);
+  await page
+    .getByLabel('Description', { exact: true })
+    .fill('Saved through the actual settings form');
+  await page.getByRole('combobox', { name: 'Category', exact: true }).click();
+  await page.getByRole('option', { name: /Trip$/ }).click();
+  await page.getByLabel('Start date', { exact: true }).fill('2032-04-10');
+  await page.getByLabel('End date', { exact: true }).fill('2032-04-14');
+  const saved = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === apiPath && response.request().method() === 'PATCH',
+  );
+  await page.getByRole('button', { name: 'Save Changes', exact: true }).click();
+  expect((await saved).status()).toBe(200);
+  await expect(page.getByText('Group info updated', { exact: true })).toBeVisible();
+  const persisted = await dataOf(await ledger.priya.get(apiPath));
+  expect(persisted).toMatchObject({
+    name,
+    description: 'Saved through the actual settings form',
+    category: 'trip',
+    startDate: '2032-04-10T00:00:00.000Z',
+    endDate: '2032-04-14T00:00:00.000Z',
+    defaultCurrency: before.defaultCurrency,
+    alternateCurrencies: before.alternateCurrencies,
+    members: before.members,
+    tags: before.tags,
+  });
+
+  const navigation = page.getByRole('navigation', { name: 'Primary', exact: true });
+  await navigation.getByRole('link', { name: 'Groups', exact: true }).click();
+  await expect(page).toHaveURL(/\/groups$/);
+  await expect(page.getByRole('link', { name, exact: true })).toBeVisible();
+  await expect(page.getByText('Apr 10, 2032 – Apr 14, 2032', { exact: true })).toBeVisible();
+  await navigation.getByRole('link', { name: 'Dashboard', exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  // The Trip-specific link label proves the saved Theme reached the dashboard adapter.
+  const trip = page.getByRole('link', { name: /^Shared contract spring trip trip,/ });
+  await expect(trip).toBeVisible();
+  await expect(trip).toHaveAccessibleName(/Apr 10, 2032 – Apr 14, 2032/);
+  await navigation.getByRole('link', { name: 'Groups', exact: true }).click();
+  await page.locator(`a[href="${settingsPath}"]`).click();
+  await expect(page.getByLabel('Group Name', { exact: true })).toHaveValue(name);
+  await expect(page.getByRole('combobox', { name: 'Category', exact: true })).toContainText('Trip');
+  await expect(page.getByLabel('Start date', { exact: true })).toHaveValue('2032-04-10');
+  await expect(page.getByLabel('End date', { exact: true })).toHaveValue('2032-04-14');
+});
