@@ -38,6 +38,7 @@ import {
   type SplitParticipantInput,
   type ExpenseSplitMethod,
 } from '@splitbook/shared/split-calculation';
+import { toDateParam } from '@splitbook/shared/date';
 import { buildDuplicateCheckUrl } from './expense-duplicate-check';
 import {
   getDefaultExpenseTag,
@@ -118,7 +119,7 @@ export default function ExpenseFormDialog({
   const [amount, setAmount] = useState('');
   const [currency, setCurrency] = useState(defaultCurrency);
   const [category, setCategory] = useState('other');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(() => toDateParam(new Date()));
   const [splitMethod, setSplitMethod] = useState<string>('equal');
   const [selectedMembers, setSelectedMembers] = useState<string[]>(members.map((m) => m.user._id));
   const [tag, setTag] = useState('');
@@ -144,7 +145,7 @@ export default function ExpenseFormDialog({
     setCurrency(defaultCurrency);
     setCategory('other');
     // A month view passes the month's last day; otherwise default to today.
-    setDate(defaultDate ?? new Date().toISOString().split('T')[0]);
+    setDate(defaultDate ?? toDateParam(new Date()));
     setSplitMethod('equal');
     setSelectedMembers(members.map((m) => m.user._id));
     setTag(getDefaultExpenseTag(groupTags));
@@ -202,7 +203,7 @@ export default function ExpenseFormDialog({
       setCategory((expense.category as string) || 'other');
       const expDate = expense.date
         ? new Date(expense.date as string).toISOString().split('T')[0]
-        : (defaultDate ?? new Date().toISOString().split('T')[0]);
+        : (defaultDate ?? toDateParam(new Date()));
       setDate(expDate);
       setSplitMethod((expense.splitMethod as string) || 'equal');
       setTag((expense.tagId as string) || (expense.tag as string) || '');
