@@ -295,7 +295,7 @@ test('saving Group settings preserves fields and updates the list, dashboard The
   await page
     .getByLabel('Description', { exact: true })
     .fill('Saved through the actual settings form');
-  await page.getByRole('combobox', { name: 'Category', exact: true }).click();
+  await page.getByRole('combobox', { name: /^Category / }).click();
   await page.getByRole('option', { name: /Trip$/ }).click();
   await page.getByLabel('Start date', { exact: true }).fill('2032-04-10');
   await page.getByLabel('End date', { exact: true }).fill('2032-04-14');
@@ -333,7 +333,7 @@ test('saving Group settings preserves fields and updates the list, dashboard The
   await navigation.getByRole('link', { name: 'Groups', exact: true }).click();
   await page.locator(`a[href="${settingsPath}"]`).click();
   await expect(page.getByLabel('Group Name', { exact: true })).toHaveValue(name);
-  await expect(page.getByRole('combobox', { name: 'Category', exact: true })).toContainText('Trip');
+  await expect(page.getByRole('combobox', { name: /^Category / })).toContainText('Trip');
   await expect(page.getByLabel('Start date', { exact: true })).toHaveValue('2032-04-10');
   await expect(page.getByLabel('End date', { exact: true })).toHaveValue('2032-04-14');
 });
