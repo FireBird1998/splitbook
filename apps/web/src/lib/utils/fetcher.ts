@@ -18,8 +18,9 @@ export async function fetcher(url: string) {
     window.location.assign(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
   }
   if (!res.ok) {
+    const message = (json as { error?: unknown } | null)?.error;
     throw new HttpResponseError(
-      (json as { error?: string }).error || res.statusText || 'Request failed',
+      (typeof message === 'string' && message) || res.statusText || 'Request failed',
       res.status,
     );
   }

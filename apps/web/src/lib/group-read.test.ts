@@ -82,6 +82,13 @@ describe('Group read transport recovery', () => {
     },
   );
 
+  it('clears revoked Group data even when the denial response body is null', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('null', { status: 403 })));
+    await expect(
+      fetchGroupRead('/api/groups', (payload) => readWebGroupListResponse(payload, actor)),
+    ).resolves.toEqual({ denied: true });
+  });
+
   it('leaves recoverable failures rejected so SWR retains its previous verified result', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 503 })));
     await expect(
