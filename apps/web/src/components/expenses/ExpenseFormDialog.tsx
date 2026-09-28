@@ -24,6 +24,7 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useSWRConfig } from 'swr';
+import { toDateParam } from '@splitbook/shared/date';
 import { PREDEFINED_ITEMS } from '@splitbook/shared/predefined-items';
 import { getCurrency, formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
 import { parseDecimalUnits, sumMinorAmounts } from '@splitbook/shared/exact-money';
@@ -102,7 +103,7 @@ function ExpenseDraftDialog({
         memberIds: members.map((member) => member.user._id),
         currency: defaultCurrency,
         defaultTag: getDefaultExpenseTag(groupTags),
-        date: defaultDate ?? new Date().toISOString().split('T')[0],
+        date: defaultDate ?? toDateParam(new Date()),
       },
       initialExpense as unknown as SavedDraftExpense | null,
     ),

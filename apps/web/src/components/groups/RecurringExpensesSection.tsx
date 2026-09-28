@@ -33,7 +33,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import MoneyText from '@/components/common/MoneyText';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
-import { formatDate } from '@splitbook/shared/date';
+import { formatDate, toDateParam } from '@splitbook/shared/date';
 import { fetcher } from '@/lib/utils/fetcher';
 import { displayTagReference, findReferencedTag } from '@splitbook/shared/tag-identity';
 import {
@@ -119,7 +119,7 @@ function emptyForm(members: MemberLike[], activeTags: TagLike[]): FormState {
     splitMethod: 'equal',
     splits,
     dayOfMonth: '1',
-    startsOn: toDateInputValue(new Date()),
+    startsOn: toDateParam(new Date()),
     endsOn: '',
   };
 }

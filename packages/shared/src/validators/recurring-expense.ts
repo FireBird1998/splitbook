@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import { CURRENCY_CODES } from '../currency';
 import { CATEGORY_IDS } from '../categories';
 import { normalizeExpenseMoney } from '../exact-money';
+import { calendarDate } from './calendar-date';
 
 const recurringexpenseFields = z.object({
   description: z.string().trim().min(1, 'Description is required').max(200),
@@ -39,8 +40,8 @@ const recurringexpenseFields = z.object({
     .min(1, 'At least one person must be in the split'),
   /** 1–31; clamped to the last day of short months at generation time. */
   dayOfMonth: z.number().int().min(1).max(31),
-  startsOn: z.coerce.date(),
-  endsOn: z.coerce.date().nullable().optional(),
+  startsOn: calendarDate,
+  endsOn: calendarDate.nullable().optional(),
 });
 
 export const createRecurringExpenseSchema = recurringexpenseFields
