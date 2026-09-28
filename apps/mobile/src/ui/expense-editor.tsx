@@ -1,12 +1,29 @@
 import { useState } from 'react';
-import { View, Pressable } from 'react-native';
+import { View, Pressable, Modal, ScrollView, KeyboardAvoidingView } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
-import type { ExpenseDraft, ExpenseEditor as Editor } from '../data/expense-draft';
+import {
+  expenseMoney,
+  type ExpenseDraft,
+  type ExpenseEditor as Editor,
+} from '../data/expense-draft';
 import { Field } from './group-workflows';
 import { Button, Copy, Label, Loading, Notice, Panel } from './primitives';
 import { fonts, useTheme } from './theme';
+
+const methods = [
+  { id: 'equal', label: 'Equal', hint: 'Everyone has an equal share.' },
+  { id: 'unequal', label: 'Unequal', hint: 'Enter each person’s amount in the Group currency.' },
+  { id: 'percentage', label: 'Percentage', hint: 'Enter percentages that add up to 100.' },
+  {
+    id: 'shares',
+    label: 'Shares',
+    hint: 'Enter whole-number weights. For example, 2 shares and 1 share split the cost 2:1.',
+  },
+  { id: 'exact', label: 'Exact', hint: 'Enter exact amounts that add up to the Expense total.' },
+] as const;
 
 export function ExpenseEditor({
   state,
@@ -25,6 +42,7 @@ export function ExpenseEditor({
 }) {
   const theme = useTheme();
   const [details, setDetails] = useState(false);
+  const [editor, setEditor] = useState<'payers' | 'split' | null>(null);
   if (state.status === 'loading') return <Loading label="Opening your draft…" />;
   if (!state.draft)
     return (
@@ -41,9 +59,26 @@ export function ExpenseEditor({
     members.find((member) => member.id === id)?.name ?? 'Unavailable member';
   const invalidMembers =
     context &&
-    [draft.payerId, ...draft.participantIds].some(
-      (id) => !members.some((member) => member.id === id),
-    );
+    [
+      ...(draft.multiPayer ? draft.payers.map((payer) => payer.user) : [draft.payerId]),
+      ...draft.participantIds,
+    ].some((id) => !members.some((member) => member.id === id));
+  let allocation: ReturnType<typeof expenseMoney> | null = null;
+  let allocationError = '';
+  try {
+    allocation = expenseMoney(draft);
+  } catch (error) {
+    allocationError = error instanceof Error ? error.message : 'Review the allocation.';
+  }
+  const money = (minor: number) =>
+    formatCurrency(toMajorAmount(minor, draft.currency), draft.currency);
+  const method = methods.find((item) => item.id === draft.splitMethod)!;
+  const valueLabel =
+    draft.splitMethod === 'percentage'
+      ? 'Percent'
+      : draft.splitMethod === 'shares'
+        ? 'Shares'
+        : `Amount (${draft.currency})`;
   const tag = context?.tags.find((item) => item.id === draft.tagId);
   const choice = (
     key: string,
@@ -84,7 +119,7 @@ export function ExpenseEditor({
         Add expense
       </Copy>
       <Copy style={{ color: theme.textSecondary }}>
-        Split a shared cost equally. Your draft stays on this device until you save or discard it.
+        Split a shared cost. Your draft stays on this device until you save or discard it.
       </Copy>
       {state.status === 'resume' && (
         <Panel>
@@ -148,55 +183,29 @@ export function ExpenseEditor({
         editable={!locked}
         onChangeText={(date) => onChange({ date })}
       />
-      <View style={{ gap: 8 }} accessibilityRole="radiogroup">
+      <Panel>
         <Copy style={{ fontFamily: fonts.semibold }}>Paid by</Copy>
-        {members.map((member) =>
-          choice(
-            member.id,
-            `Paid by ${member.name}`,
-            draft.payerId === member.id,
-            () => onChange({ payerId: member.id }),
-            true,
-          ),
-        )}
-        {!members.length && <Copy>{name(draft.payerId)}</Copy>}
-      </View>
-      <View style={{ gap: 8 }}>
-        <Copy style={{ fontFamily: fonts.semibold }}>Split equally between</Copy>
-        {members.map((member) =>
-          choice(
-            member.id,
-            `Include ${member.name}`,
-            draft.participantIds.includes(member.id),
-            () =>
-              onChange({
-                participantIds: draft.participantIds.includes(member.id)
-                  ? draft.participantIds.filter((id) => id !== member.id)
-                  : [...draft.participantIds, member.id],
-              }),
-          ),
-        )}
+        <Copy>
+          {draft.multiPayer
+            ? `${draft.payers.length} ${draft.payers.length === 1 ? 'payer' : 'payers'}`
+            : name(draft.payerId)}
+        </Copy>
+        <Button
+          label="Edit payers"
+          secondary
+          disabled={locked}
+          onPress={() => setEditor('payers')}
+        />
+        <Copy style={{ fontFamily: fonts.semibold }}>Split · {method.label}</Copy>
+        <Copy>{draft.participantIds.length} participants</Copy>
+        <Button label="Edit split" secondary disabled={locked} onPress={() => setEditor('split')} />
         {invalidMembers && (
-          <>
-            <Copy accessibilityRole="alert">
-              A saved payer or participant is no longer in this Group. Choose a current payer and
-              review the participants.
-            </Copy>
-            <Button
-              label="Remove unavailable participants"
-              secondary
-              disabled={locked}
-              onPress={() =>
-                onChange({
-                  participantIds: draft.participantIds.filter((id) =>
-                    members.some((member) => member.id === id),
-                  ),
-                })
-              }
-            />
-          </>
+          <Copy accessibilityRole="alert">
+            A saved payer or participant is no longer in this Group. Open the editors to remove
+            unavailable members.
+          </Copy>
         )}
-      </View>
+      </Panel>
       <View style={{ gap: 8 }} accessibilityRole="radiogroup">
         <Copy style={{ fontFamily: fonts.semibold }}>Tag · required</Copy>
         {draft.tagId && context && (!tag || tag.isArchived || tag.isDeleted) ? (
@@ -222,24 +231,40 @@ export function ExpenseEditor({
         )}
       </View>
       <Panel>
-        <Label>EQUAL SPLIT PREVIEW</Label>
-        {state.preview ? (
-          state.preview.map((share) => (
-            <View
-              key={String(share.user)}
-              style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}
-            >
-              <Copy style={{ flex: 1 }}>{name(String(share.user))}</Copy>
-              <Copy style={{ fontFamily: fonts.mono }}>
-                {formatCurrency(toMajorAmount(share.amountMinor, draft.currency), draft.currency)}
-              </Copy>
-            </View>
-          ))
+        <Label>REVIEW ALLOCATION · {draft.currency}</Label>
+        {allocation ? (
+          <>
+            <Copy style={{ fontFamily: fonts.semibold }}>Paid</Copy>
+            {allocation.paidBy.map((payer) => (
+              <View
+                key={String(payer.user)}
+                style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}
+              >
+                <Copy style={{ flex: 1 }}>{name(String(payer.user))}</Copy>
+                <Copy style={{ fontFamily: fonts.mono }}>{money(payer.amountMinor)}</Copy>
+              </View>
+            ))}
+            <Copy style={{ fontFamily: fonts.semibold }}>Owes · {method.label}</Copy>
+            {allocation.splitBetween.map((share) => (
+              <View
+                key={String(share.user)}
+                style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}
+              >
+                <Copy style={{ flex: 1 }}>{name(String(share.user))}</Copy>
+                <Copy style={{ fontFamily: fonts.mono }}>{money(share.amountMinor)}</Copy>
+              </View>
+            ))}
+            <Copy>Total paid = total allocated = {money(allocation.amountMinor)}</Copy>
+          </>
         ) : (
-          <Copy>Enter an amount and choose participants to see each share.</Copy>
+          <Copy accessibilityRole="alert">
+            {draft.amount
+              ? allocationError
+              : 'Enter an amount and choose participants to review the allocation.'}
+          </Copy>
         )}
         <Copy style={{ fontSize: 13, color: theme.textSecondary }}>
-          Any smallest-unit remainder goes to the first selected participants.
+          Rounding keeps the full amount accounted for, even when it cannot divide evenly.
         </Copy>
       </Panel>
       <Button
@@ -300,6 +325,177 @@ export function ExpenseEditor({
           check Group history before recreating this expense.
         </Copy>
       )}
+      <Modal visible={editor !== null} animationType="slide" onRequestClose={() => setEditor(null)}>
+        <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior="height">
+            <View style={{ padding: 20, gap: 12 }}>
+              <Copy
+                accessibilityRole="header"
+                style={{ fontFamily: fonts.semibold, fontSize: 26, lineHeight: 32 }}
+              >
+                {editor === 'payers' ? 'Who paid?' : 'Choose the split'}
+              </Copy>
+              <Button label="Done" onPress={() => setEditor(null)} />
+            </View>
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ padding: 20, gap: 16 }}
+            >
+              {editor === 'payers' ? (
+                <>
+                  {choice('multiple', 'Multiple payers', draft.multiPayer, () =>
+                    onChange({
+                      multiPayer: !draft.multiPayer,
+                      ...(draft.multiPayer || draft.payers.length
+                        ? {}
+                        : { payers: [{ user: draft.payerId, amount: draft.amount }] }),
+                    }),
+                  )}
+                  <Copy>
+                    {draft.multiPayer
+                      ? 'Enter what each person paid. The amounts must add up to the Expense total.'
+                      : 'One person paid the full Expense amount.'}
+                  </Copy>
+                  {members.map((member) => (
+                    <View key={member.id} style={{ gap: 8 }}>
+                      {choice(
+                        member.id,
+                        `Paid by ${member.name}`,
+                        draft.multiPayer
+                          ? draft.payers.some((payer) => payer.user === member.id)
+                          : draft.payerId === member.id,
+                        () =>
+                          onChange(
+                            draft.multiPayer
+                              ? {
+                                  payers: draft.payers.some((payer) => payer.user === member.id)
+                                    ? draft.payers.filter((payer) => payer.user !== member.id)
+                                    : [...draft.payers, { user: member.id, amount: '' }],
+                                }
+                              : { payerId: member.id },
+                          ),
+                        !draft.multiPayer,
+                      )}
+                      {draft.multiPayer &&
+                        draft.payers.some((payer) => payer.user === member.id) && (
+                          <Field
+                            label={`Paid by ${member.name} (${draft.currency})`}
+                            value={draft.payers.find((payer) => payer.user === member.id)!.amount}
+                            keyboardType="decimal-pad"
+                            maxLength={40}
+                            editable={!locked}
+                            onChangeText={(amount) =>
+                              onChange({
+                                payers: draft.payers.map((payer) =>
+                                  payer.user === member.id ? { ...payer, amount } : payer,
+                                ),
+                              })
+                            }
+                          />
+                        )}
+                    </View>
+                  ))}
+                  {draft.multiPayer &&
+                    draft.payers.some(
+                      (payer) => !members.some((member) => member.id === payer.user),
+                    ) && (
+                      <Button
+                        label="Remove unavailable payers"
+                        secondary
+                        disabled={locked}
+                        onPress={() =>
+                          onChange({
+                            payers: draft.payers.filter((payer) =>
+                              members.some((member) => member.id === payer.user),
+                            ),
+                          })
+                        }
+                      />
+                    )}
+                </>
+              ) : (
+                <>
+                  <View accessibilityRole="radiogroup" style={{ gap: 8 }}>
+                    {methods.map((item) =>
+                      choice(
+                        item.id,
+                        item.label,
+                        draft.splitMethod === item.id,
+                        () => onChange({ splitMethod: item.id }),
+                        true,
+                      ),
+                    )}
+                  </View>
+                  <Copy>{method.hint}</Copy>
+                  <Copy style={{ color: theme.textSecondary }}>
+                    Changing method clears the previous split values. Other draft entries stay
+                    saved.
+                  </Copy>
+                  {members.map((member) => (
+                    <View key={member.id} style={{ gap: 8 }}>
+                      {choice(
+                        member.id,
+                        `Include ${member.name}`,
+                        draft.participantIds.includes(member.id),
+                        () =>
+                          onChange({
+                            participantIds: draft.participantIds.includes(member.id)
+                              ? draft.participantIds.filter((id) => id !== member.id)
+                              : [...draft.participantIds, member.id],
+                          }),
+                      )}
+                      {draft.splitMethod !== 'equal' &&
+                        draft.participantIds.includes(member.id) && (
+                          <Field
+                            label={`${valueLabel} for ${member.name}`}
+                            value={draft.splitValues[member.id] ?? ''}
+                            hint="Use 0 for no share."
+                            keyboardType={
+                              draft.splitMethod === 'shares' ? 'number-pad' : 'decimal-pad'
+                            }
+                            maxLength={40}
+                            editable={!locked}
+                            onChangeText={(value) =>
+                              onChange({
+                                splitValues: { ...draft.splitValues, [member.id]: value },
+                              })
+                            }
+                          />
+                        )}
+                    </View>
+                  ))}
+                  {draft.participantIds.some(
+                    (id) => !members.some((member) => member.id === id),
+                  ) && (
+                    <Button
+                      label="Remove unavailable participants"
+                      secondary
+                      disabled={locked}
+                      onPress={() =>
+                        onChange({
+                          participantIds: draft.participantIds.filter((id) =>
+                            members.some((member) => member.id === id),
+                          ),
+                        })
+                      }
+                    />
+                  )}
+                </>
+              )}
+              {allocationError && draft.amount ? (
+                <Copy accessibilityRole="alert">{allocationError}</Copy>
+              ) : null}
+              <Copy>
+                {state.persistence === 'saving'
+                  ? 'Saving draft…'
+                  : state.persistence === 'error'
+                    ? 'Could not save these entries on this device. Close this editor and retry saving the draft.'
+                    : 'Entries are saved with your draft. Done or Android Back keeps them.'}
+              </Copy>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }

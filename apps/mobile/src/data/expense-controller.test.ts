@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { ExpenseDraft } from './expense-draft';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse, MobileFetch } from './types';
 
@@ -139,6 +140,288 @@ function setup(
 }
 
 describe('native Expense creation', () => {
+  it.each([
+    ['equal', {}, [334, 333, 333]],
+    ['unequal', { [memberIds[0]]: '5', [memberIds[1]]: '3', [memberIds[2]]: '2' }, [500, 300, 200]],
+    ['exact', { [memberIds[0]]: '0.01', [memberIds[1]]: '9.99', [memberIds[2]]: '0' }, [1, 999, 0]],
+    [
+      'percentage',
+      { [memberIds[0]]: '33.33', [memberIds[1]]: '33.33', [memberIds[2]]: '33.34' },
+      [333, 333, 334],
+    ],
+    ['shares', { [memberIds[0]]: '1', [memberIds[1]]: '1', [memberIds[2]]: '1' }, [334, 333, 333]],
+  ] as const)(
+    'saves %s with preview agreement and deterministic member ordering',
+    async (splitMethod, splitValues, expected) => {
+      let body: unknown;
+      const { controller } = setup((path, init) => {
+        if (path.endsWith('/expenses') && init.method === 'POST') {
+          body = JSON.parse(String(init.body));
+          return Promise.resolve(json({ status: 201, data: { _id: tagId, group: groupId } }, 201));
+        }
+      });
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({
+        description: 'Dinner',
+        amount: '10',
+        tagId,
+        splitMethod,
+      });
+      await controller.updateExpenseDraft({
+        splitValues,
+        participantIds: [...memberIds].reverse(),
+      });
+      expect(controller.getSnapshot().expense.preview?.map((row) => row.amountMinor)).toEqual(
+        [...expected].reverse(),
+      );
+      await controller.saveExpense();
+      expect(controller.getSnapshot().expense.status).toBe('saved');
+      expect(body).toMatchObject({ splitMethod });
+    },
+  );
+
+  it.each([
+    [
+      { splitMethod: 'shares', splitValues: { [memberIds[0]]: '1.0000000000000001' } },
+      'Amount supports at most 0 decimal places',
+    ],
+    [
+      {
+        splitMethod: 'percentage',
+        splitValues: { [memberIds[0]]: '33.33000000000000001', [memberIds[1]]: '66.67' },
+      },
+      'Amount supports at most 2 decimal places',
+    ],
+    [
+      { splitMethod: 'exact', splitValues: { [memberIds[0]]: '10.001' } },
+      'Amount supports at most 2 decimal places',
+    ],
+    [
+      { splitMethod: 'unequal', splitValues: { [memberIds[0]]: '9' } },
+      'Split amounts must add up to the expense amount',
+    ],
+    [{ splitMethod: 'shares', splitValues: { [memberIds[0]]: '-1' } }, 'Shares cannot be negative'],
+    [
+      { splitMethod: 'shares', splitValues: { [memberIds[0]]: '1.5' } },
+      'Amount supports at most 0 decimal places',
+    ],
+    [{ splitMethod: 'shares' }, 'Total split weight must be positive'],
+    [{ participantIds: [memberIds[0], memberIds[0]] }, 'Each person can appear only once'],
+    [
+      { multiPayer: true, payers: [{ user: memberIds[0], amount: '9' }] },
+      'Payer amounts must add up to the expense amount',
+    ],
+    [
+      {
+        multiPayer: true,
+        payers: [
+          { user: memberIds[0], amount: '5' },
+          { user: memberIds[0], amount: '5' },
+        ],
+      },
+      'Each person can appear only once',
+    ],
+  ] satisfies [Partial<ExpenseDraft>, string][])(
+    'retains invalid allocation with shared correction: %j',
+    async (patch, message) => {
+      let posts = 0;
+      const { controller } = setup((path, init) => {
+        if (path.endsWith('/expenses') && init.method === 'POST') posts++;
+        return undefined;
+      });
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+      if ('splitMethod' in patch)
+        await controller.updateExpenseDraft({ splitMethod: patch.splitMethod });
+      await controller.updateExpenseDraft(patch);
+      await controller.saveExpense();
+      expect(posts).toBe(0);
+      expect(controller.getSnapshot().expense.message).toBe(message);
+      expect(controller.getSnapshot().expense.status).toBe('editing');
+    },
+  );
+
+  it('resumes a pre-custom-splits draft with the original equal allocation', async () => {
+    const { controller, records } = setup();
+    await controller.signIn('alex');
+    records.set(`${memberIds[0]}:${groupId}`, {
+      version: 1,
+      accountId: memberIds[0],
+      groupId,
+      draft: {
+        amount: '10',
+        currency: 'INR',
+        description: 'Existing draft',
+        date: '2026-09-28',
+        payerId: memberIds[0],
+        participantIds: memberIds,
+        category: 'other',
+        tagId,
+        notes: '',
+      },
+    });
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense.status).toBe('resume');
+    expect(controller.getSnapshot().expense.draft).toMatchObject({
+      splitMethod: 'equal',
+      multiPayer: false,
+      description: 'Existing draft',
+    });
+    expect(controller.getSnapshot().expense.preview?.map((row) => row.amountMinor)).toEqual([
+      334, 333, 333,
+    ]);
+  });
+
+  it('shows the shared correction for incomplete percentages and keeps invalid input without posting', async () => {
+    let posts = 0;
+    const { controller } = setup((path, init) => {
+      if (path.endsWith('/expenses') && init.method === 'POST') posts++;
+      return undefined;
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({
+      amount: '10',
+      description: 'Dinner',
+      tagId,
+      splitMethod: 'percentage',
+    });
+    await controller.updateExpenseDraft({ splitValues: { [memberIds[0]]: '90' } });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.message).toBe('Percentages must add up to 100');
+    expect(controller.getSnapshot().expense.draft?.splitValues).toEqual({ [memberIds[0]]: '90' });
+    expect(posts).toBe(0);
+  });
+
+  it('clears incompatible values on method changes but preserves participants, payers and other entries', async () => {
+    const { controller, create } = setup();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({
+      description: 'Keep dinner',
+      amount: '10',
+      tagId,
+      splitMethod: 'percentage',
+    });
+    await controller.updateExpenseDraft({
+      splitValues: { [memberIds[0]]: '100' },
+      participantIds: [memberIds[0]],
+    });
+    await controller.updateExpenseDraft({ splitMethod: 'shares' });
+    expect(controller.getSnapshot().expense.draft?.splitValues).toEqual({});
+    await controller.updateExpenseDraft({ splitValues: { [memberIds[0]]: '2' } });
+    await controller.updateExpenseDraft({ splitMethod: 'shares' });
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openExpense(groupId);
+    expect(restarted.getSnapshot().expense.draft).toMatchObject({
+      description: 'Keep dinner',
+      amount: '10',
+      tagId,
+      participantIds: [memberIds[0]],
+      splitMethod: 'shares',
+      splitValues: { [memberIds[0]]: '2' },
+    });
+    expect(restarted.getSnapshot().expense.preview?.map((row) => row.amountMinor)).toEqual([1000]);
+  });
+
+  it('preserves multiple payers and percentage shares through restart and an explicit identical retry', async () => {
+    const submissions: { key: string | null; body: string }[] = [];
+    const { controller, create } = setup((path, init) => {
+      if (path.endsWith('/expenses') && init.method === 'POST') {
+        submissions.push({
+          key: new Headers(init.headers).get('Idempotency-Key'),
+          body: String(init.body),
+        });
+        if (submissions.length === 1) return Promise.reject(new Error('Lost response'));
+        return Promise.resolve(json({ status: 201, data: { _id: tagId, group: groupId } }, 201));
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({
+      description: 'Dinner',
+      amount: '10.01',
+      tagId,
+      multiPayer: true,
+      payers: [
+        { user: memberIds[0], amount: '6' },
+        { user: memberIds[1], amount: '4.01' },
+      ],
+      splitMethod: 'percentage',
+      participantIds: [memberIds[0], memberIds[2]],
+    });
+    await controller.updateExpenseDraft({
+      splitValues: { [memberIds[0]]: '25', [memberIds[2]]: '75' },
+    });
+    expect(controller.getSnapshot().expense.preview?.map((row) => row.amountMinor)).toEqual([
+      250, 751,
+    ]);
+    await controller.saveExpense();
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openExpense(groupId);
+    expect(restarted.getSnapshot().expense.draft).toMatchObject({
+      multiPayer: true,
+      splitMethod: 'percentage',
+      payers: [
+        { user: memberIds[0], amount: '6' },
+        { user: memberIds[1], amount: '4.01' },
+      ],
+    });
+    restarted.resumeExpenseDraft();
+    await restarted.updateExpenseDraft({ amount: '99', splitMethod: 'equal' });
+    await restarted.refresh();
+    expect(submissions).toHaveLength(1);
+    await restarted.saveExpense();
+    expect(submissions).toHaveLength(2);
+    expect(submissions[1]).toEqual(submissions[0]);
+    expect(JSON.parse(submissions[1].body)).toMatchObject({
+      paidBy: [
+        { user: memberIds[0], amount: 6 },
+        { user: memberIds[1], amount: 4.01 },
+      ],
+      splitMethod: 'percentage',
+      splitBetween: [
+        { user: memberIds[0], amount: 2.5, percentage: 25 },
+        { user: memberIds[2], amount: 7.51, percentage: 75 },
+      ],
+    });
+    expect(restarted.getSnapshot().expense.status).toBe('saved');
+  });
+
+  it('previews and saves an unequal allocation with the shared exact totals', async () => {
+    let submitted: unknown;
+    const { controller } = setup((path, init) => {
+      if (path.endsWith('/expenses') && init.method === 'POST') {
+        submitted = JSON.parse(String(init.body));
+        return Promise.resolve(json({ status: 201, data: { _id: tagId, group: groupId } }, 201));
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+    await controller.updateExpenseDraft({ splitMethod: 'unequal' });
+    await controller.updateExpenseDraft({
+      splitValues: { [memberIds[0]]: '5', [memberIds[1]]: '3', [memberIds[2]]: '2' },
+    });
+    expect(controller.getSnapshot().expense.preview?.map((row) => row.amountMinor)).toEqual([
+      500, 300, 200,
+    ]);
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.status).toBe('saved');
+    expect(submitted).toMatchObject({
+      splitMethod: 'unequal',
+      splitBetween: [
+        { user: memberIds[0], amount: 5 },
+        { user: memberIds[1], amount: 3 },
+        { user: memberIds[2], amount: 2 },
+      ],
+    });
+  });
+
   it.each([
     { amount: '10.001' },
     { participantIds: [] },

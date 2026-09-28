@@ -235,7 +235,13 @@ export function calculateSplitAmountsMinor<T extends MinorSplitInput>(
       }
       return percentage;
     }
-    const shares = assertSafeMinorAmount(participant.shares ?? 0);
+    const shares = participant.shares ?? 0;
+    if (!Number.isSafeInteger(shares)) {
+      throw new MoneyValidationError(
+        'INVALID_SHARES',
+        'Shares must be whole numbers within the supported range',
+      );
+    }
     if (shares < 0) throw new MoneyValidationError('INVALID_SHARES', 'Shares cannot be negative');
     return shares;
   });

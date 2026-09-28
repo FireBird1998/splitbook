@@ -1,3 +1,4 @@
+import { MoneyValidationError } from '@splitbook/shared/exact-money';
 import {
   emptyExpenseEditor,
   buildExpenseBody,
@@ -917,7 +918,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         !context.group.members.some((member) => member.user.id === accountId)
       )
         throw new RequestError('You no longer have access to this Group.', 403);
-      const draft =
+      const draft: ExpenseDraft =
         record === null
           ? {
               amount: '',
@@ -929,6 +930,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                   : new Date(now()),
               ),
               payerId: accountId,
+              multiPayer: false,
+              payers: [],
+              splitMethod: 'equal',
+              splitValues: {},
               participantIds: context.group.members.map((member) => member.user.id),
               category: 'other',
               tagId: '',
@@ -985,7 +990,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (!lease || !storage) return;
     const owner = generation;
     const groupId = snapshot.expense.groupId!;
-    const draft = { ...snapshot.expense.draft, ...patch };
+    const draft = {
+      ...snapshot.expense.draft,
+      ...patch,
+      ...(patch.splitMethod && patch.splitMethod !== snapshot.expense.draft.splitMethod
+        ? { splitValues: {} }
+        : {}),
+    };
     publish({
       ...snapshot,
       expense: {
@@ -1191,7 +1202,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             ? 'Could not save the submission on this device. No Expense was sent. Retry local storage before saving.'
             : attempt
               ? `${error instanceof RequestError ? `${error.message} ` : ''}This Expense may already be saved. Retry this same submission to confirm it; its amount and participants are locked until then.`
-              : error instanceof RequestError
+              : error instanceof RequestError || error instanceof MoneyValidationError
                 ? error.message
                 : 'Check the amount, date, participants, currency, and active Tag. Your draft is still here.',
         },

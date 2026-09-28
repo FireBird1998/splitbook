@@ -96,6 +96,18 @@ describe('currency-aware decimal boundaries', () => {
 });
 
 describe('balanced expense normalization', () => {
+  it('explains that fractional or nonfinite share weights need whole numbers', () => {
+    for (const shares of [1.5, NaN, Infinity]) {
+      expect(() =>
+        normalizeExpenseMoney({
+          ...expense,
+          splitMethod: 'shares',
+          splitBetween: [{ user: 'a', shares }],
+        }),
+      ).toThrow('Shares must be whole numbers within the supported range');
+    }
+  });
+
   it('returns matching canonical and compatible amounts for every participant', () => {
     const normalized = normalizeExpenseMoney(expense);
     expect(normalized).toMatchObject({ moneyVersion: 1, amount: 100, amountMinor: 10000 });
