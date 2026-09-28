@@ -1,3 +1,4 @@
+import { cachedRead } from './offline-cache';
 import { emptyActivity, parseActivityPage, parseActivityExpense } from './activity';
 import {
   emptySettlement,
@@ -90,6 +91,7 @@ class RequestError extends Error {
     message: string,
     readonly status = 0,
     readonly code: string | null = null,
+    readonly networkFailure = false,
   ) {
     super(message);
   }
@@ -110,6 +112,7 @@ function expenseRejectionMessage(error: unknown) {
 function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
   return {
     auth,
+    offline: { active: false, refreshedAt: null, message: null },
     screen: 'groups',
     expense: emptyExpenseEditor(),
     settlement: emptySettlement(),
@@ -172,6 +175,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let balancesRequest = 0;
   let activityRequest = 0;
   let activityDetailRequest = 0;
+  let cacheEpoch = 0;
+  let offlineSession = false;
+  const staleReads = new Map<string, number | null>();
   let storeQueue: Promise<unknown> = Promise.resolve();
   let cleanupRequired = false;
   let accountCleanupRequired = false;
@@ -215,6 +221,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   const invalidate = () => {
     generation += 1;
+    cacheEpoch += 1;
+    offlineSession = false;
+    staleReads.clear();
     viewRequest += 1;
     requests.forEach((request) => request.abort());
     requests.clear();
@@ -415,6 +424,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const abort = new AbortController();
     requests.add(abort);
     const timeout = setTimeout(() => abort.abort(), 20_000);
+    let received = false;
     try {
       const outgoingCookie = options.sessionCookie === undefined ? cookie : options.sessionCookie;
       const response = await dependencies.fetch(`${apiBase}${path}`, {
@@ -438,6 +448,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             : { body: JSON.stringify(options.body) }
           : { body: options.serializedBody }),
       });
+      received = true;
       assertCurrent(owner);
       // Logout responses must never reinstall a cookie, even a surprising one.
       if (!options.logout) await adoptCookie(response, owner);
@@ -447,6 +458,26 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         throw new Superseded();
       }
       if (!response.ok) {
+        const deniedGroup = /^\/api\/groups\/([a-f\d]{24})(?:\/|\?|$)/i.exec(path)?.[1];
+        if (
+          (response.status === 403 ||
+            (response.status === 404 && path === `/api/groups/${deniedGroup}`)) &&
+          deniedGroup
+        ) {
+          cacheEpoch += 1;
+          const lease = accountStorage();
+          if (lease && dependencies.readCache) {
+            try {
+              await lease.write(() =>
+                dependencies.readCache!.invalidateGroup(lease.accountId, deniedGroup),
+              );
+            } catch (error) {
+              if (!current(owner) || error instanceof Superseded) throw error;
+              await signOut();
+              throw new Superseded();
+            }
+          }
+        }
         const message =
           response.status === 403
             ? 'You no longer have access to this group.'
@@ -471,16 +502,161 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     } catch (error) {
       if (!current(owner)) throw new Superseded();
       if (error instanceof RequestError || error instanceof Superseded) throw error;
-      throw new RequestError('Could not reach SplitBook. Check your connection and try again.');
+      throw new RequestError(
+        'Could not reach SplitBook. Check your connection and try again.',
+        0,
+        null,
+        !received,
+      );
     } finally {
       clearTimeout(timeout);
       requests.delete(abort);
     }
   };
 
+  const publishReadFreshness = () => {
+    const times = [...staleReads.values()].filter((value): value is number => value !== null);
+    publish({
+      ...snapshot,
+      offline: {
+        ...snapshot.offline,
+        active: offlineSession || staleReads.size > 0,
+        refreshedAt: times.length ? Math.min(...times) : null,
+      },
+    });
+  };
+  const startReadView = () => {
+    staleReads.clear();
+    publishReadFreshness();
+  };
+
+  const revalidateSession = async (owner: number) => {
+    const session = parseSession(await request('/api/auth/get-session', owner));
+    assertCurrent(owner);
+    if (
+      !session ||
+      session.expiresAt.getTime() <= now() ||
+      session.user.id !== snapshot.auth.user?.id
+    ) {
+      await failSession(owner, expiredMessage);
+      throw new Superseded();
+    }
+    offlineSession = false;
+    const lease = accountStorage();
+    if (lease && dependencies.offlineIdentity) {
+      try {
+        await lease.write(() =>
+          dependencies.offlineIdentity!.save({
+            user: session.user,
+            session: { userId: session.user.id, expiresAt: session.expiresAt.toISOString() },
+          }),
+        );
+      } catch (error) {
+        if (!current(owner) || error instanceof Superseded) throw error;
+      }
+    }
+  };
+
+  /** Explicitly opt in display reads only; request() and every mutation stay live. */
+  const readCached = async <T>(
+    path: string,
+    owner: number,
+    parse: (value: unknown) => T,
+  ): Promise<T> => {
+    const lease = accountStorage(),
+      view = viewRequest,
+      epoch = cacheEpoch;
+    try {
+      if (offlineSession || snapshot.offline.active) await revalidateSession(owner);
+      const value = await request(path, owner);
+      const parsed = parse(value);
+      if (lease && dependencies.readCache) {
+        try {
+          await lease.write(async () => {
+            if (epoch !== cacheEpoch) throw new Superseded();
+            await dependencies.readCache!.save(lease.accountId, path, {
+              version: 1,
+              accountId: lease.accountId,
+              path,
+              refreshedAt: now(),
+              value,
+            });
+          });
+        } catch (error) {
+          if (!current(owner) || error instanceof Superseded) throw error;
+          publish({
+            ...snapshot,
+            offline: {
+              ...snapshot.offline,
+              message: 'Could not save this view for offline use. Online data is still available.',
+            },
+          });
+        }
+      }
+      if (view === viewRequest && current(owner)) {
+        staleReads.delete(path);
+        publishReadFreshness();
+      }
+      return parsed;
+    } catch (error) {
+      if (
+        !(error instanceof RequestError) ||
+        !error.networkFailure ||
+        !lease ||
+        !dependencies.readCache
+      )
+        throw error;
+      if (epoch !== cacheEpoch) throw new Superseded();
+      const stored = await lease.write(() => dependencies.readCache!.load(lease.accountId, path));
+      const cached = cachedRead(stored, lease.accountId, path, now());
+      if (!current(owner) || epoch !== cacheEpoch) throw new Superseded();
+      if (view === viewRequest) {
+        offlineSession = true;
+        staleReads.set(path, cached?.refreshedAt ?? null);
+        publishReadFreshness();
+      }
+      if (!cached)
+        throw new RequestError(
+          'This view was not saved on this device. Connect to load it.',
+          0,
+          'OFFLINE_UNAVAILABLE',
+        );
+      return parse(cached.value);
+    }
+  };
+
+  const restoreOffline = async (owner: number) => {
+    if (
+      !cookie ||
+      !dependencies.accountLocal ||
+      !dependencies.offlineIdentity ||
+      !dependencies.readCache
+    )
+      return false;
+    try {
+      const accountId = await dependencies.accountLocal.owner.load();
+      const session = parseSession(await dependencies.offlineIdentity.load());
+      assertCurrent(owner);
+      if (!session || session.user.id !== accountId || session.expiresAt.getTime() <= now())
+        return false;
+      offlineSession = true;
+      publish({
+        ...cleanSnapshot({ status: 'authenticated', user: session.user, message: null }),
+        offline: { active: true, refreshedAt: null, message: null },
+      });
+      await loadGroups(owner);
+      if (current(owner)) await refreshHome();
+      return true;
+    } catch (error) {
+      if (error instanceof Superseded) throw error;
+      return false;
+    }
+  };
+
   const loadGroups = async (owner: number) => {
     assertCurrent(owner);
     const view = ++viewRequest;
+    startReadView();
     publish({
       ...snapshot,
       screen: 'groups',
@@ -488,7 +664,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       detail: { status: 'idle', id: null, data: null, message: null },
     });
     try {
-      const groups = parseGroups(await request('/api/groups', owner));
+      const groups = await readCached('/api/groups', owner, parseGroups);
       assertCurrent(owner);
       if (view !== viewRequest) return;
       // Do not display a malformed server response as somebody else's groups.
@@ -498,6 +674,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         )
       ) {
         throw new RequestError('The server returned invalid group membership. Please refresh.');
+      }
+      const lease = accountStorage();
+      if (lease && dependencies.readCache && !staleReads.has('/api/groups')) {
+        cacheEpoch += 1;
+        try {
+          await lease.write(() =>
+            dependencies.readCache!.retainGroups(
+              lease.accountId,
+              groups.map((group) => group.id),
+            ),
+          );
+        } catch (error) {
+          if (!current(owner) || error instanceof Superseded) throw error;
+          await signOut();
+          throw new Superseded();
+        }
+        if (!current(owner) || view !== viewRequest) return;
       }
       publish({ ...snapshot, groups: { status: 'ready', data: groups, message: null } });
     } catch (error) {
@@ -541,6 +734,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
     }
     publish(cleanSnapshot({ status: 'authenticated', user: session.user, message: null }));
+    const lease = accountStorage();
+    if (lease && dependencies.offlineIdentity) {
+      try {
+        await lease.write(() =>
+          dependencies.offlineIdentity!.save({
+            user: session.user,
+            session: { userId: session.user.id, expiresAt: session.expiresAt.toISOString() },
+          }),
+        );
+      } catch (error) {
+        if (!current(owner) || error instanceof Superseded) throw error;
+      }
+    }
     await loadGroups(owner);
     if (current(owner)) await refreshHome();
     if (!current(owner)) return;
@@ -561,7 +767,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const read = ++homeRequest;
     publish({ ...snapshot, home: { status: 'loading', data: null, message: null } });
     try {
-      const data = parseHomeBalances(await request('/api/user/balances', owner));
+      const data = await readCached('/api/user/balances', owner, parseHomeBalances);
       if (!current(owner) || read !== homeRequest) return;
       publish({ ...snapshot, home: { status: 'ready', data, message: null } });
     } catch (error) {
@@ -571,7 +777,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         home: {
           status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
           data: null,
-          message: 'Could not load your balances. Please try again.',
+          message:
+            error instanceof RequestError
+              ? error.message
+              : 'Could not load your balances. Please try again.',
         },
       });
     }
@@ -604,6 +813,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await verifyAndLoad(owner);
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;
+      if (error instanceof RequestError && error.networkFailure && (await restoreOffline(owner)))
+        return;
       publish(
         cleanSnapshot({
           status: 'error',
@@ -662,6 +873,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const previousMonth = snapshot.financial.groupId === id ? snapshot.financial.month : undefined;
     const verified = snapshot.detail.id === id ? snapshot.detail.data : null;
     const view = ++viewRequest;
+    startReadView();
     publish({
       ...snapshot,
       screen: 'group',
@@ -672,7 +884,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     try {
       if (!objectId.safeParse(id).success)
         throw new RequestError('This group is no longer available.', 404);
-      const group = parseGroup(await request(`/api/groups/${id}`, owner));
+      const group = await readCached(`/api/groups/${id}`, owner, parseGroup);
       assertCurrent(owner);
       if (view !== viewRequest) return;
       if (
@@ -756,7 +968,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       },
     });
     try {
-      const data = parseGroupBalances(await request(`/api/groups/${group.id}/balances`, owner));
+      const data = await readCached(`/api/groups/${group.id}/balances`, owner, parseGroupBalances);
       if (!current(owner) || view !== viewRequest || read !== balancesRequest) return;
       publish({
         ...snapshot,
@@ -778,7 +990,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           balances: {
             status: 'error',
             data: null,
-            message: 'Could not load running balances. Please try again.',
+            message:
+              error instanceof RequestError
+                ? error.message
+                : 'Could not load running balances. Please try again.',
           },
         },
       });
@@ -841,6 +1056,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return;
       pageNumber = pagination.page + 1;
     }
+    if (!append)
+      for (const path of staleReads.keys())
+        if (path.startsWith(`/api/groups/${group.id}/expenses?`)) staleReads.delete(path);
     const owner = generation;
     const view = viewRequest;
     const read = ++financialRequest;
@@ -855,13 +1073,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       },
     });
     try {
-      const page = parseExpensePage(
-        await request(
-          expensePath(group.id, group.category, snapshot.financial.month, pageNumber),
-          owner,
-        ),
-        group.id,
-        group.defaultCurrency,
+      const page = await readCached(
+        expensePath(group.id, group.category, snapshot.financial.month, pageNumber),
+        owner,
+        (value) => parseExpensePage(value, group.id, group.defaultCurrency),
       );
       if (!current(owner) || view !== viewRequest || read !== financialRequest) return;
       if (page.pagination.page !== pageNumber) throw new Error('Unexpected expense page.');
@@ -905,12 +1120,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             ? {
                 ...snapshot.financial.expenses,
                 moreStatus: 'error',
-                moreMessage: 'Could not load more expenses. Please try again.',
+                moreMessage:
+                  error instanceof RequestError
+                    ? error.message
+                    : 'Could not load more expenses. Please try again.',
               }
             : {
                 ...emptyFinancial().expenses,
                 status: 'error',
-                message: 'Could not load expenses. Please try again.',
+                message:
+                  error instanceof RequestError
+                    ? error.message
+                    : 'Could not load expenses. Please try again.',
               },
         },
       });
@@ -952,10 +1173,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     try {
       if (!objectId.safeParse(groupId).success)
         throw new RequestError('This Group is unavailable.', 404);
-      const page = parseActivityPage(
-        await request(`/api/groups/${groupId}/activity?page=${pageNumber}&limit=20`, owner),
-        groupId,
-        pageNumber,
+      const page = await readCached(
+        `/api/groups/${groupId}/activity?page=${pageNumber}&limit=20`,
+        owner,
+        (value) => parseActivityPage(value, groupId, pageNumber),
       );
       if (!current(owner) || view !== viewRequest || read !== activityRequest) return;
       const events = [
@@ -995,7 +1216,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               status: append ? 'ready' : 'error',
               moreStatus: append ? 'error' : 'idle',
               message:
-                'Could not refresh Activity. Previously loaded events may be stale. A missing event does not mean the ledger change failed.',
+                error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE'
+                  ? error.message
+                  : 'Could not refresh Activity. Previously loaded events may be stale. A missing event does not mean the ledger change failed.',
             },
       });
     }
@@ -1003,6 +1226,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const openActivity = async (groupId: string) => {
     if (snapshot.auth.status !== 'authenticated' || expenseNavigationBlocked()) return;
     viewRequest += 1;
+    startReadView();
     publish({ ...snapshot, screen: 'activity', activity: { ...emptyActivity(), groupId } });
     await readActivity(false);
   };
@@ -1029,7 +1253,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     let targetRequested = false;
     try {
-      const group = parseGroup(await request(`/api/groups/${groupId}`, owner));
+      const group = await readCached(`/api/groups/${groupId}`, owner, parseGroup);
       if (!current(owner) || view !== viewRequest || read !== activityDetailRequest) return;
       if (
         group.id !== groupId ||
@@ -1040,10 +1264,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       let target: typeof activity.target = { status: 'none' };
       if (expenseId) {
         targetRequested = true;
-        target = parseActivityExpense(
-          await request(`/api/groups/${groupId}/expenses/${expenseId}`, owner),
-          groupId,
-          expenseId,
+        target = await readCached(`/api/groups/${groupId}/expenses/${expenseId}`, owner, (value) =>
+          parseActivityExpense(value, groupId, expenseId),
         );
       }
       if (!current(owner) || view !== viewRequest || read !== activityDetailRequest) return;
@@ -1093,6 +1315,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const view = ++viewRequest;
     const accountId = snapshot.auth.user.id;
     const month = snapshot.financial.groupId === groupId ? snapshot.financial.month : null;
+    startReadView();
     publish({
       ...snapshot,
       screen: 'expense',
@@ -1121,7 +1344,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             status: 'loading',
           },
         });
-      const context = parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
+      const context = await readCached(`/api/groups/${groupId}`, owner, parseExpenseContext);
       if (!current(owner) || view !== viewRequest) return;
       if (
         context.group.id !== groupId ||
@@ -1130,10 +1353,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         throw new RequestError('You no longer have access to this Group.', 403);
       const original =
         record === null && expenseId
-          ? parseExpenseRecord(
-              await request(`/api/groups/${groupId}/expenses/${expenseId}`, owner),
-              groupId,
-              expenseId,
+          ? await readCached(`/api/groups/${groupId}/expenses/${expenseId}`, owner, (value) =>
+              parseExpenseRecord(value, groupId, expenseId),
             )
           : null;
       if (!current(owner) || view !== viewRequest) return;
@@ -2601,22 +2822,67 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.auth.status !== 'authenticated') return restore();
     if (snapshot.screen === 'activity') return refreshActivity();
     if (['create', 'invite', 'settings', 'expense', 'settlement'].includes(snapshot.screen)) {
-      const owner = generation;
+      const owner = generation,
+        view = viewRequest,
+        screen = snapshot.screen;
+      const groupId =
+        screen === 'expense'
+          ? snapshot.expense.groupId
+          : screen === 'settlement'
+            ? snapshot.settlement.groupId
+            : null;
       try {
-        const session = parseSession(await request('/api/auth/get-session', owner));
-        assertCurrent(owner);
-        if (
-          !session ||
-          session.expiresAt.getTime() <= now() ||
-          session.user.id !== snapshot.auth.user?.id
-        ) {
-          await failSession(owner, expiredMessage);
-          return;
+        try {
+          await revalidateSession(owner);
+        } catch (error) {
+          if (!(error instanceof RequestError) || !error.networkFailure || !dependencies.readCache)
+            throw error;
+          offlineSession = true;
         }
+        if (!current(owner) || view !== viewRequest) return;
+        staleReads.clear();
+        if (dependencies.readCache && groupId) {
+          const context = await readCached(`/api/groups/${groupId}`, owner, parseExpenseContext);
+          if (!current(owner) || view !== viewRequest) return;
+          if (
+            context.group.id !== groupId ||
+            !context.group.members.some((member) => member.user.id === snapshot.auth.user?.id)
+          )
+            throw new RequestError('You no longer have access to this Group.', 403);
+          if (screen === 'expense')
+            publish({ ...snapshot, expense: { ...snapshot.expense, context } });
+          else
+            publish({ ...snapshot, settlement: { ...snapshot.settlement, group: context.group } });
+        }
+        publishReadFreshness();
         if (snapshot.screen === 'invite') await retryInvitation();
       } catch (error) {
-        if (!current(owner) || error instanceof Superseded) return;
-        if (snapshot.screen === 'create')
+        if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+        if (groupId && error instanceof RequestError && [403, 404].includes(error.status)) {
+          dropDeniedGroup(groupId, error);
+          if (screen === 'expense')
+            publish({
+              ...snapshot,
+              expense: {
+                ...snapshot.expense,
+                status: 'blocked',
+                context: null,
+                message: error.message,
+              },
+            });
+          else
+            publish({
+              ...snapshot,
+              settlement: {
+                ...snapshot.settlement,
+                status: 'blocked',
+                group: null,
+                balances: [],
+                history: [],
+                message: error.message,
+              },
+            });
+        } else if (snapshot.screen === 'create')
           publish({
             ...snapshot,
             creation: {

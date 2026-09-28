@@ -1,3 +1,4 @@
+import { createFinancialReadStore } from './data/read-cache-storage';
 import { createSettlementAttemptStore } from './data/settlement-storage';
 import { randomUUID } from 'expo-crypto';
 import { createExpenseDraftStore } from './data/expense-storage';
@@ -41,8 +42,20 @@ export const appearance = createAppearanceController({
 });
 const expenseDrafts = createExpenseDraftStore(controllerConfig.apiBaseUrl);
 const settlementAttempts = createSettlementAttemptStore(controllerConfig.apiBaseUrl);
+const readCache = createFinancialReadStore(controllerConfig.apiBaseUrl);
+const offlineIdentityKey = storageKey.replace('splitbook.session.', 'splitbook.offline-identity.');
+const offlineIdentity = {
+  load: async () => {
+    const value = await SecureStore.getItemAsync(offlineIdentityKey);
+    return value ? JSON.parse(value) : null;
+  },
+  save: (value: unknown) => SecureStore.setItemAsync(offlineIdentityKey, JSON.stringify(value)),
+  clear: () => SecureStore.deleteItemAsync(offlineIdentityKey),
+};
 export const controller = createMobileController(controllerConfig, {
   fetch,
+  readCache,
+  offlineIdentity,
   expenseDrafts,
   settlementAttempts,
   newSubmissionKey: randomUUID,
@@ -67,6 +80,6 @@ export const controller = createMobileController(controllerConfig, {
       save: (accountId) => SecureStore.setItemAsync(ownerKey, accountId),
       clear: () => SecureStore.deleteItemAsync(ownerKey),
     },
-    stores: [expenseDrafts, settlementAttempts],
+    stores: [expenseDrafts, settlementAttempts, readCache, offlineIdentity],
   },
 });

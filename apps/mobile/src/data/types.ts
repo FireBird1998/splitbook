@@ -1,3 +1,4 @@
+import type { FinancialReadStore, OfflineIdentityStore } from './offline-cache';
 import type { ActivityState } from './activity';
 import type { AccountGroupRecordStore } from './account-record-storage';
 import type { SettlementState } from './settlement';
@@ -127,6 +128,7 @@ export interface PendingInvitationStore {
 }
 
 export interface MobileSnapshot {
+  offline: { active: boolean; refreshedAt: number | null; message: string | null };
   auth: {
     status: 'restoring' | 'signed-out' | 'signing-in' | 'authenticated' | 'error';
     user: SessionUser | null;
@@ -222,6 +224,8 @@ export interface FetchResponse {
 export type MobileFetch = (url: string, init: RequestInit) => Promise<FetchResponse>;
 
 export interface MobileDependencies {
+  readCache?: FinancialReadStore;
+  offlineIdentity?: OfflineIdentityStore;
   fetch: MobileFetch;
   credentials: CredentialStore;
   pendingInvitation?: PendingInvitationStore;

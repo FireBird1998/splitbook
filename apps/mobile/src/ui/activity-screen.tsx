@@ -78,12 +78,14 @@ function EventSummary({ event }: { event: ActivityEvent }) {
 }
 export function ActivityScreen({
   state,
+  stale = false,
   onRefresh,
   onMore,
   onSelect,
   onClose,
 }: {
   state: ActivityState;
+  stale?: boolean;
   onRefresh: () => void;
   onMore: () => void;
   onSelect: (id: string) => void;
@@ -144,18 +146,30 @@ export function ActivityScreen({
           ) : null}
           {['available', 'deleted', 'unavailable', 'error'].includes(state.target.status) ? (
             <Panel>
-              <Label>CURRENT RECORD CHECK</Label>
+              <Label>{stale ? 'SAVED RECORD CHECK' : 'CURRENT RECORD CHECK'}</Label>
+              {stale ? (
+                <Copy>
+                  This is the last saved record status. It may have changed while disconnected.
+                </Copy>
+              ) : null}
               <Copy>
                 {state.target.status === 'deleted'
-                  ? 'This Expense is currently deleted. Its historical Activity remains available.'
+                  ? stale
+                    ? 'This Expense was deleted at the last saved check. Its historical Activity remains available.'
+                    : 'This Expense is currently deleted. Its historical Activity remains available.'
                   : state.target.status === 'available'
-                    ? 'This Expense currently exists. Its current values may differ from this event.'
+                    ? stale
+                      ? 'This Expense existed at the last saved check. Its values may differ from this event.'
+                      : 'This Expense currently exists. Its current values may differ from this event.'
                     : state.target.status === 'unavailable'
                       ? 'The linked Expense is unavailable. This does not change the historical event.'
                       : 'Could not check the current record. Its present state is unknown.'}
               </Copy>
               {state.target.description ? (
-                <Copy>Current description: {state.target.description}</Copy>
+                <Copy>
+                  {stale ? 'Last saved description' : 'Current description'}:{' '}
+                  {state.target.description}
+                </Copy>
               ) : null}
               {state.target.status === 'error' ? (
                 <Button
