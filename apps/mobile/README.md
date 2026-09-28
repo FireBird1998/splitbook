@@ -102,7 +102,7 @@ Sign-out clears memory and protected session storage, cancels requests, and prev
 
 `verify:settings` exercises account details, sign-out, server session revocation, restart/account switching, and delayed response delivery through the real controller and isolated HTTP backend. Native checks separately verify actual SecureStore appearance persistence, system appearance changes, enlarged text, the browser destination, and sign-out/account switching.
 
-## Expense creation and drafts (#53)
+## Expense creation and drafts (#53–54)
 
 Open a Group and choose **Add expense**. Equal splits use shared exact-money allocation; the form collects a payer, participants, date, stable Tag identity, and optional category/notes. A past Household Month starts on that Month’s last day. Currency is the Group currency; an outdated draft requires an explicit currency choice and amount review.
 
@@ -111,3 +111,9 @@ SQLite keeps one draft per backend, account, and Group. Every edit is serialized
 Run `TZ=Asia/Kolkata pnpm mobile verify:expenses` against the isolated local development backend. It verifies literal remainder allocation, corrected validation, offline prevention, real response loss after commit, disk-backed controller restart, identical retry, exactly one Expense and Activity, renamed/archived Tag replay, machine error codes, refreshed balances, and account isolation. It creates and archives only its own fictional Group. Native process-restart/SQLite and keyboard/appearance checks remain separate device checks; this verifier does not claim to run Android.
 
 For native fixtures, use `verify:expenses --seed-fixtures /absolute/path/manifest.json`, then `verify:expenses --cleanup-fixtures /absolute/path/manifest.json`. Never use fixture helpers against real user data. Advanced splits, editing/deletion, and financial read caching belong to later tickets.
+
+### Custom splits and multiple payers
+
+**Edit split** supports Equal, Unequal, Percentage, Shares, and Exact using the shared exact-money calculator. **Edit payers** retains the single-payer default and reveals individual paid amounts for multiple payers. The review shows each person’s paid and owed amounts with both totals conserved in the Group currency. Invalid totals, percentages, shares, precision, and duplicate members use shared correction messages.
+
+Done and Android Back retain sheet edits in the account-scoped draft. Changing split method clears incompatible split values; participant toggles retain their entries within the same method. Existing equal-split drafts remain readable. Every custom submission uses the same persisted immutable body/key and explicit retry rules as equal splits. The HTTP verifier now saves all five methods with multiple payers, reverses participant order to verify stable remainder placement, interrupts each committed response, restarts, retries explicitly, and compares the authorized saved allocations and Activity with the preview.

@@ -5,11 +5,7 @@ import {
 } from '@splitbook/shared/expense-validation';
 import { resolveTagReference } from '@splitbook/shared/tag-identity';
 import { z } from 'zod';
-import {
-  calculateSplitAmountsMinor,
-  parseAmountMinor,
-  toMajorAmount,
-} from '@splitbook/shared/exact-money';
+import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
 import { getCurrency } from '@splitbook/shared/currency';
 import { objectId, parseGroup } from './dto';
 import type { MobileGroup } from './types';
@@ -20,6 +16,10 @@ export const expenseDraftSchema = z.object({
   description: z.string().max(200),
   date: z.string().max(10),
   payerId: objectId,
+  multiPayer: z.boolean().default(false),
+  payers: z.array(z.object({ user: objectId, amount: z.string().max(40) })).default([]),
+  splitMethod: z.enum(['equal', 'unequal', 'percentage', 'shares', 'exact']).default('equal'),
+  splitValues: z.record(objectId, z.string().max(40)).default({}),
   participantIds: z.array(objectId),
   category: z.string(),
   tagId: z.string(),
@@ -99,14 +99,28 @@ export function parseStoredExpenseDraft(value: unknown, accountId: string, group
   if (record.attempt) createExpenseSchema.parse(JSON.parse(record.attempt.body));
   return record;
 }
+/** Adapt text entry to the same exact-money command used by the web ledger. */
+export function expenseMoney(draft: ExpenseDraft) {
+  return normalizeExpenseMoney({
+    amount: draft.amount,
+    currency: draft.currency,
+    paidBy: draft.multiPayer ? draft.payers : [{ user: draft.payerId, amount: draft.amount }],
+    splitMethod: draft.splitMethod,
+    splitBetween: draft.participantIds.map((user) => ({
+      user,
+      ...(draft.splitMethod === 'unequal' || draft.splitMethod === 'exact'
+        ? { amount: draft.splitValues[user] || '0' }
+        : draft.splitMethod === 'percentage'
+          ? { percentage: Number(draft.splitValues[user] || '0') }
+          : draft.splitMethod === 'shares'
+            ? { shares: Number(draft.splitValues[user] || '0') }
+            : {}),
+    })),
+  });
+}
 export function previewExpense(draft: ExpenseDraft): ExpenseEditor['preview'] {
   try {
-    if (!draft.amount.trim() || !draft.participantIds.length) return null;
-    return calculateSplitAmountsMinor(
-      'equal',
-      parseAmountMinor(draft.amount, draft.currency),
-      draft.participantIds.map((user) => ({ user })),
-    );
+    return expenseMoney(draft).splitBetween;
   } catch {
     return null;
   }
@@ -114,16 +128,7 @@ export function previewExpense(draft: ExpenseDraft): ExpenseEditor['preview'] {
 
 export function buildExpenseBody(draft: ExpenseDraft, context: ExpenseContext): string {
   assertGroupCurrency(context.group.defaultCurrency, draft.currency);
-  const amount = toMajorAmount(parseAmountMinor(draft.amount, draft.currency), draft.currency);
-  const paidBy = [{ user: draft.payerId, amount }];
-  const splitBetween = calculateSplitAmountsMinor(
-    'equal',
-    parseAmountMinor(draft.amount, draft.currency),
-    draft.participantIds.map((user) => ({ user })),
-  ).map((item) => ({
-    user: String(item.user),
-    amount: toMajorAmount(item.amountMinor, draft.currency),
-  }));
+  const { amount, paidBy, splitBetween } = expenseMoney(draft);
   assertExpenseParticipants(
     new Set(context.group.members.map((member) => member.user.id)),
     paidBy,
@@ -142,7 +147,7 @@ export function buildExpenseBody(draft: ExpenseDraft, context: ExpenseContext): 
     date: new Date(`${date}T12:00:00`),
     paidBy,
     splitBetween,
-    splitMethod: 'equal',
+    splitMethod: draft.splitMethod,
     tagId: tag.tagId,
     notes: draft.notes,
   });

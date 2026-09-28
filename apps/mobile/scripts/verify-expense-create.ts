@@ -1,4 +1,4 @@
-/** Ticket #53: real HTTP ledger verification with controlled loss of a committed response. */
+/** Tickets #53–54: real HTTP ledger verification with controlled loss of a committed response. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, writeFile, rename, rm } from 'node:fs/promises';
@@ -301,6 +301,114 @@ async function verify(manifest: Manifest) {
       ).length,
       1,
     );
+    await alex.request(`/api/groups/${manifest.groupId}/tags/${manifest.tagId}`, 'PATCH', {
+      isArchived: false,
+    });
+    const memberIds = controller
+      .getSnapshot()
+      .expense.context!.group.members.map((member) => member.user.id)
+      .sort();
+    const cases = [
+      { method: 'equal', values: ['0', '0', '0'], expected: [334, 333, 333] },
+      { method: 'unequal', values: ['5', '3', '2'], expected: [500, 300, 200] },
+      { method: 'percentage', values: ['33.33', '33.33', '33.34'], expected: [333, 333, 334] },
+      { method: 'shares', values: ['1', '1', '1'], expected: [334, 333, 333] },
+      { method: 'exact', values: ['0.01', '9.99', '0'], expected: [1, 999, 0] },
+    ] as const;
+    for (const entry of cases) {
+      await controller.openExpense(manifest.groupId);
+      await controller.updateExpenseDraft({
+        description: `QA54 ${entry.method}`,
+        amount: '10',
+        tagId: manifest.tagId,
+        splitMethod: entry.method,
+        multiPayer: true,
+        payers: [
+          { user: memberIds[0], amount: '6' },
+          { user: memberIds[1], amount: '4' },
+        ],
+        participantIds: [...memberIds].reverse(),
+      });
+      await controller.updateExpenseDraft({
+        splitValues: Object.fromEntries(
+          memberIds.map((user, index) => [user, entry.values[index]]),
+        ),
+      });
+      const preview = controller.getSnapshot().expense.preview!;
+      assert.deepEqual(
+        [...preview]
+          .sort((a, b) => String(a.user).localeCompare(String(b.user)))
+          .map((row) => row.amountMinor),
+        entry.expected,
+      );
+      const before: number = submissions.length;
+      offline = true;
+      await controller.saveExpense();
+      assert.equal(submissions.length, before);
+      offline = false;
+      loseResponse = true;
+      await controller.saveExpense();
+      assert.equal(controller.getSnapshot().expense.status, 'uncertain');
+      controller = create();
+      await controller.restore();
+      await controller.openExpense(manifest.groupId);
+      controller.resumeExpenseDraft();
+      await controller.refresh();
+      assert.equal(submissions.length, before + 1, 'Custom recovery resubmitted automatically.');
+      await controller.saveExpense();
+      assert.equal(controller.getSnapshot().expense.status, 'saved');
+      assert.equal(submissions.length, before + 2);
+      assert.deepEqual(submissions[before + 1], submissions[before]);
+      const receiptId = controller.getSnapshot().expense.receiptId;
+      const saved = z
+        .object({
+          data: z.object({
+            expenses: z.array(
+              z.object({
+                _id: id,
+                splitMethod: z.string(),
+                amountMinor: z.number(),
+                paidBy: z.array(z.object({ user: z.object({ _id: id }), amountMinor: z.number() })),
+                splitBetween: z.array(
+                  z.object({ user: z.object({ _id: id }), amountMinor: z.number() }),
+                ),
+              }),
+            ),
+          }),
+        })
+        .parse(await alex.request(`/api/groups/${manifest.groupId}/expenses`)).data.expenses;
+      const expense = saved.find((row) => row._id === receiptId);
+      assert.ok(expense);
+      assert.equal(expense.splitMethod, entry.method);
+      assert.equal(expense.amountMinor, 1000);
+      assert.deepEqual(
+        expense.paidBy.map((row) => row.amountMinor),
+        [600, 400],
+      );
+      assert.deepEqual(
+        expense.splitBetween.map((row) => ({ user: row.user._id, amountMinor: row.amountMinor })),
+        preview.map((row) => ({ user: row.user, amountMinor: row.amountMinor })),
+      );
+      assert.equal(saved.length, cases.indexOf(entry) + 2, 'A custom retry duplicated an Expense.');
+      const events = z
+        .object({
+          data: z.object({
+            activities: z.array(
+              z.object({ type: z.string(), metadata: z.record(z.string(), z.unknown()) }),
+            ),
+          }),
+        })
+        .parse(await alex.request(`/api/groups/${manifest.groupId}/activity`)).data.activities;
+      assert.equal(
+        events.filter(
+          (event) => event.type === 'expense_added' && event.metadata.expenseId === receiptId,
+        ).length,
+        1,
+      );
+      console.log(
+        `PASS: ${entry.method}, multiple payers, offline prevention, persisted retry, exact read-back and one Activity.`,
+      );
+    }
     await controller.openExpense(manifest.groupId);
     await controller.updateExpenseDraft({ description: 'Alex private draft', amount: '12' });
     await controller.signOut();
