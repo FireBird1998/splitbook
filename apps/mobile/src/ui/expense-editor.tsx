@@ -185,7 +185,11 @@ export function ExpenseEditor({
       />
       <Panel>
         <Copy style={{ fontFamily: fonts.semibold }}>Paid by</Copy>
-        <Copy>{draft.multiPayer ? `${draft.payers.length} payers` : name(draft.payerId)}</Copy>
+        <Copy>
+          {draft.multiPayer
+            ? `${draft.payers.length} ${draft.payers.length === 1 ? 'payer' : 'payers'}`
+            : name(draft.payerId)}
+        </Copy>
         <Button
           label="Edit payers"
           secondary
@@ -260,7 +264,7 @@ export function ExpenseEditor({
           </Copy>
         )}
         <Copy style={{ fontSize: 13, color: theme.textSecondary }}>
-          Rounding follows the shared ledger, with stable member identity breaking remainder ties.
+          Rounding keeps the full amount accounted for, even when it cannot divide evenly.
         </Copy>
       </Panel>
       <Button
