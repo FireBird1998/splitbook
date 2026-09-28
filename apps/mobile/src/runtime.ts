@@ -1,3 +1,4 @@
+import { createSettlementAttemptStore } from './data/settlement-storage';
 import { randomUUID } from 'expo-crypto';
 import { createExpenseDraftStore } from './data/expense-storage';
 import { fetch } from 'expo/fetch';
@@ -39,9 +40,11 @@ export const appearance = createAppearanceController({
   save: (mode) => SecureStore.setItemAsync('splitbook.appearance', mode),
 });
 const expenseDrafts = createExpenseDraftStore(controllerConfig.apiBaseUrl);
+const settlementAttempts = createSettlementAttemptStore(controllerConfig.apiBaseUrl);
 export const controller = createMobileController(controllerConfig, {
   fetch,
   expenseDrafts,
+  settlementAttempts,
   newSubmissionKey: randomUUID,
   credentials: {
     load: () => SecureStore.getItemAsync(storageKey),
@@ -64,6 +67,6 @@ export const controller = createMobileController(controllerConfig, {
       save: (accountId) => SecureStore.setItemAsync(ownerKey, accountId),
       clear: () => SecureStore.deleteItemAsync(ownerKey),
     },
-    stores: [expenseDrafts],
+    stores: [expenseDrafts, settlementAttempts],
   },
 });

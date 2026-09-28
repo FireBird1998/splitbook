@@ -1,5 +1,20 @@
+import {
+  emptySettlement,
+  parseRecordedSettlement,
+  parseSettlementAttempt,
+  parseSettlementHistory,
+  settlementBody,
+  settlementSuggestion,
+  type SettlementDraft,
+} from './settlement';
+import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
+import {
+  assertSettlementMembers,
+  assertSettlementAuthorization,
+  assertGroupCurrency,
+} from '@splitbook/shared/expense-validation';
 import { canEditExpense, parseExpenseRecord } from './expense-record';
-import { MoneyValidationError } from '@splitbook/shared/exact-money';
+import { parseAmountMinor, MoneyValidationError } from '@splitbook/shared/exact-money';
 import {
   emptyExpenseEditor,
   draftFromExpense,
@@ -96,6 +111,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
     auth,
     screen: 'groups',
     expense: emptyExpenseEditor(),
+    settlement: emptySettlement(),
     home: { status: 'idle', data: null, message: null },
     financial: emptyFinancial(),
     creation: {
@@ -897,8 +913,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const loadMoreExpenses = () => readExpenses(true);
 
   const expenseNavigationBlocked = () =>
-    snapshot.screen === 'expense' &&
-    (snapshot.expense.status === 'saving' || snapshot.expense.persistence !== 'saved');
+    (snapshot.screen === 'expense' &&
+      (snapshot.expense.status === 'saving' || snapshot.expense.persistence !== 'saved')) ||
+    (snapshot.screen === 'settlement' && snapshot.settlement.status === 'saving');
 
   const openExpense = async (groupId: string, expenseId?: string) => {
     if (snapshot.auth.status !== 'authenticated' || !snapshot.auth.user) return;
@@ -1109,7 +1126,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  const refreshExpenseViews = async (groupId: string, owner: number, navigate: boolean) => {
+  const refreshLedgerViews = async (groupId: string, owner: number, navigate: boolean) => {
     if (navigate || (snapshot.screen === 'group' && snapshot.detail.id === groupId))
       await openGroup(groupId);
     if (current(owner)) await refreshHome();
@@ -1362,7 +1379,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         },
       });
       refreshed = true;
-      await refreshExpenseViews(groupId, owner, true);
+      await refreshLedgerViews(groupId, owner, true);
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
       const rejection = expenseRejectionMessage(error);
@@ -1440,7 +1457,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         });
       }
       if (current(owner) && completed && !refreshed)
-        await refreshExpenseViews(groupId, owner, false);
+        await refreshLedgerViews(groupId, owner, false);
     }
   };
   const saveExpense = async () => {
@@ -1529,7 +1546,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         },
       });
       successHandled = true;
-      await refreshExpenseViews(groupId, owner, true);
+      await refreshLedgerViews(groupId, owner, true);
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
       const rejection = expenseRejectionMessage(error);
@@ -1605,8 +1622,394 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         });
       }
       if (current(owner) && resolvedReceipt && !successHandled && view !== viewRequest) {
-        await refreshExpenseViews(groupId, owner, false);
+        await refreshLedgerViews(groupId, owner, false);
       }
+    }
+  };
+
+  const settlementContext = async (groupId: string, owner: number) => {
+    const group = parseGroup(await request(`/api/groups/${groupId}`, owner));
+    if (group.id !== groupId || !group.members.some((m) => m.user.id === snapshot.auth.user?.id))
+      throw new RequestError('You no longer have access to this Group.', 403);
+    const balances = parseGroupBalances(await request(`/api/groups/${groupId}/balances`, owner));
+    return { group, balances };
+  };
+  const openSettlements = async (groupId: string) => {
+    if (snapshot.auth.status !== 'authenticated') return;
+    const owner = generation,
+      view = ++viewRequest,
+      lease = accountStorage(),
+      storage = dependencies.settlementAttempts;
+    publish({
+      ...snapshot,
+      screen: 'settlement',
+      settlement: { ...emptySettlement(), groupId, status: 'loading' },
+    });
+    try {
+      if (!lease || !storage) throw new Error('Payment recovery storage is unavailable.');
+      const stored = await lease.write(() => storage.load(lease.accountId, groupId));
+      const recovery =
+        stored === null ? null : parseSettlementAttempt(stored, lease.accountId, groupId);
+      if (!current(owner) || view !== viewRequest) return;
+      if (recovery) publish({ ...snapshot, settlement: { ...snapshot.settlement, ...recovery } });
+      const context = await settlementContext(groupId, owner);
+      const history = parseSettlementHistory(
+        await request(`/api/groups/${groupId}/settlements`, owner),
+        groupId,
+      );
+      if (!current(owner) || view !== viewRequest) return;
+      publish({
+        ...snapshot,
+        settlement: {
+          ...snapshot.settlement,
+          ...context,
+          history,
+          status: recovery ? 'uncertain' : 'ready',
+          message: recovery
+            ? 'A payment record is unresolved. Check the history, then explicitly retry the same submission to confirm it.'
+            : null,
+        },
+      });
+    } catch (error) {
+      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      publish({
+        ...snapshot,
+        settlement: {
+          ...snapshot.settlement,
+          status:
+            error instanceof RequestError && [403, 404].includes(error.status)
+              ? 'blocked'
+              : snapshot.settlement.attempt
+                ? 'uncertain'
+                : 'error',
+          message:
+            error instanceof RequestError
+              ? error.message
+              : 'Could not load payments. Reconnect and retry; retained submissions are unchanged.',
+        },
+      });
+    }
+  };
+  const selectSettlement = (paidBy: string, paidTo: string, currency: string) => {
+    const state = snapshot.settlement,
+      account = snapshot.auth.user?.id;
+    if (
+      snapshot.screen !== 'settlement' ||
+      state.status !== 'ready' ||
+      state.attempt ||
+      !state.group ||
+      !account
+    )
+      return;
+    const debt = state.balances
+      .find((b) => b.currency === currency)
+      ?.debts.find((d) => d.from.id === paidBy && d.to.id === paidTo);
+    if (
+      !debt ||
+      currency !== state.group.defaultCurrency ||
+      !canRecordSettlement(account, paidBy, paidTo) ||
+      !state.group.members.some((m) => m.user.id === paidBy) ||
+      !state.group.members.some((m) => m.user.id === paidTo)
+    )
+      return;
+    publish({
+      ...snapshot,
+      settlement: {
+        ...state,
+        status: 'editing',
+        draft: { paidBy, paidTo, currency, amount: String(debt.amount), note: '' },
+        suggested: debt.amount,
+        acknowledged: false,
+        message: null,
+      },
+    });
+  };
+  const updateSettlement = (patch: Partial<Pick<SettlementDraft, 'amount' | 'note'>>) => {
+    const state = snapshot.settlement;
+    if (
+      snapshot.screen !== 'settlement' ||
+      !['editing', 'review'].includes(state.status) ||
+      state.attempt ||
+      !state.draft
+    )
+      return;
+    publish({
+      ...snapshot,
+      settlement: {
+        ...state,
+        status: 'editing',
+        draft: { ...state.draft, ...patch },
+        acknowledged: false,
+        message: null,
+      },
+    });
+  };
+  const reviewSettlement = async () => {
+    const state = snapshot.settlement,
+      lease = accountStorage();
+    if (
+      snapshot.screen !== 'settlement' ||
+      !['editing', 'review'].includes(state.status) ||
+      !state.draft ||
+      !state.groupId ||
+      state.attempt ||
+      !lease
+    )
+      return;
+    const owner = generation,
+      view = viewRequest;
+    publish({ ...snapshot, settlement: { ...state, status: 'loading', message: null } });
+    try {
+      settlementBody(state.draft);
+      const context = await settlementContext(state.groupId, owner);
+      assertSettlementMembers(
+        new Set(context.group.members.map((m) => m.user.id)),
+        state.draft.paidBy,
+        state.draft.paidTo,
+      );
+      assertSettlementAuthorization(lease.accountId, state.draft.paidBy, state.draft.paidTo);
+      assertGroupCurrency(context.group.defaultCurrency, state.draft.currency);
+      if (!current(owner) || view !== viewRequest) return;
+      const suggested = settlementSuggestion(context.balances, state.draft);
+      publish({
+        ...snapshot,
+        settlement: {
+          ...state,
+          ...context,
+          status: 'review',
+          suggested,
+          acknowledged: false,
+          message:
+            suggested !== state.suggested
+              ? 'The suggested debt changed. Review the current suggestion and your actual payment.'
+              : null,
+        },
+      });
+    } catch (error) {
+      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      publish({
+        ...snapshot,
+        settlement: {
+          ...state,
+          status:
+            error instanceof RequestError && [403, 404].includes(error.status)
+              ? 'blocked'
+              : 'editing',
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Could not review this payment. Reconnect and retry.',
+        },
+      });
+    } finally {
+      if (
+        current(owner) &&
+        view !== viewRequest &&
+        snapshot.settlement.draft === state.draft &&
+        snapshot.settlement.status === 'loading'
+      )
+        publish({
+          ...snapshot,
+          settlement: {
+            ...snapshot.settlement,
+            status: 'editing',
+            acknowledged: false,
+            message: 'Your payment details are kept. Review again before recording.',
+          },
+        });
+    }
+  };
+
+  const acknowledgeSettlement = () => {
+    if (
+      snapshot.screen === 'settlement' &&
+      snapshot.settlement.status === 'review' &&
+      !snapshot.settlement.attempt
+    )
+      publish({ ...snapshot, settlement: { ...snapshot.settlement, acknowledged: true } });
+  };
+  const recordSettlement = async () => {
+    const state = snapshot.settlement,
+      lease = accountStorage(),
+      storage = dependencies.settlementAttempts;
+    if (
+      snapshot.screen !== 'settlement' ||
+      !['review', 'uncertain'].includes(state.status) ||
+      !state.draft ||
+      !state.groupId ||
+      !lease ||
+      !storage
+    )
+      return;
+    const owner = generation,
+      view = viewRequest,
+      groupId = state.groupId,
+      draft = state.draft;
+    let attempt = state.attempt,
+      completed = false;
+    publish({ ...snapshot, settlement: { ...state, status: 'saving', message: null } });
+    try {
+      const context = await settlementContext(groupId, owner);
+      if (!current(owner) || view !== viewRequest) return;
+      assertSettlementMembers(
+        new Set(context.group.members.map((m) => m.user.id)),
+        draft.paidBy,
+        draft.paidTo,
+      );
+      assertSettlementAuthorization(lease.accountId, draft.paidBy, draft.paidTo);
+      if (!attempt) {
+        const suggested = settlementSuggestion(context.balances, draft);
+        if (suggested !== state.suggested) {
+          publish({
+            ...snapshot,
+            settlement: {
+              ...state,
+              ...context,
+              suggested,
+              status: 'review',
+              acknowledged: false,
+              message:
+                'The suggested debt changed. Review this amount before recording your actual payment.',
+            },
+          });
+          return;
+        }
+        if (
+          parseAmountMinor(draft.amount, draft.currency) >
+            parseAmountMinor(suggested, draft.currency) &&
+          !state.acknowledged
+        ) {
+          publish({
+            ...snapshot,
+            settlement: {
+              ...state,
+              status: 'review',
+              message:
+                'This payment exceeds the current suggestion. Acknowledge the difference before recording.',
+            },
+          });
+          return;
+        }
+        assertGroupCurrency(context.group.defaultCurrency, draft.currency);
+        const body = settlementBody(draft);
+        const pending = { key: dependencies.newSubmissionKey?.() ?? '', body };
+        const value = { version: 1, accountId: lease.accountId, groupId, ...pending };
+        parseSettlementAttempt(value, lease.accountId, groupId);
+        await lease.write(() => storage.save(lease.accountId, groupId, value));
+        attempt = pending;
+      }
+      if (!current(owner) || view !== viewRequest) return;
+      publish({ ...snapshot, settlement: { ...snapshot.settlement, attempt } });
+      const response = await request(`/api/groups/${groupId}/settlements`, owner, {
+        method: 'POST',
+        serializedBody: attempt.body,
+        idempotencyKey: attempt.key,
+      });
+      parseRecordedSettlement(response, groupId, attempt.body);
+      await lease.write(async () => {
+        const saved = await storage.load(lease.accountId, groupId);
+        if (saved === null) return;
+        const currentAttempt = parseSettlementAttempt(saved, lease.accountId, groupId).attempt;
+        if (currentAttempt.key === attempt!.key && currentAttempt.body === attempt!.body)
+          await storage.remove(lease.accountId, groupId);
+      });
+      completed = true;
+      if (!current(owner) || view !== viewRequest) return;
+      await openSettlements(groupId);
+      if (
+        current(owner) &&
+        snapshot.screen === 'settlement' &&
+        snapshot.settlement.groupId === groupId
+      )
+        publish({
+          ...snapshot,
+          settlement: {
+            ...snapshot.settlement,
+            message:
+              'Payment recorded. The refreshed balances show what remains; no money was transferred by SplitBook.',
+          },
+        });
+    } catch (error) {
+      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      const correctionCodes: Record<string, string> = {
+        CURRENCY_MISMATCH:
+          'The Group currency changed. Return to payments and review the available currency.',
+        INVALID_MEMBERS:
+          'The payer or recipient is no longer a Group member. Review the available payments.',
+        SAME_PARTY: 'Payer and recipient must be different people.',
+        FORBIDDEN_SETTLEMENT: 'Only the payer or recipient can record this payment.',
+        VALIDATION_ERROR: 'Check the actual amount, currency precision, and note before recording.',
+      };
+      const correction =
+        error instanceof RequestError && error.status === 422 && error.code
+          ? correctionCodes[error.code]
+          : undefined;
+      if (attempt && !state.attempt && correction) {
+        try {
+          await lease.write(async () => {
+            const value = await storage.load(lease.accountId, groupId);
+            if (value === null) return;
+            const pending = parseSettlementAttempt(value, lease.accountId, groupId).attempt;
+            if (pending.key === attempt!.key && pending.body === attempt!.body)
+              await storage.remove(lease.accountId, groupId);
+          });
+          attempt = null;
+          if (!current(owner) || view !== viewRequest) return;
+          publish({
+            ...snapshot,
+            settlement: {
+              ...snapshot.settlement,
+              attempt: null,
+              status: 'editing',
+              acknowledged: false,
+              message: correction,
+            },
+          });
+          return;
+        } catch {
+          /* A failed local cleanup keeps the recovery record locked. */
+        }
+      }
+      if (!current(owner) || view !== viewRequest) return;
+      const denied =
+        (error instanceof RequestError && [403, 404, 409, 422].includes(error.status)) ||
+        (error instanceof Error &&
+          ['INVALID_MEMBERS', 'FORBIDDEN_SETTLEMENT', 'SAME_PARTY'].includes(error.message));
+      publish({
+        ...snapshot,
+        settlement: {
+          ...snapshot.settlement,
+          attempt,
+          status: denied ? 'blocked' : attempt ? 'uncertain' : 'review',
+          message: denied
+            ? 'This payment cannot be recorded with the current access or details. Any unresolved submission is retained; check the history and refresh access before continuing.'
+            : attempt
+              ? 'The payment may already be recorded. Retry this exact submission to confirm it; it cannot be edited.'
+              : error instanceof Error
+                ? error.message
+                : 'Could not record this payment. Your entries are kept.',
+        },
+      });
+    } finally {
+      if (
+        current(owner) &&
+        view !== viewRequest &&
+        snapshot.settlement.draft === draft &&
+        snapshot.settlement.status === 'saving'
+      )
+        publish({
+          ...snapshot,
+          settlement: {
+            ...snapshot.settlement,
+            attempt: completed ? null : attempt,
+            draft: completed ? null : draft,
+            status: completed ? 'ready' : attempt ? 'uncertain' : 'editing',
+            message: completed
+              ? 'Payment recorded. Refresh payments to see current balances.'
+              : 'Your entries are retained. Review or explicitly retry after reconnecting.',
+          },
+        });
+      if (current(owner) && completed) await refreshLedgerViews(groupId, owner, false);
     }
   };
 
@@ -2009,13 +2412,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (
       snapshot.creation.status === 'saving' ||
       snapshot.invitation.status === 'joining' ||
-      (snapshot.screen === 'expense' && snapshot.expense.status === 'saving')
+      (snapshot.screen === 'expense' && snapshot.expense.status === 'saving') ||
+      (snapshot.screen === 'settlement' && snapshot.settlement.status === 'saving')
     )
       return;
     if (snapshot.screen === 'invite' && snapshot.auth.status !== 'authenticated')
       return retryInvitation();
     if (snapshot.auth.status !== 'authenticated') return restore();
-    if (['create', 'invite', 'settings', 'expense'].includes(snapshot.screen)) {
+    if (['create', 'invite', 'settings', 'expense', 'settlement'].includes(snapshot.screen)) {
       const owner = generation;
       try {
         const session = parseSession(await request('/api/auth/get-session', owner));
@@ -2108,6 +2512,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     startCreate,
     openSettings,
     accountStorage,
+    openSettlements,
+    selectSettlement,
+    updateSettlement,
+    reviewSettlement,
+    recordSettlement,
+    acknowledgeSettlement,
     updateCreation,
     createGroup,
     loadInviteLink,

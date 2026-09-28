@@ -1,3 +1,4 @@
+import { SettlementScreen } from './src/ui/settlement-screen';
 import { useEffect, useSyncExternalStore } from 'react';
 import {
   AppState,
@@ -145,12 +146,14 @@ function SplitBook() {
             accessibilityState={{
               disabled:
                 state.creation.status === 'saving' ||
+                (state.screen === 'settlement' && state.settlement.status === 'saving') ||
                 state.invitation.status === 'joining' ||
                 (state.screen === 'expense' &&
                   (state.expense.status === 'saving' || state.expense.persistence !== 'saved')),
             }}
             disabled={
               state.creation.status === 'saving' ||
+              (state.screen === 'settlement' && state.settlement.status === 'saving') ||
               state.invitation.status === 'joining' ||
               (state.screen === 'expense' &&
                 (state.expense.status === 'saving' || state.expense.persistence !== 'saved'))
@@ -239,7 +242,7 @@ function SplitBook() {
             keyboardDismissMode="on-drag"
             contentContainerStyle={styles.content}
             refreshControl={
-              ['settings', 'expense'].includes(state.screen) ? undefined : (
+              ['settings', 'expense', 'settlement'].includes(state.screen) ? undefined : (
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={() => void controller.refresh()}
@@ -271,7 +274,7 @@ function SplitBook() {
                 onSignOut={() =>
                   Alert.alert(
                     'Sign out on this device?',
-                    'Your session, expense drafts and save recovery keys, unsaved Group form, saved invitation, and local account data will be cleared. If a save was interrupted, check your saved history after signing in before creating it again.',
+                    'Your session, expense drafts, unresolved payment records and save recovery keys, unsaved Group form, saved invitation, and local account data will be cleared. If a save was interrupted, check your saved history after signing in before creating it again.',
                     [
                       { text: 'Cancel', style: 'cancel' },
                       {
@@ -282,6 +285,20 @@ function SplitBook() {
                     ],
                   )
                 }
+              />
+            ) : state.screen === 'settlement' ? (
+              <SettlementScreen
+                state={state.settlement}
+                accountId={state.auth.user!.id}
+                onSelect={controller.selectSettlement}
+                onChange={controller.updateSettlement}
+                onReview={() => void controller.reviewSettlement()}
+                onAcknowledge={controller.acknowledgeSettlement}
+                onRecord={() => void controller.recordSettlement()}
+                onRefresh={() => {
+                  if (state.settlement.groupId)
+                    void controller.openSettlements(state.settlement.groupId);
+                }}
               />
             ) : state.screen === 'expense' ? (
               <ExpenseEditor
@@ -460,6 +477,11 @@ function SplitBook() {
                     label="Add expense"
                     icon="add-outline"
                     onPress={() => void controller.openExpense(state.detail.data!.id)}
+                  />
+                  <Button
+                    label="Payments"
+                    secondary
+                    onPress={() => void controller.openSettlements(state.detail.id!)}
                   />
                   {state.expense.status === 'saved' &&
                     state.expense.groupId === state.detail.id && (
