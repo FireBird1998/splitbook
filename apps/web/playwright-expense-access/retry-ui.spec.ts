@@ -59,3 +59,85 @@ test('a lost create response preserves the draft and retries the same submission
     ),
   ).toHaveLength(1);
 });
+
+test('changing a draft after a lost committed response creates a distinct explicit action', async ({
+  page,
+  ledger,
+}) => {
+  await page.context().addCookies((await ledger.sam.storageState()).cookies);
+  await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${ledger.groupB}`);
+  await page.getByRole('button', { name: 'Add expense' }).last().click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('What was it for?').fill('First explicit action');
+  await dialog.getByLabel('Amount').fill('7.13');
+  const keys: string[] = [];
+  await page.route(`**/api/groups/${ledger.groupB}/expenses`, async (route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    keys.push(route.request().headers()['idempotency-key']);
+    if (keys.length === 1) {
+      expect((await route.fetch()).status()).toBe(201);
+      return route.abort('failed');
+    }
+    return route.continue();
+  });
+  await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toBeVisible();
+  await dialog.getByLabel('What was it for?').fill('Second explicit action');
+  // Editing alone must not issue another financial request.
+  expect(keys).toHaveLength(1);
+  await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  expect(keys).toHaveLength(2);
+  expect(keys[1]).not.toBe(keys[0]);
+  const result = await dataOf(await ledger.sam.get(`/api/groups/${ledger.groupB}/expenses`));
+  expect(
+    result.expenses.filter((row: { description: string }) =>
+      /^(First|Second) explicit action$/.test(row.description),
+    ),
+  ).toHaveLength(2);
+  const activity = await dataOf(await ledger.sam.get(`/api/groups/${ledger.groupB}/activity`));
+  expect(
+    activity.activities.filter(
+      (row: { type: string; metadata: { description?: string } }) =>
+        row.type === 'expense_added' &&
+        /^(First|Second) explicit action$/.test(row.metadata.description ?? ''),
+    ),
+  ).toHaveLength(2);
+});
+
+test('validation and cancelled duplicate confirmation retain the draft; advisory failure still permits a real save', async ({
+  page,
+  ledger,
+}) => {
+  await page.context().addCookies((await ledger.sam.storageState()).cookies);
+  await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${ledger.groupB}`);
+  await page.getByRole('button', { name: 'Add expense' }).last().click();
+  const dialog = page.getByRole('dialog');
+  const description = dialog.getByLabel('What was it for?');
+  const amount = dialog.getByLabel('Amount');
+  await description.fill('Private rent');
+  await amount.fill('1200.001');
+  await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+  await expect(dialog.getByRole('alert')).toContainText('decimal places');
+  await expect(amount).toHaveValue('1200.001');
+  await amount.fill('1200');
+  const warning = page.waitForEvent('dialog');
+  const confirmSave = dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+  await (await warning).dismiss();
+  await confirmSave;
+  await expect(description).toHaveValue('Private rent');
+  await expect(amount).toHaveValue('1200');
+  await expect(dialog.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
+  await description.fill('After duplicate cancellation');
+  await page.route('**/expenses/check-duplicate?*', (route) =>
+    route.fulfill({ status: 503, json: { error: 'Advisory unavailable' } }),
+  );
+  await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
+  await expect(dialog).toBeHidden();
+  const result = await dataOf(await ledger.sam.get(`/api/groups/${ledger.groupB}/expenses`));
+  expect(
+    result.expenses.filter(
+      (row: { description: string }) => row.description === 'After duplicate cancellation',
+    ),
+  ).toHaveLength(1);
+});

@@ -9,13 +9,8 @@ import {
   assertExpenseParticipants,
   assertGroupCurrency,
 } from '@splitbook/shared/expense-validation';
-import {
-  assertStoredExpenseMoney,
-  normalizeExpenseMoney,
-  moneyParticipantId,
-  readStoredAmountMinor,
-  toMajorAmount,
-} from '@splitbook/shared/exact-money';
+import { normalizeExpenseMoney } from '@splitbook/shared/exact-money';
+import { decideExpenseMoneyEdit, readExpenseMoney } from '@splitbook/shared/expense-money-edit';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import {
   expenseDateForPeriod,
@@ -87,59 +82,6 @@ function isDuplicateKeyError(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 11000;
 }
 
-/** Computed allocations and row order do not change a person's split definition. */
-function moneyDefinition(data: TemplateData) {
-  return JSON.stringify({
-    amount: data.amount,
-    currency: data.currency,
-    splitMethod: data.splitMethod,
-    paidBy: data.paidBy
-      .map((row) => ({ user: moneyParticipantId(row.user), amount: row.amount }))
-      .sort((left, right) => left.user.localeCompare(right.user)),
-    splitBetween: data.splitBetween
-      .map((row) => ({
-        user: moneyParticipantId(row.user),
-        ...(data.splitMethod === 'exact' || data.splitMethod === 'unequal'
-          ? { amount: row.amount }
-          : data.splitMethod === 'percentage'
-            ? { percentage: row.percentage }
-            : data.splitMethod === 'shares'
-              ? { shares: row.shares }
-              : {}),
-      }))
-      .sort((left, right) => left.user.localeCompare(right.user)),
-  });
-}
-
-function normalizeTemplateMoney(data: TemplateData, preserveAllocation = false) {
-  if (preserveAllocation) assertStoredExpenseMoney(data);
-  const storedAmount = (row: { amount?: number; amountMinor?: number }) =>
-    toMajorAmount(
-      readStoredAmountMinor({
-        amount: row.amount,
-        amountMinor: row.amountMinor,
-        currency: data.currency,
-        moneyVersion: data.moneyVersion,
-      }),
-      data.currency,
-    );
-  return normalizeExpenseMoney({
-    amount: preserveAllocation ? storedAmount(data) : data.amount,
-    currency: data.currency,
-    splitMethod: preserveAllocation ? 'exact' : data.splitMethod,
-    paidBy: data.paidBy.map((row) => ({
-      user: moneyParticipantId(row.user),
-      amount: preserveAllocation ? storedAmount(row) : row.amount,
-    })),
-    splitBetween: data.splitBetween.map((row) => ({
-      user: moneyParticipantId(row.user),
-      amount: preserveAllocation ? storedAmount(row) : row.amount,
-      percentage: row.percentage,
-      shares: row.shares,
-    })),
-  });
-}
-
 export class RecurringExpenseService {
   /**
    * Create a recurring template. Admins only, Household groups only.
@@ -154,7 +96,7 @@ export class RecurringExpenseService {
     assertAdmin(group, userId);
     assertHouseholdTheme(group.category);
     assertTemplateData(group, data);
-    const money = normalizeTemplateMoney(data);
+    const money = normalizeExpenseMoney(data);
     await lockLedgerCurrency(groupId, data.currency);
 
     const template = await RecurringExpense.create({
@@ -224,13 +166,9 @@ export class RecurringExpenseService {
 
     const memberIds = new Set(group.members.map((member) => member.user.toString()));
     const original = template.toObject();
-    const storedMoney = normalizeTemplateMoney(original, true);
-    const normalizedOriginal = { ...original, ...storedMoney };
-    const merged = { ...normalizedOriginal, ...data };
-    assertExpenseParticipants(memberIds, merged.paidBy, merged.splitBetween);
-    assertGroupCurrency(group.defaultCurrency, merged.currency);
-    const financialEdit = moneyDefinition(normalizedOriginal) !== moneyDefinition(merged);
-    const money = normalizeTemplateMoney(financialEdit ? merged : original, !financialEdit);
+    const { money } = decideExpenseMoneyEdit(original, data);
+    assertExpenseParticipants(memberIds, money.paidBy, money.splitBetween);
+    assertGroupCurrency(group.defaultCurrency, money.currency);
     const tagReference = resolveTagReference(group.tags, data, template);
 
     const mergedStartsOn = data.startsOn ?? template.startsOn;
@@ -337,12 +275,12 @@ export class RecurringExpenseService {
         );
         if (duePeriods.length === 0) continue;
 
-        let money: ReturnType<typeof normalizeTemplateMoney>;
+        let money: ReturnType<typeof readExpenseMoney>;
         try {
           assertTemplateData(group, template);
           // Generation copies the validated, stored allocation; metadata edits and
           // library upgrades cannot move a penny between participants retroactively.
-          money = normalizeTemplateMoney(template.toObject(), true);
+          money = readExpenseMoney(template.toObject());
         } catch {
           continue; // Problem state — visible in the settings list.
         }

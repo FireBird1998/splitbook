@@ -42,6 +42,7 @@ import {
   tagOptionValue,
 } from '@/components/expenses/expense-form-helpers';
 import type { IRecurringExpense, SplitMethod } from '@splitbook/shared/types';
+import { decideExpenseMoneyEdit } from '@splitbook/shared/expense-money-edit';
 import { formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
 import {
   assertStoredExpenseMoney,
@@ -246,7 +247,7 @@ export default function RecurringExpensesSection({
     const included = members.filter((m) => form.splits[m.user._id]?.included);
     if (included.length === 0) return 'Include at least one person in the split';
     try {
-      normalizeExpenseMoney(buildPayload());
+      resolveMoney();
     } catch (err) {
       return err instanceof Error ? err.message : 'Check the amount and split';
     }
@@ -295,48 +296,20 @@ export default function RecurringExpensesSection({
     };
   };
 
-  const splitPreview = (() => {
+  const resolveMoney = () => {
+    const payload = buildPayload();
+    return editing
+      ? decideExpenseMoneyEdit(editing, payload).money
+      : normalizeExpenseMoney(payload);
+  };
+  const preview = (() => {
     try {
-      const payload = buildPayload();
-      const preview = normalizeExpenseMoney(payload);
-      // An unchanged definition retains a legacy template's existing allocation.
-      // This matches the service's metadata-only edit behavior.
-      if (editing) {
-        const original = formFromTemplate(editing, members);
-        const definition = (value: FormState) => ({
-          amount: Number(value.amount),
-          payer: value.paidByUser,
-          method: value.splitMethod,
-          splits: members
-            .filter((member) => value.splits[member.user._id]?.included)
-            .map((member) => {
-              const draft = value.splits[member.user._id];
-              return {
-                user: member.user._id,
-                value:
-                  value.splitMethod === 'exact' || value.splitMethod === 'unequal'
-                    ? Number(draft.amount)
-                    : value.splitMethod === 'percentage'
-                      ? Number(draft.percentage)
-                      : value.splitMethod === 'shares'
-                        ? Number(draft.shares)
-                        : 1,
-              };
-            }),
-        });
-        if (JSON.stringify(definition(form)) === JSON.stringify(definition(original))) {
-          const fields = getStoredExpenseMoneyFields(editing);
-          return editing.splitBetween.map((split, index) => ({
-            ...split,
-            amount: Number(fields.splitBetween[index]),
-          }));
-        }
-      }
-      return preview.splitBetween;
-    } catch {
-      return [];
+      return { money: resolveMoney(), error: '' };
+    } catch (err) {
+      return { money: null, error: err instanceof Error ? err.message : 'Invalid allocation' };
     }
   })();
+  const splitPreview = preview.money?.splitBetween ?? [];
 
   const reloadLatest = async (target: 'form' | 'action') => {
     const id = target === 'form' ? editing?._id : selected?._id;
@@ -840,15 +813,16 @@ export default function RecurringExpensesSection({
                   );
                 })}
               </Stack>
+              {form.amount && preview.error && (
+                <Box role="status" sx={{ color: 'status.negative' }}>
+                  {preview.error}
+                </Box>
+              )}
               {splitPreview.length > 0 && (
                 <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 1 }}>
                   {splitPreview
                     .map((split) => {
-                      const id =
-                        typeof split.user === 'object' && split.user !== null && '_id' in split.user
-                          ? String(split.user._id)
-                          : String(split.user);
-                      return `${memberName(id)}: ${formatCurrency(split.amount, defaultCurrency)}`;
+                      return `${memberName(split.user)}: ${formatCurrency(split.amount, defaultCurrency)}`;
                     })
                     .join(' · ')}
                 </Typography>
