@@ -1,10 +1,11 @@
 import { z } from 'zod/v4';
 import { CURRENCY_CODES } from '../currency';
 import { validateTripDates } from '../trip-setup';
+import { calendarDate } from './calendar-date';
 
 const optionalDate = z.preprocess(
   (value) => (value === '' || value === undefined ? null : value),
-  z.coerce.date().nullable().optional(),
+  calendarDate.nullable().optional(),
 );
 
 const tripDatesRefine = <T extends { startDate?: unknown; endDate?: unknown }>(

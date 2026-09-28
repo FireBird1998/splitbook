@@ -65,6 +65,7 @@ export function serverError(err?: unknown) {
   if (err instanceof MoneyValidationError) return error(err.message, 422);
   if (err instanceof Error) {
     const messages: Record<string, [string, number]> = {
+      FORBIDDEN: ['Forbidden', 403],
       INVALID_IDEMPOTENCY_KEY: ['Invalid submission key', 422],
       IDEMPOTENCY_CONFLICT: [
         'This submission key was already used for different data. Start a new submission.',

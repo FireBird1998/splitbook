@@ -53,6 +53,13 @@ interface GroupSettingsViewProps {
   userId: string;
 }
 
+/** The API's `{ error }` message for a rejected request, or `fallback` when it has none. */
+async function failureMessage(res: Response, fallback: string): Promise<string> {
+  const body: unknown = await res.json().catch(() => null);
+  const message = (body as { error?: unknown } | null)?.error;
+  return typeof message === 'string' && message ? message : fallback;
+}
+
 export default function GroupSettingsView(props: GroupSettingsViewProps) {
   return <GroupSettingsContent key={`${props.userId}:${props.groupId}`} {...props} />;
 }
@@ -188,14 +195,16 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
           endDate: endDate || null,
         }),
       });
-      if (res.ok) {
-        mutate();
-        globalMutate(
-          (key: unknown) =>
-            (typeof key === 'string' && key.includes('/api/groups')) || isGroupReadKey(key),
-        );
-        setSnackbar({ open: true, message: 'Group info updated' });
+      if (!res.ok) {
+        setSnackbar({ open: true, message: await failureMessage(res, 'Failed to update') });
+        return;
       }
+      mutate();
+      globalMutate(
+        (key: unknown) =>
+          (typeof key === 'string' && key.includes('/api/groups')) || isGroupReadKey(key),
+      );
+      setSnackbar({ open: true, message: 'Group info updated' });
     } catch {
       setSnackbar({ open: true, message: 'Failed to update' });
     } finally {
@@ -211,10 +220,12 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ defaultCurrency, alternateCurrencies }),
       });
-      if (res.ok) {
-        mutate();
-        setSnackbar({ open: true, message: 'Currency settings updated' });
+      if (!res.ok) {
+        setSnackbar({ open: true, message: await failureMessage(res, 'Failed to update') });
+        return;
       }
+      mutate();
+      setSnackbar({ open: true, message: 'Currency settings updated' });
     } catch {
       setSnackbar({ open: true, message: 'Failed to update' });
     } finally {
@@ -226,20 +237,24 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
     if (!selectedMember) return;
     setMemberLoading(true);
     try {
-      if (action === 'remove') {
-        await fetch(`/api/groups/${groupId}/members/${selectedMember}`, {
-          method: 'DELETE',
-        });
-      } else {
-        await fetch(`/api/groups/${groupId}/members/${selectedMember}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            role: action === 'promote' ? 'admin' : 'member',
-          }),
-        });
-      }
+      const res =
+        action === 'remove'
+          ? await fetch(`/api/groups/${groupId}/members/${selectedMember}`, {
+              method: 'DELETE',
+            })
+          : await fetch(`/api/groups/${groupId}/members/${selectedMember}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                role: action === 'promote' ? 'admin' : 'member',
+              }),
+            });
+      // Refresh either way: a rejection usually means the member list is stale.
       mutate();
+      if (!res.ok) {
+        setSnackbar({ open: true, message: await failureMessage(res, 'Action failed') });
+        return;
+      }
       setSnackbar({
         open: true,
         message:
@@ -266,6 +281,10 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expiresInDays: 7 }),
       });
+      if (!res.ok) {
+        setSnackbar({ open: true, message: await failureMessage(res, 'Failed to generate link') });
+        return;
+      }
       const data = await res.json();
       if (data.data?.inviteUrl) {
         setInviteLink(data.data.inviteUrl);
@@ -288,9 +307,11 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
     setArchiveLoading(true);
     try {
       const res = await fetch(`/api/groups/${groupId}`, { method: 'DELETE' });
-      if (res.ok) {
-        window.location.href = '/groups';
+      if (!res.ok) {
+        setSnackbar({ open: true, message: await failureMessage(res, 'Failed to archive group') });
+        return;
       }
+      window.location.href = '/groups';
     } catch {
       setSnackbar({ open: true, message: 'Failed to archive group' });
     } finally {
@@ -368,13 +389,15 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isArchived: !selectedTagData.isArchived }),
       });
-      if (res.ok) {
-        mutate();
-        setSnackbar({
-          open: true,
-          message: selectedTagData.isArchived ? 'Tag unarchived' : 'Tag archived',
-        });
+      if (!res.ok) {
+        setSnackbar({ open: true, message: await failureMessage(res, 'Failed to update tag') });
+        return;
       }
+      mutate();
+      setSnackbar({
+        open: true,
+        message: selectedTagData.isArchived ? 'Tag unarchived' : 'Tag archived',
+      });
     } catch {
       setSnackbar({ open: true, message: 'Failed to update tag' });
     } finally {
