@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -24,6 +24,7 @@ import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import { useSWRConfig } from 'swr';
+import { isGroupReadKey } from '@/lib/group-read';
 import { PREDEFINED_ITEMS } from '@splitbook/shared/predefined-items';
 import { getCurrency, formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
 import { parseDecimalUnits, sumMinorAmounts } from '@splitbook/shared/exact-money';
@@ -41,22 +42,16 @@ import {
   isAdvancedSplit,
   resolveExpenseCategory,
   resolvePredefinedTag,
-  type GroupTagOption,
 } from './expense-form-helpers';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
-import type { GroupCategory } from '@splitbook/shared/types';
+import type { GroupRead } from '@splitbook/shared/group-read';
 
 // ─── Types ─────────────────────────────────────────────
-interface Member {
-  user: { _id: string; name: string; image?: string };
-  role: string;
-}
-
 interface ExpenseFormDialogProps {
   open: boolean;
   onClose: () => void;
   groupId: string;
-  group: Record<string, unknown>;
+  group: GroupRead;
   userId: string;
   expense?: Record<string, unknown> | null; // If provided → edit mode
   /**
@@ -88,10 +83,10 @@ function ExpenseDraftDialog({
   defaultDate = null,
 }: ExpenseFormDialogProps) {
   const { mutate } = useSWRConfig();
-  const members = useMemo(() => (group.members || []) as Member[], [group.members]);
-  const groupTags = useMemo(() => (group.tags || []) as GroupTagOption[], [group.tags]);
-  const defaultCurrency = group.defaultCurrency as string;
-  const groupNoun = getGroupTheme(group.category as GroupCategory).nouns.singular;
+  const members = group.members;
+  const groupTags = group.tags;
+  const defaultCurrency = group.defaultCurrency;
+  const groupNoun = getGroupTheme(group.category).nouns.singular;
   const groupNounTitle = groupNoun.charAt(0).toUpperCase() + groupNoun.slice(1);
 
   const [draft, setDraft] = useState(() =>
@@ -321,7 +316,8 @@ function ExpenseDraftDialog({
       setDraft((current) => current.complete(submission));
       void mutate(
         (key: unknown) =>
-          typeof key === 'string' && key.startsWith(`/api/groups/${submission.groupId}`),
+          (typeof key === 'string' && key.startsWith(`/api/groups/${submission.groupId}`)) ||
+          isGroupReadKey(key, `/api/groups/${submission.groupId}`),
       );
       onClose();
     } catch (error) {

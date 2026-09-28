@@ -41,6 +41,7 @@ import {
   getSelectableExpenseTags,
   tagOptionValue,
 } from '@/components/expenses/expense-form-helpers';
+import type { GroupReadMember, GroupReadTag } from '@splitbook/shared/group-read';
 import type { IRecurringExpense, SplitMethod } from '@splitbook/shared/types';
 import { decideExpenseMoneyEdit } from '@splitbook/shared/expense-money-edit';
 import { formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
@@ -51,22 +52,10 @@ import {
   toMajorAmount,
 } from '@splitbook/shared/exact-money';
 
-interface MemberLike {
-  user: { _id: string; name: string; image?: string };
-  role: string;
-}
-
-interface TagLike {
-  _id: string;
-  name: string;
-  isArchived: boolean;
-  isDeleted?: boolean;
-}
-
 interface RecurringExpensesSectionProps {
   groupId: string;
-  tags: TagLike[];
-  members: MemberLike[];
+  tags: GroupReadTag[];
+  members: GroupReadMember[];
   defaultCurrency: string;
   onNotify: (message: string) => void;
 }
@@ -105,7 +94,7 @@ function toDateInputValue(date: Date | string | null | undefined): string {
   return d.toISOString().split('T')[0];
 }
 
-function emptyForm(members: MemberLike[], activeTags: TagLike[]): FormState {
+function emptyForm(members: GroupReadMember[], activeTags: GroupReadTag[]): FormState {
   const splits: Record<string, SplitDraft> = {};
   for (const member of members) {
     splits[member.user._id] = { included: true, amount: '', percentage: '', shares: '1' };
@@ -124,7 +113,7 @@ function emptyForm(members: MemberLike[], activeTags: TagLike[]): FormState {
   };
 }
 
-function formFromTemplate(template: IRecurringExpense, members: MemberLike[]): FormState {
+function formFromTemplate(template: IRecurringExpense, members: GroupReadMember[]): FormState {
   const base = emptyForm(members, []);
   let storedMoney: ReturnType<typeof getStoredExpenseMoneyFields> | undefined;
   try {

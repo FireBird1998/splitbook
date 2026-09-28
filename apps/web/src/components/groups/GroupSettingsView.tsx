@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import useSWR, { useSWRConfig } from 'swr';
+import { useSWRConfig } from 'swr';
 import Link from 'next/link';
 import Box from '@mui/material/Box';
 import Container from '@mui/material/Container';
@@ -41,22 +41,25 @@ import EditIcon from '@mui/icons-material/Edit';
 import LabelIcon from '@mui/icons-material/Label';
 import { CURRENCIES, getSortedCurrencies } from '@splitbook/shared/currency';
 import { formatDate } from '@splitbook/shared/date';
-import { fetcher } from '@/lib/utils/fetcher';
+import { useGroup } from '@/lib/hooks/use-groups';
+import { isGroupReadKey } from '@/lib/group-read';
+import ErrorState from '@/components/common/ErrorState';
 import { validateTripDates } from '@splitbook/shared/trip-setup';
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
 import RecurringExpensesSection from '@/components/groups/RecurringExpensesSection';
-import type { GroupCategory } from '@splitbook/shared/types';
 
 interface GroupSettingsViewProps {
   groupId: string;
   userId: string;
 }
 
-export default function GroupSettingsView({ groupId, userId }: GroupSettingsViewProps) {
-  const { mutate: globalMutate } = useSWRConfig();
-  const { data: groupData, isLoading, error, mutate } = useSWR(`/api/groups/${groupId}`, fetcher);
+export default function GroupSettingsView(props: GroupSettingsViewProps) {
+  return <GroupSettingsContent key={`${props.userId}:${props.groupId}`} {...props} />;
+}
 
-  const group = groupData?.data;
+function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
+  const { mutate: globalMutate } = useSWRConfig();
+  const { data: group, isLoading, error, mutate } = useGroup(userId, groupId);
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -95,24 +98,22 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
 
   useEffect(() => {
     if (!group || generalInitialized) return;
-    setName(group.name || '');
-    setDescription(group.description || '');
-    setCategory(group.category || 'other');
-    setStartDate(
-      group.startDate ? new Date(group.startDate as string).toISOString().split('T')[0] : '',
-    );
-    setEndDate(group.endDate ? new Date(group.endDate as string).toISOString().split('T')[0] : '');
+    setName(group.name);
+    setDescription(group.description);
+    setCategory(group.category);
+    setStartDate(group.startDate ? new Date(group.startDate).toISOString().split('T')[0] : '');
+    setEndDate(group.endDate ? new Date(group.endDate).toISOString().split('T')[0] : '');
     setGeneralInitialized(true);
   }, [group, generalInitialized]);
 
   useEffect(() => {
     if (!group || currencyInitialized) return;
-    setDefaultCurrency(group.defaultCurrency || 'INR');
-    setAlternateCurrencies(group.alternateCurrencies || []);
+    setDefaultCurrency(group.defaultCurrency);
+    setAlternateCurrencies(group.alternateCurrencies);
     setCurrencyInitialized(true);
   }, [group, currencyInitialized]);
 
-  if (isLoading) {
+  if (isLoading && !group) {
     return (
       <Container maxWidth="md" disableGutters>
         <Skeleton variant="text" width={192} height={32} sx={{ mb: 2 }} />
@@ -122,10 +123,10 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     );
   }
 
-  if (error) {
+  if (error && !group) {
     return (
       <Container maxWidth="md" disableGutters>
-        <Typography color="error.main">{error.message}</Typography>
+        <ErrorState message="Group could not be loaded." onRetry={() => void mutate()} />
       </Container>
     );
   }
@@ -145,11 +146,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     );
   }
 
-  const members = (group.members || []) as Array<{
-    user: { _id: string; name: string; email?: string; image?: string };
-    role: string;
-    joinedAt: string;
-  }>;
+  const members = group.members;
 
   const currentUserMember = members.find((m) => m.user._id === userId);
   const isAdmin = currentUserMember?.role === 'admin';
@@ -172,9 +169,9 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     );
   }
 
-  const currencies = getSortedCurrencies(group.defaultCurrency, group.alternateCurrencies || []);
+  const currencies = getSortedCurrencies(group.defaultCurrency, group.alternateCurrencies);
   const tripDateError = validateTripDates(startDate || null, endDate || null);
-  const theme = getGroupTheme(group.category as GroupCategory);
+  const theme = getGroupTheme(group.category);
 
   const handleSaveGeneral = async () => {
     if (tripDateError) return;
@@ -298,15 +295,7 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
     }
   };
 
-  const tags = (
-    (group.tags || []) as Array<{
-      _id: string;
-      name: string;
-      isArchived: boolean;
-      isDeleted?: boolean;
-      createdAt: string;
-    }>
-  ).filter((tag) => !tag.isDeleted);
+  const tags = group.tags.filter((tag) => !tag.isDeleted);
 
   const selectedTagData = tags.find((t) => t._id === selectedTag);
 
@@ -353,7 +342,9 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
         return;
       }
       await globalMutate(
-        (key) => typeof key === 'string' && key.startsWith(`/api/groups/${groupId}`),
+        (key) =>
+          (typeof key === 'string' && key.startsWith(`/api/groups/${groupId}`)) ||
+          isGroupReadKey(key, `/api/groups/${groupId}`),
       );
       setRenameTagOpen(false);
       setSelectedTag(null);
@@ -419,6 +410,12 @@ export default function GroupSettingsView({ groupId, userId }: GroupSettingsView
 
   return (
     <Container maxWidth="md" disableGutters>
+      {error && (
+        <ErrorState
+          message="Group could not be refreshed. Showing previously loaded group."
+          onRetry={() => void mutate()}
+        />
+      )}
       {/* Header */}
       <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 4 }}>
         <IconButton

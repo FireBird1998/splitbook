@@ -29,7 +29,7 @@ import { formatDate } from '@splitbook/shared/date';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import { fetcher } from '@/lib/utils/fetcher';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
-import type { GroupCategory } from '@splitbook/shared/types';
+import type { GroupRead } from '@splitbook/shared/group-read';
 
 const QUICK_FILTERS = [
   { id: 'all', label: 'All' },
@@ -44,7 +44,7 @@ const QUICK_FILTERS = [
 interface ExpenseListViewProps {
   groupId: string;
   userId: string;
-  group: Record<string, unknown>;
+  group: GroupRead;
   onAddExpense?: () => void;
   /**
    * Controlled date range (full ISO 8601 bounds), owned by the Household
@@ -150,7 +150,7 @@ export default function ExpenseListView({
     onSummaryChange?.(summary);
   }, [onSummaryChange, summary]);
 
-  const currency = group.defaultCurrency as string;
+  const currency = group.defaultCurrency;
 
   const activeFilterCount = [
     category,
@@ -414,14 +414,7 @@ export default function ExpenseListView({
                       : {}
                   }
                 />
-                {(
-                  (group.tags || []) as Array<{
-                    _id: string;
-                    name: string;
-                    isArchived: boolean;
-                    isDeleted?: boolean;
-                  }>
-                )
+                {group.tags
                   .filter((t) => !t.isDeleted)
                   .map((t) => (
                     <Chip
@@ -599,7 +592,7 @@ export default function ExpenseListView({
             {controlledDateRange && !(search || category || tagFilter)
               ? 'Nothing logged in this month yet.'
               : search || quickFilter !== 'all' || category || tagFilter
-                ? `Try clearing filters to see everything in this ${getGroupTheme(group.category as GroupCategory).nouns.singular}.`
+                ? `Try clearing filters to see everything in this ${getGroupTheme(group.category).nouns.singular}.`
                 : 'Add a shared cost — tags and equal split are ready.'}
           </Typography>
           {onAddExpense &&
