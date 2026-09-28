@@ -28,6 +28,7 @@ export interface GroupFinancialViewsProps {
   onRefreshExpenses: () => void;
   onRefreshBalances: () => void;
   onLoadMore: () => void;
+  onOpenExpense: (expenseId: string) => void;
 }
 
 function Amount({
@@ -266,7 +267,15 @@ function monthLabel(month: string | null) {
     : 'All time';
 }
 
-function ExpenseRow({ expense, currentUserId }: { expense: MobileExpense; currentUserId: string }) {
+function ExpenseRow({
+  expense,
+  currentUserId,
+  onOpen,
+}: {
+  expense: MobileExpense;
+  currentUserId: string;
+  onOpen: () => void;
+}) {
   const theme = useTheme();
   return (
     <Panel>
@@ -296,6 +305,7 @@ function ExpenseRow({ expense, currentUserId }: { expense: MobileExpense; curren
           </Copy>
         </View>
       )}
+      <Button label={`View ${expense.description}`} secondary onPress={onOpen} />
     </Panel>
   );
 }
@@ -384,6 +394,7 @@ export function GroupFinancialViews({
   onRefreshExpenses,
   onRefreshBalances,
   onLoadMore,
+  onOpenExpense,
 }: GroupFinancialViewsProps) {
   const theme = useTheme();
   const { balances, expenses } = state;
@@ -577,7 +588,12 @@ export function GroupFinancialViews({
         ) : expenses.data.length ? (
           <>
             {expenses.data.map((expense) => (
-              <ExpenseRow key={expense.id} expense={expense} currentUserId={currentUserId} />
+              <ExpenseRow
+                key={expense.id}
+                expense={expense}
+                currentUserId={currentUserId}
+                onOpen={() => onOpenExpense(expense.id)}
+              />
             ))}
             {expenses.pagination && (
               <Copy

@@ -2,7 +2,7 @@
 
 Expo + React Native, TypeScript, Android first. The foundation implements [ticket #50](https://github.com/FireBird1998/splitbook/issues/50): guarded local persona sign-in, API-backed Group browsing, Theme-specific headers, member lists, session restoration, foreground revalidation, and sign-out. [Ticket #52](https://github.com/FireBird1998/splitbook/issues/52) adds Group creation, Android sharing, invitation preview, and explicit joining. [The approved spec](https://github.com/FireBird1998/splitbook/issues/49) tracks the remaining native app.
 
-This is a **development client**. It requires Metro and a local fictional backend. The staging APK, real Google callback, financial editing, drafts, offline views, and iOS validation have separate tickets; they are not included here.
+This is a **development client**. It requires Metro and a local fictional backend. The staging APK, real Google callback, offline views, and iOS validation have separate tickets; they are not included here.
 
 ## Run locally
 
@@ -72,7 +72,7 @@ No real staging domain or certificate is configured here. Ticket [#60](https://g
 - Logout invalidates request generations, purges memory and SQLite drafts, serializes account storage cleanup, and attempts server revocation. In-flight responses cannot refill state. Future caches must join this purge boundary.
 - Native demo entry requires both `__DEV__` and explicit `EXPO_PUBLIC_APP_ENV=development`; the server independently enforces its existing demo guard. A production bundle cannot use this adapter. Cleartext Android traffic is configured only for the development variant.
 - Display tokens live in `@splitbook/shared/design-tokens`; the old web import re-exports that source. Both clients share the semantic light/dark colors and Group Theme registry. Only the required Outfit/IBM Plex Mono weights are bundled.
-- Financial writes, offline caches, native Google integration, and production configuration are intentionally handled by the remaining approved tickets. The data boundary is the extension point for those changes.
+- Remaining financial workflows, offline caches, native Google integration, and production configuration are handled by the remaining approved tickets. The data boundary is the extension point for those changes.
 
 ## Home and Group financial views
 
@@ -110,10 +110,18 @@ SQLite keeps one draft per backend, account, and Group. Every edit is serialized
 
 Run `TZ=Asia/Kolkata pnpm mobile verify:expenses` against the isolated local development backend. It verifies literal remainder allocation, corrected validation, offline prevention, real response loss after commit, disk-backed controller restart, identical retry, exactly one Expense and Activity, renamed/archived Tag replay, machine error codes, refreshed balances, and account isolation. It creates and archives only its own fictional Group. Native process-restart/SQLite and keyboard/appearance checks remain separate device checks; this verifier does not claim to run Android.
 
-For native fixtures, use `verify:expenses --seed-fixtures /absolute/path/manifest.json`, then `verify:expenses --cleanup-fixtures /absolute/path/manifest.json`. Never use fixture helpers against real user data. Expense editing/deletion and financial read caching belong to later tickets.
+For native fixtures, use `verify:expenses --seed-fixtures /absolute/path/manifest.json`, then `verify:expenses --cleanup-fixtures /absolute/path/manifest.json`. Never use fixture helpers against real user data. Financial read caching belongs to a later ticket.
 
 ### Custom splits and multiple payers
 
 **Edit split** supports Equal, Unequal, Percentage, Shares, and Exact using the shared exact-money calculator. **Edit payers** retains the single-payer default and reveals individual paid amounts for multiple payers. The review shows each person’s paid and owed amounts with both totals conserved in the Group currency. Invalid totals, percentages, shares, precision, and duplicate members use shared correction messages.
 
 Done and Android Back retain sheet edits in the account-scoped draft. Changing split method clears incompatible split values; participant toggles retain their entries within the same method. Existing equal-split drafts remain readable. Every custom submission uses the same persisted immutable body/key and explicit retry rules as equal splits. The HTTP verifier now saves all five methods with multiple payers, reverses participant order to verify stable remainder placement, interrupts each committed response, restarts, retries explicitly, and compares the authorized saved allocations and Activity with the preview.
+
+## Expense detail, editing, and deletion (#55)
+
+Open an Expense from the Group ledger to see its stored currency, payers, allocations, Tag, notes, and available edit history. **Edit expense** retains the record’s original values, including historical rounding and archived Tag association. Metadata-only changes send only changed metadata; they do not recalculate or resend allocations. **Delete expense** shows the saved record and requires explicit confirmation before soft deletion. Successful writes refresh the Group ledger, balances, and Home. The backend records Activity, verified through authorized HTTP reads; the native Activity screen remains a separate ticket.
+
+Every edit/delete carries the displayed revision and requires an online membership check. SQLite persists the draft, original record, revision, and exact pending mutation before sending. If another member changed the record, or a response is lost, **Check current Expense** performs an authorized read only. Compare the current saved record with the retained draft, then explicitly choose **Keep my draft for review** before saving again, or **Keep current saved record** to discard the local draft. Deleted records and revoked access disable saving. Neither restart nor reconnect automatically repeats an edit/delete or adopts a new revision. A Group’s existing draft must be resolved before editing a different Expense.
+
+Run `TZ=Asia/Kolkata pnpm mobile verify:expense-edit` against the isolated local backend. It checks metadata preservation, archived Tags, two editors, stale delete, committed-response loss, disk-backed restart, explicit reconciliation, and single deletion Activity. It archives only its own fictional Group and signs out its test sessions. Native checks separately exercise detail/edit controls, conflict choices, process restart, and deletion confirmation.

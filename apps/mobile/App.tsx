@@ -286,11 +286,34 @@ function SplitBook() {
             ) : state.screen === 'expense' ? (
               <ExpenseEditor
                 state={state.expense}
+                onEdit={() => void controller.editExpense()}
+                onReviewDelete={controller.reviewExpenseDeletion}
+                onCancelDelete={controller.cancelExpenseDeletion}
+                onDelete={() => void controller.deleteExpense()}
+                onReconcile={() => void controller.reconcileExpense()}
+                onReviewLatest={() => void controller.reviewLatestExpense()}
+                onAcceptCurrent={() =>
+                  Alert.alert(
+                    'Use the current saved record?',
+                    'This discards your local draft after checking the saved record.',
+                    [
+                      { text: 'Keep draft', style: 'cancel' },
+                      {
+                        text: 'Use saved record',
+                        onPress: () => void controller.acceptCurrentExpense(),
+                      },
+                    ],
+                  )
+                }
                 onChange={(patch) => void controller.updateExpenseDraft(patch)}
                 onSave={() => void controller.saveExpense()}
                 onResume={controller.resumeExpenseDraft}
                 onRetry={() =>
-                  state.expense.groupId && void controller.openExpense(state.expense.groupId)
+                  state.expense.groupId &&
+                  void controller.openExpense(
+                    state.expense.groupId,
+                    state.expense.requestedExpenseId ?? undefined,
+                  )
                 }
                 onDiscard={() =>
                   Alert.alert(
@@ -440,7 +463,9 @@ function SplitBook() {
                   />
                   {state.expense.status === 'saved' &&
                     state.expense.groupId === state.detail.id && (
-                      <Copy accessibilityLiveRegion="polite">Expense saved.</Copy>
+                      <Copy accessibilityLiveRegion="polite">
+                        {state.expense.message ?? 'Expense saved.'}
+                      </Copy>
                     )}
                   <GroupFinancialViews
                     group={state.detail.data}
@@ -450,6 +475,9 @@ function SplitBook() {
                     onRefreshExpenses={() => void controller.refreshExpenses()}
                     onRefreshBalances={() => void controller.refreshBalances()}
                     onLoadMore={() => void controller.loadMoreExpenses()}
+                    onOpenExpense={(expenseId) =>
+                      void controller.openExpense(state.detail.id!, expenseId)
+                    }
                   />
                 </GroupDetail>
                 {state.detail.data.members.length === 1 && (

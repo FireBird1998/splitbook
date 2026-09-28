@@ -83,7 +83,8 @@ export function serverError(err?: unknown) {
       ],
       INVALID_MONEY: ['Enter a positive amount with the currency’s supported precision.', 422],
     };
-    if (err.name === 'VersionError') return error(messages.STALE_REVISION[0], 409);
+    if (err.name === 'VersionError')
+      return error(messages.STALE_REVISION[0], 409, 'STALE_REVISION');
     if (messages[err.message]) return error(...messages[err.message], err.message);
   }
   console.error('Server error:', err);

@@ -1,3 +1,5 @@
+import { canEditExpense } from '../data/expense-record';
+import { ExpenseRecordView } from './expense-record-view';
 import { useState } from 'react';
 import { View, Pressable, Modal, ScrollView, KeyboardAvoidingView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -32,6 +34,13 @@ export function ExpenseEditor({
   onResume,
   onDiscard,
   onRetry,
+  onEdit,
+  onReviewDelete,
+  onDelete,
+  onCancelDelete,
+  onReconcile,
+  onReviewLatest,
+  onAcceptCurrent,
 }: {
   state: Editor;
   onChange: (patch: Partial<ExpenseDraft>) => void;
@@ -39,6 +48,13 @@ export function ExpenseEditor({
   onResume: () => void;
   onDiscard: () => void;
   onRetry: () => void;
+  onEdit: () => void;
+  onReviewDelete: () => void;
+  onDelete: () => void;
+  onCancelDelete: () => void;
+  onReconcile: () => void;
+  onReviewLatest: () => void;
+  onAcceptCurrent: () => void;
 }) {
   const theme = useTheme();
   const [details, setDetails] = useState(false);
@@ -56,7 +72,11 @@ export function ExpenseEditor({
   const locked = state.status !== 'editing';
   const members = context?.group.members.map(({ user }) => user) ?? [];
   const name = (id: string) =>
-    members.find((member) => member.id === id)?.name ?? 'Unavailable member';
+    members.find((member) => member.id === id)?.name ??
+    [...(draft.original?.paidBy ?? []), ...(draft.original?.splitBetween ?? [])].find(
+      (row) => row.user === id,
+    )?.name ??
+    'Unavailable member';
   const invalidMembers =
     context &&
     [
@@ -109,6 +129,42 @@ export function ExpenseEditor({
       </Copy>
     </Pressable>
   );
+  if (draft.original && ['detail', 'delete-review'].includes(state.status))
+    return (
+      <View style={{ gap: 20 }}>
+        <ExpenseRecordView record={draft.original} />
+        {state.message ? <Copy accessibilityRole="alert">{state.message}</Copy> : null}
+        {state.status === 'delete-review' ? (
+          <Panel>
+            <Copy accessibilityRole="header" style={{ fontFamily: fonts.semibold }}>
+              Delete this Expense?
+            </Copy>
+            <Copy>
+              This removes the Expense from balances. Its saved history is retained. Review the
+              record above before confirming.
+            </Copy>
+            <Button label="Confirm delete Expense" onPress={onDelete} />
+            <Button label="Keep Expense" secondary onPress={onCancelDelete} />
+          </Panel>
+        ) : !draft.original.isDeleted ? (
+          <>
+            <Button
+              label="Edit Expense"
+              onPress={onEdit}
+              disabled={!canEditExpense(draft.original)}
+            />
+            {!canEditExpense(draft.original) ? (
+              <Copy>
+                This historical Expense includes a member whose account is no longer available. It
+                can be reviewed or deleted, but not edited.
+              </Copy>
+            ) : null}
+            <Button label="Delete Expense" secondary onPress={onReviewDelete} />
+            <Button label="Refresh Expense" secondary onPress={onRetry} />
+          </>
+        ) : null}
+      </View>
+    );
   return (
     <View style={{ gap: 20 }}>
       <Label>{context?.group.name ?? 'SAVED GROUP DRAFT'}</Label>
@@ -116,26 +172,47 @@ export function ExpenseEditor({
         accessibilityRole="header"
         style={{ fontFamily: fonts.semibold, fontSize: 32, lineHeight: 38 }}
       >
-        Add expense
+        {draft.original ? 'Edit expense' : 'Add expense'}
       </Copy>
       <Copy style={{ color: theme.textSecondary }}>
         Split a shared cost. Your draft stays on this device until you save or discard it.
       </Copy>
+      {state.latest && <ExpenseRecordView record={state.latest} title="Current saved record" />}
+      {state.status === 'conflict' && (
+        <Panel>
+          <Copy>
+            Your draft is shown below. Compare every field with the current record before choosing.
+          </Copy>
+          <Button
+            label="Keep my draft for review"
+            onPress={onReviewLatest}
+            disabled={!state.latest || !canEditExpense(state.latest)}
+          />
+          <Button label="Keep current saved record" secondary onPress={onAcceptCurrent} />
+        </Panel>
+      )}
+      {state.status === 'blocked' && state.latest && (
+        <Button label="Keep current saved record" secondary onPress={onAcceptCurrent} />
+      )}
       {state.status === 'resume' && (
         <Panel>
           <Copy accessibilityRole="header" style={{ fontFamily: fonts.semibold }}>
             You have a saved draft
           </Copy>
           <Copy>
-            {state.attempt
-              ? 'This submission may already be saved. Resume to confirm it with the same details.'
-              : 'Resume your entries or discard them to start again.'}
+            {state.mutation
+              ? 'This change needs a current-record check before another write. Resume to review it.'
+              : state.attempt
+                ? 'This submission may already be saved. Resume to confirm it with the same details.'
+                : 'Resume your entries or discard them to start again.'}
           </Copy>
           <Button
-            label={state.attempt ? 'Resume save recovery' : 'Resume draft'}
+            label={state.attempt || state.mutation ? 'Resume save recovery' : 'Resume draft'}
             onPress={onResume}
           />
-          {!state.attempt && <Button label="Discard draft" secondary onPress={onDiscard} />}
+          {!state.attempt && !state.mutation && (
+            <Button label="Discard draft" secondary onPress={onDiscard} />
+          )}
         </Panel>
       )}
       {!context && (
@@ -152,8 +229,10 @@ export function ExpenseEditor({
           editable={!locked}
           onChangeText={(amount) => onChange({ amount })}
         />
-        <Copy style={{ fontFamily: fonts.mono }}>{draft.currency} · Group currency</Copy>
-        {context && draft.currency !== context.group.defaultCurrency && (
+        <Copy style={{ fontFamily: fonts.mono }}>
+          {draft.currency} · {draft.original ? 'Expense currency' : 'Group currency'}
+        </Copy>
+        {!draft.original && context && draft.currency !== context.group.defaultCurrency && (
           <>
             <Copy accessibilityRole="alert">
               This draft uses {draft.currency}; the Group now uses {context.group.defaultCurrency}.
@@ -210,9 +289,11 @@ export function ExpenseEditor({
         <Copy style={{ fontFamily: fonts.semibold }}>Tag · required</Copy>
         {draft.tagId && context && (!tag || tag.isArchived || tag.isDeleted) ? (
           <Copy accessibilityRole="alert">
-            {state.attempt
-              ? `Submitted Tag: ${tag?.name ?? 'unavailable'}. Recovery keeps the original Tag identity.`
-              : `Saved Tag: ${tag?.name ?? 'unavailable'}. It is unavailable or archived; choose an active Tag before saving.`}
+            {draft.original && draft.tagId === (draft.original.tagId ?? '')
+              ? `Historical Tag: ${tag?.name ?? draft.original.tag}. This association is retained.`
+              : state.attempt
+                ? `Submitted Tag: ${tag?.name ?? 'unavailable'}. Recovery keeps the original Tag identity.`
+                : `Saved Tag: ${tag?.name ?? 'unavailable'}. It is unavailable or archived; choose an active Tag before saving.`}
           </Copy>
         ) : null}
         {context?.tags
@@ -305,21 +386,28 @@ export function ExpenseEditor({
       {state.persistence === 'error' && !state.attempt && (
         <Button label="Retry saving draft" secondary onPress={() => onChange({})} />
       )}
-      {state.status !== 'resume' && (
+      {draft.original && ['uncertain', 'blocked'].includes(state.status) && (
+        <Button label="Check current Expense" onPress={onReconcile} />
+      )}
+      {(state.status === 'editing' ||
+        state.status === 'saving' ||
+        (!draft.original && state.status === 'uncertain')) && (
         <Button
           label={
             state.status === 'saving'
               ? 'Saving expense…'
               : state.attempt
                 ? 'Retry same submission'
-                : 'Save expense'
+                : draft.original
+                  ? 'Save changes'
+                  : 'Save expense'
           }
           onPress={onSave}
           disabled={state.status === 'saving' || state.persistence !== 'saved'}
         />
       )}
       {state.status === 'editing' && <Button label="Discard draft" secondary onPress={onDiscard} />}
-      {state.attempt && (
+      {(state.attempt || state.mutation) && (
         <Copy>
           Details are locked until the save is confirmed. Signing out removes recovery information;
           check Group history before recreating this expense.
