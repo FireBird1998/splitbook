@@ -252,6 +252,18 @@ async function run() {
     console.log(
       'PASS: committed response loss, offline retry refusal, persistent restart, immutable explicit retry, one Settlement/Activity and exact balance.',
     );
+    await controller.openActivity(groupId);
+    assert.equal(controller.getSnapshot().activity.status, 'ready');
+    await controller.refreshActivity();
+    assert.equal(
+      controller
+        .getSnapshot()
+        .activity.events.filter((event) => event.metadata.settlementId === recovered._id).length,
+      1,
+    );
+    console.log(
+      'PASS: recovered payment appears once in the native Activity controller after authoritative refresh.',
+    );
     await start('1', 'Revoked member payment');
     await alex.request(`${path}/members/${samId}`, 'DELETE');
     count = writes.length;

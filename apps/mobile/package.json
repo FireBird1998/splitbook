@@ -48,7 +48,8 @@
     "verify:financial": "node --import tsx scripts/verify-financial-views.ts",
     "verify:expenses": "node --import tsx scripts/verify-expense-create.ts",
     "verify:expense-edit": "node --import tsx scripts/verify-expense-edit.ts",
-    "verify:settlements": "node --import tsx scripts/verify-settlements.ts"
+    "verify:settlements": "node --import tsx scripts/verify-settlements.ts",
+    "verify:activity": "node --import tsx scripts/verify-activity.ts"
   },
   "private": true
 }

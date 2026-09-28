@@ -84,6 +84,21 @@ describe('activity timeline helpers', () => {
     ).toBe('Priya → Alex');
   });
 
+  it.each([
+    ['removed', 'Alex removed a member from the group'],
+    ['left', 'Alex left the group'],
+  ])('distinguishes membership action %s from the actor leaving', (method, expected) => {
+    expect(
+      formatActivityHeadline({
+        _id: 'membership',
+        type: 'member_left',
+        createdAt: '2026-09-28T12:00:00.000Z',
+        actor: { name: 'Alex' },
+        metadata: { userId: 'sam', method },
+      }),
+    ).toBe(expected);
+  });
+
   it('marks recurring-generated expenses in the headline', () => {
     expect(
       formatActivityHeadline({
