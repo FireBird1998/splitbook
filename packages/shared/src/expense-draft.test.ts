@@ -143,3 +143,27 @@ it('blocks invalid stored money and preserves the draft on an invalid reload', (
   expect(entered.base?.revision).toBe(3);
   expect(entered.error).toMatch(/invalid stored amounts/);
 });
+
+it('requires entered shares before submitting the Shares method', () => {
+  const draft = ExpenseDraft.open(context)
+    .edit({ description: 'Lunch', amount: '10' })
+    .chooseSplitMethod('shares');
+  const prepared = draft.prepare(['general-id'], 'shares');
+  expect(prepared.submission).toBeUndefined();
+  expect(prepared.draft.error).toContain('at least 1 share');
+});
+
+it.each(['paidBy', 'splitBetween'])('shows an editing error for malformed stored %s', (field) => {
+  const malformed = { ...saved };
+  Reflect.set(malformed, field, null);
+  const draft = ExpenseDraft.open(context, malformed);
+  expect(draft.invalidStoredMoney).toBe(true);
+  expect(draft.error).toContain('invalid stored amounts');
+  expect(draft.prepare(['general-id'], 'invalid').submission).toBeUndefined();
+});
+
+it('keeps invalid stored currency out of editable money controls', () => {
+  const draft = ExpenseDraft.open(context, { ...saved, currency: 'invalid' });
+  expect(draft.invalidStoredMoney).toBe(true);
+  expect(draft.values.currency).toBe('USD');
+});

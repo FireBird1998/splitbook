@@ -72,16 +72,7 @@ export class ExpenseDraft {
   private constructor(private readonly state: DraftState) {}
 
   static open(context: ExpenseDraftContext, saved: SavedDraftExpense | null = null): ExpenseDraft {
-    const base = saved
-      ? {
-          ...saved,
-          paidBy: saved.paidBy.map((row) => ({ ...row, user: moneyParticipantId(row.user) })),
-          splitBetween: saved.splitBetween.map((row) => ({
-            ...row,
-            user: moneyParticipantId(row.user),
-          })),
-        }
-      : null;
+    const base = saved ? { ...saved } : null;
     const values: ExpenseDraftValues = {
       description: base?.description ?? '',
       amount: '',
@@ -102,6 +93,11 @@ export class ExpenseDraft {
     if (base) {
       try {
         const money = readExpenseMoney(base);
+        base.paidBy = base.paidBy.map((row) => ({ ...row, user: moneyParticipantId(row.user) }));
+        base.splitBetween = base.splitBetween.map((row) => ({
+          ...row,
+          user: moneyParticipantId(row.user),
+        }));
         values.amount = String(money.amount);
         values.payers = money.paidBy.map((row) => ({ user: row.user, amount: String(row.amount) }));
         values.multiPayerMode = values.payers.length > 1;
@@ -113,6 +109,7 @@ export class ExpenseDraft {
           if (row.shares !== undefined) values.customShares[row.user] = String(row.shares);
         }
       } catch {
+        values.currency = context.currency;
         error = 'This expense contains invalid stored amounts and cannot be edited.';
       }
     }
@@ -177,6 +174,11 @@ export class ExpenseDraft {
   private money() {
     if (this.invalidStoredMoney) throw new Error(this.error);
     const v = this.values;
+    if (
+      v.splitMethod === 'shares' &&
+      v.selectedMembers.reduce((sum, id) => sum + (parseInt(v.customShares[id]) || 0), 0) === 0
+    )
+      throw new Error('Each member needs at least 1 share');
     const input = {
       amount: v.amount,
       currency: v.currency,
