@@ -2,7 +2,7 @@
 
 Expo + React Native, TypeScript, Android first. The foundation implements [ticket #50](https://github.com/FireBird1998/splitbook/issues/50): guarded local persona sign-in, API-backed Group browsing, Theme-specific headers, member lists, session restoration, foreground revalidation, and sign-out. [Ticket #52](https://github.com/FireBird1998/splitbook/issues/52) adds Group creation, Android sharing, invitation preview, and explicit joining. [The approved spec](https://github.com/FireBird1998/splitbook/issues/49) tracks the remaining native app.
 
-This is a **development client**. It requires Metro and a local fictional backend. The staging APK, real Google callback, offline views, and iOS validation have separate tickets; they are not included here.
+This is a **development client**. It requires Metro and a local fictional backend. The staging APK, real Google callback, and iOS validation have separate tickets; they are not included here.
 
 ## Run locally
 
@@ -72,7 +72,7 @@ No real staging domain or certificate is configured here. Ticket [#60](https://g
 - Logout invalidates request generations, purges memory and SQLite drafts, serializes account storage cleanup, and attempts server revocation. In-flight responses cannot refill state. Future caches must join this purge boundary.
 - Native demo entry requires both `__DEV__` and explicit `EXPO_PUBLIC_APP_ENV=development`; the server independently enforces its existing demo guard. A production bundle cannot use this adapter. Cleartext Android traffic is configured only for the development variant.
 - Display tokens live in `@splitbook/shared/design-tokens`; the old web import re-exports that source. Both clients share the semantic light/dark colors and Group Theme registry. Only the required Outfit/IBM Plex Mono weights are bundled.
-- Remaining financial workflows, offline caches, native Google integration, and production configuration are handled by the remaining approved tickets. The data boundary is the extension point for those changes.
+- Native Google integration, staging release, and production configuration are handled by the remaining approved tickets. The data boundary is the extension point for those changes.
 
 ## Home and Group financial views
 
@@ -82,7 +82,7 @@ Opening a Group loads its expenses and all-time running balances. Expenses show 
 
 A Month is only an expense window. The client sends full ISO bounds for local calendar-month start and end, asks for the backend's summary and member contributions, and keeps running balances separate. Monthly contributions are scoped to the Group's default currency; expense totals and running balances preserve every currency returned by the backend. Changing Month neither resets the ledger nor records a Settlement.
 
-The expense read can materialize due recurring entries on the backend, so the controller reads expenses before refreshing Group balances. The native app validates the returned money with shared exact-money helpers but does not compute its own balances. These reads remain memory-only and join the existing session/navigation invalidation and sign-out cleanup boundaries.
+The expense read can materialize due recurring entries on the backend, so the controller reads expenses before refreshing Group balances. The native app validates the returned money with shared exact-money helpers but does not compute its own balances. These reads now support the account-scoped offline cache described below and join the existing session/navigation invalidation and sign-out cleanup boundaries.
 
 `verify:financial` exercises the public mobile controller against the real local HTTP backend with uniquely named fictional Groups, known obligations in INR/EUR, local Month boundaries, an empty Month, and more than one expense page. Run it with `TZ=Asia/Kolkata` for a reproducible non-UTC fixture; the app itself follows the device timezone. The verifier archives its own Groups afterward. Native checks separately cover rendering, controls, refresh, light/dark appearance, and enlarged text.
 
@@ -110,7 +110,7 @@ SQLite keeps one draft per backend, account, and Group. Every edit is serialized
 
 Run `TZ=Asia/Kolkata pnpm mobile verify:expenses` against the isolated local development backend. It verifies literal remainder allocation, corrected validation, offline prevention, real response loss after commit, disk-backed controller restart, identical retry, exactly one Expense and Activity, renamed/archived Tag replay, machine error codes, refreshed balances, and account isolation. It creates and archives only its own fictional Group. Native process-restart/SQLite and keyboard/appearance checks remain separate device checks; this verifier does not claim to run Android.
 
-For native fixtures, use `verify:expenses --seed-fixtures /absolute/path/manifest.json`, then `verify:expenses --cleanup-fixtures /absolute/path/manifest.json`. Never use fixture helpers against real user data. Financial read caching belongs to a later ticket.
+For native fixtures, use `verify:expenses --seed-fixtures /absolute/path/manifest.json`, then `verify:expenses --cleanup-fixtures /absolute/path/manifest.json`. Never use fixture helpers against real user data. Financial read caching is described below.
 
 ### Custom splits and multiple payers
 
@@ -142,6 +142,16 @@ Open **Activity** from a Group for the authorized backend timeline. Events show 
 
 Event details are explicitly historical snapshots, with recorded changes and Expense/payment references where available. A separate authorized read checks whether a linked Expense currently exists, is deleted, or is unavailable. These details never open an editor or substitute the snapshot for the current Expense. Missing references and unknown current status stay explicit.
 
-Returning to the foreground refreshes Activity authorization. Access denial removes its timeline and detail; session expiry/sign-out clears account state and late responses cannot restore it. A failed refresh retains only this process's previously loaded events with a stale/error notice and disabled detail actions. This ticket adds no persistent offline cache. A missing event is never evidence that its Expense or payment failed.
+Returning to the foreground refreshes Activity authorization. Access denial removes its timeline and detail; session expiry/sign-out clears account state and late responses cannot restore it. A network failure uses the validated account-scoped cache described below; other failed refreshes retain previously loaded events with a stale/error notice and disabled detail actions. A missing event is never evidence that its Expense or payment failed.
 
 Run `MOBILE_VERIFY_URL=http://127.0.0.1:<port> pnpm mobile verify:activity` against an isolated local backend for mixed-event pagination, deleted-target details, stale/error recovery, and foreground membership revocation. The existing `verify:settlements` journey also checks that a payment recovered after committed-response loss appears once in the native Activity controller. Both scripts use only owned fictional fixtures. For device checks, `verify:activity --seed-fixtures /absolute/path/manifest.json` preserves an owned fixture; `--cleanup-fixtures` archives that exact Group after verification.
+
+## Offline financial views (#59)
+
+Previously loaded Home balances, Groups, exact expense Month/page queries, running balances, Activity pages, and Expense details persist in SQLite, scoped to the backend and account. Offline reads show a saved-data notice with the oldest refresh time among the saved views displayed. An unvisited Group, Month, page, or detail remains explicitly unavailable. Server errors and invalid responses are not disguised as successful offline reads.
+
+A cold offline restart requires the existing protected session cookie, matching account owner, and an unexpired last verified identity in SecureStore. This permits inspection of previously authorized data; it cannot discover remote revocation while disconnected. Once connected, reads recheck the session and server authorization. A denied Group is purged, including its cached aggregates; an authoritative Group list also removes caches for lost memberships. Sign-out/account switching use the existing serialized cleanup and restart marker.
+
+Expense drafts remain editable using saved Group context. Financial create/edit/delete and payment submission still require live checks. Reconnect preserves the draft and any uncertain attempt, and never retries a mutation automatically. Cached Activity record status is labelled as the last saved check rather than a statement of current existence. Payments history and invitations remain online-only.
+
+Run `MOBILE_VERIFY_URL=http://127.0.0.1:<port> pnpm mobile verify:offline` against an isolated fictional backend. This public-controller/HTTP journey uses disk persistence to verify cold offline restoration, exact Month availability, retained drafts, reconnect without writes, revocation and sign-out. Android SQLite/SecureStore/process-restart and visual checks are recorded separately in the QA report.

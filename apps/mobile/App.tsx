@@ -1,3 +1,4 @@
+import { OfflineNotice } from './src/ui/offline-notice';
 import { ActivityScreen } from './src/ui/activity-screen';
 import { SettlementScreen } from './src/ui/settlement-screen';
 import { useEffect, useSyncExternalStore } from 'react';
@@ -267,6 +268,7 @@ function SplitBook() {
               )
             }
           >
+            <OfflineNotice state={state.offline} />
             {state.screen === 'settings' ? (
               <SettingsScreen
                 user={state.auth.user!}
@@ -304,6 +306,7 @@ function SplitBook() {
             ) : state.screen === 'activity' ? (
               <ActivityScreen
                 state={state.activity}
+                stale={state.offline.active}
                 onRefresh={() => void controller.refreshActivity()}
                 onMore={() => void controller.loadMoreActivity()}
                 onSelect={(id) => void controller.selectActivity(id)}

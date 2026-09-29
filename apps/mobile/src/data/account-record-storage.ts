@@ -9,12 +9,13 @@ export interface AccountGroupRecordStore {
 /** Atomic account/Group JSON records. The two existing on-disk stores keep their identities. */
 export function createAccountGroupRecordStore(
   environment: string,
-  kind: 'expense' | 'settlement',
+  kind: 'expense' | 'settlement' | 'cache',
 ): AccountGroupRecordStore {
-  const { file, table } =
-    kind === 'expense'
-      ? { file: 'splitbook-drafts.db', table: 'expense_drafts' }
-      : { file: 'splitbook-settlements.db', table: 'settlement_attempts' };
+  const { file, table } = {
+    expense: { file: 'splitbook-drafts.db', table: 'expense_drafts' },
+    settlement: { file: 'splitbook-settlements.db', table: 'settlement_attempts' },
+    cache: { file: 'splitbook-read-cache.db', table: 'financial_reads' },
+  }[kind];
   let opening: Promise<SQLiteDatabase> | undefined;
   const database = () => {
     opening ??= (async () => {
