@@ -84,7 +84,7 @@ async function assertOneEffect(writer: Writer, id: unknown) {
 
 for (const writer of ['expenses', 'settlements'] as const) {
   describe(`${writer} creation recovery`, () => {
-    it('characterizes a committed write whose response preparation fails, then replays once', async () => {
+    it('attempts Activity before a committed response fails, then replays once', async () => {
       const key = randomUUID();
       const model = writer === 'expenses' ? Expense : Settlement;
       const fault = vi
@@ -93,11 +93,9 @@ for (const writer of ['expenses', 'settlements'] as const) {
       await expect(create(writer, key)).rejects.toThrow('response preparation unavailable');
       const stored = await collection(writer).findOne({ 'creationRequest.key': key });
       expect(stored).not.toBeNull();
-      // Baseline #77: Expense publishes first; fresh Settlement still prepares first.
-      expect(await Activity.countDocuments({ group: groupId, type: eventType(writer) })).toBe(
-        writer === 'expenses' ? 1 : 0,
-      );
-      expect(stored!.pendingActivity).toHaveLength(writer === 'expenses' ? 0 : 1);
+      // A response failure must not prevent the first publication attempt.
+      expect(await Activity.countDocuments({ group: groupId, type: eventType(writer) })).toBe(1);
+      expect(stored!.pendingActivity).toHaveLength(0);
       // Normal replay already publishes before preparing its response for both writers.
       await expect(create(writer, key)).rejects.toThrow('response preparation unavailable');
       expect(await Activity.countDocuments({ group: groupId, type: eventType(writer) })).toBe(1);

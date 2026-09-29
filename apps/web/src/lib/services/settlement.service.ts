@@ -119,15 +119,13 @@ export class SettlementService {
       throw err;
     }
 
-    const populated = await settlement.populate([
+    // Attempt recoverable publication before response preparation can fail after commit.
+    await activityService.publishPending('settlements', settlement._id, settlement.pendingActivity);
+    return settlement.populate([
       { path: 'paidBy', select: 'name email image' },
       { path: 'paidTo', select: 'name email image' },
       { path: 'createdBy', select: 'name email image' },
     ]);
-
-    await activityService.publishPending('settlements', settlement._id, settlement.pendingActivity);
-
-    return populated;
   }
 
   /**
