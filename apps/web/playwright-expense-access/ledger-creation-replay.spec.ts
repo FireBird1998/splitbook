@@ -205,9 +205,14 @@ test('legacy Tag aliases replay after rename, retirement and reassignment with c
   await dataOf(await ledger.priya.delete(tagPath));
   const current = await dataOf(await ledger.priya.get(endpoint));
   const before = await snapshot(ledger.priya, ledger.groupB);
-  expect(await dataOf(await ledger.priya.post(path, { data: body, headers }), 201)).toEqual(
-    current,
-  );
+  // POST replay keeps history actor IDs; GET detail populates those users.
+  expect(await dataOf(await ledger.priya.post(path, { data: body, headers }), 201)).toEqual({
+    ...current,
+    editHistory: current.editHistory.map((entry: { editedBy: { _id: string } }) => ({
+      ...entry,
+      editedBy: entry.editedBy._id,
+    })),
+  });
   expect(current).toMatchObject({ description: 'Edited after creation', tagId: replacement._id });
   expect(await assertEffects(ledger.priya, ledger.groupB, 'expenses', [first._id], -50)).toEqual(
     before,
