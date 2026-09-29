@@ -9,6 +9,9 @@ import {
   updateRecurringExpenseSchema,
 } from '@splitbook/shared/validators/recurring-expense';
 import { toPeriod } from '@splitbook/shared/recurring-due-periods';
+import { balanceService } from './balance.service';
+import { expenseService } from './expense.service';
+import { decideExpenseMoneyEdit } from '@splitbook/shared/expense-money-edit';
 import { groupService } from './group.service';
 import { recurringExpenseService } from './recurring-expense.service';
 
@@ -87,6 +90,54 @@ describe('recurring financial integrity and revisions', () => {
     const expense = await Expense.findOne({ recurringExpense: template!._id }).lean();
     expect(expense).toMatchObject({ amount: 1, amountMinor: 1, moneyVersion: 1 });
     expect(expense!.splitBetween.map((row) => row.amountMinor)).toEqual([1, 0, 0]);
+  });
+
+  it('applies a financial template edit only to future generation with preview and Balance parity', async () => {
+    const groupId = await household();
+    const template = await recurringExpenseService.create(groupId, input('INR', 0.03), alice);
+    await recurringExpenseService.generateDueExpenses(groupId, nextMonth);
+    const initial = await expenseService.getGroupExpenses(groupId, {}, alice);
+    expect(initial.expenses).toHaveLength(1);
+    const original = initial.expenses[0];
+    const change = { amount: 0.05, paidBy: [{ user: alice, amount: 0.05 }] };
+    const preview = decideExpenseMoneyEdit(template!.toObject(), change).money;
+    const updated = await recurringExpenseService.update(
+      groupId,
+      String(template!._id),
+      change,
+      alice,
+      0,
+    );
+    expect(preview.splitBetween.map((row) => row.amountMinor)).toEqual([2, 2, 1]);
+    expect(updated!.splitBetween.map((row) => row.amountMinor)).toEqual([2, 2, 1]);
+
+    const followingMonth = new Date(
+      Date.UTC(nextMonth.getUTCFullYear(), nextMonth.getUTCMonth() + 1, 1),
+    );
+    expect(await recurringExpenseService.generateDueExpenses(groupId, followingMonth)).toEqual({
+      generated: 1,
+    });
+    expect(await recurringExpenseService.generateDueExpenses(groupId, followingMonth)).toEqual({
+      generated: 0,
+    });
+    const result = await expenseService.getGroupExpenses(groupId, {}, alice);
+    expect(result.expenses).toHaveLength(2);
+    const future = result.expenses.find((row) => row.period === toPeriod(followingMonth))!;
+    expect(future).toMatchObject({ amountMinor: 5, moneyVersion: 1 });
+    expect(future.paidBy.map((row) => row.amountMinor)).toEqual([5]);
+    expect(future.splitBetween.map((row) => row.amountMinor)).toEqual([2, 2, 1]);
+    expect(result.expenses.find((row) => String(row._id) === String(original._id))).toEqual(
+      original,
+    );
+    const balances = await balanceService.getGroupBalances(groupId);
+    expect(balances!.balances.map((row) => ({ user: row.user._id, balance: row.balance }))).toEqual(
+      expect.arrayContaining([
+        { user: alice, balance: 0.05 },
+        { user: bob, balance: -0.03 },
+        { user: carol, balance: -0.02 },
+      ]),
+    );
+    expect(await Activity.countDocuments({ group: groupId, type: 'expense_added' })).toBe(2);
   });
 
   it('rejects an amount-only partial update without changing the template or revision', async () => {
