@@ -7,6 +7,12 @@ import {
   toMajorAmount,
 } from '@splitbook/shared/exact-money';
 import { objectId } from './dto';
+import {
+  amountError,
+  correctionSummary,
+  emptyFormValidation,
+  type FormValidation,
+} from './field-feedback';
 import type { GroupCurrencyBalance, MobileGroup } from './types';
 
 export interface SettlementDraft {
@@ -16,6 +22,26 @@ export interface SettlementDraft {
   amount: string;
   note: string;
 }
+export const settlementFields = ['amount', 'note'] as const;
+export type SettlementField = (typeof settlementFields)[number];
+export type SettlementFieldErrors = Partial<Record<SettlementField, string>>;
+export const settlementFieldLabels: Record<SettlementField, string> = {
+  amount: 'Amount',
+  note: 'Note',
+};
+/**
+ * Local corrections before review. Payer, recipient and currency come from the chosen
+ * suggestion and never change here; the server re-validates the same shared rules.
+ */
+export function validateSettlementDraft(draft: SettlementDraft): SettlementFieldErrors {
+  const errors: SettlementFieldErrors = {};
+  const amount = amountError(draft.amount, draft.currency);
+  if (amount) errors.amount = amount;
+  if (draft.note.trim().length > 500) errors.note = 'Keep the note to 500 characters or fewer.';
+  return errors;
+}
+export const settlementCorrectionSummary = (errors: SettlementFieldErrors) =>
+  correctionSummary(settlementFields, settlementFieldLabels, errors, 'reviewing');
 export interface SettlementAttempt {
   key: string;
   body: string;
@@ -59,6 +85,7 @@ export interface SettlementState {
   suggested: number | null;
   acknowledged: boolean;
   message: string | null;
+  validation: FormValidation<SettlementField>;
 }
 export const emptySettlement = (): SettlementState => ({
   groupId: null,
@@ -71,6 +98,7 @@ export const emptySettlement = (): SettlementState => ({
   suggested: null,
   acknowledged: false,
   message: null,
+  validation: emptyFormValidation(),
 });
 export function parseSettlementHistory(value: unknown, groupId: string) {
   const records = z.object({ status: z.literal(200), data: z.array(record) }).parse(value).data;

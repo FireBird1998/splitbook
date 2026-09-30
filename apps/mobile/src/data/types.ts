@@ -3,6 +3,7 @@ import type { ActivityState } from './activity';
 import type { AccountGroupRecordStore } from './account-record-storage';
 import type { SettlementState } from './settlement';
 import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
+import type { GroupValidation } from './group-draft';
 import type { GroupCategory } from '@splitbook/shared/types';
 
 export interface SessionUser {
@@ -130,6 +131,7 @@ export interface GroupCreation {
   draft: GroupDraft;
   status: 'editing' | 'saving' | 'error' | 'uncertain';
   message: string | null;
+  validation: GroupValidation;
 }
 
 export interface InvitationPreview {

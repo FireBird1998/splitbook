@@ -47,6 +47,8 @@ import {
   RetainedNotice,
 } from './src/ui/financial-views';
 import { refreshFeedback } from './src/ui/refresh-feedback';
+import { visibleFieldErrors } from './src/data/field-feedback';
+import { groupFields } from './src/data/group-draft';
 
 export default function App() {
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
@@ -351,6 +353,8 @@ function SplitBook() {
                   if (state.settlement.groupId)
                     void controller.openSettlements(state.settlement.groupId);
                 }}
+                onLeaveField={controller.touchSettlementField}
+                onReveal={reveal}
               />
             ) : state.screen === 'expense' ? (
               <ExpenseEditor
@@ -409,6 +413,10 @@ function SplitBook() {
                 busy={state.creation.status === 'saving'}
                 uncertain={state.creation.status === 'uncertain'}
                 message={state.creation.message}
+                errors={visibleFieldErrors(groupFields, state.creation.validation)}
+                focus={state.creation.validation.focus}
+                onLeaveField={controller.touchCreationField}
+                onReveal={reveal}
                 onCheckGroups={() => void controller.checkCreatedGroups()}
                 onDiscard={() =>
                   Alert.alert('Discard this Group form?', 'Your unsaved entries will be cleared.', [

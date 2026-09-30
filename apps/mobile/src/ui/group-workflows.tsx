@@ -1,4 +1,4 @@
-import { useState, type Ref } from 'react';
+import { useEffect, useRef, useState, type Ref } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CURRENCIES, getCurrency } from '@splitbook/shared/currency';
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
+import type { GroupField, GroupFieldErrors } from '../data/group-draft';
 import type { GroupDraft, InvitationPreview as InvitationPreviewModel } from '../data/types';
 import { Button, Copy, Icon, Label, Loading, Notice, Panel } from './primitives';
 import { fonts, useTheme } from './theme';
@@ -26,6 +27,13 @@ export interface GroupCreateFormProps {
   uncertain: boolean;
   onCheckGroups: () => void;
   onDiscard: () => void;
+  /** Corrections to show now: after a field was left or a create was attempted. */
+  errors?: GroupFieldErrors;
+  /** Changes once per rejected create, naming the first field to correct. */
+  focus?: { field: GroupField; request: number } | null;
+  onLeaveField?: (field: GroupField) => void;
+  /** Scrolls a field into view within the screen's ScrollView. */
+  onReveal?: (section: View) => void;
 }
 
 /** A correction shown directly below the control it belongs to. */
@@ -113,13 +121,33 @@ export function GroupCreateForm({
   uncertain,
   onCheckGroups,
   onDiscard,
+  errors = {},
+  focus = null,
+  onLeaveField = () => undefined,
+  onReveal = () => undefined,
 }: GroupCreateFormProps) {
   const theme = useTheme();
+  const sections = useRef<Partial<Record<GroupField, View | null>>>({});
+  const inputs = useRef<Partial<Record<GroupField, TextInput | null>>>({});
+  useEffect(() => {
+    // Each rejected create asks once for the first invalid field; later edits never move focus.
+    if (!focus) return;
+    const section = sections.current[focus.field];
+    if (section) onReveal(section);
+    inputs.current[focus.field]?.focus();
+  }, [focus?.request]);
+  const section = (field: GroupField) => (node: View | null) => {
+    sections.current[field] = node;
+  };
+  const input = (field: GroupField) => (node: TextInput | null) => {
+    inputs.current[field] = node;
+  };
   const descriptor = getGroupTheme(draft.category);
   const currency = getCurrency(draft.defaultCurrency);
   const [choosingCurrency, setChoosingCurrency] = useState(false);
   const [currencySearch, setCurrencySearch] = useState('');
   const locked = busy || uncertain;
+  const creating = 'Sending this Group. Keep this screen open until SplitBook confirms it.';
   const noun = descriptor.nouns.singular;
   const capitalizedNoun = noun.charAt(0).toUpperCase() + noun.slice(1);
   const matchingCurrencies = CURRENCIES.filter((item) =>
@@ -201,16 +229,23 @@ export function GroupCreateForm({
         </Copy>
       </View>
 
-      <Field
-        label={`${capitalizedNoun} name`}
-        value={draft.name}
-        onChangeText={(name) => onChange({ name })}
-        maxLength={100}
-        placeholder={descriptor.namePlaceholder}
-        autoCapitalize="sentences"
-        returnKeyType="done"
-        editable={!locked}
-      />
+      <View ref={section('name')}>
+        <Field
+          label={`${capitalizedNoun} name`}
+          required
+          hint="Everyone you invite sees this name."
+          inputRef={input('name')}
+          error={errors.name}
+          value={draft.name}
+          onChangeText={(name) => onChange({ name })}
+          onBlur={() => onLeaveField('name')}
+          maxLength={100}
+          placeholder={descriptor.namePlaceholder}
+          autoCapitalize="sentences"
+          returnKeyType="done"
+          editable={!locked}
+        />
+      </View>
 
       <View style={{ gap: 7 }}>
         <Copy style={{ fontFamily: fonts.medium, fontSize: 14 }}>Currency</Copy>
@@ -255,30 +290,40 @@ export function GroupCreateForm({
           <Copy style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 21 }}>
             Optional. Leave these blank if your plans are still taking shape.
           </Copy>
-          <Field
-            label="Start date"
-            value={draft.startDate}
-            onChangeText={(startDate) => onChange({ startDate })}
-            placeholder="YYYY-MM-DD"
-            hint="Year-month-day, for example 2026-10-15."
-            autoCorrect={false}
-            autoCapitalize="none"
-            maxLength={10}
-            returnKeyType="done"
-            editable={!locked}
-          />
-          <Field
-            label="End date"
-            value={draft.endDate}
-            onChangeText={(endDate) => onChange({ endDate })}
-            placeholder="YYYY-MM-DD"
-            hint="On or after the start date."
-            autoCorrect={false}
-            autoCapitalize="none"
-            maxLength={10}
-            returnKeyType="done"
-            editable={!locked}
-          />
+          <View ref={section('startDate')}>
+            <Field
+              label="Start date"
+              inputRef={input('startDate')}
+              error={errors.startDate}
+              value={draft.startDate}
+              onChangeText={(startDate) => onChange({ startDate })}
+              onBlur={() => onLeaveField('startDate')}
+              placeholder="YYYY-MM-DD"
+              hint="Year-month-day, for example 2026-10-15."
+              autoCorrect={false}
+              autoCapitalize="none"
+              maxLength={10}
+              returnKeyType="done"
+              editable={!locked}
+            />
+          </View>
+          <View ref={section('endDate')}>
+            <Field
+              label="End date"
+              inputRef={input('endDate')}
+              error={errors.endDate}
+              value={draft.endDate}
+              onChangeText={(endDate) => onChange({ endDate })}
+              onBlur={() => onLeaveField('endDate')}
+              placeholder="YYYY-MM-DD"
+              hint="On or after the start date."
+              autoCorrect={false}
+              autoCapitalize="none"
+              maxLength={10}
+              returnKeyType="done"
+              editable={!locked}
+            />
+          </View>
         </Panel>
       )}
 
@@ -300,12 +345,19 @@ export function GroupCreateForm({
       )}
       <View style={{ gap: 10 }}>
         {!uncertain && (
+          // Create stays available for incomplete input so it can explain what is missing.
           <Button
             label={busy ? 'Creating your Group…' : `Create ${noun}`}
             icon={busy ? undefined : 'add-outline'}
-            disabled={busy || !draft.name.trim() || !currency}
+            hint={busy ? creating : undefined}
+            disabled={busy}
             onPress={onSubmit}
           />
+        )}
+        {busy && (
+          <Copy style={{ fontSize: 14, color: theme.textSecondary, textAlign: 'center' }}>
+            {creating}
+          </Copy>
         )}
         <Button
           label={uncertain ? 'Leave this form' : 'Cancel'}

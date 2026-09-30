@@ -6,8 +6,12 @@ import {
   parseSettlementAttempt,
   parseSettlementHistory,
   settlementBody,
+  settlementCorrectionSummary,
+  settlementFields,
   settlementSuggestion,
+  validateSettlementDraft,
   type SettlementDraft,
+  type SettlementField,
 } from './settlement';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
 import {
@@ -38,6 +42,13 @@ import {
   type ExpenseValidation,
 } from './expense-draft';
 import { readSessionCookie, validSessionCookie } from './cookies';
+import { emptyFormValidation, rejectFields, touchField } from './field-feedback';
+import {
+  groupCorrectionSummary,
+  groupFields,
+  validateGroupDraft,
+  type GroupField,
+} from './group-draft';
 import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { currentMonthKey, getLocalMonthIsoRange, toDateParam } from '@splitbook/shared/date';
@@ -130,6 +141,12 @@ class AccountCleanupError extends Error {
     super('Could not remove this account from the device. Try signing out again.');
   }
 }
+/** This device's storage blocks the action. The message is safe to show; raw errors never are. */
+class DeviceStorageError extends Error {}
+const recoveryStorageMissing =
+  'Payments need this device to keep a recovery copy of each submission, and that storage isn’t available right now. Try again, or sign out and back in.';
+const recoveryStorageUnreadable =
+  'Couldn’t read this device’s payment recovery records, so payments can’t be recorded right now. Any unresolved payment is kept. Try again, or restart the app.';
 class RequestError extends Error {
   constructor(
     message: string,
@@ -182,6 +199,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
       },
       status: 'editing',
       message: null,
+      validation: emptyFormValidation(),
     },
     invitation: { code: null, status: 'idle', preview: null, message: null },
     share: { status: 'idle', url: null, message: null },
@@ -2831,10 +2849,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       settlement: { ...emptySettlement(), groupId, status: 'loading' },
     });
     try {
-      if (!lease || !storage) throw new Error('Payment recovery storage is unavailable.');
-      const stored = await lease.write(() => storage.load(lease.accountId, groupId));
-      const recovery =
-        stored === null ? null : parseSettlementAttempt(stored, lease.accountId, groupId);
+      if (!lease || !storage) throw new DeviceStorageError(recoveryStorageMissing);
+      let recovery: ReturnType<typeof parseSettlementAttempt> | null;
+      try {
+        const stored = await lease.write(() => storage.load(lease.accountId, groupId));
+        recovery =
+          stored === null ? null : parseSettlementAttempt(stored, lease.accountId, groupId);
+      } catch (error) {
+        if (error instanceof Superseded || !current(owner)) throw error;
+        // The stored record is left exactly as it is, for a later explicit retry.
+        throw new DeviceStorageError(recoveryStorageUnreadable);
+      }
       if (!current(owner) || view !== viewRequest) return;
       if (recovery) publish({ ...snapshot, settlement: { ...snapshot.settlement, ...recovery } });
       const context = await settlementContext(groupId, owner);
@@ -2867,8 +2892,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               : snapshot.settlement.attempt
                 ? 'uncertain'
                 : 'error',
+          // Storage problems say so, rather than pointing at the connection.
           message:
-            error instanceof RequestError
+            error instanceof RequestError || error instanceof DeviceStorageError
               ? error.message
               : 'Could not load payments. Reconnect and retry; retained submissions are unchanged.',
         },
@@ -2906,6 +2932,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         suggested: debt.amount,
         acknowledged: false,
         message: null,
+        validation: emptyFormValidation(),
       },
     });
   };
@@ -2918,14 +2945,34 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !state.draft
     )
       return;
+    const draft = { ...state.draft, ...patch };
     publish({
       ...snapshot,
       settlement: {
         ...state,
         status: 'editing',
-        draft: { ...state.draft, ...patch },
+        draft,
         acknowledged: false,
         message: null,
+        validation: { ...state.validation, errors: validateSettlementDraft(draft) },
+      },
+    });
+  };
+  /** Leaving a field shows its correction, if any; typing alone never does. */
+  const touchSettlementField = (field: SettlementField) => {
+    const state = snapshot.settlement;
+    if (
+      snapshot.screen !== 'settlement' ||
+      state.status !== 'editing' ||
+      !state.draft ||
+      state.validation.touched.includes(field)
+    )
+      return;
+    publish({
+      ...snapshot,
+      settlement: {
+        ...state,
+        validation: touchField(state.validation, field, validateSettlementDraft(state.draft)),
       },
     });
   };
@@ -2941,6 +2988,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !lease
     )
       return;
+    // Amount corrections stay on the Amount field; payer, recipient, currency and every
+    // entered value are kept, and nothing is requested.
+    const errors = validateSettlementDraft(state.draft);
+    const rejected = rejectFields(settlementFields, state.validation, errors);
+    if (rejected) {
+      publish({
+        ...snapshot,
+        settlement: {
+          ...state,
+          status: 'editing',
+          acknowledged: false,
+          message: settlementCorrectionSummary(errors),
+          validation: rejected,
+        },
+      });
+      return;
+    }
     const owner = generation,
       view = viewRequest;
     publish({ ...snapshot, settlement: { ...state, status: 'loading', message: null } });
@@ -3021,11 +3085,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.screen !== 'settlement' ||
       !['review', 'uncertain'].includes(state.status) ||
       !state.draft ||
-      !state.groupId ||
-      !lease ||
-      !storage
+      !state.groupId
     )
       return;
+    // A payment is only sent once its retry identity is stored on this device.
+    if (!lease || !storage) {
+      publish({
+        ...snapshot,
+        settlement: {
+          ...state,
+          message:
+            'This device can’t keep a recovery copy of the payment right now, so it can’t be recorded yet. Your entries are kept. Try again, or sign out and back in.',
+        },
+      });
+      return;
+    }
     const owner = generation,
       view = viewRequest,
       groupId = state.groupId,
@@ -3080,7 +3154,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         const pending = { key: dependencies.newSubmissionKey?.() ?? '', body };
         const value = { version: 1, accountId: lease.accountId, groupId, ...pending };
         parseSettlementAttempt(value, lease.accountId, groupId);
-        await lease.write(() => storage.save(lease.accountId, groupId, value));
+        try {
+          await lease.write(() => storage.save(lease.accountId, groupId, value));
+        } catch (error) {
+          if (error instanceof Superseded || !current(owner)) throw error;
+          throw new DeviceStorageError(
+            'Nothing was sent: this device couldn’t store a recovery copy of the payment. Your entries are kept. Choose Record payment again.',
+          );
+        }
         attempt = pending;
       }
       if (!current(owner) || view !== viewRequest) return;
@@ -3461,9 +3542,40 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ['saving', 'uncertain'].includes(snapshot.creation.status)
     )
       return;
+    const { creation } = snapshot;
+    const draft = { ...creation.draft, ...patch };
     publish({
       ...snapshot,
-      creation: { ...snapshot.creation, draft: { ...snapshot.creation.draft, ...patch } },
+      creation: {
+        ...creation,
+        draft,
+        // An edit answers the previous correction; field errors stay beside their fields.
+        status: 'editing',
+        message: null,
+        validation: { ...creation.validation, errors: validateGroupDraft(draft, today()) },
+      },
+    });
+  };
+
+  /** Leaving a field shows its correction, if any; typing alone never does. */
+  const touchCreationField = (field: GroupField) => {
+    const { creation } = snapshot;
+    if (
+      snapshot.screen !== 'create' ||
+      ['saving', 'uncertain'].includes(creation.status) ||
+      creation.validation.touched.includes(field)
+    )
+      return;
+    publish({
+      ...snapshot,
+      creation: {
+        ...creation,
+        validation: touchField(
+          creation.validation,
+          field,
+          validateGroupDraft(creation.draft, today()),
+        ),
+      },
     });
   };
 
@@ -3477,24 +3589,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const view = viewRequest;
     const draft = snapshot.creation.draft;
     const bounded = getGroupTheme(draft.category).dates === 'bounded';
-    if (
-      bounded &&
-      [draft.startDate, draft.endDate].some((value) => {
-        if (!value) return false;
-        const date = new Date(value);
-        return (
-          !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
-          !Number.isFinite(date.getTime()) ||
-          date.toISOString().slice(0, 10) !== value
-        );
-      })
-    ) {
+    // Every correction is explained beside its field before anything is sent.
+    const errors = validateGroupDraft(draft, today());
+    const rejected = rejectFields(groupFields, snapshot.creation.validation, errors);
+    if (rejected) {
       publish({
         ...snapshot,
         creation: {
           ...snapshot.creation,
-          status: 'error',
-          message: 'Enter valid Trip dates as YYYY-MM-DD.',
+          status: 'editing',
+          message: groupCorrectionSummary(errors),
+          validation: rejected,
         },
       });
       return;
@@ -3504,8 +3609,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       name: draft.name.trim(),
       description: draft.description.trim(),
       alternateCurrencies: [],
-      startDate: bounded && draft.startDate ? draft.startDate : null,
-      endDate: bounded && draft.endDate ? draft.endDate : null,
+      startDate: bounded && draft.startDate.trim() ? draft.startDate.trim() : null,
+      endDate: bounded && draft.endDate.trim() ? draft.endDate.trim() : null,
     });
     if (!payload.success) {
       publish({
@@ -3803,7 +3908,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     reviewSettlement,
     recordSettlement,
     acknowledgeSettlement,
+    touchSettlementField,
     updateCreation,
+    touchCreationField,
     createGroup,
     loadInviteLink,
     openInvitation,
