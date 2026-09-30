@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "name": "Splitbook",
+  "direction": "Equal share",
+  "colors": {
+    "indigo": "#6366F1",
+    "indigoOnDark": "#7B8CFF",
+    "ink": "#172033",
+    "white": "#FFFFFF",
+    "paper": "#F8F9FC"
+  },
+  "wordmark": { "font": "Outfit", "weight": 700, "trackingEm": -0.025 },
+  "clearSpace": { "markFraction": 0.25, "lockupHeightFraction": 0.5 },
+  "sizes": {
+    "mark": [16, 20, 24, 32, 40, 48, 64, 128, 256, 512],
+    "lockupHeights": [24, 32, 40, 48, 64, 96],
+    "pixelDensities": [1, 2, 3],
+    "web": [16, 32, 48, 180, 192, 512],
+    "app": [48, 72, 96, 144, 192, 512, 1024],
+    "adaptive": [108, 162, 216, 324, 432, 1024]
+  }
+}

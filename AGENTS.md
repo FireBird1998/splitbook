@@ -36,3 +36,7 @@ The five canonical triage labels are used as-is (`needs-triage`, `needs-info`, `
 ### Domain docs
 
 Single-context: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Brand assets
+
+For logos, favicons, app icons, brand colors, or logo size variants, read `docs/design/brand/README.md`. Use the canonical sources and exporter in `assets/brand/` and `tools/brand/`; completion includes generated-asset checks and visual verification.
