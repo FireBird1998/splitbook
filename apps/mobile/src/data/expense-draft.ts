@@ -8,8 +8,16 @@ import {
 } from '@splitbook/shared/expense-validation';
 import { resolveTagReference } from '@splitbook/shared/tag-identity';
 import { z } from 'zod';
-import { normalizeExpenseMoney, parseDecimalUnits } from '@splitbook/shared/exact-money';
-import { getCurrency } from '@splitbook/shared/currency';
+import {
+  MAX_EXPENSE_AMOUNT,
+  MoneyValidationError,
+  normalizeExpenseMoney,
+  parseAmountMinor,
+  parseDecimalUnits,
+  parseExpenseAmountMinor,
+} from '@splitbook/shared/exact-money';
+import { getCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
+import { calendarDate } from '@splitbook/shared/validators/calendar-date';
 import { parseGroupResponse } from '@splitbook/shared/group-read';
 import { objectId, toMobileGroup } from './dto';
 import type { MobileGroup } from './types';
@@ -72,6 +80,32 @@ export interface ExpenseEditor {
   receiptId: string | null;
   persistence: 'saved' | 'saving' | 'error';
   message: string | null;
+  validation: ExpenseValidation;
+}
+/** Correctable Expense inputs, in the order they appear on screen. */
+export const expenseFields = ['amount', 'description', 'date', 'payers', 'split', 'tag'] as const;
+export type ExpenseField = (typeof expenseFields)[number];
+export type ExpenseFieldErrors = Partial<Record<ExpenseField, string>>;
+/**
+ * Errors become visible once a field is left or a save is attempted, so partial
+ * typing is not treated as a mistake. `focus.request` changes once per rejected save.
+ */
+export interface ExpenseValidation {
+  submitted: boolean;
+  touched: ExpenseField[];
+  errors: ExpenseFieldErrors;
+  focus: { field: ExpenseField; request: number } | null;
+}
+export const expenseFieldLabels: Record<ExpenseField, string> = {
+  amount: 'Amount',
+  description: 'Description',
+  date: 'Date',
+  payers: 'Paid by',
+  split: 'Split',
+  tag: 'Tag',
+};
+export function emptyExpenseValidation(): ExpenseValidation {
+  return { submitted: false, touched: [], errors: {}, focus: null };
 }
 export type { AccountGroupRecordStore as ExpenseDraftStore } from './account-record-storage';
 export function emptyExpenseEditor(): ExpenseEditor {
@@ -88,6 +122,7 @@ export function emptyExpenseEditor(): ExpenseEditor {
     receiptId: null,
     persistence: 'saved',
     message: null,
+    validation: emptyExpenseValidation(),
   };
 }
 export function parseExpenseContext(value: unknown): ExpenseContext {
@@ -134,7 +169,13 @@ export function parseStoredExpenseDraft(value: unknown, accountId: string, group
 }
 /** Adapt text entry to the same exact-money command used by the web ledger. */
 export function expenseMoney(draft: ExpenseDraft) {
-  const input = {
+  const input = expenseMoneyInput(draft);
+  return draft.original
+    ? decideExpenseMoneyEdit(storedExpenseMoney(draft.original), input).money
+    : normalizeExpenseMoney(input);
+}
+function expenseMoneyInput(draft: ExpenseDraft) {
+  return {
     amount: draft.amount,
     currency: draft.currency,
     paidBy: draft.multiPayer ? draft.payers : [{ user: draft.payerId, amount: draft.amount }],
@@ -150,9 +191,16 @@ export function expenseMoney(draft: ExpenseDraft) {
             : {}),
     })),
   };
-  return draft.original
-    ? decideExpenseMoneyEdit(storedExpenseMoney(draft.original), input).money
-    : normalizeExpenseMoney(input);
+}
+/** An edit re-checks current members only when it changes the saved allocation. */
+function changesExpenseMoney(draft: ExpenseDraft, money: ReturnType<typeof expenseMoney>) {
+  return (
+    !draft.original ||
+    decideExpenseMoneyEdit(storedExpenseMoney(draft.original), {
+      ...money,
+      splitMethod: draft.splitMethod,
+    }).financialEdit
+  );
 }
 export function previewExpense(draft: ExpenseDraft): ExpenseEditor['preview'] {
   try {
@@ -160,6 +208,166 @@ export function previewExpense(draft: ExpenseDraft): ExpenseEditor['preview'] {
   } catch {
     return null;
   }
+}
+
+const moneyCode = (error: unknown) => (error instanceof MoneyValidationError ? error.code : '');
+function amountExample(currency: string) {
+  const digits = getCurrencyPrecision(currency);
+  return digits ? `250.${'50'.padEnd(digits, '0').slice(0, digits)}` : '250';
+}
+function amountError(draft: ExpenseDraft, context: ExpenseContext | null) {
+  const { currency } = draft;
+  if (!draft.original && context && currency !== context.group.defaultCurrency)
+    return `This draft uses ${currency}, but the Group now uses ${context.group.defaultCurrency}. Choose Use ${context.group.defaultCurrency}, then review the amount.`;
+  const example = amountExample(currency);
+  if (!draft.amount.trim()) return `Enter the amount, such as ${example}.`;
+  try {
+    parseExpenseAmountMinor(draft.amount, currency);
+    return undefined;
+  } catch (error) {
+    const code = moneyCode(error);
+    const digits = getCurrencyPrecision(currency);
+    if (code === 'INVALID_MONEY_PRECISION')
+      return `${currency} amounts ${
+        digits
+          ? `can have at most ${digits} decimal ${digits === 1 ? 'place' : 'places'}`
+          : 'can’t include decimal places'
+      }. Nothing is rounded for you.`;
+    if (code === 'INVALID_MONEY_RANGE' || code === 'UNSAFE_MONEY') {
+      let positive = !draft.amount.trim().startsWith('-');
+      try {
+        positive &&= parseAmountMinor(draft.amount, currency) > 0;
+      } catch {
+        // Too large to represent exactly: still above the limit.
+      }
+      return positive
+        ? `Enter an amount of at most ${String(MAX_EXPENSE_AMOUNT).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.`
+        : 'Enter an amount greater than 0.';
+    }
+    return digits
+      ? `Use digits and one decimal point, such as ${example}.`
+      : `Use digits only, such as ${example}.`;
+  }
+}
+function dateError(date: string, today: string) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return `Enter the date as YYYY-MM-DD, such as ${today}.`;
+  if (!calendarDate.safeParse(date).success || !z.iso.date().safeParse(date).success)
+    return `${date} isn’t a real date. Check the day and month.`;
+  return undefined;
+}
+function memberName(draft: ExpenseDraft, id: string) {
+  return [...(draft.original?.paidBy ?? []), ...(draft.original?.splitBetween ?? [])].find(
+    (row) => row.user === id,
+  )?.name;
+}
+/** Payer and split problems stay with their editors; the shared money rules decide validity. */
+function allocationErrors(draft: ExpenseDraft, context: ExpenseContext | null): ExpenseFieldErrors {
+  let money: ReturnType<typeof expenseMoney>;
+  try {
+    money = expenseMoney(draft);
+  } catch (error) {
+    const code = moneyCode(error);
+    const payerIds = draft.multiPayer ? draft.payers.map((payer) => payer.user) : [draft.payerId];
+    if (code === 'EMPTY_PARTICIPANTS')
+      return payerIds.length
+        ? { split: 'Choose at least one person to share this Expense.' }
+        : { payers: 'Choose who paid.' };
+    const unreadablePayer =
+      draft.multiPayer &&
+      draft.payers.some((payer) => {
+        try {
+          parseAmountMinor(payer.amount, draft.currency);
+          return false;
+        } catch {
+          return true;
+        }
+      });
+    const payerProblem =
+      code === 'PAYER_TOTAL_MISMATCH' ||
+      code === 'INVALID_PAYER_AMOUNT' ||
+      (code === 'DUPLICATE_PARTICIPANTS' && new Set(payerIds).size !== payerIds.length) ||
+      (code.startsWith('INVALID_MONEY') && unreadablePayer);
+    const message =
+      error instanceof MoneyValidationError
+        ? error.message
+        : 'Review who paid and how this Expense is split.';
+    return payerProblem ? { payers: message } : { split: message };
+  }
+  if (!context || !changesExpenseMoney(draft, money)) return {};
+  const members = new Set(context.group.members.map((member) => member.user.id));
+  const payer = money.paidBy.find((row) => !members.has(String(row.user)));
+  if (payer)
+    return {
+      payers: `${memberName(draft, String(payer.user)) ?? 'A payer'} is no longer in this Group. Choose who paid.`,
+    };
+  const participant = money.splitBetween.find((row) => !members.has(String(row.user)));
+  if (participant)
+    return {
+      split: `${memberName(draft, String(participant.user)) ?? 'A participant'} is no longer in this Group. Remove unavailable participants from the split.`,
+    };
+  return {};
+}
+function tagError(draft: ExpenseDraft, context: ExpenseContext | null) {
+  const original = draft.original;
+  // Editing keeps an existing historical Tag association unless the member changes it.
+  if (original && draft.tagId === (original.tagId ?? '')) return undefined;
+  if (!draft.tagId) return 'Choose a Tag for this Expense.';
+  if (!context) return undefined;
+  try {
+    resolveTagReference(
+      context.tags.map(({ id, ...rest }) => ({ _id: id, ...rest })),
+      { tagId: draft.tagId },
+      original,
+    );
+    return undefined;
+  } catch {
+    return 'This Tag is no longer available. Choose an active Tag.';
+  }
+}
+
+/**
+ * Local corrections for every field, in screen order. `context` availability is
+ * advisory: saving re-runs this against the freshly authorized Group first.
+ */
+export function validateExpenseDraft(
+  draft: ExpenseDraft,
+  context: ExpenseContext | null,
+  today: string,
+): ExpenseFieldErrors {
+  const amount = amountError(draft, context);
+  const found: ExpenseFieldErrors = {
+    amount,
+    description: updateExpenseSchema.shape.description.safeParse(draft.description).success
+      ? undefined
+      : draft.description.trim()
+        ? 'Keep the description to 200 characters or fewer.'
+        : 'Add a description, such as Groceries.',
+    date: dateError(draft.date, today),
+    ...(amount ? {} : allocationErrors(draft, context)),
+    tag: tagError(draft, context),
+  };
+  return Object.fromEntries(
+    expenseFields.filter((field) => found[field]).map((field) => [field, found[field]]),
+  );
+}
+export function visibleExpenseErrors(
+  errors: ExpenseFieldErrors,
+  validation: Pick<ExpenseValidation, 'submitted' | 'touched'>,
+): ExpenseFieldErrors {
+  return validation.submitted
+    ? errors
+    : Object.fromEntries(
+        expenseFields
+          .filter((field) => errors[field] && validation.touched.includes(field))
+          .map((field) => [field, errors[field]]),
+      );
+}
+/** One concise announcement for a rejected save; details stay beside each field. */
+export function expenseCorrectionSummary(errors: ExpenseFieldErrors): string | null {
+  const fields = expenseFields.filter((field) => errors[field]);
+  if (fields.length <= 1) return fields.length ? errors[fields[0]]! : null;
+  const labels = fields.map((field) => expenseFieldLabels[field]);
+  return `Correct ${fields.length} fields before saving: ${labels.slice(0, -1).join(', ')} and ${labels[labels.length - 1]}.`;
 }
 
 export function buildExpenseBody(draft: ExpenseDraft, context: ExpenseContext): string {
@@ -234,10 +442,7 @@ export function buildExpensePatch(draft: ExpenseDraft, context: ExpenseContext):
   const original = draft.original;
   if (!original || original.isDeleted) throw new Error('This Expense is deleted.');
   const money = expenseMoney(draft);
-  const financial = decideExpenseMoneyEdit(storedExpenseMoney(original), {
-    ...money,
-    splitMethod: draft.splitMethod,
-  }).financialEdit;
+  const financial = changesExpenseMoney(draft, money);
   if (financial)
     assertExpenseParticipants(
       new Set(context.group.members.map((member) => member.user.id)),

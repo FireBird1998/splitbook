@@ -1,7 +1,7 @@
 import { OfflineNotice } from './src/ui/offline-notice';
 import { ActivityScreen } from './src/ui/activity-screen';
 import { SettlementScreen } from './src/ui/settlement-screen';
-import { useEffect, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useSyncExternalStore, type RefObject } from 'react';
 import {
   AppState,
   Appearance,
@@ -75,6 +75,18 @@ function SplitBook() {
   const theme = useTheme();
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
+  const scroll = useRef<ScrollView>(null);
+  const scrollContent = useRef<View>(null);
+  // Place a form section near the top, so it stays visible when the keyboard opens.
+  const reveal = useCallback((section: View) => {
+    const content = scrollContent.current;
+    if (!content) return;
+    section.measureLayout(
+      content,
+      (_x, y) => scroll.current?.scrollTo({ y: Math.max(0, y - 16), animated: false }),
+      () => undefined,
+    );
+  }, []);
   useEffect(() => {
     if (!configurationReady) return;
     const startup = controller.restore();
@@ -261,6 +273,8 @@ function SplitBook() {
                   ? `group:${state.detail.id}`
                   : state.screen
             }
+            ref={scroll}
+            innerViewRef={scrollContent as RefObject<View>}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             contentContainerStyle={styles.content}
@@ -358,6 +372,8 @@ function SplitBook() {
                   )
                 }
                 onChange={(patch) => void controller.updateExpenseDraft(patch)}
+                onLeaveField={controller.touchExpenseField}
+                onReveal={reveal}
                 onSave={() => void controller.saveExpense()}
                 onResume={controller.resumeExpenseDraft}
                 onRetry={() =>

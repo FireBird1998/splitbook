@@ -275,6 +275,18 @@ export function calculateSplitAmountsMinor<T extends MinorSplitInput>(
   }));
 }
 
+/** The Expense total alone: exact currency precision, positive, and within the ledger limit. */
+export function parseExpenseAmountMinor(amount: string | number, currency: string): number {
+  const amountMinor = parseAmountMinor(amount, currency);
+  if (amountMinor <= 0 || amountMinor > parseAmountMinor(MAX_EXPENSE_AMOUNT, currency)) {
+    throw new MoneyValidationError(
+      'INVALID_MONEY_RANGE',
+      'Amount must be positive and at most 10,000,000',
+    );
+  }
+  return amountMinor;
+}
+
 /** Validate a complete merged command, never a PATCH fragment. */
 export function normalizeExpenseMoney<P extends MoneyPayerInput, S extends MoneySplitInput>(input: {
   amount: string | number;
@@ -284,13 +296,7 @@ export function normalizeExpenseMoney<P extends MoneyPayerInput, S extends Money
   splitBetween: S[];
 }) {
   const { currency } = input;
-  const amountMinor = parseAmountMinor(input.amount, currency);
-  if (amountMinor <= 0 || amountMinor > parseAmountMinor(MAX_EXPENSE_AMOUNT, currency)) {
-    throw new MoneyValidationError(
-      'INVALID_MONEY_RANGE',
-      'Amount must be positive and at most 10,000,000',
-    );
-  }
+  const amountMinor = parseExpenseAmountMinor(input.amount, currency);
   if (input.paidBy.length === 0 || input.splitBetween.length === 0) {
     throw new MoneyValidationError(
       'EMPTY_PARTICIPANTS',

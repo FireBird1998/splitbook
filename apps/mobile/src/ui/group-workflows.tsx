@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type Ref } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -28,19 +28,52 @@ export interface GroupCreateFormProps {
   onDiscard: () => void;
 }
 
+/** A correction shown directly below the control it belongs to. */
+export function FieldError({ message, ref }: { message?: string | null; ref?: Ref<View> }) {
+  const theme = useTheme();
+  if (!message) return null;
+  return (
+    <View
+      ref={ref}
+      accessible
+      accessibilityLabel={message}
+      accessibilityLiveRegion="polite"
+      style={{ flexDirection: 'row', gap: 6 }}
+    >
+      <Icon name="alert-circle-outline" size={18} color={theme.status.negative} />
+      <Copy style={{ flex: 1, fontSize: 14, lineHeight: 20, color: theme.status.negative }}>
+        {message}
+      </Copy>
+    </View>
+  );
+}
+
 export function Field({
   label,
   hint,
+  required = false,
+  error,
+  inputRef,
   ...props
-}: TextInputProps & { label: string; hint?: string }) {
+}: TextInputProps & {
+  label: string;
+  hint?: string;
+  required?: boolean;
+  error?: string | null;
+  inputRef?: Ref<TextInput>;
+}) {
   const theme = useTheme();
   return (
     <View style={{ gap: 7 }}>
-      <Copy style={{ fontFamily: fonts.medium, fontSize: 14 }}>{label}</Copy>
+      <Copy style={{ fontFamily: fonts.medium, fontSize: 14 }}>
+        {label}
+        {required && <Copy style={{ fontSize: 14, color: theme.textSecondary }}> · Required</Copy>}
+      </Copy>
       <TextInput
         {...props}
-        accessibilityLabel={label}
-        accessibilityHint={hint}
+        ref={inputRef}
+        accessibilityLabel={required ? `${label}, required` : label}
+        accessibilityHint={error ? `${error}${hint ? ` ${hint}` : ''}` : hint}
         placeholderTextColor={theme.textSecondary}
         selectionColor={theme.brand.main}
         style={[
@@ -49,8 +82,8 @@ export function Field({
             paddingHorizontal: 15,
             paddingVertical: 13,
             borderRadius: 12,
-            borderWidth: 1,
-            borderColor: theme.border,
+            borderWidth: error ? 2 : 1,
+            borderColor: error ? theme.status.negative : theme.border,
             backgroundColor: theme.surface,
             color: theme.text,
             fontFamily: fonts.regular,
@@ -65,6 +98,7 @@ export function Field({
       {hint && (
         <Copy style={{ fontSize: 13, lineHeight: 19, color: theme.textSecondary }}>{hint}</Copy>
       )}
+      <FieldError message={error} />
     </View>
   );
 }
