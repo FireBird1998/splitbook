@@ -19,3 +19,7 @@ _Avoid_: label, expense group
 **Month**:
 In a Household group, a read-only lens over expenses for one calendar month in the viewer's own timezone — never a ledger boundary. Answers "what did August cost us", never "what is owed".
 _Avoid_: cycle, period, billing month
+
+**Connected assistant**:
+An external AI assistant a member has authorized to act as them in Splitbook, limited to the access that member granted and revocable at any time. Acts only as that one member.
+_Avoid_: bot, agent, integration
