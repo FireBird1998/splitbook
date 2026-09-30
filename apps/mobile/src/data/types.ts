@@ -3,6 +3,7 @@ import type { ActivityState } from './activity';
 import type { AccountGroupRecordStore } from './account-record-storage';
 import type { SettlementState } from './settlement';
 import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
+import type { ReceiptScanner } from './receipt-scan';
 import type { GroupCategory } from '@splitbook/shared/types';
 
 export interface SessionUser {
@@ -178,6 +179,8 @@ export interface MobileConfig {
   inviteOrigin?: string;
   /** The caller must combine __DEV__ with an explicit development-persona setting. */
   developmentPersonaEnabled: boolean;
+  /** On-device receipt scanning for new INR drafts; development and staging builds only. */
+  receiptScanEnabled?: boolean;
 }
 
 export interface CredentialStore {
@@ -234,4 +237,5 @@ export interface MobileDependencies {
   expenseDrafts?: ExpenseDraftStore;
   settlementAttempts?: AccountGroupRecordStore;
   newSubmissionKey?: () => string;
+  receiptScanner?: ReceiptScanner;
 }

@@ -28,6 +28,11 @@ export function androidInvitationFilters(
   ];
 }
 
+/** The receipt-scanning experiment exists only in development and staging builds. */
+export function receiptScanEnabled(mode: string | undefined): boolean {
+  return mode === 'development' || mode === 'staging';
+}
+
 /** Malformed/missing build settings must show setup UI, never crash or enable demo. */
 export function developmentConfig(
   env: { mode?: string; apiUrl?: string; authOrigin?: string; inviteOrigin?: string },

@@ -349,6 +349,10 @@ function SplitBook() {
                   )
                 }
                 onChange={(patch) => void controller.updateExpenseDraft(patch)}
+                receiptScanEnabled={controller.receiptScanEnabled}
+                onScanReceipt={() => void controller.scanReceipt()}
+                onApplyReceiptScan={() => void controller.applyReceiptScan()}
+                onDismissReceiptScan={controller.dismissReceiptScan}
                 onSave={() => void controller.saveExpense()}
                 onResume={controller.resumeExpenseDraft}
                 onRetry={() =>

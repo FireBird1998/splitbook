@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { androidInvitationFilters, developmentConfig } from './config';
+import { androidInvitationFilters, developmentConfig, receiptScanEnabled } from './config';
 
 const local = {
   mode: 'development',
@@ -12,6 +12,11 @@ describe('development build configuration', () => {
     expect(developmentConfig(local, false)).toBeNull();
     expect(developmentConfig({ ...local, mode: 'staging' }, true)).toBeNull();
     expect(developmentConfig({}, true)).toBeNull();
+  });
+  it('limits the receipt-scanning experiment to development and staging builds', () => {
+    expect(receiptScanEnabled('development')).toBe(true);
+    expect(receiptScanEnabled('staging')).toBe(true);
+    for (const mode of ['production', '', undefined]) expect(receiptScanEnabled(mode)).toBe(false);
   });
   it('uses the explicit invitation origin or the configured auth origin as its fallback', () => {
     expect(developmentConfig(local, true)?.inviteOrigin).toBe('http://127.0.0.1:4138');
