@@ -127,6 +127,8 @@ export interface GroupReturnContext {
   month: string | null;
   /** The Group view's vertical scroll offset at entry. */
   scrollY: number;
+  /** Expense pages loaded at entry, read again on return so that position still exists. */
+  pages: number;
 }
 
 /** Confirms a ledger change on the Group view it returned to. */

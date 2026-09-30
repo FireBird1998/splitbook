@@ -213,6 +213,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let activityRequest = 0;
   let activityDetailRequest = 0;
   let cacheEpoch = 0;
+  // Set by returnToGroup: the next read of that Group and Month reads this many pages.
+  let returnPages: { groupId: string; month: string | null; pages: number } | null = null;
   let offlineSession = false;
   const staleReads = new Map<string, number | null>();
   let storeQueue: Promise<unknown> = Promise.resolve();
@@ -264,6 +266,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const invalidate = () => {
     generation += 1;
     cacheEpoch += 1;
+    returnPages = null;
     offlineSession = false;
     staleReads.clear();
     viewRequest += 1;
@@ -1304,6 +1307,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const read = ++financialRequest;
     const month = snapshot.financial.month;
     const path = expensePath(group.id, group.category, month, pageNumber);
+    // A return reads the page range it left, so the position it restores still exists.
+    const through =
+      !append && returnPages?.groupId === group.id && returnPages.month === month
+        ? returnPages.pages
+        : pageNumber;
+    if (!append) returnPages = null;
     beginExpenseRead();
     // A refresh keeps Expenses readable only when they belong to the Month being read.
     publish({
@@ -1321,14 +1330,46 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             },
       },
     });
-    try {
-      const page = await readCached(path, owner, (value) =>
-        parseExpensePage(value, group.id, group.defaultCurrency),
+    const readPage = async (number: number) => {
+      const page = await readCached(
+        expensePath(group.id, group.category, month, number),
+        owner,
+        (value) => parseExpensePage(value, group.id, group.defaultCurrency),
       );
-      if (!current(owner) || view !== viewRequest || read !== financialRequest) return;
-      if (page.pagination.page !== pageNumber) throw new Error('Unexpected expense page.');
-      const existing = append ? expenses.data : [];
-      const seen = new Set(existing.map((expense) => expense.id));
+      if (!current(owner) || view !== viewRequest || read !== financialRequest)
+        throw new Superseded();
+      if (page.pagination.page !== number) throw new Error('Unexpected expense page.');
+      return page;
+    };
+    try {
+      const first = await readPage(pageNumber);
+      const refreshedAt = append ? expenses.refreshedAt : readAt(path);
+      let last = first;
+      const rows = [...(append ? expenses.data : []), ...first.expenses];
+      let more: { status: 'idle' | 'error'; message: string | null } = {
+        status: 'idle',
+        message: null,
+      };
+      try {
+        while (last.pagination.page < Math.min(through, last.pagination.totalPages)) {
+          last = await readPage(last.pagination.page + 1);
+          rows.push(...last.expenses);
+        }
+      } catch (error) {
+        // Losing access still evicts the Group below; otherwise keep what was read.
+        if (
+          error instanceof Superseded ||
+          (error instanceof RequestError && [403, 404].includes(error.status))
+        )
+          throw error;
+        more = {
+          status: 'error',
+          message:
+            error instanceof RequestError
+              ? error.message
+              : 'Could not load more expenses. Please try again.',
+        };
+      }
       publish({
         ...snapshot,
         financial: {
@@ -1336,13 +1377,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           expenses: {
             month,
             status: 'ready',
-            data: [...existing, ...page.expenses.filter((expense) => !seen.has(expense.id))],
-            summary: page.summary,
-            pagination: page.pagination,
+            data: [...new Map(rows.map((expense) => [expense.id, expense])).values()],
+            summary: first.summary,
+            pagination: last.pagination,
             message: null,
-            moreStatus: 'idle',
-            moreMessage: null,
-            refreshedAt: append ? expenses.refreshedAt : readAt(path),
+            moreStatus: more.status,
+            moreMessage: more.message,
+            refreshedAt,
           },
         },
       });
@@ -1635,10 +1676,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.financial.groupId !== groupId
     )
       return null;
+    const { expenses, month } = snapshot.financial;
     return {
       groupId,
-      month: snapshot.financial.month,
+      month,
       scrollY: Number.isFinite(scrollY) ? Math.max(0, scrollY) : 0,
+      pages: expenses.month === month && expenses.pagination ? expenses.pagination.page : 1,
     };
   };
 
@@ -1653,6 +1696,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const accountId = snapshot.auth.user.id;
     const month = snapshot.financial.groupId === groupId ? snapshot.financial.month : null;
     const returnTo = expenseReturn(groupId, origin.scrollY);
+    returnPages = null;
     startReadView();
     publish({
       ...snapshot,
@@ -1882,6 +1926,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const origin =
       snapshot.expense.returnTo?.groupId === groupId ? snapshot.expense.returnTo : null;
     const { detail, financial } = snapshot;
+    returnPages = origin && { groupId, month: origin.month, pages: origin.pages };
     publish({
       ...snapshot,
       screen: 'group',
@@ -1920,6 +1965,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const showHome = () => {
     viewRequest += 1;
+    returnPages = null;
     publish({
       ...snapshot,
       screen: 'groups',

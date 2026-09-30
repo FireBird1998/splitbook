@@ -61,6 +61,7 @@ function ledger() {
   let account: string | null = null;
   let cleanup = false;
   let loseResponses = 0;
+  let failPage: number | null = null;
   let nextId = 2;
   const holds: { match: (method: string, path: string) => boolean; wait: Promise<void> }[] = [];
   const person = (id: string) => ({
@@ -153,17 +154,30 @@ function ledger() {
     }
     if (route.endsWith('/expenses')) {
       const month = monthOf(url.searchParams.get('dateFrom'));
-      const rows = [...records.values()].filter(
-        (row) =>
-          row.group === target._id &&
-          (month === 'all' || String(row.date) >= getLocalMonthIsoRange(month).dateFrom) &&
-          (month === 'all' || String(row.date) <= getLocalMonthIsoRange(month).dateTo),
-      );
+      const page = Number(url.searchParams.get('page'));
+      if (page === failPage) {
+        failPage = null;
+        return json({ status: 500 }, 500);
+      }
+      // Newest first, 20 to a page, like the ledger.
+      const rows = [...records.values()]
+        .filter(
+          (row) =>
+            row.group === target._id &&
+            (month === 'all' || String(row.date) >= getLocalMonthIsoRange(month).dateFrom) &&
+            (month === 'all' || String(row.date) <= getLocalMonthIsoRange(month).dateTo),
+        )
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)));
       return json({
         status: 200,
         data: {
-          expenses: rows.map(populated),
-          pagination: { page: 1, limit: 20, total: rows.length, totalPages: 1 },
+          expenses: rows.slice((page - 1) * 20, page * 20).map(populated),
+          pagination: {
+            page,
+            limit: 20,
+            total: rows.length,
+            totalPages: Math.ceil(rows.length / 20),
+          },
           summary: {
             count: rows.length,
             totalsByCurrency: [],
@@ -283,6 +297,41 @@ function ledger() {
       requests.filter(
         (request) => request.method !== 'GET' && request.path.startsWith('/api/groups/'),
       ),
+    /** Adds fictional Expenses on the given days of a Month, returning their identities. */
+    seed: (month: string, days: number[]) =>
+      days.map((day, index) => {
+        const id = `c${String(index).padStart(23, '0')}`;
+        store(
+          id,
+          {
+            description: `Seeded ${month}-${String(day).padStart(2, '0')} #${index + 1}`,
+            amount: 3,
+            currency: 'INR',
+            category: 'food',
+            date: new Date(
+              Number(month.slice(0, 4)),
+              Number(month.slice(5)) - 1,
+              day,
+              12,
+            ).toISOString(),
+            paidBy: [{ user: people[0].id, amount: 3 }],
+            splitBetween: people.map(({ id: user }) => ({ user, amount: 1 })),
+            splitMethod: 'equal',
+            tagId,
+            notes: '',
+          },
+          householdId,
+        );
+        return id;
+      }),
+    /** The next read of this Expense page fails with a server error. */
+    failNextPage: (page: number) => {
+      failPage = page;
+    },
+    pagesRead: () =>
+      requests
+        .filter((request) => request.method === 'GET' && /\/expenses\?/.test(request.path))
+        .map((request) => Number(new URL(request.path, 'http://local').searchParams.get('page'))),
     loseNextResponse: () => {
       loseResponses += 1;
     },
@@ -397,6 +446,7 @@ describe('Returning from an Expense', () => {
       groupId: householdId,
       month: '2026-07',
       scrollY: 300,
+      pages: 1,
     });
     await controller.back();
     expect(controller.getSnapshot().financial.month).toBe('2026-07');
@@ -429,6 +479,88 @@ describe('Returning from an Expense', () => {
     posted.release();
     await saving;
     expect(controller.getSnapshot().screen).toBe('group');
+  });
+});
+
+describe('Returning to an Expense beyond the first page', () => {
+  // 25 August Expenses: the oldest is the last row of page 2.
+  async function secondPage() {
+    const server = ledger();
+    server.seed(
+      '2026-08',
+      Array.from({ length: 24 }, (_, index) => index + 1),
+    );
+    const { controller } = await signedIn(server);
+    await controller.openGroup(householdId);
+    await controller.selectMonth('2026-08');
+    await controller.loadMoreExpenses();
+    const rows = controller.getSnapshot().financial.expenses.data;
+    expect(rows).toHaveLength(25);
+    return { server, controller, last: rows[24] };
+  }
+
+  it('Back reads every page it left, so the opened Expense is still listed', async () => {
+    const { server, controller, last } = await secondPage();
+    await controller.openExpense(householdId, last.id, { scrollY: 2200 });
+    const reads = server.pagesRead().length;
+    await controller.back();
+
+    const { financial, restoreScroll } = controller.getSnapshot();
+    expect(restoreScroll).toMatchObject({ y: 2200 });
+    expect(financial.expenses.data).toHaveLength(25);
+    expect(financial.expenses.data.map((row) => row.id)).toContain(last.id);
+    expect(financial.expenses.pagination?.page).toBe(2);
+    expect(server.pagesRead().slice(reads)).toEqual([1, 2]);
+
+    // Only the return restores the range; an ordinary refresh starts from the first page.
+    await controller.refresh('pull');
+    expect(server.pagesRead().slice(reads + 2)).toEqual([1]);
+  });
+
+  it('reads the same pages again after an edit or a new Expense is saved', async () => {
+    const { server, controller, last } = await secondPage();
+    await controller.openExpense(householdId, last.id, { scrollY: 2200 });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Seeded, corrected' });
+    let reads = server.pagesRead().length;
+    await controller.saveExpense();
+    let shown = controller.getSnapshot();
+    expect(shown.snackbar?.message).toBe('Expense updated · Seeded, corrected');
+    expect(shown.restoreScroll).toMatchObject({ y: 2200 });
+    expect(shown.financial.expenses.data).toHaveLength(25);
+    expect(shown.financial.expenses.data.find((row) => row.id === last.id)?.description).toBe(
+      'Seeded, corrected',
+    );
+    expect(server.pagesRead().slice(reads)).toEqual([1, 2]);
+
+    await controller.openExpense(householdId, undefined, { scrollY: 2150 });
+    await fillNewExpense(controller, { date: '2026-08-02' });
+    reads = server.pagesRead().length;
+    await controller.saveExpense();
+    shown = controller.getSnapshot();
+    expect(shown.snackbar).toMatchObject({
+      message: 'Expense saved · Weekly groceries',
+      viewMonth: null,
+    });
+    expect(shown.restoreScroll).toMatchObject({ y: 2150 });
+    expect(shown.financial.expenses.data).toHaveLength(26);
+    expect(server.pagesRead().slice(reads)).toEqual([1, 2]);
+  });
+
+  it('keeps the pages it read and offers Load more when a later page fails', async () => {
+    const { server, controller, last } = await secondPage();
+    await controller.openExpense(householdId, last.id, { scrollY: 2200 });
+    server.failNextPage(2);
+    await controller.back();
+    const { expenses, balances } = controller.getSnapshot().financial;
+    expect(expenses).toMatchObject({ status: 'ready', moreStatus: 'error' });
+    expect(expenses.data).toHaveLength(20);
+    expect(balances.status).toBe('ready');
+
+    await controller.loadMoreExpenses();
+    expect(controller.getSnapshot().financial.expenses.data.map((row) => row.id)).toContain(
+      last.id,
+    );
   });
 });
 
