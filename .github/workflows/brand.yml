@@ -1,0 +1,39 @@
+name: Brand assets
+
+on:
+  pull_request:
+    paths:
+      - 'assets/brand/**'
+      - 'tools/brand/**'
+      - 'apps/web/public/brand/**'
+      - 'apps/mobile/assets/brand/**'
+      - 'docs/design/brand/**'
+      - '.github/workflows/brand.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'assets/brand/**'
+      - 'tools/brand/**'
+      - 'apps/web/public/brand/**'
+      - 'apps/mobile/assets/brand/**'
+      - 'docs/design/brand/**'
+      - '.github/workflows/brand.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-brand:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/brand
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tools/brand/package-lock.json
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
