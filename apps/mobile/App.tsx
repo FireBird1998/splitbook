@@ -40,7 +40,8 @@ import { EmptyGroups, GroupCard, GroupDetail, SignIn, styles } from './src/ui/sc
 import { GroupCreateForm, InvitationPreview, InviteSharePanel } from './src/ui/group-workflows';
 import { SettingsScreen } from './src/ui/settings-screen';
 import { ExpenseEditor } from './src/ui/expense-editor';
-import { GroupFinancialViews, HomeBalances } from './src/ui/financial-views';
+import { GroupFinancialViews, HomeBalances, RefreshStatus } from './src/ui/financial-views';
+import { refreshFeedback } from './src/ui/refresh-feedback';
 
 export default function App() {
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
@@ -88,7 +89,7 @@ function SplitBook() {
       if (url) openLink(url);
     });
     const appState = AppState.addEventListener('change', (next) => {
-      if (next === 'active') void controller.refresh();
+      if (next === 'active') void controller.refresh('background');
     });
     const back = BackHandler.addEventListener('hardwareBackPress', () => {
       if (controller.getSnapshot().screen !== 'groups') {
@@ -105,13 +106,7 @@ function SplitBook() {
   }, []);
 
   const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
-  const refreshing =
-    state.screen === 'groups'
-      ? state.groups.status === 'loading' || state.home.status === 'loading'
-      : state.screen === 'group' &&
-        (state.detail.status === 'loading' ||
-          state.financial.expenses.status === 'loading' ||
-          state.financial.balances.status === 'loading');
+  const feedback = refreshFeedback(state);
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
@@ -152,6 +147,8 @@ function SplitBook() {
           <Copy style={{ fontFamily: fonts.semibold, fontSize: 23, letterSpacing: -0.6 }}>
             splitbook<Copy style={{ color: theme.brand.main, fontSize: 24 }}>.</Copy>
           </Copy>
+          {/* In the fixed header, so it stays visible wherever the content is scrolled. */}
+          <RefreshStatus visible={feedback.quiet} />
         </View>
         {authenticated && state.screen !== 'settings' ? (
           <Pressable
@@ -269,8 +266,8 @@ function SplitBook() {
                 state.screen,
               ) ? undefined : (
                 <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={() => void controller.refresh()}
+                  refreshing={feedback.pull}
+                  onRefresh={() => void controller.refresh('manual')}
                   tintColor={theme.brand.main}
                   colors={[theme.brand.main]}
                 />

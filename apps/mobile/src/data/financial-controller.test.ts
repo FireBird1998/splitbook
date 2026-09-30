@@ -88,6 +88,7 @@ function setup(
 ) {
   let cookie: string | null = null;
   const calls: string[] = [];
+  const clock = { now: new Date(2026, 8, 27, 12).getTime() };
   const controller = createMobileController(
     {
       apiBaseUrl: 'http://localhost:4138',
@@ -95,7 +96,7 @@ function setup(
       developmentPersonaEnabled: true,
     },
     {
-      now: () => new Date(2026, 8, 27, 12).getTime(),
+      now: () => clock.now,
       credentials: {
         load: async () => cookie,
         save: async (value) => {
@@ -130,7 +131,28 @@ function setup(
       },
     },
   );
-  return { controller, calls };
+  return { controller, calls, clock };
+}
+
+/** Hold matching requests until released, to observe the screen mid-refresh. */
+function gate() {
+  const waiting: { path: string; release: (response: FetchResponse) => void }[] = [];
+  const arrivals: (() => void)[] = [];
+  return {
+    hold(path: string) {
+      return new Promise<FetchResponse>((release) => {
+        waiting.push({ path, release });
+        arrivals.splice(0).forEach((notify) => notify());
+      });
+    },
+    async next(match: string) {
+      for (;;) {
+        const index = waiting.findIndex((entry) => entry.path.includes(match));
+        if (index >= 0) return waiting.splice(index, 1)[0];
+        await new Promise<void>((resolve) => arrivals.push(resolve));
+      }
+    },
+  };
 }
 
 describe('native financial views', () => {
@@ -271,6 +293,15 @@ describe('native financial views', () => {
   });
 
   it('retires running-balance reads started before a new expense materialization', async () => {
+    const outdated = {
+      ...balances,
+      data: {
+        ...balances.data,
+        byCurrency: [
+          { ...balances.data.byCurrency[0], balances: [{ user: person, balance: -99 }] },
+        ],
+      },
+    };
     let hold = false;
     let releaseBalance!: (response: FetchResponse) => void;
     let releaseExpenses!: (response: FetchResponse) => void;
@@ -299,27 +330,34 @@ describe('native financial views', () => {
     });
     await controller.signIn('sam');
     await controller.openGroup(groupId);
+    const verified = controller.getSnapshot().financial;
     hold = true;
     const oldBalance = controller.refreshBalances();
     await balanceDispatched;
     const expenses = controller.refreshExpenses();
     await expensesDispatched;
-    releaseBalance(json(balances));
+    releaseBalance(json(outdated));
     await oldBalance;
+    // The pre-materialization response is discarded; previous figures stay, marked unverified.
     expect(controller.getSnapshot().financial.balances).toMatchObject({
       status: 'loading',
-      data: null,
+      data: verified.balances.data,
+      stale: true,
+      refreshedAt: verified.balances.refreshedAt,
     });
     releaseExpenses(json({}, 503));
     await expenses;
     expect(controller.getSnapshot().financial.expenses).toMatchObject({
       status: 'error',
-      data: [],
-      summary: null,
+      data: verified.expenses.data,
+      summary: verified.expenses.summary,
+      refreshedAt: verified.expenses.refreshedAt,
     });
     expect(controller.getSnapshot().financial.balances).toMatchObject({
       status: 'error',
-      data: null,
+      data: verified.balances.data,
+      stale: true,
+      refreshedAt: verified.balances.refreshedAt,
     });
   });
 
@@ -342,15 +380,26 @@ describe('native financial views', () => {
     await controller.signIn('sam');
     expect(controller.getSnapshot().home.data?.[0].youOwe).toBe(0);
     await controller.openGroup(groupId);
-    expect(controller.getSnapshot().home.data).toBeNull();
+    // Retained for the return to Home, but no longer presented as current.
+    expect(controller.getSnapshot().home).toMatchObject({
+      stale: true,
+      data: [{ youOwe: 0 }],
+    });
     await controller.back();
-    expect(controller.getSnapshot().home.data?.[0].youOwe).toBe(30);
+    expect(controller.getSnapshot().home).toMatchObject({
+      status: 'ready',
+      stale: false,
+      data: [{ youOwe: 30 }],
+    });
     owe = 40;
     await controller.refresh();
     expect(controller.getSnapshot().home.data?.[0].youOwe).toBe(40);
     failHome = true;
     await controller.refreshHome();
-    expect(controller.getSnapshot().home).toMatchObject({ status: 'error', data: null });
+    expect(controller.getSnapshot().home).toMatchObject({
+      status: 'error',
+      data: [{ youOwe: 40 }],
+    });
   });
 
   it('reloads Home after cancelling an invitation opened from a Group', async () => {
@@ -556,6 +605,302 @@ describe('native financial views', () => {
         { currency: 'EUR', youOwe: 12.34, youAreOwed: 5.67 },
       ],
       message: null,
+      refreshedAt: new Date(2026, 8, 27, 12).getTime(),
+      stale: false,
     });
+  });
+});
+
+describe('stable financial refresh', () => {
+  const later = (clock: { now: number }) => (clock.now += 60_000);
+  const secondExpense = { ...expense, _id: 'b00000000000000000000002', description: 'Rent' };
+
+  it('keeps the same Group readable during a background refresh, then publishes verified figures in order', async () => {
+    const held = gate();
+    let holding = false;
+    const { controller, calls, clock } = setup((path) =>
+      holding && (path.includes('/expenses?') || path.endsWith(`/${groupId}/balances`))
+        ? held.hold(path)
+        : undefined,
+    );
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    const before = controller.getSnapshot();
+    const verifiedAt = before.financial.balances.refreshedAt;
+    expect(verifiedAt).toBe(clock.now);
+    expect(before.financial.expenses.refreshedAt).toBe(clock.now);
+    later(clock);
+    holding = true;
+    calls.length = 0;
+    const refresh = controller.refresh('background');
+
+    const expenseRead = await held.next('/expenses?');
+    let screen = controller.getSnapshot();
+    expect(screen.pull).toBe(false);
+    expect(screen.detail).toMatchObject({ id: groupId, data: before.detail.data });
+    expect(screen.financial.expenses).toMatchObject({
+      status: 'loading',
+      data: before.financial.expenses.data,
+      summary: before.financial.expenses.summary,
+      refreshedAt: verifiedAt,
+    });
+    // Expense reads can materialize recurring entries: prior Balances are shown as updating.
+    expect(screen.financial.balances).toMatchObject({
+      status: 'loading',
+      data: before.financial.balances.data,
+      stale: true,
+      refreshedAt: verifiedAt,
+    });
+    expect(calls.some((path) => path.endsWith(`/${groupId}/balances`))).toBe(false);
+
+    expenseRead.release(json(expensePage([expense, secondExpense])));
+    const balanceRead = await held.next('/balances');
+    screen = controller.getSnapshot();
+    expect(screen.financial.expenses).toMatchObject({
+      status: 'ready',
+      refreshedAt: clock.now,
+    });
+    expect(screen.financial.expenses.data.map((row) => row.id)).toEqual([
+      expense._id,
+      secondExpense._id,
+    ]);
+    expect(screen.financial.balances).toMatchObject({ status: 'loading', stale: true });
+
+    balanceRead.release(json(balances));
+    await refresh;
+    expect(controller.getSnapshot().financial.balances).toMatchObject({
+      status: 'ready',
+      stale: false,
+      refreshedAt: clock.now,
+    });
+  });
+
+  it('shows the native pull indicator only while a manual refresh runs', async () => {
+    const held = gate();
+    let holding = false;
+    const { controller } = setup((path) =>
+      holding && path.includes('/expenses?') ? held.hold(path) : undefined,
+    );
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    expect(controller.getSnapshot().pull).toBe(false);
+    holding = true;
+
+    const background = controller.refresh('background');
+    (await held.next('/expenses?')).release(json(expensePage()));
+    expect(controller.getSnapshot().pull).toBe(false);
+    await background;
+
+    const pull = controller.refresh('manual');
+    expect(controller.getSnapshot().pull).toBe(true);
+    const read = await held.next('/expenses?');
+    expect(controller.getSnapshot()).toMatchObject({
+      pull: true,
+      financial: { expenses: { status: 'loading', data: [{ id: expense._id }] } },
+    });
+    read.release(json(expensePage()));
+    await pull;
+    expect(controller.getSnapshot().pull).toBe(false);
+  });
+
+  it('keeps Home figures and Groups with their original time when a background refresh fails', async () => {
+    let failing = false;
+    const { controller, clock } = setup((path) =>
+      failing && path === '/api/user/balances' ? json({}, 503) : undefined,
+    );
+    await controller.signIn('sam');
+    const verifiedAt = clock.now;
+    const before = controller.getSnapshot();
+    later(clock);
+    failing = true;
+    await controller.refresh('background');
+    expect(controller.getSnapshot()).toMatchObject({
+      pull: false,
+      groups: { status: 'ready', data: before.groups.data },
+      home: {
+        status: 'error',
+        data: before.home.data,
+        refreshedAt: verifiedAt,
+        message: 'The server could not complete this request. Please try again.',
+      },
+    });
+    failing = false;
+    await controller.refresh('manual');
+    expect(controller.getSnapshot().home).toMatchObject({
+      status: 'ready',
+      refreshedAt: clock.now,
+    });
+  });
+
+  it('keeps unverified Balances with their original time when the Expense refresh fails', async () => {
+    let failing = false;
+    const { controller, clock } = setup((path) =>
+      failing && path.includes('/expenses?') ? json({}, 503) : undefined,
+    );
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    const before = controller.getSnapshot().financial;
+    later(clock);
+    failing = true;
+    await controller.refresh('background');
+    expect(controller.getSnapshot().financial).toMatchObject({
+      expenses: {
+        status: 'error',
+        data: before.expenses.data,
+        summary: before.expenses.summary,
+        refreshedAt: before.expenses.refreshedAt,
+      },
+      balances: {
+        status: 'error',
+        data: before.balances.data,
+        stale: true,
+        refreshedAt: before.balances.refreshedAt,
+        message: 'Could not update running balances. Please try again.',
+      },
+    });
+  });
+
+  it('never labels the previous Month’s Expenses with a new Month while keeping all-time Balances', async () => {
+    const held = gate();
+    let holding = false;
+    const { controller } = setup((path) =>
+      holding && path.includes('/expenses?') ? held.hold(path) : undefined,
+    );
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    const before = controller.getSnapshot().financial;
+    expect(before.month).toBe('2026-09');
+    holding = true;
+    const selecting = controller.selectMonth('2026-08');
+    const read = await held.next('/expenses?');
+    expect(controller.getSnapshot().financial).toMatchObject({
+      month: '2026-08',
+      expenses: { status: 'loading', data: [], summary: null, refreshedAt: null },
+      balances: { status: 'loading', data: before.balances.data, stale: true },
+    });
+    read.release(json(expensePage([])));
+    await selecting;
+    expect(controller.getSnapshot().financial).toMatchObject({
+      month: '2026-08',
+      expenses: { status: 'ready', data: [] },
+      balances: { status: 'ready', data: before.balances.data, stale: false },
+    });
+  });
+
+  it('opens another Group without showing the previous Group’s figures', async () => {
+    const otherId = 'a00000000000000000000011';
+    const held = gate();
+    const { controller } = setup((path) =>
+      path.startsWith(`/api/groups/${otherId}`) ? held.hold(path) : undefined,
+    );
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    const opening = controller.openGroup(otherId);
+    const read = await held.next(`/api/groups/${otherId}`);
+    expect(controller.getSnapshot()).toMatchObject({
+      detail: { id: otherId, data: null, status: 'loading' },
+      financial: {
+        groupId: otherId,
+        expenses: { status: 'idle', data: [], summary: null },
+        balances: { data: null },
+      },
+    });
+    read.release(json({}, 404));
+    await opening;
+  });
+
+  it('removes retained Group figures immediately when a refresh is denied', async () => {
+    const held = gate();
+    let holding = false;
+    const { controller } = setup((path) =>
+      holding && path === `/api/groups/${groupId}` ? held.hold(path) : undefined,
+    );
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    holding = true;
+    const refresh = controller.refresh('background');
+    const read = await held.next(`/api/groups/${groupId}`);
+    expect(controller.getSnapshot().financial.expenses.data).toHaveLength(1);
+    read.release(json({}, 403));
+    await refresh;
+    expect(controller.getSnapshot()).toMatchObject({
+      detail: { status: 'denied', data: null },
+      groups: { data: [] },
+      home: { data: null },
+      financial: { groupId: null, expenses: { data: [], summary: null }, balances: { data: null } },
+    });
+  });
+
+  it('applies only the newest of two overlapping refreshes', async () => {
+    const held = gate();
+    let holding = false;
+    const { controller } = setup((path) =>
+      holding && path.includes('/expenses?') ? held.hold(path) : undefined,
+    );
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    holding = true;
+    const first = controller.refresh('background');
+    const older = await held.next('/expenses?');
+    const second = controller.refresh('manual');
+    const newer = await held.next('/expenses?');
+    newer.release(json(expensePage([secondExpense])));
+    await second;
+    older.release(json(expensePage([expense])));
+    await first;
+    expect(controller.getSnapshot()).toMatchObject({
+      pull: false,
+      financial: {
+        expenses: { status: 'ready', data: [{ id: secondExpense._id }] },
+        balances: { status: 'ready', stale: false },
+      },
+    });
+  });
+
+  it('drops retained figures on sign-out and ignores the refresh that was in flight', async () => {
+    const held = gate();
+    let holding = false;
+    const { controller } = setup((path) =>
+      holding && path.includes('/expenses?') ? held.hold(path) : undefined,
+    );
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    holding = true;
+    const refresh = controller.refresh('manual');
+    const read = await held.next('/expenses?');
+    await controller.signOut();
+    read.release(json(expensePage([secondExpense])));
+    await refresh;
+    expect(controller.getSnapshot()).toMatchObject({
+      auth: { status: 'signed-out' },
+      pull: false,
+      home: { data: null },
+      financial: { groupId: null, expenses: { data: [] }, balances: { data: null } },
+    });
+  });
+
+  it('keeps loaded Expenses while the next page loads and marks only the footer busy', async () => {
+    const rows = Array.from({ length: 21 }, (_, index) => ({
+      ...expense,
+      _id: `b${String(index + 1).padStart(23, '0')}`,
+    }));
+    const held = gate();
+    const { controller } = setup((path) => {
+      if (!path.includes('/expenses?')) return;
+      const page = Number(new URL(path, 'http://local').searchParams.get('page'));
+      return page === 2 ? held.hold(path) : json(expensePage(rows.slice(0, 20), 1, 21));
+    });
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    const more = controller.loadMoreExpenses();
+    const read = await held.next('page=2');
+    expect(controller.getSnapshot()).toMatchObject({
+      pull: false,
+      financial: { expenses: { status: 'ready', moreStatus: 'loading' } },
+    });
+    expect(controller.getSnapshot().financial.expenses.data).toHaveLength(20);
+    read.release(json(expensePage(rows.slice(20), 2, 21)));
+    await more;
+    expect(controller.getSnapshot().financial.expenses.data).toHaveLength(21);
   });
 });
