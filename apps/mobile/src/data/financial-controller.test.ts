@@ -834,23 +834,24 @@ describe('stable financial refresh', () => {
     });
   });
 
-  it('applies only the newest of two overlapping refreshes', async () => {
+  it('shares one Expense read between overlapping refreshes and applies it once', async () => {
     const held = gate();
     let holding = false;
-    const { controller } = setup((path) =>
+    const { controller, calls } = setup((path) =>
       holding && path.includes('/expenses?') ? held.hold(path) : undefined,
     );
     await controller.signIn('sam');
     await controller.openGroup(groupId);
     holding = true;
+    const before = calls.length;
     const first = controller.refresh();
-    const older = await held.next('/expenses?');
+    const read = await held.next('/expenses?');
     const second = controller.refresh('pull');
-    const newer = await held.next('/expenses?');
-    newer.release(json(expensePage([secondExpense])));
-    await second;
-    older.release(json(expensePage([expense])));
-    await first;
+    // Let the pull reach the same Expense read before that read answers.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    read.release(json(expensePage([secondExpense])));
+    await Promise.all([first, second]);
+    expect(calls.slice(before).filter((path) => path.includes('/expenses?'))).toHaveLength(1);
     expect(controller.getSnapshot()).toMatchObject({
       pull: false,
       financial: {

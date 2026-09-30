@@ -106,7 +106,7 @@ function SplitBook() {
       if (url) openLink(url);
     });
     const appState = AppState.addEventListener('change', (next) => {
-      if (next === 'active') void controller.refresh();
+      if (next === 'active') void controller.refresh('foreground');
     });
     const back = BackHandler.addEventListener('hardwareBackPress', () => {
       if (controller.getSnapshot().screen !== 'groups') {
@@ -127,7 +127,8 @@ function SplitBook() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+        {/* Shrinks so a long refresh status wraps instead of pushing Settings off screen. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 }}>
           {state.screen !== 'groups' ? (
             <Pressable
               accessibilityRole="button"
@@ -165,7 +166,7 @@ function SplitBook() {
             splitbook<Copy style={{ color: theme.brand.main, fontSize: 24 }}>.</Copy>
           </Copy>
           {/* In the fixed header, so it stays visible wherever the content is scrolled. */}
-          <RefreshStatus visible={feedback.quiet} />
+          <RefreshStatus visible={feedback.quiet} savedAt={feedback.savedAt} />
         </View>
         {authenticated && state.screen !== 'settings' ? (
           <Pressable

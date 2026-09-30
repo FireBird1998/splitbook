@@ -147,7 +147,7 @@ export interface PendingInvitationStore {
 
 export interface MobileSnapshot {
   offline: { active: boolean; refreshedAt: number | null; message: string | null };
-  /** A pull-to-refresh is running; automatic refreshes and retries never set this. */
+  /** A pull-to-refresh is running; foreground refreshes and retries never set this. */
   pull: boolean;
   auth: {
     status: 'restoring' | 'signed-out' | 'signing-in' | 'authenticated' | 'error';
@@ -262,6 +262,12 @@ export interface MobileDependencies {
   pendingInvitation?: PendingInvitationStore;
   accountLocal?: AccountLocalStorage;
   now?: () => number;
+  /**
+   * How long a verified read is shown again without another request when navigating
+   * or returning to the foreground. Defaults to `DISPLAY_FRESHNESS_MS`. Pull-to-refresh,
+   * Retry and confirmed changes always read again; it never extends session or access.
+   */
+  displayFreshnessMs?: number;
   expenseDrafts?: ExpenseDraftStore;
   settlementAttempts?: AccountGroupRecordStore;
   newSubmissionKey?: () => string;
