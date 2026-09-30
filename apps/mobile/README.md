@@ -126,6 +126,12 @@ Every edit/delete carries the displayed revision and requires an online membersh
 
 Run `TZ=Asia/Kolkata pnpm mobile verify:expense-edit` against the isolated local backend. It checks metadata preservation, archived Tags, two editors, stale delete, committed-response loss, disk-backed restart, explicit reconciliation, and single deletion Activity. It archives only its own fictional Group and signs out its test sessions. Native checks separately exercise detail/edit controls, conflict choices, process restart, and deletion confirmation.
 
+## Returning from an Expense (#104)
+
+Opening an Expense from a Group records where it came from: the Group, its Month and the list's scroll position. Android Back and the back arrow keep the draft on this device and return there. Direct entry, with no known origin, returns to the Group at its default Month. A confirmed save, edit or deletion returns the same way with a Snackbar. When the saved Expense belongs to another Month, the Snackbar offers **View in {Month}**; the Month shown changes only when chosen. A save that finishes after you leave never navigates.
+
+Resuming an ordinary draft is marked as never sent. A save that may already be recorded is marked **Save not confirmed** and is only retried when you choose to, with the same submission. Edit history names people ("Former member" when an account is gone) and shows amounts, dates, Tags and splits in words. The Group bottom-navigation destination is restored once #115 adds it. Evidence and unverified device checks: `docs/qa/2026-10-01-android-return-navigation.md`.
+
 ## Record actual payments (#56)
 
 Open **Payments** in a Group to view authorized Settlement history and eligible suggested debts involving you. Review the amount actually paid; partial payments are supported. Review refreshes the suggestion while retaining your entry. An amount above the current suggestion requires a separate acknowledgment, which resets if the suggestion changes before submission. This records an existing payment; SplitBook neither transfers funds nor confirms bank/provider status.
