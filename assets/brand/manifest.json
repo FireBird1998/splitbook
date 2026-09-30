@@ -1,0 +1,1050 @@
+{
+  "version": "1.0.0",
+  "files": [
+    {
+      "file": "assets/brand/svg/logo-light.svg",
+      "bytes": 6225,
+      "sha256": "734957e95287d4c1681d585ee55432cbda6c7a2895bd1628211d893078d3ccf2"
+    },
+    {
+      "file": "assets/brand/svg/wordmark-light.svg",
+      "bytes": 5453,
+      "sha256": "77c08099f4947424b92b1718fc9adf649b7862a5e9c1cf4e3815ed68ec3a45a5"
+    },
+    {
+      "file": "assets/brand/svg/stacked-light.svg",
+      "bytes": 6227,
+      "sha256": "0d53c46049906c26530a1d2a09596051e044b3603f1a548c0346f274283203b4"
+    },
+    {
+      "file": "assets/brand/svg/logo-dark.svg",
+      "bytes": 6225,
+      "sha256": "0927dd8c6197907439aa6a072cad544c501c5c160ab9c0010027144173b37bf2"
+    },
+    {
+      "file": "assets/brand/svg/wordmark-dark.svg",
+      "bytes": 5453,
+      "sha256": "bb673199f5acdd46c9b19cd2460253780f41b0e6e1cfbc982cd995927d8e77b3"
+    },
+    {
+      "file": "assets/brand/svg/stacked-dark.svg",
+      "bytes": 6227,
+      "sha256": "fac7b4ee785e6b3e77395e92fbfd7e6f0d1168af6c8ef3658037e3ad25ac48d3"
+    },
+    {
+      "file": "assets/brand/svg/logo-ink.svg",
+      "bytes": 6225,
+      "sha256": "93fd21b599d77b1ece30f160bdb27c73600a6a115e6456e1faea81dd31335bc8"
+    },
+    {
+      "file": "assets/brand/svg/wordmark-ink.svg",
+      "bytes": 5453,
+      "sha256": "77c08099f4947424b92b1718fc9adf649b7862a5e9c1cf4e3815ed68ec3a45a5"
+    },
+    {
+      "file": "assets/brand/svg/stacked-ink.svg",
+      "bytes": 6227,
+      "sha256": "fa74c479163c3b944846e9f9084c135c941d3197624f096896889a6940388560"
+    },
+    {
+      "file": "assets/brand/svg/logo-white.svg",
+      "bytes": 6225,
+      "sha256": "72347bada442ea98887ba235d7e2c5801722426a1285c3143772379ebf5631db"
+    },
+    {
+      "file": "assets/brand/svg/wordmark-white.svg",
+      "bytes": 5453,
+      "sha256": "bb673199f5acdd46c9b19cd2460253780f41b0e6e1cfbc982cd995927d8e77b3"
+    },
+    {
+      "file": "assets/brand/svg/stacked-white.svg",
+      "bytes": 6227,
+      "sha256": "5b0796f0b866ccad4881474bc19c0d8af7f306dcccbfca3140c237ac9c7a452f"
+    },
+    {
+      "file": "assets/brand/svg/mark-indigo.svg",
+      "bytes": 898,
+      "sha256": "502fa43a4b6c1bd6c432d3230000313ec5bc1bbef6fa8019f9946047141298d6"
+    },
+    {
+      "file": "assets/brand/svg/mark-on-dark.svg",
+      "bytes": 898,
+      "sha256": "ac6a142fcbabc3e258c8d3f3dd32f99cba3abc9f5d3e57aa1211507d429a4759"
+    },
+    {
+      "file": "assets/brand/svg/mark-ink.svg",
+      "bytes": 898,
+      "sha256": "084754d740cb025a5d474bcab0b622807dcf82246f12a46b3514fdfad7d5a7b3"
+    },
+    {
+      "file": "assets/brand/svg/mark-white.svg",
+      "bytes": 898,
+      "sha256": "ec5b010c04e121d38cdcc10efaf0bcbfc2db78ce86df122bfb9396963142995a"
+    },
+    {
+      "file": "assets/brand/svg/app-icon.svg",
+      "bytes": 981,
+      "sha256": "163697de923db857da2a7efebd9dbeee7a99e08fde2d31b33f94880e22abffd0"
+    },
+    {
+      "file": "assets/brand/svg/app-icon-indigo.svg",
+      "bytes": 981,
+      "sha256": "066bca46400d3bd4ecce3430af395de3748c864a109a3046b863c054d69ed1bf"
+    },
+    {
+      "file": "assets/brand/svg/maskable.svg",
+      "bytes": 982,
+      "sha256": "8bcc47bb33523115ebac6990460592185294c420b636371599d957d12bb26f42"
+    },
+    {
+      "file": "assets/brand/svg/android-foreground.svg",
+      "bytes": 915,
+      "sha256": "5793d34979d16dd2bf620b3b89bbf2605eff6f434b1aa4a034c42246c0d5efc1"
+    },
+    {
+      "file": "assets/brand/svg/android-monochrome.svg",
+      "bytes": 915,
+      "sha256": "c5b82cfb285d17d46a816b007722089631cab5490ab0489cb713fb340d256597"
+    },
+    {
+      "file": "assets/brand/svg/favicon.svg",
+      "bytes": 965,
+      "sha256": "bf89813d179c9637b3012b9484277d88284c73e464f1a0a08db30f6ec373f185"
+    },
+    {
+      "file": "assets/brand/png/mark-indigo-16.png",
+      "bytes": 448,
+      "sha256": "65f6b7ac634eb3b631416b8464b39d389987f626de4c6e2c56b89967e87d27c7",
+      "width": 16,
+      "height": 16,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-indigo-20.png",
+      "bytes": 533,
+      "sha256": "342aafcdda9c7462cf13f86f909cfe44f73a539485c6db836d95dd96b7cd1bf8",
+      "width": 20,
+      "height": 20,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-indigo-24.png",
+      "bytes": 646,
+      "sha256": "fe588c013c000e02327ca31b36120a45bf814ce5c40d93d70b2a0f5f56c5bb2d",
+      "width": 24,
+      "height": 24,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-indigo-32.png",
+      "bytes": 842,
+      "sha256": "08fd618806ffd9d2f3d60fe91f4c770e20fd798f2a4a71f80107b51e81af2a3e",
+      "width": 32,
+      "height": 32,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-indigo-40.png",
+      "bytes": 1027,
+      "sha256": "d4c641437097d45389d365c3c3ed9762ff806efd4b692472f55241007dfd5848",
+      "width": 40,
+      "height": 40,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-indigo-48.png",
+      "bytes": 1190,
+      "sha256": "9b330bb45bce9e6e95affc0a66829ee461b8bebbd8b15a1eaa4f93010aa2c801",
+      "width": 48,
+      "height": 48,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-indigo-64.png",
+      "bytes": 1584,
+      "sha256": "32932ff0993fbfa946ea36add4caf42690672622f827fcea8b7619ad8c426399",
+      "width": 64,
+      "height": 64,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-indigo-128.png",
+      "bytes": 3059,
+      "sha256": "ea26a1fdb26ea98e5bee2c719c3d2e373e02cb586e43f60eab5d7166c21d39d8",
+      "width": 128,
+      "height": 128,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-indigo-256.png",
+      "bytes": 6964,
+      "sha256": "bc64be5be0c433673bb465a07c332035e7eb81654b214164bcf5d924aade5455",
+      "width": 256,
+      "height": 256,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-indigo-512.png",
+      "bytes": 16187,
+      "sha256": "16e59f24d7b80150a9a7375ef0665dfcc60b087a97facca381821980cb77a518",
+      "width": 512,
+      "height": 512,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-on-dark-16.png",
+      "bytes": 425,
+      "sha256": "1b6f82c18e74facce89c3e0a5517f560e6515acc0427ece53de9a57065834841",
+      "width": 16,
+      "height": 16,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-on-dark-20.png",
+      "bytes": 521,
+      "sha256": "fc27ba365e8e68ed4c7b7fa74483787e3b6658aedf30c227c662207ad2270e15",
+      "width": 20,
+      "height": 20,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-on-dark-24.png",
+      "bytes": 619,
+      "sha256": "7aa3ea62f980efeec945921604ff8f5ba35d663a3ec916b4d69ac8b1bc471fe1",
+      "width": 24,
+      "height": 24,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-on-dark-32.png",
+      "bytes": 810,
+      "sha256": "c9601a8c8094634ae65bec4657932bdf972d0556fe356596b11898123e941c2a",
+      "width": 32,
+      "height": 32,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-on-dark-40.png",
+      "bytes": 994,
+      "sha256": "eca4e7a453ada64f0dba5082c6e684c34463a17230d7446227ef1ed47ad62a96",
+      "width": 40,
+      "height": 40,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-on-dark-48.png",
+      "bytes": 1168,
+      "sha256": "7941357f41d33af377d82fd4af2a5b14bf7551da4af9797165b1f724cab686d8",
+      "width": 48,
+      "height": 48,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-on-dark-64.png",
+      "bytes": 1532,
+      "sha256": "0f4cb6c009d73e0110e2d63a2e570e325ccedf493c31a7ee9e2ba869df6c2ee9",
+      "width": 64,
+      "height": 64,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-on-dark-128.png",
+      "bytes": 2996,
+      "sha256": "4c6248f2b20eee7c951f040a4b0914ef6f06f9b29214d312e6e77a6b6d8430ba",
+      "width": 128,
+      "height": 128,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-on-dark-256.png",
+      "bytes": 6774,
+      "sha256": "a47f827d281d7f4ec124d2ece14a5619dba399f0c662a36a39203f698b84f425",
+      "width": 256,
+      "height": 256,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-on-dark-512.png",
+      "bytes": 15806,
+      "sha256": "a1057a3454e849b809587286865afa11a4766b9ba0b1f32fe66abe279379b7e1",
+      "width": 512,
+      "height": 512,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-ink-16.png",
+      "bytes": 435,
+      "sha256": "317ea418bbd4c76cd7f3aeda7cf920163b2a66b195cd072306880e841afd95dd",
+      "width": 16,
+      "height": 16,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-ink-20.png",
+      "bytes": 547,
+      "sha256": "5e5ef69a167b61d090e20c2f6bd4734090e5ea8f19dd8558aba818af5070b3fc",
+      "width": 20,
+      "height": 20,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-ink-24.png",
+      "bytes": 639,
+      "sha256": "60a8aa2e69ff608e84d8ba8552b30aedaff1e49839ef39e2244e64f5bca18130",
+      "width": 24,
+      "height": 24,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-ink-32.png",
+      "bytes": 841,
+      "sha256": "6751d56b8677e9d80a4a05818eb552bd9d77a7833b73bb60546c89adfe46c0ed",
+      "width": 32,
+      "height": 32,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-ink-40.png",
+      "bytes": 1033,
+      "sha256": "2cc4f7c2c53bb250bb58f420dcb0d24fe56a16ca5a988999e79aae361b09dc5e",
+      "width": 40,
+      "height": 40,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-ink-48.png",
+      "bytes": 1189,
+      "sha256": "8ce7699830d8065c5e48aae62a502e03bf2ac71aa04c5a01ecf0b6fe71ba14a3",
+      "width": 48,
+      "height": 48,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-ink-64.png",
+      "bytes": 1593,
+      "sha256": "dc2ec821676241afd0b3621a1628400006f3601538415ef1f1efb7a2afb952b2",
+      "width": 64,
+      "height": 64,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-ink-128.png",
+      "bytes": 3086,
+      "sha256": "52272af97212543be32ce878fb17956429ce11d6e61a5a2182ee01793ec46e7f",
+      "width": 128,
+      "height": 128,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-ink-256.png",
+      "bytes": 6955,
+      "sha256": "0331922cf31c1921e231f8fe517a2d00fdde5d66b390088b915ae0df065ecb37",
+      "width": 256,
+      "height": 256,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-ink-512.png",
+      "bytes": 16203,
+      "sha256": "7f6eb053efda864a9e059deb8ef16135392487ef063c6df9e22be96463794265",
+      "width": 512,
+      "height": 512,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-white-16.png",
+      "bytes": 348,
+      "sha256": "d8eb3199b63f3c1df814b4e9a4bb6a4a4765e5e4dca6ce17bc15e81608710f9e",
+      "width": 16,
+      "height": 16,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-white-20.png",
+      "bytes": 419,
+      "sha256": "849e4e2114ee11141c7d48d58c98e49800f4c5f5a5ff75998ad08e4e70a5a218",
+      "width": 20,
+      "height": 20,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-white-24.png",
+      "bytes": 495,
+      "sha256": "6becf49f0b5d277d8278d45ff3c4921d83cf16a30ddaa40979619069bb9cbbc2",
+      "width": 24,
+      "height": 24,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-white-32.png",
+      "bytes": 647,
+      "sha256": "a8b4fd93c009b387a51afa399f9cac1f97458c75c8e916e851fe52ddb095ff47",
+      "width": 32,
+      "height": 32,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-white-40.png",
+      "bytes": 790,
+      "sha256": "e8b729f12ec0c4daa2b9354fa193b71bd420838a8454f6bbe316f77038eb2e05",
+      "width": 40,
+      "height": 40,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-white-48.png",
+      "bytes": 914,
+      "sha256": "9cf0b4a46816b29725d5e61e6d4db422d60711d05105013330f19f9c4fb9f4a0",
+      "width": 48,
+      "height": 48,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-white-64.png",
+      "bytes": 1211,
+      "sha256": "c3c903f09255ac773a23bcc65c42fe36d463b7407f0ae683cf75b8ac3b665fdf",
+      "width": 64,
+      "height": 64,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-white-128.png",
+      "bytes": 2383,
+      "sha256": "3d863704dc4ff19a92f0abbb7785672f0287b8179c972061b07afdcc69a9210f",
+      "width": 128,
+      "height": 128,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-white-256.png",
+      "bytes": 5316,
+      "sha256": "64e58a911935f0e5dc625d4d094f964309b5092a9be4c8f98f29b21c70c4025a",
+      "width": 256,
+      "height": 256,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/mark-white-512.png",
+      "bytes": 11604,
+      "sha256": "296e29f9b9e06e0233134690aa235c51412884594fdb92b5fac0bcd57c16f80c",
+      "width": 512,
+      "height": 512,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h24@1x.png",
+      "bytes": 1701,
+      "sha256": "b02fc582938e678f0e4354805629f9bc6aa20b0d70d3350a6989cf470b7d8d0e",
+      "width": 93,
+      "height": 24,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h24@2x.png",
+      "bytes": 3178,
+      "sha256": "81c303754204e4306fd12918597eaefe2ac0a9c99faf7997a2132db6a639e46f",
+      "width": 186,
+      "height": 48,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h24@3x.png",
+      "bytes": 4849,
+      "sha256": "114884ac6d1a2dfc8c6cc8d3d7991248394504bf1b0529cb31b882fdfc7a803d",
+      "width": 280,
+      "height": 72,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h32@1x.png",
+      "bytes": 2202,
+      "sha256": "d99e7ac358b3d90f5e49e382d14cc50522f792f908901d34f1683837eaa301ba",
+      "width": 124,
+      "height": 32,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h32@2x.png",
+      "bytes": 4246,
+      "sha256": "45c86d0a4fcff1c433edb2e793857f5dd1410895532c6a0317721b6b64fbbdef",
+      "width": 249,
+      "height": 64,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h32@3x.png",
+      "bytes": 6434,
+      "sha256": "6b0311e8488b32711e45901f72871e44ea6d6c23448e68884b788e401f75eafc",
+      "width": 373,
+      "height": 96,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h40@1x.png",
+      "bytes": 2716,
+      "sha256": "27e79808d21484f206f3c8461c666116a3f730630245186dfaae0c19bcbc7385",
+      "width": 155,
+      "height": 40,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h40@2x.png",
+      "bytes": 5325,
+      "sha256": "759914c5cfb30cfd2103340dba0536f3d53e32823c94f3f6b724671f87355827",
+      "width": 311,
+      "height": 80,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h40@3x.png",
+      "bytes": 8300,
+      "sha256": "11cb74604794d62e8c48298fbf21888332a97146ff49c7798344fdc6815ec3b6",
+      "width": 466,
+      "height": 120,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h48@1x.png",
+      "bytes": 3178,
+      "sha256": "81c303754204e4306fd12918597eaefe2ac0a9c99faf7997a2132db6a639e46f",
+      "width": 186,
+      "height": 48,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h48@2x.png",
+      "bytes": 6434,
+      "sha256": "6b0311e8488b32711e45901f72871e44ea6d6c23448e68884b788e401f75eafc",
+      "width": 373,
+      "height": 96,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h48@3x.png",
+      "bytes": 10208,
+      "sha256": "44dbadb0ad6d0e96e93f051cf460a6850549d5813c10b6335bd82d958a40e0e0",
+      "width": 559,
+      "height": 144,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h64@1x.png",
+      "bytes": 4246,
+      "sha256": "45c86d0a4fcff1c433edb2e793857f5dd1410895532c6a0317721b6b64fbbdef",
+      "width": 249,
+      "height": 64,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h64@2x.png",
+      "bytes": 8835,
+      "sha256": "3c7a41fc0d74ad97165bf4ea1291d82922615789b1bcdae439822dddf4e2284a",
+      "width": 497,
+      "height": 128,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h64@3x.png",
+      "bytes": 14391,
+      "sha256": "ebed0def1af32924748aa1561fa7614492011e2a223d1beaf56b29cab8b13509",
+      "width": 746,
+      "height": 192,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h96@1x.png",
+      "bytes": 6434,
+      "sha256": "6b0311e8488b32711e45901f72871e44ea6d6c23448e68884b788e401f75eafc",
+      "width": 373,
+      "height": 96,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h96@2x.png",
+      "bytes": 14391,
+      "sha256": "ebed0def1af32924748aa1561fa7614492011e2a223d1beaf56b29cab8b13509",
+      "width": 746,
+      "height": 192,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-light-h96@3x.png",
+      "bytes": 23541,
+      "sha256": "088073e72c7a5304c567c45696e4d455391f56e3d512e86d133102a482e931aa",
+      "width": 1118,
+      "height": 288,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h24@1x.png",
+      "bytes": 1359,
+      "sha256": "0fe4a59241405ee2d4661e8dfe4246b49212576ba81bd6e87f2684a82f5f2abb",
+      "width": 93,
+      "height": 24,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h24@2x.png",
+      "bytes": 2640,
+      "sha256": "110232870ac308fb541f287c595300511a2daf15358e20823ba8713959c6f08b",
+      "width": 186,
+      "height": 48,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h24@3x.png",
+      "bytes": 4110,
+      "sha256": "ef95075a8d8d472eff3463d687c25ef8b0f5debbec13721132d388589837a62f",
+      "width": 280,
+      "height": 72,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h32@1x.png",
+      "bytes": 1790,
+      "sha256": "5c6f25a9f69b4bda5e22739b76a4600c7f544e4f9b1f1cb4d96b670d1ac86a73",
+      "width": 124,
+      "height": 32,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h32@2x.png",
+      "bytes": 3611,
+      "sha256": "2f9b521a2722bc8154d092fcd9dda1e079bd3cd166894f10a8aa1e2b3f28b9ea",
+      "width": 249,
+      "height": 64,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h32@3x.png",
+      "bytes": 5532,
+      "sha256": "cd1b55b62e271a6dcac7c63ce82c3e0f92f6a10601fb4e922294afbdea3f9522",
+      "width": 373,
+      "height": 96,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h40@1x.png",
+      "bytes": 2258,
+      "sha256": "a6c60c6353d590b292e252d28297205e503e43f57e90835130d37f3cb2fb5eea",
+      "width": 155,
+      "height": 40,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h40@2x.png",
+      "bytes": 4548,
+      "sha256": "cebfa20a725d362536b78b2d3240efb1f57570f1b0f53b12c0b9701ffd74c747",
+      "width": 311,
+      "height": 80,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h40@3x.png",
+      "bytes": 7135,
+      "sha256": "456d2e97a2ca3c1a63fb6f61b529965ec840f908447c55cee1e94f3658de1b46",
+      "width": 466,
+      "height": 120,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h48@1x.png",
+      "bytes": 2640,
+      "sha256": "110232870ac308fb541f287c595300511a2daf15358e20823ba8713959c6f08b",
+      "width": 186,
+      "height": 48,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h48@2x.png",
+      "bytes": 5532,
+      "sha256": "cd1b55b62e271a6dcac7c63ce82c3e0f92f6a10601fb4e922294afbdea3f9522",
+      "width": 373,
+      "height": 96,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h48@3x.png",
+      "bytes": 8738,
+      "sha256": "7a92dffe5762999f2b3b38d3d55948925633912a159e10c7be3342570fe5b934",
+      "width": 559,
+      "height": 144,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h64@1x.png",
+      "bytes": 3611,
+      "sha256": "2f9b521a2722bc8154d092fcd9dda1e079bd3cd166894f10a8aa1e2b3f28b9ea",
+      "width": 249,
+      "height": 64,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h64@2x.png",
+      "bytes": 7585,
+      "sha256": "f7aa042a5983014a888441bd176dc08e618f26fd362338dce2fafc43d3f32e6d",
+      "width": 497,
+      "height": 128,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h64@3x.png",
+      "bytes": 12133,
+      "sha256": "d077557bdb0b550b098ab1c31f1170ac5d3aafe1ef36034238544f2218a248db",
+      "width": 746,
+      "height": 192,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h96@1x.png",
+      "bytes": 5532,
+      "sha256": "cd1b55b62e271a6dcac7c63ce82c3e0f92f6a10601fb4e922294afbdea3f9522",
+      "width": 373,
+      "height": 96,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h96@2x.png",
+      "bytes": 12133,
+      "sha256": "d077557bdb0b550b098ab1c31f1170ac5d3aafe1ef36034238544f2218a248db",
+      "width": 746,
+      "height": 192,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/logo-dark-h96@3x.png",
+      "bytes": 19897,
+      "sha256": "f1664d8187b179372c6fff69aca592c3eb209423a3aa38e44ce8158465b696a4",
+      "width": 1118,
+      "height": 288,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/app-icon-48.png",
+      "bytes": 989,
+      "sha256": "df4e9fe0fa9d750c88598a501f8da42e0dae43d714ce60a76910885db99533d3",
+      "width": 48,
+      "height": 48,
+      "alpha": false
+    },
+    {
+      "file": "assets/brand/png/app-icon-72.png",
+      "bytes": 1488,
+      "sha256": "6889230345db8d2278a99425e3d925b9433b70a21cc4f67ff9b40302928d4d2b",
+      "width": 72,
+      "height": 72,
+      "alpha": false
+    },
+    {
+      "file": "assets/brand/png/app-icon-96.png",
+      "bytes": 1944,
+      "sha256": "bcaa26c995033c1221e52609769eccf3ab360f39cf329f542a0a98de3d363fca",
+      "width": 96,
+      "height": 96,
+      "alpha": false
+    },
+    {
+      "file": "assets/brand/png/app-icon-144.png",
+      "bytes": 3036,
+      "sha256": "487e5f712fb92c503c87cabd18fdbf2176004c81a21c7e3174a16dc0043ef25d",
+      "width": 144,
+      "height": 144,
+      "alpha": false
+    },
+    {
+      "file": "assets/brand/png/app-icon-192.png",
+      "bytes": 4148,
+      "sha256": "a5bfcebfcad73e8d98b36ecddb626ebb05d9949ae35ef0cb8c610f2820e8f5d4",
+      "width": 192,
+      "height": 192,
+      "alpha": false
+    },
+    {
+      "file": "assets/brand/png/app-icon-512.png",
+      "bytes": 14026,
+      "sha256": "3e0351daaaa3403c4e26e189c3eddaa4e7455b36063d925e37afbb990f6b23f9",
+      "width": 512,
+      "height": 512,
+      "alpha": false
+    },
+    {
+      "file": "assets/brand/png/app-icon-1024.png",
+      "bytes": 36468,
+      "sha256": "60f1ee045bce2291f8c7ac52c00c4f36a61062314320ef8d5c9a70addd8977bf",
+      "width": 1024,
+      "height": 1024,
+      "alpha": false
+    },
+    {
+      "file": "assets/brand/png/android-foreground-108.png",
+      "bytes": 1346,
+      "sha256": "9670ee1c0325a706ec2a184a6c5c093153b39dd8217955eba4529400780cc4ed",
+      "width": 108,
+      "height": 108,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/android-monochrome-108.png",
+      "bytes": 1353,
+      "sha256": "d1dc5340d9b0b42d0f7067336d3440b2c87f6b0d211dcc173d09c3e69d459642",
+      "width": 108,
+      "height": 108,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/android-foreground-162.png",
+      "bytes": 2013,
+      "sha256": "1189b4c9f8051a748aaa5445b7b21c16a47e71649a28ee9aa22b23e5b6406d07",
+      "width": 162,
+      "height": 162,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/android-monochrome-162.png",
+      "bytes": 2018,
+      "sha256": "abe7964eee0eb99f9e2c42c1f223dc317b854e80f372f75fd5c7f9cb326dc65d",
+      "width": 162,
+      "height": 162,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/android-foreground-216.png",
+      "bytes": 2753,
+      "sha256": "ac95cdb5522d188871995fe122a93c8adafe627aaf14631a4488a9133a44f1ac",
+      "width": 216,
+      "height": 216,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/android-monochrome-216.png",
+      "bytes": 2762,
+      "sha256": "f58cde29d55f24194bacbfd25a8077d5ced6e65f1df6f365a8890b3b4563bf9e",
+      "width": 216,
+      "height": 216,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/android-foreground-324.png",
+      "bytes": 4284,
+      "sha256": "00689818de3b427cf4e43e27706d571b821f378a540bec508e69902ff98abf7b",
+      "width": 324,
+      "height": 324,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/android-monochrome-324.png",
+      "bytes": 4436,
+      "sha256": "9237d44ab5aad1eeea609c709cd047ed503fa7e921e74c6438c73c56d8d674f6",
+      "width": 324,
+      "height": 324,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/android-foreground-432.png",
+      "bytes": 6040,
+      "sha256": "1949fd470aae498eb23b33ee08ee50855bb04b37a44cbddf71af992d38a49128",
+      "width": 432,
+      "height": 432,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/android-monochrome-432.png",
+      "bytes": 6303,
+      "sha256": "9cb48006e7d4c53992426e3e7dfa549558eda2c68ef105aa0a74f8b6f436636d",
+      "width": 432,
+      "height": 432,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/android-foreground-1024.png",
+      "bytes": 17332,
+      "sha256": "96297ed99175e1fb60e1b29014e9d95b890a9a084d36e806697c71fc5179ef0a",
+      "width": 1024,
+      "height": 1024,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/android-monochrome-1024.png",
+      "bytes": 19073,
+      "sha256": "ee7f734b731a3b1ebbac5fd100c108a409f57173ad50dd98d722f8996b8c052f",
+      "width": 1024,
+      "height": 1024,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/maskable-192.png",
+      "bytes": 4420,
+      "sha256": "1ab557ef7fb5f4daed5b7fe305b5421cddbe18c549269e3f5fb1122e9c16822c",
+      "width": 192,
+      "height": 192,
+      "alpha": false
+    },
+    {
+      "file": "assets/brand/png/maskable-512.png",
+      "bytes": 14691,
+      "sha256": "094ab35660937ff1a4a62ad4971cb59a46534e108e55ff1f502eba24c238262f",
+      "width": 512,
+      "height": 512,
+      "alpha": false
+    },
+    {
+      "file": "assets/brand/png/web-icon-16.png",
+      "bytes": 455,
+      "sha256": "03e822ec6bb9b7148a1827ef891b2f9cef282ca5023d6ae6085b38c1a8c4fb95",
+      "width": 16,
+      "height": 16,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/web-icon-32.png",
+      "bytes": 888,
+      "sha256": "7d163e47d6bbce9ac673b2a3e4bd417293ea41874691707e0b798b18e2344c3a",
+      "width": 32,
+      "height": 32,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/web-icon-48.png",
+      "bytes": 1353,
+      "sha256": "92d8c6e3a63577cc03ca3e3b5c0acfd32cb36569e1008de5e10925d9bed11fbd",
+      "width": 48,
+      "height": 48,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/web-icon-180.png",
+      "bytes": 3864,
+      "sha256": "515720de42ea81c8a91070cafc17c286486d343d1e34fef2f7e3af3077008682",
+      "width": 180,
+      "height": 180,
+      "alpha": false
+    },
+    {
+      "file": "assets/brand/png/web-icon-192.png",
+      "bytes": 4148,
+      "sha256": "a5bfcebfcad73e8d98b36ecddb626ebb05d9949ae35ef0cb8c610f2820e8f5d4",
+      "width": 192,
+      "height": 192,
+      "alpha": false
+    },
+    {
+      "file": "assets/brand/png/web-icon-512.png",
+      "bytes": 14026,
+      "sha256": "3e0351daaaa3403c4e26e189c3eddaa4e7455b36063d925e37afbb990f6b23f9",
+      "width": 512,
+      "height": 512,
+      "alpha": false
+    },
+    {
+      "file": "assets/brand/favicon.ico",
+      "bytes": 2750,
+      "sha256": "c0ba96f0096a9b87e537f74290b89dadd3f19d554038cf5c35bbc301df84c867"
+    },
+    {
+      "file": "apps/web/public/brand/logo-light.svg",
+      "bytes": 6225,
+      "sha256": "734957e95287d4c1681d585ee55432cbda6c7a2895bd1628211d893078d3ccf2"
+    },
+    {
+      "file": "apps/web/public/brand/logo-dark.svg",
+      "bytes": 6225,
+      "sha256": "0927dd8c6197907439aa6a072cad544c501c5c160ab9c0010027144173b37bf2"
+    },
+    {
+      "file": "apps/web/public/brand/mark-indigo.svg",
+      "bytes": 898,
+      "sha256": "502fa43a4b6c1bd6c432d3230000313ec5bc1bbef6fa8019f9946047141298d6"
+    },
+    {
+      "file": "apps/web/public/brand/mark-on-dark.svg",
+      "bytes": 898,
+      "sha256": "ac6a142fcbabc3e258c8d3f3dd32f99cba3abc9f5d3e57aa1211507d429a4759"
+    },
+    {
+      "file": "apps/web/public/brand/mark-white.svg",
+      "bytes": 898,
+      "sha256": "ec5b010c04e121d38cdcc10efaf0bcbfc2db78ce86df122bfb9396963142995a"
+    },
+    {
+      "file": "apps/web/public/brand/favicon.svg",
+      "bytes": 965,
+      "sha256": "bf89813d179c9637b3012b9484277d88284c73e464f1a0a08db30f6ec373f185"
+    },
+    {
+      "file": "apps/web/public/brand/icon-180.png",
+      "bytes": 3864,
+      "sha256": "515720de42ea81c8a91070cafc17c286486d343d1e34fef2f7e3af3077008682",
+      "width": 180,
+      "height": 180,
+      "alpha": false
+    },
+    {
+      "file": "apps/web/public/brand/icon-192.png",
+      "bytes": 4148,
+      "sha256": "a5bfcebfcad73e8d98b36ecddb626ebb05d9949ae35ef0cb8c610f2820e8f5d4",
+      "width": 192,
+      "height": 192,
+      "alpha": false
+    },
+    {
+      "file": "apps/web/public/brand/icon-512.png",
+      "bytes": 14026,
+      "sha256": "3e0351daaaa3403c4e26e189c3eddaa4e7455b36063d925e37afbb990f6b23f9",
+      "width": 512,
+      "height": 512,
+      "alpha": false
+    },
+    {
+      "file": "apps/web/public/brand/favicon.ico",
+      "bytes": 2750,
+      "sha256": "c0ba96f0096a9b87e537f74290b89dadd3f19d554038cf5c35bbc301df84c867"
+    },
+    {
+      "file": "apps/mobile/assets/brand/app-icon.png",
+      "bytes": 36468,
+      "sha256": "60f1ee045bce2291f8c7ac52c00c4f36a61062314320ef8d5c9a70addd8977bf",
+      "width": 1024,
+      "height": 1024,
+      "alpha": false
+    },
+    {
+      "file": "apps/mobile/assets/brand/android-foreground.png",
+      "bytes": 17332,
+      "sha256": "96297ed99175e1fb60e1b29014e9d95b890a9a084d36e806697c71fc5179ef0a",
+      "width": 1024,
+      "height": 1024,
+      "alpha": true
+    },
+    {
+      "file": "apps/mobile/assets/brand/android-monochrome.png",
+      "bytes": 19073,
+      "sha256": "ee7f734b731a3b1ebbac5fd100c108a409f57173ad50dd98d722f8996b8c052f",
+      "width": 1024,
+      "height": 1024,
+      "alpha": true
+    },
+    {
+      "file": "apps/mobile/assets/brand/mark-indigo.svg",
+      "bytes": 898,
+      "sha256": "502fa43a4b6c1bd6c432d3230000313ec5bc1bbef6fa8019f9946047141298d6"
+    },
+    {
+      "file": "apps/mobile/assets/brand/mark-white.svg",
+      "bytes": 898,
+      "sha256": "ec5b010c04e121d38cdcc10efaf0bcbfc2db78ce86df122bfb9396963142995a"
+    },
+    {
+      "file": "docs/design/brand/brand-board.svg",
+      "bytes": 227820,
+      "sha256": "ed56d42b86925259e03aeeffb9bd778226ba7d749ff1394640c17c71241c0e68"
+    },
+    {
+      "file": "docs/design/brand/brand-board.png",
+      "bytes": 170053,
+      "sha256": "b6ea4eba7615c481114069180d896775e6339fb0d62c8390749f144324caef11",
+      "width": 1600,
+      "height": 1500,
+      "alpha": true
+    }
+  ]
+}

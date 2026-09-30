@@ -1,0 +1,13 @@
+{
+  "name": "splitbook-brand-tools",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node generate.mjs",
+    "check": "node generate.mjs --check"
+  },
+  "dependencies": {
+    "opentype.js": "1.3.4",
+    "sharp": "0.34.5"
+  }
+}
