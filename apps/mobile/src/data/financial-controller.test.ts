@@ -633,7 +633,7 @@ describe('stable financial refresh', () => {
     later(clock);
     holding = true;
     calls.length = 0;
-    const refresh = controller.refresh('background');
+    const refresh = controller.refresh();
 
     const expenseRead = await held.next('/expenses?');
     let screen = controller.getSnapshot();
@@ -676,7 +676,7 @@ describe('stable financial refresh', () => {
     });
   });
 
-  it('shows the native pull indicator only while a manual refresh runs', async () => {
+  it('shows the native pull indicator only while a pull runs; retries and automatic refreshes stay quiet', async () => {
     const held = gate();
     let holding = false;
     const { controller } = setup((path) =>
@@ -687,12 +687,14 @@ describe('stable financial refresh', () => {
     expect(controller.getSnapshot().pull).toBe(false);
     holding = true;
 
-    const background = controller.refresh('background');
-    (await held.next('/expenses?')).release(json(expensePage()));
+    // An automatic foreground refresh and a Retry button both use the default quiet feedback.
+    const quiet = controller.refresh();
+    const quietRead = await held.next('/expenses?');
     expect(controller.getSnapshot().pull).toBe(false);
-    await background;
+    quietRead.release(json(expensePage()));
+    await quiet;
 
-    const pull = controller.refresh('manual');
+    const pull = controller.refresh('pull');
     expect(controller.getSnapshot().pull).toBe(true);
     const read = await held.next('/expenses?');
     expect(controller.getSnapshot()).toMatchObject({
@@ -714,7 +716,7 @@ describe('stable financial refresh', () => {
     const before = controller.getSnapshot();
     later(clock);
     failing = true;
-    await controller.refresh('background');
+    await controller.refresh();
     expect(controller.getSnapshot()).toMatchObject({
       pull: false,
       groups: { status: 'ready', data: before.groups.data },
@@ -726,7 +728,7 @@ describe('stable financial refresh', () => {
       },
     });
     failing = false;
-    await controller.refresh('manual');
+    await controller.refresh('pull');
     expect(controller.getSnapshot().home).toMatchObject({
       status: 'ready',
       refreshedAt: clock.now,
@@ -743,7 +745,7 @@ describe('stable financial refresh', () => {
     const before = controller.getSnapshot().financial;
     later(clock);
     failing = true;
-    await controller.refresh('background');
+    await controller.refresh();
     expect(controller.getSnapshot().financial).toMatchObject({
       expenses: {
         status: 'error',
@@ -819,7 +821,7 @@ describe('stable financial refresh', () => {
     await controller.signIn('sam');
     await controller.openGroup(groupId);
     holding = true;
-    const refresh = controller.refresh('background');
+    const refresh = controller.refresh();
     const read = await held.next(`/api/groups/${groupId}`);
     expect(controller.getSnapshot().financial.expenses.data).toHaveLength(1);
     read.release(json({}, 403));
@@ -841,9 +843,9 @@ describe('stable financial refresh', () => {
     await controller.signIn('sam');
     await controller.openGroup(groupId);
     holding = true;
-    const first = controller.refresh('background');
+    const first = controller.refresh();
     const older = await held.next('/expenses?');
-    const second = controller.refresh('manual');
+    const second = controller.refresh('pull');
     const newer = await held.next('/expenses?');
     newer.release(json(expensePage([secondExpense])));
     await second;
@@ -884,7 +886,7 @@ describe('stable financial refresh', () => {
     expect(controller.getSnapshot().financial.month).toBe('2026-09');
 
     holding = true;
-    const refresh = controller.refresh('background');
+    const refresh = controller.refresh();
     const olderGroupRead = await held.next(`/api/groups/${groupId}`);
     await controller.selectMonth('2026-08');
     expect(controller.getSnapshot().financial).toMatchObject({
@@ -914,7 +916,7 @@ describe('stable financial refresh', () => {
     expect(before.detail.refreshedAt).toBe(verifiedAt);
     later(clock);
     failing = true;
-    await controller.refresh('background');
+    await controller.refresh();
     expect(controller.getSnapshot()).toMatchObject({
       detail: {
         status: 'error',
@@ -925,7 +927,7 @@ describe('stable financial refresh', () => {
       financial: before.financial,
     });
     failing = false;
-    await controller.refresh('manual');
+    await controller.refresh('pull');
     expect(controller.getSnapshot().detail).toMatchObject({
       status: 'ready',
       refreshedAt: clock.now,
@@ -941,7 +943,7 @@ describe('stable financial refresh', () => {
     await controller.signIn('sam');
     await controller.openGroup(groupId);
     holding = true;
-    const refresh = controller.refresh('manual');
+    const refresh = controller.refresh('pull');
     const read = await held.next('/expenses?');
     await controller.signOut();
     read.release(json(expensePage([secondExpense])));
