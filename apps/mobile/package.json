@@ -19,6 +19,8 @@
     "expo-system-ui": "~57.0.4",
     "react": "19.2.3",
     "react-native": "0.86.3",
+    "react-native-nitro-google-signin": "2.3.0",
+    "react-native-nitro-modules": "0.37.1",
     "react-native-safe-area-context": "~5.7.0",
     "zod": "^4.5.4"
   },
@@ -50,7 +52,8 @@
     "verify:expense-edit": "node --import tsx scripts/verify-expense-edit.ts",
     "verify:settlements": "node --import tsx scripts/verify-settlements.ts",
     "verify:activity": "node --import tsx scripts/verify-activity.ts",
-    "verify:offline": "node --import tsx scripts/verify-offline.ts"
+    "verify:offline": "node --import tsx scripts/verify-offline.ts",
+    "build:staging": "node scripts/build-staging-apk.mjs"
   },
   "private": true
 }

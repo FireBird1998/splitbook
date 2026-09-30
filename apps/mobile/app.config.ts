@@ -27,6 +27,8 @@ export default {
       authOrigin: process.env.EXPO_PUBLIC_AUTH_ORIGIN,
     }),
   },
+  // Android Google identity uses an explicit web client ID and native autolinking.
+  // The Google Expo plugin configures Firebase/iOS, neither needed for this Android beta.
   plugins: [
     'expo-secure-store',
     'expo-font',

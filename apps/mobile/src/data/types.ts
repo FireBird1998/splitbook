@@ -178,6 +178,8 @@ export interface MobileConfig {
   inviteOrigin?: string;
   /** The caller must combine __DEV__ with an explicit development-persona setting. */
   developmentPersonaEnabled: boolean;
+  /** Public server audience for native Google identity tokens. Staging requires HTTPS. */
+  googleWebClientId?: string;
 }
 
 export interface CredentialStore {
@@ -223,7 +225,14 @@ export interface FetchResponse {
 
 export type MobileFetch = (url: string, init: RequestInit) => Promise<FetchResponse>;
 
+export type GoogleIdentityResult =
+  | { status: 'success'; idToken: string; nonce: string }
+  | { status: 'cancelled' }
+  | { status: 'error'; message: string };
+
 export interface MobileDependencies {
+  /** Native identity acquisition only. The controller owns the app session. */
+  googleSignIn?: () => Promise<GoogleIdentityResult>;
   readCache?: FinancialReadStore;
   offlineIdentity?: OfflineIdentityStore;
   fetch: MobileFetch;

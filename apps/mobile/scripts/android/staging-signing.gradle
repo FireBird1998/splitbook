@@ -1,0 +1,14 @@
+// Loaded only by build-staging-apk.mjs. Keep signing material outside the checkout.
+allprojects {
+    afterEvaluate { project ->
+        if (project.plugins.hasPlugin('com.android.application')) {
+            def android = project.extensions.getByName('android')
+            def signing = android.signingConfigs.create('splitbookStaging')
+            signing.storeFile = new File(System.getenv('SPLITBOOK_ANDROID_KEYSTORE'))
+            signing.storePassword = new File(System.getenv('SPLITBOOK_ANDROID_PASSWORD_FILE')).text.trim()
+            signing.keyAlias = System.getenv('SPLITBOOK_ANDROID_KEY_ALIAS')
+            signing.keyPassword = signing.storePassword
+            android.buildTypes.getByName('release').signingConfig = signing
+        }
+    }
+}
