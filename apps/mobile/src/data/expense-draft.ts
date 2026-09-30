@@ -13,6 +13,7 @@ import { getCurrency } from '@splitbook/shared/currency';
 import { parseGroupResponse } from '@splitbook/shared/group-read';
 import { objectId, toMobileGroup } from './dto';
 import type { MobileGroup } from './types';
+import { idleReceiptScan, type ReceiptScanState } from './receipt-scan';
 
 // Historical missing identities are local read/delete-recovery keys, never API identities.
 const draftMemberId = z.union([objectId, z.string().regex(/^former-(payer|participant)-\d+$/)]);
@@ -72,6 +73,8 @@ export interface ExpenseEditor {
   receiptId: string | null;
   persistence: 'saved' | 'saving' | 'error';
   message: string | null;
+  /** The receipt-scanning experiment's review, bound to this editor's account, Group and draft. */
+  receiptScan: ReceiptScanState;
 }
 export type { AccountGroupRecordStore as ExpenseDraftStore } from './account-record-storage';
 export function emptyExpenseEditor(): ExpenseEditor {
@@ -88,6 +91,7 @@ export function emptyExpenseEditor(): ExpenseEditor {
     receiptId: null,
     persistence: 'saved',
     message: null,
+    receiptScan: idleReceiptScan,
   };
 }
 export function parseExpenseContext(value: unknown): ExpenseContext {

@@ -12,6 +12,7 @@ import {
   type ExpenseEditor as Editor,
 } from '../data/expense-draft';
 import { Field } from './group-workflows';
+import { ReceiptScanPanel } from './receipt-scan-panel';
 import { Button, Copy, Label, Loading, Notice, Panel } from './primitives';
 import { fonts, useTheme } from './theme';
 
@@ -41,6 +42,10 @@ export function ExpenseEditor({
   onReconcile,
   onReviewLatest,
   onAcceptCurrent,
+  receiptScanEnabled = false,
+  onScanReceipt = () => {},
+  onApplyReceiptScan = () => {},
+  onDismissReceiptScan = () => {},
 }: {
   state: Editor;
   onChange: (patch: Partial<ExpenseDraft>) => void;
@@ -55,6 +60,10 @@ export function ExpenseEditor({
   onReconcile: () => void;
   onReviewLatest: () => void;
   onAcceptCurrent: () => void;
+  receiptScanEnabled?: boolean;
+  onScanReceipt?: () => void;
+  onApplyReceiptScan?: () => void;
+  onDismissReceiptScan?: () => void;
 }) {
   const theme = useTheme();
   const [details, setDetails] = useState(false);
@@ -247,6 +256,13 @@ export function ExpenseEditor({
           </>
         )}
       </Panel>
+      <ReceiptScanPanel
+        state={state}
+        enabled={receiptScanEnabled}
+        onScan={onScanReceipt}
+        onApply={onApplyReceiptScan}
+        onDismiss={onDismissReceiptScan}
+      />
       <Field
         label="Description"
         value={draft.description}

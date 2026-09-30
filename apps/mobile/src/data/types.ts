@@ -3,6 +3,7 @@ import type { ActivityState } from './activity';
 import type { AccountGroupRecordStore } from './account-record-storage';
 import type { SettlementState } from './settlement';
 import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
+import type { ReceiptScanner } from './receipt-scan';
 import type { GroupCategory } from '@splitbook/shared/types';
 
 export interface SessionUser {
@@ -180,6 +181,8 @@ export interface MobileConfig {
   developmentPersonaEnabled: boolean;
   /** Public server audience for native Google identity tokens. Staging requires HTTPS. */
   googleWebClientId?: string;
+  /** On-device receipt scanning for new INR drafts; development and staging builds only. */
+  receiptScanEnabled?: boolean;
 }
 
 export interface CredentialStore {
@@ -243,4 +246,5 @@ export interface MobileDependencies {
   expenseDrafts?: ExpenseDraftStore;
   settlementAttempts?: AccountGroupRecordStore;
   newSubmissionKey?: () => string;
+  receiptScanner?: ReceiptScanner;
 }

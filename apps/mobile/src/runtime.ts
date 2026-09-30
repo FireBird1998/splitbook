@@ -5,8 +5,9 @@ import { createExpenseDraftStore } from './data/expense-storage';
 import { fetch } from 'expo/fetch';
 import * as SecureStore from 'expo-secure-store';
 import { createMobileController } from './data';
-import { mobileConfig } from './config';
+import { mobileConfig, receiptScanEnabled } from './config';
 import { createGoogleIdentityProvider } from './google-identity';
+import { createReceiptScanner } from './receipt-scanner';
 import { createAppearanceController } from './data/appearance';
 
 const config = mobileConfig(
@@ -23,10 +24,13 @@ export const configurationReady = config !== null;
 export const googleSignInEnabled = Boolean(config?.googleWebClientId);
 
 // The inert fallback only allows the setup screen to render. No restore is run.
-const controllerConfig = config ?? {
-  apiBaseUrl: 'http://127.0.0.1:4138',
-  authOrigin: 'http://127.0.0.1:4138',
-  developmentPersonaEnabled: false,
+const controllerConfig = {
+  ...(config ?? {
+    apiBaseUrl: 'http://127.0.0.1:4138',
+    authOrigin: 'http://127.0.0.1:4138',
+    developmentPersonaEnabled: false,
+  }),
+  receiptScanEnabled: config !== null && receiptScanEnabled(process.env.EXPO_PUBLIC_APP_ENV),
 };
 // Separate credentials even when two development servers share the same device.
 const storageKey = `splitbook.session.${Array.from(controllerConfig.apiBaseUrl, (char) => char.charCodeAt(0).toString(16)).join('')}`;
@@ -71,6 +75,7 @@ export const controller = createMobileController(controllerConfig, {
   expenseDrafts,
   settlementAttempts,
   newSubmissionKey: randomUUID,
+  receiptScanner: controllerConfig.receiptScanEnabled ? createReceiptScanner() : undefined,
   credentials: {
     load: () => SecureStore.getItemAsync(storageKey),
     save: (cookie) => SecureStore.setItemAsync(storageKey, cookie),

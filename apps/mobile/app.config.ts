@@ -32,6 +32,8 @@ export default {
   plugins: [
     'expo-secure-store',
     'expo-font',
+    // Receipt scanning uses Android's photo picker only; no camera or microphone access.
+    ['expo-image-picker', { cameraPermission: false, microphonePermission: false }],
     ['expo-build-properties', { android: { usesCleartextTraffic: development } }],
   ],
 } satisfies ExpoConfig;
