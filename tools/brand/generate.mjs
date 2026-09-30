@@ -149,7 +149,7 @@ if (args.includes('--asset')) {
     `width="${width}" height="${+((width * Number(h)) / Number(w)).toFixed(3)}"`,
   );
   await fs.mkdir(path.dirname(filename), { recursive: true });
-  await fs.writeFile(filename, ext === '.svg' ? sized : await png(source, width));
+  await fs.writeFile(filename, ext === '.svg' ? sized : await png(source, width), { flag: 'wx' });
   console.log(filename);
   process.exit(0);
 }
