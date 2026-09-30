@@ -216,6 +216,9 @@ export function SegmentedControl<T extends string>({
             style={{ flex: 1, paddingVertical: 3, paddingHorizontal: 1.5 }}
           >
             <View
+              // Remounted on selection: Android keeps corners square when a background
+              // changes from transparent to a colour.
+              key={selected ? 'selected' : 'idle'}
               style={{
                 minHeight: touch.dense,
                 borderRadius: 10,
