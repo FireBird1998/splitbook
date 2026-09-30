@@ -61,6 +61,7 @@ import type {
   GroupCreation,
   GroupDraft,
   GroupFinancialState,
+  HomeFinancialState,
   MobileConfig,
   MobileDependencies,
   MobileSnapshot,
@@ -68,21 +69,31 @@ import type {
 
 export { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
 
+function emptyExpenses(month: string | null = null): GroupFinancialState['expenses'] {
+  return {
+    month,
+    status: 'idle',
+    data: [],
+    summary: null,
+    pagination: null,
+    message: null,
+    moreStatus: 'idle',
+    moreMessage: null,
+    refreshedAt: null,
+  };
+}
+
 function emptyFinancial(): GroupFinancialState {
   return {
     groupId: null,
     month: null,
-    expenses: {
-      status: 'idle',
-      data: [],
-      summary: null,
-      pagination: null,
-      message: null,
-      moreStatus: 'idle',
-      moreMessage: null,
-    },
-    balances: { status: 'idle', data: null, message: null },
+    expenses: emptyExpenses(),
+    balances: { status: 'idle', data: null, message: null, refreshedAt: null, stale: false },
   };
+}
+
+function emptyHome(): HomeFinancialState {
+  return { status: 'idle', data: null, message: null, refreshedAt: null, stale: false };
 }
 
 const expiredMessage = 'Your session has expired. Sign in again to continue.';
@@ -129,11 +140,12 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
   return {
     auth,
     offline: { active: false, refreshedAt: null, message: null },
+    pull: false,
     screen: 'groups',
     expense: emptyExpenseEditor(),
     settlement: emptySettlement(),
     activity: emptyActivity(),
-    home: { status: 'idle', data: null, message: null },
+    home: emptyHome(),
     financial: emptyFinancial(),
     creation: {
       draft: {
@@ -150,7 +162,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
     invitation: { code: null, status: 'idle', preview: null, message: null },
     share: { status: 'idle', url: null, message: null },
     groups: { status: 'idle', data: [], message: null },
-    detail: { status: 'idle', id: null, data: null, message: null },
+    detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
   };
 }
 
@@ -741,7 +753,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ...snapshot,
       screen: 'groups',
       groups: { status: 'loading', data: snapshot.groups.data, message: null },
-      detail: { status: 'idle', id: null, data: null, message: null },
+      detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
     });
     try {
       const groups = await readCached('/api/groups', owner, parseGroups);
@@ -830,22 +842,36 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (current(owner) && pendingCode) await previewInvitation(pendingCode);
   };
 
+  /** A saved-view fallback keeps its original time; a live read is verified now. */
+  const readAt = (path: string) => (staleReads.has(path) ? (staleReads.get(path) ?? null) : now());
+
   const refreshHome = async () => {
     if (snapshot.auth.status !== 'authenticated') return;
     const owner = generation;
     const read = ++homeRequest;
-    publish({ ...snapshot, home: { status: 'loading', data: null, message: null } });
+    // The same account's figures stay readable, and keep their time, until replaced.
+    publish({ ...snapshot, home: { ...snapshot.home, status: 'loading', message: null } });
     try {
       const data = await readCached('/api/user/balances', owner, parseHomeBalances);
       if (!current(owner) || read !== homeRequest) return;
-      publish({ ...snapshot, home: { status: 'ready', data, message: null } });
-    } catch (error) {
-      if (!current(owner) || read !== homeRequest || error instanceof Superseded) return;
       publish({
         ...snapshot,
         home: {
-          status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
-          data: null,
+          status: 'ready',
+          data,
+          message: null,
+          refreshedAt: readAt('/api/user/balances'),
+          stale: false,
+        },
+      });
+    } catch (error) {
+      if (!current(owner) || read !== homeRequest || error instanceof Superseded) return;
+      const denied = error instanceof RequestError && error.status === 403;
+      publish({
+        ...snapshot,
+        home: {
+          ...(denied ? emptyHome() : snapshot.home),
+          status: denied ? 'denied' : 'error',
           message:
             error instanceof RequestError
               ? error.message
@@ -999,19 +1025,28 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const owner = generation;
     const previousMonth = snapshot.financial.groupId === id ? snapshot.financial.month : undefined;
     const verified = snapshot.detail.id === id ? snapshot.detail.data : null;
+    // Refreshing this account's same Group keeps its figures; another Group starts empty.
+    const retained = verified && snapshot.financial.groupId === id;
     const view = ++viewRequest;
+    const path = `/api/groups/${id}`;
     startReadView();
     publish({
       ...snapshot,
       screen: 'group',
       share: { status: 'idle', url: null, message: null },
-      detail: { status: 'loading', id, data: verified, message: null },
-      financial: { ...emptyFinancial(), groupId: id },
+      detail: {
+        status: 'loading',
+        id,
+        data: verified,
+        message: null,
+        refreshedAt: verified ? snapshot.detail.refreshedAt : null,
+      },
+      financial: retained ? snapshot.financial : { ...emptyFinancial(), groupId: id },
     });
     try {
       if (!objectId.safeParse(id).success)
         throw new RequestError('This group is no longer available.', 404);
-      const group = await readCached(`/api/groups/${id}`, owner, parseGroup);
+      const group = await readCached(path, owner, parseGroup);
       assertCurrent(owner);
       if (view !== viewRequest) return;
       if (
@@ -1022,27 +1057,31 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       publish({
         ...snapshot,
-        detail: { status: 'ready', id, data: group, message: null },
+        detail: { status: 'ready', id, data: group, message: null, refreshedAt: readAt(path) },
         financial: {
           ...snapshot.financial,
+          // While a refresh reads the Group, the member can still choose another Month:
+          // that newer choice wins over the Month this refresh started with.
           month:
-            group.category === 'home'
-              ? previousMonth === undefined
-                ? currentMonthKey(new Date(now()))
-                : previousMonth
-              : null,
+            group.category !== 'home'
+              ? null
+              : retained
+                ? snapshot.financial.month
+                : previousMonth === undefined
+                  ? currentMonthKey(new Date(now()))
+                  : previousMonth,
         },
       });
       await refreshExpenses();
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
       if (dropDeniedGroup(id, error)) return;
+      // Figures already shown for this Group stay, with their time, beside the failure.
       publish({
         ...snapshot,
         detail: {
+          ...snapshot.detail,
           status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
-          id,
-          data: verified,
           message:
             error instanceof RequestError
               ? error.message
@@ -1061,10 +1100,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({
       ...snapshot,
       groups: { ...snapshot.groups, data: snapshot.groups.data.filter((group) => group.id !== id) },
-      home: { status: 'idle', data: null, message: null },
+      home: emptyHome(),
       detail:
         snapshot.detail.id === id
-          ? { ...snapshot.detail, data: null, status: status === 403 ? 'denied' : 'error', message }
+          ? {
+              ...snapshot.detail,
+              data: null,
+              refreshedAt: null,
+              status: status === 403 ? 'denied' : 'error',
+              message,
+            }
           : snapshot.detail,
       financial: snapshot.financial.groupId === id ? emptyFinancial() : snapshot.financial,
       activity:
@@ -1092,13 +1137,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         id,
         data: null,
         message: error.message,
+        refreshedAt: null,
       },
       financial: emptyFinancial(),
       activity:
         snapshot.activity.groupId === id
           ? { ...emptyActivity(), groupId: id, status: 'denied', message: error.message }
           : snapshot.activity,
-      home: { status: 'idle', data: null, message: null },
+      home: emptyHome(),
       share: { status: 'idle', url: null, message: null },
     });
     return true;
@@ -1115,19 +1161,29 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     const read = ++balancesRequest;
+    const path = `/api/groups/${group.id}/balances`;
     publish({
       ...snapshot,
       financial: {
         ...snapshot.financial,
-        balances: { status: 'loading', data: null, message: null },
+        balances: { ...snapshot.financial.balances, status: 'loading', message: null },
       },
     });
     try {
-      const data = await readCached(`/api/groups/${group.id}/balances`, owner, parseGroupBalances);
+      const data = await readCached(path, owner, parseGroupBalances);
       if (!current(owner) || view !== viewRequest || read !== balancesRequest) return;
       publish({
         ...snapshot,
-        financial: { ...snapshot.financial, balances: { status: 'ready', data, message: null } },
+        financial: {
+          ...snapshot.financial,
+          balances: {
+            status: 'ready',
+            data,
+            message: null,
+            refreshedAt: readAt(path),
+            stale: false,
+          },
+        },
       });
     } catch (error) {
       if (
@@ -1143,8 +1199,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         financial: {
           ...snapshot.financial,
           balances: {
+            ...snapshot.financial.balances,
             status: 'error',
-            data: null,
             message:
               error instanceof RequestError
                 ? error.message
@@ -1176,21 +1232,37 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     if (month !== null) getLocalMonthIsoRange(month);
-    publish({ ...snapshot, financial: { ...snapshot.financial, month } });
+    const { financial } = snapshot;
+    publish({
+      ...snapshot,
+      financial: {
+        ...financial,
+        month,
+        // A different Month never shows the previous Month's Expenses under its label.
+        expenses: month === financial.month ? financial.expenses : emptyExpenses(month),
+      },
+    });
     await refreshExpenses();
   };
 
   const beginExpenseRead = () => {
-    // Expense reads can materialize due recurring entries. Older Home responses
-    // no longer describe the same ledger, even while the Group read is pending.
+    // Expense reads can materialize due recurring entries. Older Home and Balance
+    // responses no longer describe the same ledger, even while the Group read is
+    // pending. Their figures stay visible but unverified until read again afterwards.
     homeRequest += 1;
     balancesRequest += 1;
+    const { home, financial } = snapshot;
     publish({
       ...snapshot,
-      home: { status: 'idle', data: null, message: null },
+      home: { ...home, status: 'idle', message: null, stale: home.data !== null },
       financial: {
-        ...snapshot.financial,
-        balances: { status: 'loading', data: null, message: null },
+        ...financial,
+        balances: {
+          ...financial.balances,
+          status: 'loading',
+          message: null,
+          stale: financial.balances.data !== null,
+        },
       },
     });
   };
@@ -1204,6 +1276,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (append) {
       if (
         expenses.status !== 'ready' ||
+        expenses.month !== snapshot.financial.month ||
         expenses.moreStatus === 'loading' ||
         !pagination ||
         pagination.page >= pagination.totalPages
@@ -1217,21 +1290,28 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const owner = generation;
     const view = viewRequest;
     const read = ++financialRequest;
+    const month = snapshot.financial.month;
+    const path = expensePath(group.id, group.category, month, pageNumber);
     beginExpenseRead();
+    // A refresh keeps Expenses readable only when they belong to the Month being read.
     publish({
       ...snapshot,
       financial: {
         ...snapshot.financial,
         expenses: append
           ? { ...expenses, moreStatus: 'loading', moreMessage: null }
-          : { ...emptyFinancial().expenses, status: 'loading' },
+          : {
+              ...(expenses.month === month ? expenses : emptyExpenses(month)),
+              status: 'loading',
+              message: null,
+              moreStatus: 'idle',
+              moreMessage: null,
+            },
       },
     });
     try {
-      const page = await readCached(
-        expensePath(group.id, group.category, snapshot.financial.month, pageNumber),
-        owner,
-        (value) => parseExpensePage(value, group.id, group.defaultCurrency),
+      const page = await readCached(path, owner, (value) =>
+        parseExpensePage(value, group.id, group.defaultCurrency),
       );
       if (!current(owner) || view !== viewRequest || read !== financialRequest) return;
       if (page.pagination.page !== pageNumber) throw new Error('Unexpected expense page.');
@@ -1242,6 +1322,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         financial: {
           ...snapshot.financial,
           expenses: {
+            month,
             status: 'ready',
             data: [...existing, ...page.expenses.filter((expense) => !seen.has(expense.id))],
             summary: page.summary,
@@ -1249,6 +1330,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             message: null,
             moreStatus: 'idle',
             moreMessage: null,
+            refreshedAt: append ? expenses.refreshedAt : readAt(path),
           },
         },
       });
@@ -1268,11 +1350,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ...snapshot,
         financial: {
           ...snapshot.financial,
+          // Balances were not re-read after this Expense read: keep them, still unverified.
           balances: unavailableOffline
             ? snapshot.financial.balances
             : {
+                ...snapshot.financial.balances,
                 status: 'error',
-                data: null,
                 message: 'Could not update running balances. Please try again.',
               },
           expenses: append
@@ -1285,7 +1368,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                     : 'Could not load more expenses. Please try again.',
               }
             : {
-                ...emptyFinancial().expenses,
+                ...snapshot.financial.expenses,
                 status: 'error',
                 message:
                   error instanceof RequestError
@@ -2869,7 +2952,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({
       ...snapshot,
       screen: 'groups',
-      detail: { status: 'idle', id: null, data: null, message: null },
+      detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
       financial: emptyFinancial(),
       invitation: { code: null, status: 'idle', preview: null, message: null },
     });
@@ -2976,7 +3059,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ...(view === viewRequest
           ? ({
               screen: 'group',
-              detail: { status: 'ready', id: group.id, data: group, message: null },
+              detail: {
+                status: 'ready',
+                id: group.id,
+                data: group,
+                message: null,
+                refreshedAt: now(),
+              },
             } as const)
           : {}),
       });
@@ -3036,13 +3125,30 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({
       ...snapshot,
       screen: 'groups',
-      detail: { status: 'idle', id: null, data: null, message: null },
+      detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
       financial: emptyFinancial(),
     });
     return refreshHome();
   };
 
-  const refresh = async () => {
+  let pulls = 0;
+  /**
+   * Re-read the visible view. Only a member-requested ('manual') refresh shows the
+   * native pull indicator; automatic foreground refreshes stay quiet.
+   */
+  const refresh = async (origin: 'manual' | 'background' = 'manual') => {
+    if (origin === 'background') return refreshView();
+    pulls += 1;
+    if (!snapshot.pull) publish({ ...snapshot, pull: true });
+    try {
+      await refreshView();
+    } finally {
+      pulls -= 1;
+      if (pulls === 0 && snapshot.pull) publish({ ...snapshot, pull: false });
+    }
+  };
+
+  const refreshView = async () => {
     if (['restoring', 'signing-in'].includes(snapshot.auth.status)) return;
     if (
       snapshot.creation.status === 'saving' ||

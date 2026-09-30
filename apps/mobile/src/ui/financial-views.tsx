@@ -13,6 +13,7 @@ import type {
   MobileGroup,
 } from '../data/types';
 import { Avatar, Button, Copy, Icon, Label, Panel, type IconName } from './primitives';
+import { refreshedLabel } from './refresh-feedback';
 import { fonts, useTheme } from './theme';
 
 export interface HomeBalancesProps {
@@ -130,6 +131,64 @@ function FinancialState({
   );
 }
 
+/** The one quiet cue for an automatic refresh of content that stays on screen. */
+export function RefreshStatus({ visible }: { visible: boolean }) {
+  const theme = useTheme();
+  if (!visible) return null;
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Icon name="sync-outline" size={15} />
+      <Copy style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 20 }}>Updating…</Copy>
+    </View>
+  );
+}
+
+/**
+ * Explains figures that stay visible but are not current: still being verified
+ * after a ledger change, or kept after a refresh failed.
+ */
+export function RetainedNotice({
+  status,
+  stale,
+  refreshedAt,
+  message,
+  subject,
+  retryLabel,
+  onRetry,
+}: {
+  status: LoadStatus;
+  stale: boolean;
+  refreshedAt: number | null;
+  message: string | null;
+  subject: string;
+  retryLabel: string;
+  onRetry: () => void;
+}) {
+  const theme = useTheme();
+  const time = refreshedLabel(refreshedAt);
+  if (status === 'error')
+    return (
+      <View style={{ gap: 12 }}>
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <Icon name="cloud-offline-outline" color={theme.status.negative} />
+          <Copy accessibilityRole="alert" style={{ flex: 1, color: theme.status.negative }}>
+            {message ?? `Couldn’t refresh ${subject}.`} Showing {subject} from {time}.
+          </Copy>
+        </View>
+        <Button label={retryLabel} secondary onPress={onRetry} />
+      </View>
+    );
+  if (!stale) return null;
+  return (
+    <View style={{ flexDirection: 'row', gap: 10 }}>
+      <Icon name="sync-outline" color={theme.textSecondary} />
+      <Copy style={{ flex: 1, color: theme.textSecondary, fontSize: 14, lineHeight: 21 }}>
+        Updating {subject}. These figures are from {time} and may change.
+      </Copy>
+    </View>
+  );
+}
+
 export function HomeBalances({ state, onRefresh }: HomeBalancesProps) {
   const theme = useTheme();
   return (
@@ -154,7 +213,18 @@ export function HomeBalances({ state, onRefresh }: HomeBalancesProps) {
       <Copy style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 21 }}>
         Across your active Groups. Each currency stays separate.
       </Copy>
-      {state.status !== 'ready' || state.data === null ? (
+      {state.data !== null && (
+        <RetainedNotice
+          status={state.status}
+          stale={state.stale}
+          refreshedAt={state.refreshedAt}
+          message={state.message}
+          subject="your balances"
+          retryLabel="Retry Home balances"
+          onRetry={onRefresh}
+        />
+      )}
+      {state.data === null ? (
         <Panel>
           <FinancialState
             status={state.status === 'ready' ? 'error' : state.status}
@@ -164,7 +234,7 @@ export function HomeBalances({ state, onRefresh }: HomeBalancesProps) {
             onRetry={onRefresh}
           />
         </Panel>
-      ) : state.data?.length ? (
+      ) : state.data.length ? (
         state.data.map((bucket) => (
           <Panel key={bucket.currency}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -399,7 +469,11 @@ export function GroupFinancialViews({
   const theme = useTheme();
   const { balances, expenses } = state;
   const windowLabel = monthLabel(state.month);
-  const summary = expenses.status === 'ready' ? expenses.summary : null;
+  // Never show one Month's Expenses under another Month's label.
+  const current = expenses.month === state.month;
+  const summary = current ? expenses.summary : null;
+  const listed =
+    current && (expenses.status === 'ready' || summary !== null || expenses.data.length > 0);
   return (
     <View style={{ gap: 24 }}>
       <Panel>
@@ -424,96 +498,107 @@ export function GroupFinancialViews({
           Includes all Expenses and recorded Settlements. Month selections do not change these
           balances.
         </Copy>
-        <FinancialState
-          status={balances.status === 'ready' && balances.data === null ? 'error' : balances.status}
-          message={balances.message}
-          loadingLabel="Loading running balances…"
-          retryLabel="Retry running balances"
-          onRetry={onRefreshBalances}
-        />
-        {balances.status === 'ready' &&
-          balances.data?.map((bucket) => (
-            <View
-              key={bucket.currency}
-              style={{ gap: 14, borderTopWidth: 1, borderColor: theme.border, paddingTop: 16 }}
-            >
-              <Label>{bucket.currency}</Label>
-              {bucket.balances.length ? (
-                bucket.balances.map(({ user, balance }, index) => {
-                  const tone = getMoneyTone(balance);
-                  const isYou = user.id === currentUserId;
-                  const label =
-                    tone === 'negative'
+        {balances.data === null ? (
+          <FinancialState
+            status={balances.status === 'ready' ? 'error' : balances.status}
+            message={balances.message}
+            loadingLabel="Loading running balances…"
+            retryLabel="Retry running balances"
+            onRetry={onRefreshBalances}
+          />
+        ) : (
+          <RetainedNotice
+            status={balances.status}
+            stale={balances.stale}
+            refreshedAt={balances.refreshedAt}
+            message={balances.message}
+            subject="running balances"
+            retryLabel="Retry running balances"
+            onRetry={onRefreshBalances}
+          />
+        )}
+        {balances.data?.map((bucket) => (
+          <View
+            key={bucket.currency}
+            style={{ gap: 14, borderTopWidth: 1, borderColor: theme.border, paddingTop: 16 }}
+          >
+            <Label>{bucket.currency}</Label>
+            {bucket.balances.length ? (
+              bucket.balances.map(({ user, balance }, index) => {
+                const tone = getMoneyTone(balance);
+                const isYou = user.id === currentUserId;
+                const label =
+                  tone === 'negative'
+                    ? isYou
+                      ? 'You owe'
+                      : 'Owes'
+                    : tone === 'positive'
                       ? isYou
-                        ? 'You owe'
-                        : 'Owes'
-                      : tone === 'positive'
-                        ? isYou
-                          ? 'You are owed'
-                          : 'Is owed'
-                        : 'Settled';
-                  return (
-                    <View
-                      key={user.id ?? `former-member-${index}`}
-                      style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}
-                    >
-                      <Avatar name={user.name} small />
-                      <View style={{ flex: 1, gap: 3 }}>
-                        <Copy style={{ fontFamily: fonts.medium }}>
-                          {user.name}
-                          {isYou ? ' · you' : ''}
-                        </Copy>
-                        <Copy
-                          style={{
-                            color: tone === 'neutral' ? theme.textSecondary : theme.status[tone],
-                            fontSize: 13,
-                            lineHeight: 20,
-                          }}
-                        >
-                          {label}
-                        </Copy>
-                        <Amount value={Math.abs(balance)} currency={bucket.currency} tone={tone} />
-                      </View>
-                    </View>
-                  );
-                })
-              ) : (
-                <Copy style={{ color: theme.textSecondary }}>
-                  No outstanding balances in {bucket.currency}.
-                </Copy>
-              )}
-              {bucket.debts.length > 0 && (
-                <View
-                  style={{ gap: 14, borderTopWidth: 1, borderColor: theme.border, paddingTop: 16 }}
-                >
-                  <Label>WHO OWES WHOM</Label>
-                  {bucket.debts.map((debt, index) => (
-                    <View
-                      key={`${debt.from.id ?? 'former'}:${debt.to.id ?? 'former'}:${index}`}
-                      style={{ gap: 5 }}
-                    >
+                        ? 'You are owed'
+                        : 'Is owed'
+                      : 'Settled';
+                return (
+                  <View
+                    key={user.id ?? `former-member-${index}`}
+                    style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}
+                  >
+                    <Avatar name={user.name} small />
+                    <View style={{ flex: 1, gap: 3 }}>
                       <Copy style={{ fontFamily: fonts.medium }}>
-                        {debt.from.id === currentUserId ? 'You owe' : `${debt.from.name} owes`}{' '}
-                        {debt.to.id === currentUserId ? 'you' : debt.to.name}
+                        {user.name}
+                        {isYou ? ' · you' : ''}
                       </Copy>
-                      <Amount
-                        value={debt.amount}
-                        currency={bucket.currency}
-                        tone={
-                          debt.from.id === currentUserId
-                            ? 'negative'
-                            : debt.to.id === currentUserId
-                              ? 'positive'
-                              : 'neutral'
-                        }
-                      />
+                      <Copy
+                        style={{
+                          color: tone === 'neutral' ? theme.textSecondary : theme.status[tone],
+                          fontSize: 13,
+                          lineHeight: 20,
+                        }}
+                      >
+                        {label}
+                      </Copy>
+                      <Amount value={Math.abs(balance)} currency={bucket.currency} tone={tone} />
                     </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          ))}
-        {balances.status === 'ready' && balances.data?.length === 0 && (
+                  </View>
+                );
+              })
+            ) : (
+              <Copy style={{ color: theme.textSecondary }}>
+                No outstanding balances in {bucket.currency}.
+              </Copy>
+            )}
+            {bucket.debts.length > 0 && (
+              <View
+                style={{ gap: 14, borderTopWidth: 1, borderColor: theme.border, paddingTop: 16 }}
+              >
+                <Label>WHO OWES WHOM</Label>
+                {bucket.debts.map((debt, index) => (
+                  <View
+                    key={`${debt.from.id ?? 'former'}:${debt.to.id ?? 'former'}:${index}`}
+                    style={{ gap: 5 }}
+                  >
+                    <Copy style={{ fontFamily: fonts.medium }}>
+                      {debt.from.id === currentUserId ? 'You owe' : `${debt.from.name} owes`}{' '}
+                      {debt.to.id === currentUserId ? 'you' : debt.to.name}
+                    </Copy>
+                    <Amount
+                      value={debt.amount}
+                      currency={bucket.currency}
+                      tone={
+                        debt.from.id === currentUserId
+                          ? 'negative'
+                          : debt.to.id === currentUserId
+                            ? 'positive'
+                            : 'neutral'
+                      }
+                    />
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        ))}
+        {balances.data?.length === 0 && (
           <Copy style={{ color: theme.textSecondary }}>No running balances to show.</Copy>
         )}
       </Panel>
@@ -542,6 +627,17 @@ export function GroupFinancialViews({
             disabled={expenses.status === 'loading' || expenses.moreStatus === 'loading'}
           />
         </View>
+        {listed && (
+          <RetainedNotice
+            status={expenses.status}
+            stale={false}
+            refreshedAt={expenses.refreshedAt}
+            message={expenses.message}
+            subject={`${state.month ? windowLabel : 'all-time'} expenses`}
+            retryLabel="Retry expenses"
+            onRetry={onRefreshExpenses}
+          />
+        )}
         {summary && (
           <Panel>
             <Copy
@@ -575,7 +671,7 @@ export function GroupFinancialViews({
             )}
           </Panel>
         )}
-        {expenses.status !== 'ready' ? (
+        {!listed ? (
           <Panel>
             <FinancialState
               status={expenses.status}
@@ -613,19 +709,31 @@ export function GroupFinancialViews({
                   'More expenses could not be loaded. Your displayed expenses are still here.'}
               </Copy>
             )}
-            {expenses.pagination && expenses.pagination.page < expenses.pagination.totalPages && (
-              <Button
-                label={
-                  expenses.moreStatus === 'loading'
-                    ? 'Loading more…'
-                    : expenses.moreStatus === 'error'
-                      ? 'Retry more expenses'
-                      : 'Load more expenses'
-                }
-                secondary
-                disabled={expenses.moreStatus === 'loading'}
-                onPress={onLoadMore}
-              />
+            {expenses.moreStatus === 'loading' ? (
+              <View
+                accessibilityLiveRegion="polite"
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                  minHeight: 48,
+                }}
+              >
+                <ActivityIndicator color={theme.brand.main} />
+                <Copy style={{ color: theme.textSecondary }}>Loading more expenses…</Copy>
+              </View>
+            ) : (
+              expenses.pagination &&
+              expenses.pagination.page < expenses.pagination.totalPages && (
+                <Button
+                  label={
+                    expenses.moreStatus === 'error' ? 'Retry more expenses' : 'Load more expenses'
+                  }
+                  secondary
+                  onPress={onLoadMore}
+                />
+              )
             )}
           </>
         ) : (

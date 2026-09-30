@@ -43,7 +43,17 @@ export interface HomeCurrencyBalance {
   youAreOwed: number;
 }
 
-export interface HomeFinancialState {
+/**
+ * `status` describes the latest request; `data` stays while the same authorized
+ * view refreshes. `refreshedAt` is when that data was last read successfully.
+ */
+export interface ReadFreshness {
+  refreshedAt: number | null;
+  /** Retained after a ledger change, such as recurring materialization, and not yet re-read. */
+  stale: boolean;
+}
+
+export interface HomeFinancialState extends ReadFreshness {
   status: LoadStatus;
   data: HomeCurrencyBalance[] | null;
   message: string | null;
@@ -95,8 +105,16 @@ export interface GroupFinancialState {
     message: string | null;
     moreStatus: 'idle' | 'loading' | 'error';
     moreMessage: string | null;
+    /** The Month these Expenses belong to; content is never shown or kept under another. */
+    month: string | null;
+    refreshedAt: number | null;
   };
-  balances: { status: LoadStatus; data: GroupCurrencyBalance[] | null; message: string | null };
+  /** All-time; never filtered by `month`. */
+  balances: ReadFreshness & {
+    status: LoadStatus;
+    data: GroupCurrencyBalance[] | null;
+    message: string | null;
+  };
 }
 
 export interface GroupDraft {
@@ -129,6 +147,8 @@ export interface PendingInvitationStore {
 
 export interface MobileSnapshot {
   offline: { active: boolean; refreshedAt: number | null; message: string | null };
+  /** A member-requested refresh is running; automatic refreshes never set this. */
+  pull: boolean;
   auth: {
     status: 'restoring' | 'signed-out' | 'signing-in' | 'authenticated' | 'error';
     user: SessionUser | null;
@@ -164,8 +184,10 @@ export interface MobileSnapshot {
   detail: {
     status: LoadStatus;
     id: string | null;
+    /** Kept, with `refreshedAt`, while the same Group refreshes or after a failed refresh. */
     data: MobileGroup | null;
     message: string | null;
+    refreshedAt: number | null;
   };
 }
 
