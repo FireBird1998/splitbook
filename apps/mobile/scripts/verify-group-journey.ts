@@ -29,6 +29,7 @@ async function verify() {
   const runId = randomUUID();
   const householdName = `Mobile 52 household ${runId}`;
   const uncertainName = `Mobile 52 response loss ${runId}`;
+  const resendName = `Mobile 52 transport resend ${runId}`;
   const ownNames = new Set<string>();
   const checks: string[] = [];
   let archivedCount = 0;
@@ -41,6 +42,8 @@ async function verify() {
     let joinPosts = 0;
     let invitePosts = 0;
     let loseCreateResponse = false;
+    let resendCreate = false;
+    const createKeys: (string | null)[] = [];
     let loseInviteResponse = false;
     const transport: MobileFetch = async (url, init) => {
       requests += 1;
@@ -50,8 +53,19 @@ async function verify() {
       const joining = init.method === 'POST' && target.pathname.startsWith('/api/join/');
       const generating = init.method === 'POST' && target.pathname.endsWith('/invite-link');
       if (creating) createPosts += 1;
+      if (creating) createKeys.push(new Headers(init.headers).get('Idempotency-Key'));
       if (joining) joinPosts += 1;
       if (generating) invitePosts += 1;
+      if (creating && resendCreate) {
+        // Android's OkHttp resends an identical request after a pooled connection
+        // drops the response. The first request really commits before it is resent.
+        resendCreate = false;
+        const lost = await fetch(url, { ...init, redirect: 'error' });
+        await lost.arrayBuffer();
+        assert.ok(lost.status === 201, 'The first create before the resend did not commit.');
+        createPosts += 1;
+        createKeys.push(new Headers(init.headers).get('Idempotency-Key'));
+      }
       const response = await fetch(url, { ...init, redirect: 'error' });
       if (response.ok && ((creating && loseCreateResponse) || (generating && loseInviteResponse))) {
         // The real server has committed and completed its response. Lose only
@@ -92,7 +106,7 @@ async function verify() {
           inviteOrigin: apiBaseUrl,
           developmentPersonaEnabled: true,
         },
-        dependencies,
+        { ...dependencies, newSubmissionKey: randomUUID },
       );
     let controller = build();
     return {
@@ -105,6 +119,9 @@ async function verify() {
       get createPosts() {
         return createPosts;
       },
+      get createKeys() {
+        return createKeys;
+      },
       get joinPosts() {
         return joinPosts;
       },
@@ -116,6 +133,9 @@ async function verify() {
       },
       loseNextCreateResponse() {
         loseCreateResponse = true;
+      },
+      resendNextCreate() {
+        resendCreate = true;
       },
       loseNextInviteResponse() {
         loseInviteResponse = true;
@@ -329,6 +349,51 @@ async function verify() {
     checks.push(
       'Committed create response loss, retained input, blocked resubmit, and read reconciliation',
     );
+
+    // After reviewing Groups, an explicit retry of unchanged details reuses the key.
+    alex.controller.resumeCreationAfterCheck();
+    await alex.controller.createGroup();
+    const retried = alex.controller.getSnapshot();
+    assert.ok(
+      alex.createPosts === beforeUncertainCreate + 2 &&
+        alex.createKeys.at(-1) === alex.createKeys.at(-2) &&
+        retried.screen === 'group' &&
+        retried.detail.data?.id === reconciled[0]._id,
+      'An explicit retry did not return the Group its lost response created.',
+    );
+    assert.ok(
+      (await discoverOwnGroups()).filter((group) => group.name === uncertainName).length === 1,
+      'An explicit retry of a committed create saved a second Group.',
+    );
+    checks.push('Explicit retry of a committed create returns the same Group');
+
+    ownNames.add(resendName);
+    alex.controller.startCreate();
+    alex.controller.updateCreation({
+      name: resendName,
+      description: 'An identical request resent after its response was lost.',
+      category: 'home',
+      defaultCurrency: 'INR',
+      startDate: '',
+      endDate: '',
+    });
+    const beforeResend = alex.createPosts;
+    alex.resendNextCreate();
+    await alex.controller.createGroup();
+    const resent = await discoverOwnGroups();
+    const resentGroups = resent.filter((group) => group.name === resendName);
+    assert.ok(
+      alex.createPosts === beforeResend + 2 &&
+        alex.createKeys.at(-1) !== null &&
+        alex.createKeys.at(-1) === alex.createKeys.at(-2),
+      'The resent create did not carry the same Idempotency-Key twice.',
+    );
+    assert.ok(
+      resentGroups.length === 1 &&
+        alex.controller.getSnapshot().detail.data?.id === resentGroups[0]._id,
+      'A transport-level resend of Group creation saved a second Group.',
+    );
+    checks.push('Transport-level resend of a committed create saves one Group');
 
     await alex.controller.openGroup(reconciled[0]._id);
     const beforeLostInvite = alex.invitePosts;

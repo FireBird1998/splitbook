@@ -98,8 +98,10 @@ function setup(
       path: string,
       init: RequestInit,
     ) => FetchResponse | Promise<FetchResponse> | undefined;
+    newSubmissionKey?: (() => string) | null;
   } = {},
 ) {
+  let keys = 0;
   const store = options.store ?? memoryCredentials(options.saved);
   const fetch = vi.fn<MobileFetch>(async (url, init) => {
     const path = new URL(url).pathname;
@@ -148,6 +150,10 @@ function setup(
       credentials: store.credentials,
       pendingInvitation: options.pending,
       accountLocal: options.accountLocal,
+      newSubmissionKey:
+        options.newSubmissionKey === null
+          ? undefined
+          : (options.newSubmissionKey ?? (() => `native-group-key-${++keys}`)),
       now: () => now,
     },
   );
@@ -763,6 +769,98 @@ describe('native session and Group boundary', () => {
     await controller.createGroup();
     await controller.refresh();
     expect(controller.getSnapshot().groups.data).toHaveLength(1);
+  });
+
+  /** A keyed server: a repeated key returns the Group it already created. */
+  function keyedGroupServer() {
+    const created = new Map<string, ReturnType<typeof group>>();
+    const posts: { key: string | null; body: string }[] = [];
+    let loseNext = false;
+    return {
+      created,
+      posts,
+      loseNextResponse: () => {
+        loseNext = true;
+      },
+      intercept: (path: string, init: RequestInit) => {
+        if (path !== '/api/groups') return;
+        if (init.method !== 'POST') return json({ data: [...created.values()], status: 200 });
+        const key = new Headers(init.headers).get('Idempotency-Key');
+        const body = String(init.body);
+        posts.push({ key, body });
+        if (!key) return json({ error: 'Key required' }, 422);
+        const stored = created.get(key) ?? {
+          ...group(alex, `a0000000000000000000002${created.size}`),
+          name: JSON.parse(body).name,
+        };
+        created.set(key, stored);
+        if (loseNext) {
+          loseNext = false;
+          throw new Error('Response lost after commit');
+        }
+        return json({ data: stored, status: 201 }, 201);
+      },
+    };
+  }
+
+  it('retries unchanged Group details with the same key, so a lost response creates one Group', async () => {
+    const server = keyedGroupServer();
+    const { controller } = setup({ intercept: server.intercept });
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'Cabin Weekend' });
+    server.loseNextResponse();
+    await controller.createGroup();
+    expect(controller.getSnapshot().creation).toMatchObject({ status: 'uncertain' });
+
+    // The member reviews their Groups, returns to the form and explicitly retries.
+    controller.resumeCreationAfterCheck();
+    await controller.createGroup();
+
+    expect(server.posts).toHaveLength(2);
+    expect(server.posts[1]).toEqual(server.posts[0]);
+    expect(server.posts[0].key).toBe('native-group-key-1');
+    expect(server.created.size).toBe(1);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { status: 'ready', data: { name: 'Cabin Weekend' } },
+      creation: { status: 'editing', attempt: null, draft: { name: '' } },
+    });
+  });
+
+  it('gives changed Group details a new key after an uncertain create', async () => {
+    const server = keyedGroupServer();
+    const { controller } = setup({ intercept: server.intercept });
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'Cabin Weekend' });
+    server.loseNextResponse();
+    await controller.createGroup();
+    controller.resumeCreationAfterCheck();
+    controller.updateCreation({ name: 'Lake Weekend' });
+    await controller.createGroup();
+
+    expect(server.posts.map((post) => post.key)).toEqual([
+      'native-group-key-1',
+      'native-group-key-2',
+    ]);
+    expect(JSON.parse(server.posts[1].body)).toMatchObject({ name: 'Lake Weekend' });
+  });
+
+  it('sends nothing when a Group submission key cannot be created', async () => {
+    const server = keyedGroupServer();
+    const { controller } = setup({ intercept: server.intercept, newSubmissionKey: null });
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'Cabin Weekend' });
+    await controller.createGroup();
+
+    expect(server.posts).toHaveLength(0);
+    expect(controller.getSnapshot().creation).toMatchObject({
+      status: 'error',
+      draft: { name: 'Cabin Weekend' },
+      message: 'Could not prepare this Group for sending. Nothing was sent. Try again.',
+    });
   });
 
   it('keeps invalid Group input editable without posting it', async () => {

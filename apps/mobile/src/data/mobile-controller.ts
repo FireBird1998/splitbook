@@ -200,6 +200,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
       status: 'editing',
       message: null,
       validation: emptyFormValidation(),
+      attempt: null,
     },
     invitation: { code: null, status: 'idle', preview: null, message: null },
     share: { status: 'idle', url: null, message: null },
@@ -3623,12 +3624,33 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       return;
     }
-    publish({ ...snapshot, creation: { ...snapshot.creation, status: 'saving', message: null } });
+    // Unchanged details keep their key, so the server returns a Group whose response was lost
+    // (to this retry, or to a transparent resend by the HTTP layer) instead of creating another.
+    const body = JSON.stringify(payload.data);
+    const previous = snapshot.creation.attempt;
+    const key = previous?.body === body ? previous.key : dependencies.newSubmissionKey?.();
+    if (!key) {
+      publish({
+        ...snapshot,
+        creation: {
+          ...snapshot.creation,
+          status: 'error',
+          message: 'Could not prepare this Group for sending. Nothing was sent. Try again.',
+        },
+      });
+      return;
+    }
+    const attempt = { key, body };
+    publish({
+      ...snapshot,
+      creation: { ...snapshot.creation, attempt, status: 'saving', message: null },
+    });
     try {
       const group = parseCreatedGroup(
         await request('/api/groups', owner, {
           method: 'POST',
-          body: payload.data,
+          serializedBody: attempt.body,
+          idempotencyKey: attempt.key,
         }).finally(() => {
           if (current(owner)) invalidateReads('groups', 'home');
         }),

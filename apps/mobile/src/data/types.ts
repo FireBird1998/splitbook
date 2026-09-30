@@ -132,6 +132,8 @@ export interface GroupCreation {
   status: 'editing' | 'saving' | 'error' | 'uncertain';
   message: string | null;
   validation: GroupValidation;
+  /** The immutable identity of the last submission. Sending the same details again reuses it. */
+  attempt: { key: string; body: string } | null;
 }
 
 export interface InvitationPreview {
