@@ -131,14 +131,25 @@ function FinancialState({
   );
 }
 
-/** The one quiet cue for an automatic refresh of content that stays on screen. */
-export function RefreshStatus({ visible }: { visible: boolean }) {
+/**
+ * The one quiet cue for an automatic refresh or retry of content that stays on screen,
+ * with when that content was verified when known.
+ */
+export function RefreshStatus({
+  visible,
+  savedAt = null,
+}: {
+  visible: boolean;
+  savedAt?: number | null;
+}) {
   const theme = useTheme();
   if (!visible) return null;
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
       <Icon name="sync-outline" size={15} />
-      <Copy style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 20 }}>Updating…</Copy>
+      <Copy style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 20, flexShrink: 1 }}>
+        {savedAt === null ? 'Updating…' : `Saved ${refreshedLabel(savedAt)} · updating`}
+      </Copy>
     </View>
   );
 }

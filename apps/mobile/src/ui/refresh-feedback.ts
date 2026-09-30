@@ -5,6 +5,8 @@ export interface RefreshFeedback {
   pull: boolean;
   /** One quiet status line while visible content is re-read automatically or retried. */
   quiet: boolean;
+  /** When the oldest figures being re-read on screen were verified, shown with the quiet status. */
+  savedAt: number | null;
 }
 
 /**
@@ -14,19 +16,40 @@ export interface RefreshFeedback {
 export function refreshFeedback(state: MobileSnapshot): RefreshFeedback {
   const { groups, home, detail, financial } = state;
   const { expenses, balances } = financial;
-  const updating =
+  const refreshing =
     state.screen === 'groups'
-      ? (groups.status === 'loading' && groups.data.length > 0) ||
-        (home.status === 'loading' && home.data !== null)
+      ? [
+          { active: groups.status === 'loading' && groups.data.length > 0, time: null },
+          { active: home.status === 'loading' && home.data !== null, time: home.refreshedAt },
+        ]
       : state.screen === 'group' &&
-        // Pagination has its own footer.
-        expenses.moreStatus !== 'loading' &&
-        ((detail.status === 'loading' && detail.data !== null) ||
-          (expenses.status === 'loading' &&
-            (expenses.summary !== null || expenses.data.length > 0)) ||
-          // Unverified Balances already carry their own "Updating" label.
-          (balances.status === 'loading' && balances.data !== null && !balances.stale));
-  return { pull: state.pull, quiet: updating && !state.pull };
+          // Pagination has its own footer.
+          expenses.moreStatus !== 'loading'
+        ? [
+            {
+              active: detail.status === 'loading' && detail.data !== null,
+              time: detail.refreshedAt,
+            },
+            {
+              active:
+                expenses.status === 'loading' &&
+                (expenses.summary !== null || expenses.data.length > 0),
+              time: expenses.refreshedAt,
+            },
+            {
+              // Unverified Balances already carry their own "Updating" label.
+              active: balances.status === 'loading' && balances.data !== null && !balances.stale,
+              time: balances.refreshedAt,
+            },
+          ]
+        : [];
+  const active = refreshing.filter((item) => item.active);
+  const times = active.map((item) => item.time).filter((time): time is number => time !== null);
+  return {
+    pull: state.pull,
+    quiet: active.length > 0 && !state.pull,
+    savedAt: times.length ? Math.min(...times) : null,
+  };
 }
 
 /** "12:05 PM" today, otherwise "Sep 30, 12:05 PM": when the shown figures were read. */
