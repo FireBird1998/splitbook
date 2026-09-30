@@ -9,15 +9,13 @@ import {
 import { resolveTagReference } from '@splitbook/shared/tag-identity';
 import { z } from 'zod';
 import {
-  MAX_EXPENSE_AMOUNT,
   MoneyValidationError,
   normalizeExpenseMoney,
   parseAmountMinor,
   parseDecimalUnits,
-  parseExpenseAmountMinor,
 } from '@splitbook/shared/exact-money';
-import { getCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
-import { calendarDate } from '@splitbook/shared/validators/calendar-date';
+import { getCurrency } from '@splitbook/shared/currency';
+import { amountError as moneyAmountError, calendarDateError } from './field-feedback';
 import { parseGroupResponse } from '@splitbook/shared/group-read';
 import { objectId, toMobileGroup } from './dto';
 import type { MobileGroup } from './types';
@@ -211,49 +209,11 @@ export function previewExpense(draft: ExpenseDraft): ExpenseEditor['preview'] {
 }
 
 const moneyCode = (error: unknown) => (error instanceof MoneyValidationError ? error.code : '');
-function amountExample(currency: string) {
-  const digits = getCurrencyPrecision(currency);
-  return digits ? `250.${'50'.padEnd(digits, '0').slice(0, digits)}` : '250';
-}
 function amountError(draft: ExpenseDraft, context: ExpenseContext | null) {
   const { currency } = draft;
   if (!draft.original && context && currency !== context.group.defaultCurrency)
     return `This draft uses ${currency}, but the Group now uses ${context.group.defaultCurrency}. Choose Use ${context.group.defaultCurrency}, then review the amount.`;
-  const example = amountExample(currency);
-  if (!draft.amount.trim()) return `Enter the amount, such as ${example}.`;
-  try {
-    parseExpenseAmountMinor(draft.amount, currency);
-    return undefined;
-  } catch (error) {
-    const code = moneyCode(error);
-    const digits = getCurrencyPrecision(currency);
-    if (code === 'INVALID_MONEY_PRECISION')
-      return `${currency} amounts ${
-        digits
-          ? `can have at most ${digits} decimal ${digits === 1 ? 'place' : 'places'}`
-          : 'can’t include decimal places'
-      }. Nothing is rounded for you.`;
-    if (code === 'INVALID_MONEY_RANGE' || code === 'UNSAFE_MONEY') {
-      let positive = !draft.amount.trim().startsWith('-');
-      try {
-        positive &&= parseAmountMinor(draft.amount, currency) > 0;
-      } catch {
-        // Too large to represent exactly: still above the limit.
-      }
-      return positive
-        ? `Enter an amount of at most ${String(MAX_EXPENSE_AMOUNT).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.`
-        : 'Enter an amount greater than 0.';
-    }
-    return digits
-      ? `Use digits and one decimal point, such as ${example}.`
-      : `Use digits only, such as ${example}.`;
-  }
-}
-function dateError(date: string, today: string) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return `Enter the date as YYYY-MM-DD, such as ${today}.`;
-  if (!calendarDate.safeParse(date).success || !z.iso.date().safeParse(date).success)
-    return `${date} isn’t a real date. Check the day and month.`;
-  return undefined;
+  return moneyAmountError(draft.amount, currency);
 }
 function memberName(draft: ExpenseDraft, id: string) {
   return [...(draft.original?.paidBy ?? []), ...(draft.original?.splitBetween ?? [])].find(
@@ -342,7 +302,7 @@ export function validateExpenseDraft(
       : draft.description.trim()
         ? 'Keep the description to 200 characters or fewer.'
         : 'Add a description, such as Groceries.',
-    date: dateError(draft.date, today),
+    date: calendarDateError(draft.date, today),
     ...(amount ? {} : allocationErrors(draft, context)),
     tag: tagError(draft, context),
   };

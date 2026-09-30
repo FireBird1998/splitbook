@@ -489,9 +489,14 @@ describe('native session and Group boundary', () => {
     await controller.createGroup();
     expect(posted).toBe(false);
     expect(controller.getSnapshot().creation).toMatchObject({
-      status: 'error',
-      draft: { startDate: '2026-02-30' },
-      message: 'Enter valid Trip dates as YYYY-MM-DD.',
+      status: 'editing',
+      draft: { name: 'Weekend away', startDate: '2026-02-30' },
+      message: '2026-02-30 isn’t a real date. Check the day and month.',
+      validation: {
+        submitted: true,
+        errors: { startDate: '2026-02-30 isn’t a real date. Check the day and month.' },
+        focus: { field: 'startDate', request: 1 },
+      },
     });
   });
 
@@ -773,9 +778,13 @@ describe('native session and Group boundary', () => {
     controller.updateCreation({ name: '   ', description: 'Keep this description' });
     await controller.createGroup();
     expect(controller.getSnapshot().creation).toMatchObject({
-      status: 'error',
+      status: 'editing',
       draft: { description: 'Keep this description' },
-      message: 'Name is required',
+      message: 'Add a name for this trip, such as Goa Weekend.',
+      validation: {
+        errors: { name: 'Add a name for this trip, such as Goa Weekend.' },
+        focus: { field: 'name', request: 1 },
+      },
     });
     expect(posted).toBe(false);
   });
