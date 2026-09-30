@@ -105,7 +105,8 @@ export interface GroupFinancialState {
     message: string | null;
     moreStatus: 'idle' | 'loading' | 'error';
     moreMessage: string | null;
-    /** Always for `month`: a different Month starts empty. */
+    /** The Month these Expenses belong to; content is never shown or kept under another. */
+    month: string | null;
     refreshedAt: number | null;
   };
   /** All-time; never filtered by `month`. */
@@ -183,8 +184,10 @@ export interface MobileSnapshot {
   detail: {
     status: LoadStatus;
     id: string | null;
+    /** Kept, with `refreshedAt`, while the same Group refreshes or after a failed refresh. */
     data: MobileGroup | null;
     message: string | null;
+    refreshedAt: number | null;
   };
 }
 

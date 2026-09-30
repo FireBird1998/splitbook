@@ -40,7 +40,12 @@ import { EmptyGroups, GroupCard, GroupDetail, SignIn, styles } from './src/ui/sc
 import { GroupCreateForm, InvitationPreview, InviteSharePanel } from './src/ui/group-workflows';
 import { SettingsScreen } from './src/ui/settings-screen';
 import { ExpenseEditor } from './src/ui/expense-editor';
-import { GroupFinancialViews, HomeBalances, RefreshStatus } from './src/ui/financial-views';
+import {
+  GroupFinancialViews,
+  HomeBalances,
+  RefreshStatus,
+  RetainedNotice,
+} from './src/ui/financial-views';
 import { refreshFeedback } from './src/ui/refresh-feedback';
 
 export default function App() {
@@ -487,23 +492,26 @@ function SplitBook() {
                 retry={controller.back}
                 retryLabel="Back to Groups"
               />
-            ) : state.detail.status === 'error' ? (
-              <>
-                <Notice
-                  title="Couldn’t open this Group"
-                  message={
-                    state.detail.data
-                      ? `${state.detail.message ?? 'Please try again.'} Showing previously verified Group information.`
-                      : (state.detail.message ?? 'Please try again.')
-                  }
-                  retry={() => void controller.refresh()}
-                />
-                {state.detail.data && (
-                  <GroupDetail group={state.detail.data} currentUserId={state.auth.user!.id} />
-                )}
-              </>
+            ) : state.detail.status === 'error' && !state.detail.data ? (
+              <Notice
+                title="Couldn’t open this Group"
+                message={state.detail.message ?? 'Please try again.'}
+                retry={() => void controller.refresh('manual')}
+              />
             ) : state.detail.data ? (
               <>
+                {/* A failed refresh keeps the whole Group readable, with its time and a retry. */}
+                {state.detail.status === 'error' && (
+                  <RetainedNotice
+                    status="error"
+                    stale={false}
+                    refreshedAt={state.detail.refreshedAt}
+                    message={state.detail.message}
+                    subject={state.detail.data.name}
+                    retryLabel="Retry Group"
+                    onRetry={() => void controller.refresh('manual')}
+                  />
+                )}
                 <GroupDetail group={state.detail.data} currentUserId={state.auth.user!.id}>
                   <Button
                     label="Add expense"

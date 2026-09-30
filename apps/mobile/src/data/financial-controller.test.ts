@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse } from './types';
 
@@ -854,6 +855,80 @@ describe('stable financial refresh', () => {
         expenses: { status: 'ready', data: [{ id: secondExpense._id }] },
         balances: { status: 'ready', stale: false },
       },
+    });
+  });
+
+  it('keeps the newest Month when an older Group refresh finishes later, never mislabelling Expenses', async () => {
+    const august = { ...expense, _id: 'b00000000000000000000003', description: 'August rent' };
+    const held = gate();
+    let holding = false;
+    const { controller } = setup((path) => {
+      if (holding && path === `/api/groups/${groupId}`) return held.hold(path);
+      if (!path.includes('/expenses?')) return;
+      const from = new URL(path, 'http://local').searchParams.get('dateFrom');
+      return json(
+        expensePage(from === getLocalMonthIsoRange('2026-08').dateFrom ? [august] : [expense]),
+      );
+    });
+    const monthOf = { [expense.description]: '2026-09', [august.description]: '2026-08' };
+    const mislabelled: string[] = [];
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    controller.subscribe(() => {
+      const { financial, screen } = controller.getSnapshot();
+      if (screen !== 'group') return;
+      for (const row of financial.expenses.data)
+        if (monthOf[row.description] !== financial.month)
+          mislabelled.push(`${row.description} under ${financial.month}`);
+    });
+    expect(controller.getSnapshot().financial.month).toBe('2026-09');
+
+    holding = true;
+    const refresh = controller.refresh('background');
+    const olderGroupRead = await held.next(`/api/groups/${groupId}`);
+    await controller.selectMonth('2026-08');
+    expect(controller.getSnapshot().financial).toMatchObject({
+      month: '2026-08',
+      expenses: { status: 'ready', data: [{ description: 'August rent' }] },
+    });
+
+    olderGroupRead.release(json({ data: group, status: 200 }));
+    await refresh;
+    expect(controller.getSnapshot().financial).toMatchObject({
+      month: '2026-08',
+      expenses: { status: 'ready', data: [{ description: 'August rent' }] },
+      balances: { status: 'ready', stale: false },
+    });
+    expect(mislabelled).toEqual([]);
+  });
+
+  it('keeps Group figures with their original time when the Group read fails', async () => {
+    let failing = false;
+    const { controller, clock } = setup((path) =>
+      failing && path === `/api/groups/${groupId}` ? json({}, 503) : undefined,
+    );
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    const verifiedAt = clock.now;
+    const before = controller.getSnapshot();
+    expect(before.detail.refreshedAt).toBe(verifiedAt);
+    later(clock);
+    failing = true;
+    await controller.refresh('background');
+    expect(controller.getSnapshot()).toMatchObject({
+      detail: {
+        status: 'error',
+        data: before.detail.data,
+        refreshedAt: verifiedAt,
+        message: 'The server could not complete this request. Please try again.',
+      },
+      financial: before.financial,
+    });
+    failing = false;
+    await controller.refresh('manual');
+    expect(controller.getSnapshot().detail).toMatchObject({
+      status: 'ready',
+      refreshedAt: clock.now,
     });
   });
 

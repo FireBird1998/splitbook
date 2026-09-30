@@ -147,7 +147,7 @@ export function RefreshStatus({ visible }: { visible: boolean }) {
  * Explains figures that stay visible but are not current: still being verified
  * after a ledger change, or kept after a refresh failed.
  */
-function RetainedNotice({
+export function RetainedNotice({
   status,
   stale,
   refreshedAt,
@@ -469,9 +469,11 @@ export function GroupFinancialViews({
   const theme = useTheme();
   const { balances, expenses } = state;
   const windowLabel = monthLabel(state.month);
-  // Loaded Expenses always belong to `state.month`, including while it refreshes.
-  const summary = expenses.summary;
-  const listed = expenses.status === 'ready' || summary !== null || expenses.data.length > 0;
+  // Never show one Month's Expenses under another Month's label.
+  const current = expenses.month === state.month;
+  const summary = current ? expenses.summary : null;
+  const listed =
+    current && (expenses.status === 'ready' || summary !== null || expenses.data.length > 0);
   return (
     <View style={{ gap: 24 }}>
       <Panel>

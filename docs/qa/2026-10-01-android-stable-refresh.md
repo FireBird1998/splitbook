@@ -82,6 +82,40 @@ Request coalescing and freshness windows remain #103, and the TanStack Query pil
   - `splitbook-102-stable-refresh.mp4`
 - **Not an app issue:** an extra refresh seen once during scripted QA came from the helper's own scroll gestures reaching the top of the list, which is pull-to-refresh. One isolated foreground event produced exactly one Group → Expenses → Balances sequence.
 
+## Review fixes
+
+Two review findings were reproduced before fixing: by controller regressions, and by App rendering tests that mount the real `App.tsx` with only native modules replaced.
+
+- **P1, wrong Month content:**
+  - **Cause:** `openGroup` captured the Month when a refresh started and re-applied it after the Group read. If the member chose August while an older September refresh was reading the Group, the late response switched back to September. Retained August Expenses then appeared under that label while September reloaded.
+  - **Fix:** a same-Group refresh now keeps whatever Month is selected when its Group read returns.
+  - **Also:** Expenses now record the Month they belong to (`expenses.month`). The controller never keeps, appends to or shows Expenses under another Month, and `GroupFinancialViews` renders them only when that Month matches the label.
+  - **Regressions:** a controller test with a subscriber that records every published snapshot pairing a Month label with another Month's Expenses; the App test drives the same sequence with a foreground event and the rendered Previous month button.
+- **P2, content hidden after a Group-read failure:**
+  - **Cause:** a 503 from `GET /api/groups/:id` sent `App.tsx` to its error branch, which rendered only the Group header.
+  - **Fix:** Group detail now has `refreshedAt`. With a known Group, the whole Group screen stays: detail, Balances, Month and Expenses. Above it sits "… Showing Maple House from 2:26 AM." with a Retry Group button. A Group never loaded still shows the full-screen error.
+  - **Regressions:** a controller test, and an App test that pulls to refresh, checks the warning, time, figures and pull indicator, then retries.
+- **Wiring check:** a third App test confirms the real `RefreshControl` wiring. A foreground event never turns on the pull indicator; a pull does.
+- **Checks:** Mobile has 233 tests. Workspace typecheck, lint and Prettier passed.
+
+Native evidence, as Sam, on the same emulator, dev APK and fictional backend, through the QA proxy (a new Group-read delay and 503 mode):
+
+- **QA data:** Sam added a clearly named Expense, "QA-102 August check" (₹100, 15 Aug 2026), so August had visible content. One POST returned 201.
+- **P1:**
+  - With September shown, the app went to the background and returned. The proxy held that refresh's Group read for 9 s.
+  - Previous month was chosen, loading August (₹100 total).
+  - When the older Group read returned, the refresh continued with August's Expenses and then Balances. The screen stayed on August 2026 with the ₹100 August total, and September never reappeared.
+  - Proxy log: Group read at +0 s; August Expenses at +3.8 s and Balances at +4.7 s; after the Group reply, Expenses at +9.8 s and Balances at +10.6 s.
+- **P2:**
+  - An injected Group-read 503 during an automatic refresh kept Balances, Month and the August Expenses visible below "The server could not complete this request. Please try again. Showing Maple House from 2:26 AM." and a Retry Group button.
+  - After the failure was cleared, Retry Group re-read the Group, and the warning disappeared.
+- **Evidence:** local artifacts, not committed:
+  - `41-p1-august-while-older-refresh-pending.png`
+  - `42-p1-after-older-refresh.png` and `43-p1-august-list.png`
+  - `44-p2-group-503.png` and `45-p2-recovered.png`
+  - `splitbook-111-review-month-and-group-failure.mp4` (2:28)
+  - `splitbook-111-review-group-retry.mp4` (0:38)
+
 ## Not verified here
 
 - **Physical phone, TalkBack, large text and dark theme** were not checked for these states. Freshness copy uses `toLocaleTimeString` and was checked only on this emulator.
