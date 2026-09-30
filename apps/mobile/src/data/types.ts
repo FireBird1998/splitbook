@@ -117,6 +117,26 @@ export interface GroupFinancialState {
   };
 }
 
+/**
+ * Where a full-screen Expense task returns: captured when it opens from that Group's view.
+ * `null` is direct entry, which returns to the Group at its default Month.
+ */
+export interface GroupReturnContext {
+  groupId: string;
+  /** The Month shown at entry; null for All time or a Group without a Month lens. */
+  month: string | null;
+  /** The Group view's vertical scroll offset at entry. */
+  scrollY: number;
+}
+
+/** Confirms a ledger change on the Group view it returned to. */
+export interface GroupSnackbar {
+  groupId: string;
+  message: string;
+  /** The saved Expense's Month when it differs from the Month shown; offered, never switched to. */
+  viewMonth: string | null;
+}
+
 export interface GroupDraft {
   name: string;
   description: string;
@@ -164,6 +184,12 @@ export interface MobileSnapshot {
     | 'settlement'
     | 'activity';
   expense: ExpenseEditor;
+  /**
+   * Asks the Group view to scroll back to where the member was after a full-screen task
+   * returns to it. `request` changes once per return.
+   */
+  restoreScroll: { groupId: string; y: number; request: number } | null;
+  snackbar: GroupSnackbar | null;
   settlement: SettlementState;
   activity: ActivityState;
   home: HomeFinancialState;

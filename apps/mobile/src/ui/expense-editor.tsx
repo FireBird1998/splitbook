@@ -22,6 +22,7 @@ import {
 } from '../data/expense-draft';
 import { Field, FieldError } from './group-workflows';
 import { Button, Copy, Label, Loading, Notice, Panel } from './primitives';
+import { Banner } from './compact/feedback';
 import { fonts, useTheme } from './theme';
 
 const methods = [
@@ -180,7 +181,7 @@ export function ExpenseEditor({
   if (draft.original && ['detail', 'delete-review'].includes(state.status))
     return (
       <View style={{ gap: 20 }}>
-        <ExpenseRecordView record={draft.original} />
+        <ExpenseRecordView record={draft.original} people={members} tags={context?.tags} />
         {state.message ? <Copy accessibilityRole="alert">{state.message}</Copy> : null}
         {state.status === 'delete-review' ? (
           <Panel>
@@ -225,7 +226,14 @@ export function ExpenseEditor({
       <Copy style={{ color: theme.textSecondary }}>
         Split a shared cost. Your draft stays on this device until you save or discard it.
       </Copy>
-      {state.latest && <ExpenseRecordView record={state.latest} title="Current saved record" />}
+      {state.latest && (
+        <ExpenseRecordView
+          record={state.latest}
+          title="Current saved record"
+          people={members}
+          tags={context?.tags}
+        />
+      )}
       {state.status === 'conflict' && (
         <Panel>
           <Copy>
@@ -242,27 +250,32 @@ export function ExpenseEditor({
       {state.status === 'blocked' && state.latest && (
         <Button label="Keep current saved record" secondary onPress={onAcceptCurrent} />
       )}
-      {state.status === 'resume' && (
-        <Panel>
-          <Copy accessibilityRole="header" style={{ fontFamily: fonts.semibold }}>
-            You have a saved draft
-          </Copy>
-          <Copy>
-            {state.mutation
-              ? 'This change needs a current-record check before another write. Resume to review it.'
-              : state.attempt
-                ? 'This submission may already be saved. Resume to confirm it with the same details.'
-                : 'Resume your entries or discard them to start again.'}
-          </Copy>
-          <Button
-            label={state.attempt || state.mutation ? 'Resume save recovery' : 'Resume draft'}
-            onPress={onResume}
-          />
-          {!state.attempt && !state.mutation && (
+      {/* An ordinary draft was never sent; an unconfirmed save may already be recorded. */}
+      {state.status === 'resume' &&
+        (state.attempt || state.mutation ? (
+          <View style={{ gap: 12 }}>
+            <Banner
+              tone="warning"
+              title="Save not confirmed"
+              message={
+                state.mutation
+                  ? 'This change may already be saved. Resume to check the current Expense before anything else is sent.'
+                  : 'This Expense may already be saved. Resume to confirm it with the same details; it can’t be added twice.'
+              }
+            />
+            <Button label="Resume save recovery" onPress={onResume} />
+          </View>
+        ) : (
+          <View style={{ gap: 12 }}>
+            <Banner
+              tone="info"
+              title="Unfinished draft"
+              message="Nothing has been sent. Resume your entries or discard them to start again."
+            />
+            <Button label="Resume draft" onPress={onResume} />
             <Button label="Discard draft" secondary onPress={onDiscard} />
-          )}
-        </Panel>
-      )}
+          </View>
+        ))}
       {!context && (
         <Copy>
           Connect to check the current members and Tags. You can still edit your saved text.

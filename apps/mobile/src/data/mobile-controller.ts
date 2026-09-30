@@ -61,6 +61,8 @@ import type {
   GroupCreation,
   GroupDraft,
   GroupFinancialState,
+  GroupReturnContext,
+  GroupSnackbar,
   HomeFinancialState,
   MobileConfig,
   MobileDependencies,
@@ -143,6 +145,8 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
     pull: false,
     screen: 'groups',
     expense: emptyExpenseEditor(),
+    restoreScroll: null,
+    snackbar: null,
     settlement: emptySettlement(),
     activity: emptyActivity(),
     home: emptyHome(),
@@ -245,6 +249,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const publish = (next: MobileSnapshot) => {
+    // Return feedback belongs to the Group view it was made for; leaving that view ends it.
+    const showing = (groupId: string) => next.screen === 'group' && next.detail.id === groupId;
+    if (next.snackbar && !showing(next.snackbar.groupId)) next = { ...next, snackbar: null };
+    if (next.restoreScroll && !showing(next.restoreScroll.groupId))
+      next = { ...next, restoreScroll: null };
     snapshot = next;
     listeners.forEach((listener) => listener());
   };
@@ -1235,6 +1244,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const { financial } = snapshot;
     publish({
       ...snapshot,
+      // The member chose another view: an earlier position or offer no longer applies.
+      restoreScroll: null,
+      snackbar: null,
       financial: {
         ...financial,
         month,
@@ -1612,12 +1624,35 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       (snapshot.expense.status === 'saving' || snapshot.expense.persistence !== 'saved')) ||
     (snapshot.screen === 'settlement' && snapshot.settlement.status === 'saving');
 
-  const openExpense = async (groupId: string, expenseId?: string) => {
+  /** Opening from the Group's own view records where to return; other entry is direct. */
+  const expenseReturn = (groupId: string, scrollY = 0): GroupReturnContext | null => {
+    // Retry, Discard and Use saved version reopen the same task, which keeps its origin.
+    if (snapshot.screen === 'expense' && snapshot.expense.groupId === groupId)
+      return snapshot.expense.returnTo;
+    if (
+      snapshot.screen !== 'group' ||
+      snapshot.detail.id !== groupId ||
+      snapshot.financial.groupId !== groupId
+    )
+      return null;
+    return {
+      groupId,
+      month: snapshot.financial.month,
+      scrollY: Number.isFinite(scrollY) ? Math.max(0, scrollY) : 0,
+    };
+  };
+
+  const openExpense = async (
+    groupId: string,
+    expenseId?: string,
+    origin: { scrollY?: number } = {},
+  ) => {
     if (snapshot.auth.status !== 'authenticated' || !snapshot.auth.user) return;
     const owner = generation;
     const view = ++viewRequest;
     const accountId = snapshot.auth.user.id;
     const month = snapshot.financial.groupId === groupId ? snapshot.financial.month : null;
+    const returnTo = expenseReturn(groupId, origin.scrollY);
     startReadView();
     publish({
       ...snapshot,
@@ -1627,6 +1662,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         groupId,
         requestedExpenseId: expenseId ?? null,
         status: 'loading',
+        returnTo,
       },
     });
     try {
@@ -1699,6 +1735,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           receiptId: null,
           persistence: 'saved',
           validation: emptyExpenseValidation(),
+          returnTo,
           message:
             record && record.draft.original?._id !== expenseId
               ? 'This Group already has an unfinished Expense draft. Resume it, or explicitly discard it before opening another Expense.'
@@ -1727,12 +1764,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const resumeExpenseDraft = () => {
-    if (snapshot.screen !== 'expense' || snapshot.expense.status !== 'resume') return;
+    const editor = snapshot.expense;
+    if (snapshot.screen !== 'expense' || editor.status !== 'resume') return;
     publish({
       ...snapshot,
       expense: {
-        ...snapshot.expense,
-        status: snapshot.expense.attempt || snapshot.expense.mutation ? 'uncertain' : 'editing',
+        ...editor,
+        status: editor.attempt || editor.mutation ? 'uncertain' : 'editing',
+        // Resuming answers the resume prompt, so its notices no longer apply. A save that
+        // may already be recorded keeps explaining why it stays locked.
+        message: editor.attempt
+          ? 'This Expense may already be saved. Retry the same submission to confirm it; its details stay locked, so retrying can’t add it twice.'
+          : editor.mutation
+            ? 'This change may already be saved. Check the current Expense before changing anything else.'
+            : null,
       },
     });
   };
@@ -1826,6 +1871,87 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (navigate || (snapshot.screen === 'group' && snapshot.detail.id === groupId))
       await openGroup(groupId);
     if (current(owner)) await refreshHome();
+  };
+
+  let scrollRequests = 0;
+  /**
+   * Show the Group view an Expense task returns to; the caller then reads it. A known origin
+   * keeps its Month and asks for its scroll position; direct entry uses the default Month.
+   */
+  const returnToGroup = (groupId: string, snackbar: GroupSnackbar | null = null) => {
+    const origin =
+      snapshot.expense.returnTo?.groupId === groupId ? snapshot.expense.returnTo : null;
+    const { detail, financial } = snapshot;
+    publish({
+      ...snapshot,
+      screen: 'group',
+      detail:
+        detail.id === groupId
+          ? detail
+          : { status: 'loading', id: groupId, data: null, message: null, refreshedAt: null },
+      financial: !origin
+        ? emptyFinancial()
+        : financial.groupId === groupId && financial.month === origin.month
+          ? financial
+          : { ...emptyFinancial(), groupId, month: origin.month },
+      restoreScroll: origin ? { groupId, y: origin.scrollY, request: ++scrollRequests } : null,
+      snackbar,
+    });
+  };
+
+  /** Offers the saved Expense's Month only when it differs from the Month the view returns to. */
+  const ledgerSnackbar = (
+    groupId: string,
+    message: string,
+    context: ExpenseContext,
+    date?: string,
+  ): GroupSnackbar => {
+    const origin =
+      snapshot.expense.returnTo?.groupId === groupId ? snapshot.expense.returnTo : null;
+    const shown =
+      context.group.category !== 'home'
+        ? null
+        : origin
+          ? origin.month
+          : currentMonthKey(new Date(now()));
+    const month = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.slice(0, 7) : null;
+    return { groupId, message, viewMonth: shown && month && month !== shown ? month : null };
+  };
+
+  const showHome = () => {
+    viewRequest += 1;
+    publish({
+      ...snapshot,
+      screen: 'groups',
+      detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
+      financial: emptyFinancial(),
+    });
+    return refreshHome();
+  };
+
+  /** Android Back and close keep the draft on this device and return where the task began. */
+  const closeExpense = async () => {
+    const editor = snapshot.expense;
+    if (snapshot.screen !== 'expense' || expenseNavigationBlocked()) return;
+    if (editor.status === 'delete-review') return cancelExpenseDeletion();
+    const { detail } = snapshot;
+    const groupId = editor.groupId;
+    // A Group removed after denial has nothing to return to.
+    if (
+      !groupId ||
+      (detail.id === groupId && !detail.data && ['denied', 'error'].includes(detail.status))
+    )
+      return showHome();
+    returnToGroup(groupId);
+    await openGroup(groupId);
+  };
+
+  const viewSnackbarMonth = async () => {
+    const month = snapshot.snackbar?.viewMonth;
+    if (month) await selectMonth(month);
+  };
+  const dismissSnackbar = () => {
+    if (snapshot.snackbar) publish({ ...snapshot, snackbar: null });
   };
 
   const editExpense = async () => {
@@ -2078,6 +2204,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         },
       });
       refreshed = true;
+      returnToGroup(
+        groupId,
+        kind === 'delete'
+          ? ledgerSnackbar(groupId, `Expense deleted · ${original.description}`, context)
+          : ledgerSnackbar(
+              groupId,
+              `Expense updated · ${draft.description.trim()}`,
+              context,
+              draft.date,
+            ),
+      );
       await refreshLedgerViews(groupId, owner, true);
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
@@ -2253,6 +2390,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         },
       });
       successHandled = true;
+      returnToGroup(
+        groupId,
+        ledgerSnackbar(groupId, `Expense saved · ${draft.description.trim()}`, context, draft.date),
+      );
       await refreshLedgerViews(groupId, owner, true);
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
@@ -3121,14 +3262,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return;
     }
     if (snapshot.creation.status === 'saving' || expenseNavigationBlocked()) return;
-    viewRequest += 1;
-    publish({
-      ...snapshot,
-      screen: 'groups',
-      detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
-      financial: emptyFinancial(),
-    });
-    return refreshHome();
+    if (snapshot.screen === 'expense') return closeExpense();
+    return showHome();
   };
 
   let pulls = 0;
@@ -3297,6 +3432,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     discardExpenseDraft,
     saveExpense,
     openExpense,
+    closeExpense,
+    viewSnackbarMonth,
+    dismissSnackbar,
     resumeExpenseDraft,
     updateExpenseDraft,
     touchExpenseField,

@@ -8,11 +8,16 @@ import { refreshedLabel } from './ui/refresh-feedback';
 // The real App tree renders through these host names; only native modules are replaced.
 const native = vi.hoisted(() => ({
   appState: [] as ((state: string) => void)[],
+  back: [] as (() => boolean)[],
   controller: undefined as unknown,
   appearance: { mode: 'light', status: 'ready', message: null },
+  scrollTo: vi.fn(),
 }));
 vi.mock('react-native', () => ({
-  AccessibilityInfo: { sendAccessibilityEvent: vi.fn() },
+  AccessibilityInfo: {
+    sendAccessibilityEvent: vi.fn(),
+    getRecommendedTimeoutMillis: async (timeout: number) => timeout,
+  },
   ActivityIndicator: 'ActivityIndicator',
   Alert: { alert: vi.fn() },
   AppState: {
@@ -22,7 +27,12 @@ vi.mock('react-native', () => ({
     },
   },
   Appearance: { setColorScheme: vi.fn() },
-  BackHandler: { addEventListener: () => ({ remove: () => undefined }) },
+  BackHandler: {
+    addEventListener: (_: string, listener: () => boolean) => {
+      native.back.push(listener);
+      return { remove: () => native.back.splice(native.back.indexOf(listener), 1) };
+    },
+  },
   KeyboardAvoidingView: 'KeyboardAvoidingView',
   Linking: {
     addEventListener: () => ({ remove: () => undefined }),
@@ -91,6 +101,7 @@ const group = {
   category: 'home',
   defaultCurrency: 'INR',
   members: [{ user: { ...person, email: user.email }, role: 'member', joinedAt: iso }],
+  tags: [{ _id: 'c00000000000000000000001', name: 'Shared', isArchived: false, createdAt: iso }],
   createdAt: iso,
   updatedAt: iso,
 };
@@ -130,9 +141,14 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 const september = expense('b00000000000000000000001', 'September groceries');
 const august = expense('b00000000000000000000002', 'August rent');
 
-type Handler = (path: string) => FetchResponse | Promise<FetchResponse> | undefined;
+type Handler = (
+  path: string,
+  init: RequestInit,
+) => FetchResponse | Promise<FetchResponse> | undefined;
 function backend() {
   let cookie: string | null = null;
+  let account: string | null = null;
+  const drafts = new Map<string, unknown>();
   const clock = { now: new Date(2026, 8, 27, 12).getTime() };
   let handler: Handler = () => undefined;
   const controller = createMobileController(
@@ -143,6 +159,30 @@ function backend() {
     },
     {
       now: () => clock.now,
+      expenseDrafts: {
+        load: async (accountId, id) => structuredClone(drafts.get(`${accountId}:${id}`) ?? null),
+        save: async (accountId, id, value) => {
+          drafts.set(`${accountId}:${id}`, structuredClone(value));
+        },
+        remove: async (accountId, id) => {
+          drafts.delete(`${accountId}:${id}`);
+        },
+        clear: async () => drafts.clear(),
+      },
+      accountLocal: {
+        owner: {
+          load: async () => account,
+          save: async (value) => {
+            account = value;
+          },
+          clear: async () => {
+            account = null;
+          },
+        },
+        cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
+        stores: [],
+      },
+      newSubmissionKey: () => 'native-app-test-0001',
       credentials: {
         load: async () => cookie,
         save: async (value) => {
@@ -152,9 +192,9 @@ function backend() {
           cookie = null;
         },
       },
-      fetch: async (url) => {
+      fetch: async (url, init) => {
         const path = new URL(url).pathname + new URL(url).search;
-        const override = handler(path);
+        const override = handler(path, init);
         if (override) return override;
         if (path.endsWith('/sign-in'))
           return new Response(JSON.stringify({ user }), {
@@ -238,6 +278,8 @@ afterEach(() => {
   act(() => screen?.unmount());
   screen = null;
   native.appState.length = 0;
+  native.back.length = 0;
+  native.scrollTo.mockClear();
   vi.restoreAllMocks();
 });
 const settle = (pending?: Promise<unknown>) =>
@@ -251,7 +293,10 @@ async function renderApp() {
   await harness.controller.signIn('sam');
   native.controller = harness.controller;
   await act(async () => {
-    screen = create(<App />);
+    // Host stand-ins have no native methods; the Group view's scroll requests are recorded.
+    screen = create(<App />, {
+      createNodeMock: () => ({ scrollTo: native.scrollTo, focus: () => undefined }),
+    });
   });
   await settle();
   const root = () => screen!.root;
@@ -269,12 +314,40 @@ async function renderApp() {
   const refreshControl = () =>
     root().find((node) => isHost(node, 'ScrollView') && node.props.refreshControl).props
       .refreshControl.props as { refreshing: boolean; onRefresh: () => void };
+  const scrollView = () => root().find((node) => isHost(node, 'ScrollView'));
   return {
     ...harness,
     text,
     pressable,
     refreshControl,
     press: (label: string) => settle(Promise.resolve(pressable(label).props.onPress())),
+    type: (label: string, value: string) =>
+      settle(
+        Promise.resolve(
+          root()
+            .find((node) => isHost(node, 'TextInput') && node.props.accessibilityLabel === label)
+            .props.onChangeText(value),
+        ),
+      ),
+    /** The member scrolls the visible screen to this offset. */
+    scrollTo: (y: number) =>
+      act(() => scrollView().props.onScroll({ nativeEvent: { contentOffset: { y } } })),
+    /** Native layout reports the visible screen's viewport and content heights. */
+    layout: (viewport: number, content: number) =>
+      act(() => {
+        scrollView().props.onLayout({ nativeEvent: { layout: { height: viewport } } });
+        scrollView().props.onContentSizeChange(390, content);
+      }),
+    /** Android's hardware or gesture Back; returns whether the app handled it. */
+    androidBack: async () => {
+      let handled = false;
+      await settle(
+        Promise.resolve().then(() => {
+          handled = native.back.some((listener) => listener());
+        }),
+      );
+      return handled;
+    },
     /** Android reports the app returning to the foreground. */
     foreground: () => native.appState.forEach((listener) => listener('active')),
   };
@@ -370,5 +443,77 @@ describe('App refresh rendering', () => {
     pulled.release(json(page([september])));
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
+  });
+});
+
+describe('App return from an Expense', () => {
+  const addExpense = async (app: Awaited<ReturnType<typeof renderApp>>, date: string) => {
+    await app.press('Add expense');
+    await app.type('Amount, required', '12.50');
+    await app.type('Description, required', 'Weekly groceries');
+    await app.type('Date, required', date);
+    await app.press('Tag: Shared');
+  };
+  const created = (path: string, init: RequestInit) =>
+    path === `/api/groups/${groupId}/expenses` && init.method === 'POST'
+      ? json({ status: 201, data: { _id: 'b00000000000000000000009', group: groupId } }, 201)
+      : undefined;
+
+  it('Android Back returns to the same Group, Month and scroll position', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Previous month');
+    await app.scrollTo(420);
+    await app.press('Add expense');
+    expect(app.text()).toContain('Add expense');
+    await app.type('Description, required', 'Kept for later');
+
+    expect(await app.androidBack()).toBe(true);
+    expect(app.text()).toContain('August 2026');
+    expect(app.text()).toContain('August rent');
+    expect(app.text()).not.toContain('September groceries');
+    await app.layout(700, 1600);
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 420, animated: false });
+
+    // Leaving never discarded the draft.
+    await app.press('Add expense');
+    expect(app.text()).toContain('Unfinished draft');
+  });
+
+  it('the top-bar back arrow names the Group it returns to', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Add expense');
+    await app.press('Back to Group');
+    expect(app.text()).toContain('September 2026');
+    expect(app.text()).toContain('September groceries');
+  });
+
+  it('confirms a save in the Month shown without offering another Month', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    app.use(created);
+    await addExpense(app, '2026-09-20');
+    await app.press('Save expense');
+
+    expect(app.text()).toContain('Expense saved · Weekly groceries');
+    expect(app.text()).toContain('September 2026');
+    expect(() => app.pressable('View in')).toThrow();
+  });
+
+  it('keeps the Month after saving into another and switches only when asked', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    app.use(created);
+    await addExpense(app, '2026-08-15');
+    await app.press('Save expense');
+
+    expect(app.text()).toContain('Expense saved · Weekly groceries');
+    expect(app.text()).toContain('September 2026');
+    expect(app.text()).toContain('September groceries');
+    await app.press('View in August');
+    expect(app.text()).toContain('August 2026');
+    expect(app.text()).toContain('August rent');
+    expect(app.text()).not.toContain('Expense saved');
   });
 });
