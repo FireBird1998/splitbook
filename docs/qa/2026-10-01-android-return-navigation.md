@@ -6,6 +6,11 @@ This change implements [#104](https://github.com/FireBird1998/splitbook/issues/1
 
 - **Return context.** Opening an Expense from a Group's view records its Group, Month and scroll offset (`snapshot.expense.returnTo`). Retry, Discard and "Keep current saved record" reopen the same task and keep it.
 - **Back and close.** Android Back and the top-bar arrow ("Back to Group") keep the draft on the device and return to that Group and Month. The view restores its scroll position once its content is laid out. A drag or a Month change cancels the restore.
+- **Page range.** The return context also records how many Expense pages were loaded (`pages`).
+  - The Group's next Expense read after a return reads that same range, so an Expense opened from page 2 or later is still listed.
+  - The range is published once, so the list never shrinks while the position is restored.
+  - If a later page fails for any reason other than denial, the pages read are kept and Load more is offered.
+  - Ordinary refreshes still start from the first page. This was added after independent review found that a return kept only the first page.
 - **Other exits.**
   - Back first dismisses a delete confirmation.
   - Direct entry, with no known origin, returns to the Group at its default Month (the current Month for a Household).
@@ -26,13 +31,13 @@ This change implements [#104](https://github.com/FireBird1998/splitbook/issues/1
 
 ## Automated verification
 
-- **Mobile:** 316 tests. New:
-  - `expense-return-controller.test.ts` (16): public-controller journeys against a fictional ledger that commits a create before losing its response, deduplicates by `Idempotency-Key` and enforces `If-Match` revisions.
+- **Mobile:** 319 tests. New:
+  - `expense-return-controller.test.ts` (19): public-controller journeys against a fictional ledger that paginates like the backend, commits a create before losing its response, deduplicates by `Idempotency-Key` and enforces `If-Match` revisions. Three cover a return beyond the first page: Back, an edit and a new save, and a failing later page. All three fail on the first reviewed head, `52e2c27`.
   - `expense-history.test.ts` (5): the formatter's rules.
   - Rendered editor tests (3): ordinary versus unconfirmed resume, and readable history.
   - Rendered App tests (4): Android Back with Month and scroll, the back arrow, and same-Month and other-Month saves with "View in August".
 - **Checked against `main`:**
-  - 15 of the 16 controller journeys fail on `main`. Three of those, the late-completion guards, fail only because `snackbar` and `restoreScroll` do not exist there.
+  - 18 of the 19 controller journeys fail on `main`. Three of those, the late-completion guards, fail only because `snackbar` and `restoreScroll` do not exist there.
   - "Never leaves while a save is being sent" passes on both.
   - All 7 new rendered tests fail on `main`.
 - **Other packages:** shared 268 and web unit 139. Workspace typecheck, lint and `prettier --check .` pass.
@@ -68,7 +73,14 @@ This change implements [#104](https://github.com/FireBird1998/splitbook/issues/1
 
 ## Integration with #137
 
-A throwaway merge of #137 (`feat/android-cached-reads` at `58787d7`) into this branch conflicts only in `back()`. The resolution keeps `closeExpense()`/`showHome()` and has `showHome` call #137's `loadHome(true)`. With that, the 332 mobile tests of both branches, typecheck and lint pass together. Back from an Expense then reuses #137's recent reads, and confirmed saves still invalidate and re-read.
+A throwaway merge of #137 (`feat/android-cached-reads` at `58787d7`) into this branch conflicts in `back()` and twice in `readExpenses`. The resolution:
+
+- **`back()`:** keep `closeExpense()`/`showHome()`, and have `showHome` call #137's `loadHome(true)`.
+- **`readExpenses`:**
+  - Decide the return's page target (`through`) before #137's fresh-first-page shortcut, and take that shortcut only when `through === 1`.
+  - Keep #137's first-page read with `wanted` and its saved-copy preview. Then read the remaining pages with this branch's loop, passing `wanted` to `readCached`.
+
+With that, the 336 mobile tests of both branches, typecheck and lint pass together. Without the `through === 1` condition, two page-range tests fail: #137 would publish only a reused first page. Back from an Expense on its first page still reuses #137's recent reads, and confirmed saves still invalidate and re-read.
 
 ## Not verified
 
