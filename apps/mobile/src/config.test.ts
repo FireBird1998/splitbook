@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { androidInvitationFilters, developmentConfig } from './config';
+import { androidInvitationFilters, developmentConfig, mobileConfig } from './config';
 
 const local = {
   mode: 'development',
@@ -97,5 +97,38 @@ describe('Android invitation link configuration', () => {
       { ...local, inviteOrigin: 'https://example.com/#other' },
     ])
       expect(androidInvitationFilters(env)).toEqual([]);
+  });
+});
+
+describe('staging Google build configuration', () => {
+  const staging = {
+    mode: 'staging',
+    apiUrl: 'https://staging.splitbook.test',
+    authOrigin: 'https://staging.splitbook.test',
+    googleWebClientId: '123-test.apps.googleusercontent.com',
+  };
+  it('enables real sessions in signed builds without enabling demo personas', () => {
+    for (const developmentBuild of [false, true]) {
+      expect(mobileConfig(staging, developmentBuild)).toMatchObject({
+        developmentPersonaEnabled: false,
+        googleWebClientId: staging.googleWebClientId,
+        inviteOrigin: staging.authOrigin,
+      });
+    }
+    expect(mobileConfig(local, true)?.developmentPersonaEnabled).toBe(true);
+    expect(mobileConfig(local, false)).toBeNull();
+  });
+  it('fails closed for incomplete, insecure, cross-server, or unsupported settings', () => {
+    for (const overrides of [
+      { mode: undefined },
+      { mode: 'production' },
+      { apiUrl: '' },
+      { apiUrl: 'http://staging.splitbook.test' },
+      { authOrigin: 'https://different.test' },
+      { inviteOrigin: 'http://staging.splitbook.test' },
+      { googleWebClientId: '' },
+      { googleWebClientId: 'not-a-client-id' },
+    ])
+      expect(mobileConfig({ ...staging, ...overrides }, false)).toBeNull();
   });
 });

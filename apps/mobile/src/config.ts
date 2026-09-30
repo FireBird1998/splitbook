@@ -45,3 +45,37 @@ export function developmentConfig(
     developmentPersonaEnabled: true,
   };
 }
+
+/** Staging is a real-account environment; it never enables development personas. */
+export function mobileConfig(
+  env: {
+    mode?: string;
+    apiUrl?: string;
+    authOrigin?: string;
+    inviteOrigin?: string;
+    googleWebClientId?: string;
+  },
+  developmentBuild: boolean,
+): MobileConfig | null {
+  if (env.mode === 'development') return developmentConfig(env, developmentBuild);
+  if (env.mode !== 'staging') return null;
+  const api = parseWebOrigin(env.apiUrl ?? '');
+  const auth = parseWebOrigin(env.authOrigin ?? '');
+  const invite = parseWebOrigin(env.inviteOrigin ?? env.authOrigin ?? '');
+  if (
+    !api ||
+    !auth ||
+    !invite ||
+    [api, auth, invite].some((url) => url.protocol !== 'https:') ||
+    api.origin !== auth.origin ||
+    !/^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(env.googleWebClientId ?? '')
+  )
+    return null;
+  return {
+    apiBaseUrl: api.origin,
+    authOrigin: auth.origin,
+    inviteOrigin: invite.origin,
+    developmentPersonaEnabled: false,
+    googleWebClientId: env.googleWebClientId,
+  };
+}
