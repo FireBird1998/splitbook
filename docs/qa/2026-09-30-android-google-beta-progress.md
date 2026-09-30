@@ -118,3 +118,17 @@ Android package/signing-certificate registration, signed beta APK, native Google
 - Auth changes received independent Standards/Spec reviews, including the corrected invitation regression. Follow-up review agents hit their usage limit before reviewing the final build scripts and labels; those additions were reviewed by the implementing agent and exercised by the successful signed build, package/certificate checks and emulator launch. No independent final-script review is claimed.
 - Final mobile typecheck/lint and supported-file formatting passed. The release APK's app code matches this branch; only release-script lint formatting and documentation changed after assembly. Staging server code remains the previous implementation deployment plus App Link environment configuration; the client-side request guard is included in the APK.
 - No physical device is connected. The next acceptance step is real approved/denied Google sign-in on this candidate, followed by authenticated restart, invitation continuation and the Group/Expense/balance/Settlement journey. Keep #35/#36/#60 open until their applicable criteria and changed native architecture are reconciled with actual evidence.
+
+## PR #97 build-cache QA follow-up
+
+Independent QA found that changing a public Google audience could leave Gradle's JavaScript bundle task `UP-TO-DATE`. Reproduced on baseline `c21e57d` by setting a non-live probe audience, running the real `:app:createBundleReleaseJsAndAssets` task and inspecting the generated Hermes bundle. The task skipped and the new audience was absent (`/tmp/splitbook-pr97-cache-red.log`). No server configuration or distributed APK was changed for the probe.
+
+The staging build command now requests `:app:createBundleReleaseJsAndAssets --rerun` before `:app:assembleRelease`. Gradle's installed task help confirms task-scoped `--rerun`; the React Native bundle task passes `--reset-cache` to Metro. This rebuilds inlined public configuration on every staging invocation while retaining incremental native compilation.
+
+Verification:
+
+- The same real Gradle task with `--rerun` ran and produced a Hermes bundle containing the probe audience and excluding the old audience (`/tmp/splitbook-pr97-cache-green.log`).
+- The full updated staging script was then run with the real staging configuration. Verification examines `assets/index.android.bundle` inside the signed APK, requiring the actual staging audience and absence of the probe. Build log: `/tmp/splitbook-pr97-real-rebuild.log`.
+- Mobile lint, changed-script formatting and syntax checks pass. Independent Standards and Spec follow-up reviews each report zero findings.
+- The original APK already uploaded to Google Drive was separately inspected and contains the correct real staging audience, with no probe. The change fixes future rebuilds; it does not require replacing that uploaded candidate.
+- Real Android approved/denied login and authenticated device journeys remain pending. No merge is performed by this follow-up.

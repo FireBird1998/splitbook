@@ -57,6 +57,10 @@ try {
   run(
     './gradlew',
     [
+      // Gradle does not track Expo's inlined EXPO_PUBLIC_* environment values.
+      // Rerun only bundling (which resets Metro's cache); keep native compilation incremental.
+      ':app:createBundleReleaseJsAndAssets',
+      '--rerun',
       ':app:assembleRelease',
       '-PreactNativeArchitectures=arm64-v8a',
       '--init-script',
