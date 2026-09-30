@@ -159,14 +159,19 @@ function server() {
 }
 
 /** One member's device: its own session, account storage and payment recovery store. */
-function device(backend: ReturnType<typeof server>, options: { failAttemptSave?: boolean } = {}) {
+function device(
+  backend: ReturnType<typeof server>,
+  options: { failAttemptSave?: boolean; failAttemptLoad?: boolean; noAttemptStore?: boolean } = {},
+) {
   let cookie: string | null = null,
     owner: string | null = null,
     keys = 0;
   const attempts = new Map<string, unknown>();
   const store = {
-    load: async (account: string, id: string) =>
-      structuredClone(attempts.get(account + id) ?? null),
+    load: async (account: string, id: string) => {
+      if (options.failAttemptLoad) throw new Error('SQLITE_CANTOPEN: unable to open database file');
+      return structuredClone(attempts.get(account + id) ?? null);
+    },
     save: async (account: string, id: string, value: unknown) => {
       if (options.failAttemptSave) throw new Error('SQLITE_FULL: database or disk is full');
       attempts.set(account + id, structuredClone(value));
@@ -187,7 +192,7 @@ function device(backend: ReturnType<typeof server>, options: { failAttemptSave?:
         fetch: backend.fetch,
         now: () => Date.parse(iso),
         newSubmissionKey: () => `payment-attempt-${String(++keys).padStart(4, '0')}`,
-        settlementAttempts: store,
+        settlementAttempts: options.noAttemptStore ? undefined : store,
         credentials: {
           load: async () => cookie,
           save: async (value) => {
@@ -395,6 +400,56 @@ describe('Settlement corrections (#105)', () => {
     expect(alex.getSnapshot().settlement.history).toMatchObject([
       { paidBy: { name: 'Sam' }, paidTo: { name: 'Alex' }, amount: 30, currency: 'INR' },
     ]);
+  });
+
+  it('explains missing payment recovery storage when opening Payments, not connectivity', async () => {
+    const backend = server();
+    const sam = device(backend, { noAttemptStore: true }).create();
+    await sam.signIn('sam');
+    await sam.openSettlements(groupId);
+    expect(sam.getSnapshot().settlement).toMatchObject({
+      status: 'error',
+      message:
+        'Payments need this device to keep a recovery copy of each submission, and that storage isn’t available right now. Try again, or sign out and back in.',
+    });
+    expect(backend.calls.filter((call) => call.includes('/settlements'))).toEqual([]);
+  });
+
+  it('explains an unreadable recovery store when opening Payments and keeps the unresolved payment', async () => {
+    const backend = server();
+    const options = { failAttemptLoad: false };
+    const member = device(backend, options);
+    const sam = member.create();
+    await sam.signIn('sam');
+    await sam.openSettlements(groupId);
+    sam.selectSettlement(people.sam.id, people.alex.id, 'INR');
+    await sam.reviewSettlement();
+    backend.loseNextResponse();
+    await sam.recordSettlement();
+    expect(sam.getSnapshot().settlement.status).toBe('uncertain');
+
+    options.failAttemptLoad = true;
+    const restarted = member.create();
+    await restarted.restore();
+    await restarted.openSettlements(groupId);
+    const state = restarted.getSnapshot().settlement;
+    expect(state).toMatchObject({
+      status: 'error',
+      attempt: null,
+      message:
+        'Couldn’t read this device’s payment recovery records, so payments can’t be recorded right now. Any unresolved payment is kept. Try again, or restart the app.',
+    });
+    expect(state.message).not.toMatch(/sqlite/i);
+    expect(member.attempts.size).toBe(1);
+
+    // Once storage reads again, the unresolved payment returns for an explicit retry.
+    options.failAttemptLoad = false;
+    await restarted.openSettlements(groupId);
+    expect(restarted.getSnapshot().settlement).toMatchObject({
+      status: 'uncertain',
+      draft: { amount: '30' },
+    });
+    expect(backend.recorded).toHaveLength(1);
   });
 
   it('sends nothing and explains when the recovery copy cannot be stored', async () => {

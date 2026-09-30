@@ -117,6 +117,12 @@ class AccountCleanupError extends Error {
     super('Could not remove this account from the device. Try signing out again.');
   }
 }
+/** This device's storage blocks the action. The message is safe to show; raw errors never are. */
+class DeviceStorageError extends Error {}
+const recoveryStorageMissing =
+  'Payments need this device to keep a recovery copy of each submission, and that storage isn’t available right now. Try again, or sign out and back in.';
+const recoveryStorageUnreadable =
+  'Couldn’t read this device’s payment recovery records, so payments can’t be recorded right now. Any unresolved payment is kept. Try again, or restart the app.';
 class RequestError extends Error {
   constructor(
     message: string,
@@ -2366,13 +2372,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       settlement: { ...emptySettlement(), groupId, status: 'loading' },
     });
     try {
-      if (!lease || !storage)
-        throw new Error(
-          'Payments need this device to keep a recovery copy of each submission, and that storage isn’t available right now. Try again, or sign out and back in.',
-        );
-      const stored = await lease.write(() => storage.load(lease.accountId, groupId));
-      const recovery =
-        stored === null ? null : parseSettlementAttempt(stored, lease.accountId, groupId);
+      if (!lease || !storage) throw new DeviceStorageError(recoveryStorageMissing);
+      let recovery: ReturnType<typeof parseSettlementAttempt> | null;
+      try {
+        const stored = await lease.write(() => storage.load(lease.accountId, groupId));
+        recovery =
+          stored === null ? null : parseSettlementAttempt(stored, lease.accountId, groupId);
+      } catch (error) {
+        if (error instanceof Superseded || !current(owner)) throw error;
+        // The stored record is left exactly as it is, for a later explicit retry.
+        throw new DeviceStorageError(recoveryStorageUnreadable);
+      }
       if (!current(owner) || view !== viewRequest) return;
       if (recovery) publish({ ...snapshot, settlement: { ...snapshot.settlement, ...recovery } });
       const context = await settlementContext(groupId, owner);
@@ -2405,8 +2415,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               : snapshot.settlement.attempt
                 ? 'uncertain'
                 : 'error',
+          // Storage problems say so, rather than pointing at the connection.
           message:
-            error instanceof RequestError
+            error instanceof RequestError || error instanceof DeviceStorageError
               ? error.message
               : 'Could not load payments. Reconnect and retry; retained submissions are unchanged.',
         },
@@ -2670,7 +2681,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           await lease.write(() => storage.save(lease.accountId, groupId, value));
         } catch (error) {
           if (error instanceof Superseded || !current(owner)) throw error;
-          throw new Error(
+          throw new DeviceStorageError(
             'Nothing was sent: this device couldn’t store a recovery copy of the payment. Your entries are kept. Choose Record payment again.',
           );
         }

@@ -110,6 +110,22 @@ On `main`:
   - `105-alex-history.png`
   - `splitbook-105-settlement-corrections.mp4`, 5:08
 
+## Review fix
+
+The independent review of `a2ec4b8` found one P2 issue: the storage explanation for opening Payments never reached the member.
+
+- **Cause:** the explanation was thrown as a plain `Error`, and the catch kept only `RequestError` messages. A missing recovery store, or one whose `load()` rejected, both showed "Could not load payments. Reconnect and retry; …", which points at the connection.
+- **Fix:** local storage problems now raise a dedicated storage error whose message is safe to show:
+  - Missing store: "Payments need this device to keep a recovery copy of each submission, and that storage isn’t available right now. Try again, or sign out and back in."
+  - Unreadable store (a rejected load or an unreadable record): "Couldn’t read this device’s payment recovery records, so payments can’t be recorded right now. Any unresolved payment is kept. Try again, or restart the app."
+  - No raw SQLite text is shown, and the stored record is left untouched.
+  - Refresh payments stays available. Once storage reads again, the unresolved payment returns for an explicit retry.
+  - Record-time save failures use the same error type, with unchanged copy.
+- **Regressions:** two controller tests sit beside the existing failed-save test. Both failed at `a2ec4b8`.
+  - With the store missing, the storage message appears and no Settlement request is sent.
+  - With `load()` rejecting `SQLITE_CANTOPEN`, the storage message appears without SQLite text. The unresolved record is kept, and it returns as `uncertain` once storage recovers, still one server record.
+- **Checks:** mobile has 305 tests. Workspace typecheck, lint and Prettier passed.
+
 ## Not verified here
 
 - **Other environments:** a physical phone, TalkBack (only the accessibility labels, hints and live regions were inspected), large text, the dark theme and staging were not checked for these states.
