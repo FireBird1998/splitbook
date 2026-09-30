@@ -27,7 +27,13 @@ import { Outfit_700Bold } from '@expo-google-fonts/outfit/700Bold';
 import { IBMPlexMono_500Medium } from '@expo-google-fonts/ibm-plex-mono/500Medium';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
-import { appearance, configurationReady, controller, environment } from './src/runtime';
+import {
+  appearance,
+  configurationReady,
+  controller,
+  environment,
+  googleSignInEnabled,
+} from './src/runtime';
 import { ThemeContext, fonts, useTheme } from './src/ui/theme';
 import { Avatar, Button, Copy, Icon, Label, Loading, Notice } from './src/ui/primitives';
 import { EmptyGroups, GroupCard, GroupDetail, SignIn, styles } from './src/ui/screens';
@@ -185,7 +191,7 @@ function SplitBook() {
               backgroundColor: theme.brand.bg,
             }}
           >
-            <Label>DEV</Label>
+            <Label>{googleSignInEnabled ? 'STAGING' : 'DEV'}</Label>
           </View>
         )}
       </View>
@@ -195,9 +201,9 @@ function SplitBook() {
       >
         {!configurationReady ? (
           <Notice
-            title="Development build"
+            title="Build setup needed"
             icon="build-outline"
-            message="Configure the local backend in apps/mobile/.env.local, then restart Metro. Google sign-in arrives with the staging build."
+            message="This build is missing its connection settings. Ask the beta organizer for the configured app, or follow the development setup guide."
           />
         ) : state.auth.status === 'restoring' ? (
           <Loading label="Checking your session…" />
@@ -242,6 +248,9 @@ function SplitBook() {
                 : null)
             }
             onSignIn={(id) => void controller.signIn(id)}
+            onGoogleSignIn={
+              googleSignInEnabled ? () => void controller.signInWithGoogle() : undefined
+            }
           />
         ) : (
           <ScrollView
@@ -579,7 +588,7 @@ function SplitBook() {
             >
               <Icon name="flask-outline" size={12} />
               <Copy style={{ color: theme.textSecondary, fontSize: 11, lineHeight: 18 }}>
-                LOCAL DEVELOPMENT · FICTIONAL DATA
+                {environment.label.toUpperCase()}
               </Copy>
             </View>
           </ScrollView>

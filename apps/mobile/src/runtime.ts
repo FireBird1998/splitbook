@@ -1,24 +1,27 @@
 import { createFinancialReadStore } from './data/read-cache-storage';
 import { createSettlementAttemptStore } from './data/settlement-storage';
-import { randomUUID } from 'expo-crypto';
+import { randomUUID, getRandomBytes } from 'expo-crypto';
 import { createExpenseDraftStore } from './data/expense-storage';
 import { fetch } from 'expo/fetch';
 import * as SecureStore from 'expo-secure-store';
 import { createMobileController } from './data';
-import { developmentConfig, receiptScanEnabled } from './config';
+import { mobileConfig, receiptScanEnabled } from './config';
+import { createGoogleIdentityProvider } from './google-identity';
 import { createReceiptScanner } from './receipt-scanner';
 import { createAppearanceController } from './data/appearance';
 
-const config = developmentConfig(
+const config = mobileConfig(
   {
     mode: process.env.EXPO_PUBLIC_APP_ENV,
     apiUrl: process.env.EXPO_PUBLIC_API_URL,
     authOrigin: process.env.EXPO_PUBLIC_AUTH_ORIGIN,
     inviteOrigin: process.env.EXPO_PUBLIC_INVITE_ORIGIN,
+    googleWebClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
   },
   __DEV__,
 );
 export const configurationReady = config !== null;
+export const googleSignInEnabled = Boolean(config?.googleWebClientId);
 
 // The inert fallback only allows the setup screen to render. No restore is run.
 const controllerConfig = {
@@ -35,7 +38,9 @@ const invitationKey = `splitbook.invitation.${Array.from(controllerConfig.invite
 const cleanupKey = storageKey.replace('splitbook.session.', 'splitbook.cleanup.');
 const ownerKey = storageKey.replace('splitbook.session.', 'splitbook.account-owner.');
 export const environment = {
-  label: 'Local development · fictional data',
+  label: googleSignInEnabled
+    ? 'Private beta · staging ledger'
+    : 'Local development · fictional data',
   apiOrigin: new URL(controllerConfig.apiBaseUrl).origin,
   webOrigin: new URL(controllerConfig.inviteOrigin ?? controllerConfig.authOrigin).origin,
 };
@@ -57,6 +62,13 @@ const offlineIdentity = {
   clear: () => SecureStore.deleteItemAsync(offlineIdentityKey),
 };
 export const controller = createMobileController(controllerConfig, {
+  googleSignIn: config?.googleWebClientId
+    ? createGoogleIdentityProvider(
+        config.googleWebClientId,
+        async () => (await import('react-native-nitro-google-signin')).GoogleOneTapSignIn,
+        () => Array.from(getRandomBytes(32), (byte) => byte.toString(16).padStart(2, '0')).join(''),
+      )
+    : undefined,
   fetch,
   readCache,
   offlineIdentity,
@@ -85,6 +97,21 @@ export const controller = createMobileController(controllerConfig, {
       save: (accountId) => SecureStore.setItemAsync(ownerKey, accountId),
       clear: () => SecureStore.deleteItemAsync(ownerKey),
     },
-    stores: [expenseDrafts, settlementAttempts, readCache, offlineIdentity],
+    stores: [
+      expenseDrafts,
+      settlementAttempts,
+      readCache,
+      offlineIdentity,
+      ...(googleSignInEnabled
+        ? [
+            {
+              clear: async () => {
+                const { GoogleOneTapSignIn } = await import('react-native-nitro-google-signin');
+                await GoogleOneTapSignIn.signOut();
+              },
+            },
+          ]
+        : []),
+    ],
   },
 });

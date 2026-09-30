@@ -160,7 +160,7 @@ function origin(value: string): string {
 }
 
 /**
- * Development-persona transport and memory-only Group and financial reads. Secure credential
+ * Session transport and Group/financial reads. Secure credential
  * persistence is injected by the native runtime. It never imports React or a
  * native SDK, and it never treats a raw Better Auth token as a signed cookie.
  */
@@ -169,6 +169,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const authOrigin = origin(config.authOrigin);
   const inviteOrigin = origin(config.inviteOrigin ?? config.authOrigin);
   const secureTransport = apiBase.startsWith('https:');
+  const googleEnabled = Boolean(
+    config.googleWebClientId && secureTransport && authOrigin === apiBase,
+  );
+  let googlePending = false;
+  let verifiedGoogleBackend = -1;
   const now = dependencies.now ?? Date.now;
   const listeners = new Set<() => void>();
   const requests = new Set<AbortController>();
@@ -422,10 +427,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       body?: unknown;
       sessionCookie?: string | null;
       logout?: boolean;
+      adoptSession?: boolean;
       serializedBody?: string;
       idempotencyKey?: string;
     } = {},
   ): Promise<unknown> => {
+    assertCurrent(owner);
+    // Invitations can open even after restoration fails. Every ordinary request
+    // must verify staging before it can send or adopt a session cookie.
+    if (path !== '/.well-known/splitbook-mobile.json') await verifyGoogleBackend(owner);
     assertCurrent(owner);
     const abort = new AbortController();
     requests.add(abort);
@@ -457,9 +467,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       received = true;
       assertCurrent(owner);
       // Logout responses must never reinstall a cookie, even a surprising one.
-      if (!options.logout) await adoptCookie(response, owner);
+      if (!options.logout && options.adoptSession !== false) await adoptCookie(response, owner);
       assertCurrent(owner);
-      if (response.status === 401 && !options.logout) {
+      if (
+        response.status === 401 &&
+        !options.logout &&
+        options.adoptSession !== false &&
+        path !== '/api/auth/sign-in/social'
+      ) {
         await failSession(owner, expiredMessage);
         throw new Superseded();
       }
@@ -564,7 +579,40 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
+  const verifyGoogleBackend = async (owner: number) => {
+    if (!googleEnabled || verifiedGoogleBackend === owner) return;
+    let value: unknown;
+    try {
+      value = await request('/.well-known/splitbook-mobile.json', owner, {
+        sessionCookie: null,
+        adoptSession: false,
+      });
+    } catch (error) {
+      if (error instanceof RequestError && error.status) {
+        throw new RequestError(
+          'This server is not configured for the Android beta. Please contact the beta organizer.',
+        );
+      }
+      throw error;
+    }
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      !('environment' in value) ||
+      value.environment !== 'staging' ||
+      !('googleWebClientId' in value) ||
+      value.googleWebClientId !== config.googleWebClientId
+    ) {
+      throw new RequestError(
+        'This build does not match the staging login configuration. Please contact the beta organizer.',
+      );
+    }
+    assertCurrent(owner);
+    verifiedGoogleBackend = owner;
+  };
+
   const revalidateSession = async (owner: number) => {
+    await verifyGoogleBackend(owner);
     const session = parseSession(await request('/api/auth/get-session', owner));
     assertCurrent(owner);
     if (
@@ -732,6 +780,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const verifyAndLoad = async (owner: number) => {
+    await verifyGoogleBackend(owner);
     const session = parseSession(await request('/api/auth/get-session', owner));
     assertCurrent(owner);
     if (!session || session.expiresAt.getTime() <= now()) {
@@ -801,7 +850,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish(cleanSnapshot({ status: 'restoring', user: null, message: null }));
     try {
       await finishAccountCleanup(owner);
-      if (!config.developmentPersonaEnabled) {
+      if (!config.developmentPersonaEnabled && !googleEnabled) {
         await clearSaved(owner);
         publish(cleanSnapshot({ status: 'signed-out', user: null, message: disabledMessage }));
         return;
@@ -874,6 +923,64 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               ? error.message
               : 'Could not sign in with this development persona. Please try again.';
       await failSession(owner, message);
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    // An OS account chooser cannot be aborted like fetch. Keep one active until it returns.
+    if (googlePending) return;
+    googlePending = true;
+    const owner = invalidate();
+    publish(cleanSnapshot({ status: 'signing-in', user: null, message: null }));
+    try {
+      await finishAccountCleanup(owner);
+      await clearSaved(owner);
+      if (!googleEnabled || !dependencies.googleSignIn) {
+        await failSession(owner, 'Google sign-in is not configured for this build.');
+        return;
+      }
+      await verifyGoogleBackend(owner);
+      const identity = await dependencies.googleSignIn();
+      assertCurrent(owner);
+      if (identity.status !== 'success') {
+        await failSession(
+          owner,
+          identity.status === 'cancelled'
+            ? 'Sign-in cancelled. Choose Sign in with Google when you are ready.'
+            : identity.message,
+        );
+        return;
+      }
+      if (!identity.idToken || !identity.nonce)
+        throw new RequestError('Google did not return a usable identity. Please try again.');
+      parseSignIn(
+        await request('/api/auth/sign-in/social', owner, {
+          method: 'POST',
+          body: { provider: 'google', idToken: { token: identity.idToken, nonce: identity.nonce } },
+        }),
+      );
+      if (!cookie)
+        throw new RequestError('The server did not provide a usable session. Please try again.');
+      await verifyAndLoad(owner);
+    } catch (error) {
+      if (!current(owner) || error instanceof Superseded) return;
+      const message =
+        error instanceof AccountCleanupError
+          ? error.message
+          : error instanceof RequestError && error.code?.toLowerCase() === 'email_not_allowed'
+            ? 'This Google account is not invited to the beta. Choose an approved account.'
+            : error instanceof RequestError && [401, 403].includes(error.status)
+              ? 'Google sign-in was not accepted. Try again with an approved beta account.'
+              : error instanceof RequestError
+                ? error.message
+                : 'Could not sign in with Google. Please try again.';
+      await failSession(
+        owner,
+        message,
+        error instanceof AccountCleanupError ? 'error' : 'signed-out',
+      );
+    } finally {
+      googlePending = false;
     }
   };
 
@@ -3029,6 +3136,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     if (!oldCookie || !current(owner)) return;
     try {
+      await verifyGoogleBackend(owner);
       await request('/api/auth/sign-out', owner, {
         method: 'POST',
         body: {},
@@ -3072,6 +3180,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     dismissReceiptScan,
     restore,
     signIn,
+    signInWithGoogle,
     startCreate,
     openSettings,
     accountStorage,

@@ -2,7 +2,7 @@
 
 Expo + React Native, TypeScript, Android first. The foundation implements [ticket #50](https://github.com/FireBird1998/splitbook/issues/50): guarded local persona sign-in, API-backed Group browsing, Theme-specific headers, member lists, session restoration, foreground revalidation, and sign-out. [Ticket #52](https://github.com/FireBird1998/splitbook/issues/52) adds Group creation, Android sharing, invitation preview, and explicit joining. [The approved spec](https://github.com/FireBird1998/splitbook/issues/49) tracks the remaining native app.
 
-This is a **development client**. It requires Metro and a local fictional backend. The staging APK, real Google callback, and iOS validation have separate tickets; they are not included here.
+Local development uses Metro and fictional personas. The staging configuration supports native Google identity and the existing Better Auth session boundary. A verified staging deployment, registered Android signing identity, signed distributable APK, and real-device Google checks are still required before beta distribution; the implementation alone does not establish those release gates.
 
 ## Run locally
 
@@ -72,7 +72,7 @@ No real staging domain or certificate is configured here. Ticket [#60](https://g
 - Logout invalidates request generations, purges memory and SQLite drafts, serializes account storage cleanup, and attempts server revocation. In-flight responses cannot refill state. Future caches must join this purge boundary.
 - Native demo entry requires both `__DEV__` and explicit `EXPO_PUBLIC_APP_ENV=development`; the server independently enforces its existing demo guard. A production bundle cannot use this adapter. Cleartext Android traffic is configured only for the development variant.
 - Display tokens live in `@splitbook/shared/design-tokens`; the old web import re-exports that source. Both clients share the semantic light/dark colors and Group Theme registry. Only the required Outfit/IBM Plex Mono weights are bundled.
-- Native Google integration, staging release, and production configuration are handled by the remaining approved tickets. The data boundary is the extension point for those changes.
+- Native Google identity uses Android Credential Manager through `react-native-nitro-google-signin`. The controller exchanges the identity token plus nonce through Better Auth and retains only its signed session cookie. Google SDK identity is cleared after each attempt and participates in account cleanup. Staging release and production configuration retain their separate verification gates.
 
 ## Home and Group financial views
 
@@ -155,6 +155,31 @@ A cold offline restart requires the existing protected session cookie, matching 
 Expense drafts remain editable using saved Group context. Financial create/edit/delete and payment submission still require live checks. Reconnect preserves the draft and any uncertain attempt, and never retries a mutation automatically. Cached Activity record status is labelled as the last saved check rather than a statement of current existence. Payments history and invitations remain online-only.
 
 Run `MOBILE_VERIFY_URL=http://127.0.0.1:<port> pnpm mobile verify:offline` against an isolated fictional backend. This public-controller/HTTP journey uses disk persistence to verify cold offline restoration, exact Month availability, retained drafts, reconnect without writes, revocation and sign-out. Android SQLite/SecureStore/process-restart and visual checks are recorded separately in the QA report.
+
+## Google sign-in for the staging beta
+
+Set `EXPO_PUBLIC_APP_ENV=staging`, identical HTTPS `EXPO_PUBLIC_API_URL` and `EXPO_PUBLIC_AUTH_ORIGIN`, and `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID` to the staging backend's `AUTH_GOOGLE_ID`. `EXPO_PUBLIC_INVITE_ORIGIN` defaults to the auth origin. Public client IDs are not secrets; never bundle the Google client secret, database URI, or Better Auth secret.
+
+The separate backend must use `AUTH_MODE=google`, `MOBILE_APP_ENV=staging`, its own database/secret and approved email allowlist. The native controller checks `/.well-known/splitbook-mobile.json` without credentials before login, restoration and server logout; a missing or mismatched staging marker/audience stops credential transmission. This guard identifies the configured environment; operators must separately verify that the deployment uses an isolated database. Do not enable the marker on production, or enable test ID-token/demo overrides on staging.
+
+Register `com.splitbook.app.staging` and the actual APK signing SHA-1 in the same Google project as the staging web client. Credential Manager requests tokens for that **web** audience, so the existing Google verifier accepts the same single intended audience. This direct identity-token exchange does not use a browser callback or custom-scheme redirect: it preserves the existing explicit-cookie transport and backend HTTPS Origin. It does not need an additional Better Auth Expo session store, wildcard trusted origins, or an expanded audience list. The older Expo/browser proposal in issues #35/#36 needs reconciliation with this implementation; iOS remains outside this release.
+
+The native library autolinks on Android. Its Expo config plugin only adds Firebase/iOS configuration; this Android-only, explicit-client-ID setup requires neither and intentionally does not supply fabricated iOS settings. Rebuild the development binary after installing the native dependency. Expo Go cannot run it.
+
+Before distribution, verify real approved/denied Google accounts, cancel/retry, restart and expiry, offline recovery, pending invitations, account switching and sign-out purge, Android App Links, light/dark and enlarged text, and a complete Group/Expense/balance/Settlement journey. Mocked controller tests and an assembled debug APK do not replace these checks.
+
+### Build the signed staging APK locally
+
+Run `pnpm mobile build:staging` with the staging public settings above and these explicit signing inputs:
+
+- `SPLITBOOK_ANDROID_KEYSTORE`: absolute path to the private PKCS12/JKS keystore, stored outside Git.
+- `SPLITBOOK_ANDROID_PASSWORD_FILE`: absolute path to a private file containing the keystore password. The key uses the same password; restrict both files to their owner.
+- `SPLITBOOK_ANDROID_KEY_ALIAS`: alias of the staging signing key.
+- `JAVA_HOME` and `ANDROID_HOME`: the installed JDK and Android SDK paths.
+
+The command disables implicit dotenv loading, verifies the deployed staging handshake, regenerates Android from tracked Expo configuration and builds the ARM64 release APK. It explicitly reruns the JavaScript bundle task (including Metro cache reset) on every invocation because Gradle does not track Expo public environment values; native compilation remains incremental. It requires a single HTTPS host for auth, API and invitations. Generated output is `apps/mobile/android/app/build/outputs/apk/release/app-release.apk`; it runs without Metro. Signing values stay outside source and command arguments. Keep a secure backup of the key and password: future upgrades of this installed beta must use the same certificate.
+
+Use Android SDK `apksigner verify --print-certs` on the APK. Register its package `com.splitbook.app.staging` and SHA-1 in Google Cloud, and publish its SHA-256 through the staging server's existing App Links settings. A build succeeding does not establish Google login or verified links; follow the release checks above before inviting testers.
 
 ## Receipt scanning experiment (#90)
 

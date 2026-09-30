@@ -50,5 +50,5 @@ One defect was found and fixed during the native check. Hermes leaves `groups` u
 ## Not verified here
 
 - A physical phone, performance, memory, app-size delta, airplane-mode or fresh-install recognition, dark mode and large text. These belong to #93 and #95.
-- Staging builds. The staging configuration does not exist yet, so the experiment is enabled only in the development build.
+- Staging builds. Since #97, a valid staging configuration also enables the experiment, but no staging APK was built or checked here.
 - Parity with the Tesseract pipeline, which is not claimed.
