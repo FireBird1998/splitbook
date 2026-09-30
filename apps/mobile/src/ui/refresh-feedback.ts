@@ -1,9 +1,9 @@
 import type { MobileSnapshot } from '../data/types';
 
 export interface RefreshFeedback {
-  /** The native pull indicator: only while a member-requested refresh runs. */
+  /** The native pull indicator: only while a pull-to-refresh runs. */
   pull: boolean;
-  /** One quiet status line while visible content is re-read automatically. */
+  /** One quiet status line while visible content is re-read automatically or retried. */
   quiet: boolean;
 }
 

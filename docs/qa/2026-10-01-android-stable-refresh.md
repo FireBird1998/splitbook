@@ -27,8 +27,8 @@ Request coalescing and freshness windows remain #103, and the TanStack Query pil
   - Late responses are dropped by the existing generation, view and request guards.
 - **One progress cue per operation:**
   - First load without content: the section placeholders.
-  - Manual pull: the native pull indicator only. `controller.refresh('manual')` sets `snapshot.pull`.
-  - Automatic foreground refresh: one quiet "Updating…" in the fixed header. `refresh('background')` never sets `pull`.
+  - Pull-to-refresh: the native pull indicator only. `controller.refresh('pull')` sets `snapshot.pull`.
+  - Automatic foreground refresh and every Retry button: one quiet "Updating…" in the fixed header. The default `refresh()` never sets `pull`.
   - Pagination: a footer, "Loading more expenses…".
 
 ## Automated verification
@@ -36,7 +36,7 @@ Request coalescing and freshness windows remain #103, and the TanStack Query pil
 - Mobile: 228 tests.
 - 11 new or updated controller regressions were confirmed failing on `main`. A twelfth, "opens another Group without the previous Group's figures", guards existing behaviour and already passed. They cover:
   - retained content during a background refresh, with ordered Expense-then-Balance reads and updated timestamps
-  - the pull flag set only for a manual refresh
+  - the pull flag set only for a pull, never for a retry or an automatic refresh
   - Home failure keeping its original time
   - an Expense failure keeping unverified Balances
   - a Month change clearing Expenses while keeping all-time Balances
@@ -115,6 +115,14 @@ Native evidence, as Sam, on the same emulator, dev APK and fictional backend, th
   - `44-p2-group-503.png` and `45-p2-recovered.png`
   - `splitbook-111-review-month-and-group-failure.mp4` (2:28)
   - `splitbook-111-review-group-retry.mp4` (0:38)
+
+### Quiet retries
+
+Retry buttons now use the quiet header status instead of the native pull indicator. The pull indicator is reserved for a pull-to-refresh.
+
+- The Retry Group button, the Groups error retry and the empty-Groups refresh all call the default quiet `refresh()`.
+- On the emulator, Retry Group was tapped after an injected Group 503, with the Group read delayed 6 s. The header showed "Updating…" and no pull indicator, and the Group and Balances stayed visible (`46-retry-quiet.png`). After the reply, the warning and "Updating…" cleared (`47-retry-done.png`).
+- The real-App test holds the retried Group read and checks for the quiet status, figures still on screen and no pull indicator. The controller test checks that the default `refresh()` never sets `pull`.
 
 ## Not verified here
 

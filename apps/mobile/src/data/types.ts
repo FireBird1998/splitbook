@@ -147,7 +147,7 @@ export interface PendingInvitationStore {
 
 export interface MobileSnapshot {
   offline: { active: boolean; refreshedAt: number | null; message: string | null };
-  /** A member-requested refresh is running; automatic refreshes never set this. */
+  /** A pull-to-refresh is running; automatic refreshes and retries never set this. */
   pull: boolean;
   auth: {
     status: 'restoring' | 'signed-out' | 'signing-in' | 'authenticated' | 'error';

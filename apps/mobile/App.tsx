@@ -94,7 +94,7 @@ function SplitBook() {
       if (url) openLink(url);
     });
     const appState = AppState.addEventListener('change', (next) => {
-      if (next === 'active') void controller.refresh('background');
+      if (next === 'active') void controller.refresh();
     });
     const back = BackHandler.addEventListener('hardwareBackPress', () => {
       if (controller.getSnapshot().screen !== 'groups') {
@@ -272,7 +272,7 @@ function SplitBook() {
               ) ? undefined : (
                 <RefreshControl
                   refreshing={feedback.pull}
-                  onRefresh={() => void controller.refresh('manual')}
+                  onRefresh={() => void controller.refresh('pull')}
                   tintColor={theme.brand.main}
                   colors={[theme.brand.main]}
                 />
@@ -496,7 +496,7 @@ function SplitBook() {
               <Notice
                 title="Couldn’t open this Group"
                 message={state.detail.message ?? 'Please try again.'}
-                retry={() => void controller.refresh('manual')}
+                retry={() => void controller.refresh()}
               />
             ) : state.detail.data ? (
               <>
@@ -509,7 +509,7 @@ function SplitBook() {
                     message={state.detail.message}
                     subject={state.detail.data.name}
                     retryLabel="Retry Group"
-                    onRetry={() => void controller.refresh('manual')}
+                    onRetry={() => void controller.refresh()}
                   />
                 )}
                 <GroupDetail group={state.detail.data} currentUserId={state.auth.user!.id}>

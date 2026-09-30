@@ -3046,11 +3046,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   let pulls = 0;
   /**
-   * Re-read the visible view. Only a member-requested ('manual') refresh shows the
-   * native pull indicator; automatic foreground refreshes stay quiet.
+   * Re-read the visible view. Only a pull-to-refresh shows the native pull indicator;
+   * automatic foreground refreshes and Retry buttons use the quiet status.
    */
-  const refresh = async (origin: 'manual' | 'background' = 'manual') => {
-    if (origin === 'background') return refreshView();
+  const refresh = async (feedback: 'pull' | 'quiet' = 'quiet') => {
+    if (feedback === 'quiet') return refreshView();
     pulls += 1;
     if (!snapshot.pull) publish({ ...snapshot, pull: true });
     try {
