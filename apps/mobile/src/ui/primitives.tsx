@@ -55,6 +55,7 @@ export function Label({ children, light = false }: { children: ReactNode; light?
 export function Button({
   label,
   accessibilityLabel = label,
+  hint,
   onPress,
   secondary = false,
   disabled = false,
@@ -62,6 +63,8 @@ export function Button({
 }: {
   label: string;
   accessibilityLabel?: string;
+  /** Read by screen readers, e.g. why the action is unavailable. */
+  hint?: string;
   onPress: () => void;
   secondary?: boolean;
   disabled?: boolean;
@@ -73,6 +76,7 @@ export function Button({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      accessibilityHint={hint}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}

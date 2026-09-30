@@ -5,6 +5,7 @@ import {
   calculateSplitAmountsMinor,
   normalizeExpenseMoney,
   parseAmountMinor,
+  parseExpenseAmountMinor,
   readLegacyAmountMinor,
   readStoredAmountMinor,
   sumMinorAmounts,
@@ -54,6 +55,33 @@ describe('currency-aware decimal boundaries', () => {
     'rejects malformed or unsafe %s',
     (value) => {
       expect(() => parseAmountMinor(value, 'INR')).toThrow(MoneyValidationError);
+    },
+  );
+
+  it.each([
+    ['250.50', 'INR', 25050, null],
+    ['10000000', 'INR', 1_000_000_000, null],
+    ['1500', 'JPY', 1500, null],
+    ['0', 'INR', null, 'INVALID_MONEY_RANGE'],
+    ['-5', 'INR', null, 'INVALID_MONEY_RANGE'],
+    ['10000000.01', 'INR', null, 'INVALID_MONEY_RANGE'],
+    ['10.001', 'INR', null, 'INVALID_MONEY_PRECISION'],
+    ['1500.5', 'JPY', null, 'INVALID_MONEY_PRECISION'],
+    ['abc', 'INR', null, 'INVALID_MONEY'],
+  ])(
+    'checks an Expense total %s %s with the same rule as a full allocation',
+    (amount, currency, minor, code) => {
+      const full = () =>
+        normalizeExpenseMoney({ ...expense, amount, currency, paidBy: [{ user: 'a', amount }] });
+      if (minor !== null) {
+        expect(parseExpenseAmountMinor(amount, currency)).toBe(minor);
+        expect(full().amountMinor).toBe(minor);
+        return;
+      }
+      expect(() => parseExpenseAmountMinor(amount, currency)).toThrow(
+        expect.objectContaining({ code }),
+      );
+      expect(full).toThrow(expect.objectContaining({ code }));
     },
   );
 

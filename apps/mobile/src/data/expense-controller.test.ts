@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ExpenseDraft } from './expense-draft';
+import type { ExpenseDraft, ExpenseField } from './expense-draft';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse, MobileFetch } from './types';
 
@@ -812,28 +812,34 @@ describe('native Expense creation and editing', () => {
   });
 
   it.each([
-    { amount: '10.001' },
-    { participantIds: [] },
-    { payerId: 'a00000000000000000000099' },
-    { tagId: 'a00000000000000000000099' },
-    { currency: 'USD' },
-    { date: '2026-02-30' },
-    { description: '' },
-  ])('retains invalid entries without sending a write: %j', async (patch) => {
-    let posts = 0;
-    const { controller } = setup((path, init) => {
-      if (path.endsWith('/expenses') && init.method === 'POST') posts++;
-      return undefined;
-    });
-    await controller.signIn('alex');
-    await controller.openExpense(groupId);
-    await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId, ...patch });
-    await controller.saveExpense();
-    expect(posts).toBe(0);
-    expect(controller.getSnapshot().expense.status).toBe('editing');
-    expect(controller.getSnapshot().expense.draft).toMatchObject(patch);
-    expect(controller.getSnapshot().expense.message).toBeTruthy();
-  });
+    [{ amount: '10.001' }, 'amount', 'INR amounts can have at most 2 decimal places.'],
+    [{ participantIds: [] }, 'split', 'Choose at least one person to share this Expense.'],
+    [{ payerId: 'a00000000000000000000099' }, 'payers', 'is no longer in this Group'],
+    [{ tagId: 'a00000000000000000000099' }, 'tag', 'This Tag is no longer available.'],
+    [{ currency: 'USD' }, 'amount', 'This draft uses USD, but the Group now uses INR.'],
+    [{ date: '2026-02-30' }, 'date', '2026-02-30 isn’t a real date.'],
+    [{ description: '' }, 'description', 'Add a description, such as Groceries.'],
+  ] satisfies [Partial<ExpenseDraft>, ExpenseField, string][])(
+    'identifies the invalid field and retains entries without sending a write: %j',
+    async (patch, field, message) => {
+      let posts = 0;
+      const { controller } = setup((path, init) => {
+        if (path.endsWith('/expenses') && init.method === 'POST') posts++;
+        return undefined;
+      });
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId, ...patch });
+      await controller.saveExpense();
+      const expense = controller.getSnapshot().expense;
+      expect(posts).toBe(0);
+      expect(expense.status).toBe('editing');
+      expect(expense.draft).toMatchObject(patch);
+      expect(Object.keys(expense.validation.errors)).toEqual([field]);
+      expect(expense.validation.errors[field]).toContain(message);
+      expect(expense.validation.focus?.field).toBe(field);
+    },
+  );
 
   it.each([403, 409, 422, 500])(
     'keeps unknown or ambiguous HTTP %s failures immutable',
@@ -1291,5 +1297,244 @@ describe('native Expense creation and editing', () => {
       tagId,
       participantIds: memberIds,
     });
+  });
+});
+
+describe('native Expense field corrections', () => {
+  const countingSetup = () => {
+    const requests: string[] = [];
+    const harness = setup((path, init) => {
+      requests.push(`${init.method ?? 'GET'} ${path}`);
+      return init.method === 'POST' && path.endsWith('/expenses')
+        ? Promise.resolve(json({ status: 201, data: { _id: expenseId, group: groupId } }, 201))
+        : undefined;
+    });
+    return { ...harness, requests };
+  };
+
+  it.each(['', '   '])(
+    'identifies a missing Description %j before any request and saves once after correction',
+    async (description) => {
+      const { controller, requests } = countingSetup();
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ amount: '250.50', tagId, description });
+      requests.length = 0;
+      await controller.saveExpense();
+      let expense = controller.getSnapshot().expense;
+      expect(requests).toEqual([]);
+      expect(expense.status).toBe('editing');
+      expect(expense.attempt).toBeNull();
+      expect(expense.validation.errors).toEqual({
+        description: 'Add a description, such as Groceries.',
+      });
+      expect(expense.validation.focus).toEqual({ field: 'description', request: 1 });
+      expect(expense.message).toBe('Add a description, such as Groceries.');
+      expect(expense.draft).toMatchObject({ amount: '250.50', tagId, description });
+
+      await controller.updateExpenseDraft({ description: 'Groceries' });
+      expense = controller.getSnapshot().expense;
+      expect(expense.validation.errors).toEqual({});
+      expect(expense.message).toBeNull();
+      expect(expense.draft).toMatchObject({ amount: '250.50', tagId });
+
+      await controller.saveExpense();
+      expect(requests.filter((request) => request.startsWith('POST'))).toEqual([
+        `POST /api/groups/${groupId}/expenses`,
+      ]);
+      expect(controller.getSnapshot().expense.status).toBe('saved');
+    },
+  );
+
+  it('explains the same blank Description when editing, without serialized validation details', async () => {
+    const { controller, requests } = countingSetup();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ amount: '10', tagId, description: ' ' });
+    await controller.saveExpense();
+    const created = controller.getSnapshot().expense;
+    await controller.discardExpenseDraft();
+
+    const editing = setup((path, init) => {
+      requests.push(`${init.method ?? 'GET'} ${path}`);
+      return path.endsWith(`/${expenseId}`)
+        ? Promise.resolve(json({ data: savedExpense, status: 200 }))
+        : undefined;
+    }).controller;
+    await editing.signIn('alex');
+    await editing.openExpense(groupId, expenseId);
+    await editing.editExpense();
+    await editing.updateExpenseDraft({ description: ' ', notes: 'Keep my note' });
+    requests.length = 0;
+    await editing.saveExpense();
+    const edited = editing.getSnapshot().expense;
+    expect(requests).toEqual([]);
+    expect(edited.status).toBe('editing');
+    expect(edited.mutation).toBeNull();
+    expect(edited.validation.errors).toEqual(created.validation.errors);
+    expect(edited.message).toBe(created.message);
+    expect(edited.message).not.toMatch(/"code"|"path"|\[|\{/);
+    expect(edited.draft).toMatchObject({ description: ' ', notes: 'Keep my note' });
+  });
+
+  it.each([
+    ['', 'Enter the amount, such as 250.50.'],
+    ['abc', 'Use digits and one decimal point, such as 250.50.'],
+    ['1,250', 'Use digits and one decimal point, such as 250.50.'],
+    ['0', 'Enter an amount greater than 0.'],
+    ['-5', 'Enter an amount greater than 0.'],
+    ['10000000.01', 'Enter an amount of at most 10,000,000.'],
+    ['10.001', 'INR amounts can have at most 2 decimal places. Nothing is rounded for you.'],
+  ])('explains Amount %j beside the Amount field', async (amount, message) => {
+    const { controller, requests } = countingSetup();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ amount, description: 'Dinner', tagId });
+    requests.length = 0;
+    await controller.saveExpense();
+    const expense = controller.getSnapshot().expense;
+    expect(requests).toEqual([]);
+    expect(expense.validation.errors).toEqual({ amount: message });
+    expect(expense.draft?.amount).toBe(amount);
+  });
+
+  it('uses the Group currency precision instead of assuming two decimal places', async () => {
+    const yen = { ...group, defaultCurrency: 'JPY' };
+    const { controller } = setup((path) =>
+      path === `/api/groups/${groupId}`
+        ? Promise.resolve(json({ data: yen, status: 200 }))
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ amount: '1500.5', description: 'Ramen', tagId });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({
+      amount: 'JPY amounts can’t include decimal places. Nothing is rounded for you.',
+    });
+    await controller.updateExpenseDraft({ amount: '1500' });
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({});
+  });
+
+  it.each([
+    ['', 'Enter the date as YYYY-MM-DD, such as 2026-09-28.'],
+    ['28/09/2026', 'Enter the date as YYYY-MM-DD, such as 2026-09-28.'],
+    ['2026-02-30', '2026-02-30 isn’t a real date. Check the day and month.'],
+    ['2026-13-01', '2026-13-01 isn’t a real date. Check the day and month.'],
+  ])('explains date %j beside the Date field', async (date, message) => {
+    const { controller, requests } = countingSetup();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ amount: '10', description: 'Dinner', tagId, date });
+    requests.length = 0;
+    await controller.saveExpense();
+    expect(requests).toEqual([]);
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({ date: message });
+  });
+
+  it('identifies a missing Tag and an archived Tag without substituting another Tag', async () => {
+    const otherTag = 'a00000000000000000000021';
+    let archived = false;
+    let posts = 0;
+    const { controller } = setup((path, init) => {
+      if (path.endsWith('/expenses') && init.method === 'POST') posts++;
+      if (path === `/api/groups/${groupId}`)
+        return Promise.resolve(
+          json({
+            data: {
+              ...group,
+              tags: [
+                { _id: tagId, name: 'Groceries', isArchived: archived, createdAt: iso },
+                { _id: otherTag, name: 'Rent', isArchived: false, createdAt: iso },
+              ],
+            },
+            status: 200,
+          }),
+        );
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ amount: '10', description: 'Dinner' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({
+      tag: 'Choose a Tag for this Expense.',
+    });
+
+    await controller.updateExpenseDraft({ tagId });
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({});
+    archived = true;
+    await controller.saveExpense();
+    const expense = controller.getSnapshot().expense;
+    expect(posts).toBe(0);
+    expect(expense.status).toBe('editing');
+    expect(expense.draft?.tagId).toBe(tagId);
+    expect(expense.validation.errors).toEqual({
+      tag: 'This Tag is no longer available. Choose an active Tag.',
+    });
+    expect(expense.validation.focus?.field).toBe('tag');
+  });
+
+  it('shows every local error, focuses the first in screen order, and keeps unrelated entries', async () => {
+    const { controller, requests } = countingSetup();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ notes: 'Split with flatmates', category: 'food' });
+    requests.length = 0;
+    await controller.saveExpense();
+    let expense = controller.getSnapshot().expense;
+    expect(requests).toEqual([]);
+    expect(Object.keys(expense.validation.errors)).toEqual(['amount', 'description', 'tag']);
+    expect(expense.validation.focus).toEqual({ field: 'amount', request: 1 });
+    expect(expense.message).toBe('Correct 3 fields before saving: Amount, Description and Tag.');
+
+    await controller.updateExpenseDraft({ amount: '12' });
+    await controller.saveExpense();
+    expense = controller.getSnapshot().expense;
+    expect(Object.keys(expense.validation.errors)).toEqual(['description', 'tag']);
+    expect(expense.validation.focus).toEqual({ field: 'description', request: 2 });
+    expect(expense.draft).toMatchObject({
+      amount: '12',
+      notes: 'Split with flatmates',
+      category: 'food',
+    });
+  });
+
+  it('shows a field error after the member leaves it, not while they first type', async () => {
+    const { controller } = setup();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({});
+    await controller.updateExpenseDraft({ amount: '10.0' });
+    await controller.updateExpenseDraft({ amount: '10.005' });
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({});
+    controller.touchExpenseField('amount');
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({
+      amount: 'INR amounts can have at most 2 decimal places. Nothing is rounded for you.',
+    });
+    expect(controller.getSnapshot().expense.validation.focus).toBeNull();
+    await controller.updateExpenseDraft({ amount: '10.05' });
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({});
+  });
+
+  it('keeps a rejected incomplete draft through restart', async () => {
+    const { controller, create } = setup();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ amount: '10.001', description: 'QA correction' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.validation.errors).toMatchObject({
+      amount: expect.any(String),
+      tag: expect.any(String),
+    });
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openExpense(groupId);
+    restarted.resumeExpenseDraft();
+    expect(restarted.getSnapshot().expense.status).toBe('editing');
+    expect(restarted.getSnapshot().expense.draft).toMatchObject({
+      amount: '10.001',
+      description: 'QA correction',
+    });
+    expect(restarted.getSnapshot().expense.validation.errors).toEqual({});
   });
 });

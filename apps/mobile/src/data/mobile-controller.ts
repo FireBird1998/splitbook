@@ -19,14 +19,23 @@ import { canEditExpense, parseExpenseRecord } from './expense-record';
 import { parseAmountMinor, MoneyValidationError } from '@splitbook/shared/exact-money';
 import {
   emptyExpenseEditor,
+  emptyExpenseValidation,
   draftFromExpense,
   buildExpenseBody,
   buildExpensePatch,
+  expenseCorrectionSummary,
+  expenseFields,
   parseCreatedExpenseId,
   parseExpenseContext,
   parseStoredExpenseDraft,
   previewExpense,
+  validateExpenseDraft,
+  visibleExpenseErrors,
+  type ExpenseContext,
   type ExpenseDraft,
+  type ExpenseEditor,
+  type ExpenseField,
+  type ExpenseValidation,
 } from './expense-draft';
 import { readSessionCookie, validSessionCookie } from './cookies';
 import { createGroupSchema } from '@splitbook/shared/validators/group';
@@ -97,16 +106,23 @@ class RequestError extends Error {
   }
 }
 
+const rejectionMessages: Record<string, string> = {
+  INVALID_TAG: 'Choose an active Tag in this Group. Your entries are kept.',
+  INVALID_MEMBERS: 'Review the payer and participants: Group membership changed.',
+  CURRENCY_MISMATCH: 'The Group currency changed. Review the currency before saving.',
+  VALIDATION_ERROR: 'Check the amount, description, date, and participants before saving.',
+};
+
 function expenseRejectionMessage(error: unknown) {
-  const rejectionMessages: Record<string, string> = {
-    INVALID_TAG: 'Choose an active Tag in this Group. Your entries are kept.',
-    INVALID_MEMBERS: 'Review the payer and participants: Group membership changed.',
-    CURRENCY_MISMATCH: 'The Group currency changed. Review the currency before saving.',
-    VALIDATION_ERROR: 'Check the amount, description, date, and participants before saving.',
-  };
   return error instanceof RequestError && error.status === 422 && error.code
     ? rejectionMessages[error.code]
     : undefined;
+}
+
+/** Human copy only: parser and schema errors are never shown to members. */
+function expenseFailureMessage(error: unknown, fallback: string) {
+  if (error instanceof RequestError || error instanceof MoneyValidationError) return error.message;
+  return (error instanceof Error && rejectionMessages[error.message]) || fallback;
 }
 
 function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
@@ -1451,6 +1467,63 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
   };
 
+  const today = () => toDateParam(new Date(now()));
+  const revalidateExpense = (
+    validation: ExpenseValidation,
+    draft: ExpenseDraft,
+    context: ExpenseContext | null,
+  ): ExpenseValidation => ({
+    ...validation,
+    errors: visibleExpenseErrors(validateExpenseDraft(draft, context, today()), validation),
+  });
+  /** Explain every invalid field and request focus on the first; nothing is sent. */
+  const rejectInvalidExpense = (
+    editor: ExpenseEditor,
+    draft: ExpenseDraft,
+    context: ExpenseContext | null,
+  ) => {
+    const errors = validateExpenseDraft(draft, context, today());
+    const field = expenseFields.find((name) => errors[name]);
+    if (!field) return false;
+    publish({
+      ...snapshot,
+      expense: {
+        ...editor,
+        context,
+        status: 'editing',
+        message: expenseCorrectionSummary(errors),
+        validation: {
+          ...editor.validation,
+          submitted: true,
+          errors,
+          focus: { field, request: (editor.validation.focus?.request ?? 0) + 1 },
+        },
+      },
+    });
+    return true;
+  };
+  const touchExpenseField = (field: ExpenseField) => {
+    const editor = snapshot.expense;
+    if (
+      snapshot.screen !== 'expense' ||
+      editor.status !== 'editing' ||
+      !editor.draft ||
+      editor.validation.touched.includes(field)
+    )
+      return;
+    publish({
+      ...snapshot,
+      expense: {
+        ...editor,
+        validation: revalidateExpense(
+          { ...editor.validation, touched: [...editor.validation.touched, field] },
+          editor.draft,
+          editor.context,
+        ),
+      },
+    });
+  };
+
   const expenseNavigationBlocked = () =>
     (snapshot.screen === 'expense' &&
       (snapshot.expense.status === 'saving' || snapshot.expense.persistence !== 'saved')) ||
@@ -1542,6 +1615,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           requestedExpenseId: expenseId ?? null,
           receiptId: null,
           persistence: 'saved',
+          validation: emptyExpenseValidation(),
           message:
             record && record.draft.original?._id !== expenseId
               ? 'This Group already has an unfinished Expense draft. Resume it, or explicitly discard it before opening another Expense.'
@@ -1607,6 +1681,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         preview: previewExpense(draft),
         persistence: 'saving',
         message: null,
+        validation: revalidateExpense(snapshot.expense.validation, draft, snapshot.expense.context),
       },
     });
     try {
@@ -1845,6 +1920,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       editor.mutation
     )
       return;
+    if (kind === 'edit' && rejectInvalidExpense(editor, draft, editor.context)) return;
     const owner = generation,
       view = viewRequest;
     let mutation: MobileSnapshot['expense']['mutation'] = editor.mutation;
@@ -1859,6 +1935,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         !context.group.members.some((member) => member.user.id === lease.accountId)
       )
         throw new RequestError('You no longer have access to this Group.', 403);
+      // Tags and members may have changed since the draft opened.
+      if (kind === 'edit' && rejectInvalidExpense(snapshot.expense, draft, context)) return;
       const pending = {
         kind,
         revision: original.revision,
@@ -1961,7 +2039,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               : kind === 'delete'
                 ? 'delete-review'
                 : 'editing',
-          message: error instanceof Error ? error.message : 'Could not update this Expense.',
+          message: expenseFailureMessage(
+            error,
+            kind === 'delete'
+              ? 'Could not delete this Expense. It has not been changed.'
+              : 'Could not update this Expense. Your draft is kept.',
+          ),
         },
       });
       if (mutation) await reconcileExpense();
@@ -2012,9 +2095,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !storage
     )
       return;
+    const { groupId, draft } = editor;
+    // A retry resends its immutable attempt; only new input is checked locally first.
+    if (!editor.attempt && rejectInvalidExpense(editor, draft, editor.context)) return;
     const owner = generation;
     const view = viewRequest;
-    const { groupId, draft } = editor;
     publish({ ...snapshot, expense: { ...editor, status: 'saving', message: null } });
     let attempt = editor.attempt;
     let storing = false;
@@ -2029,6 +2114,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         !context.group.members.some((member) => member.user.id === lease.accountId)
       )
         throw new RequestError('You no longer have access to this Group.', 403);
+      if (!attempt && rejectInvalidExpense(snapshot.expense, draft, context)) return;
       publish({ ...snapshot, expense: { ...snapshot.expense, context } });
       if (!attempt) {
         const body = buildExpenseBody(draft, context);
@@ -2126,9 +2212,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             ? 'Could not save the submission on this device. No Expense was sent. Retry local storage before saving.'
             : attempt
               ? `${error instanceof RequestError ? `${error.message} ` : ''}This Expense may already be saved. Retry this same submission to confirm it; its amount and participants are locked until then.`
-              : error instanceof RequestError || error instanceof MoneyValidationError
-                ? error.message
-                : 'Check the amount, date, participants, currency, and active Tag. Your draft is still here.',
+              : expenseFailureMessage(
+                  error,
+                  'Could not prepare this Expense. Your draft is still here.',
+                ),
         },
       });
     } finally {
@@ -3106,6 +3193,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openExpense,
     resumeExpenseDraft,
     updateExpenseDraft,
+    touchExpenseField,
     restore,
     signIn,
     signInWithGoogle,

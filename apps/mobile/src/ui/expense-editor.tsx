@@ -1,7 +1,15 @@
 import { canEditExpense } from '../data/expense-record';
 import { ExpenseRecordView } from './expense-record-view';
-import { useState } from 'react';
-import { View, Pressable, Modal, ScrollView, KeyboardAvoidingView } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  AccessibilityInfo,
+  View,
+  Pressable,
+  Modal,
+  ScrollView,
+  KeyboardAvoidingView,
+  type TextInput,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import { formatCurrency } from '@splitbook/shared/currency';
@@ -10,8 +18,9 @@ import {
   expenseMoney,
   type ExpenseDraft,
   type ExpenseEditor as Editor,
+  type ExpenseField,
 } from '../data/expense-draft';
-import { Field } from './group-workflows';
+import { Field, FieldError } from './group-workflows';
 import { Button, Copy, Label, Loading, Notice, Panel } from './primitives';
 import { fonts, useTheme } from './theme';
 
@@ -41,9 +50,15 @@ export function ExpenseEditor({
   onReconcile,
   onReviewLatest,
   onAcceptCurrent,
+  onLeaveField,
+  onReveal,
 }: {
   state: Editor;
   onChange: (patch: Partial<ExpenseDraft>) => void;
+  /** Called when a field loses focus, so its correction can appear. */
+  onLeaveField: (field: ExpenseField) => void;
+  /** Scrolls the surrounding screen so this section is visible. */
+  onReveal: (section: View) => void;
   onSave: () => void;
   onResume: () => void;
   onDiscard: () => void;
@@ -59,6 +74,30 @@ export function ExpenseEditor({
   const theme = useTheme();
   const [details, setDetails] = useState(false);
   const [editor, setEditor] = useState<'payers' | 'split' | null>(null);
+  const sections = useRef<Partial<Record<ExpenseField, View | null>>>({});
+  const inputs = useRef<Partial<Record<ExpenseField, TextInput | null>>>({});
+  const corrections = useRef<Partial<Record<ExpenseField, View | null>>>({});
+  const focus = state.validation.focus;
+  useEffect(() => {
+    // Each rejected save asks once for the first invalid field; later edits never move focus.
+    if (!focus) return;
+    const section = sections.current[focus.field];
+    if (section) onReveal(section);
+    const input = inputs.current[focus.field];
+    const correction = corrections.current[focus.field];
+    if (input) input.focus();
+    else if (correction) AccessibilityInfo.sendAccessibilityEvent(correction, 'focus');
+  }, [focus?.request]);
+  const errors = state.validation.errors;
+  const section = (field: ExpenseField) => (node: View | null) => {
+    sections.current[field] = node;
+  };
+  const input = (field: ExpenseField) => (node: TextInput | null) => {
+    inputs.current[field] = node;
+  };
+  const correction = (field: ExpenseField) => (node: View | null) => {
+    corrections.current[field] = node;
+  };
   if (state.status === 'loading') return <Loading label="Opening your draft…" />;
   if (!state.draft)
     return (
@@ -100,6 +139,15 @@ export function ExpenseEditor({
         ? 'Shares'
         : `Amount (${draft.currency})`;
   const tag = context?.tags.find((item) => item.id === draft.tagId);
+  // Save stays available for incomplete input so it can explain what is missing.
+  const saveBlocked =
+    state.status === 'saving'
+      ? 'Sending this Expense. Keep this screen open until SplitBook confirms it.'
+      : state.persistence === 'error'
+        ? 'Save is unavailable until this draft is stored on this device. Retry saving the draft first.'
+        : state.persistence === 'saving'
+          ? 'Available once your latest entries are stored on this device.'
+          : null;
   const choice = (
     key: string,
     label: string,
@@ -220,24 +268,35 @@ export function ExpenseEditor({
           Connect to check the current members and Tags. You can still edit your saved text.
         </Copy>
       )}
+      <Copy style={{ fontSize: 13, color: theme.textSecondary }}>
+        Fields marked Required are needed to save. Category and notes are optional.
+      </Copy>
       <Panel>
-        <Field
-          label="Amount"
-          value={draft.amount}
-          maxLength={40}
-          keyboardType="decimal-pad"
-          editable={!locked}
-          onChangeText={(amount) => onChange({ amount })}
-        />
+        <View ref={section('amount')}>
+          <Field
+            label="Amount"
+            required
+            inputRef={input('amount')}
+            value={draft.amount}
+            maxLength={40}
+            keyboardType="decimal-pad"
+            editable={!locked}
+            error={errors.amount}
+            onBlur={() => onLeaveField('amount')}
+            onChangeText={(amount) => onChange({ amount })}
+          />
+        </View>
         <Copy style={{ fontFamily: fonts.mono }}>
           {draft.currency} · {draft.original ? 'Expense currency' : 'Group currency'}
         </Copy>
         {!draft.original && context && draft.currency !== context.group.defaultCurrency && (
           <>
-            <Copy accessibilityRole="alert">
-              This draft uses {draft.currency}; the Group now uses {context.group.defaultCurrency}.
-              Review the amount before choosing the new currency.
-            </Copy>
+            {!errors.amount && (
+              <Copy accessibilityRole="alert">
+                This draft uses {draft.currency}; the Group now uses {context.group.defaultCurrency}
+                . Review the amount before choosing the new currency.
+              </Copy>
+            )}
             <Button
               label={`Use ${context.group.defaultCurrency}`}
               secondary
@@ -247,47 +306,79 @@ export function ExpenseEditor({
           </>
         )}
       </Panel>
-      <Field
-        label="Description"
-        value={draft.description}
-        maxLength={200}
-        editable={!locked}
-        onChangeText={(description) => onChange({ description })}
-      />
-      <Field
-        label="Date"
-        hint="YYYY-MM-DD"
-        value={draft.date}
-        maxLength={10}
-        editable={!locked}
-        onChangeText={(date) => onChange({ date })}
-      />
-      <Panel>
-        <Copy style={{ fontFamily: fonts.semibold }}>Paid by</Copy>
-        <Copy>
-          {draft.multiPayer
-            ? `${draft.payers.length} ${draft.payers.length === 1 ? 'payer' : 'payers'}`
-            : name(draft.payerId)}
-        </Copy>
-        <Button
-          label="Edit payers"
-          secondary
-          disabled={locked}
-          onPress={() => setEditor('payers')}
+      <View ref={section('description')}>
+        <Field
+          label="Description"
+          required
+          hint="What was this for?"
+          inputRef={input('description')}
+          value={draft.description}
+          maxLength={200}
+          editable={!locked}
+          error={errors.description}
+          onBlur={() => onLeaveField('description')}
+          onChangeText={(description) => onChange({ description })}
         />
-        <Copy style={{ fontFamily: fonts.semibold }}>Split · {method.label}</Copy>
-        <Copy>{draft.participantIds.length} participants</Copy>
-        <Button label="Edit split" secondary disabled={locked} onPress={() => setEditor('split')} />
-        {invalidMembers && (
+      </View>
+      <View ref={section('date')}>
+        <Field
+          label="Date"
+          required
+          hint="Use YYYY-MM-DD."
+          inputRef={input('date')}
+          value={draft.date}
+          maxLength={10}
+          editable={!locked}
+          error={errors.date}
+          onBlur={() => onLeaveField('date')}
+          onChangeText={(date) => onChange({ date })}
+        />
+      </View>
+      <Panel>
+        <View ref={section('payers')} style={{ gap: 16 }}>
+          <Copy style={{ fontFamily: fonts.semibold }}>
+            Paid by<Copy style={{ color: theme.textSecondary }}> · Required</Copy>
+          </Copy>
+          <Copy>
+            {draft.multiPayer
+              ? `${draft.payers.length} ${draft.payers.length === 1 ? 'payer' : 'payers'}`
+              : name(draft.payerId)}
+          </Copy>
+          <FieldError ref={correction('payers')} message={errors.payers} />
+          <Button
+            label="Edit payers"
+            secondary
+            disabled={locked}
+            onPress={() => setEditor('payers')}
+          />
+        </View>
+        <View ref={section('split')} style={{ gap: 16 }}>
+          <Copy style={{ fontFamily: fonts.semibold }}>
+            Split · {method.label}
+            <Copy style={{ color: theme.textSecondary }}> · Required</Copy>
+          </Copy>
+          <Copy>{draft.participantIds.length} participants</Copy>
+          <FieldError ref={correction('split')} message={errors.split} />
+          <Button
+            label="Edit split"
+            secondary
+            disabled={locked}
+            onPress={() => setEditor('split')}
+          />
+        </View>
+        {invalidMembers && !errors.payers && !errors.split && (
           <Copy accessibilityRole="alert">
             A saved payer or participant is no longer in this Group. Open the editors to remove
             unavailable members.
           </Copy>
         )}
       </Panel>
-      <View style={{ gap: 8 }} accessibilityRole="radiogroup">
-        <Copy style={{ fontFamily: fonts.semibold }}>Tag · required</Copy>
-        {draft.tagId && context && (!tag || tag.isArchived || tag.isDeleted) ? (
+      <View ref={section('tag')} style={{ gap: 8 }} accessibilityRole="radiogroup">
+        <Copy style={{ fontFamily: fonts.semibold }}>
+          Tag<Copy style={{ color: theme.textSecondary }}> · Required</Copy>
+        </Copy>
+        <FieldError ref={correction('tag')} message={errors.tag} />
+        {!errors.tag && draft.tagId && context && (!tag || tag.isArchived || tag.isDeleted) ? (
           <Copy accessibilityRole="alert">
             {draft.original && draft.tagId === (draft.original.tagId ?? '')
               ? `Historical Tag: ${tag?.name ?? draft.original.tag}. This association is retained.`
@@ -339,9 +430,11 @@ export function ExpenseEditor({
           </>
         ) : (
           <Copy accessibilityRole="alert">
-            {draft.amount
-              ? allocationError
-              : 'Enter an amount and choose participants to review the allocation.'}
+            {errors.amount
+              ? 'Correct the amount above to review the allocation.'
+              : draft.amount
+                ? allocationError
+                : 'Enter an amount and choose participants to review the allocation.'}
           </Copy>
         )}
         <Copy style={{ fontSize: 13, color: theme.textSecondary }}>
@@ -349,7 +442,7 @@ export function ExpenseEditor({
         </Copy>
       </Panel>
       <Button
-        label={details ? 'Hide optional details' : 'Optional details'}
+        label={details ? 'Hide optional details' : 'Optional details: category and notes'}
         secondary
         onPress={() => setDetails(!details)}
       />
@@ -382,7 +475,11 @@ export function ExpenseEditor({
             ? 'Saving draft on this device…'
             : 'Draft has not been saved on this device'}
       </Copy>
-      {state.message && <Copy accessibilityRole="alert">{state.message}</Copy>}
+      {state.message && (
+        <Copy accessibilityRole="alert" accessibilityLiveRegion="polite">
+          {state.message}
+        </Copy>
+      )}
       {state.persistence === 'error' && !state.attempt && (
         <Button label="Retry saving draft" secondary onPress={() => onChange({})} />
       )}
@@ -392,19 +489,25 @@ export function ExpenseEditor({
       {(state.status === 'editing' ||
         state.status === 'saving' ||
         (!draft.original && state.status === 'uncertain')) && (
-        <Button
-          label={
-            state.status === 'saving'
-              ? 'Saving expense…'
-              : state.attempt
-                ? 'Retry same submission'
-                : draft.original
-                  ? 'Save changes'
-                  : 'Save expense'
-          }
-          onPress={onSave}
-          disabled={state.status === 'saving' || state.persistence !== 'saved'}
-        />
+        <>
+          <Button
+            label={
+              state.status === 'saving'
+                ? 'Saving expense…'
+                : state.attempt
+                  ? 'Retry same submission'
+                  : draft.original
+                    ? 'Save changes'
+                    : 'Save expense'
+            }
+            hint={saveBlocked ?? undefined}
+            onPress={onSave}
+            disabled={saveBlocked !== null}
+          />
+          {saveBlocked && state.persistence !== 'saving' && (
+            <Copy style={{ fontSize: 14, color: theme.textSecondary }}>{saveBlocked}</Copy>
+          )}
+        </>
       )}
       {state.status === 'editing' && <Button label="Discard draft" secondary onPress={onDiscard} />}
       {(state.attempt || state.mutation) && (
