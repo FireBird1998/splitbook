@@ -150,6 +150,21 @@ Notes on the table:
   - Three App tests advance the clock past the window before a foreground event.
   - The quiet cue assertions now expect "Saved {time} · updating".
 
+## Review fixes
+
+The independent review of `58787d7` found two P2 issues. Each was reproduced as a public-controller regression that fails at `58787d7` and passes after the fix.
+
+- **An explicit refresh stays explicit when a foreground refresh overlaps it.**
+  - **Cause:** a foreground refresh started during a pull reused the Group's still-fresh Expenses and Balances. It also superseded the pull, so the explicit refresh never read them again.
+  - **Fix:** explicit refreshes now mark their view as explicit until they finish. That covers a pull, Retry, section Retry and the post-write refresh, for `group:<id>`, `groups` and `home`. While a view is marked, overlapping reads of it never accept freshness and join the pending reads instead.
+  - **Regressions:** "keeps a pull explicit when a foreground refresh overlaps it …" ends with 2 Group, 2 Expense and 2 Balance reads, current Expenses and Balances of 31. A Groups/Home variant guards the same rule for Home.
+- **Balances follow a pending Month read that may add recurring Expenses.**
+  - **Cause:** returning to a recently read Month could read Balances while another Month's Expense read was still pending. That read materializes due recurring Expenses on the server, so the Balances missed it and were never read again, because the superseded read returned without follow-up.
+  - **Fix:** every Expense read is tracked until it settles, including superseded ones. When one settles, earlier Balance and Home reads become obsolete: a read still in flight is read again, and a completed one is no longer reused. If that Group is still on screen and nothing else is reading it, Balances are marked as updating and read once more. The selected Month and its Expenses are unchanged.
+  - **Why not wait instead:** waiting for pending Expense reads before every Balance read was tried first. It stalled Balances behind any slow superseded read, for up to the 20 s timeout, so the follow-up read replaced it.
+  - **Regressions:** "reads Balances only after a pending Month read …" covers a completed Balance read followed by the follow-up read. "reads Balances again when that pending Month read settles while they are still being read" covers an in-flight read being read again. Both end at 31 with September still selected.
+- **Checks:** mobile has 279 tests. Workspace typecheck, lint and Prettier passed.
+
 ## Not verified here
 
 - **Other environments:** a physical phone, TalkBack, large text and the dark theme were not checked for these states, and staging was not used.

@@ -427,6 +427,106 @@ describe('cached views and coalesced reads (#103)', () => {
     });
   });
 
+  it('keeps a pull explicit when a foreground refresh overlaps it, reading current Expenses and Balances', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    f.state.ledger += 1;
+    f.hold((path) => path === groupPath);
+    const pulling = controller.refresh('pull');
+    const read = await f.held.next(groupPath);
+    // Within the freshness window, but an explicit refresh of this Group is still running.
+    const foreground = controller.refresh('foreground');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    f.hold(() => false);
+    read.release(f.live());
+    await Promise.all([pulling, foreground]);
+    expect([f.reads(groupPath), f.reads(expenseReads), f.reads(balanceReads)]).toEqual([2, 2, 2]);
+    expect(controller.getSnapshot()).toMatchObject({
+      pull: false,
+      financial: {
+        expenses: { status: 'ready', data: [{ description: '2026-09 rent, ledger 1' }] },
+        balances: { status: 'ready', stale: false, data: [{ debts: [{ amount: 31 }] }] },
+      },
+    });
+  });
+
+  it('keeps a pull on Groups explicit when a foreground refresh overlaps it, reading current Home', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    f.state.ledger += 1;
+    f.hold((path) => path === '/api/groups');
+    const pulling = controller.refresh('pull');
+    const read = await f.held.next('/api/groups');
+    const foreground = controller.refresh('foreground');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    f.hold(() => false);
+    read.release(f.live());
+    await Promise.all([pulling, foreground]);
+    expect(controller.getSnapshot().home).toMatchObject({
+      status: 'ready',
+      data: [{ youOwe: 31 }],
+    });
+  });
+
+  it('reads Balances only after a pending Month read that may add recurring Expenses', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    f.hold((path, method) => method === 'GET' && monthOf(path) === '2026-08');
+    const august = controller.selectMonth('2026-08');
+    const held = await f.held.next(expenseReads);
+    // Back to the recently verified September while August's read is still pending.
+    const september = controller.selectMonth('2026-09');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(controller.getSnapshot().financial.expenses).toMatchObject({
+      month: '2026-09',
+      status: 'ready',
+    });
+    // August's read materializes a due recurring Expense before it answers.
+    f.state.ledger += 1;
+    f.hold(() => false);
+    held.release(f.live());
+    await Promise.all([august, september]);
+    expect(controller.getSnapshot().financial).toMatchObject({
+      month: '2026-09',
+      expenses: { month: '2026-09', data: [{ description: '2026-09 rent, ledger 0' }] },
+      balances: { status: 'ready', stale: false, data: [{ debts: [{ amount: 31 }] }] },
+    });
+    // Home, read afterwards, follows the same ledger.
+    await controller.back();
+    expect(controller.getSnapshot().home.data).toMatchObject([{ youOwe: 31 }]);
+  });
+
+  it('reads Balances again when that pending Month read settles while they are still being read', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    f.hold((path, method) => method === 'GET' && monthOf(path) === '2026-08');
+    const august = controller.selectMonth('2026-08');
+    const augustRead = await f.held.next(expenseReads);
+    f.hold((path) => path === balanceReads || monthOf(path) === '2026-08');
+    const september = controller.selectMonth('2026-09');
+    const balanceRead = await f.held.next(balanceReads);
+    const beforeAugust = f.answer(balanceRead.path);
+    f.state.ledger += 1;
+    f.hold(() => false);
+    augustRead.release(f.live());
+    await august;
+    // The Balance response began before August materialized: it is read again.
+    balanceRead.release(beforeAugust);
+    await september;
+    expect(f.reads(balanceReads)).toBe(3);
+    expect(controller.getSnapshot().financial).toMatchObject({
+      month: '2026-09',
+      balances: { status: 'ready', stale: false, data: [{ debts: [{ amount: 31 }] }] },
+    });
+  });
+
   it('switches back to a recent Month without reading, and never reuses Balances older than an Expense read', async () => {
     const f = fixture();
     const controller = f.create();

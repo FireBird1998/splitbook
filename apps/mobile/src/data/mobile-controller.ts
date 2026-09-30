@@ -244,6 +244,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** Bumped when a confirmed change, denial or newer ledger read makes a scope's responses obsolete. */
   const versions = new Map<string, number>();
   const invalidatedAt = new Map<string, number>();
+  /**
+   * Views ('groups', 'home', 'group:<id>') with an explicit refresh still running: a pull,
+   * Retry or confirmed change. Overlapping calls for those views never accept freshness.
+   */
+  let explicit = new Map<string, number>();
+  /** Expense reads in flight, by Group: each may materialize recurring Expenses on the server. */
+  let materializing = new Map<string, Set<Promise<unknown>>>();
   let storeQueue: Promise<unknown> = Promise.resolve();
   let cleanupRequired = false;
   let accountCleanupRequired = false;
@@ -294,6 +301,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     inflight.clear();
     versions.clear();
     invalidatedAt.clear();
+    explicit = new Map();
+    materializing = new Map();
     viewRequest += 1;
     requests.forEach((request) => request.abort());
     requests.clear();
@@ -711,13 +720,86 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const ledgerChanged = (groupId: string) =>
     invalidateReads(`ledger:${groupId}`, `balances:${groupId}`, 'home');
 
+  /** The view a display read belongs to, for explicit refresh intent. */
+  const viewOf = (path: string) =>
+    path === '/api/groups' || path === '/api/user/balances'
+      ? path === '/api/groups'
+        ? 'groups'
+        : 'home'
+      : `group:${/^\/api\/groups\/([a-f\d]{24})/i.exec(path)?.[1]}`;
+
+  /** Runs an explicit refresh; while it runs, overlapping reads of these views read again too. */
+  const explicitly = async <T>(views: string[], run: () => Promise<T>): Promise<T> => {
+    const running = explicit;
+    for (const view of views) running.set(view, (running.get(view) ?? 0) + 1);
+    try {
+      return await run();
+    } finally {
+      for (const view of views) {
+        const left = (running.get(view) ?? 1) - 1;
+        if (left > 0) running.set(view, left);
+        else running.delete(view);
+      }
+    }
+  };
+
   /** Reusable without a request: verified this session, recently, and never while offline. */
   const freshRead = (path: string) => {
     const saved = reads.get(path);
     const age = saved ? now() - saved.refreshedAt : Infinity;
-    return saved && !offlineSession && !snapshot.offline.active && age >= 0 && age < freshness
+    return saved &&
+      !offlineSession &&
+      !snapshot.offline.active &&
+      // An explicit refresh of this view is still running: join it instead.
+      !explicit.has(viewOf(path)) &&
+      age >= 0 &&
+      age < freshness
       ? saved
       : null;
+  };
+
+  /**
+   * An Expense read may materialize recurring Expenses whenever it reaches the server,
+   * even after its view moved on. When it settles, Balances and Home read before then are
+   * obsolete: they are not reused, and a read of them still in flight is read again.
+   */
+  const trackExpenseRead = (groupId: string, owner: number, read: Promise<unknown>) => {
+    const running = materializing;
+    const pending = running.get(groupId) ?? new Set<Promise<unknown>>();
+    running.set(groupId, pending);
+    pending.add(read);
+    const settle = () => {
+      pending.delete(read);
+      if (!pending.size && running.get(groupId) === pending) running.delete(groupId);
+      if (current(owner)) invalidateReads(`balances:${groupId}`, 'home');
+    };
+    read.then(settle, settle);
+  };
+  /**
+   * A superseded Expense read has settled. If its Group is still on screen with nothing
+   * else reading it, re-read Balances so they include anything that read materialized.
+   * The selected Month and its Expenses are unchanged.
+   */
+  const followSupersededExpenseRead = async (groupId: string, owner: number) => {
+    const { financial } = snapshot;
+    if (
+      !current(owner) ||
+      snapshot.screen !== 'group' ||
+      snapshot.detail.id !== groupId ||
+      materializing.has(groupId) ||
+      financial.expenses.status === 'loading' ||
+      financial.expenses.moreStatus === 'loading' ||
+      financial.balances.status === 'loading'
+    )
+      return;
+    publish({
+      ...snapshot,
+      financial: {
+        ...financial,
+        balances: { ...financial.balances, stale: financial.balances.data !== null },
+      },
+    });
+    await loadBalances(false);
   };
 
   /**
@@ -903,7 +985,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     );
 
   /** `reuse` accepts a list verified within the display freshness window. */
-  const loadGroups = async (owner: number, reuse = false) => {
+  const loadGroups = (owner: number, reuse = false) =>
+    reuse ? listGroups(owner, true) : explicitly(['groups'], () => listGroups(owner, false));
+  const listGroups = async (owner: number, reuse: boolean) => {
     assertCurrent(owner);
     const view = ++viewRequest;
     const path = '/api/groups';
@@ -1025,7 +1109,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     staleReads.has(path) ? (staleReads.get(path) ?? null) : (reads.get(path)?.refreshedAt ?? now());
 
   /** `reuse` accepts figures verified within the display freshness window. */
-  const loadHome = async (reuse: boolean) => {
+  const readHome = async (reuse: boolean) => {
     if (snapshot.auth.status !== 'authenticated') return;
     const owner = generation;
     const read = ++homeRequest;
@@ -1085,6 +1169,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
     }
   };
+  /** `reuse` accepts figures verified within the display freshness window. */
+  const loadHome = (reuse: boolean) =>
+    reuse ? readHome(true) : explicitly(['home'], () => readHome(false));
   /** Refresh and Retry always read again. */
   const refreshHome = () => loadHome(false);
 
@@ -1289,8 +1376,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     return true;
   };
 
-  /** `reuse` (navigation, foreground) accepts reads verified within the display freshness window. */
-  const openGroup = async (id: string, reuse = true) => {
+  /**
+   * `reuse` (navigation, foreground) accepts reads verified within the display freshness
+   * window. An explicit refresh keeps the Group explicit until it finishes, so overlapping
+   * foreground refreshes join its reads instead of reusing older figures.
+   */
+  const openGroup = (id: string, reuse = true) =>
+    reuse ? showGroup(id, true) : explicitly([`group:${id}`], () => showGroup(id, false));
+  const showGroup = async (id: string, reuse: boolean) => {
     if (snapshot.auth.status !== 'authenticated') return;
     const owner = generation;
     const previousMonth = snapshot.financial.groupId === id ? snapshot.financial.month : undefined;
@@ -1518,8 +1611,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
     }
   };
-  /** Retry, and every Balance read after an Expense read, reads again. */
-  const refreshBalances = () => loadBalances(false);
+  /** Retry always reads again, and keeps the Group explicit while it does. */
+  const refreshBalances = () =>
+    explicitly([`group:${snapshot.detail.data?.id}`], () => loadBalances(false));
 
   const expensePath = (groupId: string, category: string, month: string | null, page: number) => {
     const params = new URLSearchParams({ page: String(page), limit: '20' });
@@ -1649,6 +1743,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const wanted = () => current(owner) && view === viewRequest && read === financialRequest;
     try {
       const reading = readCached(path, owner, parse, wanted);
+      // Even if this view moves on, Balances and Home read before it settles are replaced.
+      trackExpenseRead(group.id, owner, reading);
       reading.catch(() => undefined);
       // A Month not on screen shows its saved copy, with its own time, while it is read again.
       if (!append && !shown.data.length && shown.summary === null) {
@@ -1669,7 +1765,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           });
       }
       const page = await reading;
-      if (!current(owner) || view !== viewRequest || read !== financialRequest) return;
+      if (!current(owner) || view !== viewRequest || read !== financialRequest)
+        return await followSupersededExpenseRead(group.id, owner);
       if (page.pagination.page !== pageNumber) throw new Error('Unexpected expense page.');
       const existing = append ? expenses.data : [];
       const seen = new Set(existing.map((expense) => expense.id));
@@ -1690,15 +1787,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           },
         },
       });
-      await refreshBalances();
+      await loadBalances(false);
     } catch (error) {
-      if (
-        !current(owner) ||
-        view !== viewRequest ||
-        read !== financialRequest ||
-        error instanceof Superseded
-      )
-        return;
+      if (!current(owner) || error instanceof Superseded) return;
+      // A superseded read that failed may still have reached the server.
+      if (view !== viewRequest || read !== financialRequest)
+        return await followSupersededExpenseRead(group.id, owner);
       if (dropDeniedGroup(group.id, error)) return;
       const unavailableOffline =
         error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
@@ -1736,11 +1830,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // A missing cached Month/page says nothing about all-time balances. Load
       // their independent cache only after the expense read has settled, keeping
       // recurring-materialization ordering and authorization checks intact.
-      if (unavailableOffline) await refreshBalances();
+      if (unavailableOffline) await loadBalances(false);
     }
   };
 
-  const refreshExpenses = () => readExpenses(false);
+  /** Retry always reads again, and keeps the Group explicit while it does. */
+  const refreshExpenses = () =>
+    explicitly([`group:${snapshot.detail.data?.id}`], () => readExpenses(false));
   const loadMoreExpenses = () => readExpenses(true);
 
   const readActivity = async (append: boolean) => {
@@ -3625,8 +3721,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.screen === 'group' && snapshot.detail.id)
       return openGroup(snapshot.detail.id, reuse);
     const owner = generation;
-    await loadGroups(owner, reuse);
-    if (current(owner)) await loadHome(reuse);
+    const groupsThenHome = async () => {
+      await loadGroups(owner, reuse);
+      if (current(owner)) await loadHome(reuse);
+    };
+    // An explicit refresh keeps both views explicit until Home has been read too.
+    return reuse ? groupsThenHome() : explicitly(['groups', 'home'], groupsThenHome);
   };
 
   const signOut = async () => {
