@@ -243,7 +243,7 @@ describe('rendered refresh feedback', () => {
     const expenses = hold();
     use((path) => (path.includes('/expenses?') ? expenses.respond() : undefined));
     const root = await render(controller);
-    const refresh = controller.refresh('background');
+    const refresh = controller.refresh();
     await expenses.reached;
     await flush();
     const shown = text(root());
@@ -277,7 +277,7 @@ describe('rendered refresh feedback', () => {
     use((path) => (path.includes('/expenses?') ? json({}, 503) : undefined));
     const root = await render(controller);
     await act(async () => {
-      await controller.refresh('background');
+      await controller.refresh();
     });
     const shown = text(root());
     expect(shown).toContain('Groceries');
@@ -300,7 +300,7 @@ describe('rendered refresh feedback', () => {
     use((path) => (path === '/api/user/balances' ? json({}, 503) : undefined));
     const root = await render(controller);
     await act(async () => {
-      await controller.refresh('background');
+      await controller.refresh();
     });
     expect(text(root())).toContain('You owe');
     expect(text(root())).toContain(`Showing your balances from ${verifiedAt}.`);

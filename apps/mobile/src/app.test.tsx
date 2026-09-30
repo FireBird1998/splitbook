@@ -324,10 +324,24 @@ describe('App refresh rendering', () => {
     expect(shown).toContain('You owe Alex');
     expect(app.refreshControl().refreshing).toBe(false);
 
-    app.use(() => undefined);
-    await app.press('Retry Group');
-    expect(app.text()).not.toContain('Showing Maple House from');
+    // A retry is not a pull: it keeps the figures and shows the quiet header status only.
+    const retried = hold();
+    app.use((path) => (path === `/api/groups/${groupId}` ? retried.respond() : undefined));
+    app.pressable('Retry Group').props.onPress();
+    await retried.reached;
+    await settle();
+    expect(app.refreshControl().refreshing).toBe(false);
+    expect(app.text()).toContain('Updating…');
     expect(app.text()).toContain('September groceries');
+    expect(app.text()).toContain('You owe Alex');
+
+    app.use(() => undefined);
+    retried.release(json({ data: group, status: 200 }));
+    await settle();
+    expect(app.text()).not.toContain('Showing Maple House from');
+    expect(app.text()).not.toContain('Updating…');
+    expect(app.text()).toContain('September groceries');
+    expect(app.refreshControl().refreshing).toBe(false);
   });
 
   it('turns on the pull indicator for a pull but never for an automatic refresh', async () => {
