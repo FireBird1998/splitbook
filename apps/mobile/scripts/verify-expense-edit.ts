@@ -109,12 +109,12 @@ async function run() {
         const persisted = await drafts.load();
         assert.equal(
           persisted.mutation.revision,
-          Number(new Headers(init.headers).get('If-Match')),
+          Number(new Headers(init.headers).get('X-Splitbook-Revision')),
         );
         assert.equal(persisted.mutation.body, String(init.body ?? ''));
         writes.push({
           method: init.method!,
-          revision: new Headers(init.headers).get('If-Match'),
+          revision: new Headers(init.headers).get('X-Splitbook-Revision'),
           body: String(init.body ?? ''),
         });
       }

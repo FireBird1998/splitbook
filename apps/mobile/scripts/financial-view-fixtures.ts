@@ -85,7 +85,7 @@ export class FixtureActor {
       headers: {
         Origin: this.origin,
         Accept: 'application/json',
-        ...(revision === undefined ? {} : { 'If-Match': String(revision) }),
+        ...(revision === undefined ? {} : { 'X-Splitbook-Revision': String(revision) }),
         ...(this.cookie ? { Cookie: this.cookie } : {}),
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         ...(method === 'POST' && path.endsWith('/expenses')

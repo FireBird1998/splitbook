@@ -2,6 +2,7 @@ import connectDB from '@/lib/db';
 import Expense from '@/lib/models/Expense';
 import Settlement from '@/lib/models/Settlement';
 import Group from '@/lib/models/Group';
+import '@/lib/models/User'; // Register the population target in cold balance-route workers.
 import { calculateNetBalances, simplifyDebts } from '@splitbook/shared/debt-simplifier';
 import { aggregateCurrencyBalances } from '@splitbook/shared/dashboard';
 import { assertStoredExpenseMoney } from '@splitbook/shared/exact-money';

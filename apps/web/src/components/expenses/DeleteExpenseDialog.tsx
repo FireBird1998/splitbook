@@ -38,7 +38,7 @@ export default function DeleteExpenseDialog({
     try {
       const res = await fetch(`/api/groups/${groupId}/expenses/${expense._id}`, {
         method: 'DELETE',
-        headers: { 'If-Match': String(expense.revision ?? 0) },
+        headers: { 'X-Splitbook-Revision': String(expense.revision ?? 0) },
       });
 
       if (!res.ok) {

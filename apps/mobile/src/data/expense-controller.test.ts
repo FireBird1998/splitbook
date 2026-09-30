@@ -174,6 +174,41 @@ const savedExpense = {
 };
 
 describe('native Expense creation and editing', () => {
+  it('confirms an edit through a host that evaluates HTTP If-Match preconditions', async () => {
+    let updated = false;
+    let writes = 0;
+    const { controller } = setup((path, init) => {
+      if (!path.endsWith(`/${expenseId}`)) return;
+      if (init.method === 'PATCH') {
+        writes++;
+        updated = true;
+        const headers = new Headers(init.headers);
+        // Staging commits the route's write but replaces its response with a host 412.
+        if (headers.has('If-Match'))
+          return Promise.resolve(new Response('PRECONDITION_FAILED', { status: 412 }));
+        expect(headers.get('X-Splitbook-Revision')).toBe('3');
+      }
+      return Promise.resolve(
+        json({
+          data: {
+            ...savedExpense,
+            revision: updated ? 4 : 3,
+            description: updated ? 'Updated dinner' : savedExpense.description,
+          },
+          status: 200,
+        }),
+      );
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Updated dinner' });
+    await controller.saveExpense();
+    expect(writes).toBe(1);
+    expect(controller.getSnapshot().expense.message).toBe('Expense updated.');
+    expect(controller.getSnapshot().expense.mutation).toBeNull();
+  });
+
   it('recovers a deleted historical Expense with missing member identities after restart', async () => {
     let deleted = false,
       offline = false,
@@ -395,7 +430,7 @@ describe('native Expense creation and editing', () => {
     const { controller } = setup((path, init) => {
       if (path.endsWith(`/${expenseId}`)) {
         if (init.method === 'DELETE') {
-          writes.push(new Headers(init.headers).get('If-Match')!);
+          writes.push(new Headers(init.headers).get('X-Splitbook-Revision')!);
           deleted = true;
           return Promise.resolve(
             json({ status: 200, data: { revision: 4, message: 'Expense deleted' } }),
@@ -433,7 +468,7 @@ describe('native Expense creation and editing', () => {
     const { controller, create } = setup((path, init) => {
       if (path.endsWith(`/${expenseId}`)) {
         if (init.method === 'PATCH') {
-          writes.push(new Headers(init.headers).get('If-Match')!);
+          writes.push(new Headers(init.headers).get('X-Splitbook-Revision')!);
           if (writes.length === 1) {
             revision = 4;
             return Promise.resolve(json({ code: 'STALE_REVISION', status: 409 }, 409));
@@ -489,7 +524,7 @@ describe('native Expense creation and editing', () => {
           writes.push({
             method: init.method,
             body,
-            revision: new Headers(init.headers).get('If-Match'),
+            revision: new Headers(init.headers).get('X-Splitbook-Revision'),
           });
           return Promise.resolve(
             json({ data: { ...savedExpense, ...body, revision: 4 }, status: 200 }),
