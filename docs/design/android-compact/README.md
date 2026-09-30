@@ -26,16 +26,16 @@ Colours are the shared semantic tokens from `@splitbook/shared/design-tokens`, u
 
 ### Expense form: keyboard, corrections and sheets
 
-| Screen                                                                         | What it shows                                                                              |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| [Keyboard open](./screens/07-keyboard-open.png)                                | Amount focused on the decimal keypad; the Save bar rides above the keyboard                |
-| [Corrections](./screens/08-corrections.png)                                    | Linked error summary, errors beside each control, no silent rounding or Tag substitution   |
-| [Who paid sheet](./screens/09-who-paid-sheet.png)                              | One person or several people, remainder and progress, "Give the rest to …"                 |
-| [Split sheet](./screens/10-split-sheet.png)                                    | Equal, Amounts, Percentage and Shares; checkboxes, steppers, rounding note                 |
-| [Date sheet](./screens/11-date-sheet.png)                                      | Today and Yesterday, and the built-in month calendar                                       |
-| [Tag sheet](./screens/12-tag-sheet.png)                                        | Active Tags only, with search                                                              |
-| [Edit, changed by someone else](./screens/29-edit-changed-by-someone-else.png) | Conflict comparison: "Keep my version for review" or "Use the saved version"               |
-| [Receipt suggestion](./screens/33-receipt-suggestion.png)                      | Scan icon in the Amount row and the suggestion chip (only while the experiment is enabled) |
+| Screen                                                                         | What it shows                                                                                                                      |
+| ------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| [Keyboard open](./screens/07-keyboard-open.png)                                | Amount focused on the decimal keypad; the Save bar rides above the keyboard                                                        |
+| [Corrections](./screens/08-corrections.png)                                    | Linked error summary, errors beside each control, no silent rounding or Tag substitution                                           |
+| [Who paid sheet](./screens/09-who-paid-sheet.png)                              | One person or several people, remainder and progress, "Give the rest to …"                                                         |
+| [Split sheet](./screens/10-split-sheet.png)                                    | Equal, Amounts, Percentage and Shares; checkboxes, steppers, rounding note                                                         |
+| [Date sheet](./screens/11-date-sheet.png)                                      | Today and Yesterday, and the built-in month calendar                                                                               |
+| [Tag sheet](./screens/12-tag-sheet.png)                                        | Active Tags only, with search                                                                                                      |
+| [Edit, changed by someone else](./screens/29-edit-changed-by-someone-else.png) | Conflict comparison: "Keep my version for review" or "Use the saved version"                                                       |
+| [Receipt suggestion](./screens/33-receipt-suggestion.png)                      | Scan icon in the Amount row and the suggestion chip. Parked for now ([#130](https://github.com/FireBird1998/splitbook/issues/130)) |
 
 ### Loading, offline and recovery states
 
@@ -165,6 +165,7 @@ All sizes are in dp and scale with the Android font size. Layout boxes do not sc
 - A rounding note appears only when rounding happened.
 - The Save label includes the amount once it is valid.
 - Discard draft lives in ⋮, behind a confirmation.
+- Receipt scanning is parked ([#130](https://github.com/FireBird1998/splitbook/issues/130)). The scan icon in the Amount row of the Add expense screenshots is not part of the compact form until scanning resumes; the Amount row ends at the input.
 
 ### States
 
