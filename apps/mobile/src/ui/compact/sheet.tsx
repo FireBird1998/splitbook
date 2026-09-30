@@ -73,7 +73,6 @@ export function BottomSheet({
     >
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Pressable
-          testID="sheet-scrim"
           accessibilityRole="button"
           accessibilityLabel={`Close ${title}, keeping your entries`}
           onPress={onDone}

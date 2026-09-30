@@ -273,7 +273,7 @@ export function TileGrid({ children }: { children: ReactNode }) {
         return acc;
       }, []);
   return (
-    <View style={{ gap: space.gap }} testID={large ? 'tile-grid-single' : 'tile-grid-double'}>
+    <View style={{ gap: space.gap }}>
       {rows.map((row, index) => (
         <View key={index} style={{ flexDirection: 'row', gap: space.gap }}>
           {row.map((item, column) => (
@@ -299,7 +299,6 @@ export function SummaryStats({ stats }: { stats: SummaryStat[] }) {
   const large = useLargeText();
   return (
     <View
-      testID={large ? 'summary-stats-single' : 'summary-stats-row'}
       style={{
         flexDirection: large ? 'column' : 'row',
         gap: large ? 6 : space.gap,

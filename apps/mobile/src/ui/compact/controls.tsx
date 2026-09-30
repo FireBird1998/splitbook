@@ -177,7 +177,10 @@ export interface SegmentOption<T extends string> {
   label: string;
 }
 
-/** A single choice between two or three options, e.g. "One person" / "Several people". */
+/**
+ * A single choice between two or three options, e.g. "One person" / "Several people".
+ * Each option's touch area fills its share of the track, so the 44 pill gets a 50 target.
+ */
 export function SegmentedControl<T extends string>({
   label,
   options,
@@ -196,8 +199,7 @@ export function SegmentedControl<T extends string>({
       accessibilityLabel={label}
       style={{
         flexDirection: 'row',
-        gap: 3,
-        padding: 3,
+        paddingHorizontal: 1.5,
         borderRadius: radius.tile,
         backgroundColor: theme.surfaceMuted,
       }}
@@ -211,22 +213,25 @@ export function SegmentedControl<T extends string>({
             accessibilityLabel={option.label}
             accessibilityState={{ checked: selected }}
             onPress={() => onChange(option.value)}
-            style={{
-              flex: 1,
-              minHeight: touch.dense,
-              borderRadius: 10,
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: selected ? theme.surface : 'transparent',
-            }}
+            style={{ flex: 1, paddingVertical: 3, paddingHorizontal: 1.5 }}
           >
-            <CompactText
-              weight="semibold"
-              tone={selected ? 'primary' : 'secondary'}
-              style={{ fontSize: 14 }}
+            <View
+              style={{
+                minHeight: touch.dense,
+                borderRadius: 10,
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: selected ? theme.surface : 'transparent',
+              }}
             >
-              {option.label}
-            </CompactText>
+              <CompactText
+                weight="semibold"
+                tone={selected ? 'primary' : 'secondary'}
+                style={{ fontSize: 14 }}
+              >
+                {option.label}
+              </CompactText>
+            </View>
           </Pressable>
         );
       })}

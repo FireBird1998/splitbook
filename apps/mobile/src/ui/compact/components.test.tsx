@@ -292,6 +292,8 @@ describe('Feedback', () => {
 });
 
 describe('Large text', () => {
+  // The reflow itself (one column from 130%) is layout, so it is checked on a device; these
+  // tests pin what a reader relies on at every scale: nothing is dropped, relabelled or reordered.
   const tiles = (
     <TileGrid>
       <SelectorTile icon="calendar-outline" label="Date" value="Today" onPress={vi.fn()} />
@@ -309,31 +311,27 @@ describe('Large text', () => {
       ]}
     />
   );
-  const rowsOf = (root: ReactTestInstance, testID: string) =>
-    one(hosts(root, (p) => p.testID === testID)).children as ReactTestInstance[];
 
-  it('keeps tiles two per row and stats side by side up to 115%', () => {
-    screen.fontScale = 1.15;
-    const root = render(
-      <>
-        {tiles}
-        {stats}
-      </>,
-    );
-    expect(rowsOf(root, 'tile-grid-double')).toHaveLength(2);
-    one(hosts(root, (p) => p.testID === 'summary-stats-row'));
-  });
-
-  it('switches tiles and stats to one column at 130%', () => {
-    screen.fontScale = 1.3;
-    const root = render(
-      <>
-        {tiles}
-        {stats}
-      </>,
-    );
-    expect(rowsOf(root, 'tile-grid-single')).toHaveLength(4);
-    one(hosts(root, (p) => p.testID === 'summary-stats-single'));
-    one(hosts(root, (p) => p.accessibilityLabel === 'Your share: ₹6,140.00'));
-  });
+  it.each([1, 1.15, 1.3, 2])(
+    'keeps every tile a button and every stat announced, in order, at %sx text',
+    (fontScale) => {
+      screen.fontScale = fontScale;
+      const root = render(
+        <>
+          {tiles}
+          {stats}
+        </>,
+      );
+      expect(byRole(root, 'button').map((tile) => tile.props.accessibilityLabel)).toEqual([
+        'Date: Today',
+        'Paid by: You',
+        'Split: Equally · 3',
+        'Tag: Groceries',
+      ]);
+      expect(
+        hosts(root, (p) => p.accessible === true).map((stat) => stat.props.accessibilityLabel),
+      ).toEqual(['Spent: ₹18,420.00', 'Your share: ₹6,140.00', 'You paid: ₹5,210.00']);
+      expect(text(root)).toContain('Your share ₹6,140.00');
+    },
+  );
 });

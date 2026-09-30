@@ -8,6 +8,11 @@ describe('large text threshold', () => {
     expect(isLargeText(1.3)).toBe(true);
     expect(isLargeText(2)).toBe(true);
   });
+
+  it('treats the scales Android reports as 32-bit floats as the settings they come from', () => {
+    expect(isLargeText(1.149999976158142)).toBe(false);
+    expect(isLargeText(1.2999999523162842)).toBe(true);
+  });
 });
 
 describe('sheet swipe dismissal', () => {

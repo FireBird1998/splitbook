@@ -38,7 +38,10 @@ export const moneySizes: Record<MoneySize, TextStyle> = {
 
 /** At or above this Android font scale, tile grids and summary stats use one column. */
 export const LARGE_TEXT_SCALE = 1.3;
-export const isLargeText = (fontScale: number) => fontScale >= LARGE_TEXT_SCALE;
+// Android reports the scale as a 32-bit float (130% arrives as 1.2999999523…), so compare
+// whole percentages rather than the raw value.
+export const isLargeText = (fontScale: number) =>
+  Math.round(fontScale * 100) >= Math.round(LARGE_TEXT_SCALE * 100);
 
 /** A downward drag dismisses a sheet (which behaves like Done) when it travels or flings far enough. */
 export const SHEET_DISMISS_DISTANCE = 80;

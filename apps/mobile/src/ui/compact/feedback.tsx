@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Pressable, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
-import { radius } from './scale';
+import { radius, touch } from './scale';
 import { CompactText } from './text';
 
 export type BannerTone = 'info' | 'warning' | 'error' | 'offline';
@@ -17,6 +17,8 @@ const bannerIcons: Record<BannerTone, IconName> = {
 /**
  * A compact message in context. Info marks an ordinary draft; warning marks a save that may
  * already be recorded or a conflict; error lists corrections; offline marks saved figures.
+ * The headline (the title, or the message when there is none) uses the tone's status
+ * foreground; the explanation under a title stays secondary so inline links stand out.
  * Warning and error interrupt screen readers; info and offline are announced politely.
  */
 export function Banner({
@@ -55,11 +57,15 @@ export function Banner({
       <Icon name={bannerIcons[tone]} size={20} color={colors[1]} />
       <View style={{ flex: 1, gap: 2 }}>
         {title ? (
-          <CompactText variant="small" weight="semibold">
+          <CompactText variant="small" weight="semibold" style={{ color: colors[1] }}>
             {title}
           </CompactText>
         ) : null}
-        <CompactText variant="small" tone={title ? 'secondary' : 'primary'}>
+        <CompactText
+          variant="small"
+          tone="secondary"
+          style={title ? undefined : { color: colors[1] }}
+        >
           {message}
         </CompactText>
         {children ? (
@@ -155,7 +161,7 @@ export function Snackbar({
           accessibilityRole="button"
           accessibilityLabel={action.label}
           onPress={action.onPress}
-          style={{ minHeight: 44, paddingHorizontal: 12, justifyContent: 'center' }}
+          style={{ minHeight: touch.min, paddingHorizontal: 12, justifyContent: 'center' }}
         >
           <CompactText weight="semibold" style={{ color: theme.brand.bg, fontSize: 14 }}>
             {action.label}

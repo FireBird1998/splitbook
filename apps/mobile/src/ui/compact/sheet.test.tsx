@@ -93,8 +93,12 @@ describe('Bottom sheet dismissal keeps entries', () => {
 
   it('tapping outside behaves like Done and says entries are kept', () => {
     const { root, onDone } = sheet();
-    const scrim = host(root, (p) => p.testID === 'sheet-scrim');
-    expect(scrim.props.accessibilityLabel).toBe('Close Tag, keeping your entries');
+    const scrim = host(
+      root,
+      (p) =>
+        p.accessibilityRole === 'button' &&
+        p.accessibilityLabel === 'Close Tag, keeping your entries',
+    );
     act(() => {
       scrim.props.onPress();
     });
