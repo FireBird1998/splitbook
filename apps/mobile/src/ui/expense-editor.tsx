@@ -1,44 +1,54 @@
 import { canEditExpense } from '../data/expense-record';
 import { ExpenseRecordView } from './expense-record-view';
-import { useEffect, useRef, useState } from 'react';
-import {
-  AccessibilityInfo,
-  View,
-  Pressable,
-  Modal,
-  ScrollView,
-  KeyboardAvoidingView,
-  type TextInput,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
+import { toDateParam } from '@splitbook/shared/date';
 import {
+  expenseFieldLabels,
+  expenseFields,
   expenseMoney,
   type ExpenseDraft,
   type ExpenseEditor as Editor,
   type ExpenseField,
 } from '../data/expense-draft';
-import { Field, FieldError } from './group-workflows';
-import { Button, Copy, Label, Loading, Notice, Panel } from './primitives';
-import { Banner } from './compact/feedback';
+import { Field } from './group-workflows';
+import { Button, Copy, Icon, Loading, Notice, Panel } from './primitives';
+import {
+  Banner,
+  BottomSheet,
+  Card,
+  Chip,
+  CompactButton,
+  CompactText,
+  FieldMarker,
+  IconButton,
+  IconTile,
+  ListRow,
+  TopBar,
+} from './compact';
+import { AllocationEditor } from './allocation-editors';
+import {
+  AmountDescriptionCard,
+  ExpenseTiles,
+  OptionalDetails,
+  SaveBar,
+  WhoOwesWhat,
+  expenseDateLabel,
+  splitSummary,
+} from './expense-form';
 import { fonts, useTheme } from './theme';
 
-const methods = [
-  { id: 'equal', label: 'Equal', hint: 'Everyone has an equal share.' },
-  { id: 'unequal', label: 'Unequal', hint: 'Enter each person’s amount in the Group currency.' },
-  { id: 'percentage', label: 'Percentage', hint: 'Enter percentages that add up to 100.' },
-  {
-    id: 'shares',
-    label: 'Shares',
-    hint: 'Enter whole-number weights. For example, 2 shares and 1 share split the cost 2:1.',
-  },
-  { id: 'exact', label: 'Exact', hint: 'Enter exact amounts that add up to the Expense total.' },
-] as const;
-
+/**
+ * The Expense task, full screen without the Group's bottom navigation: the compact form for
+ * adding and editing, and the saved record. Close and Android Back keep the draft.
+ */
 export function ExpenseEditor({
   state,
+  currentUserId,
+  onClose,
+  notice,
   onChange,
   onSave,
   onResume,
@@ -55,11 +65,17 @@ export function ExpenseEditor({
   onReveal,
 }: {
   state: Editor;
+  /** Shown as "You" in the form. */
+  currentUserId?: string;
+  /** Close or Back: returns to the Group and keeps the draft on this device. */
+  onClose?: () => void;
+  /** Shown above the content, such as the offline notice. */
+  notice?: ReactNode;
   onChange: (patch: Partial<ExpenseDraft>) => void;
   /** Called when a field loses focus, so its correction can appear. */
   onLeaveField: (field: ExpenseField) => void;
-  /** Scrolls the surrounding screen so this section is visible. */
-  onReveal: (section: View) => void;
+  /** Told whenever a section is scrolled into view. */
+  onReveal?: (section: View) => void;
   onSave: () => void;
   onResume: () => void;
   onDiscard: () => void;
@@ -73,21 +89,37 @@ export function ExpenseEditor({
   onAcceptCurrent: () => void;
 }) {
   const theme = useTheme();
-  const [details, setDetails] = useState(false);
   const [editor, setEditor] = useState<'payers' | 'split' | null>(null);
+  const [sheet, setSheet] = useState<'date' | 'tag' | 'options' | null>(null);
+  const scroll = useRef<ScrollView>(null);
+  const content = useRef<View>(null);
   const sections = useRef<Partial<Record<ExpenseField, View | null>>>({});
   const inputs = useRef<Partial<Record<ExpenseField, TextInput | null>>>({});
   const corrections = useRef<Partial<Record<ExpenseField, View | null>>>({});
+  /** Scroll a section near the top so it stays visible when the keyboard opens. */
+  const reveal = (section: View) => {
+    const container = content.current;
+    if (container && typeof section.measureLayout === 'function')
+      section.measureLayout(
+        container,
+        (_x, y) => scroll.current?.scrollTo({ y: Math.max(0, y - 16), animated: false }),
+        () => undefined,
+      );
+    onReveal?.(section);
+  };
+  /** Moves to a field: its input when it has one, otherwise its correction for screen readers. */
+  const goTo = (field: ExpenseField) => {
+    const section = sections.current[field];
+    if (section) reveal(section);
+    const input = inputs.current[field];
+    const correction = corrections.current[field];
+    if (input) input.focus();
+    else if (correction) AccessibilityInfo.sendAccessibilityEvent(correction, 'focus');
+  };
   const focus = state.validation.focus;
   useEffect(() => {
     // Each rejected save asks once for the first invalid field; later edits never move focus.
-    if (!focus) return;
-    const section = sections.current[focus.field];
-    if (section) onReveal(section);
-    const input = inputs.current[focus.field];
-    const correction = corrections.current[focus.field];
-    if (input) input.focus();
-    else if (correction) AccessibilityInfo.sendAccessibilityEvent(correction, 'focus');
+    if (focus) goTo(focus.field);
   }, [focus?.request]);
   const errors = state.validation.errors;
   const section = (field: ExpenseField) => (node: View | null) => {
@@ -99,16 +131,66 @@ export function ExpenseEditor({
   const correction = (field: ExpenseField) => (node: View | null) => {
     corrections.current[field] = node;
   };
-  if (state.status === 'loading') return <Loading label="Opening your draft…" />;
-  if (!state.draft)
-    return (
+  const { draft, context } = state;
+  const record = !!draft?.original && ['detail', 'delete-review'].includes(state.status);
+  const form = !!draft && !record && state.status !== 'loading';
+  const frame = (body: ReactNode, footer?: ReactNode) => (
+    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <TopBar
+        title={
+          !draft || state.status === 'loading' || record
+            ? 'Expense'
+            : draft.original
+              ? 'Edit expense'
+              : 'Add expense'
+        }
+        subtitle={
+          context
+            ? `${context.group.name} · ${draft?.currency ?? context.group.defaultCurrency}`
+            : undefined
+        }
+        prominent={!form}
+        leading={
+          onClose
+            ? form
+              ? { kind: 'close', label: 'Back to Group, keeping your draft', onPress: onClose }
+              : { kind: 'back', label: 'Back to Group', onPress: onClose }
+            : undefined
+        }
+        status={form ? <DraftStatus persistence={state.persistence} draft={draft!} /> : null}
+        actions={
+          form && state.status === 'editing' ? (
+            <IconButton
+              icon="ellipsis-vertical-outline"
+              label="Expense options"
+              onPress={() => setSheet('options')}
+            />
+          ) : null
+        }
+      />
+      <ScrollView
+        ref={scroll}
+        innerViewRef={content as RefObject<View>}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
+      >
+        {notice}
+        {body}
+      </ScrollView>
+      {footer}
+    </View>
+  );
+
+  if (state.status === 'loading') return frame(<Loading label="Opening your draft…" />);
+  if (!draft)
+    return frame(
       <Notice
         title="Couldn’t open this draft"
         message={state.message ?? 'Please try again.'}
         retry={onRetry}
-      />
+      />,
     );
-  const { draft, context } = state;
   const locked = state.status !== 'editing';
   const members = context?.group.members.map(({ user }) => user) ?? [];
   const name = (id: string) =>
@@ -132,14 +214,8 @@ export function ExpenseEditor({
   }
   const money = (minor: number) =>
     formatCurrency(toMajorAmount(minor, draft.currency), draft.currency);
-  const method = methods.find((item) => item.id === draft.splitMethod)!;
-  const valueLabel =
-    draft.splitMethod === 'percentage'
-      ? 'Percent'
-      : draft.splitMethod === 'shares'
-        ? 'Shares'
-        : `Amount (${draft.currency})`;
   const tag = context?.tags.find((item) => item.id === draft.tagId);
+  const activeTags = context?.tags.filter((item) => !item.isArchived && !item.isDeleted) ?? [];
   // Save stays available for incomplete input so it can explain what is missing.
   const saveBlocked =
     state.status === 'saving'
@@ -149,39 +225,11 @@ export function ExpenseEditor({
         : state.persistence === 'saving'
           ? 'Available once your latest entries are stored on this device.'
           : null;
-  const choice = (
-    key: string,
-    label: string,
-    selected: boolean,
-    onPress: () => void,
-    radio = false,
-  ) => (
-    <Pressable
-      key={key}
-      accessibilityRole={radio ? 'radio' : 'checkbox'}
-      accessibilityLabel={label}
-      accessibilityState={{ checked: selected, disabled: locked }}
-      disabled={locked}
-      onPress={onPress}
-      style={{
-        minHeight: 48,
-        padding: 12,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: selected ? theme.brand.main : theme.border,
-        backgroundColor: selected ? theme.brand.bg : theme.surface,
-      }}
-    >
-      <Copy>
-        {selected ? '✓ ' : ''}
-        {label}
-      </Copy>
-    </Pressable>
-  );
-  if (draft.original && ['detail', 'delete-review'].includes(state.status))
-    return (
-      <View style={{ gap: 20 }}>
-        <ExpenseRecordView record={draft.original} people={members} tags={context?.tags} />
+
+  if (record)
+    return frame(
+      <>
+        <ExpenseRecordView record={draft.original!} people={members} tags={context?.tags} />
         {state.message ? <Copy accessibilityRole="alert">{state.message}</Copy> : null}
         {state.status === 'delete-review' ? (
           <Panel>
@@ -195,14 +243,14 @@ export function ExpenseEditor({
             <Button label="Confirm delete Expense" onPress={onDelete} />
             <Button label="Keep Expense" secondary onPress={onCancelDelete} />
           </Panel>
-        ) : !draft.original.isDeleted ? (
+        ) : !draft.original!.isDeleted ? (
           <>
             <Button
               label="Edit Expense"
               onPress={onEdit}
-              disabled={!canEditExpense(draft.original)}
+              disabled={!canEditExpense(draft.original!)}
             />
-            {!canEditExpense(draft.original) ? (
+            {!canEditExpense(draft.original!) ? (
               <Copy>
                 This historical Expense includes a member whose account is no longer available. It
                 can be reviewed or deleted, but not edited.
@@ -212,298 +260,209 @@ export function ExpenseEditor({
             <Button label="Refresh Expense" secondary onPress={onRetry} />
           </>
         ) : null}
-      </View>
+      </>,
     );
+
+  const invalid = expenseFields.filter((field) => errors[field]);
+  const summary = state.validation.submitted && invalid.length > 0;
+  const canSave =
+    state.status === 'editing' ||
+    state.status === 'saving' ||
+    (!draft.original && state.status === 'uncertain');
+  const tagNotice =
+    !errors.tag && draft.tagId && context && (!tag || tag.isArchived || tag.isDeleted)
+      ? draft.original && draft.tagId === (draft.original.tagId ?? '')
+        ? `Historical Tag: ${tag?.name ?? draft.original.tag}. This association is retained.`
+        : state.attempt
+          ? `Submitted Tag: ${tag?.name ?? 'unavailable'}. Recovery keeps the original Tag identity.`
+          : `Saved Tag: ${tag?.name ?? 'unavailable'}. It is unavailable or archived; choose an active Tag before saving.`
+      : null;
+  const today = toDateParam(new Date());
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterday = toDateParam(yesterdayDate);
+
   return (
-    <View style={{ gap: 20 }}>
-      <Label>{context?.group.name ?? 'SAVED GROUP DRAFT'}</Label>
-      <Copy
-        accessibilityRole="header"
-        style={{ fontFamily: fonts.semibold, fontSize: 32, lineHeight: 38 }}
-      >
-        {draft.original ? 'Edit expense' : 'Add expense'}
-      </Copy>
-      <Copy style={{ color: theme.textSecondary }}>
-        Split a shared cost. Your draft stays on this device until you save or discard it.
-      </Copy>
-      {state.latest && (
-        <ExpenseRecordView
-          record={state.latest}
-          title="Current saved record"
-          people={members}
-          tags={context?.tags}
-        />
-      )}
-      {state.status === 'conflict' && (
-        <Panel>
-          <Copy>
-            Your draft is shown below. Compare every field with the current record before choosing.
-          </Copy>
-          <Button
-            label="Keep my draft for review"
-            onPress={onReviewLatest}
-            disabled={!state.latest || !canEditExpense(state.latest)}
-          />
-          <Button label="Keep current saved record" secondary onPress={onAcceptCurrent} />
-        </Panel>
-      )}
-      {state.status === 'blocked' && state.latest && (
-        <Button label="Keep current saved record" secondary onPress={onAcceptCurrent} />
-      )}
-      {/* An ordinary draft was never sent; an unconfirmed save may already be recorded. */}
-      {state.status === 'resume' &&
-        (state.attempt || state.mutation ? (
-          <View style={{ gap: 12 }}>
-            <Banner
-              tone="warning"
-              title="Save not confirmed"
-              message={
-                state.mutation
-                  ? 'This change may already be saved. Resume to check the current Expense before anything else is sent.'
-                  : 'This Expense may already be saved. Resume to confirm it with the same details; it can’t be added twice.'
-              }
-            />
-            <Button label="Resume save recovery" onPress={onResume} />
-          </View>
-        ) : (
-          <View style={{ gap: 12 }}>
-            <Banner
-              tone="info"
-              title="Unfinished draft"
-              message="Nothing has been sent. Resume your entries or discard them to start again."
-            />
-            <Button label="Resume draft" onPress={onResume} />
-            <Button label="Discard draft" secondary onPress={onDiscard} />
-          </View>
-        ))}
-      {!context && (
-        <Copy>
-          Connect to check the current members and Tags. You can still edit your saved text.
-        </Copy>
-      )}
-      <Copy style={{ fontSize: 13, color: theme.textSecondary }}>
-        Fields marked Required are needed to save. Category and notes are optional.
-      </Copy>
-      <Panel>
-        <View ref={section('amount')}>
-          <Field
-            label="Amount"
-            required
-            inputRef={input('amount')}
-            value={draft.amount}
-            maxLength={40}
-            keyboardType="decimal-pad"
-            editable={!locked}
-            error={errors.amount}
-            onBlur={() => onLeaveField('amount')}
-            onChangeText={(amount) => onChange({ amount })}
-          />
-        </View>
-        <Copy style={{ fontFamily: fonts.mono }}>
-          {draft.currency} · {draft.original ? 'Expense currency' : 'Group currency'}
-        </Copy>
-        {!draft.original && context && draft.currency !== context.group.defaultCurrency && (
-          <>
-            {!errors.amount && (
-              <Copy accessibilityRole="alert">
-                This draft uses {draft.currency}; the Group now uses {context.group.defaultCurrency}
-                . Review the amount before choosing the new currency.
-              </Copy>
-            )}
-            <Button
-              label={`Use ${context.group.defaultCurrency}`}
-              secondary
-              disabled={locked}
-              onPress={() => onChange({ currency: context.group.defaultCurrency })}
-            />
-          </>
-        )}
-      </Panel>
-      <View ref={section('description')}>
-        <Field
-          label="Description"
-          required
-          hint="What was this for?"
-          inputRef={input('description')}
-          value={draft.description}
-          maxLength={200}
-          editable={!locked}
-          error={errors.description}
-          onBlur={() => onLeaveField('description')}
-          onChangeText={(description) => onChange({ description })}
-        />
-      </View>
-      <View ref={section('date')}>
-        <Field
-          label="Date"
-          required
-          hint="Use YYYY-MM-DD."
-          inputRef={input('date')}
-          value={draft.date}
-          maxLength={10}
-          editable={!locked}
-          error={errors.date}
-          onBlur={() => onLeaveField('date')}
-          onChangeText={(date) => onChange({ date })}
-        />
-      </View>
-      <Panel>
-        <View ref={section('payers')} style={{ gap: 16 }}>
-          <Copy style={{ fontFamily: fonts.semibold }}>
-            Paid by<Copy style={{ color: theme.textSecondary }}> · Required</Copy>
-          </Copy>
-          <Copy>
-            {draft.multiPayer
-              ? `${draft.payers.length} ${draft.payers.length === 1 ? 'payer' : 'payers'}`
-              : name(draft.payerId)}
-          </Copy>
-          <FieldError ref={correction('payers')} message={errors.payers} />
-          <Button
-            label="Edit payers"
-            secondary
-            disabled={locked}
-            onPress={() => setEditor('payers')}
-          />
-        </View>
-        <View ref={section('split')} style={{ gap: 16 }}>
-          <Copy style={{ fontFamily: fonts.semibold }}>
-            Split · {method.label}
-            <Copy style={{ color: theme.textSecondary }}> · Required</Copy>
-          </Copy>
-          <Copy>{draft.participantIds.length} participants</Copy>
-          <FieldError ref={correction('split')} message={errors.split} />
-          <Button
-            label="Edit split"
-            secondary
-            disabled={locked}
-            onPress={() => setEditor('split')}
-          />
-        </View>
-        {invalidMembers && !errors.payers && !errors.split && (
-          <Copy accessibilityRole="alert">
-            A saved payer or participant is no longer in this Group. Open the editors to remove
-            unavailable members.
-          </Copy>
-        )}
-      </Panel>
-      <View ref={section('tag')} style={{ gap: 8 }} accessibilityRole="radiogroup">
-        <Copy style={{ fontFamily: fonts.semibold }}>
-          Tag<Copy style={{ color: theme.textSecondary }}> · Required</Copy>
-        </Copy>
-        <FieldError ref={correction('tag')} message={errors.tag} />
-        {!errors.tag && draft.tagId && context && (!tag || tag.isArchived || tag.isDeleted) ? (
-          <Copy accessibilityRole="alert">
-            {draft.original && draft.tagId === (draft.original.tagId ?? '')
-              ? `Historical Tag: ${tag?.name ?? draft.original.tag}. This association is retained.`
-              : state.attempt
-                ? `Submitted Tag: ${tag?.name ?? 'unavailable'}. Recovery keeps the original Tag identity.`
-                : `Saved Tag: ${tag?.name ?? 'unavailable'}. It is unavailable or archived; choose an active Tag before saving.`}
-          </Copy>
-        ) : null}
-        {context?.tags
-          .filter((item) => !item.isArchived && !item.isDeleted)
-          .map((item) =>
-            choice(
-              item.id,
-              `Tag: ${item.name}`,
-              draft.tagId === item.id,
-              () => onChange({ tagId: item.id }),
-              true,
-            ),
-          )}
-        {context && !context.tags.some((item) => !item.isArchived && !item.isDeleted) && (
-          <Copy>This Group needs an active Tag. Add one on the web, then reopen this draft.</Copy>
-        )}
-      </View>
-      <Panel>
-        <Label>REVIEW ALLOCATION · {draft.currency}</Label>
-        {allocation ? (
-          <>
-            <Copy style={{ fontFamily: fonts.semibold }}>Paid</Copy>
-            {allocation.paidBy.map((payer) => (
-              <View
-                key={String(payer.user)}
-                style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}
-              >
-                <Copy style={{ flex: 1 }}>{name(String(payer.user))}</Copy>
-                <Copy style={{ fontFamily: fonts.mono }}>{money(payer.amountMinor)}</Copy>
-              </View>
-            ))}
-            <Copy style={{ fontFamily: fonts.semibold }}>Owes · {method.label}</Copy>
-            {allocation.splitBetween.map((share) => (
-              <View
-                key={String(share.user)}
-                style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}
-              >
-                <Copy style={{ flex: 1 }}>{name(String(share.user))}</Copy>
-                <Copy style={{ fontFamily: fonts.mono }}>{money(share.amountMinor)}</Copy>
-              </View>
-            ))}
-            <Copy>Total paid = total allocated = {money(allocation.amountMinor)}</Copy>
-          </>
-        ) : (
-          <Copy accessibilityRole="alert">
-            {errors.amount
-              ? 'Correct the amount above to review the allocation.'
-              : draft.amount
-                ? allocationError
-                : 'Enter an amount and choose participants to review the allocation.'}
-          </Copy>
-        )}
-        <Copy style={{ fontSize: 13, color: theme.textSecondary }}>
-          Rounding keeps the full amount accounted for, even when it cannot divide evenly.
-        </Copy>
-      </Panel>
-      <Button
-        label={details ? 'Hide optional details' : 'Optional details: category and notes'}
-        secondary
-        onPress={() => setDetails(!details)}
-      />
-      {details && (
-        <View style={{ gap: 12 }}>
-          <Copy style={{ fontFamily: fonts.semibold }}>Category</Copy>
-          {EXPENSE_CATEGORIES.map((category) =>
-            choice(
-              category.id,
-              category.label,
-              draft.category === category.id,
-              () => onChange({ category: category.id }),
-              true,
-            ),
-          )}
-          <Field
-            label="Notes"
-            value={draft.notes}
-            maxLength={500}
-            multiline
-            editable={!locked}
-            onChangeText={(notes) => onChange({ notes })}
-          />
-        </View>
-      )}
-      <Copy style={{ fontSize: 13, color: theme.textSecondary }}>
-        {state.persistence === 'saved'
-          ? 'Draft storage ready on this device'
-          : state.persistence === 'saving'
-            ? 'Saving draft on this device…'
-            : 'Draft has not been saved on this device'}
-      </Copy>
-      {state.message && (
-        <Copy accessibilityRole="alert" accessibilityLiveRegion="polite">
-          {state.message}
-        </Copy>
-      )}
-      {state.persistence === 'error' && !state.attempt && (
-        <Button label="Retry saving draft" secondary onPress={() => onChange({})} />
-      )}
-      {draft.original && ['uncertain', 'blocked'].includes(state.status) && (
-        <Button label="Check current Expense" onPress={onReconcile} />
-      )}
-      {(state.status === 'editing' ||
-        state.status === 'saving' ||
-        (!draft.original && state.status === 'uncertain')) && (
+    <>
+      {frame(
         <>
-          <Button
+          {state.latest && (
+            <ExpenseRecordView
+              record={state.latest}
+              title="Current saved record"
+              people={members}
+              tags={context?.tags}
+            />
+          )}
+          {state.status === 'conflict' && (
+            <Panel>
+              <Copy>
+                Your draft is shown below. Compare every field with the current record before
+                choosing.
+              </Copy>
+              <Button
+                label="Keep my draft for review"
+                onPress={onReviewLatest}
+                disabled={!state.latest || !canEditExpense(state.latest)}
+              />
+              <Button label="Keep current saved record" secondary onPress={onAcceptCurrent} />
+            </Panel>
+          )}
+          {state.status === 'blocked' && state.latest && (
+            <Button label="Keep current saved record" secondary onPress={onAcceptCurrent} />
+          )}
+          {/* An ordinary draft was never sent; an unconfirmed save may already be recorded. */}
+          {state.status === 'resume' &&
+            (state.attempt || state.mutation ? (
+              <View style={{ gap: 12 }}>
+                <Banner
+                  tone="warning"
+                  title="Save not confirmed"
+                  message={
+                    state.mutation
+                      ? 'This change may already be saved. Resume to check the current Expense before anything else is sent.'
+                      : 'This Expense may already be saved. Resume to confirm it with the same details; it can’t be added twice.'
+                  }
+                />
+                <Button label="Resume save recovery" onPress={onResume} />
+              </View>
+            ) : (
+              <View style={{ gap: 12 }}>
+                <Banner
+                  tone="info"
+                  title="Unfinished draft"
+                  message="Nothing has been sent. Resume your entries or discard them to start again."
+                />
+                <Button label="Resume draft" onPress={onResume} />
+                <Button label="Discard draft" secondary onPress={onDiscard} />
+              </View>
+            ))}
+          {summary ? (
+            <Banner
+              tone="error"
+              title={`${invalid.length === 1 ? 'One thing' : `${invalid.length} things`} to fix before saving`}
+              message="Your draft is kept. Go to each one:"
+            >
+              {invalid.map((field) => (
+                <CompactButton
+                  key={field}
+                  label={expenseFieldLabels[field]}
+                  accessibilityLabel={`Go to ${expenseFieldLabels[field]}`}
+                  variant="text"
+                  dense
+                  onPress={() => goTo(field)}
+                />
+              ))}
+            </Banner>
+          ) : null}
+          {!context && (
+            <Banner
+              tone="offline"
+              message="Connect to check the current members and Tags. You can still edit your saved text."
+            />
+          )}
+          <AmountDescriptionCard
+            draft={draft}
+            locked={locked}
+            errors={errors}
+            amountRef={input('amount')}
+            descriptionRef={input('description')}
+            section={section}
+            onChange={onChange}
+            onLeave={onLeaveField}
+            onAmountDone={() => inputs.current.description?.focus()}
+          >
+            {!draft.original && context && draft.currency !== context.group.defaultCurrency ? (
+              <View style={{ gap: 6 }}>
+                {!errors.amount && (
+                  <CompactText variant="small" tone="warning" accessibilityRole="alert">
+                    This draft uses {draft.currency}; the Group now uses{' '}
+                    {context.group.defaultCurrency}. Review the amount before choosing the new
+                    currency.
+                  </CompactText>
+                )}
+                <CompactButton
+                  label={`Use ${context.group.defaultCurrency}`}
+                  variant="tonal"
+                  dense
+                  disabled={locked}
+                  onPress={() => onChange({ currency: context.group.defaultCurrency })}
+                />
+              </View>
+            ) : null}
+          </AmountDescriptionCard>
+          <ExpenseTiles
+            locked={locked}
+            errors={errors}
+            values={{
+              date: expenseDateLabel(draft.date),
+              payers: draft.multiPayer
+                ? `${draft.payers.length} ${draft.payers.length === 1 ? 'person' : 'people'}`
+                : draft.payerId === currentUserId
+                  ? 'You'
+                  : name(draft.payerId),
+              split: splitSummary(draft),
+              tag:
+                tag?.name ??
+                (draft.tagId ? (draft.original?.tag ?? 'Unavailable Tag') : 'Choose a Tag'),
+            }}
+            correction={correction}
+            section={section}
+            onOpen={(tile) =>
+              tile === 'payers' || tile === 'split' ? setEditor(tile) : setSheet(tile)
+            }
+          />
+          {tagNotice ? (
+            <CompactText variant="small" tone="warning" accessibilityRole="alert">
+              {tagNotice}
+            </CompactText>
+          ) : null}
+          {context && !activeTags.length ? (
+            <CompactText variant="small" tone="secondary">
+              This Group needs an active Tag. Add one on the web, then reopen this draft.
+            </CompactText>
+          ) : null}
+          {invalidMembers && !errors.payers && !errors.split && (
+            <CompactText variant="small" tone="warning" accessibilityRole="alert">
+              A saved payer or participant is no longer in this Group. Open Paid by or Split to
+              remove unavailable members.
+            </CompactText>
+          )}
+          <WhoOwesWhat
+            draft={draft}
+            allocation={allocation}
+            problem={
+              errors.amount
+                ? 'Correct the amount to see who owes what.'
+                : draft.amount
+                  ? allocationError
+                  : 'Enter a valid amount to see who owes what.'
+            }
+            name={name}
+            currentUserId={currentUserId}
+            money={money}
+          />
+          <OptionalDetails draft={draft} locked={locked} onChange={onChange} />
+          {state.message && !summary && (
+            <CompactText variant="small" accessibilityRole="alert" accessibilityLiveRegion="polite">
+              {state.message}
+            </CompactText>
+          )}
+          {state.persistence === 'error' && !state.attempt && (
+            <Button label="Retry saving draft" secondary onPress={() => onChange({})} />
+          )}
+          {draft.original && ['uncertain', 'blocked'].includes(state.status) && (
+            <Button label="Check current Expense" onPress={onReconcile} />
+          )}
+          {(state.attempt || state.mutation) && (
+            <CompactText variant="small" tone="secondary">
+              Details are locked until the save is confirmed. Signing out removes recovery
+              information; check Group history before recreating this expense.
+            </CompactText>
+          )}
+        </>,
+        canSave ? (
+          <SaveBar
             label={
               state.status === 'saving'
                 ? 'Saving expense…'
@@ -513,193 +472,141 @@ export function ExpenseEditor({
                     ? 'Save changes'
                     : 'Save expense'
             }
-            hint={saveBlocked ?? undefined}
-            onPress={onSave}
-            disabled={saveBlocked !== null}
+            amount={
+              allocation && state.status !== 'saving' ? money(allocation.amountMinor) : undefined
+            }
+            blocked={saveBlocked}
+            onSave={onSave}
           />
-          {saveBlocked && state.persistence !== 'saving' && (
-            <Copy style={{ fontSize: 14, color: theme.textSecondary }}>{saveBlocked}</Copy>
-          )}
-        </>
+        ) : null,
       )}
-      {state.status === 'editing' && <Button label="Discard draft" secondary onPress={onDiscard} />}
-      {(state.attempt || state.mutation) && (
-        <Copy>
-          Details are locked until the save is confirmed. Signing out removes recovery information;
-          check Group history before recreating this expense.
-        </Copy>
-      )}
-      <Modal visible={editor !== null} animationType="slide" onRequestClose={() => setEditor(null)}>
-        <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-          <KeyboardAvoidingView style={{ flex: 1 }} behavior="height">
-            <View style={{ padding: 20, gap: 12 }}>
-              <Copy
-                accessibilityRole="header"
-                style={{ fontFamily: fonts.semibold, fontSize: 26, lineHeight: 32 }}
-              >
-                {editor === 'payers' ? 'Who paid?' : 'Choose the split'}
-              </Copy>
-              <Button label="Done" onPress={() => setEditor(null)} />
-            </View>
-            <ScrollView
-              keyboardShouldPersistTaps="handled"
-              contentContainerStyle={{ padding: 20, gap: 16 }}
-            >
-              {editor === 'payers' ? (
-                <>
-                  {choice('multiple', 'Multiple payers', draft.multiPayer, () =>
-                    onChange({
-                      multiPayer: !draft.multiPayer,
-                      ...(draft.multiPayer || draft.payers.length
-                        ? {}
-                        : { payers: [{ user: draft.payerId, amount: draft.amount }] }),
-                    }),
-                  )}
-                  <Copy>
-                    {draft.multiPayer
-                      ? 'Enter what each person paid. The amounts must add up to the Expense total.'
-                      : 'One person paid the full Expense amount.'}
-                  </Copy>
-                  {members.map((member) => (
-                    <View key={member.id} style={{ gap: 8 }}>
-                      {choice(
-                        member.id,
-                        `Paid by ${member.name}`,
-                        draft.multiPayer
-                          ? draft.payers.some((payer) => payer.user === member.id)
-                          : draft.payerId === member.id,
-                        () =>
-                          onChange(
-                            draft.multiPayer
-                              ? {
-                                  payers: draft.payers.some((payer) => payer.user === member.id)
-                                    ? draft.payers.filter((payer) => payer.user !== member.id)
-                                    : [...draft.payers, { user: member.id, amount: '' }],
-                                }
-                              : { payerId: member.id },
-                          ),
-                        !draft.multiPayer,
-                      )}
-                      {draft.multiPayer &&
-                        draft.payers.some((payer) => payer.user === member.id) && (
-                          <Field
-                            label={`Paid by ${member.name} (${draft.currency})`}
-                            value={draft.payers.find((payer) => payer.user === member.id)!.amount}
-                            keyboardType="decimal-pad"
-                            maxLength={40}
-                            editable={!locked}
-                            onChangeText={(amount) =>
-                              onChange({
-                                payers: draft.payers.map((payer) =>
-                                  payer.user === member.id ? { ...payer, amount } : payer,
-                                ),
-                              })
-                            }
-                          />
-                        )}
-                    </View>
-                  ))}
-                  {draft.multiPayer &&
-                    draft.payers.some(
-                      (payer) => !members.some((member) => member.id === payer.user),
-                    ) && (
-                      <Button
-                        label="Remove unavailable payers"
-                        secondary
-                        disabled={locked}
-                        onPress={() =>
-                          onChange({
-                            payers: draft.payers.filter((payer) =>
-                              members.some((member) => member.id === payer.user),
-                            ),
-                          })
-                        }
-                      />
-                    )}
-                </>
-              ) : (
-                <>
-                  <View accessibilityRole="radiogroup" style={{ gap: 8 }}>
-                    {methods.map((item) =>
-                      choice(
-                        item.id,
-                        item.label,
-                        draft.splitMethod === item.id,
-                        () => onChange({ splitMethod: item.id }),
-                        true,
-                      ),
-                    )}
-                  </View>
-                  <Copy>{method.hint}</Copy>
-                  <Copy style={{ color: theme.textSecondary }}>
-                    Changing method clears the previous split values. Other draft entries stay
-                    saved.
-                  </Copy>
-                  {members.map((member) => (
-                    <View key={member.id} style={{ gap: 8 }}>
-                      {choice(
-                        member.id,
-                        `Include ${member.name}`,
-                        draft.participantIds.includes(member.id),
-                        () =>
-                          onChange({
-                            participantIds: draft.participantIds.includes(member.id)
-                              ? draft.participantIds.filter((id) => id !== member.id)
-                              : [...draft.participantIds, member.id],
-                          }),
-                      )}
-                      {draft.splitMethod !== 'equal' &&
-                        draft.participantIds.includes(member.id) && (
-                          <Field
-                            label={`${valueLabel} for ${member.name}`}
-                            value={draft.splitValues[member.id] ?? ''}
-                            hint="Use 0 for no share."
-                            keyboardType={
-                              draft.splitMethod === 'shares' ? 'number-pad' : 'decimal-pad'
-                            }
-                            maxLength={40}
-                            editable={!locked}
-                            onChangeText={(value) =>
-                              onChange({
-                                splitValues: { ...draft.splitValues, [member.id]: value },
-                              })
-                            }
-                          />
-                        )}
-                    </View>
-                  ))}
-                  {draft.participantIds.some(
-                    (id) => !members.some((member) => member.id === id),
-                  ) && (
-                    <Button
-                      label="Remove unavailable participants"
-                      secondary
-                      disabled={locked}
-                      onPress={() =>
-                        onChange({
-                          participantIds: draft.participantIds.filter((id) =>
-                            members.some((member) => member.id === id),
-                          ),
-                        })
-                      }
-                    />
-                  )}
-                </>
-              )}
-              {allocationError && draft.amount ? (
-                <Copy accessibilityRole="alert">{allocationError}</Copy>
-              ) : null}
-              <Copy>
-                {state.persistence === 'saving'
-                  ? 'Saving draft…'
-                  : state.persistence === 'error'
-                    ? 'Could not save these entries on this device. Close this editor and retry saving the draft.'
-                    : 'Entries are saved with your draft. Done or Android Back keeps them.'}
-              </Copy>
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </SafeAreaView>
-      </Modal>
+      <BottomSheet
+        visible={sheet === 'date'}
+        title="Date"
+        titleAccessory={<FieldMarker kind="required" />}
+        onDone={() => {
+          setSheet(null);
+          onLeaveField('date');
+        }}
+      >
+        <View style={{ gap: 12 }}>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Chip
+              label="Today"
+              selected={draft.date === today}
+              onPress={() => !locked && onChange({ date: today })}
+            />
+            <Chip
+              label="Yesterday"
+              selected={draft.date === yesterday}
+              onPress={() => !locked && onChange({ date: yesterday })}
+            />
+          </View>
+          <Field
+            label="Date"
+            required
+            hint="Use YYYY-MM-DD."
+            value={draft.date}
+            maxLength={10}
+            editable={!locked}
+            error={errors.date}
+            onBlur={() => onLeaveField('date')}
+            onChangeText={(date) => onChange({ date })}
+          />
+        </View>
+      </BottomSheet>
+      <BottomSheet
+        visible={sheet === 'tag'}
+        title="Tag"
+        titleAccessory={<FieldMarker kind="required" />}
+        onDone={() => {
+          setSheet(null);
+          onLeaveField('tag');
+        }}
+        footer={
+          <CompactText variant="small" tone="secondary">
+            Only this Group’s active Tags are listed.
+          </CompactText>
+        }
+      >
+        <View
+          accessibilityRole="radiogroup"
+          accessibilityLabel="Tag"
+          style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}
+        >
+          {activeTags.map((item) => (
+            <Chip
+              key={item.id}
+              role="radio"
+              label={`Tag: ${item.name}`}
+              selected={draft.tagId === item.id}
+              onPress={() => {
+                if (locked) return;
+                onChange({ tagId: item.id });
+                setSheet(null);
+              }}
+            />
+          ))}
+        </View>
+      </BottomSheet>
+      <BottomSheet
+        visible={sheet === 'options'}
+        title="Expense options"
+        onDone={() => setSheet(null)}
+      >
+        <Card>
+          <ListRow
+            leading={<IconTile icon="trash-outline" tone="warning" />}
+            title="Discard draft"
+            meta="Removes these entries from this device"
+            onPress={() => {
+              setSheet(null);
+              onDiscard();
+            }}
+          />
+        </Card>
+      </BottomSheet>
+      <AllocationEditor
+        editor={editor}
+        draft={draft}
+        members={members}
+        locked={locked}
+        persistence={state.persistence}
+        allocationError={allocationError}
+        onChange={onChange}
+        onClose={() => setEditor(null)}
+      />
+    </>
+  );
+}
+
+/** "Draft saved" once the entries are stored on this device. */
+function DraftStatus({
+  persistence,
+  draft,
+}: {
+  persistence: Editor['persistence'];
+  draft: ExpenseDraft;
+}) {
+  const theme = useTheme();
+  if (persistence === 'saved' && !draft.amount && !draft.description) return null;
+  const [icon, text, color] =
+    persistence === 'saved'
+      ? (['checkmark', 'Draft saved', theme.textSecondary] as const)
+      : persistence === 'saving'
+        ? (['sync-outline', 'Saving draft…', theme.textSecondary] as const)
+        : (['alert-circle-outline', 'Draft not saved', theme.status.negative] as const);
+  return (
+    <View
+      accessible
+      accessibilityLabel={text}
+      accessibilityLiveRegion="polite"
+      style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 4 }}
+    >
+      <Icon name={icon} size={16} color={color} />
+      <CompactText variant="caption" style={{ color }}>
+        {text}
+      </CompactText>
     </View>
   );
 }

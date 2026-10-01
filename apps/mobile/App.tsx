@@ -131,6 +131,18 @@ function SplitBook() {
 
   const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
   const feedback = refreshFeedback(state);
+  if (configurationReady && authenticated && state.screen === 'expense')
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
+        {/* Height-based on Android, so the pinned Save bar sits directly above the keyboard. */}
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <ExpenseScreen state={state} />
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    );
   if (configurationReady && authenticated && state.screen === 'group')
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -145,11 +157,7 @@ function SplitBook() {
           {state.screen !== 'groups' ? (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={
-                state.screen === 'expense' && state.expense.groupId
-                  ? 'Back to Group'
-                  : 'Back to Groups'
-              }
+              accessibilityLabel="Back to Groups"
               onPress={controller.back}
               style={{ minWidth: 48, minHeight: 48, justifyContent: 'center' }}
             >
@@ -347,55 +355,6 @@ function SplitBook() {
                 }}
                 onLeaveField={controller.touchSettlementField}
                 onReveal={reveal}
-              />
-            ) : state.screen === 'expense' ? (
-              <ExpenseEditor
-                state={state.expense}
-                onEdit={() => void controller.editExpense()}
-                onReviewDelete={controller.reviewExpenseDeletion}
-                onCancelDelete={controller.cancelExpenseDeletion}
-                onDelete={() => void controller.deleteExpense()}
-                onReconcile={() => void controller.reconcileExpense()}
-                onReviewLatest={() => void controller.reviewLatestExpense()}
-                onAcceptCurrent={() =>
-                  Alert.alert(
-                    'Use the current saved record?',
-                    'This discards your local draft after checking the saved record.',
-                    [
-                      { text: 'Keep draft', style: 'cancel' },
-                      {
-                        text: 'Use saved record',
-                        onPress: () => void controller.acceptCurrentExpense(),
-                      },
-                    ],
-                  )
-                }
-                onChange={(patch) => void controller.updateExpenseDraft(patch)}
-                onLeaveField={controller.touchExpenseField}
-                onReveal={reveal}
-                onSave={() => void controller.saveExpense()}
-                onResume={controller.resumeExpenseDraft}
-                onRetry={() =>
-                  state.expense.groupId &&
-                  void controller.openExpense(
-                    state.expense.groupId,
-                    state.expense.requestedExpenseId ?? undefined,
-                  )
-                }
-                onDiscard={() =>
-                  Alert.alert(
-                    'Discard this expense draft?',
-                    'Your saved entries will be removed from this device.',
-                    [
-                      { text: 'Keep draft', style: 'cancel' },
-                      {
-                        text: 'Discard',
-                        style: 'destructive',
-                        onPress: () => void controller.discardExpenseDraft(),
-                      },
-                    ],
-                  )
-                }
               />
             ) : state.screen === 'create' ? (
               <GroupCreateForm
@@ -707,5 +666,61 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         </>
       )}
     </GroupShell>
+  );
+}
+
+/** Adding, editing or reviewing an Expense: a full-screen task without the Group's navigation. */
+function ExpenseScreen({ state }: { state: MobileSnapshot }) {
+  return (
+    <ExpenseEditor
+      state={state.expense}
+      currentUserId={state.auth.user?.id}
+      notice={<OfflineNotice state={state.offline} />}
+      onClose={() => void controller.back()}
+      onEdit={() => void controller.editExpense()}
+      onReviewDelete={controller.reviewExpenseDeletion}
+      onCancelDelete={controller.cancelExpenseDeletion}
+      onDelete={() => void controller.deleteExpense()}
+      onReconcile={() => void controller.reconcileExpense()}
+      onReviewLatest={() => void controller.reviewLatestExpense()}
+      onAcceptCurrent={() =>
+        Alert.alert(
+          'Use the current saved record?',
+          'This discards your local draft after checking the saved record.',
+          [
+            { text: 'Keep draft', style: 'cancel' },
+            {
+              text: 'Use saved record',
+              onPress: () => void controller.acceptCurrentExpense(),
+            },
+          ],
+        )
+      }
+      onChange={(patch) => void controller.updateExpenseDraft(patch)}
+      onLeaveField={controller.touchExpenseField}
+      onSave={() => void controller.saveExpense()}
+      onResume={controller.resumeExpenseDraft}
+      onRetry={() =>
+        state.expense.groupId &&
+        void controller.openExpense(
+          state.expense.groupId,
+          state.expense.requestedExpenseId ?? undefined,
+        )
+      }
+      onDiscard={() =>
+        Alert.alert(
+          'Discard this expense draft?',
+          'Your saved entries will be removed from this device.',
+          [
+            { text: 'Keep draft', style: 'cancel' },
+            {
+              text: 'Discard',
+              style: 'destructive',
+              onPress: () => void controller.discardExpenseDraft(),
+            },
+          ],
+        )
+      }
+    />
   );
 }
