@@ -88,6 +88,18 @@ export function correctionSummary<F extends string>(
   return `Correct ${invalid.length} fields before ${action}: ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}.`;
 }
 
+/**
+ * Whether an edit can stay in a number field. The numeric keypad alone isn't enough, because
+ * a hardware keyboard or a paste bypasses it. An edit with a letter, symbol or space is refused
+ * whole, never stripped. Signs, commas and decimal points stay, even when invalid, so the
+ * field's correction explains them: "-5" is never turned into 5, nor "1.5" shares into 15.
+ * Text that is already outside this set, such as an older draft's, stays editable.
+ */
+export function acceptsNumericText(next: string, current: string) {
+  const numeric = /^[\d.,-]*$/;
+  return numeric.test(next) || !numeric.test(current);
+}
+
 export function amountExample(currency: string) {
   const digits = getCurrencyPrecision(currency);
   return digits ? `250.${'50'.padEnd(digits, '0').slice(0, digits)}` : '250';

@@ -10,14 +10,23 @@ import { ExpenseEditor } from './expense-editor';
 vi.mock('react-native', () => ({
   AccessibilityInfo: { sendAccessibilityEvent: vi.fn() },
   ActivityIndicator: 'ActivityIndicator',
+  Animated: {
+    View: 'AnimatedView',
+    Value: class {
+      setValue() {}
+    },
+    spring: () => ({ start: () => undefined }),
+  },
   KeyboardAvoidingView: 'KeyboardAvoidingView',
   Modal: 'Modal',
+  PanResponder: { create: (config: object) => ({ panHandlers: config }) },
   Pressable: 'Pressable',
   ScrollView: 'ScrollView',
   StyleSheet: { create: <T,>(styles: T) => styles },
   Text: 'Text',
   TextInput: 'TextInput',
   View: 'View',
+  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: 1 }),
 }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
 vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
@@ -163,6 +172,7 @@ interface NodeMock {
   focus: ReturnType<typeof vi.fn>;
 }
 const noop = () => undefined;
+const calls = { close: vi.fn(), discard: vi.fn() };
 
 function EditorScreen({
   controller,
@@ -175,13 +185,15 @@ function EditorScreen({
   return (
     <ExpenseEditor
       state={state.expense}
+      currentUserId={memberId}
+      onClose={calls.close}
       onChange={(patch) => void controller.updateExpenseDraft(patch)}
       onLeaveField={controller.touchExpenseField}
       onReveal={onReveal}
       onSave={() => void controller.saveExpense()}
       onEdit={() => void controller.editExpense()}
       onResume={controller.resumeExpenseDraft}
-      onDiscard={noop}
+      onDiscard={calls.discard}
       onRetry={noop}
       onReviewDelete={noop}
       onDelete={noop}
@@ -203,6 +215,8 @@ afterEach(() => {
   act(() => screen?.unmount());
   screen = null;
   vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mockClear();
+  calls.close.mockClear();
+  calls.discard.mockClear();
 });
 
 async function render(
@@ -232,8 +246,23 @@ async function render(
   const root = () => screen!.root;
   const input = (label: string) =>
     root().find((node) => isHost(node, 'TextInput') && node.props.accessibilityLabel === label);
+  // Save names the amount once it is valid, as in "Save expense ₹250.50".
   const pressable = (label: string) =>
-    root().find((node) => isHost(node, 'Pressable') && node.props.accessibilityLabel === label);
+    root().find(
+      (node) =>
+        isHost(node, 'Pressable') &&
+        (node.props.accessibilityLabel === label ||
+          String(node.props.accessibilityLabel).startsWith(`${label} `)),
+    );
+  /** One of the Date, Paid by, Split and Tag tiles. */
+  const tile = (label: string) =>
+    root().find(
+      (node) =>
+        isHost(node, 'Pressable') &&
+        node.props.accessibilityRole === 'button' &&
+        /^[^:]+:/.test(String(node.props.accessibilityLabel)) &&
+        String(node.props.accessibilityLabel).startsWith(label),
+    );
   const act$ = async (run: () => void) => {
     await act(async () => run());
     await settle();
@@ -248,6 +277,7 @@ async function render(
     root,
     input,
     pressable,
+    tile,
     revealed,
     focusCount,
     type: (label: string, text: string) => act$(() => input(label).props.onChangeText(text)),
@@ -257,18 +287,25 @@ async function render(
 }
 
 const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
-/** The Field wrapper that owns this input: its label, input, hint and correction. */
-const fieldOf = (input: ReactTestInstance) => input.parent!;
+/** The section that owns this input: the largest ancestor holding no other input. */
+const fieldOf = (input: ReactTestInstance) => {
+  const inputs = (node: ReactTestInstance) =>
+    node.findAll((child) => isHost(child, 'TextInput')).length;
+  let node = input.parent!;
+  while (node.parent && inputs(node.parent) === 1) node = node.parent;
+  return node;
+};
+/** Corrections are announced as they appear; other labelled views (the currency) aren't. */
 const corrections = (scope: ReactTestInstance) =>
   scope
-    .findAll((node) => isHost(node, 'View') && node.props.accessible === true)
+    .findAll(
+      (node) =>
+        isHost(node, 'View') &&
+        node.props.accessible === true &&
+        node.props.accessibilityLiveRegion === 'polite' &&
+        !String(node.props.accessibilityLabel).startsWith('Draft '),
+    )
     .map((node) => node.props.accessibilityLabel as string);
-const tagSection = (root: ReactTestInstance) =>
-  root
-    .findAll((node) => isHost(node, 'View') && node.props.accessibilityRole === 'radiogroup')
-    .find(
-      (node) => node.findAll((child) => child.props.accessibilityLabel === 'Tag: Groceries').length,
-    )!;
 const text = (scope: ReactTestInstance) =>
   scope
     .findAll((node) => isHost(node, 'Text'))
@@ -290,7 +327,8 @@ describe('rendered Expense corrections', () => {
     expect(ui.focusCount('Description, required')).toBe(1);
     expect(ui.focusCount('Amount, required')).toBe(0);
     expect(ui.revealed).toHaveLength(1);
-    expect(text(ui.root())).toContain('Description · Required');
+    expect(text(ui.root())).toContain('One thing to fix before saving');
+    expect(ui.pressable('Go to Description')).toBeTruthy();
     expect(ui.input('Amount, required').props.value).toBe('250.50');
     expect(ui.pressable('Tag: Groceries').props.accessibilityState.checked).toBe(true);
 
@@ -318,11 +356,13 @@ describe('rendered Expense corrections', () => {
     expect(corrections(fieldOf(ui.input('Date, required')))).toEqual([
       '2026-02-30 isn’t a real date. Check the day and month.',
     ]);
-    const tags = tagSection(ui.root());
-    expect(corrections(tags)).toEqual(['Choose a Tag for this Expense.']);
-    expect(text(ui.root())).toContain(
-      'Correct 4 fields before saving: Amount, Description, Date and Tag.',
+    expect(ui.tile('Tag').props.accessibilityLabel).toBe(
+      'Tag, required: Choose a Tag. Choose a Tag for this Expense.',
     );
+    expect(corrections(ui.root())).toContain('Choose a Tag for this Expense.');
+    expect(text(ui.root())).toContain('4 things to fix before saving');
+    for (const field of ['Amount', 'Description', 'Date', 'Tag'])
+      expect(ui.pressable(`Go to ${field}`)).toBeTruthy();
     expect(ui.focusCount('Amount, required')).toBe(1);
     expect(ui.focusCount('Date, required')).toBe(0);
   });
@@ -355,8 +395,8 @@ describe('rendered Expense corrections', () => {
     expect(ui.focusCount('Amount, required')).toBe(0);
     expect(ui.focusCount('Description, required')).toBe(0);
     await ui.press('Tag: Groceries');
-    const tags = tagSection(ui.root());
-    expect(corrections(tags)).toEqual([]);
+    expect(corrections(ui.root())).not.toContain('Choose a Tag for this Expense.');
+    expect(ui.tile('Tag').props.accessibilityLabel).toBe('Tag, required: Groceries');
   });
 
   it('shows the same Description correction when editing, without a write', async () => {
@@ -495,5 +535,137 @@ describe('rendered edit history', () => {
     expect(shown).not.toMatch(/[a-f\d]{24}/);
     expect(shown).not.toMatch(/[{}"[\]]|moneyVersion|amountMinor|internalState/);
     expect(labels.join(' ')).not.toMatch(/[a-f\d]{24}/);
+  });
+});
+
+describe('compact Expense form', () => {
+  const openSheet = (root: ReactTestInstance, title: string) =>
+    root
+      .findAll((node) => isHost(node, 'Modal') && node.props.visible === true)
+      .some((modal) => text(modal).includes(title));
+
+  it('is a full-screen task: close keeps the draft, and the status says it is stored', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    const headings = ui
+      .root()
+      .findAll((node) => isHost(node, 'Text') && node.props.accessibilityRole === 'header');
+    expect(text(headings[0])).toBe('Add expense');
+    expect(text(ui.root())).toContain('Shared home · INR');
+    await ui.type('Description, required', 'Milk');
+    expect(
+      ui
+        .root()
+        .findAll((node) => isHost(node, 'View') && node.props.accessibilityLabel === 'Draft saved'),
+    ).toHaveLength(1);
+    await ui.press('Back to Group, keeping your draft');
+    expect(calls.close).toHaveBeenCalledOnce();
+    expect(ui.writes).toEqual([]);
+  });
+
+  it('offers Discard draft from Expense options; the app confirms it', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    await ui.press('Expense options');
+    expect(openSheet(ui.root(), 'Expense options')).toBe(true);
+    await ui.press('Discard draft, Removes these entries from this device');
+    expect(calls.discard).toHaveBeenCalledOnce();
+  });
+
+  it('uses a decimal keypad for Amount beside its read-only currency, then moves to Description', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    const amount = ui.input('Amount, required');
+    expect(amount.props).toMatchObject({ keyboardType: 'decimal-pad', returnKeyType: 'next' });
+    expect(
+      ui
+        .root()
+        .findAll(
+          (node) =>
+            isHost(node, 'View') &&
+            node.props.accessibilityLabel === 'Currency INR, the Group’s currency',
+        ),
+    ).toHaveLength(1);
+    act(() => {
+      amount.props.onSubmitEditing();
+    });
+    expect(ui.focusCount('Description, required')).toBe(1);
+  });
+
+  // A hardware keyboard or a paste bypasses the numeric keypad.
+  it('refuses letters and symbols in numbers, but never converts a value it keeps for correction', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    await ui.type('Amount, required', '-5');
+    expect(ui.input('Amount, required').props.value).toBe('-5');
+    await ui.type('Description, required', 'Milk');
+    await ui.press('Tag: Groceries');
+    await ui.press('Save expense');
+    expect(ui.writes).toEqual([]);
+    expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([
+      'Enter an amount greater than 0.',
+    ]);
+
+    await ui.type('Amount, required', '12.5');
+    for (const edit of ['12.5x', '₹12.5', '12.5 ']) await ui.type('Amount, required', edit);
+    expect(ui.input('Amount, required').props.value).toBe('12.5');
+
+    await ui.press(ui.tile('Split').props.accessibilityLabel);
+    await ui.press('Shares');
+    await ui.type('Shares for Alex', '1.5');
+    expect(ui.input('Shares for Alex').props.value).toBe('1.5');
+    await ui.type('Shares for Alex', '1.5a');
+    expect(ui.input('Shares for Alex').props.value).toBe('1.5');
+  });
+
+  it('shows each value on its tile and opens its editor', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    expect(ui.tile('Date').props.accessibilityLabel).toMatch(/^Date: /);
+    expect(ui.tile('Paid by').props.accessibilityLabel).toBe('Paid by: You');
+    expect(ui.tile('Split').props.accessibilityLabel).toBe('Split: Equally · 1');
+    expect(ui.tile('Tag').props.accessibilityLabel).toBe('Tag, required: Choose a Tag');
+
+    await ui.press(ui.tile('Paid by').props.accessibilityLabel);
+    expect(openSheet(ui.root(), 'Who paid?')).toBe(true);
+
+    await ui.press('Tag, required: Choose a Tag');
+    expect(openSheet(ui.root(), 'Only this Group’s active Tags are listed.')).toBe(true);
+    await ui.press('Tag: Groceries');
+    expect(ui.tile('Tag').props.accessibilityLabel).toBe('Tag, required: Groceries');
+    expect(openSheet(ui.root(), 'Only this Group’s active Tags are listed.')).toBe(false);
+  });
+
+  it('shows who owes what as soon as the amount is valid, and names it on Save', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    expect(text(ui.root())).toContain('Enter a valid amount to see who owes what.');
+    expect(ui.pressable('Save expense').props.accessibilityLabel).toBe('Save expense');
+    await ui.type('Amount, required', '250.50');
+    expect(
+      ui
+        .root()
+        .findAll(
+          (node) =>
+            isHost(node, 'View') &&
+            node.props.accessibilityLabel === 'You: paid ₹250.50, share ₹250.50',
+        ),
+    ).toHaveLength(1);
+    expect(text(ui.root())).toContain('Adds up');
+    expect(ui.pressable('Save expense').props.accessibilityLabel).toBe('Save expense ₹250.50');
+  });
+
+  it('keeps Category and Notes behind one optional row', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    const row = () => ui.pressable('Category and notes, optional');
+    expect(row().props.accessibilityState).toEqual({ expanded: false });
+    expect(() => ui.input('Notes')).toThrow();
+    await ui.press('Category and notes, optional');
+    expect(row().props.accessibilityState).toEqual({ expanded: true });
+    expect(ui.input('Notes')).toBeTruthy();
+    expect(
+      ui
+        .root()
+        .findAll(
+          (node) =>
+            isHost(node, 'View') &&
+            node.props.accessibilityRole === 'radiogroup' &&
+            node.props.accessibilityLabel === 'Category',
+        ),
+    ).toHaveLength(1);
   });
 });

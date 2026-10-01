@@ -248,11 +248,14 @@ export function SegmentedControl<T extends string>({
  */
 export function Chip({
   label,
+  accessibilityLabel,
   selected = false,
   onPress,
   role = 'button',
 }: {
   label: string;
+  /** When the spoken name needs more context than the visible label, e.g. "Tag: Groceries". */
+  accessibilityLabel?: string;
   selected?: boolean;
   onPress: () => void;
   role?: 'radio' | 'button';
@@ -261,7 +264,7 @@ export function Chip({
   return (
     <Pressable
       accessibilityRole={role}
-      accessibilityLabel={label}
+      accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={role === 'radio' ? { checked: selected } : { selected }}
       onPress={onPress}
       hitSlop={denseHitSlop}
