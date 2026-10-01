@@ -2,6 +2,7 @@ import { useState, type ReactNode, type Ref } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import type { ExpenseDraft, ExpenseField, expenseMoney } from '../data/expense-draft';
+import { numericText } from '../data/field-feedback';
 import { Field, FieldError } from './group-workflows';
 import { Icon } from './primitives';
 import {
@@ -128,7 +129,10 @@ export function AmountDescriptionCard({
               selectionColor={theme.brand.main}
               accessibilityLabel="Amount, required"
               accessibilityHint={errors.amount}
-              onChangeText={(amount) => onChange({ amount })}
+              onChangeText={(text) => {
+                const amount = numericText(text);
+                if (amount !== draft.amount) onChange({ amount });
+              }}
               onBlur={() => onLeave('amount')}
               onSubmitEditing={onAmountDone}
               style={[

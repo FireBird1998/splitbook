@@ -574,6 +574,9 @@ describe('compact Expense form', () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     const amount = ui.input('Amount, required');
     expect(amount.props).toMatchObject({ keyboardType: 'decimal-pad', returnKeyType: 'next' });
+    // A hardware keyboard or a paste can bypass the keypad; Amount still holds only a number.
+    await ui.type('Amount, required', '₹1,249.5x0.');
+    expect(ui.input('Amount, required').props.value).toBe('1249.50');
     expect(
       ui
         .root()

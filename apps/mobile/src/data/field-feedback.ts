@@ -88,6 +88,17 @@ export function correctionSummary<F extends string>(
   return `Correct ${invalid.length} fields before ${action}: ${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}.`;
 }
 
+/**
+ * Keeps only what a number field can hold: digits and, unless `whole`, one decimal point.
+ * The numeric keypad alone isn't enough: a hardware keyboard or a paste bypasses it.
+ * Precision is left to `amountError`, so nothing typed is cut short silently.
+ */
+export function numericText(text: string, whole = false): string {
+  const kept = text.replace(whole ? /\D/g : /[^\d.]/g, '');
+  const point = kept.indexOf('.');
+  return point < 0 ? kept : kept.slice(0, point + 1) + kept.slice(point + 1).replaceAll('.', '');
+}
+
 export function amountExample(currency: string) {
   const digits = getCurrencyPrecision(currency);
   return digits ? `250.${'50'.padEnd(digits, '0').slice(0, digits)}` : '250';

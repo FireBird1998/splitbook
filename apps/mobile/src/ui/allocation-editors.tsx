@@ -1,6 +1,7 @@
 import { KeyboardAvoidingView, Modal, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ExpenseDraft } from '../data/expense-draft';
+import { numericText } from '../data/field-feedback';
 import { Field } from './group-workflows';
 import { Button, Copy } from './primitives';
 import { fonts, useTheme } from './theme';
@@ -136,10 +137,12 @@ export function AllocationEditor({
                         keyboardType="decimal-pad"
                         maxLength={40}
                         editable={!locked}
-                        onChangeText={(amount) =>
+                        onChangeText={(text) =>
                           onChange({
                             payers: draft.payers.map((payer) =>
-                              payer.user === member.id ? { ...payer, amount } : payer,
+                              payer.user === member.id
+                                ? { ...payer, amount: numericText(text) }
+                                : payer,
                             ),
                           })
                         }
@@ -203,8 +206,13 @@ export function AllocationEditor({
                         keyboardType={draft.splitMethod === 'shares' ? 'number-pad' : 'decimal-pad'}
                         maxLength={40}
                         editable={!locked}
-                        onChangeText={(value) =>
-                          onChange({ splitValues: { ...draft.splitValues, [member.id]: value } })
+                        onChangeText={(text) =>
+                          onChange({
+                            splitValues: {
+                              ...draft.splitValues,
+                              [member.id]: numericText(text, draft.splitMethod === 'shares'),
+                            },
+                          })
                         }
                       />
                     )}
