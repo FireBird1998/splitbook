@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
-import { visibleFieldErrors } from '../data/field-feedback';
+import { acceptsNumericText, visibleFieldErrors } from '../data/field-feedback';
 import {
   settlementFields,
   type SettlementDraft,
@@ -280,7 +280,11 @@ export function RecordPaymentSheet({
                   selectionColor={theme.brand.main}
                   accessibilityLabel="Amount paid, required"
                   accessibilityHint={errors.amount}
-                  onChangeText={(amount) => onChange({ amount })}
+                  onChangeText={(amount) => {
+                    // A refused edit leaves the field showing the draft's amount.
+                    if (amount !== draft.amount && acceptsNumericText(amount, draft.amount))
+                      onChange({ amount });
+                  }}
                   onBlur={() => onLeaveField('amount')}
                   style={{
                     flex: 1,

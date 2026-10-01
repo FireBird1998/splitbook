@@ -198,14 +198,14 @@ describe('Record payment sheet states', () => {
     ...overrides,
   });
   const sheet = (state: SettlementState) => {
-    const calls = { record: vi.fn(), close: vi.fn() };
+    const calls = { record: vi.fn(), close: vi.fn(), change: vi.fn() };
     const root = render(
       <RecordPaymentSheet
         visible
         state={state}
         currentUserId={you}
         today="Today, Oct 1"
-        onChange={() => undefined}
+        onChange={calls.change}
         onLeaveField={() => undefined}
         onAcknowledge={() => undefined}
         onRecord={calls.record}
@@ -236,6 +236,16 @@ describe('Record payment sheet states', () => {
       base({ draft: { paidBy: sam, paidTo: you, currency: 'INR', amount: '1060', note: '' } }),
     );
     expect(labelled(root, 'Sam Chen pays you. Suggested ₹1,060.00.')).toHaveLength(1);
+  });
+
+  it('refuses letters and symbols in the amount, keeping a sign for its correction', () => {
+    // A hardware keyboard or a paste bypasses the decimal keypad.
+    const { root, calls } = sheet(base({}));
+    const amount = () => labelled(root, 'Amount paid, required')[0];
+    for (const edit of ['1060a', '₹1060', '1060 ']) act(() => amount().props.onChangeText(edit));
+    expect(calls.change).not.toHaveBeenCalled();
+    act(() => amount().props.onChangeText('-1060'));
+    expect(calls.change).toHaveBeenCalledWith({ amount: '-1060' });
   });
 
   it('shows one progress bar while checking the latest balances', () => {
