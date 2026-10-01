@@ -178,12 +178,13 @@ async function run() {
       await controller!.openSettlements(groupId!);
       controller!.selectSettlement(samId, alexId, 'INR');
       controller!.updateSettlement({ amount, note });
-      await controller!.reviewSettlement();
-      assert.equal(controller!.getSnapshot().settlement.status, 'review');
+      assert.equal(controller!.getSnapshot().settlement.status, 'editing');
     };
     await start('2.34', 'Partial payment already made');
     await controller.recordSettlement();
-    assert.equal(controller.getSnapshot().settlement.status, 'ready');
+    // The sheet closes onto Balances with its confirmation.
+    assert.equal(controller.getSnapshot().screen, 'group');
+    assert.equal(controller.getSnapshot().snackbar?.message, 'Payment recorded');
     assert.equal(await debt(samId, alexId), 10);
     await start('10', 'Full remaining payment');
     await controller.recordSettlement();

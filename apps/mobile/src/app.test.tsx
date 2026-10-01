@@ -429,7 +429,7 @@ describe('App refresh rendering', () => {
     expect(app.text()).toContain('September 2026 expense total');
     await app.press('Balances');
     expect(app.text()).toContain(retained);
-    expect(app.text()).toContain('You owe Alex');
+    expect(app.text()).toContain('You owe₹30.00');
     expect(app.refreshControl().refreshing).toBe(false);
 
     // A retry is not a pull: it keeps the figures and shows the quiet header status only.
@@ -440,14 +440,14 @@ describe('App refresh rendering', () => {
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
     expect(app.text()).toContain(`Saved ${verifiedAt} · updating`);
-    expect(app.text()).toContain('You owe Alex');
+    expect(app.text()).toContain('You owe₹30.00');
 
     app.use(() => undefined);
     retried.release(json({ data: group, status: 200 }));
     await settle();
     expect(app.text()).not.toContain('Showing Maple House from');
     expect(app.text()).not.toContain('· updating');
-    expect(app.text()).toContain('You owe Alex');
+    expect(app.text()).toContain('You owe₹30.00');
     expect(app.refreshControl().refreshing).toBe(false);
     await app.press('Expenses');
     expect(app.text()).toContain('September groceries');
@@ -486,13 +486,13 @@ describe('App refresh rendering', () => {
     expect(app.text()).toContain('September groceries');
     await app.press('Balances');
     expect(app.text()).toContain(`Saved ${verifiedAt} · updating`);
-    expect(app.text()).toContain('You owe Alex');
+    expect(app.text()).toContain('You owe₹30.00');
     expect(app.refreshControl().refreshing).toBe(false);
     app.use(() => undefined);
     groupRead.release(json({ data: group, status: 200 }));
     await settle();
     expect(app.text()).not.toContain('· updating');
-    expect(app.text()).toContain('You owe Alex');
+    expect(app.text()).toContain('You owe₹30.00');
   });
 
   it('turns on the pull indicator for a pull but never for an automatic refresh', async () => {

@@ -644,12 +644,11 @@ describe('cached views and coalesced reads (#103)', () => {
         await controller.updateExpenseDraft({ description: 'Dinner', amount: '12', tagId });
         await controller.saveExpense();
       } else {
-        await controller.openSettlements(groupId);
-        controller.selectSettlement(alex.id, sam.id, 'INR');
-        await controller.reviewSettlement();
+        await controller.openGroup(groupId, true, 'balances');
+        await controller.openRecordPayment(alex.id, sam.id, 'INR');
         await controller.recordSettlement();
-        expect(controller.getSnapshot().settlement.message).toContain('Payment recorded');
-        await controller.openGroup(groupId);
+        expect(controller.getSnapshot().snackbar?.message).toBe('Payment recorded');
+        await controller.selectDestination('expenses');
       }
       expect(f.state.ledger).toBe(1);
       expect(controller.getSnapshot().financial).toMatchObject({

@@ -69,7 +69,6 @@ export interface SettlementState {
   groupId: string | null;
   group: MobileGroup | null;
   balances: GroupCurrencyBalance[];
-  history: SettlementRecord[];
   status:
     | 'idle'
     | 'loading'
@@ -91,7 +90,6 @@ export const emptySettlement = (): SettlementState => ({
   groupId: null,
   group: null,
   balances: [],
-  history: [],
   status: 'idle',
   draft: null,
   attempt: null,

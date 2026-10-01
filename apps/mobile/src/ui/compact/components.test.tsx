@@ -12,6 +12,7 @@ vi.mock('react-native', () => ({
   View: 'View',
   useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: screen.fontScale }),
 }));
+vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
 vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 

@@ -8,6 +8,7 @@ import {
   ScrollView,
   View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../theme';
 import { CompactButton } from './controls';
 import { radius, shouldDismissSheet } from './scale';
@@ -16,7 +17,8 @@ import { CompactText } from './text';
 /**
  * A bottom sheet over the current screen: handle, header with Done, a scrolling body and a pinned
  * footer for totals and status. Swipe-down, tapping outside and Back all behave like Done, so
- * dismissing never discards entries. It grows with its content up to 90% of the screen.
+ * dismissing keeps entries unless the caller's Done discards them, as Record payment's Close
+ * does (it says so through `dismissLabel`). It grows with its content up to 90% of the screen.
  */
 export function BottomSheet({
   visible,
@@ -25,6 +27,7 @@ export function BottomSheet({
   titleAccessory,
   onDone,
   doneLabel = 'Done',
+  dismissLabel = `Close ${title}, keeping your entries`,
   children,
   footer,
 }: {
@@ -35,6 +38,8 @@ export function BottomSheet({
   titleAccessory?: ReactNode;
   onDone: () => void;
   doneLabel?: string;
+  /** The scrim's spoken label, when closing doesn't keep entries. */
+  dismissLabel?: string;
   children: ReactNode;
   footer?: ReactNode;
 }) {
@@ -74,7 +79,7 @@ export function BottomSheet({
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Close ${title}, keeping your entries`}
+          accessibilityLabel={dismissLabel}
           onPress={onDone}
           style={{
             position: 'absolute',
@@ -96,69 +101,72 @@ export function BottomSheet({
             transform: [{ translateY: drag }],
           }}
         >
-          <View testID="sheet-drag-area" {...pan.panHandlers}>
-            <View
-              style={{
-                alignSelf: 'center',
-                width: 36,
-                height: 4,
-                borderRadius: 2,
-                marginTop: 10,
-                marginBottom: 2,
-                backgroundColor: theme.borderStrong,
-              }}
-            />
-            <View
-              style={{
-                minHeight: 56,
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 8,
-                paddingLeft: 20,
-                paddingRight: 8,
-              }}
-            >
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <CompactText variant="title" accessibilityRole="header" numberOfLines={1}>
-                    {title}
-                  </CompactText>
-                  {titleAccessory}
+          {/* The sheet draws edge to edge; its content stays above Android's navigation bar. */}
+          <SafeAreaView edges={['bottom']} style={{ flexShrink: 1 }}>
+            <View testID="sheet-drag-area" {...pan.panHandlers}>
+              <View
+                style={{
+                  alignSelf: 'center',
+                  width: 36,
+                  height: 4,
+                  borderRadius: 2,
+                  marginTop: 10,
+                  marginBottom: 2,
+                  backgroundColor: theme.borderStrong,
+                }}
+              />
+              <View
+                style={{
+                  minHeight: 56,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 8,
+                  paddingLeft: 20,
+                  paddingRight: 8,
+                }}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <CompactText variant="title" accessibilityRole="header" numberOfLines={1}>
+                      {title}
+                    </CompactText>
+                    {titleAccessory}
+                  </View>
+                  {subtitle ? (
+                    <CompactText variant="caption" tone="secondary">
+                      {subtitle}
+                    </CompactText>
+                  ) : null}
                 </View>
-                {subtitle ? (
-                  <CompactText variant="caption" tone="secondary">
-                    {subtitle}
-                  </CompactText>
-                ) : null}
+                <CompactButton label={doneLabel} variant="text" dense onPress={onDone} />
               </View>
-              <CompactButton label={doneLabel} variant="text" dense onPress={onDone} />
             </View>
-          </View>
-          <ScrollView
-            style={{ flexGrow: 0 }}
-            contentContainerStyle={{
-              paddingHorizontal: 20,
-              paddingBottom: footer ? 8 : 20,
-              gap: 12,
-            }}
-            keyboardShouldPersistTaps="handled"
-          >
-            {children}
-          </ScrollView>
-          {footer ? (
-            <View
-              style={{
+            <ScrollView
+              style={{ flexGrow: 0 }}
+              contentContainerStyle={{
                 paddingHorizontal: 20,
-                paddingTop: 12,
-                paddingBottom: 16,
-                gap: 6,
-                borderTopWidth: 1,
-                borderTopColor: theme.border,
+                paddingBottom: footer ? 8 : 20,
+                gap: 12,
               }}
+              keyboardShouldPersistTaps="handled"
             >
-              {footer}
-            </View>
-          ) : null}
+              {children}
+            </ScrollView>
+            {footer ? (
+              <View
+                style={{
+                  paddingHorizontal: 20,
+                  paddingTop: 12,
+                  paddingBottom: 16,
+                  gap: 6,
+                  borderTopWidth: 1,
+                  borderTopColor: theme.border,
+                }}
+              >
+                {footer}
+              </View>
+            ) : null}
+          </SafeAreaView>
         </Animated.View>
       </KeyboardAvoidingView>
     </Modal>

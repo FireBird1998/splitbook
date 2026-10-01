@@ -175,7 +175,6 @@ describe('native payment recording', () => {
     await controller.signIn('alex');
     await controller.openSettlements(groupId);
     controller.selectSettlement(actor, recipient, 'INR');
-    await controller.reviewSettlement();
     const saving = controller.recordSettlement();
     await dispatched;
     await controller.openInvitation('http://localhost:4138/join/1234abcd');
@@ -194,10 +193,10 @@ describe('native payment recording', () => {
     expect(restarted.getSnapshot().settlement.attempt).toBeNull();
   });
 
-  it('keeps an interrupted payment review usable after a warm invitation', async () => {
+  it('keeps an interrupted Record usable, and unsent, after a warm invitation', async () => {
     let hold = false,
       release!: (value: FetchResponse) => void;
-    const { controller } = setup((path) =>
+    const { controller, writes } = setup((path) =>
       hold && path === `/api/groups/${groupId}`
         ? new Promise((resolve) => {
             release = resolve;
@@ -208,12 +207,13 @@ describe('native payment recording', () => {
     await controller.openSettlements(groupId);
     controller.selectSettlement(actor, recipient, 'INR');
     hold = true;
-    const pending = controller.reviewSettlement();
+    const pending = controller.recordSettlement();
     await controller.openInvitation('http://localhost:4138/join/1234abcd');
     release(json({ status: 200, data: group }));
     await pending;
     expect(controller.getSnapshot().settlement.status).toBe('editing');
     expect(controller.getSnapshot().screen).toBe('invite');
+    expect(writes).toHaveLength(0);
   });
   it.each(['offline', 'storage'] as const)(
     'does not send or queue a payment when %s is unavailable',
@@ -227,7 +227,6 @@ describe('native payment recording', () => {
       await controller.signIn('alex');
       await controller.openSettlements(groupId);
       controller.selectSettlement(actor, recipient, 'INR');
-      await controller.reviewSettlement();
       if (failure === 'offline') offline = true;
       else
         store.save = async () => {
@@ -268,7 +267,6 @@ describe('native payment recording', () => {
     expect(controller.getSnapshot().settlement.draft).toBeNull();
     controller.selectSettlement(actor, recipient, 'INR');
     controller.updateSettlement({ amount: '10.001' });
-    await controller.reviewSettlement();
     await controller.recordSettlement();
     expect(writes).toHaveLength(0);
     expect(controller.getSnapshot().settlement.status).toBe('editing');
@@ -290,7 +288,6 @@ describe('native payment recording', () => {
     await controller.openSettlements(groupId);
     controller.selectSettlement(actor, recipient, 'INR');
     controller.updateSettlement({ amount: '10', note: 'Paid already' });
-    await controller.reviewSettlement();
     const saving = controller.recordSettlement();
     await dispatched;
     expect(records.size).toBe(1);
@@ -298,11 +295,7 @@ describe('native payment recording', () => {
     release(json({ status: 201, data: record }, 201));
     await saving;
     expect(records.size).toBe(0);
-    expect(controller.getSnapshot().settlement).toMatchObject({
-      draft: null,
-      attempt: null,
-      history: [],
-    });
+    expect(controller.getSnapshot().settlement).toMatchObject({ draft: null, attempt: null });
     expect(controller.getSnapshot().auth.status).toBe('signed-out');
   });
 
@@ -316,7 +309,6 @@ describe('native payment recording', () => {
     await controller.openSettlements(groupId);
     controller.selectSettlement(actor, recipient, 'INR');
     controller.updateSettlement({ amount: '10', note: 'Paid already' });
-    await controller.reviewSettlement();
     await controller.recordSettlement();
     expect(controller.getSnapshot().settlement).toMatchObject({
       status: 'editing',
@@ -341,7 +333,6 @@ describe('native payment recording', () => {
     await controller.signIn('alex');
     await controller.openSettlements(groupId);
     controller.selectSettlement(actor, recipient, 'INR');
-    await controller.reviewSettlement();
     denied = true;
     await controller.recordSettlement();
     expect(writes).toHaveLength(0);
@@ -349,7 +340,6 @@ describe('native payment recording', () => {
     denied = false;
     await controller.openSettlements(groupId);
     controller.selectSettlement(actor, recipient, 'INR');
-    await controller.reviewSettlement();
     await controller.recordSettlement();
     const attempt = controller.getSnapshot().settlement.attempt;
     expect(attempt).not.toBeNull();
@@ -381,7 +371,6 @@ describe('native payment recording', () => {
     await controller.openSettlements(groupId);
     controller.selectSettlement(actor, recipient, 'INR');
     controller.updateSettlement({ amount: '10', note: 'Paid already' });
-    await controller.reviewSettlement();
     await controller.recordSettlement();
     expect(controller.getSnapshot().settlement.status).toBe('uncertain');
     expect(records.size).toBe(1);
@@ -400,7 +389,12 @@ describe('native payment recording', () => {
       new Headers(writes[0].headers).get('Idempotency-Key'),
     );
     expect(records.size).toBe(0);
-    expect(restarted.getSnapshot().settlement.status).toBe('ready');
+    expect(restarted.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'balances',
+      snackbar: { message: 'Payment recorded' },
+      settlement: { draft: null, attempt: null },
+    });
   });
 
   it('requires explicit acknowledgment above the latest suggestion and resets it when that suggestion changes', async () => {
@@ -418,7 +412,6 @@ describe('native payment recording', () => {
     await controller.openSettlements(groupId);
     controller.selectSettlement(actor, recipient, 'INR');
     controller.updateSettlement({ amount: '35' });
-    await controller.reviewSettlement();
     await controller.recordSettlement();
     expect(writes).toHaveLength(0);
     controller.acknowledgeSettlement();
@@ -436,47 +429,41 @@ describe('native payment recording', () => {
     expect(writes).toHaveLength(1);
   });
 
-  it.each([
-    { endpoint: 'balances', status: 503 },
-    { endpoint: 'settlements', status: 503 },
-    { endpoint: 'balances', status: 403 },
-  ])(
-    'retains confirmed payment and $endpoint refresh failure ($status)',
-    async ({ endpoint, status }) => {
+  it.each([503, 403])(
+    'keeps a confirmed payment confirmed when the Balances read after it fails (%s)',
+    async (status) => {
       let committed = false;
       const { controller, records, writes } = setup((path, init) => {
         if (path.endsWith('/settlements') && init.method === 'POST') {
           committed = true;
           return json({ status: 201, data: record }, 201);
         }
-        if (committed && path === `/api/groups/${groupId}/${endpoint}`)
+        if (committed && path === `/api/groups/${groupId}/balances`)
           return json({ status, error: 'Payment refresh unavailable' }, status);
       });
       await controller.signIn('alex');
-      await controller.openSettlements(groupId);
-      controller.selectSettlement(actor, recipient, 'INR');
+      await controller.openGroup(groupId, true, 'balances');
+      await controller.openRecordPayment(actor, recipient, 'INR');
       controller.updateSettlement({ amount: '10', note: 'Paid already' });
-      await controller.reviewSettlement();
       await controller.recordSettlement();
       expect(writes).toHaveLength(1);
       expect(records.size).toBe(0);
-      const state = controller.getSnapshot().settlement;
-      expect(state.status).toBe(status === 403 ? 'blocked' : 'error');
-      expect(state.attempt).toBeNull();
-      expect(state.message).toContain('Payment recorded.');
-      expect(state.message).toContain(
-        status === 403
-          ? 'You no longer have access to this group.'
-          : 'The server could not complete this request. Please try again.',
-      );
-      expect(state.message).toContain('Use Refresh payments');
-      expect(state.message).not.toContain('refreshed balances show');
+      const snapshot = controller.getSnapshot();
+      expect(snapshot.screen).toBe('group');
+      expect(snapshot.settlement).toMatchObject({ draft: null, attempt: null });
+      if (status === 503)
+        expect(snapshot).toMatchObject({
+          destination: 'balances',
+          snackbar: { message: 'Payment recorded' },
+          financial: { balances: { status: 'error' } },
+        });
+      else expect(snapshot.detail.status).toBe('denied');
       await controller.recordSettlement();
       expect(writes).toHaveLength(1);
     },
   );
 
-  it('does not replace a newer payment review message when an older success refresh finishes', async () => {
+  it('keeps a reopened sheet as it is when the refresh after an earlier payment finishes', async () => {
     let committed = false,
       held = false;
     let release!: (value: FetchResponse) => void, entered!: () => void;
@@ -500,24 +487,24 @@ describe('native payment recording', () => {
       }
     });
     await controller.signIn('alex');
-    await controller.openSettlements(groupId);
-    controller.selectSettlement(actor, recipient, 'INR');
+    await controller.openGroup(groupId, true, 'balances');
+    await controller.openRecordPayment(actor, recipient, 'INR');
     controller.updateSettlement({ amount: '10', note: 'Paid already' });
-    await controller.reviewSettlement();
     const saving = controller.recordSettlement();
     await dispatched;
-    controller.openSettings();
-    await controller.openSettlements(groupId);
-    controller.selectSettlement(actor, recipient, 'INR');
+    // The sheet closed onto Balances, which are still being read; the member opens it again.
+    expect(controller.getSnapshot().screen).toBe('group');
+    await controller.openRecordPayment(actor, recipient, 'INR');
     controller.updateSettlement({ amount: '5' });
-    await controller.reviewSettlement();
-    const reviewed = controller.getSnapshot().settlement;
+    const reopened = controller.getSnapshot().settlement;
+    expect(reopened).toMatchObject({ status: 'editing', suggested: 20, draft: { amount: '5' } });
     release(json(balances(20)));
     await saving;
-    expect(controller.getSnapshot().settlement).toEqual(reviewed);
+    expect(controller.getSnapshot().screen).toBe('settlement');
+    expect(controller.getSnapshot().settlement).toEqual(reopened);
   });
 
-  it('persists the exact actual payment before recording and refreshes history and balances', async () => {
+  it('persists the exact actual payment before recording, then closes onto refreshed Balances', async () => {
     let committed = false;
     const { controller, records, writes } = setup((path, init) => {
       if (path.endsWith('/settlements') && init.method === 'POST') {
@@ -535,29 +522,26 @@ describe('native payment recording', () => {
         committed = true;
         return json({ status: 201, data: record }, 201);
       }
-      if (path.endsWith('/settlements'))
-        return json({ status: 200, data: committed ? [record] : [] });
       if (path.endsWith('/balances') && !path.endsWith('/user/balances'))
         return json(balances(committed ? 20 : 30));
     });
     await controller.signIn('alex');
-    await controller.openSettlements(groupId);
-    controller.selectSettlement(actor, recipient, 'INR');
+    await controller.openGroup(groupId, true, 'balances');
+    await controller.openRecordPayment(actor, recipient, 'INR');
     controller.updateSettlement({ amount: '10', note: 'Paid already' });
-    await controller.reviewSettlement();
     await controller.recordSettlement();
     expect(writes).toHaveLength(1);
     expect(records.size).toBe(0);
-    expect(controller.getSnapshot().settlement).toMatchObject({
-      status: 'ready',
-      draft: null,
-      attempt: null,
-      history: [{ _id: settlementId }],
-      balances: [{ debts: [{ amount: 20 }] }],
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'balances',
+      snackbar: { groupId, message: 'Payment recorded' },
+      settlement: { draft: null, attempt: null },
+      financial: { balances: { status: 'ready', data: [{ debts: [{ amount: 20 }] }] } },
     });
   });
 
-  it('refreshes the suggested debt for review while retaining a partial actual payment', async () => {
+  it('refreshes a changed suggestion on Record, keeping a partial actual payment and sending nothing', async () => {
     let suggested = 30;
     const { controller, writes } = setup((path) =>
       path.endsWith('/balances') && !path.endsWith('/user/balances')
@@ -570,12 +554,101 @@ describe('native payment recording', () => {
     expect(controller.getSnapshot().settlement.draft?.amount).toBe('30');
     controller.updateSettlement({ amount: '10', note: 'Paid already' });
     suggested = 25;
-    await controller.reviewSettlement();
+    await controller.recordSettlement();
     expect(controller.getSnapshot().settlement).toMatchObject({
       status: 'review',
       suggested: 25,
       draft: { amount: '10', paidBy: actor, paidTo: recipient, currency: 'INR' },
     });
     expect(writes).toHaveLength(0);
+  });
+
+  it('opens Record over Balances pre-filled from a live read, leaving the Group’s own reads running', async () => {
+    let hold = false,
+      release!: (value: FetchResponse) => void,
+      entered!: () => void;
+    const held = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const { controller, writes } = setup((path) => {
+      if (hold && path === `/api/groups/${groupId}/balances`) {
+        hold = false;
+        return new Promise((resolve) => {
+          release = resolve;
+          entered();
+        });
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    hold = true;
+    const refreshing = controller.refreshBalances();
+    await held;
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      settlement: {
+        status: 'editing',
+        suggested: 30,
+        acknowledged: false,
+        draft: { paidBy: actor, paidTo: recipient, currency: 'INR', amount: '30', note: '' },
+      },
+    });
+    release(json(balances(30)));
+    await refreshing;
+    expect(controller.getSnapshot().financial.balances.status).toBe('ready');
+    // Close and Android Back return to Balances, recording nothing.
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'balances',
+      settlement: { draft: null },
+    });
+    expect(writes).toHaveLength(0);
+  });
+
+  it('says so when the chosen suggestion is gone by the sheet’s live read', async () => {
+    let amount = 30;
+    const { controller, writes } = setup((path) =>
+      path.endsWith('/balances') && !path.endsWith('/user/balances')
+        ? json(balances(amount))
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    amount = 0;
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'ready',
+      draft: null,
+      message: 'This suggested payment has changed. Close this to see the latest balances.',
+    });
+    await controller.recordSettlement();
+    expect(writes).toHaveLength(0);
+  });
+
+  it('keeps the overpayment tick through note edits and asks again after a new amount', async () => {
+    const { controller } = setup();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    controller.updateSettlement({ amount: '35' });
+    controller.acknowledgeSettlement(true);
+    controller.updateSettlement({ note: 'Rounded up' });
+    expect(controller.getSnapshot().settlement.acknowledged).toBe(true);
+    controller.updateSettlement({ amount: '36' });
+    expect(controller.getSnapshot().settlement.acknowledged).toBe(false);
+    controller.acknowledgeSettlement(true);
+    controller.acknowledgeSettlement(false);
+    expect(controller.getSnapshot().settlement.acknowledged).toBe(false);
+  });
+
+  it('opens Record only from the Balances destination', async () => {
+    const { controller } = setup();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().screen).toBe('group');
+    expect(controller.getSnapshot().settlement.draft).toBeNull();
   });
 });

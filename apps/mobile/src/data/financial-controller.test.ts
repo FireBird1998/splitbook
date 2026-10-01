@@ -758,7 +758,7 @@ describe('stable financial refresh', () => {
         data: before.balances.data,
         stale: true,
         refreshedAt: before.balances.refreshedAt,
-        message: 'Could not update running balances. Please try again.',
+        message: 'Could not update balances. Please try again.',
       },
     });
   });

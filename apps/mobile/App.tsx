@@ -1,5 +1,4 @@
 import { OfflineNotice } from './src/ui/offline-notice';
-import { SettlementScreen } from './src/ui/settlement-screen';
 import { useCallback, useEffect, useRef, useSyncExternalStore, type RefObject } from 'react';
 import {
   AppState,
@@ -40,7 +39,6 @@ import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen } from './src/ui/settings-screen';
 import { ExpenseEditor } from './src/ui/expense-editor';
 import {
-  GroupBalancesView,
   GroupExpensesView,
   HomeBalances,
   RefreshStatus,
@@ -51,6 +49,8 @@ import { GroupSnackbar } from './src/ui/group-snackbar';
 import { visibleFieldErrors } from './src/data/field-feedback';
 import { groupFields } from './src/data/group-draft';
 import { GroupShell } from './src/ui/group-shell';
+import { GroupBalancesView } from './src/ui/group-balances';
+import { RecordPaymentSheet } from './src/ui/record-payment-sheet';
 import { GroupActivity } from './src/ui/group-activity';
 import type { MobileSnapshot } from './src/data/types';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -143,7 +143,8 @@ function SplitBook() {
         </KeyboardAvoidingView>
       </SafeAreaView>
     );
-  if (configurationReady && authenticated && state.screen === 'group')
+  // Record payment is a sheet over the Group's Balances.
+  if (configurationReady && authenticated && ['group', 'settlement'].includes(state.screen))
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <GroupScreen state={state} />
@@ -194,14 +195,12 @@ function SplitBook() {
             accessibilityState={{
               disabled:
                 state.creation.status === 'saving' ||
-                (state.screen === 'settlement' && state.settlement.status === 'saving') ||
                 state.invitation.status === 'joining' ||
                 (state.screen === 'expense' &&
                   (state.expense.status === 'saving' || state.expense.persistence !== 'saved')),
             }}
             disabled={
               state.creation.status === 'saving' ||
-              (state.screen === 'settlement' && state.settlement.status === 'saving') ||
               state.invitation.status === 'joining' ||
               (state.screen === 'expense' &&
                 (state.expense.status === 'saving' || state.expense.persistence !== 'saved'))
@@ -295,7 +294,7 @@ function SplitBook() {
             keyboardDismissMode="on-drag"
             contentContainerStyle={styles.content}
             refreshControl={
-              ['settings', 'expense', 'settlement'].includes(state.screen) ? undefined : (
+              ['settings', 'expense'].includes(state.screen) ? undefined : (
                 <RefreshControl
                   refreshing={feedback.pull}
                   onRefresh={() => void controller.refresh('pull')}
@@ -339,22 +338,6 @@ function SplitBook() {
                     ],
                   )
                 }
-              />
-            ) : state.screen === 'settlement' ? (
-              <SettlementScreen
-                state={state.settlement}
-                accountId={state.auth.user!.id}
-                onSelect={controller.selectSettlement}
-                onChange={controller.updateSettlement}
-                onReview={() => void controller.reviewSettlement()}
-                onAcknowledge={controller.acknowledgeSettlement}
-                onRecord={() => void controller.recordSettlement()}
-                onRefresh={() => {
-                  if (state.settlement.groupId)
-                    void controller.openSettlements(state.settlement.groupId);
-                }}
-                onLeaveField={controller.touchSettlementField}
-                onReveal={reveal}
               />
             ) : state.screen === 'create' ? (
               <GroupCreateForm
@@ -627,18 +610,16 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               onClose={controller.closeActivityDetail}
             />
           ) : state.destination === 'balances' ? (
-            <>
-              <GroupBalancesView
-                currentUserId={userId}
-                state={state.financial}
-                onRefreshBalances={() => void controller.refreshBalances()}
-              />
-              <Button
-                label="Payments"
-                secondary
-                onPress={() => void controller.openSettlements(group.id)}
-              />
-            </>
+            <GroupBalancesView
+              group={group}
+              currentUserId={userId}
+              state={state.financial}
+              offline={state.offline.active}
+              onRecord={(paidBy, paidTo, currency) =>
+                void controller.openRecordPayment(paidBy, paidTo, currency)
+              }
+              onRefreshBalances={() => void controller.refreshBalances()}
+            />
           ) : (
             <>
               {getGroupTheme(group.category).header === 'strip' ? (
@@ -665,6 +646,17 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
           )}
         </>
       )}
+      <RecordPaymentSheet
+        visible={state.screen === 'settlement'}
+        state={state.settlement}
+        currentUserId={userId}
+        today={`Today, ${new Date().toLocaleDateString('en', { month: 'short', day: 'numeric' })}`}
+        onChange={controller.updateSettlement}
+        onLeaveField={controller.touchSettlementField}
+        onAcknowledge={controller.acknowledgeSettlement}
+        onRecord={() => void controller.recordSettlement()}
+        onClose={() => void controller.back()}
+      />
     </GroupShell>
   );
 }

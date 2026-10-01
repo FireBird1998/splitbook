@@ -3,12 +3,8 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse } from '../data/types';
-import {
-  GroupBalancesView,
-  GroupExpensesView,
-  HomeBalances,
-  RefreshStatus,
-} from './financial-views';
+import { GroupExpensesView, HomeBalances, RefreshStatus } from './financial-views';
+import { GroupBalancesView } from './group-balances';
 import { refreshFeedback, refreshedLabel } from './refresh-feedback';
 
 // Host stand-ins keep the props and text Android receives.
@@ -19,6 +15,7 @@ vi.mock('react-native', () => ({
   Text: 'Text',
   View: 'View',
 }));
+vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
 vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -152,8 +149,11 @@ function Screen({ controller }: { controller: MobileController }) {
       ) : state.detail.data ? (
         <>
           <GroupBalancesView
+            group={state.detail.data}
             currentUserId={user.id}
             state={state.financial}
+            offline={false}
+            onRecord={noop}
             onRefreshBalances={noop}
           />
           <GroupExpensesView
@@ -236,10 +236,15 @@ describe('rendered refresh feedback', () => {
     const opening = controller.openGroup(groupId);
     await expenses.reached;
     await flush();
-    expect(text(root())).toContain('Loading running balances…');
+    // Balances show placeholder rows; Expenses keep their spinner until #116.
+    expect(
+      root().findAll(
+        (node) => isHost(node, 'View') && node.props.accessibilityLabel === 'Loading balances',
+      ),
+    ).toHaveLength(1);
     expect(text(root())).toContain('Loading September 2026 expenses…');
     expect(text(root())).not.toContain('Updating…');
-    expect(spinners(root())).toBe(2);
+    expect(spinners(root())).toBe(1);
     await expenses.release(json(page([expense('b00000000000000000000001', 'Groceries')])));
     await settle(opening);
     expect(spinners(root())).toBe(0);
@@ -262,9 +267,9 @@ describe('rendered refresh feedback', () => {
     expect(spinners(root())).toBe(0);
     expect(shown).toContain('Groceries');
     expect(shown).toContain('September 2026 expense total');
-    expect(shown).toContain('You owe Alex');
+    expect(shown).toContain('You owe₹30.00');
     expect(shown).toContain(
-      `Updating running balances. These figures are from ${refreshedLabel(verifiedAt)} and may change.`,
+      `Updating balances. These figures are from ${refreshedLabel(verifiedAt)} and may change.`,
     );
     await expenses.release(
       json(
@@ -292,16 +297,14 @@ describe('rendered refresh feedback', () => {
     });
     const shown = text(root());
     expect(shown).toContain('Groceries');
-    expect(shown).toContain('You owe Alex');
+    expect(shown).toContain('You owe₹30.00');
     expect(shown).toContain(
       `The server could not complete this request. Please try again. Showing September 2026 expenses from ${verifiedAt}.`,
     );
     expect(shown).toContain(
-      `Could not update running balances. Please try again. Showing running balances from ${verifiedAt}.`,
+      `Could not update balances. Please try again. Showing balances from ${verifiedAt}.`,
     );
-    expect(buttons(root())).toEqual(
-      expect.arrayContaining(['Retry expenses', 'Retry running balances']),
-    );
+    expect(buttons(root())).toEqual(expect.arrayContaining(['Retry expenses', 'Retry balances']));
   });
 
   it('keeps Home figures on screen and explains a failed automatic refresh', async () => {
