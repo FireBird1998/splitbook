@@ -1,0 +1,54 @@
+[
+  {
+    "draft": "01",
+    "title": "Validate Group lists consistently on web and Android",
+    "parent": "group",
+    "blocked_by": [],
+    "stories": [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17, 18, 19, 22, 23, 24, 25, 26]
+  },
+  {
+    "draft": "02",
+    "title": "Validate Group details and settings across clients",
+    "parent": "group",
+    "blocked_by": ["01"],
+    "stories": [
+      2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26
+    ]
+  },
+  {
+    "draft": "03",
+    "title": "Verify complete Group read compatibility and recovery",
+    "parent": "group",
+    "blocked_by": ["02"],
+    "stories": [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26
+    ]
+  },
+  {
+    "draft": "04",
+    "title": "Characterize Expense and Settlement retry failures",
+    "parent": "ledger",
+    "blocked_by": ["github:70"],
+    "stories": [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26
+    ]
+  },
+  {
+    "draft": "05",
+    "title": "Unify safe postcommit Activity ordering and narrow retry coordination",
+    "parent": "ledger",
+    "blocked_by": ["04"],
+    "stories": [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 25, 26
+    ]
+  },
+  {
+    "draft": "06",
+    "title": "Verify ledger creation and recovery end to end",
+    "parent": "ledger",
+    "blocked_by": ["05"],
+    "stories": [
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26
+    ]
+  }
+]
