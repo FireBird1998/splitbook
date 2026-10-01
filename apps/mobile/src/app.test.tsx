@@ -362,6 +362,8 @@ describe('App refresh rendering', () => {
 
     const groupRead = hold();
     app.use((path) => (path === `/api/groups/${groupId}` ? groupRead.respond() : undefined));
+    // Past the display freshness window, so the foreground refresh reads again.
+    app.clock.now += 31_000;
     app.foreground();
     await groupRead.reached;
     await settle();
@@ -404,7 +406,7 @@ describe('App refresh rendering', () => {
     await retried.reached;
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
-    expect(app.text()).toContain('Updating…');
+    expect(app.text()).toContain(`Saved ${verifiedAt} · updating`);
     expect(app.text()).toContain('September groceries');
     expect(app.text()).toContain('You owe Alex');
 
@@ -412,9 +414,49 @@ describe('App refresh rendering', () => {
     retried.release(json({ data: group, status: 200 }));
     await settle();
     expect(app.text()).not.toContain('Showing Maple House from');
-    expect(app.text()).not.toContain('Updating…');
+    expect(app.text()).not.toContain('· updating');
     expect(app.text()).toContain('September groceries');
     expect(app.refreshControl().refreshing).toBe(false);
+  });
+
+  it('reopens a recent Group without a request, then shows it with its time while it is read again', async () => {
+    const app = await renderApp();
+    const reads: string[] = [];
+    app.use((path) => {
+      reads.push(path);
+      return undefined;
+    });
+    await app.press('Open Maple House');
+    const verifiedAt = refreshedLabel(app.clock.now);
+    await app.press('Back to Groups');
+    reads.length = 0;
+
+    // Within the display freshness window: shown at once, nothing read, no progress cue.
+    app.clock.now += 20_000;
+    await app.press('Open Maple House');
+    app.foreground();
+    await settle();
+    expect(reads).toEqual([]);
+    expect(app.text()).toContain('September groceries');
+    expect(app.text()).not.toContain('· updating');
+
+    // After it: the same figures stay, labelled with when they were verified.
+    await app.press('Back to Groups');
+    app.clock.now += 31_000;
+    const groupRead = hold();
+    app.use((path) => (path === `/api/groups/${groupId}` ? groupRead.respond() : undefined));
+    await app.press('Open Maple House');
+    await groupRead.reached;
+    await settle();
+    expect(app.text()).toContain(`Saved ${verifiedAt} · updating`);
+    expect(app.text()).toContain('September groceries');
+    expect(app.text()).toContain('You owe Alex');
+    expect(app.refreshControl().refreshing).toBe(false);
+    app.use(() => undefined);
+    groupRead.release(json({ data: group, status: 200 }));
+    await settle();
+    expect(app.text()).not.toContain('· updating');
+    expect(app.text()).toContain('September groceries');
   });
 
   it('turns on the pull indicator for a pull but never for an automatic refresh', async () => {
@@ -423,11 +465,13 @@ describe('App refresh rendering', () => {
     const expenses = hold();
     app.use((path) => (path.includes('/expenses?') ? expenses.respond() : undefined));
 
+    const verifiedAt = refreshedLabel(app.clock.now);
+    app.clock.now += 31_000;
     app.foreground();
     await expenses.reached;
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
-    expect(app.text()).toContain('Updating…');
+    expect(app.text()).toContain(`Saved ${verifiedAt} · updating`);
     expect(app.text()).toContain('September groceries');
     expenses.release(json(page([september])));
     await settle();
@@ -438,7 +482,7 @@ describe('App refresh rendering', () => {
     await pulled.reached;
     await settle();
     expect(app.refreshControl().refreshing).toBe(true);
-    expect(app.text()).not.toContain('Updating…');
+    expect(app.text()).not.toContain('· updating');
     expect(app.text()).toContain('September groceries');
     pulled.release(json(page([september])));
     await settle();

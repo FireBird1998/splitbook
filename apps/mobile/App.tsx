@@ -48,6 +48,8 @@ import {
 } from './src/ui/financial-views';
 import { refreshFeedback } from './src/ui/refresh-feedback';
 import { GroupSnackbar } from './src/ui/group-snackbar';
+import { visibleFieldErrors } from './src/data/field-feedback';
+import { groupFields } from './src/data/group-draft';
 
 export default function App() {
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
@@ -113,7 +115,7 @@ function SplitBook() {
       if (url) openLink(url);
     });
     const appState = AppState.addEventListener('change', (next) => {
-      if (next === 'active') void controller.refresh();
+      if (next === 'active') void controller.refresh('foreground');
     });
     const back = BackHandler.addEventListener('hardwareBackPress', () => {
       if (controller.getSnapshot().screen !== 'groups') {
@@ -162,7 +164,8 @@ function SplitBook() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
+        {/* Shrinks so a long refresh status wraps instead of pushing Settings off screen. */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 }}>
           {state.screen !== 'groups' ? (
             <Pressable
               accessibilityRole="button"
@@ -202,7 +205,7 @@ function SplitBook() {
             splitbook<Copy style={{ color: theme.brand.main, fontSize: 24 }}>.</Copy>
           </Copy>
           {/* In the fixed header, so it stays visible wherever the content is scrolled. */}
-          <RefreshStatus visible={feedback.quiet} />
+          <RefreshStatus visible={feedback.quiet} savedAt={feedback.savedAt} />
         </View>
         {authenticated && state.screen !== 'settings' ? (
           <Pressable
@@ -393,6 +396,8 @@ function SplitBook() {
                   if (state.settlement.groupId)
                     void controller.openSettlements(state.settlement.groupId);
                 }}
+                onLeaveField={controller.touchSettlementField}
+                onReveal={reveal}
               />
             ) : state.screen === 'expense' ? (
               <ExpenseEditor
@@ -451,6 +456,10 @@ function SplitBook() {
                 busy={state.creation.status === 'saving'}
                 uncertain={state.creation.status === 'uncertain'}
                 message={state.creation.message}
+                errors={visibleFieldErrors(groupFields, state.creation.validation)}
+                focus={state.creation.validation.focus}
+                onLeaveField={controller.touchCreationField}
+                onReveal={reveal}
                 onCheckGroups={() => void controller.checkCreatedGroups()}
                 onDiscard={() =>
                   Alert.alert('Discard this Group form?', 'Your unsaved entries will be cleared.', [

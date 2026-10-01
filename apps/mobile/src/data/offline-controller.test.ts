@@ -346,7 +346,7 @@ describe('account-scoped offline financial views', () => {
     await controller.signIn('alex');
     await controller.openGroup(groupId);
     f.failPath(`/api/groups/${groupId}`);
-    await controller.openGroup(groupId);
+    await controller.refresh();
     expect(controller.getSnapshot().financial.expenses.status).toBe('ready');
     expect(controller.getSnapshot().offline).toMatchObject({ active: true, refreshedAt: now });
   });
@@ -446,7 +446,7 @@ describe('account-scoped offline financial views', () => {
     await controller.signIn('alex');
     await controller.openGroup(groupId);
     f.failResponse(`/api/groups/${groupId}`, 500);
-    await controller.openGroup(groupId);
+    await controller.refresh();
     expect(controller.getSnapshot().detail.status).toBe('error');
     expect(controller.getSnapshot().offline.active).toBe(false);
   });

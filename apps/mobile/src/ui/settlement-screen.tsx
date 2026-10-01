@@ -1,8 +1,16 @@
-import { TextInput, View } from 'react-native';
+import { useEffect, useRef } from 'react';
+import { View, type TextInput } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
-import type { SettlementDraft, SettlementState } from '../data/settlement';
+import { visibleFieldErrors } from '../data/field-feedback';
+import {
+  settlementFields,
+  type SettlementDraft,
+  type SettlementField,
+  type SettlementState,
+} from '../data/settlement';
+import { Field } from './group-workflows';
 import { Button, Copy, Label, Loading, Panel } from './primitives';
 import { fonts, useTheme } from './theme';
 
@@ -15,6 +23,8 @@ export function SettlementScreen({
   onAcknowledge,
   onRecord,
   onRefresh,
+  onLeaveField = () => undefined,
+  onReveal = () => undefined,
 }: {
   state: SettlementState;
   accountId: string;
@@ -24,14 +34,29 @@ export function SettlementScreen({
   onAcknowledge: () => void;
   onRecord: () => void;
   onRefresh: () => void;
+  onLeaveField?: (field: SettlementField) => void;
+  /** Scrolls a field into view within the screen's ScrollView. */
+  onReveal?: (section: View) => void;
 }) {
   const theme = useTheme(),
     draft = state.draft;
+  const errors = visibleFieldErrors(settlementFields, state.validation);
+  const sections = useRef<Partial<Record<SettlementField, View | null>>>({});
+  const inputs = useRef<Partial<Record<SettlementField, TextInput | null>>>({});
+  const focus = state.validation.focus;
+  useEffect(() => {
+    // Each rejected review asks once for the first invalid field; later edits never move focus.
+    if (!focus) return;
+    const section = sections.current[focus.field];
+    if (section) onReveal(section);
+    inputs.current[focus.field]?.focus();
+  }, [focus?.request]);
   const name = (id: string) =>
     state.group?.members.find((m) => m.user.id === id)?.user.name ?? `Member · ${id.slice(-6)}`;
   const money = (amount: number, currency: string) =>
     `${formatCurrency(amount, currency)} ${currency}`;
   const editable = state.status === 'editing';
+  const confirmFirst = 'Record is available once you confirm this is the actual amount paid.';
   let exceeds = false;
   if (draft && state.suggested !== null) {
     try {
@@ -71,7 +96,11 @@ export function SettlementScreen({
       {state.message ? <Copy accessibilityRole="alert">{state.message}</Copy> : null}
       {state.status === 'loading' || state.status === 'saving' ? (
         <Loading
-          label={state.status === 'saving' ? 'Recording payment…' : 'Refreshing payment review…'}
+          label={
+            state.status === 'saving'
+              ? 'Recording payment… Keep this screen open until SplitBook confirms it.'
+              : 'Refreshing payment review…'
+          }
         />
       ) : null}
       {draft ? (
@@ -82,40 +111,45 @@ export function SettlementScreen({
           <Label>ACTUAL PAYMENT · {draft.currency}</Label>
           {editable ? (
             <>
-              <Copy>Actual amount paid</Copy>
-              <TextInput
-                accessibilityLabel="Actual amount paid"
-                value={draft.amount}
-                onChangeText={(amount) => onChange({ amount })}
-                keyboardType="decimal-pad"
-                maxLength={40}
-                style={{
-                  color: theme.text,
-                  borderWidth: 1,
-                  borderColor: theme.border,
-                  borderRadius: 12,
-                  padding: 14,
-                  fontFamily: fonts.mono,
-                  fontSize: 22,
+              <View
+                ref={(node) => {
+                  sections.current.amount = node;
                 }}
-              />
-              <Copy>Note (optional)</Copy>
-              <TextInput
-                accessibilityLabel="Payment note"
-                value={draft.note}
-                onChangeText={(note) => onChange({ note })}
-                maxLength={500}
-                multiline
-                style={{
-                  color: theme.text,
-                  borderWidth: 1,
-                  borderColor: theme.border,
-                  borderRadius: 12,
-                  padding: 14,
-                  fontFamily: fonts.regular,
-                  fontSize: 16,
+              >
+                <Field
+                  label="Actual amount paid"
+                  required
+                  hint={`What ${name(draft.paidBy)} actually paid, in ${draft.currency}. Partial payments are fine.`}
+                  inputRef={(node) => {
+                    inputs.current.amount = node;
+                  }}
+                  error={errors.amount}
+                  value={draft.amount}
+                  onChangeText={(amount) => onChange({ amount })}
+                  onBlur={() => onLeaveField('amount')}
+                  keyboardType="decimal-pad"
+                  maxLength={40}
+                  style={{ fontFamily: fonts.mono, fontSize: 22, lineHeight: 30 }}
+                />
+              </View>
+              <View
+                ref={(node) => {
+                  sections.current.note = node;
                 }}
-              />
+              >
+                <Field
+                  label="Note (optional)"
+                  inputRef={(node) => {
+                    inputs.current.note = node;
+                  }}
+                  error={errors.note}
+                  value={draft.note}
+                  onChangeText={(note) => onChange({ note })}
+                  onBlur={() => onLeaveField('note')}
+                  maxLength={500}
+                  multiline
+                />
+              </View>
             </>
           ) : (
             <>
@@ -131,9 +165,19 @@ export function SettlementScreen({
           {editable ? <Button label="Review payment" onPress={onReview} /> : null}
           {state.status === 'review' ? (
             <>
+              <Copy
+                accessibilityRole="header"
+                style={{ fontFamily: fonts.semibold, fontSize: 20, lineHeight: 28 }}
+              >
+                Review the payment already made
+              </Copy>
               <Copy>
-                Confirm who paid, who received it, and the actual amount. The balance may change
-                again before this is recorded.
+                You’re recording that {name(draft.paidBy)} already paid {name(draft.paidTo)}{' '}
+                {money(Number(draft.amount), draft.currency)}. SplitBook doesn’t move money or
+                contact a bank; recording only updates this Group’s balances.
+              </Copy>
+              <Copy style={{ color: theme.textSecondary }}>
+                The balance may change again before this is recorded.
               </Copy>
               {exceeds ? (
                 <>
@@ -155,9 +199,13 @@ export function SettlementScreen({
               ) : null}
               <Button
                 label="Record payment"
+                hint={exceeds && !state.acknowledged ? confirmFirst : undefined}
                 onPress={onRecord}
                 disabled={exceeds && !state.acknowledged}
               />
+              {exceeds && !state.acknowledged ? (
+                <Copy style={{ fontSize: 14, color: theme.textSecondary }}>{confirmFirst}</Copy>
+              ) : null}
               <Button label="Change payment details" secondary onPress={() => onChange({})} />
             </>
           ) : null}
