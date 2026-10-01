@@ -1,7 +1,7 @@
 import { KeyboardAvoidingView, Modal, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { ExpenseDraft } from '../data/expense-draft';
-import { numericText } from '../data/field-feedback';
+import { acceptsNumericText } from '../data/field-feedback';
 import { Field } from './group-workflows';
 import { Button, Copy } from './primitives';
 import { fonts, useTheme } from './theme';
@@ -137,15 +137,15 @@ export function AllocationEditor({
                         keyboardType="decimal-pad"
                         maxLength={40}
                         editable={!locked}
-                        onChangeText={(text) =>
-                          onChange({
-                            payers: draft.payers.map((payer) =>
-                              payer.user === member.id
-                                ? { ...payer, amount: numericText(text) }
-                                : payer,
-                            ),
-                          })
-                        }
+                        onChangeText={(amount) => {
+                          const current = draft.payers.find((payer) => payer.user === member.id);
+                          if (current && acceptsNumericText(amount, current.amount))
+                            onChange({
+                              payers: draft.payers.map((payer) =>
+                                payer.user === member.id ? { ...payer, amount } : payer,
+                              ),
+                            });
+                        }}
                       />
                     )}
                   </View>
@@ -206,14 +206,11 @@ export function AllocationEditor({
                         keyboardType={draft.splitMethod === 'shares' ? 'number-pad' : 'decimal-pad'}
                         maxLength={40}
                         editable={!locked}
-                        onChangeText={(text) =>
-                          onChange({
-                            splitValues: {
-                              ...draft.splitValues,
-                              [member.id]: numericText(text, draft.splitMethod === 'shares'),
-                            },
-                          })
-                        }
+                        onChangeText={(value) => {
+                          const current = draft.splitValues[member.id] ?? '';
+                          if (acceptsNumericText(value, current))
+                            onChange({ splitValues: { ...draft.splitValues, [member.id]: value } });
+                        }}
                       />
                     )}
                   </View>

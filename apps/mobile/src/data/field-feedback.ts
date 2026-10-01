@@ -89,14 +89,15 @@ export function correctionSummary<F extends string>(
 }
 
 /**
- * Keeps only what a number field can hold: digits and, unless `whole`, one decimal point.
- * The numeric keypad alone isn't enough: a hardware keyboard or a paste bypasses it.
- * Precision is left to `amountError`, so nothing typed is cut short silently.
+ * Whether an edit can stay in a number field. The numeric keypad alone isn't enough, because
+ * a hardware keyboard or a paste bypasses it. An edit with a letter, symbol or space is refused
+ * whole, never stripped. Signs, commas and decimal points stay, even when invalid, so the
+ * field's correction explains them: "-5" is never turned into 5, nor "1.5" shares into 15.
+ * Text that is already outside this set, such as an older draft's, stays editable.
  */
-export function numericText(text: string, whole = false): string {
-  const kept = text.replace(whole ? /\D/g : /[^\d.]/g, '');
-  const point = kept.indexOf('.');
-  return point < 0 ? kept : kept.slice(0, point + 1) + kept.slice(point + 1).replaceAll('.', '');
+export function acceptsNumericText(next: string, current: string) {
+  const numeric = /^[\d.,-]*$/;
+  return numeric.test(next) || !numeric.test(current);
 }
 
 export function amountExample(currency: string) {

@@ -574,9 +574,6 @@ describe('compact Expense form', () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     const amount = ui.input('Amount, required');
     expect(amount.props).toMatchObject({ keyboardType: 'decimal-pad', returnKeyType: 'next' });
-    // A hardware keyboard or a paste can bypass the keypad; Amount still holds only a number.
-    await ui.type('Amount, required', '₹1,249.5x0.');
-    expect(ui.input('Amount, required').props.value).toBe('1249.50');
     expect(
       ui
         .root()
@@ -590,6 +587,31 @@ describe('compact Expense form', () => {
       amount.props.onSubmitEditing();
     });
     expect(ui.focusCount('Description, required')).toBe(1);
+  });
+
+  // A hardware keyboard or a paste bypasses the numeric keypad.
+  it('refuses letters and symbols in numbers, but never converts a value it keeps for correction', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    await ui.type('Amount, required', '-5');
+    expect(ui.input('Amount, required').props.value).toBe('-5');
+    await ui.type('Description, required', 'Milk');
+    await ui.press('Tag: Groceries');
+    await ui.press('Save expense');
+    expect(ui.writes).toEqual([]);
+    expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([
+      'Enter an amount greater than 0.',
+    ]);
+
+    await ui.type('Amount, required', '12.5');
+    for (const edit of ['12.5x', '₹12.5', '12.5 ']) await ui.type('Amount, required', edit);
+    expect(ui.input('Amount, required').props.value).toBe('12.5');
+
+    await ui.press(ui.tile('Split').props.accessibilityLabel);
+    await ui.press('Shares');
+    await ui.type('Shares for Alex', '1.5');
+    expect(ui.input('Shares for Alex').props.value).toBe('1.5');
+    await ui.type('Shares for Alex', '1.5a');
+    expect(ui.input('Shares for Alex').props.value).toBe('1.5');
   });
 
   it('shows each value on its tile and opens its editor', async () => {
