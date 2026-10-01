@@ -1667,6 +1667,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return;
     if (month !== null) getLocalMonthIsoRange(month);
     const { financial } = snapshot;
+    returnPages = null;
     publish({
       ...snapshot,
       // The member chose another view: an earlier position or offer no longer applies.
@@ -1713,12 +1714,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const expenses = snapshot.financial.expenses;
     const pagination = expenses.pagination;
     const parse = (value: unknown) => parseExpensePage(value, group.id, group.defaultCurrency);
-    // A return reads the page range it left, so the position it restores still exists.
+    // A return reads the page range it left until that range is shown, even when a later
+    // read, such as a foreground refresh, supersedes the first one.
+    if (returnPages && returnPages.groupId !== group.id) returnPages = null;
     const through =
-      !append && returnPages?.groupId === group.id && returnPages.month === snapshot.financial.month
-        ? returnPages.pages
-        : 1;
-    if (!append) returnPages = null;
+      !append && returnPages?.month === snapshot.financial.month ? returnPages.pages : 1;
     // A reused first page alone would drop the rest of the range a return needs.
     const fresh =
       !append && reuse && through === 1
@@ -1865,6 +1865,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           },
         },
       });
+      // The range a return needed is shown; later refreshes start from the first page.
+      if (!append && returnPages?.month === month) returnPages = null;
       await loadBalances(false);
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;

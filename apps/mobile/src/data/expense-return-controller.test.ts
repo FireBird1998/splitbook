@@ -221,7 +221,7 @@ function ledger() {
       key: new Headers(init.headers).get('Idempotency-Key'),
       body: String(init.body ?? ''),
     });
-    const held = holds.find((hold) => hold.match(method, pathname));
+    const held = holds.find((hold) => hold.match(method, pathname + search));
     if (held) {
       holds.splice(holds.indexOf(held), 1);
       await held.wait;
@@ -545,6 +545,61 @@ describe('Returning to an Expense beyond the first page', () => {
     expect(shown.restoreScroll).toMatchObject({ y: 2150 });
     expect(shown.financial.expenses.data).toHaveLength(26);
     expect(server.pagesRead().slice(reads)).toEqual([1, 2]);
+  });
+
+  it('keeps the range when a foreground refresh supersedes the return read', async () => {
+    const { server, controller, last } = await secondPage();
+    await controller.openExpense(householdId, last.id, { scrollY: 2200 });
+    const pageTwo = server.hold('GET', /\/expenses\?page=2&/);
+    const returning = controller.back();
+    await pageTwo.reached;
+    const refreshing = controller.refresh('foreground');
+    pageTwo.release();
+    await Promise.all([returning, refreshing]);
+
+    const { financial, restoreScroll } = controller.getSnapshot();
+    expect(restoreScroll).toMatchObject({ y: 2200 });
+    expect(financial.expenses.status).toBe('ready');
+    expect(financial.expenses.data).toHaveLength(25);
+    expect(financial.expenses.data.map((row) => row.id)).toContain(last.id);
+  });
+
+  it('keeps the range when a foreground refresh supersedes the read after a save', async () => {
+    const { server, controller, last } = await secondPage();
+    await controller.openExpense(householdId, last.id, { scrollY: 2200 });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Seeded, corrected' });
+    const pageTwo = server.hold('GET', /\/expenses\?page=2&/);
+    const saving = controller.saveExpense();
+    await pageTwo.reached;
+    const refreshing = controller.refresh('foreground');
+    pageTwo.release();
+    await Promise.all([saving, refreshing]);
+
+    const { financial, snackbar } = controller.getSnapshot();
+    expect(snackbar?.message).toBe('Expense updated · Seeded, corrected');
+    expect(financial.expenses.data).toHaveLength(25);
+    expect(financial.expenses.data.find((row) => row.id === last.id)?.description).toBe(
+      'Seeded, corrected',
+    );
+  });
+
+  it('drops the range when the member changes Month before it is shown', async () => {
+    const { server, controller, last } = await secondPage();
+    await controller.openExpense(householdId, last.id, { scrollY: 2200 });
+    const pageTwo = server.hold('GET', /\/expenses\?page=2&/);
+    const returning = controller.back();
+    await pageTwo.reached;
+    const choosing = controller.selectMonth('2026-07');
+    pageTwo.release();
+    await Promise.all([returning, choosing]);
+    expect(controller.getSnapshot().financial.month).toBe('2026-07');
+
+    // August's first page alone, read again or reused; the return's second page is not read.
+    const reads = server.pagesRead().length;
+    await controller.selectMonth('2026-08');
+    expect(server.pagesRead().slice(reads)).not.toContain(2);
+    expect(controller.getSnapshot().financial.expenses.data).toHaveLength(20);
   });
 
   it('keeps the pages it read and offers Load more when a later page fails', async () => {
