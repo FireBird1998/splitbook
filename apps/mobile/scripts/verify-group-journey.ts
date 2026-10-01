@@ -365,7 +365,13 @@ async function verify() {
       (await discoverOwnGroups()).filter((group) => group.name === uncertainName).length === 1,
       'An explicit retry of a committed create saved a second Group.',
     );
-    checks.push('Explicit retry of a committed create returns the same Group');
+    const listedOnce = () =>
+      alex.controller.getSnapshot().groups.data.filter((group) => group.id === reconciled[0]._id)
+        .length === 1;
+    assert.ok(listedOnce(), 'An explicit retry listed the returned Group twice.');
+    await alex.controller.back();
+    assert.ok(listedOnce(), 'Returning to Groups listed the retried Group twice.');
+    checks.push('Explicit retry of a committed create returns the same Group, listed once');
 
     ownNames.add(resendName);
     alex.controller.startCreate();

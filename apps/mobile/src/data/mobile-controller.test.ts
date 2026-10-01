@@ -812,6 +812,10 @@ describe('native session and Group boundary', () => {
     server.loseNextResponse();
     await controller.createGroup();
     expect(controller.getSnapshot().creation).toMatchObject({ status: 'uncertain' });
+    const createdId = [...server.created.values()][0]._id;
+    const listed = () => controller.getSnapshot().groups.data.map((item) => item.id);
+    // The Groups read after the lost response already lists the committed Group.
+    expect(listed()).toEqual([createdId]);
 
     // The member reviews their Groups, returns to the form and explicitly retries.
     controller.resumeCreationAfterCheck();
@@ -823,9 +827,14 @@ describe('native session and Group boundary', () => {
     expect(server.created.size).toBe(1);
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'group',
-      detail: { status: 'ready', data: { name: 'Cabin Weekend' } },
+      detail: { status: 'ready', data: { id: createdId, name: 'Cabin Weekend' } },
       creation: { status: 'editing', attempt: null, draft: { name: '' } },
     });
+    // The replayed Group replaces its listed entry rather than adding a second card.
+    expect(listed()).toEqual([createdId]);
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('groups');
+    expect(listed()).toEqual([createdId]);
   });
 
   it('gives changed Group details a new key after an uncertain create', async () => {

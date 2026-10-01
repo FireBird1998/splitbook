@@ -61,6 +61,7 @@ This is the smallest change that closes the only resend that duplicates data. It
   - Create reuses the key only when the serialized details are identical. Changed details get a new key, and success or Discard clears the attempt.
   - The key lives exactly as long as the in-memory form. It is not persisted, so there is no offline write queue.
   - If no key can be generated, nothing is sent.
+  - The created Group replaces any listed entry with the same ID. A keyed retry returns a Group that the read after the lost reply already listed, so it would otherwise appear twice.
   - The uncertain-create flow is unchanged: Create stays blocked until the member has checked their Groups. After that, an unchanged retry opens the Group that already exists.
 
 Transport retries are left on. With every non-idempotent create keyed, a resend returns the same record, which is the result an explicit retry would reach. See "Follow-ups" for the stricter option.
@@ -76,11 +77,11 @@ Transport retries are left on. With every non-idempotent create keyed, a resend 
   - unkeyed creates still create.
   - **Mutation check:** with the duplicate-key recovery disabled, the concurrency test fails with E11000.
 - **Controller** (`mobile-controller.test.ts`, 3 new tests):
-  - a lost reply, then check and resume, then an explicit retry sends the same key and body twice, creates one Group and opens it;
+  - a lost reply, then check and resume, then an explicit retry sends the same key and body twice, creates one Group, opens it, and lists it once, including after Back;
   - changed details get a new key;
   - with no key generator, nothing is sent and the form is kept.
 - **Real HTTP** (`verify:groups` against this branch's server on a loopback port, fictional database `splitbook_mobile_50`): 9 checks passed, 3 run-owned Groups archived. Two checks are new:
-  - "Explicit retry of a committed create returns the same Group";
+  - "Explicit retry of a committed create returns the same Group, listed once";
   - "Transport-level resend of a committed create saves one Group". The transport sends the identical request twice, as OkHttp does, and the first send has committed before the second.
 - **Workspace:** typecheck, lint and Prettier pass. Tests: shared 268, web unit 139, web integration 146, mobile 329.
 

@@ -3665,7 +3665,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       publish({
         ...snapshot,
         creation: cleanSnapshot(snapshot.auth).creation,
-        groups: { status: 'ready', data: [group, ...snapshot.groups.data], message: null },
+        groups: {
+          status: 'ready',
+          // A keyed retry returns the Group that a read after its lost response already listed.
+          data: [group, ...snapshot.groups.data.filter((item) => item.id !== group.id)],
+          message: null,
+        },
         ...(view === viewRequest
           ? ({
               screen: 'group',
