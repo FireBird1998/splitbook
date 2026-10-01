@@ -273,14 +273,18 @@ export function WhoOwesWhat({
     );
   const paid = new Map(allocation.paidBy.map((row) => [String(row.user), row.amountMinor]));
   const shares = new Map(allocation.splitBetween.map((row) => [String(row.user), row.amountMinor]));
-  const people = [...new Set([...shares.keys(), ...paid.keys()])];
+  // The signed-in member first, then everyone else in the Group's order.
+  const people = [...new Set([...shares.keys(), ...paid.keys()])].sort(
+    (a, b) => Number(b === currentUserId) - Number(a === currentUserId),
+  );
   const shown = people.length > 4 && !all ? people.slice(0, 3) : people;
   const shareValues = [...shares.values()];
   const rounded =
     draft.splitMethod === 'equal' &&
     shareValues.length > 1 &&
     Math.max(...shareValues) !== Math.min(...shareValues);
-  const column = { width: 96, textAlign: 'right' as const };
+  // Wide enough for "₹1,24,999.50" in the table face; names wrap rather than clip.
+  const column = { width: 84, textAlign: 'right' as const };
   return (
     <Card>
       <View
@@ -333,7 +337,7 @@ export function WhoOwesWhat({
             }}
           >
             <CompactAvatar name={name(id)} small />
-            <CompactText numberOfLines={1} style={{ flex: 1, minWidth: 0 }}>
+            <CompactText numberOfLines={2} style={{ flex: 1, minWidth: 0 }}>
               {person(id)}
             </CompactText>
             <View style={column}>

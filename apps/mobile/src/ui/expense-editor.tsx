@@ -538,7 +538,8 @@ export function ExpenseEditor({
             <Chip
               key={item.id}
               role="radio"
-              label={`Tag: ${item.name}`}
+              label={item.name}
+              accessibilityLabel={`Tag: ${item.name}`}
               selected={draft.tagId === item.id}
               onPress={() => {
                 if (locked) return;
