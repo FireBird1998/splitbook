@@ -4,7 +4,8 @@
  * and admin boundaries that unit tests cannot reach.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Group from '@/lib/models/Group';
 import Activity from '@/lib/models/Activity';
 import { groupService } from '@/lib/services/group.service';
@@ -49,6 +50,79 @@ describe('GroupService integration', () => {
 
       const activity = await Activity.findOne({ group: group._id, type: 'group_created' });
       expect(activity?.actor.toString()).toBe(alice);
+    });
+
+    const cabin = {
+      name: 'Cabin Weekend',
+      category: 'trip' as const,
+      defaultCurrency: 'INR',
+      alternateCurrencies: [],
+    };
+
+    it('returns the Group a keyed request already created instead of creating another', async () => {
+      const key = randomUUID();
+      const first = await groupService.create(cabin, alice, key);
+      const replay = await groupService.create(cabin, alice, key);
+
+      expect(String(replay._id)).toBe(String(first._id));
+      expect(await Group.countDocuments({ createdBy: alice })).toBe(1);
+      expect(await Activity.countDocuments({ type: 'group_created' })).toBe(1);
+      // Retry metadata is private persistence data, never part of the Group response.
+      expect(JSON.parse(JSON.stringify(first))).not.toHaveProperty('creationRequest');
+      expect(JSON.parse(JSON.stringify(replay))).not.toHaveProperty('creationRequest');
+      expect(JSON.parse(JSON.stringify(replay)).members[0].user.name).toBeTruthy();
+    });
+
+    it('converges concurrent same-key requests on one Group', async () => {
+      const key = randomUUID();
+      let arrivals = 0;
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const insert = Group.collection.insertOne;
+      // Hold real Mongo insertions until both requests have passed their initial lookup.
+      const barrier = vi.spyOn(Group.collection, 'insertOne').mockImplementation(async function (
+        ...args
+      ) {
+        arrivals += 1;
+        if (arrivals === 2) release();
+        await gate;
+        return insert.apply(Group.collection, args);
+      });
+      try {
+        const [one, two] = await Promise.all([
+          groupService.create(cabin, alice, key),
+          groupService.create(cabin, alice, key),
+        ]);
+        expect(String(one._id)).toBe(String(two._id));
+      } finally {
+        barrier.mockRestore();
+      }
+      expect(await Group.countDocuments({ createdBy: alice })).toBe(1);
+    });
+
+    it('refuses a reused key with different Group details', async () => {
+      const key = randomUUID();
+      await groupService.create(cabin, alice, key);
+      await expect(
+        groupService.create({ ...cabin, name: 'Cabin Weekend 2' }, alice, key),
+      ).rejects.toThrow('IDEMPOTENCY_CONFLICT');
+      expect(await Group.countDocuments({ createdBy: alice })).toBe(1);
+    });
+
+    it('scopes creation keys to the creator', async () => {
+      const key = randomUUID();
+      const alicesGroup = await groupService.create(cabin, alice, key);
+      const bobsGroup = await groupService.create(cabin, bob, key);
+      expect(String(bobsGroup._id)).not.toBe(String(alicesGroup._id));
+      expect(bobsGroup.members.map((member) => String(member.user._id))).toEqual([bob]);
+    });
+
+    it('still creates a Group for each unkeyed request', async () => {
+      await groupService.create(cabin, alice);
+      await groupService.create(cabin, alice);
+      expect(await Group.countDocuments({ createdBy: alice })).toBe(2);
     });
   });
 

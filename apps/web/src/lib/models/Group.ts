@@ -1,4 +1,5 @@
 import mongoose, { Schema, Model } from 'mongoose';
+import { CreationRequestSchema, type ICreationRequest } from '@/lib/financial-write';
 
 export interface IGroupMemberDocument {
   user: mongoose.Types.ObjectId;
@@ -31,6 +32,7 @@ export interface IGroupDocument {
   isArchived: boolean;
   inviteCode?: string | null;
   inviteCodeExpiresAt?: Date | null;
+  creationRequest?: ICreationRequest;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -85,9 +87,16 @@ const GroupSchema = new Schema<IGroupDocument>(
     isArchived: { type: Boolean, default: false },
     inviteCode: { type: String, default: null },
     inviteCodeExpiresAt: { type: Date, default: null },
+    creationRequest: { type: CreationRequestSchema, default: undefined, select: false },
   },
   {
     timestamps: true,
+    toJSON: {
+      transform(_doc, value) {
+        delete value.creationRequest;
+        return value;
+      },
+    },
   },
 );
 
@@ -99,6 +108,10 @@ GroupSchema.index({ createdBy: 1 });
 GroupSchema.index(
   { inviteCode: 1 },
   { unique: true, partialFilterExpression: { inviteCode: { $type: 'string' } } },
+);
+GroupSchema.index(
+  { createdBy: 1, 'creationRequest.key': 1 },
+  { unique: true, partialFilterExpression: { 'creationRequest.key': { $type: 'string' } } },
 );
 
 // In development, Mongoose models persist across hot reloads but schema changes

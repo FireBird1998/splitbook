@@ -1,4 +1,6 @@
 import connectDB from '@/lib/db';
+import { assertCreateReplay, createRequestMetadata } from '@/lib/financial-write';
+import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
 import Group from '@/lib/models/Group';
 import '@/lib/models/User'; // Ensure User model is registered for populate()
 import { activityService } from './activity.service';
@@ -15,21 +17,38 @@ export class GroupService {
    * Create a new group. The creator becomes the admin.
    * Seeds active default tags so the first expense is never blocked.
    */
-  async create(data: CreateGroupInput, userId: string) {
+  async create(data: CreateGroupInput, userId: string, requestKey?: string) {
     await connectDB();
 
-    const group = await Group.create({
-      ...data,
-      createdBy: userId,
-      members: [
-        {
-          user: userId,
-          role: 'admin',
-          joinedAt: new Date(),
-        },
-      ],
-      tags: buildDefaultGroupTags(data.category),
-    });
+    if (requestKey) {
+      await ensureLedgerWriteIndexes();
+      const replay = await this.findCreated(userId, requestKey, data);
+      if (replay) return replay;
+    }
+
+    let group;
+    try {
+      group = await Group.create({
+        ...data,
+        createdBy: userId,
+        members: [
+          {
+            user: userId,
+            role: 'admin',
+            joinedAt: new Date(),
+          },
+        ],
+        tags: buildDefaultGroupTags(data.category),
+        ...(requestKey ? { creationRequest: createRequestMetadata(requestKey, data) } : {}),
+      });
+    } catch (err) {
+      // A concurrent request with the same key committed first.
+      if (requestKey && (err as { code?: number }).code === 11000) {
+        const existing = await this.findCreated(userId, requestKey, data);
+        if (existing) return existing;
+      }
+      throw err;
+    }
 
     // Log activity
     await activityService.log(group._id.toString(), 'group_created', userId, {
@@ -37,6 +56,20 @@ export class GroupService {
     });
 
     return group.populate('members.user', 'name email image');
+  }
+
+  /** The Group an earlier request with this key created, if the same creator sent the same data. */
+  private async findCreated(userId: string, requestKey: string, data: CreateGroupInput) {
+    const existing = await Group.findOne({
+      createdBy: userId,
+      'creationRequest.key': requestKey,
+    }).select('+creationRequest');
+    if (!existing) return null;
+    assertCreateReplay(existing.creationRequest!, data);
+    // A replay must not reveal a Group the creator no longer belongs to.
+    if (!existing.members.some((member) => member.user.toString() === userId))
+      throw new Error('FORBIDDEN');
+    return existing.populate('members.user', 'name email image');
   }
 
   /**

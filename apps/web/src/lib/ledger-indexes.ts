@@ -23,6 +23,13 @@ async function createLedgerWriteIndexes(db: LedgerIndexDatabase): Promise<void> 
         { unique: true, partialFilterExpression: { 'creationRequest.key': { $type: 'string' } } },
       );
   }
+  // A Group has no parent Group, so its creation keys are scoped to the creator alone.
+  await db
+    .collection('groups')
+    .createIndex(
+      { createdBy: 1, 'creationRequest.key': 1 },
+      { unique: true, partialFilterExpression: { 'creationRequest.key': { $type: 'string' } } },
+    );
   await db
     .collection('expenses')
     .createIndex(
