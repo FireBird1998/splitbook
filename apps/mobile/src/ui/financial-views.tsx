@@ -467,18 +467,154 @@ function MemberContributions({
   );
 }
 
-export function GroupFinancialViews({
+/** All-time running balances; choosing a Month never changes them. */
+export function GroupBalancesView({
+  currentUserId,
+  state,
+  onRefreshBalances,
+}: Pick<GroupFinancialViewsProps, 'currentUserId' | 'state' | 'onRefreshBalances'>) {
+  const theme = useTheme();
+  const { balances } = state;
+  return (
+    <Panel>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={{ flex: 1, gap: 4 }}>
+          <Label>ALL TIME</Label>
+          <Copy
+            accessibilityRole="header"
+            style={{ fontFamily: fonts.semibold, fontSize: 23, lineHeight: 30 }}
+          >
+            Running balances
+          </Copy>
+        </View>
+        <IconAction
+          label="Refresh running balances"
+          icon="refresh-outline"
+          onPress={onRefreshBalances}
+          disabled={balances.status === 'loading'}
+        />
+      </View>
+      <Copy style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 20 }}>
+        Includes all Expenses and recorded Settlements. Month selections do not change these
+        balances.
+      </Copy>
+      {balances.data === null ? (
+        <FinancialState
+          status={balances.status === 'ready' ? 'error' : balances.status}
+          message={balances.message}
+          loadingLabel="Loading running balances…"
+          retryLabel="Retry running balances"
+          onRetry={onRefreshBalances}
+        />
+      ) : (
+        <RetainedNotice
+          status={balances.status}
+          stale={balances.stale}
+          refreshedAt={balances.refreshedAt}
+          message={balances.message}
+          subject="running balances"
+          retryLabel="Retry running balances"
+          onRetry={onRefreshBalances}
+        />
+      )}
+      {balances.data?.map((bucket) => (
+        <View
+          key={bucket.currency}
+          style={{ gap: 14, borderTopWidth: 1, borderColor: theme.border, paddingTop: 16 }}
+        >
+          <Label>{bucket.currency}</Label>
+          {bucket.balances.length ? (
+            bucket.balances.map(({ user, balance }, index) => {
+              const tone = getMoneyTone(balance);
+              const isYou = user.id === currentUserId;
+              const label =
+                tone === 'negative'
+                  ? isYou
+                    ? 'You owe'
+                    : 'Owes'
+                  : tone === 'positive'
+                    ? isYou
+                      ? 'You are owed'
+                      : 'Is owed'
+                    : 'Settled';
+              return (
+                <View
+                  key={user.id ?? `former-member-${index}`}
+                  style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}
+                >
+                  <Avatar name={user.name} small />
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Copy style={{ fontFamily: fonts.medium }}>
+                      {user.name}
+                      {isYou ? ' · you' : ''}
+                    </Copy>
+                    <Copy
+                      style={{
+                        color: tone === 'neutral' ? theme.textSecondary : theme.status[tone],
+                        fontSize: 13,
+                        lineHeight: 20,
+                      }}
+                    >
+                      {label}
+                    </Copy>
+                    <Amount value={Math.abs(balance)} currency={bucket.currency} tone={tone} />
+                  </View>
+                </View>
+              );
+            })
+          ) : (
+            <Copy style={{ color: theme.textSecondary }}>
+              No outstanding balances in {bucket.currency}.
+            </Copy>
+          )}
+          {bucket.debts.length > 0 && (
+            <View style={{ gap: 14, borderTopWidth: 1, borderColor: theme.border, paddingTop: 16 }}>
+              <Label>WHO OWES WHOM</Label>
+              {bucket.debts.map((debt, index) => (
+                <View
+                  key={`${debt.from.id ?? 'former'}:${debt.to.id ?? 'former'}:${index}`}
+                  style={{ gap: 5 }}
+                >
+                  <Copy style={{ fontFamily: fonts.medium }}>
+                    {debt.from.id === currentUserId ? 'You owe' : `${debt.from.name} owes`}{' '}
+                    {debt.to.id === currentUserId ? 'you' : debt.to.name}
+                  </Copy>
+                  <Amount
+                    value={debt.amount}
+                    currency={bucket.currency}
+                    tone={
+                      debt.from.id === currentUserId
+                        ? 'negative'
+                        : debt.to.id === currentUserId
+                          ? 'positive'
+                          : 'neutral'
+                    }
+                  />
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      ))}
+      {balances.data?.length === 0 && (
+        <Copy style={{ color: theme.textSecondary }}>No running balances to show.</Copy>
+      )}
+    </Panel>
+  );
+}
+
+/** The Month picker (Household), the window summary and the Expense list. */
+export function GroupExpensesView({
   group,
   currentUserId,
   state,
   onSelectMonth,
   onRefreshExpenses,
-  onRefreshBalances,
   onLoadMore,
   onOpenExpense,
-}: GroupFinancialViewsProps) {
+}: Omit<GroupFinancialViewsProps, 'onRefreshBalances'>) {
   const theme = useTheme();
-  const { balances, expenses } = state;
+  const { expenses } = state;
   const windowLabel = monthLabel(state.month);
   // Never show one Month's Expenses under another Month's label.
   const current = expenses.month === state.month;
@@ -487,133 +623,6 @@ export function GroupFinancialViews({
     current && (expenses.status === 'ready' || summary !== null || expenses.data.length > 0);
   return (
     <View style={{ gap: 24 }}>
-      <Panel>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <View style={{ flex: 1, gap: 4 }}>
-            <Label>ALL TIME</Label>
-            <Copy
-              accessibilityRole="header"
-              style={{ fontFamily: fonts.semibold, fontSize: 23, lineHeight: 30 }}
-            >
-              Running balances
-            </Copy>
-          </View>
-          <IconAction
-            label="Refresh running balances"
-            icon="refresh-outline"
-            onPress={onRefreshBalances}
-            disabled={balances.status === 'loading'}
-          />
-        </View>
-        <Copy style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 20 }}>
-          Includes all Expenses and recorded Settlements. Month selections do not change these
-          balances.
-        </Copy>
-        {balances.data === null ? (
-          <FinancialState
-            status={balances.status === 'ready' ? 'error' : balances.status}
-            message={balances.message}
-            loadingLabel="Loading running balances…"
-            retryLabel="Retry running balances"
-            onRetry={onRefreshBalances}
-          />
-        ) : (
-          <RetainedNotice
-            status={balances.status}
-            stale={balances.stale}
-            refreshedAt={balances.refreshedAt}
-            message={balances.message}
-            subject="running balances"
-            retryLabel="Retry running balances"
-            onRetry={onRefreshBalances}
-          />
-        )}
-        {balances.data?.map((bucket) => (
-          <View
-            key={bucket.currency}
-            style={{ gap: 14, borderTopWidth: 1, borderColor: theme.border, paddingTop: 16 }}
-          >
-            <Label>{bucket.currency}</Label>
-            {bucket.balances.length ? (
-              bucket.balances.map(({ user, balance }, index) => {
-                const tone = getMoneyTone(balance);
-                const isYou = user.id === currentUserId;
-                const label =
-                  tone === 'negative'
-                    ? isYou
-                      ? 'You owe'
-                      : 'Owes'
-                    : tone === 'positive'
-                      ? isYou
-                        ? 'You are owed'
-                        : 'Is owed'
-                      : 'Settled';
-                return (
-                  <View
-                    key={user.id ?? `former-member-${index}`}
-                    style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}
-                  >
-                    <Avatar name={user.name} small />
-                    <View style={{ flex: 1, gap: 3 }}>
-                      <Copy style={{ fontFamily: fonts.medium }}>
-                        {user.name}
-                        {isYou ? ' · you' : ''}
-                      </Copy>
-                      <Copy
-                        style={{
-                          color: tone === 'neutral' ? theme.textSecondary : theme.status[tone],
-                          fontSize: 13,
-                          lineHeight: 20,
-                        }}
-                      >
-                        {label}
-                      </Copy>
-                      <Amount value={Math.abs(balance)} currency={bucket.currency} tone={tone} />
-                    </View>
-                  </View>
-                );
-              })
-            ) : (
-              <Copy style={{ color: theme.textSecondary }}>
-                No outstanding balances in {bucket.currency}.
-              </Copy>
-            )}
-            {bucket.debts.length > 0 && (
-              <View
-                style={{ gap: 14, borderTopWidth: 1, borderColor: theme.border, paddingTop: 16 }}
-              >
-                <Label>WHO OWES WHOM</Label>
-                {bucket.debts.map((debt, index) => (
-                  <View
-                    key={`${debt.from.id ?? 'former'}:${debt.to.id ?? 'former'}:${index}`}
-                    style={{ gap: 5 }}
-                  >
-                    <Copy style={{ fontFamily: fonts.medium }}>
-                      {debt.from.id === currentUserId ? 'You owe' : `${debt.from.name} owes`}{' '}
-                      {debt.to.id === currentUserId ? 'you' : debt.to.name}
-                    </Copy>
-                    <Amount
-                      value={debt.amount}
-                      currency={bucket.currency}
-                      tone={
-                        debt.from.id === currentUserId
-                          ? 'negative'
-                          : debt.to.id === currentUserId
-                            ? 'positive'
-                            : 'neutral'
-                      }
-                    />
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        ))}
-        {balances.data?.length === 0 && (
-          <Copy style={{ color: theme.textSecondary }}>No running balances to show.</Copy>
-        )}
-      </Panel>
-
       {group.category === 'home' && (
         <Panel>
           <MonthPicker month={state.month} onSelectMonth={onSelectMonth} />
@@ -670,7 +679,7 @@ export function GroupFinancialViews({
               />
             ))}
             <Copy style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 20 }}>
-              Spending only. Running balances above also account for Settlements.
+              Spending only. Running balances also account for Settlements.
             </Copy>
             {group.category === 'home' && state.month && summary.byMember.length > 0 && (
               <MemberContributions

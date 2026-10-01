@@ -86,6 +86,152 @@ function list(items: string[]) {
     : (unique[0] ?? 'this Expense');
 }
 
+function allocation(
+  field: 'paidBy' | 'splitBetween',
+  change: { old?: unknown; new?: unknown },
+  currencies: { before: string; after: string },
+  person: (value: unknown) => string,
+): ExpenseHistoryChange[] {
+  const amounts = (value: unknown, currency: string) =>
+    new Map(
+      rows(value).map((row, index) => [
+        identity(row.user) ?? `former:${index}`,
+        { who: person(row.user), amount: money(row, currency) },
+      ]),
+    );
+  const before = amounts(change.old, currencies.before);
+  const after = amounts(change.new, currencies.after);
+  const absent = (currency: string) =>
+    field === 'paidBy' ? formatCurrency(0, currency) : 'Not included';
+  return [...new Set([...after.keys(), ...before.keys()])].flatMap((key) => {
+    const was = before.get(key)?.amount ?? absent(currencies.before);
+    const now = after.get(key)?.amount ?? absent(currencies.after);
+    if (was === now) return [];
+    const who = (after.get(key) ?? before.get(key))!.who;
+    return [
+      {
+        label: field === 'paidBy' ? `${who}’s payment` : `${who}’s share`,
+        before: was,
+        after: now,
+        money: true,
+      },
+    ];
+  });
+}
+
+/**
+ * Describes one recorded edit, field by field, in member terms. Shared by an Expense's history
+ * and by Activity events, so an edit reads the same wherever it appears.
+ */
+export function describeExpenseChanges(
+  changes: Record<string, { old?: unknown; new?: unknown }>,
+  {
+    currencies,
+    person,
+    tagName = () => undefined,
+  }: {
+    /** The currency before and after this edit. */
+    currencies: { before: string; after: string };
+    /** Names a member reference, or "Former member". */
+    person: (value: unknown) => string;
+    tagName?: (value: unknown) => string | undefined;
+  },
+): ExpenseHistoryChange[] {
+  return Object.entries(changes).flatMap(([field, change]): ExpenseHistoryChange[] => {
+    switch (field) {
+      case 'moneyVersion':
+        return [];
+      // References restate a named change; they are described only when that is missing.
+      case 'tagId': {
+        if (changes.tag) return [];
+        const before = tagName(change.old),
+          after = tagName(change.new);
+        return [before && after ? { label: 'Tag', before, after } : { label: 'Tag' }];
+      }
+      case 'amountMinor':
+        if (changes.amount) return [];
+        return [
+          {
+            label: 'Amount',
+            before: money({ amountMinor: change.old }, currencies.before) ?? undefined,
+            after: money({ amountMinor: change.new }, currencies.after) ?? undefined,
+            money: true,
+          },
+        ];
+      case 'description':
+      case 'notes':
+      case 'predefinedItem':
+        return [
+          {
+            label:
+              field === 'predefinedItem' ? 'Item' : field === 'notes' ? 'Notes' : 'Description',
+            before: quoted(change.old),
+            after: quoted(change.new),
+          },
+        ];
+      case 'amount':
+        return [
+          {
+            label: 'Amount',
+            before: money({ amount: change.old }, currencies.before) ?? undefined,
+            after: money({ amount: change.new }, currencies.after) ?? undefined,
+            money: true,
+          },
+        ];
+      case 'currency':
+        return [{ label: 'Currency', before: currencies.before, after: currencies.after }];
+      case 'date':
+        return [{ label: 'Date', before: day(change.old), after: day(change.new) }];
+      case 'category':
+        return [
+          {
+            label: 'Category',
+            before: getCategory(text(change.old))?.label ?? 'None',
+            after: getCategory(text(change.new))?.label ?? 'None',
+          },
+        ];
+      case 'tag':
+        return [
+          {
+            label: 'Tag',
+            before: text(change.old) || 'Historical Tag',
+            after: text(change.new) || 'Historical Tag',
+          },
+        ];
+      case 'splitMethod':
+        return [
+          {
+            label: 'Split method',
+            before: splitMethods[text(change.old)] ?? 'Unknown',
+            after: splitMethods[text(change.new)] ?? 'Unknown',
+          },
+        ];
+      case 'paidBy':
+      case 'splitBetween':
+        return allocation(field, change, currencies, person);
+      case 'receiptUrl':
+        return [
+          {
+            label: 'Receipt',
+            after: !text(change.new) ? 'Removed' : text(change.old) ? 'Replaced' : 'Added',
+          },
+        ];
+      default:
+        return [{ label: 'Other details' }];
+    }
+  });
+}
+
+/** Names member references from known people; anyone else is a former member. */
+export function memberNamer(names: Map<string, string>) {
+  return (value: unknown) => {
+    const id = identity(value);
+    const named =
+      value && typeof value === 'object' && 'name' in value ? text(value.name) : undefined;
+    return named || (id && names.get(id)) || formerMember;
+  };
+}
+
 /**
  * Explains recorded edits in member terms, newest first: names instead of member references,
  * each amount in the currency it had at the time, and no raw values or identifiers. Anyone the
@@ -105,47 +251,10 @@ export function describeExpenseHistory(
     if (editor && typeof editor === 'object' && editor.name && !names.has(editor._id))
       names.set(editor._id, editor.name);
   }
-  const person = (value: unknown) => {
-    const id = identity(value);
-    const named =
-      value && typeof value === 'object' && 'name' in value ? text(value.name) : undefined;
-    return named || (id && names.get(id)) || formerMember;
-  };
+  const person = memberNamer(names);
   const tagName = (value: unknown) => {
     const id = identity(value);
     return tags.find((tag) => tag.id === id)?.name;
-  };
-
-  const allocation = (
-    field: 'paidBy' | 'splitBetween',
-    change: { old?: unknown; new?: unknown },
-    currencies: { before: string; after: string },
-  ): ExpenseHistoryChange[] => {
-    const amounts = (value: unknown, currency: string) =>
-      new Map(
-        rows(value).map((row, index) => [
-          identity(row.user) ?? `former:${index}`,
-          { who: person(row.user), amount: money(row, currency) },
-        ]),
-      );
-    const before = amounts(change.old, currencies.before);
-    const after = amounts(change.new, currencies.after);
-    const absent = (currency: string) =>
-      field === 'paidBy' ? formatCurrency(0, currency) : 'Not included';
-    return [...new Set([...after.keys(), ...before.keys()])].flatMap((key) => {
-      const was = before.get(key)?.amount ?? absent(currencies.before);
-      const now = after.get(key)?.amount ?? absent(currencies.after);
-      if (was === now) return [];
-      const who = (after.get(key) ?? before.get(key))!.who;
-      return [
-        {
-          label: field === 'paidBy' ? `${who}’s payment` : `${who}’s share`,
-          before: was,
-          after: now,
-          money: true,
-        },
-      ];
-    });
   };
 
   let currencyAfter = record.currency;
@@ -157,89 +266,7 @@ export function describeExpenseHistory(
       before: text(changes.currency?.old) || currencyAfter,
     };
     currencyAfter = currencies.before;
-    const described = Object.entries(changes).flatMap(([field, change]): ExpenseHistoryChange[] => {
-      switch (field) {
-        case 'moneyVersion':
-          return [];
-        // References restate a named change; they are described only when that is missing.
-        case 'tagId': {
-          if (changes.tag) return [];
-          const before = tagName(change.old),
-            after = tagName(change.new);
-          return [before && after ? { label: 'Tag', before, after } : { label: 'Tag' }];
-        }
-        case 'amountMinor':
-          if (changes.amount) return [];
-          return [
-            {
-              label: 'Amount',
-              before: money({ amountMinor: change.old }, currencies.before) ?? undefined,
-              after: money({ amountMinor: change.new }, currencies.after) ?? undefined,
-              money: true,
-            },
-          ];
-        case 'description':
-        case 'notes':
-        case 'predefinedItem':
-          return [
-            {
-              label:
-                field === 'predefinedItem' ? 'Item' : field === 'notes' ? 'Notes' : 'Description',
-              before: quoted(change.old),
-              after: quoted(change.new),
-            },
-          ];
-        case 'amount':
-          return [
-            {
-              label: 'Amount',
-              before: money({ amount: change.old }, currencies.before) ?? undefined,
-              after: money({ amount: change.new }, currencies.after) ?? undefined,
-              money: true,
-            },
-          ];
-        case 'currency':
-          return [{ label: 'Currency', before: currencies.before, after: currencies.after }];
-        case 'date':
-          return [{ label: 'Date', before: day(change.old), after: day(change.new) }];
-        case 'category':
-          return [
-            {
-              label: 'Category',
-              before: getCategory(text(change.old))?.label ?? 'None',
-              after: getCategory(text(change.new))?.label ?? 'None',
-            },
-          ];
-        case 'tag':
-          return [
-            {
-              label: 'Tag',
-              before: text(change.old) || 'Historical Tag',
-              after: text(change.new) || 'Historical Tag',
-            },
-          ];
-        case 'splitMethod':
-          return [
-            {
-              label: 'Split method',
-              before: splitMethods[text(change.old)] ?? 'Unknown',
-              after: splitMethods[text(change.new)] ?? 'Unknown',
-            },
-          ];
-        case 'paidBy':
-        case 'splitBetween':
-          return allocation(field, change, currencies);
-        case 'receiptUrl':
-          return [
-            {
-              label: 'Receipt',
-              after: !text(change.new) ? 'Removed' : text(change.old) ? 'Replaced' : 'Added',
-            },
-          ];
-        default:
-          return [{ label: 'Other details' }];
-      }
-    });
+    const described = describeExpenseChanges(changes, { currencies, person, tagName });
     const editor = person(entry.editedBy);
     const fields = Object.keys(changes).filter((field) => field !== 'moneyVersion');
     return {

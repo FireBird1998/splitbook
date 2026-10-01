@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { GroupDestination } from '../../data/types';
 import { Pressable, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
@@ -66,7 +67,7 @@ export function TopBar({
   );
 }
 
-export type GroupDestination = 'expenses' | 'balances' | 'activity';
+export type { GroupDestination };
 
 const destinations: { value: GroupDestination; label: string; icon: IconName }[] = [
   { value: 'expenses', label: 'Expenses', icon: 'receipt-outline' },

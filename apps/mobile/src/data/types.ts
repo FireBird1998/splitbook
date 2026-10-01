@@ -118,6 +118,9 @@ export interface GroupFinancialState {
   };
 }
 
+/** The three Group-scoped places the bottom navigation switches between. */
+export type GroupDestination = 'expenses' | 'balances' | 'activity';
+
 /**
  * Where a full-screen Expense task returns: captured when it opens from that Group's view.
  * `null` is direct entry, which returns to the Group at its default Month.
@@ -130,6 +133,8 @@ export interface GroupReturnContext {
   scrollY: number;
   /** Expense pages loaded at entry, read again on return so that position still exists. */
   pages: number;
+  /** The bottom-navigation destination at entry; Back and close return to it. */
+  destination: GroupDestination;
 }
 
 /** Confirms a ledger change on the Group view it returned to. */
@@ -180,15 +185,12 @@ export interface MobileSnapshot {
     user: SessionUser | null;
     message: string | null;
   };
-  screen:
-    | 'groups'
-    | 'group'
-    | 'create'
-    | 'invite'
-    | 'settings'
-    | 'expense'
-    | 'settlement'
-    | 'activity';
+  screen: 'groups' | 'group' | 'create' | 'invite' | 'settings' | 'expense' | 'settlement';
+  /**
+   * The Group destination shown while `screen` is 'group'. Back from an Expense task returns
+   * to the destination it opened from; a confirmed change returns to Expenses.
+   */
+  destination: GroupDestination;
   expense: ExpenseEditor;
   /**
    * Asks the Group view to scroll back to where the member was after a full-screen task

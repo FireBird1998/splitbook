@@ -1,5 +1,4 @@
 import { OfflineNotice } from './src/ui/offline-notice';
-import { ActivityScreen } from './src/ui/activity-screen';
 import { SettlementScreen } from './src/ui/settlement-screen';
 import { useCallback, useEffect, useRef, useSyncExternalStore, type RefObject } from 'react';
 import {
@@ -36,12 +35,13 @@ import {
 } from './src/runtime';
 import { ThemeContext, fonts, useTheme } from './src/ui/theme';
 import { Avatar, Button, Copy, Icon, Label, Loading, Notice } from './src/ui/primitives';
-import { EmptyGroups, GroupCard, GroupDetail, SignIn, styles } from './src/ui/screens';
-import { GroupCreateForm, InvitationPreview, InviteSharePanel } from './src/ui/group-workflows';
+import { EmptyGroups, GroupCard, SignIn, TripStrip, styles } from './src/ui/screens';
+import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen } from './src/ui/settings-screen';
 import { ExpenseEditor } from './src/ui/expense-editor';
 import {
-  GroupFinancialViews,
+  GroupBalancesView,
+  GroupExpensesView,
   HomeBalances,
   RefreshStatus,
   RetainedNotice,
@@ -50,6 +50,10 @@ import { refreshFeedback } from './src/ui/refresh-feedback';
 import { GroupSnackbar } from './src/ui/group-snackbar';
 import { visibleFieldErrors } from './src/data/field-feedback';
 import { groupFields } from './src/data/group-draft';
+import { GroupShell } from './src/ui/group-shell';
+import { GroupActivity } from './src/ui/group-activity';
+import type { MobileSnapshot } from './src/data/types';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
 
 export default function App() {
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
@@ -86,12 +90,6 @@ function SplitBook() {
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
   const scroll = useRef<ScrollView>(null);
   const scrollContent = useRef<View>(null);
-  // The Group view's offset, recorded when an Expense opens so returning can restore it.
-  const groupScrollY = useRef(0);
-  const viewportHeight = useRef(0);
-  const pendingScroll = useRef<number | null>(null);
-  const restoreRequest = useRef<number | null>(null);
-  const shownScrollKey = useRef<string | null>(null);
   // Place a form section near the top, so it stays visible when the keyboard opens.
   const reveal = useCallback((section: View) => {
     const content = scrollContent.current;
@@ -133,34 +131,12 @@ function SplitBook() {
 
   const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
   const feedback = refreshFeedback(state);
-  const scrollKey =
-    state.screen === 'activity'
-      ? `activity:${state.activity.groupId}:${state.activity.selected?._id ?? 'list'}`
-      : state.screen === 'group'
-        ? `group:${state.detail.id}`
-        : state.screen;
-  // Synced during render, before the remounted ScrollView can report its content size.
-  if (shownScrollKey.current !== scrollKey) {
-    shownScrollKey.current = scrollKey;
-    groupScrollY.current = 0;
-  }
-  if (!state.restoreScroll) pendingScroll.current = null;
-  else if (state.restoreScroll.request !== restoreRequest.current) {
-    restoreRequest.current = state.restoreScroll.request;
-    pendingScroll.current = state.restoreScroll.y;
-  }
-  /** Applied once the returning view's content is laid out; dragging or a new view cancels it. */
-  const restorePendingScroll = (contentHeight: number) => {
-    const y = pendingScroll.current;
-    if (y === null) return;
-    const reachable = Math.max(0, contentHeight - viewportHeight.current);
-    scroll.current?.scrollTo({ y: Math.min(y, reachable), animated: false });
-    groupScrollY.current = Math.min(y, reachable);
-    const { status } = controller.getSnapshot().financial.expenses;
-    if (reachable >= y || status === 'ready' || status === 'error') pendingScroll.current = null;
-  };
-  const openExpense = (groupId: string, expenseId?: string) =>
-    void controller.openExpense(groupId, expenseId, { scrollY: groupScrollY.current });
+  if (configurationReady && authenticated && state.screen === 'group')
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
+        <GroupScreen state={state} />
+      </SafeAreaView>
+    );
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
@@ -170,13 +146,9 @@ function SplitBook() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={
-                state.screen === 'activity'
-                  ? state.activity.selected
-                    ? 'Back to Activity'
-                    : 'Back to Group'
-                  : state.screen === 'expense' && state.expense.groupId
-                    ? 'Back to Group'
-                    : 'Back to Groups'
+                state.screen === 'expense' && state.expense.groupId
+                  ? 'Back to Group'
+                  : 'Back to Groups'
               }
               onPress={controller.back}
               style={{ minWidth: 48, minHeight: 48, justifyContent: 'center' }}
@@ -308,28 +280,14 @@ function SplitBook() {
           />
         ) : (
           <ScrollView
-            key={scrollKey}
+            key={state.screen}
             ref={scroll}
             innerViewRef={scrollContent as RefObject<View>}
-            scrollEventThrottle={100}
-            onScroll={(event) => {
-              if (state.screen === 'group')
-                groupScrollY.current = event.nativeEvent.contentOffset.y;
-            }}
-            onScrollBeginDrag={() => {
-              pendingScroll.current = null;
-            }}
-            onLayout={(event) => {
-              viewportHeight.current = event.nativeEvent.layout.height;
-            }}
-            onContentSizeChange={(_width, height) => restorePendingScroll(height)}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             contentContainerStyle={styles.content}
             refreshControl={
-              ['settings', 'expense', 'settlement', 'activity'].includes(
-                state.screen,
-              ) ? undefined : (
+              ['settings', 'expense', 'settlement'].includes(state.screen) ? undefined : (
                 <RefreshControl
                   refreshing={feedback.pull}
                   onRefresh={() => void controller.refresh('pull')}
@@ -373,15 +331,6 @@ function SplitBook() {
                     ],
                   )
                 }
-              />
-            ) : state.screen === 'activity' ? (
-              <ActivityScreen
-                state={state.activity}
-                stale={state.offline.active}
-                onRefresh={() => void controller.refreshActivity()}
-                onMore={() => void controller.loadMoreActivity()}
-                onSelect={(id) => void controller.selectActivity(id)}
-                onClose={controller.closeActivityDetail}
               />
             ) : state.screen === 'settlement' ? (
               <SettlementScreen
@@ -552,89 +501,6 @@ function SplitBook() {
                   ))
                 )}
               </>
-            ) : state.detail.status === 'denied' ? (
-              <Notice
-                title="This Group isn’t available"
-                message={state.detail.message ?? 'You may no longer be a member of this Group.'}
-                icon="lock-closed-outline"
-                retry={controller.back}
-                retryLabel="Back to Groups"
-              />
-            ) : state.detail.status === 'error' && !state.detail.data ? (
-              <Notice
-                title="Couldn’t open this Group"
-                message={state.detail.message ?? 'Please try again.'}
-                retry={() => void controller.refresh()}
-              />
-            ) : state.detail.data ? (
-              <>
-                {/* A failed refresh keeps the whole Group readable, with its time and a retry. */}
-                {state.detail.status === 'error' && (
-                  <RetainedNotice
-                    status="error"
-                    stale={false}
-                    refreshedAt={state.detail.refreshedAt}
-                    message={state.detail.message}
-                    subject={state.detail.data.name}
-                    retryLabel="Retry Group"
-                    onRetry={() => void controller.refresh()}
-                  />
-                )}
-                <GroupDetail group={state.detail.data} currentUserId={state.auth.user!.id}>
-                  <Button
-                    label="Add expense"
-                    icon="add-outline"
-                    onPress={() => openExpense(state.detail.data!.id)}
-                  />
-                  <Button
-                    label="Payments"
-                    secondary
-                    onPress={() => void controller.openSettlements(state.detail.id!)}
-                  />
-                  <Button
-                    label="Activity"
-                    secondary
-                    icon="time-outline"
-                    onPress={() => void controller.openActivity(state.detail.id!)}
-                  />
-                  <GroupFinancialViews
-                    group={state.detail.data}
-                    currentUserId={state.auth.user!.id}
-                    state={state.financial}
-                    onSelectMonth={(month) => void controller.selectMonth(month)}
-                    onRefreshExpenses={() => void controller.refreshExpenses()}
-                    onRefreshBalances={() => void controller.refreshBalances()}
-                    onLoadMore={() => void controller.loadMoreExpenses()}
-                    onOpenExpense={(expenseId) => openExpense(state.detail.id!, expenseId)}
-                  />
-                </GroupDetail>
-                {state.detail.data.members.length === 1 && (
-                  <Copy>Your Group is ready. Invite someone to start sharing it.</Copy>
-                )}
-                <InviteSharePanel
-                  status={state.share.status}
-                  url={state.share.url}
-                  message={state.share.message}
-                  onLoad={() => void controller.loadInviteLink()}
-                  onShare={() => {
-                    void (async () => {
-                      const url = await controller.loadInviteLink();
-                      if (!url) return;
-                      try {
-                        await Share.share({
-                          message: `Join our Group on SplitBook: ${url}`,
-                          title: 'SplitBook invitation',
-                        });
-                      } catch {
-                        Alert.alert(
-                          'Couldn’t open sharing',
-                          'Your invitation link is still available. Try again.',
-                        );
-                      }
-                    })();
-                  }}
-                />
-              </>
             ) : (
               <Loading label="Opening your Group…" />
             )}
@@ -654,15 +520,191 @@ function SplitBook() {
             </View>
           </ScrollView>
         )}
-        {authenticated && state.snackbar && state.detail.data ? (
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+/** A Group: the compact shell around its Expenses, Balances or Activity destination. */
+function GroupScreen({ state }: { state: MobileSnapshot }) {
+  const feedback = refreshFeedback(state);
+  const group = state.detail.data;
+  const userId = state.auth.user!.id;
+  const eventOpen = state.destination === 'activity' && state.activity.selected !== null;
+  const scroll = useRef<ScrollView>(null);
+  // The destination's offset, recorded when an Expense opens so returning can restore it.
+  const scrollY = useRef(0);
+  const viewportHeight = useRef(0);
+  const pendingScroll = useRef<number | null>(null);
+  const restoreRequest = useRef<number | null>(null);
+  const shownScrollKey = useRef<string | null>(null);
+  const scrollKey = `${state.detail.id}:${state.destination}:${state.activity.selected?._id ?? ''}`;
+  // Synced during render, before the remounted ScrollView can report its content size.
+  if (shownScrollKey.current !== scrollKey) {
+    shownScrollKey.current = scrollKey;
+    scrollY.current = 0;
+  }
+  if (!state.restoreScroll) pendingScroll.current = null;
+  else if (state.restoreScroll.request !== restoreRequest.current) {
+    restoreRequest.current = state.restoreScroll.request;
+    pendingScroll.current = state.restoreScroll.y;
+  }
+  /** Applied once the returning view's content is laid out; dragging or a new view cancels it. */
+  const restorePendingScroll = (contentHeight: number) => {
+    const y = pendingScroll.current;
+    if (y === null) return;
+    const reachable = Math.max(0, contentHeight - viewportHeight.current);
+    scroll.current?.scrollTo({ y: Math.min(y, reachable), animated: false });
+    scrollY.current = Math.min(y, reachable);
+    const { status } = controller.getSnapshot().financial.expenses;
+    if (reachable >= y || status === 'ready' || status === 'error') pendingScroll.current = null;
+  };
+  const openExpense = (groupId: string, expenseId?: string) =>
+    void controller.openExpense(groupId, expenseId, { scrollY: scrollY.current });
+  const shareInvite = () => {
+    void (async () => {
+      const url = await controller.loadInviteLink();
+      if (!url) {
+        const message = controller.getSnapshot().share.message;
+        if (message) Alert.alert('Couldn’t get an invitation link', message);
+        return;
+      }
+      try {
+        await Share.share({
+          message: `Join our Group on SplitBook: ${url}`,
+          title: 'SplitBook invitation',
+        });
+      } catch {
+        Alert.alert('Couldn’t open sharing', 'Your invitation link is still available. Try again.');
+      }
+    })();
+  };
+  return (
+    <GroupShell
+      group={group}
+      currentUserId={userId}
+      destination={state.destination}
+      onDestination={(destination) => void controller.selectDestination(destination)}
+      back={{
+        label: eventOpen ? 'Back to Activity' : 'Back to Home',
+        onPress: () => void controller.back(),
+      }}
+      status={<RefreshStatus visible={feedback.quiet} savedAt={feedback.savedAt} />}
+      invite={{
+        onPress: shareInvite,
+        disabled: state.share.status === 'loading' || state.detail.status !== 'ready',
+        offline: state.offline.active,
+      }}
+      onRefresh={() => void controller.refresh()}
+      pull={{ refreshing: feedback.pull, onRefresh: () => void controller.refresh('pull') }}
+      scrollRef={scroll}
+      scroll={{
+        scrollEventThrottle: 100,
+        onScroll: (event) => {
+          scrollY.current = event.nativeEvent.contentOffset.y;
+        },
+        onScrollBeginDrag: () => {
+          pendingScroll.current = null;
+        },
+        onLayout: (event) => {
+          viewportHeight.current = event.nativeEvent.layout.height;
+        },
+        onContentSizeChange: (_width, height) => restorePendingScroll(height),
+      }}
+      overlay={
+        state.snackbar && group ? (
           <GroupSnackbar
             notice={state.snackbar}
             shownMonth={state.financial.month}
             onView={() => void controller.viewSnackbarMonth()}
             onDismiss={controller.dismissSnackbar}
           />
-        ) : null}
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+        ) : null
+      }
+    >
+      <OfflineNotice state={state.offline} />
+      {state.detail.status === 'denied' ? (
+        <Notice
+          title="This Group isn’t available"
+          message={state.detail.message ?? 'You may no longer be a member of this Group.'}
+          icon="lock-closed-outline"
+          retry={() => void controller.back()}
+          retryLabel="Back to Home"
+        />
+      ) : state.detail.status === 'error' && !group ? (
+        <Notice
+          title="Couldn’t open this Group"
+          message={state.detail.message ?? 'Please try again.'}
+          retry={() => void controller.refresh()}
+        />
+      ) : !group ? (
+        <Loading label="Opening your Group…" />
+      ) : (
+        <>
+          {/* A failed refresh keeps the whole Group readable, with its time and a retry. */}
+          {state.detail.status === 'error' && (
+            <RetainedNotice
+              status="error"
+              stale={false}
+              refreshedAt={state.detail.refreshedAt}
+              message={state.detail.message}
+              subject={group.name}
+              retryLabel="Retry Group"
+              onRetry={() => void controller.refresh()}
+            />
+          )}
+          {state.destination === 'activity' ? (
+            <GroupActivity
+              state={state.activity}
+              currentUserId={userId}
+              currency={group.defaultCurrency}
+              members={group.members.map(({ user }) => ({ id: user.id, name: user.name }))}
+              offline={state.offline.active}
+              now={Date.now()}
+              onRetry={() => void controller.refreshActivity()}
+              onMore={() => void controller.loadMoreActivity()}
+              onSelect={(id) => void controller.selectActivity(id)}
+              onClose={controller.closeActivityDetail}
+            />
+          ) : state.destination === 'balances' ? (
+            <>
+              <GroupBalancesView
+                currentUserId={userId}
+                state={state.financial}
+                onRefreshBalances={() => void controller.refreshBalances()}
+              />
+              <Button
+                label="Payments"
+                secondary
+                onPress={() => void controller.openSettlements(group.id)}
+              />
+            </>
+          ) : (
+            <>
+              {getGroupTheme(group.category).header === 'strip' ? (
+                <TripStrip group={group} />
+              ) : null}
+              <Button
+                label="Add expense"
+                icon="add-outline"
+                onPress={() => openExpense(group.id)}
+              />
+              {group.members.length === 1 && (
+                <Copy>Your Group is ready. Invite someone to start sharing it.</Copy>
+              )}
+              <GroupExpensesView
+                group={group}
+                currentUserId={userId}
+                state={state.financial}
+                onSelectMonth={(month) => void controller.selectMonth(month)}
+                onRefreshExpenses={() => void controller.refreshExpenses()}
+                onLoadMore={() => void controller.loadMoreExpenses()}
+                onOpenExpense={(expenseId) => openExpense(group.id, expenseId)}
+              />
+            </>
+          )}
+        </>
+      )}
+    </GroupShell>
   );
 }

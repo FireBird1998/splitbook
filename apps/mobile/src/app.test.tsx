@@ -20,6 +20,13 @@ vi.mock('react-native', () => ({
   },
   ActivityIndicator: 'ActivityIndicator',
   Alert: { alert: vi.fn() },
+  Animated: {
+    View: 'AnimatedView',
+    Value: class {
+      setValue() {}
+    },
+    spring: () => ({ start: () => undefined }),
+  },
   AppState: {
     addEventListener: (_: string, listener: (state: string) => void) => {
       native.appState.push(listener);
@@ -40,6 +47,7 @@ vi.mock('react-native', () => ({
     openURL: vi.fn(),
   },
   Modal: 'Modal',
+  PanResponder: { create: (config: object) => ({ panHandlers: config }) },
   Platform: { OS: 'android' },
   Pressable: 'Pressable',
   RefreshControl: 'RefreshControl',
@@ -50,6 +58,7 @@ vi.mock('react-native', () => ({
   TextInput: 'TextInput',
   View: 'View',
   useColorScheme: () => 'light',
+  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: 1 }),
 }));
 vi.mock('react-native-safe-area-context', () => ({
   SafeAreaProvider: 'SafeAreaProvider',
@@ -314,7 +323,8 @@ async function renderApp() {
   const refreshControl = () =>
     root().find((node) => isHost(node, 'ScrollView') && node.props.refreshControl).props
       .refreshControl.props as { refreshing: boolean; onRefresh: () => void };
-  const scrollView = () => root().find((node) => isHost(node, 'ScrollView'));
+  // The visible screen's; a Group's closed options sheet renders its own after it.
+  const scrollView = () => root().findAll((node) => isHost(node, 'ScrollView'))[0];
   return {
     ...harness,
     text,
@@ -390,13 +400,13 @@ describe('App refresh rendering', () => {
     app.use((path) => (path === `/api/groups/${groupId}` ? json({}, 503) : undefined));
     await settle(Promise.resolve(app.refreshControl().onRefresh()));
 
-    const shown = app.text();
-    expect(shown).toContain(
-      `The server could not complete this request. Please try again. Showing Maple House from ${verifiedAt}.`,
-    );
-    expect(shown).toContain('September groceries');
-    expect(shown).toContain('September 2026 expense total');
-    expect(shown).toContain('You owe Alex');
+    const retained = `The server could not complete this request. Please try again. Showing Maple House from ${verifiedAt}.`;
+    expect(app.text()).toContain(retained);
+    expect(app.text()).toContain('September groceries');
+    expect(app.text()).toContain('September 2026 expense total');
+    await app.press('Balances');
+    expect(app.text()).toContain(retained);
+    expect(app.text()).toContain('You owe Alex');
     expect(app.refreshControl().refreshing).toBe(false);
 
     // A retry is not a pull: it keeps the figures and shows the quiet header status only.
@@ -407,7 +417,6 @@ describe('App refresh rendering', () => {
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
     expect(app.text()).toContain(`Saved ${verifiedAt} · updating`);
-    expect(app.text()).toContain('September groceries');
     expect(app.text()).toContain('You owe Alex');
 
     app.use(() => undefined);
@@ -415,8 +424,10 @@ describe('App refresh rendering', () => {
     await settle();
     expect(app.text()).not.toContain('Showing Maple House from');
     expect(app.text()).not.toContain('· updating');
-    expect(app.text()).toContain('September groceries');
+    expect(app.text()).toContain('You owe Alex');
     expect(app.refreshControl().refreshing).toBe(false);
+    await app.press('Expenses');
+    expect(app.text()).toContain('September groceries');
   });
 
   it('reopens a recent Group without a request, then shows it with its time while it is read again', async () => {
@@ -428,7 +439,7 @@ describe('App refresh rendering', () => {
     });
     await app.press('Open Maple House');
     const verifiedAt = refreshedLabel(app.clock.now);
-    await app.press('Back to Groups');
+    await app.press('Back to Home');
     reads.length = 0;
 
     // Within the display freshness window: shown at once, nothing read, no progress cue.
@@ -441,7 +452,7 @@ describe('App refresh rendering', () => {
     expect(app.text()).not.toContain('· updating');
 
     // After it: the same figures stay, labelled with when they were verified.
-    await app.press('Back to Groups');
+    await app.press('Back to Home');
     app.clock.now += 31_000;
     const groupRead = hold();
     app.use((path) => (path === `/api/groups/${groupId}` ? groupRead.respond() : undefined));
@@ -450,13 +461,15 @@ describe('App refresh rendering', () => {
     await settle();
     expect(app.text()).toContain(`Saved ${verifiedAt} · updating`);
     expect(app.text()).toContain('September groceries');
+    await app.press('Balances');
+    expect(app.text()).toContain(`Saved ${verifiedAt} · updating`);
     expect(app.text()).toContain('You owe Alex');
     expect(app.refreshControl().refreshing).toBe(false);
     app.use(() => undefined);
     groupRead.release(json({ data: group, status: 200 }));
     await settle();
     expect(app.text()).not.toContain('· updating');
-    expect(app.text()).toContain('September groceries');
+    expect(app.text()).toContain('You owe Alex');
   });
 
   it('turns on the pull indicator for a pull but never for an automatic refresh', async () => {

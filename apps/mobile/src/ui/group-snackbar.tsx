@@ -41,8 +41,8 @@ export function GroupSnackbar({
     };
   }, [notice]);
   return (
+    // Its default offset sits just above the Group's bottom navigation.
     <Snackbar
-      bottom={16}
       message={notice.message}
       action={
         notice.viewMonth
