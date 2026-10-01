@@ -47,6 +47,7 @@ import {
   RetainedNotice,
 } from './src/ui/financial-views';
 import { refreshFeedback } from './src/ui/refresh-feedback';
+import { GroupSnackbar } from './src/ui/group-snackbar';
 import { visibleFieldErrors } from './src/data/field-feedback';
 import { groupFields } from './src/data/group-draft';
 
@@ -85,6 +86,12 @@ function SplitBook() {
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
   const scroll = useRef<ScrollView>(null);
   const scrollContent = useRef<View>(null);
+  // The Group view's offset, recorded when an Expense opens so returning can restore it.
+  const groupScrollY = useRef(0);
+  const viewportHeight = useRef(0);
+  const pendingScroll = useRef<number | null>(null);
+  const restoreRequest = useRef<number | null>(null);
+  const shownScrollKey = useRef<string | null>(null);
   // Place a form section near the top, so it stays visible when the keyboard opens.
   const reveal = useCallback((section: View) => {
     const content = scrollContent.current;
@@ -126,6 +133,34 @@ function SplitBook() {
 
   const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
   const feedback = refreshFeedback(state);
+  const scrollKey =
+    state.screen === 'activity'
+      ? `activity:${state.activity.groupId}:${state.activity.selected?._id ?? 'list'}`
+      : state.screen === 'group'
+        ? `group:${state.detail.id}`
+        : state.screen;
+  // Synced during render, before the remounted ScrollView can report its content size.
+  if (shownScrollKey.current !== scrollKey) {
+    shownScrollKey.current = scrollKey;
+    groupScrollY.current = 0;
+  }
+  if (!state.restoreScroll) pendingScroll.current = null;
+  else if (state.restoreScroll.request !== restoreRequest.current) {
+    restoreRequest.current = state.restoreScroll.request;
+    pendingScroll.current = state.restoreScroll.y;
+  }
+  /** Applied once the returning view's content is laid out; dragging or a new view cancels it. */
+  const restorePendingScroll = (contentHeight: number) => {
+    const y = pendingScroll.current;
+    if (y === null) return;
+    const reachable = Math.max(0, contentHeight - viewportHeight.current);
+    scroll.current?.scrollTo({ y: Math.min(y, reachable), animated: false });
+    groupScrollY.current = Math.min(y, reachable);
+    const { status } = controller.getSnapshot().financial.expenses;
+    if (reachable >= y || status === 'ready' || status === 'error') pendingScroll.current = null;
+  };
+  const openExpense = (groupId: string, expenseId?: string) =>
+    void controller.openExpense(groupId, expenseId, { scrollY: groupScrollY.current });
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
@@ -139,7 +174,9 @@ function SplitBook() {
                   ? state.activity.selected
                     ? 'Back to Activity'
                     : 'Back to Group'
-                  : 'Back to Groups'
+                  : state.screen === 'expense' && state.expense.groupId
+                    ? 'Back to Group'
+                    : 'Back to Groups'
               }
               onPress={controller.back}
               style={{ minWidth: 48, minHeight: 48, justifyContent: 'center' }}
@@ -271,15 +308,21 @@ function SplitBook() {
           />
         ) : (
           <ScrollView
-            key={
-              state.screen === 'activity'
-                ? `activity:${state.activity.groupId}:${state.activity.selected?._id ?? 'list'}`
-                : state.screen === 'group'
-                  ? `group:${state.detail.id}`
-                  : state.screen
-            }
+            key={scrollKey}
             ref={scroll}
             innerViewRef={scrollContent as RefObject<View>}
+            scrollEventThrottle={100}
+            onScroll={(event) => {
+              if (state.screen === 'group')
+                groupScrollY.current = event.nativeEvent.contentOffset.y;
+            }}
+            onScrollBeginDrag={() => {
+              pendingScroll.current = null;
+            }}
+            onLayout={(event) => {
+              viewportHeight.current = event.nativeEvent.layout.height;
+            }}
+            onContentSizeChange={(_width, height) => restorePendingScroll(height)}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             contentContainerStyle={styles.content}
@@ -541,7 +584,7 @@ function SplitBook() {
                   <Button
                     label="Add expense"
                     icon="add-outline"
-                    onPress={() => void controller.openExpense(state.detail.data!.id)}
+                    onPress={() => openExpense(state.detail.data!.id)}
                   />
                   <Button
                     label="Payments"
@@ -554,12 +597,6 @@ function SplitBook() {
                     icon="time-outline"
                     onPress={() => void controller.openActivity(state.detail.id!)}
                   />
-                  {state.expense.status === 'saved' &&
-                    state.expense.groupId === state.detail.id && (
-                      <Copy accessibilityLiveRegion="polite">
-                        {state.expense.message ?? 'Expense saved.'}
-                      </Copy>
-                    )}
                   <GroupFinancialViews
                     group={state.detail.data}
                     currentUserId={state.auth.user!.id}
@@ -568,9 +605,7 @@ function SplitBook() {
                     onRefreshExpenses={() => void controller.refreshExpenses()}
                     onRefreshBalances={() => void controller.refreshBalances()}
                     onLoadMore={() => void controller.loadMoreExpenses()}
-                    onOpenExpense={(expenseId) =>
-                      void controller.openExpense(state.detail.id!, expenseId)
-                    }
+                    onOpenExpense={(expenseId) => openExpense(state.detail.id!, expenseId)}
                   />
                 </GroupDetail>
                 {state.detail.data.members.length === 1 && (
@@ -619,6 +654,14 @@ function SplitBook() {
             </View>
           </ScrollView>
         )}
+        {authenticated && state.snackbar && state.detail.data ? (
+          <GroupSnackbar
+            notice={state.snackbar}
+            shownMonth={state.financial.month}
+            onView={() => void controller.viewSnackbarMonth()}
+            onDismiss={controller.dismissSnackbar}
+          />
+        ) : null}
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

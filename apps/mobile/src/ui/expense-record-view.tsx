@@ -1,18 +1,26 @@
 import { View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { readExpenseMoney } from '@splitbook/shared/expense-money-edit';
+import { describeExpenseHistory } from '../data/expense-history';
 import { storedExpenseMoney, type ExpenseRecord } from '../data/expense-record';
 import { Copy, Label, Panel } from './primitives';
-import { fonts } from './theme';
+import { fonts, useTheme } from './theme';
 
 /** Authoritative saved values, also used beside an unchanged draft during conflict review. */
 export function ExpenseRecordView({
   record,
   title = 'Saved Expense',
+  people,
+  tags,
 }: {
   record: ExpenseRecord;
   title?: string;
+  /** The Group's current members and Tags, so history can name them. */
+  people?: { id: string; name: string }[];
+  tags?: { id: string; name: string }[];
 }) {
+  const theme = useTheme();
+  const history = describeExpenseHistory(record, people, tags);
   const money = readExpenseMoney(storedExpenseMoney(record));
   const amount = (value: number) => formatCurrency(value, record.currency);
   const name = (id: string) =>
@@ -65,23 +73,44 @@ export function ExpenseRecordView({
       <Copy>Revision {record.revision}</Copy>
       <Copy>Last updated {new Date(record.updatedAt).toLocaleString()}</Copy>
       <View style={{ gap: 12 }}>
-        <Copy style={{ fontFamily: fonts.semibold }}>Edit history</Copy>
-        {!record.editHistory.length ? (
+        <Copy accessibilityRole="header" style={{ fontFamily: fonts.semibold }}>
+          Edit history
+        </Copy>
+        {!history.length ? (
           <Copy>No recorded edits.</Copy>
         ) : (
-          record.editHistory.map((entry, index) => (
-            <View key={`${entry.editedAt}:${index}`} style={{ gap: 6 }}>
-              <Copy>
-                {typeof entry.editedBy === 'object' && entry.editedBy
-                  ? (entry.editedBy.name ?? 'Former member')
-                  : 'Member'}{' '}
-                · {new Date(entry.editedAt).toLocaleString()}
-              </Copy>
-              {Object.entries(entry.changes).map(([field, change]) => (
-                <Copy key={field}>
-                  {field}: {JSON.stringify(change.old) ?? '—'} → {JSON.stringify(change.new) ?? '—'}
+          history.map((entry) => (
+            <View key={entry.key} style={{ gap: 4 }}>
+              <Copy style={{ fontFamily: fonts.semibold }}>{entry.summary}</Copy>
+              {entry.changes.map((change, index) => (
+                <Copy
+                  key={`${change.label}:${index}`}
+                  accessibilityLabel={
+                    change.before && change.after
+                      ? `${change.label} changed from ${change.before} to ${change.after}`
+                      : undefined
+                  }
+                >
+                  {change.label}
+                  {change.before && change.after ? (
+                    <>
+                      {': '}
+                      <Copy style={change.money ? { fontFamily: fonts.mono } : undefined}>
+                        {change.before}
+                      </Copy>
+                      {' → '}
+                      <Copy style={change.money ? { fontFamily: fonts.mono } : undefined}>
+                        {change.after}
+                      </Copy>
+                    </>
+                  ) : change.after ? (
+                    `: ${change.after}`
+                  ) : (
+                    ' changed'
+                  )}
                 </Copy>
               ))}
+              <Copy style={{ color: theme.textSecondary, fontSize: 13 }}>{entry.editedAt}</Copy>
             </View>
           ))
         )}

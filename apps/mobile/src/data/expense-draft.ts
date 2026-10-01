@@ -18,7 +18,7 @@ import { getCurrency } from '@splitbook/shared/currency';
 import { amountError as moneyAmountError, calendarDateError } from './field-feedback';
 import { parseGroupResponse } from '@splitbook/shared/group-read';
 import { objectId, toMobileGroup } from './dto';
-import type { MobileGroup } from './types';
+import type { GroupReturnContext, MobileGroup } from './types';
 
 // Historical missing identities are local read/delete-recovery keys, never API identities.
 const draftMemberId = z.union([objectId, z.string().regex(/^former-(payer|participant)-\d+$/)]);
@@ -79,6 +79,7 @@ export interface ExpenseEditor {
   persistence: 'saved' | 'saving' | 'error';
   message: string | null;
   validation: ExpenseValidation;
+  returnTo: GroupReturnContext | null;
 }
 /** Correctable Expense inputs, in the order they appear on screen. */
 export const expenseFields = ['amount', 'description', 'date', 'payers', 'split', 'tag'] as const;
@@ -121,6 +122,7 @@ export function emptyExpenseEditor(): ExpenseEditor {
     persistence: 'saved',
     message: null,
     validation: emptyExpenseValidation(),
+    returnTo: null,
   };
 }
 export function parseExpenseContext(value: unknown): ExpenseContext {

@@ -71,7 +71,10 @@ const json = (data: unknown, status = 200, cookie?: string): FetchResponse =>
     headers: { 'Content-Type': 'application/json', ...(cookie ? { 'Set-Cookie': cookie } : {}) },
   });
 
-function backend() {
+function backend({
+  record = savedExpense as Record<string, unknown>,
+  loseCreate = false,
+}: { record?: Record<string, unknown>; loseCreate?: boolean } = {}) {
   const writes: string[] = [];
   const records = new Map<string, unknown>();
   const drafts = {
@@ -96,9 +99,11 @@ function backend() {
       return json({ user: alex, session: { userId: memberId, expiresAt: '2030-01-01T00:00:00Z' } });
     if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
     if (path === `/api/groups/${groupId}/expenses/${expenseId}`)
-      return json({ data: savedExpense, status: 200 });
-    if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST')
+      return json({ data: record, status: 200 });
+    if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST') {
+      if (loseCreate) throw new Error('The response was lost after the server committed it');
       return json({ status: 201, data: { _id: expenseId, group: groupId } }, 201);
+    }
     if (path.endsWith('/expenses'))
       return json({
         data: {
@@ -200,8 +205,11 @@ afterEach(() => {
   vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mockClear();
 });
 
-async function render(open: (controller: MobileController) => Promise<void>) {
-  const harness = backend();
+async function render(
+  open: (controller: MobileController) => Promise<void>,
+  options?: Parameters<typeof backend>[0],
+) {
+  const harness = backend(options);
   await harness.controller.signIn('alex');
   await open(harness.controller);
   const revealed: NodeMock[] = [];
@@ -380,5 +388,112 @@ describe('rendered Expense corrections', () => {
     expect(text(ui.root())).toContain(reason);
     expect(ui.pressable('Retry saving draft')).toBeTruthy();
     expect(ui.input('Description, required').props.value).toBe('Milk');
+  });
+});
+
+describe('rendered draft recovery', () => {
+  const banner = (root: ReactTestInstance, role: 'summary' | 'alert') =>
+    root.findAll((node) => isHost(node, 'View') && node.props.accessibilityRole === role);
+
+  it('resumes an ordinary draft calmly and drops the resume notice once answered', async () => {
+    const ui = await render(async (controller) => {
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ amount: '42.00', description: 'Milk and bread' });
+      // Opening a saved Expense while a draft exists explains why the draft comes first.
+      await controller.openExpense(groupId, expenseId);
+    });
+    const [info] = banner(ui.root(), 'summary');
+    expect(text(info)).toContain('Unfinished draft');
+    expect(text(info)).toContain('Nothing has been sent.');
+    expect(banner(ui.root(), 'alert')).toEqual([]);
+    expect(text(ui.root())).not.toContain('Save not confirmed');
+    expect(text(ui.root())).toContain('This Group already has an unfinished Expense draft.');
+    expect(ui.pressable('Discard draft')).toBeTruthy();
+
+    await ui.press('Resume draft');
+    expect(text(ui.root())).not.toContain('Unfinished draft');
+    expect(text(ui.root())).not.toContain('already has an unfinished');
+    expect(ui.input('Amount, required').props.value).toBe('42.00');
+    expect(ui.input('Description, required').props.value).toBe('Milk and bread');
+    expect(ui.input('Description, required').props.editable).toBe(true);
+    expect(ui.writes).toEqual([]);
+  });
+
+  it('marks a save that may already be recorded as a warning and offers no discard', async () => {
+    const ui = await render(
+      async (controller) => {
+        await controller.openExpense(groupId);
+        await controller.updateExpenseDraft({ amount: '42.00', description: 'Milk', tagId });
+        await controller.saveExpense();
+        await controller.openExpense(groupId);
+      },
+      { loseCreate: true },
+    );
+    const [warning] = banner(ui.root(), 'alert');
+    expect(text(warning)).toContain('Save not confirmed');
+    expect(text(warning)).toContain('may already be saved');
+    expect(text(ui.root())).not.toContain('Unfinished draft');
+    expect(() => ui.pressable('Discard draft')).toThrow();
+
+    await ui.press('Resume save recovery');
+    expect(text(ui.root())).toContain('Retry the same submission to confirm it');
+    expect(ui.pressable('Retry same submission')).toBeTruthy();
+    expect(ui.input('Amount, required').props.editable).toBe(false);
+    expect(ui.writes).toEqual([`POST /api/groups/${groupId}/expenses`]);
+  });
+});
+
+describe('rendered edit history', () => {
+  const former = 'a00000000000000000000099';
+  const withHistory = {
+    ...savedExpense,
+    editHistory: [
+      {
+        editedBy: { _id: memberId, name: 'Alex' },
+        editedAt: '2026-09-27T15:40:00.000Z',
+        changes: {
+          amount: { old: 8.99, new: 10 },
+          amountMinor: { old: 899, new: 1000 },
+          moneyVersion: { new: 1 },
+          paidBy: {
+            old: [{ user: former, amount: 8.99, amountMinor: 899 }],
+            new: [{ user: memberId, amount: 10, amountMinor: 1000 }],
+          },
+        },
+      },
+      {
+        editedBy: former,
+        editedAt: iso,
+        changes: {
+          tag: { old: 'Snacks', new: 'Groceries' },
+          tagId: { old: 'a00000000000000000000021', new: tagId },
+          internalState: { old: { nested: true }, new: [former] },
+        },
+      },
+    ],
+  };
+
+  it('names people and formats values without raw data or identifiers', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId, expenseId), {
+      record: withHistory,
+    });
+    const shown = text(ui.root());
+    const labels = ui
+      .root()
+      .findAll((node) => isHost(node, 'Text') && typeof node.props.accessibilityLabel === 'string')
+      .map((node) => node.props.accessibilityLabel as string);
+
+    // Newest first.
+    expect(shown.indexOf('Former member changed the Tag')).toBeLessThan(
+      shown.indexOf('Alex changed the amount and who paid'),
+    );
+    expect(labels).toContain('Amount changed from ₹8.99 to ₹10.00');
+    expect(labels).toContain('Alex’s payment changed from ₹0.00 to ₹10.00');
+    expect(labels).toContain('Former member’s payment changed from ₹8.99 to ₹0.00');
+    expect(labels).toContain('Tag changed from Snacks to Groceries');
+    expect(shown).toContain('Other details changed');
+    expect(shown).not.toMatch(/[a-f\d]{24}/);
+    expect(shown).not.toMatch(/[{}"[\]]|moneyVersion|amountMinor|internalState/);
+    expect(labels.join(' ')).not.toMatch(/[a-f\d]{24}/);
   });
 });
