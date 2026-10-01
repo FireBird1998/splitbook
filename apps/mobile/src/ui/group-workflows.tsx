@@ -1,13 +1,5 @@
 import { useEffect, useRef, useState, type Ref } from 'react';
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  ScrollView,
-  TextInput,
-  View,
-  type TextInputProps,
-} from 'react-native';
+import { Modal, Pressable, ScrollView, TextInput, View, type TextInputProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CURRENCIES, getCurrency } from '@splitbook/shared/currency';
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
@@ -556,81 +548,5 @@ export function InvitationPreview({
       </Copy>
       <Button label="Not now" secondary disabled={joining} onPress={onCancel} />
     </View>
-  );
-}
-
-export interface InviteSharePanelProps {
-  status: 'idle' | 'loading' | 'ready' | 'error';
-  message: string | null;
-  url: string | null;
-  onShare: () => void;
-  onLoad: () => void;
-}
-
-export function InviteSharePanel({ status, message, url, onShare, onLoad }: InviteSharePanelProps) {
-  const theme = useTheme();
-  const loading = status === 'loading';
-  return (
-    <Panel>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-        <Icon name="person-add-outline" color={theme.brand.main} size={20} />
-        <Label>INVITE PEOPLE</Label>
-      </View>
-      <Copy
-        accessibilityRole="header"
-        style={{ fontFamily: fonts.semibold, fontSize: 22, lineHeight: 29 }}
-      >
-        Bring your people in
-      </Copy>
-      <Copy style={{ color: theme.textSecondary }}>
-        Share a link so someone can preview this Group and choose to join.
-      </Copy>
-      {loading && (
-        <View
-          accessibilityLiveRegion="polite"
-          style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
-        >
-          <ActivityIndicator color={theme.brand.main} />
-          <Copy style={{ color: theme.textSecondary, flex: 1 }}>Checking your invite link…</Copy>
-        </View>
-      )}
-      {message && (
-        <Copy accessibilityRole="alert" style={{ color: theme.status.negative }}>
-          {message}
-        </Copy>
-      )}
-      {status === 'ready' && url ? (
-        <>
-          <Copy
-            selectable
-            style={{
-              fontFamily: fonts.mono,
-              fontSize: 12,
-              lineHeight: 20,
-              color: theme.textSecondary,
-            }}
-          >
-            {url}
-          </Copy>
-          <Button label="Share invite link" icon="share-social-outline" onPress={onShare} />
-          <Copy style={{ fontSize: 13, lineHeight: 19, color: theme.textSecondary }}>
-            Choose an app and a recipient in Android’s share menu.
-          </Copy>
-        </>
-      ) : (
-        <Button
-          label={
-            loading
-              ? 'Checking invite link…'
-              : status === 'error'
-                ? 'Check invite link'
-                : 'Get invite link'
-          }
-          disabled={loading}
-          secondary
-          onPress={onLoad}
-        />
-      )}
-    </Panel>
   );
 }

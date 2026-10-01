@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { GoogleSignInButton } from 'react-native-nitro-google-signin';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -236,153 +235,53 @@ export function GroupCard({ group, onPress }: { group: MobileGroup; onPress: () 
   );
 }
 
-export function GroupDetail({
-  group,
-  currentUserId,
-  children,
-}: {
-  group: MobileGroup;
-  currentUserId: string;
-  children?: ReactNode;
-}) {
+/**
+ * The Trip Theme's boarding-pass strip, kept at the top of Expenses until the slim strip
+ * (#117) replaces it.
+ */
+export function TripStrip({ group }: { group: MobileGroup }) {
   const theme = useTheme();
   const descriptor = getGroupTheme(group.category);
   const codes = deriveTripCodes(group.name);
   return (
-    <View style={{ gap: 24 }}>
-      {descriptor.header === 'strip' ? (
-        <LinearGradient
-          colors={theme.strip.gradient}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={{ borderRadius: 20, overflow: 'hidden' }}
-        >
-          <View style={{ padding: 24, gap: 20 }}>
-            <View style={styles.between}>
-              <Label light>YOUR SHARED ADVENTURE</Label>
-              <Icon name="airplane" size={21} color={theme.strip.text} />
-            </View>
-            <Copy
-              accessibilityRole="header"
-              style={{
-                color: theme.strip.text,
-                fontFamily: fonts.semibold,
-                fontSize: 30,
-                lineHeight: 35,
-                letterSpacing: -0.7,
-              }}
-            >
-              {group.name}
-            </Copy>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
-              <Copy style={[styles.routeCode, { color: theme.strip.text }]}>{codes.from}</Copy>
-              <View style={{ flex: 1, height: 1, backgroundColor: theme.strip.muted }} />
-              <Icon name="airplane-outline" color={theme.strip.text} size={21} />
-              <View style={{ flex: 1, height: 1, backgroundColor: theme.strip.muted }} />
-              <Copy style={[styles.routeCode, { color: theme.strip.text }]}>{codes.to}</Copy>
-            </View>
-            <Label light>GROUP CODE · {descriptor.label.toUpperCase()}</Label>
-          </View>
-          <View
-            style={[
-              styles.between,
-              {
-                borderTopWidth: 1,
-                borderStyle: 'dashed',
-                borderColor: theme.strip.muted,
-                backgroundColor: theme.strip.stub,
-                padding: 20,
-              },
-            ]}
-          >
-            <Copy style={{ color: theme.strip.text, fontSize: 14 }}>{dateRange(group)}</Copy>
-            <Copy style={{ color: theme.strip.text, fontFamily: fonts.mono, fontSize: 12 }}>
-              {group.members.length} {group.members.length === 1 ? 'MEMBER' : 'MEMBERS'}
-            </Copy>
-          </View>
-        </LinearGradient>
-      ) : (
-        <View style={{ gap: 14, paddingVertical: 8 }}>
-          <View
-            style={{
-              width: 56,
-              height: 56,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 18,
-              backgroundColor: theme.brand.bg,
-            }}
-          >
-            <Icon name={themeIcons[descriptor.id]} size={27} color={theme.brand.main} />
-          </View>
-          <Label>{descriptor.label.toUpperCase()}</Label>
-          <Copy
-            accessibilityRole="header"
-            style={{
-              fontFamily: fonts.semibold,
-              fontSize: 34,
-              lineHeight: 40,
-              letterSpacing: -0.9,
-            }}
-          >
-            {group.name}
-          </Copy>
-          <Copy style={{ color: theme.textSecondary }}>
-            {group.description ||
-              (descriptor.id === 'home'
-                ? 'A shared home. A little more clarity.'
-                : descriptor.tagline)}
-          </Copy>
-        </View>
-      )}
-      {descriptor.header === 'strip' && group.description ? (
-        <Copy style={{ color: theme.textSecondary }}>{group.description}</Copy>
-      ) : null}
-      {children}
-      <Panel>
+    <LinearGradient
+      colors={theme.strip.gradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ borderRadius: 20, overflow: 'hidden' }}
+    >
+      <View style={{ padding: 24, gap: 20 }}>
         <View style={styles.between}>
-          <Copy style={{ color: theme.textSecondary }}>Default currency</Copy>
-          <Copy style={{ fontFamily: fonts.mono }}>{group.defaultCurrency}</Copy>
+          <Label light>YOUR SHARED ADVENTURE</Label>
+          <Icon name="airplane" size={21} color={theme.strip.text} />
         </View>
-      </Panel>
-      <View style={{ gap: 12 }}>
-        <View style={styles.between}>
-          <Copy style={{ fontFamily: fonts.semibold, fontSize: 22 }}>The people</Copy>
-          <Copy style={{ fontSize: 13, color: theme.textSecondary }}>
-            {group.members.length} {group.members.length === 1 ? 'member' : 'members'}
-          </Copy>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
+          <Copy style={[styles.routeCode, { color: theme.strip.text }]}>{codes.from}</Copy>
+          <View style={{ flex: 1, height: 1, backgroundColor: theme.strip.muted }} />
+          <Icon name="airplane-outline" color={theme.strip.text} size={21} />
+          <View style={{ flex: 1, height: 1, backgroundColor: theme.strip.muted }} />
+          <Copy style={[styles.routeCode, { color: theme.strip.text }]}>{codes.to}</Copy>
         </View>
-        <Panel>
-          {group.members.map((member, index) => (
-            <View
-              key={member.user.id}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 12,
-                paddingTop: index ? 16 : 0,
-                borderTopWidth: index ? 1 : 0,
-                borderColor: theme.border,
-              }}
-            >
-              <Avatar name={member.user.name} />
-              <View style={{ flex: 1 }}>
-                <Copy style={{ fontFamily: fonts.medium }}>
-                  {member.user.name}
-                  {member.user.id === currentUserId ? ' · You' : ''}
-                </Copy>
-                <Copy style={{ color: theme.textSecondary, fontSize: 12, lineHeight: 19 }}>
-                  {member.role === 'admin' ? 'Group admin' : 'Member'}
-                </Copy>
-              </View>
-              {member.role === 'admin' && (
-                <Icon name="shield-checkmark-outline" size={18} color={theme.brand.main} />
-              )}
-            </View>
-          ))}
-        </Panel>
+        <Label light>GROUP CODE · {descriptor.label.toUpperCase()}</Label>
       </View>
-    </View>
+      <View
+        style={[
+          styles.between,
+          {
+            borderTopWidth: 1,
+            borderStyle: 'dashed',
+            borderColor: theme.strip.muted,
+            backgroundColor: theme.strip.stub,
+            padding: 20,
+          },
+        ]}
+      >
+        <Copy style={{ color: theme.strip.text, fontSize: 14 }}>{dateRange(group)}</Copy>
+        <Copy style={{ color: theme.strip.text, fontFamily: fonts.mono, fontSize: 12 }}>
+          {group.members.length} {group.members.length === 1 ? 'MEMBER' : 'MEMBERS'}
+        </Copy>
+      </View>
+    </LinearGradient>
   );
 }
 

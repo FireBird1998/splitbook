@@ -70,6 +70,7 @@ import type {
   AccountStorageLease,
   FetchResponse,
   GroupCreation,
+  GroupDestination,
   GroupDraft,
   GroupFinancialState,
   GroupReturnContext,
@@ -185,6 +186,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
     offline: { active: false, refreshedAt: null, message: null },
     pull: false,
     screen: 'groups',
+    destination: 'expenses',
     expense: emptyExpenseEditor(),
     restoreScroll: null,
     snackbar: null,
@@ -1412,21 +1414,31 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * window. An explicit refresh keeps the Group explicit until it finishes, so overlapping
    * foreground refreshes join its reads instead of reusing older figures.
    */
-  const openGroup = (id: string, reuse = true) =>
-    reuse ? showGroup(id, true) : explicitly([`group:${id}`], () => showGroup(id, false));
-  const showGroup = async (id: string, reuse: boolean) => {
+  const openGroup = (id: string, reuse = true, destination?: GroupDestination) =>
+    reuse
+      ? showGroup(id, true, destination)
+      : explicitly([`group:${id}`], () => showGroup(id, false, destination));
+  /**
+   * The same Group reopens on the destination already shown (an Expense task's return sets
+   * it) and another Group starts on Expenses, unless `requested` names one. Only the shown
+   * destination is read; the other is read when the member switches to it.
+   */
+  const showGroup = async (id: string, reuse: boolean, requested?: GroupDestination) => {
     if (snapshot.auth.status !== 'authenticated') return;
     const owner = generation;
     const previousMonth = snapshot.financial.groupId === id ? snapshot.financial.month : undefined;
     const verified = snapshot.detail.id === id ? snapshot.detail.data : null;
     // Refreshing this account's same Group keeps its figures; another Group starts empty.
     let retained = Boolean(verified && snapshot.financial.groupId === id);
+    const destination =
+      requested ?? (snapshot.detail.id === id ? snapshot.destination : 'expenses');
     const view = ++viewRequest;
     const path = `/api/groups/${id}`;
     startReadView();
     publish({
       ...snapshot,
       screen: 'group',
+      destination,
       share: { status: 'idle', url: null, message: null },
       detail: {
         status: 'loading',
@@ -1436,6 +1448,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         refreshedAt: verified ? snapshot.detail.refreshedAt : null,
       },
       financial: retained ? snapshot.financial : { ...emptyFinancial(), groupId: id },
+      // Events already read for this Group stay readable until Activity is read again.
+      activity:
+        retained && snapshot.activity.groupId === id && snapshot.activity.status !== 'denied'
+          ? {
+              ...snapshot.activity,
+              selected: null,
+              target: { status: 'none' },
+              status: 'idle',
+              moreStatus: 'idle',
+              message: null,
+            }
+          : { ...emptyActivity(), groupId: id },
     });
     try {
       if (!objectId.safeParse(id).success)
@@ -1471,7 +1495,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                   : previousMonth,
         },
       });
-      await readExpenses(false, reuse);
+      // The member may have switched destination while the Group was read.
+      if (snapshot.destination === 'activity') {
+        const { expenses, balances } = snapshot.financial;
+        // Expenses and Balances (a saved copy may be showing) are read on the first switch.
+        publish({
+          ...snapshot,
+          financial: {
+            ...snapshot.financial,
+            expenses: { ...expenses, status: 'idle' },
+            balances: balances.status === 'loading' ? { ...balances, status: 'idle' } : balances,
+          },
+        });
+        await readActivity(false);
+      } else await readExpenses(false, reuse);
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
       if (dropDeniedGroup(id, error)) return;
@@ -1923,8 +1960,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const readActivity = async (append: boolean) => {
     const previous = snapshot.activity,
       groupId = previous.groupId;
-    if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'activity' || !groupId)
-      return;
+    if (snapshot.auth.status !== 'authenticated' || !showingActivity() || !groupId) return;
     const pagination = previous.pagination;
     if (
       append &&
@@ -2003,12 +2039,46 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
     }
   };
+  const showingActivity = () => snapshot.screen === 'group' && snapshot.destination === 'activity';
+
+  /**
+   * Switch the Group's bottom-navigation destination. Content already read stays as it is;
+   * a destination is read only when it hasn't been read since the Group was opened.
+   * Expenses and Balances share one read, because Balances follow the Expense read.
+   */
+  const selectDestination = async (destination: GroupDestination) => {
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.screen !== 'group' ||
+      destination === snapshot.destination
+    )
+      return;
+    const groupId = snapshot.detail.id;
+    publish({
+      ...snapshot,
+      destination,
+      activity:
+        groupId && snapshot.activity.groupId !== groupId
+          ? { ...emptyActivity(), groupId }
+          : snapshot.activity,
+    });
+    // A Group read still in flight reads the destination shown when it completes.
+    if (snapshot.detail.status === 'loading' || !snapshot.detail.data) return;
+    if (destination === 'activity') {
+      if (snapshot.activity.status === 'idle') await readActivity(false);
+    } else if (
+      snapshot.financial.groupId === groupId &&
+      snapshot.financial.expenses.status === 'idle'
+    )
+      await readExpenses(false, true);
+  };
+
+  /** Open a Group on its Activity destination. */
   const openActivity = async (groupId: string) => {
     if (snapshot.auth.status !== 'authenticated' || expenseNavigationBlocked()) return;
-    viewRequest += 1;
-    startReadView();
-    publish({ ...snapshot, screen: 'activity', activity: { ...emptyActivity(), groupId } });
-    await readActivity(false);
+    if (snapshot.screen === 'group' && snapshot.detail.id === groupId)
+      return selectDestination('activity');
+    await openGroup(groupId, true, 'activity');
   };
   const refreshActivity = () => readActivity(false);
   const loadMoreActivity = () => readActivity(true);
@@ -2016,7 +2086,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const selectActivity = async (eventId: string) => {
     const activity = snapshot.activity;
     if (
-      snapshot.screen !== 'activity' ||
+      !showingActivity() ||
       snapshot.auth.status !== 'authenticated' ||
       activity.status !== 'ready'
     )
@@ -2163,6 +2233,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       month,
       scrollY: Number.isFinite(scrollY) ? Math.max(0, scrollY) : 0,
       pages: expenses.month === month && expenses.pagination ? expenses.pagination.page : 1,
+      destination: snapshot.destination,
     };
   };
 
@@ -2421,6 +2492,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /**
    * Show the Group view an Expense task returns to; the caller then reads it. A known origin
    * keeps its Month and asks for its scroll position; direct entry uses the default Month.
+   * Back returns to the destination the task opened from; a confirmed change (with its
+   * snackbar) returns to Expenses, where the change shows.
    */
   const returnToGroup = (groupId: string, snackbar: GroupSnackbar | null = null) => {
     const origin =
@@ -2430,6 +2503,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({
       ...snapshot,
       screen: 'group',
+      destination: snackbar ? 'expenses' : (origin?.destination ?? 'expenses'),
       detail:
         detail.id === groupId
           ? detail
@@ -3870,6 +3944,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ...(view === viewRequest
           ? ({
               screen: 'group',
+              destination: 'expenses',
+              activity: { ...emptyActivity(), groupId: group.id },
               detail: {
                 status: 'ready',
                 id: group.id,
@@ -3922,11 +3998,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const back = () => {
-    if (snapshot.screen === 'activity') {
-      if (snapshot.activity.selected) return closeActivityDetail();
-      if (snapshot.activity.groupId && snapshot.activity.status !== 'denied')
-        return openGroup(snapshot.activity.groupId);
-    }
+    // An open event detail closes first; from any Group destination, Back returns Home.
+    if (showingActivity() && snapshot.activity.selected) return closeActivityDetail();
     if (snapshot.screen === 'invite') {
       void cancelInvitation();
       return;
@@ -3968,7 +4041,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.screen === 'invite' && snapshot.auth.status !== 'authenticated')
       return retryInvitation();
     if (snapshot.auth.status !== 'authenticated') return restore();
-    if (snapshot.screen === 'activity') return refreshActivity();
+    // Pulling on Activity re-reads Activity only; a Group that failed to load is read again.
+    if (showingActivity() && snapshot.detail.status === 'ready') return refreshActivity();
     if (['create', 'invite', 'settings', 'expense', 'settlement'].includes(snapshot.screen)) {
       const owner = generation,
         view = viewRequest,
@@ -4096,6 +4170,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   return {
     openActivity,
+    selectDestination,
     selectActivity,
     closeActivityDetail,
     refreshActivity,

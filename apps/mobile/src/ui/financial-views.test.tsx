@@ -3,7 +3,12 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse } from '../data/types';
-import { GroupFinancialViews, HomeBalances, RefreshStatus } from './financial-views';
+import {
+  GroupBalancesView,
+  GroupExpensesView,
+  HomeBalances,
+  RefreshStatus,
+} from './financial-views';
 import { refreshFeedback, refreshedLabel } from './refresh-feedback';
 
 // Host stand-ins keep the props and text Android receives.
@@ -145,16 +150,22 @@ function Screen({ controller }: { controller: MobileController }) {
       {state.screen === 'groups' ? (
         <HomeBalances state={state.home} onRefresh={noop} />
       ) : state.detail.data ? (
-        <GroupFinancialViews
-          group={state.detail.data}
-          currentUserId={user.id}
-          state={state.financial}
-          onSelectMonth={noop}
-          onRefreshExpenses={noop}
-          onRefreshBalances={noop}
-          onLoadMore={noop}
-          onOpenExpense={noop}
-        />
+        <>
+          <GroupBalancesView
+            currentUserId={user.id}
+            state={state.financial}
+            onRefreshBalances={noop}
+          />
+          <GroupExpensesView
+            group={state.detail.data}
+            currentUserId={user.id}
+            state={state.financial}
+            onSelectMonth={noop}
+            onRefreshExpenses={noop}
+            onLoadMore={noop}
+            onOpenExpense={noop}
+          />
+        </>
       ) : null}
     </>
   );

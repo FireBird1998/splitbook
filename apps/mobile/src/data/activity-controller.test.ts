@@ -83,7 +83,8 @@ describe('native Group Activity', () => {
     await controller.signIn('alex');
     await controller.openActivity(groupId);
     expect(controller.getSnapshot()).toMatchObject({
-      screen: 'activity',
+      screen: 'group',
+      destination: 'activity',
       activity: {
         groupId,
         status: 'ready',
@@ -168,7 +169,8 @@ describe('native Group Activity', () => {
     revoked = true;
     await controller.refresh();
     expect(controller.getSnapshot()).toMatchObject({
-      screen: 'activity',
+      screen: 'group',
+      destination: 'activity',
       activity: { status: 'denied', events: [], pagination: null },
     });
   });
@@ -192,7 +194,8 @@ describe('native Group Activity', () => {
     await controller.openActivity(groupId);
     await controller.selectActivity(eventId);
     expect(controller.getSnapshot()).toMatchObject({
-      screen: 'activity',
+      screen: 'group',
+      destination: 'activity',
       activity: {
         selected: { _id: eventId, metadata: { description: 'Dinner', amount: 12.34 } },
         target: { status: 'deleted', description: 'Dinner corrected later' },
@@ -201,7 +204,7 @@ describe('native Group Activity', () => {
     });
     await controller.back();
     expect(controller.getSnapshot().activity.selected).toBeNull();
-    expect(controller.getSnapshot().screen).toBe('activity');
+    expect(controller.getSnapshot()).toMatchObject({ screen: 'group', destination: 'activity' });
   });
 
   it('retains explicitly stale history on an offline refresh, then recovers without inventing events', async () => {

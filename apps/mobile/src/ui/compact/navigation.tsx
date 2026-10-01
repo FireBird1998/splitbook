@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import type { GroupDestination } from '../../data/types';
 import { Pressable, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
@@ -66,11 +67,12 @@ export function TopBar({
   );
 }
 
-export type GroupDestination = 'expenses' | 'balances' | 'activity';
+export type { GroupDestination };
 
 const destinations: { value: GroupDestination; label: string; icon: IconName }[] = [
   { value: 'expenses', label: 'Expenses', icon: 'receipt-outline' },
-  { value: 'balances', label: 'Balances', icon: 'scale-outline' },
+  // Ionicons' "scale" is a bathroom scale; the balance scale in the design has no equivalent.
+  { value: 'balances', label: 'Balances', icon: 'swap-horizontal-outline' },
   { value: 'activity', label: 'Activity', icon: 'pulse-outline' },
 ];
 
@@ -118,6 +120,9 @@ export function GroupNavBar({
             }}
           >
             <View
+              // Android keeps a view's corners square when its background changes from
+              // transparent to a colour, so the pill is remounted when it's selected.
+              key={selected ? 'selected' : 'idle'}
               style={{
                 width: 60,
                 height: 32,

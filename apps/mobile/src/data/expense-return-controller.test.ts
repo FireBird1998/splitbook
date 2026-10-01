@@ -447,9 +447,40 @@ describe('Returning from an Expense', () => {
       month: '2026-07',
       scrollY: 300,
       pages: 1,
+      destination: 'expenses',
     });
     await controller.back();
     expect(controller.getSnapshot().financial.month).toBe('2026-07');
+  });
+
+  it('Back returns to the Group destination the Expense opened from', async () => {
+    const { controller } = await signedIn();
+    await controller.openGroup(householdId);
+    await controller.selectDestination('balances');
+    await controller.openExpense(householdId, undefined, { scrollY: 80 });
+    expect(controller.getSnapshot().expense.returnTo).toMatchObject({ destination: 'balances' });
+    await fillNewExpense(controller);
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'balances',
+      restoreScroll: { y: 80 },
+      financial: { balances: { status: 'ready' } },
+    });
+  });
+
+  it('a confirmed save returns to Expenses, where it shows, whichever destination it began on', async () => {
+    const { controller } = await signedIn();
+    await controller.openGroup(householdId);
+    await controller.selectDestination('balances');
+    await controller.openExpense(householdId);
+    await fillNewExpense(controller, { date: '2026-09-10' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'expenses',
+      snackbar: { message: 'Expense saved · Weekly groceries' },
+    });
   });
 
   it('falls back to the Group’s Expenses at its default Month after direct entry', async () => {
