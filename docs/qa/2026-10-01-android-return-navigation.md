@@ -1,16 +1,19 @@
 # Android Expense return, draft recovery and history (#104)
 
-This change implements [#104](https://github.com/FireBird1998/splitbook/issues/104) under specification [#99](https://github.com/FireBird1998/splitbook/issues/99), with the navigation and snackbar decisions from [#112](https://github.com/FireBird1998/splitbook/issues/112), starting from `main` at `eb9cd92`. It is **not** a complete #104: the Group bottom-navigation destination depends on [#115](https://github.com/FireBird1998/splitbook/issues/115), and no installed-Android check was possible here (see [Not verified](#not-verified)).
+This change implements [#104](https://github.com/FireBird1998/splitbook/issues/104) under specification [#99](https://github.com/FireBird1998/splitbook/issues/99), with the navigation and snackbar decisions from [#112](https://github.com/FireBird1998/splitbook/issues/112), starting from `main` at `eb9cd92`, and since merged with `main` at `d8eff42` (#137's read cache and #139's form corrections). It is **not** a complete #104: the Group bottom-navigation destination depends on [#115](https://github.com/FireBird1998/splitbook/issues/115), and no installed-Android check was possible here (see [Not verified](#not-verified)).
 
 ## Behaviour
 
 - **Return context.** Opening an Expense from a Group's view records its Group, Month and scroll offset (`snapshot.expense.returnTo`). Retry, Discard and "Keep current saved record" reopen the same task and keep it.
 - **Back and close.** Android Back and the top-bar arrow ("Back to Group") keep the draft on the device and return to that Group and Month. The view restores its scroll position once its content is laid out. A drag or a Month change cancels the restore.
 - **Page range.** The return context also records how many Expense pages were loaded (`pages`).
-  - The Group's next Expense read after a return reads that same range, so an Expense opened from page 2 or later is still listed.
+  - Expense reads of that Group and Month read the same range until it has been shown, so an Expense opened from page 2 or later is still listed.
+  - A read that supersedes the return's read inherits the range. That includes a foreground refresh, Retry or pull arriving while a later page is still loading.
   - The range is published once, so the list never shrinks while the position is restored.
   - If a later page fails for any reason other than denial, the pages read are kept and Load more is offered.
-  - Ordinary refreshes still start from the first page. This was added after independent review found that a return kept only the first page.
+  - Once shown, later refreshes start from the first page again.
+  - Choosing another Month, opening another Group, going Home, starting another Expense or signing out ends the return.
+  - Both behaviours were added after independent review. The first review found that a return kept only the first page; the second found that a foreground refresh mid-return lost the range.
 - **Other exits.**
   - Back first dismisses a delete confirmation.
   - Direct entry, with no known origin, returns to the Group at its default Month (the current Month for a Household).
@@ -31,13 +34,18 @@ This change implements [#104](https://github.com/FireBird1998/splitbook/issues/1
 
 ## Automated verification
 
-- **Mobile:** 319 tests. New:
-  - `expense-return-controller.test.ts` (19): public-controller journeys against a fictional ledger that paginates like the backend, commits a create before losing its response, deduplicates by `Idempotency-Key` and enforces `If-Match` revisions. Three cover a return beyond the first page: Back, an edit and a new save, and a failing later page. All three fail on the first reviewed head, `52e2c27`.
+- **Mobile:** 360 tests on the merged branch. New:
+  - `expense-return-controller.test.ts` (22): public-controller journeys against a fictional ledger that paginates like the backend, commits a create before losing its response, deduplicates by `Idempotency-Key` and enforces `If-Match` revisions. Six cover a return beyond the first page:
+    - Back, an edit and a new save
+    - a failing later page
+    - a foreground refresh overlapping page 2, after Back and after an edit
+    - a Month change before the range is shown
+  - The first three fail on `52e2c27`. The two overlapping-refresh journeys fail with the range cleared when its read starts, as on `51dd45a` ("expected 25, got 20").
   - `expense-history.test.ts` (5): the formatter's rules.
   - Rendered editor tests (3): ordinary versus unconfirmed resume, and readable history.
   - Rendered App tests (4): Android Back with Month and scroll, the back arrow, and same-Month and other-Month saves with "View in August".
 - **Checked against `main`:**
-  - 18 of the 19 controller journeys fail on `main`. Three of those, the late-completion guards, fail only because `snackbar` and `restoreScroll` do not exist there.
+  - 21 of the 22 controller journeys fail against `eb9cd92`'s controller. Three of those, the late-completion guards, fail only because `snackbar` and `restoreScroll` do not exist there.
   - "Never leaves while a save is being sent" passes on both.
   - All 7 new rendered tests fail on `main`.
 - **Other packages:** shared 268 and web unit 139. Workspace typecheck, lint and `prettier --check .` pass.
@@ -51,7 +59,7 @@ This change implements [#104](https://github.com/FireBird1998/splitbook/issues/1
 - Database: MongoDB 7.0.43 (`mongo@sha256:9854f713…`) in a throwaway container, database `splitbook_mobile_50`.
 - Runtime: Node 22.22.0, `TZ=Asia/Kolkata`.
 
-**Existing verifiers, rerun unchanged and all passing:** `verify:expenses`, `verify:expense-edit` and `verify:offline`.
+**Existing verifiers, rerun unchanged and all passing:** `verify:expenses`, `verify:expense-edit` and `verify:offline`. They ran at `52e2c27` and again on the merged branch at `5ba01f1`.
 
 **#104 journey.** A one-off script, not committed, drove the real controller with disk-backed draft storage in a run-owned fictional Household, then archived it:
 
@@ -60,6 +68,9 @@ This change implements [#104](https://github.com/FireBird1998/splitbook/issues/1
 - The created Expense's response was lost after commit. After that, Back, a foreground refresh, a restart and reopening sent nothing. The explicit retry reused the same key and body, and exactly one Expense existed afterwards.
 - A save dated in the current Month, made from the previous Month, stayed on the previous Month and offered "View in". Choosing it showed the saved Expense.
 - Editing it back into the previous Month returned to the origin Month and offered the other Month.
+- On the merged branch (`5ba01f1`), 22 more fictional Expenses filled the previous Month past one page.
+  - The real page-2 response was delayed and a foreground refresh issued meanwhile. Back from the last of 23 kept all 23 Expenses.
+  - Editing and saving that Expense returned with every page and the correction.
 - The server's own `editHistory` read:
 
   ```text
@@ -71,16 +82,18 @@ This change implements [#104](https://github.com/FireBird1998/splitbook/issues/1
   Sam Chen’s share: ₹6.25 → ₹7.00
   ```
 
-## Integration with #137
+## Integration with `main` (#137, #139)
 
-A throwaway merge of #137 (`feat/android-cached-reads` at `58787d7`) into this branch conflicts in `back()` and twice in `readExpenses`. The resolution:
+`main` at `d8eff42` is merged into this branch (`fc461e3`). The merge commit ports the reviewed behaviour onto #137's read path, and `5ba01f1` then fixes the second review finding. Conflicts and their resolution:
 
-- **`back()`:** keep `closeExpense()`/`showHome()`, and have `showHome` call #137's `loadHome(true)`.
+- **`App.tsx`:** keep both imports.
+- **`back()`:** keep `closeExpense()`/`showHome()`. `showHome` reads Home with `loadHome(true)`, as #137's Back did.
 - **`readExpenses`:**
-  - Decide the return's page target (`through`) before #137's fresh-first-page shortcut, and take that shortcut only when `through === 1`.
-  - Keep #137's first-page read with `wanted` and its saved-copy preview. Then read the remaining pages with this branch's loop, passing `wanted` to `readCached`.
+  - Keep #137's first-page read with `wanted`, its saved-copy preview, `trackExpenseRead` and `followSupersededExpenseRead`.
+  - Each extra page of a return's range is read and tracked the same way. A superseded extra-page read follows the same superseded-read path.
+  - #137's fresh-first-page shortcut is taken only when the return's target is one page. Without that condition, four page-range journeys fail on the merged code.
 
-With that, the 336 mobile tests of both branches, typecheck and lint pass together. Without the `through === 1` condition, two page-range tests fail: #137 would publish only a reused first page. Back from an Expense on its first page still reuses #137's recent reads, and confirmed saves still invalidate and re-read.
+Back from an Expense on its first page still reuses #137's recent reads, and confirmed saves still invalidate and re-read. All of #137's and #139's tests pass on the merged branch.
 
 ## Not verified
 
