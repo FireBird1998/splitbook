@@ -1,0 +1,18 @@
+{
+  "id": "dpl_2Sg2FWmuvLKtJyBN7R8L8W6pRW7s",
+  "url": "splitbook-hylnx2ama-ankit-das-projects.vercel.app",
+  "readyState": "READY",
+  "target": "production",
+  "alias": [
+    "splitbook.in",
+    "www.splitbook.in",
+    "splitbook-ankit-das-projects.vercel.app",
+    "splitbook-git-main-ankit-das-projects.vercel.app"
+  ],
+  "aliasAssigned": true,
+  "source": "2d6db3e2ee84c19d6fe4de8a8ceb744a6826c818",
+  "ready": 1790729284299,
+  "buildingAt": 1790729157770,
+  "createdAt": 1790729156224,
+  "errorMessage": null
+}
