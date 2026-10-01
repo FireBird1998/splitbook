@@ -216,7 +216,7 @@ const ready = (overrides: Partial<ActivityState> = {}): ActivityState => ({
   moreStatus: 'idle',
   ...overrides,
 });
-function activity(state: ActivityState, offline = false) {
+function activity(state: ActivityState, offline = false, pulling = false) {
   const handlers = { onRetry: vi.fn(), onMore: vi.fn(), onSelect: vi.fn(), onClose: vi.fn() };
   const root = render(
     <GroupActivity
@@ -224,6 +224,7 @@ function activity(state: ActivityState, offline = false) {
       currentUserId={you}
       currency="INR"
       offline={offline}
+      pulling={pulling}
       now={now}
       {...handlers}
     />,
@@ -279,10 +280,24 @@ describe('Group Activity', () => {
     expect(failed.onMore).toHaveBeenCalledOnce();
   });
 
-  it('keeps events readable with a progress bar while updating', () => {
+  it('keeps events readable while updating, leaving the cue to the header or the pull', () => {
     const { root } = activity(ready({ status: 'loading' }));
-    one(byRole(root, 'progressbar', 'Updating Activity'));
+    expect(byRole(root, 'progressbar')).toHaveLength(0);
     expect(byRole(root, 'button').every((row) => row.props.accessibilityState.disabled)).toBe(true);
+  });
+
+  it('draws a progress bar only for a first load that is not a pull', () => {
+    const first = activity(ready({ status: 'loading', events: [], pagination: null }));
+    one(byRole(first.root, 'progressbar', 'Loading Activity'));
+    act(() => {
+      renderer?.unmount();
+    });
+    const pulled = activity(
+      ready({ status: 'loading', events: [], pagination: null }),
+      false,
+      true,
+    );
+    expect(byRole(pulled.root, 'progressbar')).toHaveLength(0);
   });
 
   it('explains a failed update and offers Try again', () => {

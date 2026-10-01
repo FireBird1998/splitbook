@@ -30,6 +30,8 @@ interface GroupActivityProps {
   members?: { id: string; name: string }[];
   /** Figures come from this device's saved copy. */
   offline: boolean;
+  /** A pull-to-refresh is running; its native indicator is the only cue. */
+  pulling: boolean;
   now: number;
   onRetry: () => void;
   onMore: () => void;
@@ -127,6 +129,7 @@ function ActivityList({
   currency,
   members,
   offline,
+  pulling,
   now,
   onRetry,
   onMore,
@@ -140,8 +143,10 @@ function ActivityList({
     state.pagination.page < state.pagination.totalPages;
   return (
     <View style={{ gap: 12 }}>
-      {loading ? (
-        <LinearProgress label={state.events.length ? 'Updating Activity' : 'Loading Activity'} />
+      {/* One cue per operation: a pull has its native indicator and a refresh of shown events
+          the header's quiet status, so only a first load draws a bar. */}
+      {loading && !state.events.length && !pulling ? (
+        <LinearProgress label="Loading Activity" />
       ) : null}
       <SectionHeader
         title="Changes in this Group"

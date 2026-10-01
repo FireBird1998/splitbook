@@ -154,6 +154,23 @@ type Handler = (
   path: string,
   init: RequestInit,
 ) => FetchResponse | Promise<FetchResponse> | undefined;
+const activityPage = {
+  status: 200,
+  data: {
+    activities: [
+      {
+        _id: 'd00000000000000000000001',
+        group: groupId,
+        actor: { _id: user.id, name: user.name },
+        type: 'expense_added',
+        createdAt: iso,
+        metadata: { description: 'September groceries', amount: 10, currency: 'INR' },
+      },
+    ],
+    pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+  },
+};
+
 function backend() {
   let cookie: string | null = null;
   let account: string | null = null;
@@ -224,6 +241,7 @@ function backend() {
             page(from === getLocalMonthIsoRange('2026-08').dateFrom ? [august] : [september]),
           );
         }
+        if (path.startsWith(`/api/groups/${groupId}/activity?`)) return json(activityPage);
         if (path === `/api/groups/${groupId}/balances`)
           return json({
             data: {
@@ -325,11 +343,16 @@ async function renderApp() {
       .refreshControl.props as { refreshing: boolean; onRefresh: () => void };
   // The visible screen's; a Group's closed options sheet renders its own after it.
   const scrollView = () => root().findAll((node) => isHost(node, 'ScrollView'))[0];
+  const progressbars = () =>
+    root().findAll(
+      (node) => typeof node.type === 'string' && node.props.accessibilityRole === 'progressbar',
+    ).length;
   return {
     ...harness,
     text,
     pressable,
     refreshControl,
+    progressbars,
     press: (label: string) => settle(Promise.resolve(pressable(label).props.onPress())),
     type: (label: string, value: string) =>
       settle(
@@ -500,6 +523,52 @@ describe('App refresh rendering', () => {
     pulled.release(json(page([september])));
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
+  });
+});
+
+describe('App Group Activity refresh', () => {
+  async function onActivity() {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Activity');
+    expect(app.text()).toContain('September groceries');
+    return app;
+  }
+
+  it('shows only the native pull indicator for a pull on Activity', async () => {
+    const app = await onActivity();
+    const read = hold();
+    app.use((path) => (path.includes('/activity?') ? read.respond() : undefined));
+    app.refreshControl().onRefresh();
+    await read.reached;
+    await settle();
+    expect(app.refreshControl().refreshing).toBe(true);
+    expect(app.progressbars()).toBe(0);
+    expect(app.text()).not.toContain('Updating…');
+    expect(app.text()).toContain('September groceries');
+
+    app.use(() => undefined);
+    read.release(json(activityPage));
+    await settle();
+    expect(app.refreshControl().refreshing).toBe(false);
+  });
+
+  it('shows one quiet header status for an automatic refresh of Activity', async () => {
+    const app = await onActivity();
+    const read = hold();
+    app.use((path) => (path.includes('/activity?') ? read.respond() : undefined));
+    app.foreground();
+    await read.reached;
+    await settle();
+    expect(app.refreshControl().refreshing).toBe(false);
+    expect(app.text()).toContain('Updating…');
+    expect(app.progressbars()).toBe(0);
+    expect(app.text()).toContain('September groceries');
+
+    app.use(() => undefined);
+    read.release(json(activityPage));
+    await settle();
+    expect(app.text()).not.toContain('Updating…');
   });
 });
 

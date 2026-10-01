@@ -660,6 +660,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               currency={group.defaultCurrency}
               members={group.members.map(({ user }) => ({ id: user.id, name: user.name }))}
               offline={state.offline.active}
+              pulling={feedback.pull}
               now={Date.now()}
               onRetry={() => void controller.refreshActivity()}
               onMore={() => void controller.loadMoreActivity()}

@@ -22,27 +22,39 @@ export function refreshFeedback(state: MobileSnapshot): RefreshFeedback {
           { active: groups.status === 'loading' && groups.data.length > 0, time: null },
           { active: home.status === 'loading' && home.data !== null, time: home.refreshedAt },
         ]
-      : state.screen === 'group' &&
-          // Pagination has its own footer.
-          expenses.moreStatus !== 'loading'
+      : state.screen === 'group' && state.destination === 'activity'
         ? [
             {
               active: detail.status === 'loading' && detail.data !== null,
               time: detail.refreshedAt,
             },
             {
-              active:
-                expenses.status === 'loading' &&
-                (expenses.summary !== null || expenses.data.length > 0),
-              time: expenses.refreshedAt,
-            },
-            {
-              // Unverified Balances already carry their own "Updating" label.
-              active: balances.status === 'loading' && balances.data !== null && !balances.stale,
-              time: balances.refreshedAt,
+              // Older pages have their own footer; a first load shows its placeholder.
+              active: state.activity.status === 'loading' && state.activity.events.length > 0,
+              time: null,
             },
           ]
-        : [];
+        : state.screen === 'group' &&
+            // Pagination has its own footer.
+            expenses.moreStatus !== 'loading'
+          ? [
+              {
+                active: detail.status === 'loading' && detail.data !== null,
+                time: detail.refreshedAt,
+              },
+              {
+                active:
+                  expenses.status === 'loading' &&
+                  (expenses.summary !== null || expenses.data.length > 0),
+                time: expenses.refreshedAt,
+              },
+              {
+                // Unverified Balances already carry their own "Updating" label.
+                active: balances.status === 'loading' && balances.data !== null && !balances.stale,
+                time: balances.refreshedAt,
+              },
+            ]
+          : [];
   const active = refreshing.filter((item) => item.active);
   const times = active.map((item) => item.time).filter((time): time is number => time !== null);
   return {
