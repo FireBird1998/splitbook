@@ -769,10 +769,14 @@ describe('Draft and save recovery', () => {
     const restarted = server.create();
     await restarted.restore();
     await restarted.openGroup(householdId);
-    // Opening another Expense first shows why the draft blocks it.
+    // Another Expense opens read-only beside the draft, and offers to resume it.
     await restarted.openExpense(householdId, expenseId);
-    expect(restarted.getSnapshot().expense.status).toBe('resume');
-    expect(restarted.getSnapshot().expense.message).toContain('already has an unfinished');
+    expect(restarted.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      draft: { original: { _id: expenseId } },
+      groupDraft: { description: 'Market run' },
+      message: null,
+    });
 
     restarted.resumeExpenseDraft();
     const resumed = restarted.getSnapshot().expense;

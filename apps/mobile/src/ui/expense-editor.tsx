@@ -226,9 +226,21 @@ export function ExpenseEditor({
           ? 'Available once your latest entries are stored on this device.'
           : null;
 
+  // The Group's draft holds Edit and Delete; the record itself stays readable.
+  const holdReason = state.groupDraft
+    ? 'Finish or discard the draft in this Group first.'
+    : undefined;
   if (record)
     return frame(
       <>
+        {state.groupDraft ? (
+          <Banner
+            tone="info"
+            message="This Group has an unfinished draft. Finish or discard it to edit or delete this Expense."
+          >
+            <CompactButton label="Resume draft" variant="text" dense onPress={onResume} />
+          </Banner>
+        ) : null}
         <ExpenseRecordView record={draft.original!} people={members} tags={context?.tags} />
         {state.message ? <Copy accessibilityRole="alert">{state.message}</Copy> : null}
         {state.status === 'delete-review' ? (
@@ -248,7 +260,8 @@ export function ExpenseEditor({
             <Button
               label="Edit Expense"
               onPress={onEdit}
-              disabled={!canEditExpense(draft.original!)}
+              disabled={!canEditExpense(draft.original!) || !!holdReason}
+              hint={holdReason}
             />
             {!canEditExpense(draft.original!) ? (
               <Copy>
@@ -256,7 +269,13 @@ export function ExpenseEditor({
                 can be reviewed or deleted, but not edited.
               </Copy>
             ) : null}
-            <Button label="Delete Expense" secondary onPress={onReviewDelete} />
+            <Button
+              label="Delete Expense"
+              secondary
+              onPress={onReviewDelete}
+              disabled={!!holdReason}
+              hint={holdReason}
+            />
             <Button label="Refresh Expense" secondary onPress={onRetry} />
           </>
         ) : null}
@@ -319,9 +338,10 @@ export function ExpenseEditor({
                   tone="warning"
                   title="Save not confirmed"
                   message={
-                    state.mutation
+                    state.message ??
+                    (state.mutation
                       ? 'This change may already be saved. Resume to check the current Expense before anything else is sent.'
-                      : 'This Expense may already be saved. Resume to confirm it with the same details; it can’t be added twice.'
+                      : 'This Expense may already be saved. Resume to confirm it with the same details; it can’t be added twice.')
                   }
                 />
                 <Button label="Resume save recovery" onPress={onResume} />
@@ -331,7 +351,10 @@ export function ExpenseEditor({
                 <Banner
                   tone="info"
                   title="Unfinished draft"
-                  message="Nothing has been sent. Resume your entries or discard them to start again."
+                  message={
+                    state.message ??
+                    'Nothing has been sent. Resume your entries or discard them to start again.'
+                  }
                 />
                 <Button label="Resume draft" onPress={onResume} />
                 <Button label="Discard draft" secondary onPress={onDiscard} />
@@ -443,7 +466,7 @@ export function ExpenseEditor({
             money={money}
           />
           <OptionalDetails draft={draft} locked={locked} onChange={onChange} />
-          {state.message && !summary && (
+          {state.message && !summary && state.status !== 'resume' && (
             <CompactText variant="small" accessibilityRole="alert" accessibilityLiveRegion="polite">
               {state.message}
             </CompactText>

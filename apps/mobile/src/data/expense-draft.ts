@@ -80,6 +80,11 @@ export interface ExpenseEditor {
   message: string | null;
   validation: ExpenseValidation;
   returnTo: GroupReturnContext | null;
+  /**
+   * The Group's ordinary draft while another, saved Expense is read. That record opens
+   * read-only; Edit and Delete wait until the draft is finished or discarded.
+   */
+  groupDraft: ExpenseDraft | null;
 }
 /** Correctable Expense inputs, in the order they appear on screen. */
 export const expenseFields = ['amount', 'description', 'date', 'payers', 'split', 'tag'] as const;
@@ -123,6 +128,7 @@ export function emptyExpenseEditor(): ExpenseEditor {
     message: null,
     validation: emptyExpenseValidation(),
     returnTo: null,
+    groupDraft: null,
   };
 }
 export function parseExpenseContext(value: unknown): ExpenseContext {
