@@ -25,11 +25,14 @@ export function Banner({
   tone,
   title,
   message,
+  standing = false,
   children,
 }: {
   tone: BannerTone;
   title?: string;
   message: string;
+  /** A notice that stays on the screen, e.g. an unconfirmed payment: announced politely. */
+  standing?: boolean;
   children?: ReactNode;
 }) {
   const theme = useTheme();
@@ -39,7 +42,7 @@ export function Banner({
     error: [theme.negative.bg, theme.status.negative],
     offline: [theme.surfaceMuted, theme.textSecondary],
   }[tone];
-  const urgent = tone === 'warning' || tone === 'error';
+  const urgent = !standing && (tone === 'warning' || tone === 'error');
   return (
     <View
       accessibilityRole={urgent ? 'alert' : 'summary'}

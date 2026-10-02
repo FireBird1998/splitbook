@@ -152,8 +152,10 @@ function Screen({ controller }: { controller: MobileController }) {
             group={state.detail.data}
             currentUserId={user.id}
             state={state.financial}
+            pending={null}
             offline={false}
             onRecord={noop}
+            onCheckPayment={noop}
             onRefreshBalances={noop}
           />
           <GroupExpensesView

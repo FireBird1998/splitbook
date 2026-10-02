@@ -614,10 +614,12 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               group={group}
               currentUserId={userId}
               state={state.financial}
+              pending={state.pendingPayment}
               offline={state.offline.active}
               onRecord={(paidBy, paidTo, currency) =>
                 void controller.openRecordPayment(paidBy, paidTo, currency)
               }
+              onCheckPayment={() => void controller.openPendingPayment()}
               onRefreshBalances={() => void controller.refreshBalances()}
             />
           ) : (

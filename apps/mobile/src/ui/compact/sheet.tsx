@@ -28,6 +28,7 @@ export function BottomSheet({
   onDone,
   doneLabel = 'Done',
   dismissLabel = `Close ${title}, keeping your entries`,
+  dismissible = true,
   children,
   footer,
 }: {
@@ -40,6 +41,8 @@ export function BottomSheet({
   doneLabel?: string;
   /** The scrim's spoken label, when closing doesn't keep entries. */
   dismissLabel?: string;
+  /** False while the sheet can't close, e.g. while it's saving: nothing closes it, and a swipe springs back. */
+  dismissible?: boolean;
   children: ReactNode;
   footer?: ReactNode;
 }) {
@@ -47,9 +50,11 @@ export function BottomSheet({
   const drag = useRef(new Animated.Value(0)).current;
   // The pan responder is created once; it reads the latest Done handler through this ref.
   const done = useRef(onDone);
+  const closable = useRef(dismissible);
   useEffect(() => {
     done.current = onDone;
-  }, [onDone]);
+    closable.current = dismissible;
+  }, [onDone, dismissible]);
 
   useEffect(() => {
     if (visible) drag.setValue(0);
@@ -62,25 +67,30 @@ export function BottomSheet({
         gesture.dy > 6 && Math.abs(gesture.dy) > Math.abs(gesture.dx),
       onPanResponderMove: (_event, gesture) => drag.setValue(Math.max(0, gesture.dy)),
       onPanResponderRelease: (_event, gesture) =>
-        shouldDismissSheet(gesture) ? done.current() : settle(),
+        closable.current && shouldDismissSheet(gesture) ? done.current() : settle(),
       onPanResponderTerminate: settle,
     });
   }, [drag]);
 
   const scrim = theme.mode === 'dark' ? theme.bg : theme.text;
+  const dismiss = () => {
+    if (dismissible) onDone();
+  };
   return (
     <Modal
       visible={visible}
       transparent
       animationType="slide"
       statusBarTranslucent
-      onRequestClose={onDone}
+      onRequestClose={dismiss}
     >
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1, justifyContent: 'flex-end' }}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={dismissLabel}
-          onPress={onDone}
+          accessibilityState={{ disabled: !dismissible }}
+          disabled={!dismissible}
+          onPress={dismiss}
           style={{
             position: 'absolute',
             top: 0,
@@ -138,7 +148,13 @@ export function BottomSheet({
                     </CompactText>
                   ) : null}
                 </View>
-                <CompactButton label={doneLabel} variant="text" dense onPress={onDone} />
+                <CompactButton
+                  label={doneLabel}
+                  variant="text"
+                  dense
+                  disabled={!dismissible}
+                  onPress={onDone}
+                />
               </View>
             </View>
             <ScrollView

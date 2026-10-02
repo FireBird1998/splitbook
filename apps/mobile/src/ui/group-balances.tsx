@@ -2,6 +2,7 @@ import { View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { formatSignedCurrency, getMoneyTone } from '@splitbook/shared/money';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
+import type { PendingPayment } from '../data/settlement';
 import type { GroupCurrencyBalance, GroupFinancialState, MobileGroup } from '../data/types';
 import {
   Banner,
@@ -66,6 +67,58 @@ const spokenBalance = (you: boolean, name: string, balance: number, currency: st
   if (you) return `You ${tone === 'positive' ? 'get back' : 'owe'} ${amount}`;
   return `${name} ${tone === 'positive' ? 'gets back' : 'owes'} ${amount}`;
 };
+
+/** "Your payment of ₹500.00 to Sam Chen", or the other way round, for the unconfirmed row. */
+export function pendingPaymentMessage(
+  pending: PendingPayment,
+  group: MobileGroup,
+  currentUserId: string,
+) {
+  const { draft } = pending;
+  if (!draft)
+    return 'A payment stored on this device couldn’t be read. Check it before recording another.';
+  const name = (id: string, fallback: string) =>
+    group.members.find(({ user }) => user.id === id)?.user.name ?? fallback;
+  const amount = formatCurrency(Number(draft.amount), draft.currency);
+  const payment =
+    draft.paidBy === currentUserId
+      ? `Your payment of ${amount} to ${name(draft.paidTo, 'a former member')}`
+      : `${name(draft.paidBy, 'A former member')}’s payment of ${amount} to you`;
+  return `${payment} may already be recorded. Check it before recording another.`;
+}
+
+/** A payment whose response was lost, offered whatever the suggestions say. */
+function PendingPaymentNotice({
+  pending,
+  group,
+  currentUserId,
+  offline,
+  onCheck,
+}: {
+  pending: PendingPayment;
+  group: MobileGroup;
+  currentUserId: string;
+  offline: boolean;
+  onCheck: () => void;
+}) {
+  return (
+    <Banner
+      tone="warning"
+      title="Payment not confirmed"
+      message={pendingPaymentMessage(pending, group, currentUserId)}
+      standing
+    >
+      <CompactButton
+        label="Check payment"
+        variant="text"
+        dense
+        disabled={offline}
+        hint={offline ? recordNeedsConnection : undefined}
+        onPress={onCheck}
+      />
+    </Banner>
+  );
+}
 
 function MemberBalanceCard({
   bucket,
@@ -301,29 +354,46 @@ function Everyone({
 }
 
 /**
- * The Balances destination: the member's all-time balance per currency, the suggested
- * payments they can record, and everyone's net position. Choosing a Month never changes it.
+ * The Balances destination: an unconfirmed payment first, then the member's all-time balance
+ * per currency, the suggested payments they can record, and everyone's net position.
+ * Choosing a Month never changes it.
  */
 export function GroupBalancesView({
   group,
   currentUserId,
   state,
+  pending,
   offline,
   onRecord,
+  onCheckPayment,
   onRefreshBalances,
 }: {
   group: MobileGroup;
   currentUserId: string;
   state: GroupFinancialState;
+  /** This Group's unconfirmed payment, if one is stored on the device. */
+  pending: PendingPayment | null;
   offline: boolean;
   onRecord: (paidBy: string, paidTo: string, currency: string) => void;
+  onCheckPayment: () => void;
   onRefreshBalances: () => void;
 }) {
   const { balances } = state;
+  const notice =
+    pending?.groupId === group.id ? (
+      <PendingPaymentNotice
+        pending={pending}
+        group={group}
+        currentUserId={currentUserId}
+        offline={offline}
+        onCheck={onCheckPayment}
+      />
+    ) : null;
   if (balances.data === null) {
     if (balances.status === 'error')
       return (
         <View style={{ gap: 10 }}>
+          {notice}
           <Banner
             tone="error"
             message={balances.message ?? 'These balances couldn’t be loaded. Try again.'}
@@ -332,14 +402,17 @@ export function GroupBalancesView({
         </View>
       );
     return (
-      <View accessibilityLabel="Loading balances" accessibilityState={{ busy: true }}>
-        <Card padded>
-          <View style={{ gap: 10 }}>
-            <Skeleton width="45%" />
-            <Skeleton width="70%" height={26} />
-            <Skeleton width="90%" />
-          </View>
-        </Card>
+      <View style={{ gap: 14 }}>
+        {notice}
+        <View accessibilityLabel="Loading balances" accessibilityState={{ busy: true }}>
+          <Card padded>
+            <View style={{ gap: 10 }}>
+              <Skeleton width="45%" />
+              <Skeleton width="70%" height={26} />
+              <Skeleton width="90%" />
+            </View>
+          </Card>
+        </View>
       </View>
     );
   }
@@ -356,6 +429,7 @@ export function GroupBalancesView({
         retryLabel="Retry balances"
         onRetry={onRefreshBalances}
       />
+      {notice}
       {balances.data.length === 0 ? (
         <Card padded>
           <CompactText weight="semibold" tone="secondary">

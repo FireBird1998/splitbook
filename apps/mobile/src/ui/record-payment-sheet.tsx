@@ -189,6 +189,7 @@ export function RecordPaymentSheet({
       title="Record payment"
       doneLabel="Close"
       dismissLabel="Close without recording"
+      dismissible={status !== 'saving'}
       onDone={onClose}
       footer={footer}
     >
@@ -238,7 +239,10 @@ export function RecordPaymentSheet({
             </CompactText>
             {state.suggested !== null ? (
               <CompactText variant="caption" tone="secondary" style={{ marginLeft: 'auto' }}>
-                Suggested {formatCurrency(state.suggested, draft.currency)}
+                Suggested{' '}
+                <CompactText variant="caption" tone="secondary" style={{ fontFamily: fonts.mono }}>
+                  {formatCurrency(state.suggested, draft.currency)}
+                </CompactText>
               </CompactText>
             ) : null}
           </View>

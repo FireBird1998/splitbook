@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptySettlement, type SettlementState } from '../data/settlement';
 import type { GroupCurrencyBalance, GroupFinancialState, MobileGroup } from '../data/types';
 import { GroupBalancesView, recordNeedsConnection } from './group-balances';
+import type { PendingPayment } from '../data/settlement';
 import { RecordPaymentSheet, recordPaymentFootnote } from './record-payment-sheet';
 
 // #118: the Balances destination and the Record payment sheet's states, rendered.
@@ -116,20 +117,28 @@ const render = (element: React.ReactElement) => {
 
 describe('Balances destination', () => {
   const view = (props: Partial<Parameters<typeof GroupBalancesView>[0]> = {}) => {
-    const onRecord = vi.fn();
+    const onRecord = vi.fn(),
+      onCheckPayment = vi.fn();
     const root = render(
       <GroupBalancesView
         group={group()}
         currentUserId={you}
         state={financial()}
+        pending={null}
         offline={false}
         onRecord={onRecord}
+        onCheckPayment={onCheckPayment}
         onRefreshBalances={() => undefined}
         {...props}
       />,
     );
-    return { root, onRecord };
+    return { root, onRecord, onCheckPayment };
   };
+  const unconfirmed = (draft: PendingPayment['draft'] = null): PendingPayment => ({
+    groupId: 'b00000000000000000000001',
+    draft,
+  });
+  const paid = { paidBy: you, paidTo: sam, currency: 'INR', amount: '1060', note: '' };
 
   it('shows the all-time balance, the payments the member can record and everyone’s position', () => {
     const { root, onRecord } = view();
@@ -168,6 +177,70 @@ describe('Balances destination', () => {
     expect(record.props.accessibilityHint).toBe(recordNeedsConnection);
     expect(text(root)).toContain(recordNeedsConnection);
     expect(onRecord).not.toHaveBeenCalled();
+  });
+
+  it('offers an unconfirmed payment even once nothing is suggested', () => {
+    // The last debt cleared when the lost payment committed: no Record button is left.
+    const { root, onCheckPayment, onRecord } = view({
+      state: financial({ data: [] }),
+      pending: unconfirmed(paid),
+    });
+    const shown = text(root);
+    expect(shown).toContain('Settled up');
+    expect(shown).toContain('Payment not confirmed');
+    expect(shown).toContain(
+      'Your payment of ₹1,060.00 to Sam Chen may already be recorded. Check it before recording another.',
+    );
+    expect(labelled(root, 'Record your payment to Sam Chen')).toHaveLength(0);
+    // It stays on screen, so it's announced politely rather than as an alert each change.
+    const row = root.find(
+      (node) => isHost(node, 'View') && node.props.accessibilityLiveRegion !== undefined,
+    );
+    expect(row.props.accessibilityLiveRegion).toBe('polite');
+    act(() => labelled(root, 'Check payment')[0].props.onPress());
+    expect(onCheckPayment).toHaveBeenCalledOnce();
+    expect(onRecord).not.toHaveBeenCalled();
+  });
+
+  it('names the payer of an unconfirmed payment to the member, and one it can’t read', () => {
+    const received = view({
+      pending: unconfirmed({ ...paid, paidBy: priya, paidTo: you, amount: '20.5' }),
+    }).root;
+    expect(text(received)).toContain(
+      'Priya Shah’s payment of ₹20.50 to you may already be recorded.',
+    );
+    act(() => screen?.unmount());
+    const former = view({
+      pending: unconfirmed({ ...paid, paidBy: 'a00000000000000000000009', paidTo: you }),
+    }).root;
+    expect(text(former)).toContain('A former member’s payment of ₹1,060.00 to you');
+    act(() => screen?.unmount());
+    const unreadable = view({ pending: unconfirmed() }).root;
+    expect(text(unreadable)).toContain('A payment stored on this device couldn’t be read.');
+    expect(labelled(unreadable, 'Check payment')).toHaveLength(1);
+  });
+
+  it('keeps an unconfirmed payment in view while Balances can’t load, and offline', () => {
+    const failed = view({
+      state: financial({ status: 'error', data: null, message: 'Could not load balances.' }),
+      pending: unconfirmed(paid),
+      offline: true,
+    }).root;
+    expect(text(failed)).toContain('Payment not confirmed');
+    const check = labelled(failed, 'Check payment')[0];
+    expect(check.props.accessibilityState).toEqual({ disabled: true });
+    expect(check.props.accessibilityHint).toBe(recordNeedsConnection);
+    act(() => screen?.unmount());
+    const loading = view({
+      state: financial({ status: 'loading', data: null }),
+      pending: unconfirmed(paid),
+    }).root;
+    expect(text(loading)).toContain('Payment not confirmed');
+  });
+
+  it('shows only this Group’s unconfirmed payment', () => {
+    const elsewhere = { ...unconfirmed(paid), groupId: 'b00000000000000000000009' };
+    expect(text(view({ pending: elsewhere }).root)).not.toContain('Payment not confirmed');
   });
 
   it('leaves out the Month note for a Group without Months', () => {
@@ -256,6 +329,24 @@ describe('Record payment sheet states', () => {
     expect(bars.map((bar) => bar.props.accessibilityLabel)).toEqual([
       'Checking the latest balances',
     ]);
+  });
+
+  it('shows the suggested amount in the money font', () => {
+    const { root } = sheet(base({}));
+    const suggested = root.find(
+      (node) => isHost(node, 'Text') && node.children.includes('Suggested'),
+    );
+    const amount = suggested.find(
+      (node) => isHost(node, 'Text') && node.children.includes('₹1,060.00'),
+    );
+    expect(JSON.stringify(amount.props.style)).toContain('IBMPlexMono');
+  });
+
+  it('can’t be closed while the payment is being recorded', () => {
+    const saving = sheet(base({ status: 'saving' }));
+    expect(labelled(saving.root, 'Close')[0].props.accessibilityState).toEqual({ disabled: true });
+    act(() => labelled(saving.root, 'Close without recording')[0].props.onPress());
+    expect(saving.calls.close).not.toHaveBeenCalled();
   });
 
   it('locks an unconfirmed payment and offers only an explicit retry', () => {

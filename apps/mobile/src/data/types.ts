@@ -1,7 +1,7 @@
 import type { FinancialReadStore, OfflineIdentityStore } from './offline-cache';
 import type { ActivityState } from './activity';
 import type { AccountGroupRecordStore } from './account-record-storage';
-import type { SettlementState } from './settlement';
+import type { PendingPayment, SettlementState } from './settlement';
 import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
 import type { GroupValidation } from './group-draft';
 import type { GroupCategory } from '@splitbook/shared/types';
@@ -199,6 +199,8 @@ export interface MobileSnapshot {
   restoreScroll: { groupId: string; y: number; request: number } | null;
   snackbar: GroupSnackbar | null;
   settlement: SettlementState;
+  /** The current Group's unconfirmed payment, kept for an explicit retry from Balances. */
+  pendingPayment: PendingPayment | null;
   activity: ActivityState;
   home: HomeFinancialState;
   financial: GroupFinancialState;
