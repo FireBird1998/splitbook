@@ -4,6 +4,8 @@ export interface AccountGroupRecordStore {
   save(accountId: string, groupId: string, value: unknown): Promise<void>;
   remove(accountId: string, groupId: string): Promise<void>;
   clear(): Promise<void>;
+  /** Every record this account has in this environment, such as Home's Expense drafts. */
+  list?(accountId: string): Promise<{ groupId: string; value: unknown }[]>;
 }
 
 /** Atomic account/Group JSON records. The two existing on-disk stores keep their identities. */
@@ -67,6 +69,16 @@ export function createAccountGroupRecordStore(
     },
     async clear() {
       await (await database()).runAsync(`DELETE FROM ${table} WHERE environment = ?`, environment);
+    },
+    async list(accountId) {
+      const rows = await (
+        await database()
+      ).getAllAsync<{ group_id: string; value: string }>(
+        `SELECT group_id, value FROM ${table} WHERE environment = ? AND account_id = ?`,
+        environment,
+        accountId,
+      );
+      return rows.map((row) => ({ groupId: row.group_id, value: JSON.parse(row.value) }));
     },
   };
 }

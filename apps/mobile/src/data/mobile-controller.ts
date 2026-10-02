@@ -139,7 +139,14 @@ function emptyFinancial(): GroupFinancialState {
 }
 
 function emptyHome(): HomeFinancialState {
-  return { status: 'idle', data: null, message: null, refreshedAt: null, stale: false };
+  return {
+    status: 'idle',
+    data: null,
+    byGroup: {},
+    message: null,
+    refreshedAt: null,
+    stale: false,
+  };
 }
 
 const expiredMessage = 'Your session has expired. Sign in again to continue.';
@@ -213,6 +220,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
     keptDraft: null,
     activity: emptyActivity(),
     home: emptyHome(),
+    drafts: [],
     financial: emptyFinancial(),
     creation: {
       draft: {
@@ -1183,11 +1191,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const path = '/api/user/balances';
     const fresh = reuse ? freshRead(path) : null;
     if (fresh) {
+      const { buckets, byGroup } = parseHomeBalances(fresh.value);
       publish({
         ...snapshot,
         home: {
           status: 'ready',
-          data: parseHomeBalances(fresh.value),
+          data: buckets,
+          byGroup,
           message: null,
           refreshedAt: fresh.refreshedAt,
           stale: false,
@@ -1205,16 +1215,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         if (saved && current(owner) && read === homeRequest && snapshot.home.data === null)
           publish({
             ...snapshot,
-            home: { ...snapshot.home, data: saved.value, refreshedAt: saved.refreshedAt },
+            home: {
+              ...snapshot.home,
+              data: saved.value.buckets,
+              byGroup: saved.value.byGroup,
+              refreshedAt: saved.refreshedAt,
+            },
           });
       }
-      const data = await reading;
+      const { buckets, byGroup } = await reading;
       if (!current(owner) || read !== homeRequest) return;
       publish({
         ...snapshot,
         home: {
           status: 'ready',
-          data,
+          data: buckets,
+          byGroup,
           message: null,
           refreshedAt: readAt(path),
           stale: false,
@@ -1236,9 +1252,62 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
     }
   };
+  /**
+   * Home's Expense drafts in this account's listed Groups, read from this device whenever Home
+   * loads. A draft with a submission or change pending may already be recorded, so it's first.
+   */
+  const listDrafts = async () => {
+    const lease = accountStorage();
+    const storage = dependencies.expenseDrafts;
+    if (!lease || !storage?.list) return;
+    const owner = generation;
+    try {
+      const records = await lease.write(() => storage.list!(lease.accountId));
+      if (!current(owner)) return;
+      const groups = snapshot.groups.data;
+      const position = (groupId: string) => groups.findIndex((group) => group.id === groupId);
+      const drafts = records.flatMap(({ groupId, value }) => {
+        const group = groups.find((item) => item.id === groupId);
+        if (!group) return [];
+        try {
+          const { draft, attempt, mutation } = parseStoredExpenseDraft(
+            value,
+            lease.accountId,
+            groupId,
+          );
+          return [
+            {
+              groupId,
+              groupName: group.name,
+              expenseId: draft.original?._id ?? null,
+              description: draft.description,
+              amount: draft.amount,
+              currency: draft.currency,
+              unconfirmed: attempt !== null || mutation !== null,
+            },
+          ];
+        } catch {
+          // An unreadable draft is left to its Group's form, which explains it.
+          return [];
+        }
+      });
+      drafts.sort(
+        (a, b) =>
+          Number(b.unconfirmed) - Number(a.unconfirmed) ||
+          position(a.groupId) - position(b.groupId),
+      );
+      publish({ ...snapshot, drafts });
+    } catch {
+      // Home keeps the drafts it lists; each one is still in its Group.
+    }
+  };
   /** `reuse` accepts figures verified within the display freshness window. */
-  const loadHome = (reuse: boolean) =>
-    reuse ? readHome(true) : explicitly(['home'], () => readHome(false));
+  const loadHome = async (reuse: boolean) => {
+    await Promise.all([
+      listDrafts(),
+      reuse ? readHome(true) : explicitly(['home'], () => readHome(false)),
+    ]);
+  };
   /** Refresh and Retry always read again. */
   const refreshHome = () => loadHome(false);
 

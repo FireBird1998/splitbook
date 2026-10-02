@@ -605,6 +605,7 @@ describe('native financial views', () => {
         { currency: 'INR', youOwe: 30, youAreOwed: 50 },
         { currency: 'EUR', youOwe: 12.34, youAreOwed: 5.67 },
       ],
+      byGroup: {},
       message: null,
       refreshedAt: new Date(2026, 8, 27, 12).getTime(),
       stale: false,

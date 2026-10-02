@@ -1,7 +1,5 @@
 import { GoogleSignInButton } from 'react-native-nitro-google-signin';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { getGroupTheme } from '@splitbook/shared/group-themes';
-import type { MobileGroup } from '../data';
 import {
   Banner,
   Card,
@@ -11,25 +9,8 @@ import {
   IconTile,
   SectionHeader,
 } from './compact';
-import { Button, Copy, Icon, Panel, type IconName } from './primitives';
-import { fonts, useTheme } from './theme';
-
-const themeIcons: Record<string, IconName> = {
-  trip: 'airplane-outline',
-  home: 'home-outline',
-  couple: 'heart-outline',
-  work: 'briefcase-outline',
-  other: 'layers-outline',
-};
-
-function dateRange(group: MobileGroup) {
-  if (!group.startDate) return 'Dates to be decided';
-  const format = (date: Date) =>
-    date.toLocaleDateString('en', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-  return group.endDate
-    ? `${format(group.startDate)} – ${format(group.endDate)}`
-    : format(group.startDate);
-}
+import { Icon } from './primitives';
+import { useTheme } from './theme';
 
 export function SignIn({
   busy,
@@ -146,117 +127,6 @@ export function SignIn({
         </CompactText>
       )}
     </ScrollView>
-  );
-}
-
-export function GroupCard({ group, onPress }: { group: MobileGroup; onPress: () => void }) {
-  const theme = useTheme();
-  const descriptor = getGroupTheme(group.category);
-  const trip = descriptor.header === 'strip';
-  return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityLabel={`Open ${group.name}, ${descriptor.label}, ${group.members.length} ${group.members.length === 1 ? 'member' : 'members'}`}
-      style={({ pressed }) => ({
-        borderRadius: 18,
-        overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: theme.border,
-        backgroundColor: theme.surface,
-        opacity: pressed ? 0.8 : 1,
-      })}
-    >
-      <View
-        style={{ padding: 20, gap: 18, backgroundColor: trip ? theme.brand.main : theme.surface }}
-      >
-        <View style={styles.between}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Icon
-              name={themeIcons[descriptor.id]}
-              size={18}
-              color={trip ? theme.brand.contrastText : theme.brand.main}
-            />
-            <Copy
-              style={{
-                fontFamily: fonts.medium,
-                fontSize: 12,
-                letterSpacing: 0.7,
-                color: trip ? theme.brand.contrastText : theme.textSecondary,
-              }}
-            >
-              {descriptor.label.toUpperCase()}
-            </Copy>
-          </View>
-          <Icon
-            name="arrow-forward-outline"
-            color={trip ? theme.brand.contrastText : theme.textSecondary}
-            size={20}
-          />
-        </View>
-        <Copy
-          style={{
-            fontFamily: fonts.semibold,
-            fontSize: 25,
-            lineHeight: 30,
-            letterSpacing: -0.5,
-            color: trip ? theme.brand.contrastText : theme.text,
-          }}
-        >
-          {group.name}
-        </Copy>
-        <Copy
-          style={{
-            fontSize: 13,
-            lineHeight: 19,
-            color: trip ? theme.brand.contrastText : theme.textSecondary,
-          }}
-        >
-          {trip
-            ? dateRange(group)
-            : descriptor.id === 'home'
-              ? 'Everyday costs, shared simply'
-              : 'Your shared space'}
-        </Copy>
-      </View>
-      <View
-        style={[
-          styles.between,
-          {
-            paddingHorizontal: 20,
-            paddingVertical: 16,
-            borderTopWidth: trip ? 0 : 1,
-            borderColor: theme.border,
-          },
-        ]}
-      >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-          <Icon name="people-outline" size={18} />
-          <Copy style={{ fontSize: 14, color: theme.textSecondary }}>
-            {group.members.length} {group.members.length === 1 ? 'member' : 'members'}
-          </Copy>
-        </View>
-        <Copy style={{ fontFamily: fonts.mono, fontSize: 12, color: theme.textSecondary }}>
-          {group.defaultCurrency}
-        </Copy>
-      </View>
-    </Pressable>
-  );
-}
-
-export function EmptyGroups({ onRefresh }: { onRefresh: () => void }) {
-  const theme = useTheme();
-  return (
-    <Panel>
-      <Icon name="people-outline" size={32} color={theme.brand.main} />
-      <Copy style={{ fontFamily: fonts.semibold, fontSize: 24, lineHeight: 30 }}>
-        A shared space starts here.
-      </Copy>
-      <Copy style={{ color: theme.textSecondary }}>
-        You haven’t joined any Groups yet. Create a Group or open an invitation to get started.
-      </Copy>
-      <Button label="Refresh Groups" secondary onPress={onRefresh} icon="refresh-outline" />
-    </Panel>
   );
 }
 

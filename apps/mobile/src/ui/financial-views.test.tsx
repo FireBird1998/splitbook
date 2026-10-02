@@ -3,9 +3,10 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse } from '../data/types';
-import { HomeBalances, RefreshStatus } from './financial-views';
+import { RefreshStatus } from './financial-views';
 import { GroupBalancesView } from './group-balances';
 import { GroupExpensesView } from './group-expenses';
+import { HomeBalances } from './home';
 import { refreshFeedback, refreshedLabel } from './refresh-feedback';
 
 // Host stand-ins keep the props and text Android receives.
