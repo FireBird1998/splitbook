@@ -17,7 +17,7 @@ import {
   type ExpenseField,
 } from '../data/expense-draft';
 import { DateSheet } from './date-sheet';
-import { Button, Copy, Icon, Loading, Notice, Panel } from './primitives';
+import { Button, Icon, Loading, Notice } from './primitives';
 import {
   Badge,
   Banner,
