@@ -7,6 +7,12 @@ import { fonts, useTheme } from './theme';
 
 export type SettingsAppearance = AppearanceMode;
 
+/** What sign-out clears from this device, as both this panel and the sign-out confirmation say. */
+export const signOutClears =
+  'session, Expense drafts, unresolved payment records and save recovery keys, unsaved Group form, saved invitation, and local account data';
+export const signOutInterruptedSave =
+  'If a save was interrupted, check your saved history after signing in before creating it again.';
+
 export interface SettingsScreenProps {
   user: SessionUser;
   appearance: SettingsAppearance;
@@ -266,12 +272,11 @@ export function SettingsScreen({
           </Copy>
         </View>
         <Copy style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 21 }}>
-          Sign-out clears this account’s session, Group data, unfinished Group form, and pending
-          invitation from this device. Groups already saved remain available when you sign in again.
+          Sign-out clears your {signOutClears} from this device. Groups already saved remain
+          available when you sign in again.
         </Copy>
         <Copy style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 21 }}>
-          If a Group creation was uncertain, check your Groups after signing back in before creating
-          it again.
+          {signOutInterruptedSave}
         </Copy>
         <Button label="Sign out" secondary icon="log-out-outline" onPress={onSignOut} />
       </Panel>

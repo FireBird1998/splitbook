@@ -1,4 +1,5 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './data/mobile-controller';
@@ -523,6 +524,25 @@ describe('App refresh rendering', () => {
     pulled.release(json(page([september])));
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
+  });
+});
+
+describe('App Settings sign-out', () => {
+  it('lists in Settings everything the sign-out confirmation says is cleared', async () => {
+    const app = await renderApp();
+    await app.press('Settings');
+    const panel = app.text();
+    expect(panel).toContain('Expense drafts');
+    expect(panel).toContain('unresolved payment records and save recovery keys');
+
+    await app.press('Sign out');
+    const [title, message] = vi.mocked(Alert.alert).mock.calls.at(-1)!;
+    expect(title).toBe('Sign out on this device?');
+    const [, cleared, advice] = /^Your (.+) will be cleared\. (.+)$/.exec(message!)!;
+    expect(panel).toContain(`Sign-out clears your ${cleared} from this device.`);
+    // Any interrupted save, not only a Group creation.
+    expect(panel).toContain(advice);
+    expect(advice).toContain('If a save was interrupted');
   });
 });
 
