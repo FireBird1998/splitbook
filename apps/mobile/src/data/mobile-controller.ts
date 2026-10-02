@@ -2342,6 +2342,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             mutation: record.mutation,
             preview: previewExpense(record.draft),
             status: 'loading',
+            blank: record.blank,
           },
         });
       const context = await readCached(`/api/groups/${groupId}`, owner, parseExpenseContext);
@@ -2371,11 +2372,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         notes: '',
       };
       // Earlier versions stored drafts that changed nothing; one would still hold the Group.
+      // A new draft is compared with the start stored with it, not today's blank form, and
+      // is kept when that start is unknown.
       if (
         record &&
         !record.attempt &&
         !record.mutation &&
-        !expenseDraftChanged(record.draft, blank)
+        !expenseDraftChanged(record.draft, record.blank)
       ) {
         await lease.write(() => dependencies.expenseDrafts!.remove(accountId, groupId));
         if (!current(owner) || view !== viewRequest) return;
@@ -2415,7 +2418,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                   ? 'This change may already be saved. Resume to check it before opening another Expense.'
                   : null,
           groupDraft: held,
-          blank,
+          blank: record ? record.blank : blank,
         },
       });
     } catch (error) {
@@ -2498,7 +2501,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.expense.persistence !== 'error' && sameExpenseDraft(draft, snapshot.expense.draft))
       return;
     // Only entries that differ from where the form started are kept on this device.
-    const kept = expenseDraftChanged(draft, snapshot.expense.blank);
+    const { blank } = snapshot.expense;
+    const kept = expenseDraftChanged(draft, blank);
     publish({
       ...snapshot,
       expense: {
@@ -2518,6 +2522,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               accountId: lease.accountId,
               groupId,
               draft,
+              ...(draft.original ? {} : { blank }),
             })
           : storage.remove(lease.accountId, groupId),
       );
@@ -3079,6 +3084,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             accountId: lease.accountId,
             groupId,
             draft,
+            blank: editor.blank,
             attempt: pending,
           }),
         );
@@ -3137,6 +3143,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               accountId: lease.accountId,
               groupId,
               draft,
+              blank: editor.blank,
             }),
           );
           if (!current(owner) || view !== viewRequest) return;

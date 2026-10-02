@@ -85,7 +85,11 @@ export interface ExpenseEditor {
    * read-only; Edit and Delete wait until the draft is finished or discarded.
    */
   groupDraft: ExpenseDraft | null;
-  /** A new Expense's starting entries; an edit starts from its saved Expense. */
+  /**
+   * The entries a new Expense's draft started from, stored with the draft so it is compared
+   * with the same start after a restart or a change of day. Null when unknown, as for drafts
+   * stored by earlier versions. An edit starts from its saved Expense.
+   */
   blank: ExpenseDraft | null;
 }
 /** Correctable Expense inputs, in the order they appear on screen. */
@@ -153,6 +157,8 @@ export function parseStoredExpenseDraft(value: unknown, accountId: string, group
       accountId: z.literal(accountId),
       groupId: z.literal(groupId),
       draft: expenseDraftSchema,
+      // Where a new Expense's draft started. Earlier records lack it; it is then unknown.
+      blank: expenseDraftSchema.nullable().default(null).catch(null),
       mutation: expenseMutationSchema.nullable().optional().default(null),
       attempt: z
         .object({ key: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/), body: z.string() })
