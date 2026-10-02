@@ -229,7 +229,8 @@ export function ExpenseRecordScreen({
               marginTop: 12,
             }}
           >
-            <Money size="form">
+            {/* Shrinks to fit rather than cutting the amount short. */}
+            <Money size="form" adjustsFontSizeToFit>
               {allocation
                 ? money(allocation.amountMinor)
                 : formatCurrency(record.amount, record.currency)}
@@ -265,7 +266,12 @@ export function ExpenseRecordScreen({
         ) : null}
         <RecordHistory record={record} currentUserId={currentUserId} name={name} />
       </ScrollView>
-      <BottomSheet visible={options} title="Expense options" onDone={() => setOptions(false)}>
+      <BottomSheet
+        visible={options}
+        title="Expense options"
+        dismissLabel="Close Expense options"
+        onDone={() => setOptions(false)}
+      >
         <Card>
           <ListRow
             leading={<IconTile icon="refresh-outline" />}

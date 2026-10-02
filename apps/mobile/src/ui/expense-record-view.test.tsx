@@ -342,6 +342,13 @@ describe('compact Expense record', () => {
       expect.arrayContaining(['Category: Housing', 'Notes: August–September meter cycle']),
     );
     expect(shown).not.toMatch(/[0-9a-f]{24}/);
+    // No amount is ever cut short: one held to a line shrinks to fit instead.
+    const amounts = ui
+      .root()
+      .findAll((node) => isHost(node, 'Text') && /^₹/.test(String(node.children[0])));
+    expect(amounts.length).toBeGreaterThan(3);
+    for (const amount of amounts)
+      if (amount.props.numberOfLines) expect(amount.props.adjustsFontSizeToFit).toBe(true);
     expect(ui.writes).toEqual([]);
   });
 
@@ -386,6 +393,8 @@ describe('compact Expense record', () => {
     );
     await ui.press('Expense options');
     expect(text(ui.shown())).toContain('Expense options');
+    // A menu has no entries to keep.
+    expect(ui.pressable('Close Expense options')).toBeTruthy();
     expect(ui.pressable('Refresh, Read the latest saved version')).toBeTruthy();
     await ui.press('Delete expense');
     expect(ui.controller.getSnapshot().expense.status).toBe('delete-review');

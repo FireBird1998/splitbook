@@ -4,6 +4,8 @@ import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { expenseMoney, type ExpenseDraft } from '../data/expense-draft';
 import { ThemeContext } from './theme';
 
+// The window the table lays out for; tests change the text size and width.
+const window = vi.hoisted(() => ({ width: 412, height: 915, scale: 2, fontScale: 1 }));
 vi.mock('react-native', () => ({
   ActivityIndicator: 'ActivityIndicator',
   Modal: 'Modal',
@@ -13,7 +15,7 @@ vi.mock('react-native', () => ({
   Text: 'Text',
   TextInput: 'TextInput',
   View: 'View',
-  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: 1 }),
+  useWindowDimensions: () => ({ ...window }),
 }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
 vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
@@ -45,6 +47,7 @@ afterEach(() => {
     renderer?.unmount();
   });
   renderer = undefined;
+  Object.assign(window, { width: 412, fontScale: 1 });
 });
 const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
 const rows = (root: ReactTestInstance) =>
@@ -103,6 +106,36 @@ describe('Who owes what', () => {
     expect(text(root)).toContain(
       'Shares differ by the smallest unit so the whole amount is shared.',
     );
+  });
+
+  /** Every amount in the table, with the line limit Android would apply to it. */
+  const amounts = (root: ReactTestInstance) =>
+    root
+      .findAll((node) => isHost(node, 'Text') && /^₹/.test(String(node.children[0])))
+      .map((node) => ({ text: node.children[0], lines: node.props.numberOfLines }));
+
+  it('never cuts an amount short, however long it is', () => {
+    const root = table(draft('1000000.00', ids.slice(0, 3)));
+    expect(amounts(root).length).toBeGreaterThan(0);
+    // No line limit, so Android never ellipsizes "₹1,000,000.00" as "₹1,000.…".
+    for (const amount of amounts(root)) expect(amount.lines || 0).toBe(0);
+  });
+
+  it.each([
+    ['at 130% text', { fontScale: 1.3 }],
+    ['on a narrow screen', { width: 340 }],
+  ])('puts Paid and Share under each name %s', (_case, size) => {
+    Object.assign(window, size);
+    const root = table(draft('100.00', ids.slice(0, 3)));
+    const rows = root.findAll((node) => isHost(node, 'View') && node.props.accessible === true);
+    expect(rows.map(text)).toEqual([
+      'ARYouPaid₹100.00Share₹33.34',
+      'SCSam ChenPaid–Share₹33.33',
+      'PSPriya ShahPaid–Share₹33.33',
+    ]);
+    // The column headings go: each amount is labelled where it is.
+    expect(text(root).match(/Paid/g)).toHaveLength(3);
+    for (const amount of amounts(root)) expect(amount.lines || 0).toBe(0);
   });
 });
 
