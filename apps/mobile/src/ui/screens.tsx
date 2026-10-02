@@ -11,7 +11,7 @@ import {
   IconTile,
   SectionHeader,
 } from './compact';
-import { Button, Copy, Icon, Label, Panel, type IconName } from './primitives';
+import { Button, Copy, Icon, Panel, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
 
 const themeIcons: Record<string, IconName> = {
