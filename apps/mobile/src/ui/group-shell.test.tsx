@@ -100,11 +100,11 @@ const text = (node: ReactTestInstance): string =>
 function shell(overrides: Partial<Parameters<typeof GroupShell>[0]> = {}) {
   const props = {
     group,
-    currentUserId: you,
     destination: 'balances' as const,
     onDestination: vi.fn(),
     back: { label: 'Back to Home', onPress: vi.fn() },
     invite: { onPress: vi.fn(), disabled: false, offline: false },
+    onMembers: vi.fn(),
     onRefresh: vi.fn(),
     pull: { refreshing: false, onRefresh: vi.fn() },
     ...overrides,
@@ -157,14 +157,17 @@ describe('Group shell', () => {
     ).toEqual({ disabled: true });
   });
 
-  it('opens Group options with Refresh and the members, marking you and admins', () => {
+  it('opens Group options with Members and Group details and Refresh', () => {
     const { root, props } = shell();
     const sheet = () => root.find((node) => isHost(node, 'Modal'));
     expect(sheet().props.visible).toBe(false);
     press(one(byRole(root, 'button', 'Group options')));
     expect(sheet().props.visible).toBe(true);
-    expect(text(sheet())).toContain('Alex RaoYou · Group admin');
-    expect(text(sheet())).toContain('Sam ChenMember');
+    press(one(byRole(sheet(), 'button', 'Members and Group details')));
+    expect(props.onMembers).toHaveBeenCalledOnce();
+    expect(sheet().props.visible).toBe(false);
+
+    press(one(byRole(root, 'button', 'Group options')));
     press(one(byRole(root, 'button', 'Refresh, Check for the latest changes')));
     expect(props.onRefresh).toHaveBeenCalledOnce();
     expect(sheet().props.visible).toBe(false);

@@ -258,3 +258,117 @@ describe('Back inside a Group', () => {
     expect(controller.getSnapshot().screen).toBe('groups');
   });
 });
+
+describe('Members and Group details', () => {
+  /** Holds matching reads made while `hold.on` is set, until `hold.release()`. */
+  function held(match: (path: string) => boolean) {
+    let release!: () => void;
+    let arrive!: () => void;
+    const reached = new Promise<void>((resolve) => {
+      arrive = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const hold = { on: false, reached, release: () => release() };
+    const harness = setup((path) => {
+      if (!hold.on || !match(path)) return undefined;
+      arrive();
+      return gate;
+    });
+    return { ...harness, hold };
+  }
+
+  it.each<GroupDestination>(['expenses', 'balances', 'activity'])(
+    'opens over %s without reading, and Back returns there',
+    async (destination) => {
+      const { controller, reads } = await signedIn();
+      await controller.openGroup(groupId);
+      await controller.selectDestination(destination);
+      reads();
+      controller.openMembers();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'members',
+        detail: { id: groupId, data: { name: 'Maple House' } },
+      });
+      expect(reads()).toEqual([]);
+      await controller.back();
+      expect(controller.getSnapshot()).toMatchObject({ screen: 'group', destination });
+    },
+  );
+
+  it('returns to the Month and scroll position it opened from, reusing recent reads', async () => {
+    const { controller, reads } = await signedIn();
+    await controller.openGroup(groupId);
+    await controller.selectMonth('2026-08');
+    reads();
+    controller.openMembers({ scrollY: 420 });
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'expenses',
+      financial: { month: '2026-08', expenses: { status: 'ready' } },
+      restoreScroll: { groupId, y: 420 },
+    });
+    expect(reads()).toEqual([]);
+  });
+
+  it('opens only from a Group that has been read', async () => {
+    const { controller, hold } = held((path) => path === `/api/groups/${groupId}`);
+    await controller.signIn('sam');
+    controller.openMembers();
+    expect(controller.getSnapshot().screen).toBe('groups');
+    hold.on = true;
+    const opening = controller.openGroup(groupId);
+    await hold.reached;
+    controller.openMembers();
+    expect(controller.getSnapshot().screen).toBe('group');
+    hold.release();
+    await opening;
+  });
+
+  it('lets a Group read in flight land on the page', async () => {
+    const { controller, hold } = held((path) => path === `/api/groups/${groupId}`);
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    hold.on = true;
+    const refreshing = controller.refresh();
+    await hold.reached;
+    controller.openMembers();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'members',
+      detail: { status: 'loading', data: { name: 'Maple House' } },
+    });
+    hold.release();
+    await refreshing;
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'members',
+      detail: { status: 'ready' },
+    });
+  });
+
+  it('Back finishes the reads the page interrupted', async () => {
+    const { controller, reads, hold } = held((path) =>
+      path.startsWith(`/api/groups/${groupId}/expenses?`),
+    );
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    await controller.selectDestination('balances');
+    hold.on = true;
+    const refreshing = controller.refresh();
+    await hold.reached;
+    controller.openMembers();
+    // The Expense read lands while the page is open; the Balances read after it waits for Back.
+    hold.release();
+    await refreshing;
+    hold.on = false;
+    reads();
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'balances',
+      financial: { expenses: { status: 'ready' }, balances: { status: 'ready' } },
+    });
+    expect(reads()).toContain('balances');
+  });
+});

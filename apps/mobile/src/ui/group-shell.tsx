@@ -5,14 +5,11 @@ import type { GroupDestination, MobileGroup } from '../data/types';
 import {
   BottomSheet,
   Card,
-  CompactAvatar,
-  CompactText,
   Divider,
   GroupNavBar,
   IconButton,
   IconTile,
   ListRow,
-  SectionHeader,
   TopBar,
 } from './compact';
 import { useTheme } from './theme';
@@ -26,13 +23,14 @@ export function groupSubtitle(group: MobileGroup) {
 interface GroupShellProps {
   /** Null until the Group has been read. */
   group: MobileGroup | null;
-  currentUserId: string;
   destination: GroupDestination;
   onDestination: (destination: GroupDestination) => void;
   back: { label: string; onPress: () => void };
   /** Quiet refresh status beside the title. */
   status?: ReactNode;
   invite: { onPress: () => void; disabled: boolean; offline: boolean };
+  /** Opens Members and Group details. */
+  onMembers: () => void;
   onRefresh: () => void;
   pull: { refreshing: boolean; onRefresh: () => void };
   /** The destination's scroll view, so returning from an Expense can restore its offset. */
@@ -48,16 +46,16 @@ interface GroupShellProps {
 
 /**
  * A Group's frame: the compact top bar, the current destination's content and the bottom
- * navigation. ⋮ opens the Group's options and details.
+ * navigation. ⋮ opens the Group's options, including Members and Group details.
  */
 export function GroupShell({
   group,
-  currentUserId,
   destination,
   onDestination,
   back,
   status,
   invite,
+  onMembers,
   onRefresh,
   pull,
   scrollRef,
@@ -125,46 +123,27 @@ export function GroupShell({
           title={group.name}
           subtitle={groupSubtitle(group)}
           onDone={close}
-          footer={
-            <CompactText variant="small" tone="secondary">
-              Role changes and removals happen on the web for now.
-            </CompactText>
-          }
         >
-          <View style={{ gap: 12 }}>
-            <Card>
-              <ListRow
-                leading={<IconTile icon="refresh-outline" />}
-                title="Refresh"
-                meta="Check for the latest changes"
-                onPress={() => {
-                  close();
-                  onRefresh();
-                }}
-              />
-            </Card>
-            {group.description ? (
-              <CompactText tone="secondary">{group.description}</CompactText>
-            ) : null}
-            <SectionHeader title="Members" />
-            <Card>
-              {group.members.map((member, index) => (
-                <View key={member.user.id}>
-                  {index > 0 ? <Divider inset={58} /> : null}
-                  <ListRow
-                    leading={<CompactAvatar name={member.user.name} />}
-                    title={member.user.name}
-                    meta={[
-                      member.user.id === currentUserId ? 'You' : null,
-                      member.role === 'admin' ? 'Group admin' : 'Member',
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  />
-                </View>
-              ))}
-            </Card>
-          </View>
+          <Card>
+            <ListRow
+              leading={<IconTile icon="people-outline" />}
+              title="Members and Group details"
+              onPress={() => {
+                close();
+                onMembers();
+              }}
+            />
+            <Divider inset={66} />
+            <ListRow
+              leading={<IconTile icon="refresh-outline" />}
+              title="Refresh"
+              meta="Check for the latest changes"
+              onPress={() => {
+                close();
+                onRefresh();
+              }}
+            />
+          </Card>
         </BottomSheet>
       ) : null}
     </View>

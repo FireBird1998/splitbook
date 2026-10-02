@@ -1,0 +1,181 @@
+import type { ReactElement } from 'react';
+import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { MobileGroup } from '../data/types';
+
+// Host stand-ins keep the props (roles, labels, states, handlers) that Android receives.
+vi.mock('react-native', () => ({
+  Pressable: 'Pressable',
+  ScrollView: 'ScrollView',
+  StyleSheet: { create: <T,>(styles: T) => styles },
+  Text: 'Text',
+  View: 'View',
+  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: 1 }),
+}));
+vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
+vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const { GroupMembers } = await import('./group-members');
+
+const you = 'a00000000000000000000001';
+const member = (id: string, name: string, role: 'admin' | 'member') => ({
+  user: { id, name, email: `${id}@x.test`, image: null },
+  role,
+  joinedAt: new Date(),
+});
+const household: MobileGroup = {
+  id: 'b00000000000000000000001',
+  name: 'Maple House',
+  description: 'Rent, bills and groceries for the flat',
+  category: 'home',
+  defaultCurrency: 'INR',
+  members: [
+    member(you, 'Alex Rivera', 'admin'),
+    member('a00000000000000000000002', 'Priya Shah', 'admin'),
+    member('a00000000000000000000003', 'Sam Chen', 'member'),
+  ],
+  startDate: null,
+  endDate: null,
+  createdAt: new Date(),
+  updatedAt: new Date(),
+};
+const trip: MobileGroup = {
+  ...household,
+  name: 'Goa Weekend',
+  description: '',
+  category: 'trip',
+  defaultCurrency: 'EUR',
+};
+
+let renderer: ReactTestRenderer | undefined;
+afterEach(() => {
+  act(() => {
+    renderer?.unmount();
+  });
+  renderer = undefined;
+});
+function render(element: ReactElement) {
+  act(() => {
+    renderer = create(element);
+  });
+  return renderer!.root;
+}
+const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
+const hosts = (root: ReactTestInstance, match: (props: Record<string, unknown>) => boolean) =>
+  root.findAll((node) => typeof node.type === 'string' && match(node.props));
+const byRole = (root: ReactTestInstance, role: string, label?: string) =>
+  hosts(
+    root,
+    (p) => p.accessibilityRole === role && (label === undefined || p.accessibilityLabel === label),
+  );
+const one = (nodes: ReactTestInstance[]) => {
+  expect(nodes).toHaveLength(1);
+  return nodes[0];
+};
+const text = (node: ReactTestInstance) =>
+  node
+    .findAll((n) => isHost(n, 'Text'))
+    .flatMap((n) => n.children.filter((c): c is string => typeof c === 'string'))
+    .join('');
+/** What TalkBack reads for each element that groups its contents. */
+const spoken = (root: ReactTestInstance) =>
+  hosts(root, (p) => p.accessible === true && typeof p.accessibilityLabel === 'string').map(
+    (node) => node.props.accessibilityLabel as string,
+  );
+
+function page(overrides: Partial<Parameters<typeof GroupMembers>[0]> = {}) {
+  const props = {
+    group: household,
+    currentUserId: you,
+    back: { label: 'Back to Group', onPress: vi.fn() },
+    invite: { onPress: vi.fn(), disabled: false, offline: false },
+    ...overrides,
+  };
+  return { root: render(<GroupMembers {...props} />), props };
+}
+
+describe('Members and Group details', () => {
+  it('titles the page with the Group and returns from the back arrow', () => {
+    const { root, props } = page();
+    expect(byRole(root, 'header').map(text)).toEqual(['Members and details', 'Members · 3']);
+    expect(text(root)).toContain('Maple House');
+    act(() => {
+      one(byRole(root, 'button', 'Back to Group')).props.onPress();
+    });
+    expect(props.back.onPress).toHaveBeenCalledOnce();
+  });
+
+  it('shows a Household’s Theme, currency, Month lens and description', () => {
+    const { root } = page();
+    expect(spoken(root).slice(0, 4)).toEqual([
+      'Theme: Household',
+      'Currency: INR',
+      'Expenses shown by: Month',
+      'Description: Rent, bills and groceries for the flat',
+    ]);
+  });
+
+  it('leaves out the Month lens for other Themes, and an empty description', () => {
+    const { root } = page({ group: trip });
+    expect(spoken(root).slice(0, 2)).toEqual(['Theme: Trip', 'Currency: EUR']);
+    expect(text(root)).not.toContain('Expenses shown by');
+    expect(text(root)).not.toContain('Description');
+  });
+
+  it('lists the members with their roles, marking you and each admin', () => {
+    const { root } = page();
+    expect(spoken(root).slice(4)).toEqual([
+      'Alex Rivera, You, Admin',
+      'Priya Shah, Admin',
+      'Sam Chen, Member',
+    ]);
+    expect(text(root)).toContain('Alex Rivera · YouAdmin');
+    expect(text(root)).toContain('Sam ChenMember');
+    const rows = hosts(root, (p) => p.accessible === true).slice(4);
+    const shields = rows.map(
+      (row) =>
+        row.findAll(
+          (node) => isHost(node, 'Ionicons') && node.props.name === 'shield-checkmark-outline',
+        ).length,
+    );
+    expect(shields).toEqual([1, 1, 0]);
+  });
+
+  it('invites through the share flow', () => {
+    const { root, props } = page();
+    const invite = one(byRole(root, 'button', 'Invite people'));
+    expect(invite.props.accessibilityState).toEqual({ disabled: false });
+    act(() => {
+      invite.props.onPress();
+    });
+    expect(props.invite.onPress).toHaveBeenCalledOnce();
+  });
+
+  it('says Invite needs a connection while offline', () => {
+    const { root } = page({ invite: { onPress: vi.fn(), disabled: false, offline: true } });
+    const invite = one(byRole(root, 'button', 'Invite people'));
+    expect(invite.props.accessibilityState).toEqual({ disabled: true });
+    expect(invite.props.accessibilityHint).toBe('Inviting needs a connection.');
+    expect(text(root)).toContain('Inviting needs a connection.');
+  });
+
+  it('keeps Invite unavailable while a link is being read', () => {
+    const { root } = page({ invite: { onPress: vi.fn(), disabled: true, offline: false } });
+    expect(one(byRole(root, 'button', 'Invite people')).props.accessibilityState).toEqual({
+      disabled: true,
+    });
+    expect(text(root)).not.toContain('Inviting needs a connection.');
+  });
+
+  it('says role changes and removals happen on the web', () => {
+    const { root } = page();
+    expect(text(root)).toContain('Changing roles or removing members is done on the web for now.');
+  });
+
+  it('explains a Group that is no longer available', () => {
+    const { root } = page({ group: null, unavailable: 'You no longer have access to this group.' });
+    expect(text(one(byRole(root, 'alert')))).toBe('You no longer have access to this group.');
+    expect(byRole(root, 'button', 'Invite people')).toHaveLength(0);
+  });
+});
