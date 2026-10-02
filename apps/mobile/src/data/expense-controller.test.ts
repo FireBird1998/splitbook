@@ -1788,6 +1788,55 @@ describe('Save straight after the last keystroke', () => {
       draft: { description: 'Dinner' },
     });
   });
+
+  it.each(['new', 'edit'] as const)(
+    'sends a %s Expense once when Save follows a Back still waiting for the draft write',
+    async (kind) => {
+      const { controller, events, hold, release } = held();
+      await controller.signIn('alex');
+      if (kind === 'new') {
+        await controller.openExpense(groupId);
+        await controller.updateExpenseDraft({ amount: '10', tagId });
+      } else {
+        await controller.openExpense(groupId, expenseId);
+        await controller.editExpense();
+      }
+      hold();
+      const typing = controller.updateExpenseDraft({ description: 'Dinner' });
+      const leaving = controller.back();
+      const saves = Promise.all([controller.saveExpense(), controller.saveExpense()]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'expense',
+        expense: { status: 'saving' },
+      });
+
+      release();
+      await Promise.all([typing, leaving, saves]);
+      expect(events).toEqual(
+        kind === 'new' ? ['draft', 'attempt', 'POST'] : ['draft', 'mutation', 'PATCH'],
+      );
+      expect(controller.getSnapshot().expense.status).toBe('saved');
+    },
+  );
+
+  it('keeps the form open with the error when Back and Save wait on a failed draft write', async () => {
+    const { controller, events, hold, release } = held(true);
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ amount: '10', tagId });
+    hold();
+    const typing = controller.updateExpenseDraft({ description: 'Dinner' });
+    const leaving = controller.back();
+    const save = controller.saveExpense();
+    release();
+    await Promise.all([typing, leaving, save]);
+    expect(events).toEqual([]);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      expense: { status: 'editing', persistence: 'error' },
+    });
+  });
 });
 
 describe('native Expense field corrections', () => {

@@ -2273,6 +2273,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     (snapshot.screen === 'settlement' && snapshot.settlement.status === 'saving');
 
   let draftWrite: Promise<void> = Promise.resolve();
+  /** A Save accepted while Back waits for a draft write wins: Back then stays on the form. */
+  let closeRequest = 0;
   /**
    * Save and close wait for the latest draft write, so nothing is sent or left from entries
    * this device doesn't hold. False when those entries couldn't be stored.
@@ -2683,8 +2685,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.expense.status === 'delete-review') return cancelExpenseDeletion();
     // Leaving waits for the latest entries to be stored; if that fails, the form stays open.
     if (snapshot.expense.persistence === 'saving') {
-      const view = viewRequest;
-      if (!(await draftWritten()) || view !== viewRequest || snapshot.screen !== 'expense') return;
+      const view = viewRequest,
+        close = ++closeRequest;
+      if (
+        !(await draftWritten()) ||
+        view !== viewRequest ||
+        close !== closeRequest ||
+        snapshot.screen !== 'expense' ||
+        expenseNavigationBlocked()
+      )
+        return;
     }
     const editor = snapshot.expense;
     const { detail } = snapshot;
@@ -2890,6 +2900,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     let mutation: MobileSnapshot['expense']['mutation'] = editor.mutation;
     let completed = false;
     let refreshed = false;
+    closeRequest += 1;
     publish({ ...snapshot, expense: { ...editor, status: 'saving', message: null } });
     try {
       // Save tapped straight after typing sends once that draft is stored, or not at all.
@@ -3087,6 +3098,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (!editor.attempt && rejectInvalidExpense(editor, draft, editor.context)) return;
     const owner = generation;
     const view = viewRequest;
+    closeRequest += 1;
     publish({ ...snapshot, expense: { ...editor, status: 'saving', message: null } });
     let attempt = editor.attempt;
     let storing = false;
