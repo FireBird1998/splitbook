@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
+import { escapeRegex } from '@splitbook/shared/escape-regex';
 import type { ExpenseDraft } from '../data/expense-draft';
 import {
   previewSplit,
@@ -36,6 +37,20 @@ const choices: { id: SplitChoice; label: string; hint: string }[] = [
 
 /** Hundredths of a percent as "33.34%". */
 const percent = (units: number) => `${Number((units / 100).toFixed(2))}%`;
+
+/** Text with each formatted amount in the money face; the words, and what's spoken, stay the same. */
+function moneyRuns(text: string, amounts: string[]): ReactNode {
+  if (!amounts.length) return text;
+  return text.split(new RegExp(`(${amounts.map(escapeRegex).join('|')})`)).map((part, index) =>
+    index % 2 ? (
+      <Text key={index} style={{ fontFamily: fonts.mono, fontVariant: ['tabular-nums'] }}>
+        {part}
+      </Text>
+    ) : (
+      part
+    ),
+  );
+}
 
 /**
  * The Split sheet over the Expense form: Equal, Amounts, Percentage or Shares, who's included,
@@ -106,7 +121,9 @@ export function SplitSheet({
       visible={visible}
       title="Split"
       subtitle={
-        preview.total === null ? undefined : `Total ${money(preview.total)} · ${draft.currency}`
+        preview.total === null
+          ? undefined
+          : moneyRuns(`Total ${money(preview.total)} · ${draft.currency}`, [money(preview.total)])
       }
       onDone={onDone}
       footer={
@@ -342,7 +359,7 @@ function SplitFooter({
         Enter a valid amount to see who owes what.
       </CompactText>
     );
-  const row = (left: ReactNode, right?: string) => (
+  const row = (left: ReactNode, right?: string, amounts: string[] = []) => (
     <View
       style={{
         flexDirection: 'row',
@@ -355,12 +372,12 @@ function SplitFooter({
       {left}
       {right ? (
         <CompactText variant="caption" tone="secondary" style={{ marginLeft: 'auto' }}>
-          {right}
+          {moneyRuns(right, amounts)}
         </CompactText>
       ) : null}
     </View>
   );
-  const problem = (message: string, detail?: string) => (
+  const problem = (message: string, detail?: string, amounts: string[] = []) => (
     <View
       accessible
       accessibilityLabel={[message, detail].filter(Boolean).join('. ')}
@@ -370,10 +387,11 @@ function SplitFooter({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
           <Icon name="alert-circle-outline" size={18} color={theme.status.negative} />
           <CompactText variant="small" weight="semibold" tone="negative" style={{ flexShrink: 1 }}>
-            {message}
+            {moneyRuns(message, amounts)}
           </CompactText>
         </View>,
         detail,
+        amounts,
       )}
     </View>
   );
@@ -388,6 +406,7 @@ function SplitFooter({
           ? `${show(-left)} over the total`
           : `${show(-left)} over 100%`,
       `${show(status.entered)} of ${show(status.target)}`,
+      status.unit === 'amount' ? [Math.abs(left), status.entered, status.target].map(money) : [],
     );
   }
   const count = draft.participantIds.length;
@@ -395,7 +414,8 @@ function SplitFooter({
     (sum, id) => sum + Number(draft.splitValues[id] || 0),
     0,
   );
-  const allocated = `${money(total!)} allocated`;
+  const amount = money(total!);
+  const allocated = `${amount} allocated`;
   const summary =
     draft.splitMethod === 'equal'
       ? `${count} ${count === 1 ? 'person' : 'people'} · ${allocated}`
@@ -412,8 +432,10 @@ function SplitFooter({
       accessibilityLiveRegion="polite"
       style={{ gap: 6 }}
     >
-      {row(<Badge label="Adds up" tone="positive" icon="checkmark" />, summary)}
-      {note ? <CompactText>{note}</CompactText> : null}
+      {row(<Badge label="Adds up" tone="positive" icon="checkmark" />, summary, [amount])}
+      {note && status.leftover ? (
+        <CompactText>{moneyRuns(note, [money(status.leftover.amountMinor)])}</CompactText>
+      ) : null}
     </View>
   );
 }

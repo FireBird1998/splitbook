@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
 import { ExpenseEditor } from './expense-editor';
+import { fonts } from './theme';
 
 // Host stand-ins: the editor renders through these names, so the tree keeps the
 // props (labels, hints, values, handlers) that Android receives.
@@ -214,11 +215,23 @@ const settle = () =>
     for (let tick = 0; tick < 20; tick++) await new Promise((resolve) => setTimeout(resolve, 0));
   });
 const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
-const text = (scope: ReactTestInstance) =>
+/** Visible text in reading order, including runs nested inside a line. */
+const text = (scope: ReactTestInstance | string): string =>
+  typeof scope === 'string' ? scope : scope.children.map(text).join('');
+/** Runs set in the money face inside a line of text, with the line they belong to. */
+const moneyRuns = (scope: ReactTestInstance) =>
   scope
-    .findAll((node) => isHost(node, 'Text'))
-    .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
-    .join('');
+    .findAll(
+      (node) =>
+        isHost(node, 'Text') &&
+        !!node.parent &&
+        isHost(node.parent, 'Text') &&
+        node.props.style?.fontFamily === fonts.mono &&
+        node.props.style?.fontVariant?.includes('tabular-nums'),
+    )
+    .map((node) => ({ run: text(node), line: text(node.parent!) }));
+const spoken = (scope: ReactTestInstance, label: string) =>
+  scope.findAll((node) => isHost(node, 'View') && node.props.accessibilityLabel === label);
 
 let screen: ReactTestRenderer | null = null;
 afterEach(() => {
@@ -367,6 +380,17 @@ describe('Split sheet', () => {
     expect(text(ui.sheet()!)).toContain(
       'The leftover ₹0.01 goes to Sam Chen so the total is exact.',
     );
+    expect(moneyRuns(ui.sheet()!)).toEqual([
+      { run: '₹1,249.50', line: 'Total ₹1,249.50 · INR' },
+      { run: '₹1,249.50', line: '4 shares · ₹1,249.50 allocated' },
+      { run: '₹0.01', line: 'The leftover ₹0.01 goes to Sam Chen so the total is exact.' },
+    ]);
+    expect(
+      spoken(
+        ui.sheet()!,
+        'Adds up. 4 shares · ₹1,249.50 allocated. The leftover ₹0.01 goes to Sam Chen so the total is exact.',
+      ),
+    ).toHaveLength(1);
     expect(ui.pressable('Decrease shares for Sam Chen').props.disabled).toBe(true);
   });
 
@@ -378,6 +402,13 @@ describe('Split sheet', () => {
     await ui.type('Amount for Sam Chen', '200');
     expect(text(ui.sheet()!)).toContain('₹49.50 still to assign');
     expect(text(ui.sheet()!)).toContain('₹1,200.00 of ₹1,249.50');
+    expect(moneyRuns(ui.sheet()!)).toEqual([
+      { run: '₹1,249.50', line: 'Total ₹1,249.50 · INR' },
+      { run: '₹49.50', line: '₹49.50 still to assign' },
+      { run: '₹1,200.00', line: '₹1,200.00 of ₹1,249.50' },
+      { run: '₹1,249.50', line: '₹1,200.00 of ₹1,249.50' },
+    ]);
+    expect(spoken(ui.sheet()!, '₹49.50 still to assign. ₹1,200.00 of ₹1,249.50')).toHaveLength(1);
     expect(text(ui.sheet()!)).not.toContain('Adds up');
     await ui.type('Amount for Priya Shah', '59.50');
     expect(text(ui.sheet()!)).toContain('₹10.00 over the total');

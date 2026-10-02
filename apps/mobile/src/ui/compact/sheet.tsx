@@ -34,7 +34,8 @@ export function BottomSheet({
 }: {
   visible: boolean;
   title: string;
-  subtitle?: string;
+  /** Text, or text runs such as an amount in the money face. */
+  subtitle?: ReactNode;
   /** Shown beside the title, e.g. a Required marker. */
   titleAccessory?: ReactNode;
   onDone: () => void;
