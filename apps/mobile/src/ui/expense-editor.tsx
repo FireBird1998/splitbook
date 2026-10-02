@@ -223,15 +223,14 @@ export function ExpenseEditor({
     formatCurrency(toMajorAmount(minor, draft.currency), draft.currency);
   const tag = context?.tags.find((item) => item.id === draft.tagId);
   const activeTags = context?.tags.filter((item) => !item.isArchived && !item.isDeleted) ?? [];
-  // Save stays available for incomplete input so it can explain what is missing.
+  // Save stays available for incomplete input so it can explain what is missing, and while
+  // the latest entries are being stored: the save waits for that write.
   const saveBlocked =
     state.status === 'saving'
       ? 'Sending this Expense. Keep this screen open until SplitBook confirms it.'
       : state.persistence === 'error'
         ? 'Save is unavailable until this draft is stored on this device. Retry saving the draft first.'
-        : state.persistence === 'saving'
-          ? 'Available once your latest entries are stored on this device.'
-          : null;
+        : null;
 
   // The Group's draft holds Edit and Delete; the record itself stays readable.
   const holdReason = state.groupDraft
@@ -585,18 +584,30 @@ export function ExpenseEditor({
 /** "Draft saved" while this device keeps entries that differ from where the form started. */
 function DraftStatus({ persistence, kept }: { persistence: Editor['persistence']; kept: boolean }) {
   const theme = useTheme();
-  if (persistence === 'saved' && !kept) return null;
+  // Writes run on every keystroke; only one that takes a while says so.
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (persistence !== 'saving') return;
+    const timer = setTimeout(() => setSlow(true), 400);
+    return () => {
+      clearTimeout(timer);
+      setSlow(false);
+    };
+  }, [persistence]);
+  const saving = persistence === 'saving' && slow;
+  if (persistence !== 'error' && !saving && !kept) return null;
   const [icon, text, color] =
-    persistence === 'saved'
-      ? (['checkmark', 'Draft saved', theme.textSecondary] as const)
-      : persistence === 'saving'
+    persistence === 'error'
+      ? (['alert-circle-outline', 'Draft not saved', theme.status.negative] as const)
+      : saving
         ? (['sync-outline', 'Saving draft…', theme.textSecondary] as const)
-        : (['alert-circle-outline', 'Draft not saved', theme.status.negative] as const);
+        : (['checkmark', 'Draft saved', theme.textSecondary] as const);
   return (
     <View
       accessible
       accessibilityLabel={text}
-      accessibilityLiveRegion="polite"
+      // Only a failure is announced.
+      accessibilityLiveRegion={persistence === 'error' ? 'polite' : 'none'}
       style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 4 }}
     >
       <Icon name={icon} size={16} color={color} />

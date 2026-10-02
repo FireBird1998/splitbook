@@ -1691,6 +1691,105 @@ describe('keeping only drafts that change something', () => {
   });
 });
 
+describe('Save straight after the last keystroke', () => {
+  /** Draft writes wait until released; each settled write and each ledger write is logged. */
+  const held = (fail = false) => {
+    const events: string[] = [];
+    const harness = setup((path, init) => {
+      if (init.method === 'POST' && path.endsWith('/expenses')) {
+        events.push('POST');
+        return Promise.resolve(
+          json({ status: 201, data: { _id: 'a00000000000000000000031', group: groupId } }, 201),
+        );
+      }
+      if (path.endsWith(`/${expenseId}`)) {
+        if (init.method === 'PATCH') events.push('PATCH');
+        return Promise.resolve(json({ status: 200, data: savedExpense }));
+      }
+    });
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const hold = () => {
+      const { save } = harness.drafts;
+      harness.drafts.save = async (accountId, id, value) => {
+        await gate;
+        if (fail) throw new Error('Disk full');
+        await save(accountId, id, value);
+        const record = value as { attempt?: unknown; mutation?: unknown };
+        events.push(record.attempt ? 'attempt' : record.mutation ? 'mutation' : 'draft');
+      };
+    };
+    return { ...harness, events, hold, release: () => release() };
+  };
+
+  it.each(['new', 'edit'] as const)(
+    'sends a %s Expense once, after the draft write it was waiting for',
+    async (kind) => {
+      const { controller, events, hold, release } = held();
+      await controller.signIn('alex');
+      if (kind === 'new') {
+        await controller.openExpense(groupId);
+        await controller.updateExpenseDraft({ amount: '10', tagId });
+      } else {
+        await controller.openExpense(groupId, expenseId);
+        await controller.editExpense();
+      }
+      hold();
+      const typing = controller.updateExpenseDraft({ description: 'Dinner' });
+      expect(controller.getSnapshot().expense.persistence).toBe('saving');
+      const saves = Promise.all([controller.saveExpense(), controller.saveExpense()]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(controller.getSnapshot().expense.status).toBe('saving');
+      expect(events).toEqual([]);
+
+      release();
+      await Promise.all([typing, saves]);
+      expect(events).toEqual(
+        kind === 'new' ? ['draft', 'attempt', 'POST'] : ['draft', 'mutation', 'PATCH'],
+      );
+      expect(controller.getSnapshot().expense.status).toBe('saved');
+    },
+  );
+
+  it('sends nothing when that draft write fails, and says why', async () => {
+    const { controller, events, hold, release } = held(true);
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ amount: '10', tagId });
+    hold();
+    const typing = controller.updateExpenseDraft({ description: 'Dinner' });
+    const save = controller.saveExpense();
+    release();
+    await Promise.all([typing, save]);
+    expect(events).toEqual([]);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      persistence: 'error',
+      message: 'Could not save your draft on this device. Keep this screen open and try again.',
+    });
+    await controller.saveExpense();
+    expect(events).toEqual([]);
+  });
+
+  it('waits for the draft write before Back leaves the form', async () => {
+    const { controller, records, hold, release } = held();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    hold();
+    const typing = controller.updateExpenseDraft({ description: 'Dinner' });
+    const leaving = controller.back();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(controller.getSnapshot().screen).toBe('expense');
+
+    release();
+    await Promise.all([typing, leaving]);
+    expect(controller.getSnapshot().screen).toBe('group');
+    expect(records.get(`${memberIds[0]}:${groupId}`)).toMatchObject({
+      draft: { description: 'Dinner' },
+    });
+  });
+});
+
 describe('native Expense field corrections', () => {
   const countingSetup = () => {
     const requests: string[] = [];
