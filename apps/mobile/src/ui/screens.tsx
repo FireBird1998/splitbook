@@ -4,7 +4,16 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import { deriveTripCodes } from '@splitbook/shared/trip-codes';
 import type { MobileGroup } from '../data';
-import { Avatar, Button, Copy, Icon, Label, Panel, type IconName } from './primitives';
+import {
+  Banner,
+  Card,
+  CompactAvatar,
+  CompactText,
+  Divider,
+  IconTile,
+  SectionHeader,
+} from './compact';
+import { Button, Copy, Icon, Label, Panel, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
 
 const themeIcons: Record<string, IconName> = {
@@ -42,99 +51,101 @@ export function SignIn({
     { id: 'priya', name: 'Priya Shah', detail: 'Always up for the next trip' },
   ];
   return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <View style={{ paddingVertical: 28, gap: 14 }}>
-        <Label>LESS MATH. MORE LIVING.</Label>
-        <Copy
-          style={{ fontFamily: fonts.semibold, fontSize: 42, lineHeight: 46, letterSpacing: -1.4 }}
-        >
-          Good company.{'\n'}Shared expenses.
-        </Copy>
-        <Copy style={{ color: theme.textSecondary, fontSize: 17, lineHeight: 26 }}>
-          A little clarity for everything you share.
-        </Copy>
+    <ScrollView
+      contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
+    >
+      <View style={{ paddingVertical: 12, gap: 6 }}>
+        <CompactText variant="overline">Less math. More living.</CompactText>
+        <CompactText variant="title">Good company.{'\n'}Shared expenses.</CompactText>
+        <CompactText tone="secondary">A little clarity for everything you share.</CompactText>
       </View>
       {onGoogleSignIn ? (
-        <Panel>
-          <Label>INVITED BETA</Label>
-          <Copy style={{ fontFamily: fonts.semibold, fontSize: 22 }}>
-            Your people. One shared ledger.
-          </Copy>
-          <Copy style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 21 }}>
-            Use the Google account invited to SplitBook. If you have a Group invitation, you can
-            continue after signing in.
-          </Copy>
-          <GoogleSignInButton
-            signInBehavior="none"
-            colorScheme={theme.mode}
-            size="wide"
-            style={{ width: '100%', height: 48 }}
-            accessibilityRole="button"
-            accessibilityLabel="Sign in with Google"
-            accessibilityState={{ disabled: busy, busy }}
-            onPress={onGoogleSignIn}
-            disabled={busy}
-          />
-          <Copy style={{ color: theme.textSecondary, fontSize: 12, lineHeight: 18 }}>
-            This beta has a separate test ledger. Entries will not move to your live account
-            automatically.
-          </Copy>
-        </Panel>
-      ) : (
-        <Panel>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <Icon name="flask-outline" size={18} color={theme.brand.main} />
-            <Label>LOCAL DEVELOPMENT</Label>
-          </View>
-          <Copy style={{ fontFamily: fonts.semibold, fontSize: 22 }}>Choose a test persona</Copy>
-          <Copy style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 21 }}>
-            Fictional people, connected to the local test ledger.
-          </Copy>
-          {personas.map((persona) => (
-            <Pressable
-              key={persona.id}
-              accessibilityRole="button"
-              accessibilityLabel={`Continue as ${persona.name}`}
-              accessibilityState={{ disabled: busy }}
-              disabled={busy}
-              onPress={() => onSignIn(persona.id)}
-              style={({ pressed }) => ({
-                flexDirection: 'row',
-                gap: 12,
-                alignItems: 'center',
-                borderTopWidth: 1,
-                borderColor: theme.border,
-                paddingVertical: 16,
-                opacity: busy ? 0.45 : pressed ? 0.65 : 1,
-              })}
-            >
-              <Avatar name={persona.name} />
-              <View style={{ flex: 1 }}>
-                <Copy style={{ fontFamily: fonts.semibold }}>{persona.name}</Copy>
-                <Copy style={{ fontSize: 12, lineHeight: 18, color: theme.textSecondary }}>
-                  {persona.detail}
-                </Copy>
+        <View style={{ gap: 6 }}>
+          <SectionHeader title="Invited beta" />
+          <Card padded>
+            <View style={{ gap: 10 }}>
+              <View style={{ gap: 2 }}>
+                <CompactText variant="heading">Your people. One shared ledger.</CompactText>
+                <CompactText variant="small" tone="secondary">
+                  Use the Google account invited to SplitBook. If you have a Group invitation, you
+                  can continue after signing in.
+                </CompactText>
               </View>
-              <Icon name="arrow-forward-outline" color={theme.brand.main} size={20} />
-            </Pressable>
-          ))}
-        </Panel>
+              <GoogleSignInButton
+                signInBehavior="none"
+                colorScheme={theme.mode}
+                size="wide"
+                style={{ width: '100%', height: 48 }}
+                accessibilityRole="button"
+                accessibilityLabel="Sign in with Google"
+                accessibilityState={{ disabled: busy, busy }}
+                onPress={onGoogleSignIn}
+                disabled={busy}
+              />
+              <CompactText variant="caption" tone="secondary">
+                This beta has a separate test ledger. Entries will not move to your live account
+                automatically.
+              </CompactText>
+            </View>
+          </Card>
+        </View>
+      ) : (
+        <View style={{ gap: 6 }}>
+          <SectionHeader title="Local development" />
+          <Card>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 14 }}>
+              <IconTile icon="flask-outline" />
+              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <CompactText variant="heading">Choose a test persona</CompactText>
+                <CompactText variant="small" tone="secondary">
+                  Fictional people, connected to the local test ledger.
+                </CompactText>
+              </View>
+            </View>
+            {personas.map((persona) => (
+              <View key={persona.id}>
+                <Divider />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Continue as ${persona.name}`}
+                  accessibilityState={{ disabled: busy }}
+                  disabled={busy}
+                  onPress={() => onSignIn(persona.id)}
+                  style={({ pressed }) => ({
+                    minHeight: 60,
+                    paddingVertical: 8,
+                    paddingHorizontal: 14,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 12,
+                    backgroundColor: pressed ? theme.surfaceMuted : undefined,
+                    opacity: busy ? 0.45 : 1,
+                  })}
+                >
+                  <CompactAvatar name={persona.name} />
+                  <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+                    <CompactText weight="semibold">{persona.name}</CompactText>
+                    <CompactText variant="caption" tone="secondary">
+                      {persona.detail}
+                    </CompactText>
+                  </View>
+                  <Icon name="arrow-forward-outline" color={theme.brand.main} size={20} />
+                </Pressable>
+              </View>
+            ))}
+          </Card>
+        </View>
       )}
-      {message && (
-        <Copy
-          accessibilityRole="alert"
-          style={{ color: theme.status.negative, textAlign: 'center' }}
-        >
-          {message}
-        </Copy>
-      )}
+      {message && <Banner tone="error" message={message} />}
       {busy && (
-        <Copy
+        <CompactText
+          variant="small"
+          tone="secondary"
           accessibilityLiveRegion="polite"
-          style={{ textAlign: 'center', color: theme.textSecondary }}
+          style={{ textAlign: 'center' }}
         >
           Signing in…
-        </Copy>
+        </CompactText>
       )}
     </ScrollView>
   );

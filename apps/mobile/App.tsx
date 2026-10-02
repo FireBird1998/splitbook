@@ -34,6 +34,7 @@ import {
 } from './src/runtime';
 import { ThemeContext, fonts, useTheme } from './src/ui/theme';
 import { Avatar, Button, Copy, Icon, Label, Loading, Notice } from './src/ui/primitives';
+import { Badge, CompactText, IconButton, TopBar } from './src/ui/compact';
 import { EmptyGroups, GroupCard, SignIn, TripStrip, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
@@ -87,19 +88,6 @@ export default function App() {
 function SplitBook() {
   const theme = useTheme();
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
-  const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
-  const scroll = useRef<ScrollView>(null);
-  const scrollContent = useRef<View>(null);
-  // Place a form section near the top, so it stays visible when the keyboard opens.
-  const reveal = useCallback((section: View) => {
-    const content = scrollContent.current;
-    if (!content) return;
-    section.measureLayout(
-      content,
-      (_x, y) => scroll.current?.scrollTo({ y: Math.max(0, y - 16), animated: false }),
-      () => undefined,
-    );
-  }, []);
   useEffect(() => {
     if (!configurationReady) return;
     const startup = controller.restore();
@@ -148,6 +136,18 @@ function SplitBook() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <GroupScreen state={state} />
+      </SafeAreaView>
+    );
+  // Settings, Create Group and an invitation, which also opens before sign-in once the session
+  // check has settled.
+  if (
+    configurationReady &&
+    !['restoring', 'error'].includes(state.auth.status) &&
+    (state.screen === 'invite' || (authenticated && ['settings', 'create'].includes(state.screen)))
+  )
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
+        <TaskScreen state={state} authenticated={authenticated} />
       </SafeAreaView>
     );
   return (
@@ -253,24 +253,6 @@ function SplitBook() {
               onPress={() => void controller.signOut()}
             />
           </View>
-        ) : state.screen === 'invite' ? (
-          <ScrollView contentContainerStyle={styles.content}>
-            <InvitationPreview
-              preview={state.invitation.preview}
-              status={state.invitation.status === 'idle' ? 'loading' : state.invitation.status}
-              message={state.invitation.message}
-              signedIn={authenticated}
-              alreadyMember={state.groups.data.some(
-                (group) => group.id === state.invitation.preview?.id,
-              )}
-              onJoin={() =>
-                authenticated ? void controller.joinInvitation() : controller.invitationSignIn()
-              }
-              onOpenGroup={() => void controller.openInvitationGroup()}
-              onRetry={() => void controller.retryInvitation()}
-              onCancel={() => void controller.cancelInvitation()}
-            />
-          </ScrollView>
         ) : !authenticated ? (
           <SignIn
             busy={state.auth.status === 'signing-in'}
@@ -288,8 +270,6 @@ function SplitBook() {
         ) : (
           <ScrollView
             key={state.screen}
-            ref={scroll}
-            innerViewRef={scrollContent as RefObject<View>}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             contentContainerStyle={styles.content}
@@ -305,61 +285,7 @@ function SplitBook() {
             }
           >
             <OfflineNotice state={state.offline} />
-            {state.screen === 'settings' ? (
-              <SettingsScreen
-                user={state.auth.user!}
-                appearance={preference.mode}
-                onAppearanceChange={(mode) => void appearance.select(mode)}
-                preferenceStatus={preference.status}
-                preferenceMessage={preference.message}
-                onRetryPreference={() => void appearance.restore()}
-                environment={environment}
-                onOpenWeb={() => {
-                  void Linking.openURL(new URL('/settings', environment.webOrigin).href).catch(
-                    () => {
-                      Alert.alert(
-                        'Couldn’t open web settings',
-                        'Check your browser and try again.',
-                      );
-                    },
-                  );
-                }}
-                onSignOut={() =>
-                  Alert.alert(
-                    'Sign out on this device?',
-                    `Your ${signOutClears} will be cleared. ${signOutInterruptedSave}`,
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'Sign out',
-                        style: 'destructive',
-                        onPress: () => void controller.signOut(),
-                      },
-                    ],
-                  )
-                }
-              />
-            ) : state.screen === 'create' ? (
-              <GroupCreateForm
-                draft={state.creation.draft}
-                onChange={controller.updateCreation}
-                onSubmit={() => void controller.createGroup()}
-                busy={state.creation.status === 'saving'}
-                uncertain={state.creation.status === 'uncertain'}
-                message={state.creation.message}
-                errors={visibleFieldErrors(groupFields, state.creation.validation)}
-                focus={state.creation.validation.focus}
-                onLeaveField={controller.touchCreationField}
-                onReveal={reveal}
-                onCheckGroups={() => void controller.checkCreatedGroups()}
-                onDiscard={() =>
-                  Alert.alert('Discard this Group form?', 'Your unsaved entries will be cleared.', [
-                    { text: 'Keep editing', style: 'cancel' },
-                    { text: 'Discard', style: 'destructive', onPress: controller.discardCreation },
-                  ])
-                }
-              />
-            ) : state.screen === 'groups' ? (
+            {state.screen === 'groups' ? (
               <>
                 <View style={{ gap: 12, marginBottom: 6 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
@@ -464,6 +390,166 @@ function SplitBook() {
         )}
       </KeyboardAvoidingView>
     </SafeAreaView>
+  );
+}
+
+/** Settings, Create Group or an invitation: a compact top bar over the screen's content. */
+function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authenticated: boolean }) {
+  const theme = useTheme();
+  const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
+  const feedback = refreshFeedback(state);
+  const scroll = useRef<ScrollView>(null);
+  const scrollContent = useRef<View>(null);
+  // Place a form section near the top, so it stays visible when the keyboard opens.
+  const reveal = useCallback((section: View) => {
+    const content = scrollContent.current;
+    if (!content) return;
+    section.measureLayout(
+      content,
+      (_x, y) => scroll.current?.scrollTo({ y: Math.max(0, y - 16), animated: false }),
+      () => undefined,
+    );
+  }, []);
+  const invite = state.screen === 'invite';
+  return (
+    <>
+      <TopBar
+        title={
+          state.screen === 'settings'
+            ? 'Settings'
+            : state.screen === 'create'
+              ? 'Create a Group'
+              : 'You’re invited'
+        }
+        leading={{ kind: 'back', label: 'Back to Home', onPress: () => void controller.back() }}
+        actions={
+          authenticated && state.screen !== 'settings' ? (
+            <IconButton
+              icon="settings-outline"
+              label="Settings"
+              disabled={state.creation.status === 'saving' || state.invitation.status === 'joining'}
+              onPress={controller.openSettings}
+            />
+          ) : (
+            <View style={{ marginRight: 12 }}>
+              <Badge label={googleSignInEnabled ? 'STAGING' : 'DEV'} />
+            </View>
+          )
+        }
+      />
+      <KeyboardAvoidingView
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <ScrollView
+          key={state.screen}
+          ref={scroll}
+          innerViewRef={scrollContent as RefObject<View>}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingTop: 4,
+            paddingBottom: 24,
+            gap: 12,
+          }}
+          refreshControl={
+            state.screen === 'create' ? (
+              <RefreshControl
+                refreshing={feedback.pull}
+                onRefresh={() => void controller.refresh('pull')}
+                tintColor={theme.brand.main}
+                colors={[theme.brand.main]}
+              />
+            ) : undefined
+          }
+        >
+          {!invite && <OfflineNotice state={state.offline} />}
+          {state.screen === 'settings' ? (
+            <SettingsScreen
+              user={state.auth.user!}
+              appearance={preference.mode}
+              onAppearanceChange={(mode) => void appearance.select(mode)}
+              preferenceStatus={preference.status}
+              preferenceMessage={preference.message}
+              onRetryPreference={() => void appearance.restore()}
+              environment={environment}
+              onOpenWeb={() => {
+                void Linking.openURL(new URL('/settings', environment.webOrigin).href).catch(() => {
+                  Alert.alert('Couldn’t open web settings', 'Check your browser and try again.');
+                });
+              }}
+              onSignOut={() =>
+                Alert.alert(
+                  'Sign out on this device?',
+                  `Your ${signOutClears} will be cleared. ${signOutInterruptedSave}`,
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Sign out',
+                      style: 'destructive',
+                      onPress: () => void controller.signOut(),
+                    },
+                  ],
+                )
+              }
+            />
+          ) : state.screen === 'create' ? (
+            <GroupCreateForm
+              draft={state.creation.draft}
+              onChange={controller.updateCreation}
+              onSubmit={() => void controller.createGroup()}
+              busy={state.creation.status === 'saving'}
+              uncertain={state.creation.status === 'uncertain'}
+              message={state.creation.message}
+              errors={visibleFieldErrors(groupFields, state.creation.validation)}
+              focus={state.creation.validation.focus}
+              onLeaveField={controller.touchCreationField}
+              onReveal={reveal}
+              onCheckGroups={() => void controller.checkCreatedGroups()}
+              onDiscard={() =>
+                Alert.alert('Discard this Group form?', 'Your unsaved entries will be cleared.', [
+                  { text: 'Keep editing', style: 'cancel' },
+                  { text: 'Discard', style: 'destructive', onPress: controller.discardCreation },
+                ])
+              }
+            />
+          ) : (
+            <InvitationPreview
+              preview={state.invitation.preview}
+              status={state.invitation.status === 'idle' ? 'loading' : state.invitation.status}
+              message={state.invitation.message}
+              signedIn={authenticated}
+              alreadyMember={state.groups.data.some(
+                (group) => group.id === state.invitation.preview?.id,
+              )}
+              onJoin={() =>
+                authenticated ? void controller.joinInvitation() : controller.invitationSignIn()
+              }
+              onOpenGroup={() => void controller.openInvitationGroup()}
+              onRetry={() => void controller.retryInvitation()}
+              onCancel={() => void controller.cancelInvitation()}
+            />
+          )}
+          {!invite && (
+            <View
+              style={{
+                alignItems: 'center',
+                flexDirection: 'row',
+                justifyContent: 'center',
+                gap: 6,
+                paddingTop: 10,
+              }}
+            >
+              <Icon name="flask-outline" size={12} />
+              <CompactText variant="caption" tone="secondary">
+                {environment.label.toUpperCase()}
+              </CompactText>
+            </View>
+          )}
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </>
   );
 }
 
