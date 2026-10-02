@@ -704,9 +704,9 @@ describe('compact Expense form', () => {
     const sheet = ui.root().find((node) => isHost(node, 'Modal') && node.props.visible === true);
     await act(async () => sheet.props.onRequestClose());
     expect(openSheet(ui.root(), 'September 2026')).toBe(false);
-    expect(ui.tile('Date').props.accessibilityLabel).toBe(
-      `Date: ${expenseDateLabel('2026-09-15')}`,
-    );
+    const label = expenseDateLabel('2026-09-15');
+    expect(ui.tile('Date').props.accessibilityLabel).toBe(`Date: ${label.spoken}`);
+    expect(text(ui.tile('Date'))).toBe(`Date${label.shown}`);
     expect(ui.controller.getSnapshot().expense.draft?.date).toBe('2026-09-15');
     expect(ui.writes).toEqual([]);
   });

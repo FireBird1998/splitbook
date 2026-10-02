@@ -154,11 +154,13 @@ export function DateSheet({
           ))}
         </View>
         {calendar.weeks.map((week, row) => (
-          <View key={row} style={{ flexDirection: 'row' }}>
+          // A native row per week, its cells updated in place from Month to Month, keeps the
+          // days in date order for TalkBack; flattened rows came out interleaved.
+          <View key={row} collapsable={false} style={{ flexDirection: 'row' }}>
             {week.map((cell, column) =>
               cell ? (
                 <Pressable
-                  key={cell.date}
+                  key={column}
                   accessibilityRole="button"
                   accessibilityLabel={cell.label}
                   accessibilityState={{ selected: cell.selected, disabled: locked }}
@@ -197,7 +199,7 @@ export function DateSheet({
                   </View>
                 </Pressable>
               ) : (
-                <View key={`blank-${column}`} style={{ flex: 1, height: 46 }} />
+                <View key={column} style={{ flex: 1, height: 46 }} />
               ),
             )}
           </View>

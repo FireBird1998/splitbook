@@ -109,12 +109,28 @@ describe('Who owes what', () => {
 describe('Expense date label', () => {
   const now = new Date(2026, 8, 30, 12).getTime();
   it('says Today and Yesterday, and dates other days', () => {
-    expect(expenseDateLabel('2026-09-30', now)).toMatch(/^Today, /);
-    expect(expenseDateLabel('2026-09-29', now)).toMatch(/^Yesterday, /);
-    expect(expenseDateLabel('2026-09-24', now)).toMatch(/24/);
-    expect(expenseDateLabel('2026-02-30', now)).toBe('2026-02-30');
-    expect(expenseDateLabel('', now)).toBe('Choose a date');
+    expect(expenseDateLabel('2026-09-30', now).shown).toMatch(/^Today, /);
+    expect(expenseDateLabel('2026-09-30', now).spoken).toMatch(/^Today, .*2026/);
+    expect(expenseDateLabel('2026-09-29', now).spoken).toMatch(/^Yesterday, .*29.*2026/);
+    expect(expenseDateLabel('2026-09-24', now).shown).toMatch(/24/);
+    expect(expenseDateLabel('2025-09-24', now).shown).toMatch(/2025/);
+    expect(expenseDateLabel('2026-02-30', now)).toEqual({
+      shown: '2026-02-30',
+      spoken: '2026-02-30',
+    });
+    expect(expenseDateLabel('', now)).toEqual({ shown: 'Choose a date', spoken: 'Choose a date' });
   });
+
+  // A half-width tile on a 360dp phone fits about 14 characters ("Today, 30 Sept").
+  it.each(['2026-09-30', '2026-09-29', '2026-09-24', '2026-01-31', '2025-12-31', '2027-05-17'])(
+    'keeps %s short enough for a half-width tile and speaks it in full',
+    (date) => {
+      const { shown, spoken } = expenseDateLabel(date, now);
+      expect(shown.length).toBeLessThanOrEqual(14);
+      expect(shown).not.toContain('Yesterday');
+      expect(spoken).toMatch(/\d{4}$/);
+    },
+  );
 });
 
 describe('Amount focus ring', () => {

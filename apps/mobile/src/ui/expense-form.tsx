@@ -35,22 +35,37 @@ const splitSummaries: Record<ExpenseDraft['splitMethod'], string> = {
 const localDay = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
-/** "Today, 30 Sep", "Yesterday, 29 Sep" or "Wed 24 Sep" for a YYYY-MM-DD draft date. */
+/**
+ * The Date tile's value for a YYYY-MM-DD draft date. `shown` fits a half-width tile on a
+ * 360dp phone: "Today, 30 Sep", "Thu 1 Oct" or "24 Sep 2025". `spoken` is the full date,
+ * such as "Yesterday, Thursday, 1 October 2026".
+ */
 export function expenseDateLabel(value: string, now = Date.now()) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return value || 'Choose a date';
-  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
-  if (localDay(date) !== value) return value;
+  const date = match && new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (!date || localDay(date) !== value) {
+    const shown = value || 'Choose a date';
+    return { shown, spoken: shown };
+  }
   const today = new Date(now);
   const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+  const thisYear = date.getFullYear() === today.getFullYear();
   const short = date.toLocaleDateString([], {
     day: 'numeric',
     month: 'short',
-    ...(date.getFullYear() === today.getFullYear() ? {} : { year: 'numeric' }),
+    ...(thisYear ? {} : { year: 'numeric' }),
   });
-  if (value === localDay(today)) return `Today, ${short}`;
-  if (value === localDay(yesterday)) return `Yesterday, ${short}`;
-  return `${date.toLocaleDateString([], { weekday: 'short' })} ${short}`;
+  const full = date.toLocaleDateString([], {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+  if (value === localDay(today)) return { shown: `Today, ${short}`, spoken: `Today, ${full}` };
+  return {
+    shown: thisYear ? `${date.toLocaleDateString([], { weekday: 'short' })} ${short}` : short,
+    spoken: value === localDay(yesterday) ? `Yesterday, ${full}` : full,
+  };
 }
 
 export const splitSummary = (draft: ExpenseDraft) =>
@@ -212,7 +227,12 @@ export function ExpenseTiles({
 }: {
   locked: boolean;
   errors: Partial<Record<'date' | 'payers' | 'split' | 'tag', string>>;
-  values: { date: string; payers: string; split: string; tag: string };
+  values: {
+    date: ReturnType<typeof expenseDateLabel>;
+    payers: string;
+    split: string;
+    tag: string;
+  };
   correction: (field: ExpenseField) => Ref<View>;
   section: SectionRef;
   onOpen: (tile: 'date' | 'payers' | 'split' | 'tag') => void;
@@ -225,7 +245,8 @@ export function ExpenseTiles({
         <SelectorTile
           icon="calendar-outline"
           label="Date"
-          value={values.date}
+          value={values.date.shown}
+          spokenValue={values.date.spoken}
           error={errors.date}
           locked={locked}
           onPress={() => onOpen('date')}

@@ -164,6 +164,37 @@ describe('Date sheet calendar', () => {
     expect(sheet.footer()).toBe('Wednesday, 30 September 2026');
   });
 
+  it('keeps each week its own row, with the days in reading order from Month to Month', () => {
+    const sheet = render('2026-09-15');
+    /** Day numbers as the rows hold them, row by row. */
+    const reading = () => {
+      const rows = sheet
+        .root()
+        .findAll((node) => isHost(node, 'View') && node.props.collapsable === false);
+      expect(rows).toHaveLength(6);
+      return rows.flatMap((row) => {
+        expect(row.children).toHaveLength(7);
+        return row.children.flatMap((cell) =>
+          typeof cell !== 'string' && isHost(cell, 'Pressable')
+            ? [Number(/, (\d+) /.exec(cell.props.accessibilityLabel)![1])]
+            : [],
+        );
+      });
+    };
+    const days = (length: number) => Array.from({ length }, (_, day) => day + 1);
+    expect(reading()).toEqual(days(30));
+    sheet.press('Next month');
+    expect(reading()).toEqual(days(31));
+    sheet.press('Next month');
+    expect(reading()).toEqual(days(30));
+    sheet.press('Previous month');
+    sheet.press('Previous month');
+    expect(reading()).toEqual(days(30));
+    expect(sheet.days().map((day) => day.props.accessibilityLabel)[0]).toBe(
+      'Tuesday, 1 September 2026',
+    );
+  });
+
   it.each([
     ['en-IN', 'SMTWTFS'],
     ['en-US', 'SMTWTFS'],
