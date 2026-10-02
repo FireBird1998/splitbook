@@ -400,7 +400,7 @@ describe('A kept draft on Expenses', () => {
 
     await server.controller.resumeKeptDraft();
     expect(server.controller.getSnapshot().expense.status).toBe('uncertain');
-    // Resuming sends nothing; only Check and finish saving retries the same submission.
+    // Opening it to check sends nothing; only the form's retry resends the same submission.
     expect(server.writes()).toHaveLength(posts);
   });
 

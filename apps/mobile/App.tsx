@@ -587,6 +587,10 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
   const openExpense = (groupId: string, expenseId?: string) =>
     void controller.openExpense(groupId, expenseId, { scrollY: scrollY.current });
   const kept = state.keptDraft?.groupId === group?.id ? state.keptDraft : null;
+  // Both open the kept record; a save that may already be recorded is checked, not resumed.
+  const keptAction = kept?.unconfirmed
+    ? { label: 'Check save', icon: 'alert-circle-outline' as const }
+    : { label: 'Resume draft', icon: 'pencil-outline' as const };
   const resumeDraft = () => void controller.resumeKeptDraft({ scrollY: scrollY.current });
   const discardDraft = () =>
     Alert.alert(
@@ -658,8 +662,8 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         <>
           {group && state.destination === 'expenses' ? (
             <FloatingAction
-              label={kept ? 'Resume draft' : 'Add expense'}
-              icon={kept ? 'pencil-outline' : 'add'}
+              label={kept ? keptAction.label : 'Add expense'}
+              icon={kept ? keptAction.icon : 'add'}
               onPress={kept ? resumeDraft : () => openExpense(group.id)}
               // Above the snackbar while it shows.
               bottom={state.snackbar ? 156 : undefined}

@@ -327,7 +327,7 @@ function KeptDraftNotice({
         }
         standing
       >
-        <CompactButton label="Check and finish saving" variant="tonal" dense onPress={onResume} />
+        <CompactButton label="Open to check" variant="tonal" dense onPress={onResume} />
       </Banner>
     );
   return (

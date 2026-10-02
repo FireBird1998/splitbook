@@ -418,7 +418,8 @@ describe('A kept draft', () => {
     );
     expect(shown).not.toContain('Draft:');
     expect(buttons(root)).not.toContain('Discard draft');
-    press(root, 'Check and finish saving');
+    expect(buttons(root)).not.toContain('Resume draft');
+    press(root, 'Open to check');
     expect(onResumeDraft).toHaveBeenCalledOnce();
   });
 

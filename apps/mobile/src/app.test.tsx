@@ -616,6 +616,29 @@ describe('App return from an Expense', () => {
       ? json({ status: 201, data: { _id: 'b00000000000000000000009', group: groupId } }, 201)
       : undefined;
 
+  it('offers a save that may already be recorded to check, not as a draft to resume', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    app.use((path, init) =>
+      path === `/api/groups/${groupId}/expenses` && init.method === 'POST'
+        ? Promise.reject(new Error('The response was lost after sending'))
+        : undefined,
+    );
+    await addExpense(app, '2026-09-20');
+    await app.press('Save expense');
+    app.use(() => undefined);
+    await app.press('Back to Group');
+
+    expect(app.text()).toContain('Save not confirmed');
+    expect(() => app.pressable('Resume draft')).toThrow();
+    expect(() => app.pressable('Add expense')).toThrow();
+    expect(app.pressable('Open to check').props.accessibilityRole).toBe('button');
+    await app.press('Check save');
+    // The form opens on its locked recovery, without the resume prompt.
+    expect(app.text()).toContain('Details are locked until the save is confirmed.');
+    expect(app.text()).not.toContain('Resume save recovery');
+  });
+
   it('Android Back returns to the same Group, Month and scroll position', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');
