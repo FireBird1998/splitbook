@@ -1,7 +1,17 @@
 import { useState, type ReactNode, type Ref } from 'react';
 import { Pressable, TextInput, View } from 'react-native';
-import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
-import type { ExpenseDraft, ExpenseField, expenseMoney } from '../data/expense-draft';
+import { EXPENSE_CATEGORIES, getCategory } from '@splitbook/shared/categories';
+import { formatCurrency } from '@splitbook/shared/currency';
+import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
+import {
+  expenseFieldLabels,
+  isMoneyField,
+  type ExpenseDraft,
+  type ExpenseField,
+  type ExpenseMoneyField,
+  type ExpenseVersionField,
+  type expenseMoney,
+} from '../data/expense-draft';
 import { acceptsNumericText } from '../data/field-feedback';
 import { gregorianDateFormat } from './date-sheet';
 import { Field, FieldError } from './group-workflows';
@@ -19,6 +29,7 @@ import {
   SelectorTile,
   TileGrid,
   radius,
+  useLargeText,
 } from './compact';
 import { fonts, useTheme } from './theme';
 
@@ -76,6 +87,7 @@ export const splitSummary = (draft: ExpenseDraft) =>
 export function AmountDescriptionCard({
   draft,
   locked,
+  showLock = false,
   errors,
   amountRef,
   descriptionRef,
@@ -87,6 +99,8 @@ export function AmountDescriptionCard({
 }: {
   draft: ExpenseDraft;
   locked: boolean;
+  /** Shows the values as locked, as for a save that may already be recorded. */
+  showLock?: boolean;
   errors: { amount?: string; description?: string };
   amountRef: Ref<TextInput>;
   descriptionRef: Ref<TextInput>;
@@ -115,7 +129,10 @@ export function AmountDescriptionCard({
     </View>
   );
   return (
-    <Card state={errors.amount || errors.description ? 'error' : 'default'} padded>
+    <Card
+      state={errors.amount || errors.description ? 'error' : showLock ? 'locked' : 'default'}
+      padded
+    >
       <View ref={section('amount')} style={{ gap: 6 }}>
         {label('Amount', errors.amount)}
         <View style={{ gap: 4 }}>
@@ -182,6 +199,9 @@ export function AmountDescriptionCard({
                 },
               ]}
             />
+            {showLock ? (
+              <Icon name="lock-closed-outline" size={20} color={theme.textSecondary} />
+            ) : null}
           </View>
         </View>
         <FieldError message={errors.amount} />
@@ -437,6 +457,205 @@ export function WhoOwesWhat({
   );
 }
 
+const versionLabels: Record<ExpenseVersionField, string> = {
+  ...expenseFieldLabels,
+  category: 'Category',
+  notes: 'Notes',
+};
+const reviewNames: Record<ExpenseMoneyField, string> = {
+  amount: 'amount',
+  payers: 'payers',
+  split: 'split',
+};
+interface VersionNames {
+  name: (id: string) => string;
+  tagName: (id: string) => string;
+  currentUserId?: string;
+}
+
+/** One field of one version as the member reads it; empty when there is nothing. */
+function versionText(
+  draft: ExpenseDraft,
+  field: ExpenseVersionField,
+  { name, tagName, currentUserId }: VersionNames,
+) {
+  const person = (id: string) => (id === currentUserId ? 'You' : name(id));
+  const money = (value: string) => {
+    try {
+      const minor = parseAmountMinor(value, draft.currency);
+      return formatCurrency(toMajorAmount(minor, draft.currency), draft.currency);
+    } catch {
+      return value && `${draft.currency} ${value}`;
+    }
+  };
+  switch (field) {
+    case 'amount':
+      return money(draft.amount);
+    case 'description':
+      return draft.description.trim();
+    case 'date':
+      return expenseDateLabel(draft.date);
+    case 'payers': {
+      const payers = draft.multiPayer
+        ? draft.payers
+        : [{ user: draft.payerId, amount: draft.amount }];
+      return payers.length === 1
+        ? person(payers[0].user)
+        : payers.map((row) => `${person(row.user)} ${money(row.amount)}`).join(', ');
+    }
+    case 'split': {
+      const value = (user: string) => draft.splitValues[user] || '0';
+      const shares = draft.participantIds.map((user) =>
+        draft.splitMethod === 'equal'
+          ? person(user)
+          : draft.splitMethod === 'percentage'
+            ? `${person(user)} ${value(user)}%`
+            : draft.splitMethod === 'shares'
+              ? `${person(user)} ${value(user)}`
+              : `${person(user)} ${money(value(user))}`,
+      );
+      return `${splitSummaries[draft.splitMethod]}: ${shares.join(', ')}`;
+    }
+    case 'tag':
+      return tagName(draft.tagId);
+    case 'category':
+      return getCategory(draft.category)?.label ?? draft.category;
+    case 'notes':
+      return draft.notes.trim();
+  }
+}
+
+/**
+ * "What's different": each field that differs between the member's version and the saved
+ * Expense. With `onChoose`, each money field offers keeping theirs or using the saved value.
+ */
+export function WhatsDifferent({
+  fields,
+  yours,
+  saved,
+  note,
+  onChoose,
+  ...names
+}: {
+  fields: readonly ExpenseVersionField[];
+  yours: ExpenseDraft;
+  saved: ExpenseDraft;
+  /** What choosing does, under the table. */
+  note: string;
+  onChoose?: (field: ExpenseMoneyField, keep: 'mine' | 'saved') => void;
+} & VersionNames) {
+  const theme = useTheme();
+  // At large text sizes each version gets its own line instead of a column.
+  const large = useLargeText();
+  // The saved version is in the warning tone, as in the banner above.
+  const value = (field: ExpenseVersionField, text: string, side: 'yours' | 'saved') => {
+    const shown = large
+      ? `${side === 'saved' ? 'Saved now' : 'Yours'}: ${text || '–'}`
+      : text || '–';
+    const tone = side === 'saved' ? 'warning' : 'primary';
+    const style = large ? undefined : { flex: 1, minWidth: 0, textAlign: 'right' as const };
+    return field === 'amount' && !large ? (
+      <Money size="table" tone={tone} style={style}>
+        {shown}
+      </Money>
+    ) : (
+      <CompactText variant="small" tone={tone} style={style}>
+        {shown}
+      </CompactText>
+    );
+  };
+  return (
+    <Card>
+      <View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4 }}>
+        <CompactText variant="overline" accessibilityRole="header">
+          What’s different
+        </CompactText>
+      </View>
+      {fields.length && !large ? (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingTop: 2 }}
+        >
+          <View style={{ width: 84 }} />
+          {['Yours', 'Saved now'].map((heading) => (
+            <CompactText
+              key={heading}
+              variant="caption"
+              tone="secondary"
+              style={{ flex: 1, textAlign: 'right' }}
+            >
+              {heading}
+            </CompactText>
+          ))}
+        </View>
+      ) : null}
+      {fields.length ? (
+        fields.map((field) => {
+          const label = versionLabels[field];
+          const mine = versionText(yours, field, names);
+          const theirs = versionText(saved, field, names);
+          return (
+            <View key={field} style={{ gap: 2, paddingHorizontal: 14, paddingVertical: 6 }}>
+              <View
+                accessible
+                accessibilityLabel={`${label}: yours ${mine || 'none'}, saved now ${theirs || 'none'}`}
+                style={
+                  large ? { gap: 2 } : { flexDirection: 'row', alignItems: 'flex-start', gap: 8 }
+                }
+              >
+                <CompactText
+                  variant="small"
+                  weight={large ? 'semibold' : undefined}
+                  style={large ? undefined : { width: 84 }}
+                >
+                  {label}
+                </CompactText>
+                {value(field, mine, 'yours')}
+                {value(field, theirs, 'saved')}
+              </View>
+              {onChoose && isMoneyField(field) ? (
+                <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: 4 }}>
+                  <CompactButton
+                    label="Keep yours"
+                    accessibilityLabel={`Keep your ${reviewNames[field]}`}
+                    variant="text"
+                    dense
+                    onPress={() => onChoose(field, 'mine')}
+                  />
+                  <CompactButton
+                    label="Use saved"
+                    accessibilityLabel={`Use the saved ${reviewNames[field]}`}
+                    variant="tonal"
+                    dense
+                    onPress={() => onChoose(field, 'saved')}
+                  />
+                </View>
+              ) : null}
+            </View>
+          );
+        })
+      ) : (
+        <CompactText tone="secondary" style={{ paddingHorizontal: 14, paddingVertical: 6 }}>
+          Your version matches the saved one.
+        </CompactText>
+      )}
+      <View
+        style={{
+          marginTop: 6,
+          borderTopWidth: 1,
+          borderTopColor: theme.border,
+          padding: 14,
+        }}
+      >
+        <CompactText variant="small" tone="secondary">
+          {note}
+        </CompactText>
+      </View>
+    </Card>
+  );
+}
+
 /** Category and Notes behind one optional row. */
 export function OptionalDetails({
   draft,
@@ -509,12 +728,15 @@ export function SaveBar({
   amount,
   blocked,
   onSave,
+  secondary,
 }: {
   label: string;
   amount?: string;
   /** Why Save is unavailable, also spoken as its hint. */
   blocked: string | null;
   onSave: () => void;
+  /** A quieter alternative under the main action, such as "Keep for later". */
+  secondary?: { label: string; onPress: () => void };
 }) {
   const theme = useTheme();
   return (
@@ -541,6 +763,9 @@ export function SaveBar({
         <CompactText variant="small" tone="secondary">
           {blocked}
         </CompactText>
+      ) : null}
+      {secondary ? (
+        <CompactButton label={secondary.label} variant="text" block onPress={secondary.onPress} />
       ) : null}
     </View>
   );

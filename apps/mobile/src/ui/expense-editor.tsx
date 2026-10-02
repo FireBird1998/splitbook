@@ -5,10 +5,13 @@ import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-nativ
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import {
+  draftFromExpense,
+  expenseDifferences,
   expenseDraftChanged,
   expenseFieldLabels,
   expenseFields,
   expenseMoney,
+  resolveExpenseReview,
   type ExpenseDraft,
   type ExpenseEditor as Editor,
   type ExpenseField,
@@ -16,6 +19,7 @@ import {
 import { DateSheet } from './date-sheet';
 import { Button, Copy, Icon, Loading, Notice, Panel } from './primitives';
 import {
+  Badge,
   Banner,
   BottomSheet,
   Card,
@@ -34,6 +38,7 @@ import {
   ExpenseTiles,
   OptionalDetails,
   SaveBar,
+  WhatsDifferent,
   WhoOwesWhat,
   expenseDateLabel,
   splitSummary,
@@ -134,6 +139,20 @@ export function ExpenseEditor({
   const { draft, context } = state;
   const record = !!draft?.original && ['detail', 'delete-review'].includes(state.status);
   const form = !!draft && !record && state.status !== 'loading';
+  // A save that may already be recorded stays locked until it is checked.
+  const unconfirmed =
+    form && ['resume', 'uncertain'].includes(state.status) && !!(state.attempt || state.mutation);
+  const conflict = form && state.status === 'conflict' ? state.latest : null;
+  // A newer revision means the Expense changed; who changed it isn't known, since the member's
+  // own unconfirmed change may be the one that landed.
+  const changed = !!conflict && conflict.revision !== draft?.original?.revision;
+  const badge = unconfirmed
+    ? 'Not confirmed'
+    : conflict
+      ? changed
+        ? 'Changed'
+        : 'Not saved'
+      : null;
   const frame = (body: ReactNode, footer?: ReactNode) => (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <TopBar
@@ -158,7 +177,9 @@ export function ExpenseEditor({
             : undefined
         }
         status={
-          form ? (
+          badge ? (
+            <Badge label={badge} tone="warning" />
+          ) : form ? (
             <DraftStatus
               persistence={state.persistence}
               kept={!!(state.attempt || state.mutation) || expenseDraftChanged(draft!, state.blank)}
@@ -202,9 +223,9 @@ export function ExpenseEditor({
   const members = context?.group.members.map(({ user }) => user) ?? [];
   const name = (id: string) =>
     members.find((member) => member.id === id)?.name ??
-    [...(draft.original?.paidBy ?? []), ...(draft.original?.splitBetween ?? [])].find(
-      (row) => row.user === id,
-    )?.name ??
+    [draft.original, state.latest]
+      .flatMap((saved) => [...(saved?.paidBy ?? []), ...(saved?.splitBetween ?? [])])
+      .find((row) => row.user === id)?.name ??
     'Unavailable member';
   const invalidMembers =
     context &&
@@ -230,7 +251,9 @@ export function ExpenseEditor({
       ? 'Sending this Expense. Keep this screen open until SplitBook confirms it.'
       : state.persistence === 'error'
         ? 'Save is unavailable until this draft is stored on this device. Retry saving the draft first.'
-        : null;
+        : draft.review?.length
+          ? 'Choose which version to keep for each change in What’s different first.'
+          : null;
 
   // The Group's draft holds Edit and Delete; the record itself stays readable.
   const holdReason = state.groupDraft
@@ -290,10 +313,14 @@ export function ExpenseEditor({
 
   const invalid = expenseFields.filter((field) => errors[field]);
   const summary = state.validation.submitted && invalid.length > 0;
-  const canSave =
-    state.status === 'editing' ||
-    state.status === 'saving' ||
-    (!draft.original && state.status === 'uncertain');
+  const canSave = state.status === 'editing' || state.status === 'saving';
+  const tagName = (id: string) =>
+    !id
+      ? 'No Tag'
+      : (context?.tags.find((item) => item.id === id)?.name ??
+        [draft.original, state.latest].find((saved) => saved?.tagId === id)?.tag ??
+        'Unavailable Tag');
+  const versions = { name, tagName, currentUserId };
   const tagNotice =
     !errors.tag && draft.tagId && context && (!tag || tag.isArchived || tag.isDeleted)
       ? draft.original && draft.tagId === (draft.original.tagId ?? '')
@@ -307,61 +334,82 @@ export function ExpenseEditor({
     <>
       {frame(
         <>
-          {state.latest && (
-            <ExpenseRecordView
-              record={state.latest}
-              title="Current saved record"
-              people={members}
-              tags={context?.tags}
-            />
-          )}
-          {state.status === 'conflict' && (
-            <Panel>
-              <Copy>
-                Your draft is shown below. Compare every field with the current record before
-                choosing.
-              </Copy>
-              <Button
-                label="Keep my draft for review"
-                onPress={onReviewLatest}
-                disabled={!state.latest || !canEditExpense(state.latest)}
-              />
-              <Button label="Keep current saved record" secondary onPress={onAcceptCurrent} />
-            </Panel>
-          )}
           {state.status === 'blocked' && state.latest && (
-            <Button label="Keep current saved record" secondary onPress={onAcceptCurrent} />
+            <>
+              <ExpenseRecordView
+                record={state.latest}
+                title="Current saved record"
+                people={members}
+                tags={context?.tags}
+              />
+              <Button label="Use the saved version" secondary onPress={onAcceptCurrent} />
+            </>
           )}
           {/* An ordinary draft was never sent; an unconfirmed save may already be recorded. */}
-          {state.status === 'resume' &&
-            (state.attempt || state.mutation ? (
-              <View style={{ gap: 12 }}>
-                <Banner
-                  tone="warning"
-                  title="Save not confirmed"
-                  message={
-                    state.message ??
-                    (state.mutation
-                      ? 'This change may already be saved. Resume to check the current Expense before anything else is sent.'
-                      : 'This Expense may already be saved. Resume to confirm it with the same details; it can’t be added twice.')
-                  }
-                />
-                <Button label="Resume save recovery" onPress={onResume} />
-              </View>
-            ) : (
-              <View style={{ gap: 12 }}>
-                <Banner
-                  tone="info"
-                  title="Unfinished draft"
-                  message={
-                    state.message ??
-                    'Nothing has been sent. Resume your entries or discard them to start again.'
-                  }
-                />
-                <Button label="Resume draft" onPress={onResume} />
-                <Button label="Discard draft" secondary onPress={onDiscard} />
-              </View>
-            ))}
+          {unconfirmed ? (
+            <Banner
+              tone="warning"
+              // Reopening says it again calmly; a new reason interrupts.
+              standing={!state.message}
+              title={
+                state.attempt
+                  ? 'We couldn’t confirm this save'
+                  : state.mutation?.kind === 'delete'
+                    ? 'We couldn’t confirm this deletion'
+                    : 'We couldn’t confirm this change'
+              }
+              message={
+                state.message ??
+                (state.attempt
+                  ? `This Expense may already be in ${context?.group.name ?? 'the Group'}. Checking reuses the same submission, so it can’t be recorded twice.`
+                  : `${state.mutation?.kind === 'delete' ? 'This Expense may already be deleted.' : 'This change may already be saved.'} Checking reads the saved Expense first, so nothing is sent twice.`)
+              }
+            />
+          ) : state.status === 'resume' ? (
+            <Banner
+              tone="info"
+              title="Unfinished draft"
+              message={
+                state.message ??
+                'Nothing has been sent. Resume your entries or discard them to start again.'
+              }
+            >
+              <CompactButton label="Resume draft" variant="tonal" dense onPress={onResume} />
+              <CompactButton label="Discard draft" variant="text" dense onPress={onDiscard} />
+            </Banner>
+          ) : null}
+          {conflict ? (
+            <>
+              <Banner
+                tone="warning"
+                title={
+                  changed
+                    ? 'This Expense changed since you started editing'
+                    : 'Your change isn’t in the saved Expense'
+                }
+                message={
+                  state.message ??
+                  'Compare your version with the saved one, then choose which to keep. Nothing is sent until you save again.'
+                }
+              />
+              <WhatsDifferent
+                fields={expenseDifferences(draft, draftFromExpense(conflict))}
+                yours={draft}
+                saved={draftFromExpense(conflict)}
+                note="Keeping your version takes the saved values for anything you didn’t change. A saved change to the amount, payers or split waits for your choice."
+                {...versions}
+              />
+            </>
+          ) : state.status === 'editing' && draft.review?.length && draft.original ? (
+            <WhatsDifferent
+              fields={draft.review}
+              yours={draft}
+              saved={draftFromExpense(draft.original)}
+              note="The saved Expense changed these while you were editing. Choose which to keep."
+              onChoose={(field, keep) => onChange(resolveExpenseReview(draft, field, keep))}
+              {...versions}
+            />
+          ) : null}
           {summary ? (
             <Banner
               tone="error"
@@ -389,6 +437,7 @@ export function ExpenseEditor({
           <AmountDescriptionCard
             draft={draft}
             locked={locked}
+            showLock={unconfirmed}
             errors={errors}
             amountRef={input('amount')}
             descriptionRef={input('description')}
@@ -468,7 +517,8 @@ export function ExpenseEditor({
             money={money}
           />
           <OptionalDetails draft={draft} locked={locked} onChange={onChange} />
-          {state.message && !summary && state.status !== 'resume' && (
+          {/* The banners above already say why a save is unconfirmed or in conflict. */}
+          {state.message && !summary && !unconfirmed && !conflict && state.status !== 'resume' && (
             <CompactText variant="small" accessibilityRole="alert" accessibilityLiveRegion="polite">
               {state.message}
             </CompactText>
@@ -476,26 +526,42 @@ export function ExpenseEditor({
           {state.persistence === 'error' && !state.attempt && (
             <Button label="Retry saving draft" secondary onPress={() => onChange({})} />
           )}
-          {draft.original && ['uncertain', 'blocked'].includes(state.status) && (
+          {draft.original && !unconfirmed && ['uncertain', 'blocked'].includes(state.status) && (
             <Button label="Check current Expense" onPress={onReconcile} />
           )}
-          {(state.attempt || state.mutation) && (
+          {unconfirmed && (
             <CompactText variant="small" tone="secondary">
               Details are locked until the save is confirmed. Signing out removes recovery
               information; check Group history before recreating this expense.
             </CompactText>
           )}
         </>,
-        canSave ? (
+        unconfirmed ? (
+          <SaveBar
+            label={state.attempt ? 'Check and finish saving' : 'Check the saved Expense'}
+            blocked={null}
+            onSave={state.attempt ? onSave : onReconcile}
+            secondary={onClose && { label: 'Keep for later', onPress: onClose }}
+          />
+        ) : conflict ? (
+          <SaveBar
+            label="Keep my version for review"
+            blocked={
+              canEditExpense(conflict)
+                ? null
+                : 'This Expense includes a member whose account is no longer available, so it can’t be edited.'
+            }
+            onSave={onReviewLatest}
+            secondary={{ label: 'Use the saved version', onPress: onAcceptCurrent }}
+          />
+        ) : canSave ? (
           <SaveBar
             label={
               state.status === 'saving'
                 ? 'Saving expense…'
-                : state.attempt
-                  ? 'Retry same submission'
-                  : draft.original
-                    ? 'Save changes'
-                    : 'Save expense'
+                : draft.original
+                  ? 'Save changes'
+                  : 'Save expense'
             }
             amount={
               allocation && state.status !== 'saving' ? money(allocation.amountMinor) : undefined

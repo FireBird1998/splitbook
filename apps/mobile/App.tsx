@@ -779,17 +779,13 @@ function ExpenseScreen({ state }: { state: MobileSnapshot }) {
       onReconcile={() => void controller.reconcileExpense()}
       onReviewLatest={() => void controller.reviewLatestExpense()}
       onAcceptCurrent={() =>
-        Alert.alert(
-          'Use the current saved record?',
-          'This discards your local draft after checking the saved record.',
-          [
-            { text: 'Keep draft', style: 'cancel' },
-            {
-              text: 'Use saved record',
-              onPress: () => void controller.acceptCurrentExpense(),
-            },
-          ],
-        )
+        Alert.alert('Use the saved version?', 'Your version is removed from this device.', [
+          { text: 'Keep my version', style: 'cancel' },
+          {
+            text: 'Use saved version',
+            onPress: () => void controller.acceptCurrentExpense(),
+          },
+        ])
       }
       onChange={(patch) => void controller.updateExpenseDraft(patch)}
       onLeaveField={controller.touchExpenseField}

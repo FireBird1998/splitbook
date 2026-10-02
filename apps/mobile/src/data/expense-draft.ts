@@ -23,6 +23,10 @@ import type { GroupReturnContext, MobileGroup } from './types';
 // Historical missing identities are local read/delete-recovery keys, never API identities.
 const draftMemberId = z.union([objectId, z.string().regex(/^former-(payer|participant)-\d+$/)]);
 
+/** Money is never merged automatically between two versions of an Expense (ADR 0004). */
+export const expenseMoneyFields = ['amount', 'payers', 'split'] as const;
+export type ExpenseMoneyField = (typeof expenseMoneyFields)[number];
+
 export const expenseDraftSchema = z.object({
   original: expenseRecordSchema.optional(),
   amount: z.string().max(40),
@@ -38,6 +42,11 @@ export const expenseDraftSchema = z.object({
   category: z.string(),
   tagId: z.string(),
   notes: z.string().max(500),
+  /**
+   * Money fields the saved Expense changed while this edit was open. Each keeps the member's
+   * entry until they choose theirs or the saved one; saving waits for every choice.
+   */
+  review: z.array(z.enum(expenseMoneyFields)).optional(),
 });
 export type ExpenseDraft = z.infer<typeof expenseDraftSchema>;
 export interface ExpenseContext {
@@ -433,6 +442,117 @@ export function sameExpenseDraft(a: ExpenseDraft, b: ExpenseDraft): boolean {
 export function expenseDraftChanged(draft: ExpenseDraft, blank: ExpenseDraft | null): boolean {
   const start = draft.original ? draftFromExpense(draft.original) : blank;
   return !start || !sameExpenseDraft(draft, start);
+}
+
+/** The fields compared between two versions of an Expense, in screen order. */
+export const expenseVersionFields = [
+  'amount',
+  'description',
+  'date',
+  'payers',
+  'split',
+  'tag',
+  'category',
+  'notes',
+] as const;
+export type ExpenseVersionField = (typeof expenseVersionFields)[number];
+const versionKeys: Record<ExpenseVersionField, (keyof ExpenseDraft)[]> = {
+  amount: ['amount', 'currency'],
+  description: ['description'],
+  date: ['date'],
+  payers: ['payerId', 'multiPayer', 'payers'],
+  split: ['splitMethod', 'splitValues', 'participantIds'],
+  tag: ['tagId'],
+  category: ['category'],
+  notes: ['notes'],
+};
+export const isMoneyField = (field: ExpenseVersionField): field is ExpenseMoneyField =>
+  (expenseMoneyFields as readonly string[]).includes(field);
+
+/** Each field as one comparable value: money by its exact units, not by how it was typed. */
+function versionValues(draft: ExpenseDraft): Record<ExpenseVersionField, string> {
+  const units = (value: string, digits?: number) => {
+    try {
+      return String(
+        digits === undefined
+          ? parseAmountMinor(value, draft.currency)
+          : parseDecimalUnits(value, digits),
+      );
+    } catch {
+      return JSON.stringify(value);
+    }
+  };
+  const payers = draft.multiPayer ? draft.payers : [{ user: draft.payerId, amount: draft.amount }];
+  const amounts = draft.splitMethod === 'unequal' || draft.splitMethod === 'exact';
+  return {
+    amount: `${draft.currency} ${units(draft.amount)}`,
+    description: draft.description,
+    date: draft.date,
+    // One payer pays the whole amount, so only who paid can differ.
+    payers: JSON.stringify(
+      payers.length === 1
+        ? [payers[0].user]
+        : payers.map((row) => [row.user, units(row.amount)]).sort(),
+    ),
+    split: JSON.stringify([
+      amounts ? 'amounts' : draft.splitMethod,
+      [...draft.participantIds].sort().map((user) => {
+        const value = draft.splitValues[user] || '0';
+        return draft.splitMethod === 'equal'
+          ? user
+          : [user, units(value, amounts ? undefined : draft.splitMethod === 'percentage' ? 2 : 0)];
+      }),
+    ]),
+    tag: draft.tagId,
+    category: draft.category,
+    notes: draft.notes,
+  };
+}
+
+/** The fields whose values differ between two versions of an Expense, in screen order. */
+export function expenseDifferences(a: ExpenseDraft, b: ExpenseDraft): ExpenseVersionField[] {
+  const [x, y] = [versionValues(a), versionValues(b)];
+  return expenseVersionFields.filter((field) => x[field] !== y[field]);
+}
+
+const versionOf = (draft: ExpenseDraft, field: ExpenseVersionField) =>
+  Object.fromEntries(versionKeys[field].map((key) => [key, draft[key]])) as Partial<ExpenseDraft>;
+
+/**
+ * "Keep my version for review" against the latest saved Expense: the member's changes stay and
+ * every field they didn't change takes the saved value. Money is never merged: a money field the
+ * saved Expense changed keeps the member's entry and waits in `review` for their choice.
+ */
+export function rebaseExpenseDraft(draft: ExpenseDraft, latest: ExpenseRecord): ExpenseDraft {
+  const start = draftFromExpense(draft.original!);
+  const saved = draftFromExpense(latest);
+  const mine = expenseDifferences(draft, start);
+  const theirs = expenseDifferences(start, saved);
+  const different = expenseDifferences(draft, saved);
+  const rebased = { ...draft, original: latest };
+  for (const field of expenseVersionFields)
+    if (!isMoneyField(field) && !mine.includes(field))
+      Object.assign(rebased, versionOf(saved, field));
+  const review = expenseMoneyFields.filter(
+    (field) =>
+      (theirs.includes(field) || !!draft.review?.includes(field)) && different.includes(field),
+  );
+  return { ...rebased, review: review.length ? review : undefined };
+}
+
+/** The member's choice for a money field under review: their entry, or the saved value. */
+export function resolveExpenseReview(
+  draft: ExpenseDraft,
+  field: ExpenseMoneyField,
+  keep: 'mine' | 'saved',
+): Partial<ExpenseDraft> {
+  const review = draft.review?.filter((item) => item !== field) ?? [];
+  return {
+    ...(keep === 'saved' && draft.original
+      ? versionOf(draftFromExpense(draft.original), field)
+      : {}),
+    review: review.length ? review : undefined,
+  };
 }
 
 export function buildExpensePatch(draft: ExpenseDraft, context: ExpenseContext): string {

@@ -84,8 +84,20 @@ const json = (data: unknown, status = 200, cookie?: string): FetchResponse =>
 function backend({
   record = savedExpense as Record<string, unknown>,
   loseCreate = false,
-}: { record?: Record<string, unknown>; loseCreate?: boolean } = {}) {
+  conflict,
+  losePatch = false,
+}: {
+  record?: Record<string, unknown>;
+  /** Loses every create response, or only this many. */
+  loseCreate?: boolean | number;
+  /** The Expense as someone else saves it just before the member's first edit arrives. */
+  conflict?: Record<string, unknown>;
+  /** Edits never reach the server. */
+  losePatch?: boolean;
+} = {}) {
   const writes: string[] = [];
+  const submissions: { key: string | null; body: string }[] = [];
+  let saved = record;
   const records = new Map<string, unknown>();
   const drafts = {
     load: async (accountId: string, id: string) =>
@@ -108,10 +120,24 @@ function backend({
     if (path.endsWith('/get-session'))
       return json({ user: alex, session: { userId: memberId, expiresAt: '2030-01-01T00:00:00Z' } });
     if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
-    if (path === `/api/groups/${groupId}/expenses/${expenseId}`)
-      return json({ data: record, status: 200 });
+    if (path === `/api/groups/${groupId}/expenses/${expenseId}`) {
+      if (init.method === 'PATCH') {
+        if (losePatch) throw new Error('The connection dropped before the edit arrived');
+        if (conflict && saved !== conflict) {
+          saved = conflict;
+          return json({ code: 'STALE_REVISION', status: 409 }, 409);
+        }
+        return json({ data: { ...saved, revision: Number(saved.revision) + 1 }, status: 200 });
+      }
+      return json({ data: saved, status: 200 });
+    }
     if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST') {
-      if (loseCreate) throw new Error('The response was lost after the server committed it');
+      submissions.push({
+        key: new Headers(init.headers).get('Idempotency-Key'),
+        body: String(init.body),
+      });
+      if (loseCreate === true || submissions.length <= Number(loseCreate))
+        throw new Error('The response was lost after the server committed it');
       return json({ status: 201, data: { _id: expenseId, group: groupId } }, 201);
     }
     if (path.endsWith('/expenses'))
@@ -165,7 +191,7 @@ function backend({
       newSubmissionKey: () => 'native-expense-test-0001',
     },
   );
-  return { controller, drafts, writes };
+  return { controller, drafts, writes, submissions };
 }
 
 interface NodeMock {
@@ -199,9 +225,9 @@ function EditorScreen({
       onReviewDelete={noop}
       onDelete={noop}
       onCancelDelete={noop}
-      onReconcile={noop}
-      onReviewLatest={noop}
-      onAcceptCurrent={noop}
+      onReconcile={() => void controller.reconcileExpense()}
+      onReviewLatest={() => void controller.reviewLatestExpense()}
+      onAcceptCurrent={() => void controller.acceptCurrentExpense()}
     />
   );
 }
@@ -485,10 +511,20 @@ describe('rendered Expense corrections', () => {
   });
 });
 
-describe('rendered draft recovery', () => {
-  const banner = (root: ReactTestInstance, role: 'summary' | 'alert') =>
-    root.findAll((node) => isHost(node, 'View') && node.props.accessibilityRole === role);
+const banner = (root: ReactTestInstance, role: 'summary' | 'alert') =>
+  root.findAll((node) => isHost(node, 'View') && node.props.accessibilityRole === role);
+/** A banner's icon shows its tone: information for a draft, a warning for a recovery. */
+const icon = (scope: ReactTestInstance) =>
+  scope.findAll((node) => isHost(node, 'Ionicons'))[0].props.name as string;
+/** Each piece of text on its own, such as a top-bar badge. */
+const words = (scope: ReactTestInstance) =>
+  scope
+    .findAll((node) => isHost(node, 'Text'))
+    .flatMap((node) => node.children.filter((child) => typeof child === 'string'));
+const labelled = (root: ReactTestInstance, label: string) =>
+  root.findAll((node) => isHost(node, 'View') && node.props.accessibilityLabel === label);
 
+describe('rendered draft recovery', () => {
   it('resumes an ordinary draft calmly and drops the resume notice once answered', async () => {
     const ui = await render(async (controller) => {
       await controller.openExpense(groupId);
@@ -498,8 +534,12 @@ describe('rendered draft recovery', () => {
     const [info] = banner(ui.root(), 'summary');
     expect(text(info)).toContain('Unfinished draft');
     expect(text(info)).toContain('Nothing has been sent.');
+    expect(icon(info)).toBe('information-circle-outline');
     expect(banner(ui.root(), 'alert')).toEqual([]);
-    expect(text(ui.root())).not.toContain('Save not confirmed');
+    expect(text(ui.root())).not.toContain('We couldn’t confirm');
+    expect(words(ui.root())).not.toContain('Not confirmed');
+    expect(draftStatus(ui.root())).toEqual([{ label: 'Draft saved', live: 'none' }]);
+    expect(() => ui.pressable('Check and finish saving')).toThrow();
     expect(ui.pressable('Discard draft')).toBeTruthy();
 
     await ui.press('Resume draft');
@@ -554,33 +594,165 @@ describe('rendered draft recovery', () => {
       { loseCreate: true },
     );
     const [warning] = banner(ui.root(), 'alert');
-    expect(text(warning)).toContain('Save not confirmed');
+    expect(text(warning)).toContain('We couldn’t confirm this save');
     expect(text(warning)).toContain('before opening another Expense');
     // Stated once, at the top.
     expect(text(ui.root()).split('before opening another Expense')).toHaveLength(2);
   });
+});
 
-  it('marks a save that may already be recorded as a warning and offers no discard', async () => {
-    const ui = await render(
-      async (controller) => {
-        await controller.openExpense(groupId);
-        await controller.updateExpenseDraft({ amount: '42.00', description: 'Milk', tagId });
-        await controller.saveExpense();
-        await controller.openExpense(groupId);
-      },
-      { loseCreate: true },
-    );
+describe('rendered save not confirmed', () => {
+  const lostSave = async (controller: MobileController) => {
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ amount: '42.00', description: 'Milk', tagId });
+    await controller.saveExpense();
+  };
+
+  it('locks the form, badges it and finishes with the same submission', async () => {
+    const ui = await render(lostSave, { loseCreate: 1 });
     const [warning] = banner(ui.root(), 'alert');
-    expect(text(warning)).toContain('Save not confirmed');
-    expect(text(warning)).toContain('may already be saved');
-    expect(text(ui.root())).not.toContain('Unfinished draft');
+    expect(text(warning)).toContain('We couldn’t confirm this save');
+    expect(text(warning)).toContain('Checking reuses the same submission');
+    expect(icon(warning)).toBe('alert-circle-outline');
+    expect(words(ui.root())).toContain('Not confirmed');
+    expect(draftStatus(ui.root())).toEqual([]);
+    expect(ui.input('Amount, required').props.editable).toBe(false);
+    expect(ui.input('Description, required').props.editable).toBe(false);
+    for (const tile of ['Date', 'Paid by', 'Split', 'Tag'])
+      expect(ui.tile(tile).props.accessibilityLabel).toMatch(/\. locked$/);
+    expect(() => ui.pressable('Expense options')).toThrow();
     expect(() => ui.pressable('Discard draft')).toThrow();
 
-    await ui.press('Resume save recovery');
-    expect(text(ui.root())).toContain('Retry the same submission to confirm it');
-    expect(ui.pressable('Retry same submission')).toBeTruthy();
+    await ui.press('Keep for later');
+    expect(calls.close).toHaveBeenCalledOnce();
+    expect(ui.submissions).toHaveLength(1);
+
+    await ui.press('Check and finish saving');
+    expect(ui.submissions).toHaveLength(2);
+    expect(ui.submissions[1]).toEqual(ui.submissions[0]);
+    expect(ui.controller.getSnapshot().expense.status).toBe('saved');
+  });
+
+  it('reopens the same way, announced calmly, and never as an ordinary draft', async () => {
+    const ui = await render(
+      async (controller) => {
+        await lostSave(controller);
+        await controller.openExpense(groupId);
+      },
+      { loseCreate: 1 },
+    );
+    expect(banner(ui.root(), 'alert')).toEqual([]);
+    const [warning] = banner(ui.root(), 'summary');
+    expect(text(warning)).toContain('We couldn’t confirm this save');
+    expect(text(warning)).toContain('This Expense may already be in Shared home.');
+    expect(icon(warning)).toBe('alert-circle-outline');
+    expect(words(ui.root())).toContain('Not confirmed');
+    expect(text(ui.root())).not.toContain('Unfinished draft');
+    expect(() => ui.pressable('Resume draft')).toThrow();
+    expect(() => ui.pressable('Discard draft')).toThrow();
     expect(ui.input('Amount, required').props.editable).toBe(false);
-    expect(ui.writes).toEqual([`POST /api/groups/${groupId}/expenses`]);
+    expect(ui.pressable('Keep for later')).toBeTruthy();
+
+    await ui.press('Check and finish saving');
+    expect(ui.submissions).toHaveLength(2);
+    expect(ui.submissions[1]).toEqual(ui.submissions[0]);
+  });
+});
+
+describe('rendered edit conflict', () => {
+  // Someone else saved a new amount and notes before the member's edit arrived.
+  const theirs = {
+    ...savedExpense,
+    revision: 4,
+    amount: 12,
+    amountMinor: 1200,
+    paidBy: [{ user: { _id: memberId, name: 'Alex' }, amount: 12, amountMinor: 1200 }],
+    splitBetween: [{ user: { _id: memberId, name: 'Alex' }, amount: 12, amountMinor: 1200 }],
+    notes: 'Paid in cash',
+  };
+  const editDescription = async (controller: MobileController) => {
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Weekly groceries and milk' });
+    await controller.saveExpense();
+  };
+
+  it('compares both versions and keeps the member’s, holding the changed amount for a choice', async () => {
+    const ui = await render(editDescription, { conflict: theirs });
+    const [warning] = banner(ui.root(), 'alert');
+    expect(text(warning)).toContain('This Expense changed since you started editing');
+    expect(words(ui.root())).toContain('Changed');
+    expect(text(ui.root())).toContain('What’s different');
+    for (const row of [
+      'Amount: yours ₹10.00, saved now ₹12.00',
+      'Description: yours Weekly groceries and milk, saved now Weekly groceries',
+      'Notes: yours none, saved now Paid in cash',
+    ])
+      expect(labelled(ui.root(), row)).toHaveLength(1);
+    expect(ui.input('Description, required').props.editable).toBe(false);
+    expect(ui.pressable('Use the saved version')).toBeTruthy();
+
+    await ui.press('Keep my version for review');
+    expect(ui.input('Description, required').props).toMatchObject({
+      value: 'Weekly groceries and milk',
+      editable: true,
+    });
+    // The amount is neither kept nor taken until the member chooses.
+    expect(ui.input('Amount, required').props.value).toBe('10');
+    expect(labelled(ui.root(), 'Amount: yours ₹10.00, saved now ₹12.00')).toHaveLength(1);
+    expect(labelled(ui.root(), 'Notes: yours none, saved now Paid in cash')).toEqual([]);
+    const reason = 'Choose which version to keep for each change in What’s different first.';
+    expect(ui.pressable('Save changes').props).toMatchObject({
+      disabled: true,
+      accessibilityHint: reason,
+    });
+    await ui.press('Category and notes, optional');
+    expect(ui.input('Notes').props.value).toBe('Paid in cash');
+
+    await ui.press('Use the saved amount');
+    expect(ui.input('Amount, required').props.value).toBe('12');
+    expect(text(ui.root())).not.toContain('What’s different');
+    await ui.press('Save changes');
+    expect(ui.writes).toEqual([
+      `PATCH /api/groups/${groupId}/expenses/${expenseId}`,
+      `PATCH /api/groups/${groupId}/expenses/${expenseId}`,
+    ]);
+  });
+
+  it('uses the saved version without sending anything', async () => {
+    const ui = await render(editDescription, { conflict: theirs });
+    await ui.press('Use the saved version');
+    expect(ui.controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      draft: { amount: '12', notes: 'Paid in cash' },
+    });
+    expect(ui.writes).toHaveLength(1);
+  });
+
+  it('checks an unconfirmed edit, and says when the saved Expense hasn’t changed', async () => {
+    const ui = await render(
+      async (controller) => {
+        await editDescription(controller);
+        await controller.openExpense(groupId, expenseId);
+      },
+      { losePatch: true },
+    );
+    const [warning] = banner(ui.root(), 'summary');
+    expect(text(warning)).toContain('We couldn’t confirm this change');
+    expect(words(ui.root())).toContain('Not confirmed');
+    expect(ui.pressable('Keep for later')).toBeTruthy();
+
+    await ui.press('Check the saved Expense');
+    const [conflict] = banner(ui.root(), 'alert');
+    expect(text(conflict)).toContain('Your change isn’t in the saved Expense');
+    expect(words(ui.root())).toContain('Not saved');
+    expect(
+      labelled(
+        ui.root(),
+        'Description: yours Weekly groceries and milk, saved now Weekly groceries',
+      ),
+    ).toHaveLength(1);
+    expect(ui.writes).toHaveLength(1);
   });
 });
 
