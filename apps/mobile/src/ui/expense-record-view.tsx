@@ -11,7 +11,7 @@ import {
 } from '../data/expense-draft';
 import { describeExpenseHistory } from '../data/expense-history';
 import { canEditExpense, storedExpenseMoney, type ExpenseRecord } from '../data/expense-record';
-import { expenseRecordPosition } from '../data/expense-record-position';
+import { expenseRecordPosition } from '@splitbook/shared/expense-position';
 import { clockTime } from './activity-format';
 import {
   Badge,
