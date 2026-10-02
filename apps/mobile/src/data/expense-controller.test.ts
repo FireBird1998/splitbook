@@ -1401,6 +1401,146 @@ describe('reading an Expense beside the Group’s draft', () => {
   });
 });
 
+describe('keeping only drafts that change something', () => {
+  const withSaved = () => {
+    const harness = setup((path) =>
+      path.endsWith(`/${expenseId}`)
+        ? Promise.resolve(json({ status: 200, data: savedExpense }))
+        : undefined,
+    );
+    let saves = 0;
+    const { save } = harness.drafts;
+    harness.drafts.save = async (accountId, id, value) => {
+      saves++;
+      await save(accountId, id, value);
+    };
+    return { ...harness, saves: () => saves };
+  };
+  const key = `${memberIds[0]}:${groupId}`;
+
+  it('stores nothing for an Edit closed without a change', async () => {
+    const { controller, records, saves } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    expect(controller.getSnapshot().expense.status).toBe('editing');
+    await controller.back();
+    expect(saves()).toBe(0);
+    expect(records.size).toBe(0);
+
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense.status).toBe('editing');
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense).toMatchObject({ status: 'detail', groupDraft: null });
+  });
+
+  it('writes nothing for a tap that changes nothing, such as Today when today is set', async () => {
+    const { controller, records, saves } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    const today = controller.getSnapshot().expense.draft!.date;
+    await controller.updateExpenseDraft({ date: today });
+    await controller.updateExpenseDraft({ splitMethod: 'equal' });
+    await controller.back();
+    expect(saves()).toBe(0);
+    expect(records.size).toBe(0);
+
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense.status).toBe('editing');
+  });
+
+  it('removes the stored draft when a change is undone', async () => {
+    const { controller, records } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ amount: '12' });
+    expect(records.size).toBe(1);
+    await controller.updateExpenseDraft({ amount: '' });
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot().expense.persistence).toBe('saved');
+
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Changed' });
+    expect(records.size).toBe(1);
+    await controller.updateExpenseDraft({ notes: savedExpense.notes });
+    expect(records.size).toBe(0);
+  });
+
+  it('keeps a real change through a restart', async () => {
+    const { controller, create, records } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Split the tip too' });
+    await controller.back();
+    expect(records.size).toBe(1);
+
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openExpense(groupId, expenseId);
+    expect(restarted.getSnapshot().expense).toMatchObject({
+      status: 'resume',
+      draft: { notes: 'Split the tip too' },
+    });
+  });
+
+  it('removes an unchanged draft an earlier version stored, when the form opens', async () => {
+    const { controller, records } = withSaved();
+    await controller.signIn('alex');
+    // The untouched new form and the untouched Edit, as earlier versions stored them.
+    await controller.openExpense(groupId);
+    const blank = controller.getSnapshot().expense.draft;
+    await controller.openExpense(groupId, expenseId);
+    const unedited = controller.getSnapshot().expense.draft;
+
+    records.set(key, { version: 1, accountId: memberIds[0], groupId, draft: blank });
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense.status).toBe('editing');
+    expect(records.size).toBe(0);
+
+    records.set(key, { version: 1, accountId: memberIds[0], groupId, draft: unedited });
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense.status).toBe('detail');
+    expect(records.size).toBe(0);
+
+    // Beside another Expense, it no longer holds Edit and Delete.
+    records.set(key, { version: 1, accountId: memberIds[0], groupId, draft: blank });
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense).toMatchObject({ status: 'detail', groupDraft: null });
+    expect(records.size).toBe(0);
+  });
+
+  it('keeps an unchanged draft whose save may already be recorded', async () => {
+    const { controller, records } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    const unedited = controller.getSnapshot().expense.draft;
+    const mutation = { kind: 'delete', revision: 3, body: '' };
+    records.set(key, { version: 1, accountId: memberIds[0], groupId, draft: unedited, mutation });
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense).toMatchObject({ status: 'resume', mutation });
+    expect(records.size).toBe(1);
+  });
+
+  it('still writes on Retry saving draft after a storage error', async () => {
+    const { controller, drafts, records } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    const { save } = drafts;
+    drafts.save = async () => {
+      throw new Error('Disk full');
+    };
+    await controller.updateExpenseDraft({ description: 'Milk' });
+    expect(controller.getSnapshot().expense.persistence).toBe('error');
+    drafts.save = save;
+    // The Retry button sends a patch that changes nothing.
+    await controller.updateExpenseDraft({});
+    expect(controller.getSnapshot().expense.persistence).toBe('saved');
+    expect(records.get(key)).toMatchObject({ draft: { description: 'Milk' } });
+  });
+});
+
 describe('native Expense field corrections', () => {
   const countingSetup = () => {
     const requests: string[] = [];

@@ -6,6 +6,7 @@ import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { toDateParam } from '@splitbook/shared/date';
 import {
+  expenseDraftChanged,
   expenseFieldLabels,
   expenseFields,
   expenseMoney,
@@ -157,7 +158,14 @@ export function ExpenseEditor({
               : { kind: 'back', label: 'Back to Group', onPress: onClose }
             : undefined
         }
-        status={form ? <DraftStatus persistence={state.persistence} draft={draft!} /> : null}
+        status={
+          form ? (
+            <DraftStatus
+              persistence={state.persistence}
+              kept={!!(state.attempt || state.mutation) || expenseDraftChanged(draft!, state.blank)}
+            />
+          ) : null
+        }
         actions={
           form && state.status === 'editing' ? (
             <IconButton
@@ -604,16 +612,10 @@ export function ExpenseEditor({
   );
 }
 
-/** "Draft saved" once the entries are stored on this device. */
-function DraftStatus({
-  persistence,
-  draft,
-}: {
-  persistence: Editor['persistence'];
-  draft: ExpenseDraft;
-}) {
+/** "Draft saved" while this device keeps entries that differ from where the form started. */
+function DraftStatus({ persistence, kept }: { persistence: Editor['persistence']; kept: boolean }) {
   const theme = useTheme();
-  if (persistence === 'saved' && !draft.amount && !draft.description) return null;
+  if (persistence === 'saved' && !kept) return null;
   const [icon, text, color] =
     persistence === 'saved'
       ? (['checkmark', 'Draft saved', theme.textSecondary] as const)
