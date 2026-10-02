@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { toDateParam } from '@splitbook/shared/date';
 import type { ExpenseDraft, ExpenseField } from './expense-draft';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse, MobileFetch } from './types';
@@ -92,7 +93,8 @@ function setup(
     if (path.endsWith('/user/balances')) return json({ data: { buckets: [] }, status: 200 });
     return json({ error: 'Unavailable', status: 404 }, 404);
   };
-  const create = () =>
+  /** `now` lets a restarted app open on a later day. */
+  const create = (now = Date.parse(iso)) =>
     createMobileController(
       {
         apiBaseUrl: 'http://localhost:4138',
@@ -132,7 +134,7 @@ function setup(
           },
           stores: [drafts],
         },
-        now: () => Date.parse(iso),
+        now: () => now,
         newSubmissionKey: () => 'native-expense-test-0001',
       },
     );
@@ -1398,6 +1400,294 @@ describe('reading an Expense beside the Group’s draft', () => {
     });
     expect(controller.getSnapshot().expense.attempt).not.toBeNull();
     expect(controller.getSnapshot().expense.message).toContain('before opening another Expense');
+  });
+});
+
+describe('keeping only drafts that change something', () => {
+  const withSaved = () => {
+    const harness = setup((path) =>
+      path.endsWith(`/${expenseId}`)
+        ? Promise.resolve(json({ status: 200, data: savedExpense }))
+        : undefined,
+    );
+    let saves = 0;
+    const { save } = harness.drafts;
+    harness.drafts.save = async (accountId, id, value) => {
+      saves++;
+      await save(accountId, id, value);
+    };
+    return { ...harness, saves: () => saves };
+  };
+  const key = `${memberIds[0]}:${groupId}`;
+
+  it('stores nothing for an Edit closed without a change', async () => {
+    const { controller, records, saves } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    expect(controller.getSnapshot().expense.status).toBe('editing');
+    await controller.back();
+    expect(saves()).toBe(0);
+    expect(records.size).toBe(0);
+
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense.status).toBe('editing');
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense).toMatchObject({ status: 'detail', groupDraft: null });
+  });
+
+  it('writes nothing for a tap that changes nothing, such as Today when today is set', async () => {
+    const { controller, records, saves } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    const today = controller.getSnapshot().expense.draft!.date;
+    await controller.updateExpenseDraft({ date: today });
+    await controller.updateExpenseDraft({ splitMethod: 'equal' });
+    await controller.back();
+    expect(saves()).toBe(0);
+    expect(records.size).toBe(0);
+
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense.status).toBe('editing');
+  });
+
+  it('removes the stored draft when a change is undone', async () => {
+    const { controller, records } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ amount: '12' });
+    expect(records.size).toBe(1);
+    await controller.updateExpenseDraft({ amount: '' });
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot().expense.persistence).toBe('saved');
+
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Changed' });
+    expect(records.size).toBe(1);
+    await controller.updateExpenseDraft({ notes: savedExpense.notes });
+    expect(records.size).toBe(0);
+  });
+
+  it('keeps a real change through a restart', async () => {
+    const { controller, create, records } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Split the tip too' });
+    await controller.back();
+    expect(records.size).toBe(1);
+
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openExpense(groupId, expenseId);
+    expect(restarted.getSnapshot().expense).toMatchObject({
+      status: 'resume',
+      draft: { notes: 'Split the tip too' },
+    });
+  });
+
+  it('removes an unchanged draft when the form opens, when its start is known', async () => {
+    const { controller, records } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    const blank = controller.getSnapshot().expense.draft;
+    await controller.openExpense(groupId, expenseId);
+    const unedited = controller.getSnapshot().expense.draft;
+
+    // An untouched Edit, as earlier versions stored it, starts from its saved Expense.
+    records.set(key, { version: 1, accountId: memberIds[0], groupId, draft: unedited });
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense.status).toBe('detail');
+    expect(records.size).toBe(0);
+
+    // An untouched new form stored with its start.
+    records.set(key, { version: 1, accountId: memberIds[0], groupId, draft: blank, blank });
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense.status).toBe('editing');
+    expect(records.size).toBe(0);
+
+    // Beside another Expense, it no longer holds Edit and Delete.
+    records.set(key, { version: 1, accountId: memberIds[0], groupId, draft: blank, blank });
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense).toMatchObject({ status: 'detail', groupDraft: null });
+    expect(records.size).toBe(0);
+  });
+
+  it('keeps an unchanged draft whose save may already be recorded', async () => {
+    const { controller, records } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    const unedited = controller.getSnapshot().expense.draft;
+    const mutation = { kind: 'delete', revision: 3, body: '' };
+    records.set(key, { version: 1, accountId: memberIds[0], groupId, draft: unedited, mutation });
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense).toMatchObject({ status: 'resume', mutation });
+    expect(records.size).toBe(1);
+  });
+
+  it('still writes on Retry saving draft after a storage error', async () => {
+    const { controller, drafts, records } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    const { save } = drafts;
+    drafts.save = async () => {
+      throw new Error('Disk full');
+    };
+    await controller.updateExpenseDraft({ description: 'Milk' });
+    expect(controller.getSnapshot().expense.persistence).toBe('error');
+    drafts.save = save;
+    // The Retry button sends a patch that changes nothing.
+    await controller.updateExpenseDraft({});
+    expect(controller.getSnapshot().expense.persistence).toBe('saved');
+    expect(records.get(key)).toMatchObject({ draft: { description: 'Milk' } });
+  });
+
+  it('keeps a draft an earlier version stored without its start, even once undone', async () => {
+    const { controller, records } = withSaved();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    const blank = controller.getSnapshot().expense.draft;
+    records.set(key, { version: 1, accountId: memberIds[0], groupId, draft: blank });
+    const legacy = structuredClone(records.get(key));
+
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense.status).toBe('resume');
+    expect(records.get(key)).toEqual(legacy);
+    controller.resumeExpenseDraft();
+    await controller.updateExpenseDraft({ amount: '5' });
+    await controller.updateExpenseDraft({ amount: '' });
+    expect(records.get(key)).toMatchObject({ draft: blank });
+  });
+
+  describe('on a later day', () => {
+    const nextDay = Date.parse('2026-09-29T10:00:00.000Z');
+    const restart = async (create: (now?: number) => ReturnType<typeof createMobileController>) => {
+      const restarted = create(nextDay);
+      await restarted.restore();
+      return restarted;
+    };
+
+    it('removes a draft undone back to where it started, not to today’s blank form', async () => {
+      const { controller, create, records, saves } = withSaved();
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ amount: '12' });
+      await controller.back();
+
+      const restarted = await restart(create);
+      await restarted.openExpense(groupId);
+      expect(restarted.getSnapshot().expense.status).toBe('resume');
+      restarted.resumeExpenseDraft();
+      const written = saves();
+      await restarted.updateExpenseDraft({ date: restarted.getSnapshot().expense.draft!.date });
+      expect(saves()).toBe(written);
+      await restarted.updateExpenseDraft({ amount: '' });
+      expect(records.size).toBe(0);
+
+      await restarted.back();
+      await restarted.openExpense(groupId);
+      expect(restarted.getSnapshot().expense).toMatchObject({
+        status: 'editing',
+        draft: { date: toDateParam(new Date(nextDay)) },
+      });
+    });
+
+    it('removes a draft resumed beside another Expense once it is undone', async () => {
+      const { controller, create, records } = withSaved();
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ amount: '12' });
+
+      const restarted = await restart(create);
+      await restarted.openExpense(groupId, expenseId);
+      expect(restarted.getSnapshot().expense.groupDraft).toMatchObject({ amount: '12' });
+      restarted.resumeExpenseDraft();
+      await restarted.updateExpenseDraft({ amount: '' });
+      expect(records.size).toBe(0);
+    });
+
+    it('keeps a draft whose only change is its date', async () => {
+      const { controller, create, records } = withSaved();
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      const tomorrow = toDateParam(new Date(nextDay));
+      await controller.updateExpenseDraft({ date: tomorrow });
+      await controller.back();
+
+      const restarted = await restart(create);
+      await restarted.openExpense(groupId);
+      expect(restarted.getSnapshot().expense).toMatchObject({
+        status: 'resume',
+        draft: { date: tomorrow },
+      });
+      expect(records.size).toBe(1);
+    });
+
+    it('stores the start on Retry saving draft, so the draft can still be undone', async () => {
+      const { controller, create, drafts, records } = withSaved();
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      const { save } = drafts;
+      drafts.save = async () => {
+        throw new Error('Disk full');
+      };
+      await controller.updateExpenseDraft({ description: 'Milk' });
+      drafts.save = save;
+      await controller.updateExpenseDraft({});
+      expect(records.get(key)).toMatchObject({
+        draft: { description: 'Milk' },
+        blank: { description: '' },
+      });
+
+      const restarted = await restart(create);
+      await restarted.openExpense(groupId);
+      restarted.resumeExpenseDraft();
+      await restarted.updateExpenseDraft({ description: '' });
+      expect(records.size).toBe(0);
+    });
+
+    it('still stores nothing for an unchanged Edit, and removes one an earlier version kept', async () => {
+      const { controller, create, records, saves } = withSaved();
+      await controller.signIn('alex');
+      await controller.openExpense(groupId, expenseId);
+      const unedited = controller.getSnapshot().expense.draft;
+      await controller.editExpense();
+      await controller.back();
+      expect(saves()).toBe(0);
+      records.set(key, { version: 1, accountId: memberIds[0], groupId, draft: unedited });
+
+      const restarted = await restart(create);
+      await restarted.openExpense(groupId, expenseId);
+      expect(restarted.getSnapshot().expense.status).toBe('detail');
+      expect(records.size).toBe(0);
+    });
+
+    it('never removes a save that may already be recorded, whatever its entries', async () => {
+      const { controller, create, records } = setup((path, init) =>
+        init.method === 'POST' && path.endsWith('/expenses')
+          ? Promise.reject(new Error('Lost response'))
+          : undefined,
+      );
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+      await controller.saveExpense();
+      expect(controller.getSnapshot().expense.status).toBe('uncertain');
+      const stored = records.get(key) as { draft: ExpenseDraft; blank: ExpenseDraft };
+      expect(stored.blank).toMatchObject({ amount: '', description: '' });
+      // Even entries back at their start leave the recovery in place.
+      records.set(key, { ...stored, draft: stored.blank });
+      const pending = structuredClone(records.get(key)) as { attempt: unknown };
+
+      const restarted = await restart(create);
+      await restarted.openExpense(groupId);
+      expect(restarted.getSnapshot().expense).toMatchObject({
+        status: 'resume',
+        attempt: pending.attempt,
+      });
+      expect(records.get(key)).toEqual(pending);
+    });
   });
 });
 

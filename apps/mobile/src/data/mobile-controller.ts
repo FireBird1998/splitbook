@@ -28,11 +28,13 @@ import {
   buildExpenseBody,
   buildExpensePatch,
   expenseCorrectionSummary,
+  expenseDraftChanged,
   expenseFields,
   parseCreatedExpenseId,
   parseExpenseContext,
   parseStoredExpenseDraft,
   previewExpense,
+  sameExpenseDraft,
   validateExpenseDraft,
   visibleExpenseErrors,
   type ExpenseContext,
@@ -2318,11 +2320,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const lease = accountStorage();
       if (!lease || !dependencies.expenseDrafts) throw new Error('Draft storage is unavailable.');
       const stored = await lease.write(() => dependencies.expenseDrafts!.load(accountId, groupId));
-      const record = stored === null ? null : parseStoredExpenseDraft(stored, accountId, groupId);
+      let record = stored === null ? null : parseStoredExpenseDraft(stored, accountId, groupId);
       if (!current(owner) || view !== viewRequest) return;
       // Another saved Expense opens read-only beside an ordinary draft. An unconfirmed save,
       // and a draft editing this same Expense, still come first.
-      const held =
+      let held =
         record &&
         expenseId &&
         record.draft.original?._id !== expenseId &&
@@ -2340,6 +2342,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             mutation: record.mutation,
             preview: previewExpense(record.draft),
             status: 'loading',
+            blank: record.blank,
           },
         });
       const context = await readCached(`/api/groups/${groupId}`, owner, parseExpenseContext);
@@ -2349,6 +2352,38 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         !context.group.members.some((member) => member.user.id === accountId)
       )
         throw new RequestError('You no longer have access to this Group.', 403);
+      const blank: ExpenseDraft = {
+        amount: '',
+        currency: context.group.defaultCurrency,
+        description: '',
+        date: toDateParam(
+          month && month < currentMonthKey(new Date(now()))
+            ? new Date(getLocalMonthIsoRange(month).dateTo)
+            : new Date(now()),
+        ),
+        payerId: accountId,
+        multiPayer: false,
+        payers: [],
+        splitMethod: 'equal',
+        splitValues: {},
+        participantIds: context.group.members.map((member) => member.user.id),
+        category: 'other',
+        tagId: '',
+        notes: '',
+      };
+      // Earlier versions stored drafts that changed nothing; one would still hold the Group.
+      // A new draft is compared with the start stored with it, not today's blank form, and
+      // is kept when that start is unknown.
+      if (
+        record &&
+        !record.attempt &&
+        !record.mutation &&
+        !expenseDraftChanged(record.draft, record.blank)
+      ) {
+        await lease.write(() => dependencies.expenseDrafts!.remove(accountId, groupId));
+        if (!current(owner) || view !== viewRequest) return;
+        record = held = null;
+      }
       const original =
         (record === null || held) && expenseId
           ? await readCached(`/api/groups/${groupId}/expenses/${expenseId}`, owner, (value) =>
@@ -2356,29 +2391,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             )
           : null;
       if (!current(owner) || view !== viewRequest) return;
-      const draft: ExpenseDraft = original
-        ? draftFromExpense(original)
-        : record === null
-          ? {
-              amount: '',
-              currency: context.group.defaultCurrency,
-              description: '',
-              date: toDateParam(
-                month && month < currentMonthKey(new Date(now()))
-                  ? new Date(getLocalMonthIsoRange(month).dateTo)
-                  : new Date(now()),
-              ),
-              payerId: accountId,
-              multiPayer: false,
-              payers: [],
-              splitMethod: 'equal',
-              splitValues: {},
-              participantIds: context.group.members.map((member) => member.user.id),
-              category: 'other',
-              tagId: '',
-              notes: '',
-            }
-          : record.draft;
+      const draft = original ? draftFromExpense(original) : (record?.draft ?? blank);
       publish({
         ...snapshot,
         expense: {
@@ -2405,6 +2418,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                   ? 'This change may already be saved. Resume to check it before opening another Expense.'
                   : null,
           groupDraft: held,
+          blank: record ? record.blank : blank,
         },
       });
     } catch (error) {
@@ -2483,6 +2497,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ? { splitValues: {} }
         : {}),
     };
+    // A tap that changes nothing writes nothing. Retry after a failed write always writes.
+    if (snapshot.expense.persistence !== 'error' && sameExpenseDraft(draft, snapshot.expense.draft))
+      return;
+    // Only entries that differ from where the form started are kept on this device.
+    const { blank } = snapshot.expense;
+    const kept = expenseDraftChanged(draft, blank);
     publish({
       ...snapshot,
       expense: {
@@ -2496,12 +2516,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     try {
       await lease.write(() =>
-        storage.save(lease.accountId, groupId, {
-          version: 1,
-          accountId: lease.accountId,
-          groupId,
-          draft,
-        }),
+        kept
+          ? storage.save(lease.accountId, groupId, {
+              version: 1,
+              accountId: lease.accountId,
+              groupId,
+              draft,
+              ...(draft.original ? {} : { blank }),
+            })
+          : storage.remove(lease.accountId, groupId),
       );
       if (current(owner) && snapshot.expense.draft === draft)
         publish({ ...snapshot, expense: { ...snapshot.expense, persistence: 'saved' } });
@@ -2670,8 +2693,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !canEditExpense(editor.draft.original)
     )
       return;
+    // Nothing is stored until an entry changes.
     publish({ ...snapshot, expense: { ...editor, status: 'editing' } });
-    await updateExpenseDraft({});
   };
 
   const reconcileExpense = async () => {
@@ -3061,6 +3084,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             accountId: lease.accountId,
             groupId,
             draft,
+            blank: editor.blank,
             attempt: pending,
           }),
         );
@@ -3119,6 +3143,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               accountId: lease.accountId,
               groupId,
               draft,
+              blank: editor.blank,
             }),
           );
           if (!current(owner) || view !== viewRequest) return;

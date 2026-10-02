@@ -609,6 +609,23 @@ describe('compact Expense form', () => {
     expect(ui.writes).toEqual([]);
   });
 
+  it('says “Draft saved” only while the entries differ from the saved Expense', async () => {
+    const ui = await render(async (controller) => {
+      await controller.openExpense(groupId, expenseId);
+      await controller.editExpense();
+    });
+    const saved = () =>
+      ui
+        .root()
+        .findAll((node) => isHost(node, 'View') && node.props.accessibilityLabel === 'Draft saved');
+    expect(saved()).toHaveLength(0);
+    await ui.type('Description, required', 'Weekly groceries and milk');
+    expect(saved()).toHaveLength(1);
+    await ui.type('Description, required', 'Weekly groceries');
+    expect(saved()).toHaveLength(0);
+    expect(await ui.drafts.load(memberId, groupId)).toBeNull();
+  });
+
   it('offers Discard draft from Expense options; the app confirms it', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     await ui.press('Expense options');

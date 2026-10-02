@@ -85,6 +85,12 @@ export interface ExpenseEditor {
    * read-only; Edit and Delete wait until the draft is finished or discarded.
    */
   groupDraft: ExpenseDraft | null;
+  /**
+   * The entries a new Expense's draft started from, stored with the draft so it is compared
+   * with the same start after a restart or a change of day. Null when unknown, as for drafts
+   * stored by earlier versions. An edit starts from its saved Expense.
+   */
+  blank: ExpenseDraft | null;
 }
 /** Correctable Expense inputs, in the order they appear on screen. */
 export const expenseFields = ['amount', 'description', 'date', 'payers', 'split', 'tag'] as const;
@@ -129,6 +135,7 @@ export function emptyExpenseEditor(): ExpenseEditor {
     validation: emptyExpenseValidation(),
     returnTo: null,
     groupDraft: null,
+    blank: null,
   };
 }
 export function parseExpenseContext(value: unknown): ExpenseContext {
@@ -150,6 +157,8 @@ export function parseStoredExpenseDraft(value: unknown, accountId: string, group
       accountId: z.literal(accountId),
       groupId: z.literal(groupId),
       draft: expenseDraftSchema,
+      // Where a new Expense's draft started. Earlier records lack it; it is then unknown.
+      blank: expenseDraftSchema.nullable().default(null).catch(null),
       mutation: expenseMutationSchema.nullable().optional().default(null),
       attempt: z
         .object({ key: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/), body: z.string() })
@@ -404,6 +413,26 @@ export function draftFromExpense(original: ExpenseRecord): ExpenseDraft {
       ]),
     ),
   };
+}
+
+/** Field by field, so key order and a fresh copy don't count as a change. */
+export function sameExpenseDraft(a: ExpenseDraft, b: ExpenseDraft): boolean {
+  const entries = (draft: ExpenseDraft) =>
+    JSON.stringify(draft, (_key, value: unknown) =>
+      value && typeof value === 'object' && !Array.isArray(value)
+        ? Object.fromEntries(Object.entries(value).sort(([x], [y]) => (x < y ? -1 : 1)))
+        : value,
+    );
+  return entries(a) === entries(b);
+}
+
+/**
+ * Whether the entries differ from where the form started: the saved Expense being edited,
+ * or a new Expense's blank entries. Only a changed draft is kept on the device.
+ */
+export function expenseDraftChanged(draft: ExpenseDraft, blank: ExpenseDraft | null): boolean {
+  const start = draft.original ? draftFromExpense(draft.original) : blank;
+  return !start || !sameExpenseDraft(draft, start);
 }
 
 export function buildExpensePatch(draft: ExpenseDraft, context: ExpenseContext): string {
