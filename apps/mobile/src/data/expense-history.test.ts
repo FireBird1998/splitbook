@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { describeExpenseHistory } from './expense-history';
+import type { ActivityEvent } from './activity';
+import { describeExpenseEvents, describeExpenseHistory } from './expense-history';
 import { expenseRecordSchema, type ExpenseRecord } from './expense-record';
 
 const alex = 'a00000000000000000000001';
@@ -171,5 +172,133 @@ describe('describeExpenseHistory', () => {
     ]);
     expect(entry.summary).toBe('Alex changed 5 details');
     expect(JSON.stringify(entry)).not.toMatch(/[a-f\d]{24}|https?:/);
+  });
+});
+
+describe('describeExpenseEvents', () => {
+  const at = (hour: number) => new Date(Date.UTC(2026, 8, 28, hour)).toISOString();
+  const event = (
+    type: string,
+    metadata: ActivityEvent['metadata'],
+    actor: ActivityEvent['actor'] = { _id: alex, name: 'Alex' },
+    hour = 12,
+  ): ActivityEvent => ({
+    _id: `d0000000000000000000000${hour % 10}`,
+    group: groupId,
+    type,
+    actor,
+    createdAt: at(hour),
+    metadata: { expenseId: 'b00000000000000000000001', ...metadata },
+  });
+  const lines = (events: ReturnType<typeof describeExpenseEvents>) =>
+    events.map((entry) =>
+      [
+        `${entry.actor} ${entry.action}`,
+        ...entry.changes.map((change) =>
+          [entry.implied ? '' : change.label, change.before, change.after].join(' | '),
+        ),
+      ].join(' / '),
+    );
+
+  it('says who changed what with formatted values, naming the signed-in member "You"', () => {
+    const described = describeExpenseEvents(
+      [
+        event(
+          'expense_updated',
+          { changes: { amount: { old: 32, new: 40 }, amountMinor: { old: 3200, new: 4000 } } },
+          { _id: sam, name: 'Sam Chen' },
+          14,
+        ),
+        event(
+          'expense_updated',
+          {
+            changes: {
+              splitBetween: {
+                old: [{ user: alex, amount: 30, amountMinor: 3000 }],
+                new: [
+                  { user: alex, amount: 20, amountMinor: 2000 },
+                  { user: sam, amount: 20, amountMinor: 2000 },
+                ],
+              },
+            },
+          },
+          { _id: alex, name: 'Alex' },
+          13,
+        ),
+        event('expense_added', { description: 'Ferry tickets' }, { _id: sam, name: 'Sam Chen' }),
+      ],
+      record([]),
+      { currentUserId: alex, people: [{ id: sam, name: 'Sam Chen' }] },
+    );
+    expect(lines(described)).toEqual([
+      'Sam Chen changed the amount /  | €32.00 | €40.00',
+      'You changed the split / Alex’s share | €30.00 | €20.00 / Sam Chen’s share | Not included | €20.00',
+      'Sam Chen added this Expense',
+    ]);
+    expect(described.map((entry) => [entry.name, entry.at])).toEqual([
+      ['Sam Chen', at(14)],
+      ['Alex', at(13)],
+      ['Sam Chen', at(12)],
+    ]);
+    expect(described[0].changes[0].money).toBe(true);
+  });
+
+  it('names anyone the event, Group and Expense don’t as a former member, never by reference', () => {
+    const described = describeExpenseEvents(
+      [
+        event('expense_deleted', {}, null, 15),
+        event('expense_updated', { action: 'restored' }, { _id: gone }, 14),
+        event(
+          'expense_updated',
+          {
+            changes: {
+              paidBy: {
+                old: [{ user: gone, amount: 40, amountMinor: 4000 }],
+                new: [{ user: alex, amount: 40, amountMinor: 4000 }],
+              },
+              notes: { old: '', new: 'Window seats' },
+            },
+          },
+          { _id: gone },
+          13,
+        ),
+        event('expense_moved', {}, { _id: sam, name: 'Sam' }),
+      ],
+      record([]),
+    );
+    expect(lines(described)).toEqual([
+      'Former member deleted this Expense',
+      'Former member restored this Expense',
+      'Former member changed who paid and the notes / Alex’s payment | €0.00 | €40.00 / Former member’s payment | €40.00 | €0.00 / Notes | None | “Window seats”',
+      'Sam changed this Expense',
+    ]);
+    const shown = described.flatMap((entry) => [
+      entry.name,
+      entry.actor,
+      entry.action,
+      ...entry.changes.flatMap((change) => [change.label, change.before, change.after]),
+    ]);
+    expect(shown.join('\n')).not.toMatch(/[a-f\d]{24}|[{}[\]]/);
+  });
+
+  it('formats each amount in the currency it had when the edit was made', () => {
+    const described = describeExpenseEvents(
+      [
+        event('expense_updated', { changes: { amount: { old: 40, new: 45 } } }, undefined, 14),
+        event(
+          'expense_updated',
+          { changes: { currency: { old: 'INR', new: 'EUR' }, amount: { old: 3500, new: 40 } } },
+          undefined,
+          13,
+        ),
+        event('expense_updated', { changes: { amount: { old: 3200, new: 3500 } } }),
+      ],
+      record([]),
+    );
+    expect(lines(described)).toEqual([
+      'Alex changed the amount /  | €40.00 | €45.00',
+      'Alex changed the currency and the amount / Currency | INR | EUR / Amount | ₹3,500.00 | €40.00',
+      'Alex changed the amount /  | ₹3,200.00 | ₹3,500.00',
+    ]);
   });
 });

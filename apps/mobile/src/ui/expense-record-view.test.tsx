@@ -45,6 +45,7 @@ const ids = {
   dinner: 'b00000000000000000000002',
   deleted: 'b00000000000000000000003',
   historical: 'b00000000000000000000004',
+  weekly: 'b00000000000000000000005',
 };
 const iso = '2026-09-29T14:32:00.000Z';
 const group = {
@@ -126,6 +127,73 @@ const records: Record<string, Record<string, unknown>> = {
     paidBy: [row(null, 30000)],
     splitBetween: [row(alex, 15000), row(null, 15000)],
   }),
+  [ids.weekly]: expense(ids.weekly, {
+    description: 'Weekly groceries',
+    amount: 900,
+    amountMinor: 90000,
+    paidBy: [row(alex, 90000)],
+    splitBetween: [row(alex, 45000), row(sam, 45000)],
+    createdBy: alex.id,
+  }),
+};
+const gone = 'a00000000000000000000099';
+const edit = (
+  id: string,
+  actor: unknown,
+  createdAt: string,
+  changes: Record<string, { old: unknown; new: unknown }>,
+) => ({
+  _id: id,
+  group: groupId,
+  type: 'expense_updated',
+  actor,
+  createdAt,
+  metadata: { changes },
+});
+const added = (id: string, actor: unknown, createdAt: string) => ({
+  _id: id,
+  group: groupId,
+  type: 'expense_added',
+  actor,
+  createdAt,
+  metadata: {},
+});
+/** Each Expense's own Activity, newest first, as the Expense filter returns it. */
+const histories: Record<string, Record<string, unknown>[]> = {
+  [ids.bill]: [
+    edit('d00000000000000000000011', person(priya), '2026-09-29T15:40:00.000Z', {
+      amount: { old: 2680, new: 2860 },
+      amountMinor: { old: 268000, new: 286000 },
+    }),
+    added('d00000000000000000000012', person(sam), iso),
+  ],
+  // Twenty notes edits, then the Expense being added: two pages.
+  [ids.weekly]: [
+    ...Array.from({ length: 20 }, (_, index) =>
+      edit(
+        `d000000000000000000001${String(index).padStart(2, '0')}`,
+        person(sam),
+        new Date(Date.parse('2026-09-29T20:00:00.000Z') - index * 60_000).toISOString(),
+        { notes: { old: `Draft ${index + 1}`, new: `Draft ${index}` } },
+      ),
+    ),
+    added('d00000000000000000000200', person(alex), iso),
+  ],
+  // Neither the person who edited nor one of the people on the split is named any more.
+  [ids.historical]: [
+    edit('d00000000000000000000300', null, '2026-09-29T15:00:00.000Z', {
+      splitBetween: {
+        old: [
+          { user: alex.id, amount: 100, amountMinor: 10000 },
+          { user: gone, amount: 200, amountMinor: 20000 },
+        ],
+        new: [
+          { user: alex.id, amount: 150, amountMinor: 15000 },
+          { user: gone, amount: 150, amountMinor: 15000 },
+        ],
+      },
+    }),
+  ],
 };
 const json = (data: unknown, status = 200): FetchResponse =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
@@ -145,8 +213,11 @@ function backend() {
     clear: async () => stored.clear(),
   };
   const deleted = new Set<string>();
+  let held: Promise<void> | null = null;
+  let unreachable = false;
   const fetch: MobileFetch = async (url, init) => {
-    const path = new URL(url).pathname;
+    const address = new URL(url);
+    const path = address.pathname;
     const method = init.method ?? 'GET';
     if (method !== 'GET' && path.startsWith('/api/groups')) writes.push(`${method} ${path}`);
     if (path.endsWith('/demo-persona/sign-in'))
@@ -177,6 +248,28 @@ function backend() {
       });
     if (path.endsWith('/balances'))
       return json({ data: { currency: 'INR', balances: [], debts: [], byCurrency: [] } });
+    const expenseId = address.searchParams.get('expenseId');
+    if (path.endsWith('/activity') && expenseId !== null) {
+      await held;
+      if (unreachable) throw new Error('Network request failed');
+      const page = Number(address.searchParams.get('page'));
+      const events = (histories[expenseId] ?? []).map((event) => ({
+        ...event,
+        metadata: { ...(event.metadata as object), expenseId },
+      }));
+      return json({
+        status: 200,
+        data: {
+          activities: events.slice((page - 1) * 20, page * 20),
+          pagination: {
+            page,
+            limit: 20,
+            total: events.length,
+            totalPages: Math.ceil(events.length / 20),
+          },
+        },
+      });
+    }
     if (path.endsWith('/activity'))
       return json({
         status: 200,
@@ -233,7 +326,23 @@ function backend() {
       newSubmissionKey: () => 'native-record-test-0001',
     },
   );
-  return { controller, writes };
+  return {
+    controller,
+    writes,
+    /** Holds history reads until the returned function is called. */
+    holdHistory: () => {
+      let release!: () => void;
+      held = new Promise((resolve) => (release = resolve));
+      return () => {
+        held = null;
+        release();
+      };
+    },
+    /** History reads fail as they would offline, without a saved copy. */
+    setUnreachable: (value: boolean) => {
+      unreachable = value;
+    },
+  };
 }
 
 function RecordScreen({ controller }: { controller: MobileController }) {
@@ -256,6 +365,8 @@ function RecordScreen({ controller }: { controller: MobileController }) {
       onReconcile={() => void controller.reconcileExpense()}
       onReviewLatest={() => void controller.reviewLatestExpense()}
       onAcceptCurrent={() => void controller.acceptCurrentExpense()}
+      onLoadOlderHistory={() => void controller.loadOlderExpenseHistory()}
+      onRetryHistory={() => void controller.refreshExpenseHistory()}
     />
   );
 }
@@ -270,6 +381,17 @@ const text = (scope: ReactTestInstance) =>
     .findAll((node) => isHost(node, 'Text'))
     .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
     .join('');
+/** Each line of text as it reads, with the runs nested in it. */
+const lines = (scope: ReactTestInstance) => {
+  const read = (node: ReactTestInstance): string =>
+    node.children.map((child) => (typeof child === 'string' ? child : read(child))).join('');
+  const nested = (node: ReactTestInstance) => {
+    for (let parent = node.parent; parent; parent = parent.parent)
+      if (isHost(parent, 'Text')) return true;
+    return false;
+  };
+  return scope.findAll((node) => isHost(node, 'Text') && !nested(node)).map(read);
+};
 
 let screen: ReactTestRenderer | null = null;
 afterEach(() => {
@@ -277,9 +399,13 @@ afterEach(() => {
   screen = null;
 });
 
-async function render(open: (controller: MobileController) => Promise<void>) {
+async function render(
+  open: (controller: MobileController) => Promise<void>,
+  prepare?: (harness: ReturnType<typeof backend>) => void,
+) {
   const harness = backend();
   await harness.controller.signIn('alex');
+  prepare?.(harness);
   await open(harness.controller);
   await act(async () => {
     screen = create(<RecordScreen controller={harness.controller} />);
@@ -314,6 +440,14 @@ async function render(open: (controller: MobileController) => Promise<void>) {
 }
 
 const open = (id: string) => (controller: MobileController) => controller.openExpense(groupId, id);
+/** Opens a record and returns once it's shown, while its changes may still be read. */
+const shownBeforeHistory = (id: string) => async (controller: MobileController) => {
+  void controller.openExpense(groupId, id);
+  for (let tick = 0; tick < 50 && controller.getSnapshot().expense.status !== 'detail'; tick++)
+    await new Promise((resolve) => setTimeout(resolve, 0));
+};
+const when = (value: string) =>
+  `${new Date(value).toLocaleDateString([], { day: 'numeric', month: 'short' })}, ${clockTime(value)}`;
 
 describe('compact Expense record', () => {
   it('shows what it was for, the member’s position and who owes what', async () => {
@@ -352,16 +486,104 @@ describe('compact Expense record', () => {
     expect(ui.writes).toEqual([]);
   });
 
-  it('shows when it was added and last changed under History', async () => {
-    const ui = await render(open(ids.bill));
+  it('shows when it was added and last changed while its changes load', async () => {
+    let release: () => void = () => undefined;
+    const ui = await render(shownBeforeHistory(ids.bill), (harness) => {
+      release = harness.holdHistory();
+    });
     expect(ui.headings()).toContain('History');
-    const history = ui.labels().filter((label) => /added this Expense|Last changed/.test(label));
-    const when = (value: string) =>
-      `${new Date(value).toLocaleDateString([], { day: 'numeric', month: 'short' })}, ${clockTime(value)}`;
-    expect(history).toEqual([
+    const history = () =>
+      ui.labels().filter((label) => /changed|added this Expense|Last changed/.test(label));
+    expect(history()).toEqual([
       `Last changed, ${when('2026-09-29T15:40:00.000Z')}`,
       `Sam Chen added this Expense, ${when(iso)}`,
     ]);
+    const loading = ui
+      .root()
+      .find((node) => isHost(node, 'View') && node.props.accessibilityLiveRegion === 'polite');
+    expect(text(loading)).toBe('Loading this Expense’s changes…');
+
+    release();
+    await settle();
+    expect(history()).toEqual([
+      `Priya Shah changed the amount, Amount from ₹2,680.00 to ₹2,860.00, ${when('2026-09-29T15:40:00.000Z')}`,
+      `Sam Chen added this Expense, ${when(iso)}`,
+    ]);
+    expect(text(ui.root())).not.toContain('Loading this Expense’s changes');
+  });
+
+  it('lists who changed what with its before and after values, and no identifiers', async () => {
+    const ui = await render(open(ids.bill));
+    const shown = lines(ui.root());
+    // The title names the change, so only its values follow, with the time.
+    expect(shown).toEqual(
+      expect.arrayContaining([
+        'Priya Shah changed the amount',
+        `₹2,680.00 → ₹2,860.00 · ${when('2026-09-29T15:40:00.000Z')}`,
+        'Sam Chen added this Expense',
+      ]),
+    );
+    expect(shown).not.toContain('Last changed');
+    expect(shown.join('\n')).not.toMatch(/[0-9a-f]{24}|[{}[\]]|amountMinor/);
+    expect(() => ui.pressable('Load older changes')).toThrow();
+  });
+
+  it('names people who are no longer in the Group or on the Expense as former members', async () => {
+    const ui = await render(open(ids.historical));
+    expect(ui.labels()).toContain(
+      `Former member changed the split, Alex Rao’s share from ₹100.00 to ₹150.00, Former member’s share from ₹200.00 to ₹150.00, ${when('2026-09-29T15:00:00.000Z')}`,
+    );
+    const shown = lines(ui.root());
+    expect(shown).toEqual(
+      expect.arrayContaining([
+        'Former member changed the split',
+        'Alex Rao’s share ₹100.00 → ₹150.00',
+        'Former member’s share ₹200.00 → ₹150.00',
+        when('2026-09-29T15:00:00.000Z'),
+      ]),
+    );
+    expect(shown.join('\n')).not.toMatch(/[0-9a-f]{24}/);
+    // Only one page, and it doesn't include the Expense being added: the record says when.
+    expect(ui.labels()).toContain(`Added, ${when(iso)}`);
+  });
+
+  it('offers Load older changes while there are more, and adds them below', async () => {
+    const ui = await render(open(ids.weekly));
+    const rows = () => ui.labels().filter((label) => /changed the notes|added this/.test(label));
+    expect(rows()).toHaveLength(20);
+    expect(rows()[0]).toBe(
+      `Sam Chen changed the notes, Notes from “Draft 1” to “Draft 0”, ${when('2026-09-29T20:00:00.000Z')}`,
+    );
+    const more = ui.pressable('Load older changes');
+    expect(more.props).toMatchObject({ accessibilityRole: 'button', disabled: false });
+
+    await ui.press('Load older changes');
+    expect(rows()).toHaveLength(21);
+    expect(rows().at(-1)).toBe(`You added this Expense, ${when(iso)}`);
+    expect(() => ui.pressable('Load older changes')).toThrow();
+  });
+
+  it('keeps its added and last-changed times when its changes can’t be read; Try again reads them', async () => {
+    const ui = await render(open(ids.bill), (harness) => harness.setUnreachable(true));
+    expect(
+      ui.labels().filter((label) => /changed|added this Expense|Last changed/.test(label)),
+    ).toEqual([
+      `Last changed, ${when('2026-09-29T15:40:00.000Z')}`,
+      `Sam Chen added this Expense, ${when(iso)}`,
+    ]);
+    expect(text(ui.root())).toContain('Couldn’t load this Expense’s changes.');
+    // The record itself is unaffected.
+    expect(text(ui.root())).toContain('You owe Sam ₹953.33');
+    expect(ui.pressable('Edit expense').props.disabled).toBe(false);
+
+    const retry = ui.pressable('Try loading this Expense’s changes again');
+    expect(retry.props.accessibilityRole).toBe('button');
+    ui.setUnreachable(false);
+    await ui.press('Try loading this Expense’s changes again');
+    expect(ui.labels()).toContain(
+      `Priya Shah changed the amount, Amount from ₹2,680.00 to ₹2,860.00, ${when('2026-09-29T15:40:00.000Z')}`,
+    );
+    expect(text(ui.root())).not.toContain('Couldn’t load');
   });
 
   it('says what the member lent, and leaves out Category and Notes when there are none', async () => {

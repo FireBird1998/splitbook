@@ -170,11 +170,11 @@ function setup() {
       },
     },
   );
-  /** The Activity pages read since the last call. */
+  /** The Group's Activity pages read since the last call; a record reads its own apart. */
   const activityPages = () =>
     reads
       .splice(0)
-      .filter((path) => path.includes('/activity?'))
+      .filter((path) => path.includes('/activity?') && !path.includes('expenseId='))
       .map((path) => Number(new URL(path, 'http://local').searchParams.get('page')));
   return { controller, drafts, activityPages };
 }

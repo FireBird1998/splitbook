@@ -2,6 +2,7 @@ import { getCategory } from '@splitbook/shared/categories';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { formatDateTime } from '@splitbook/shared/date';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
+import type { ActivityEvent } from './activity';
 import type { ExpenseRecord } from './expense-record';
 
 /** One changed value. Values are absent when only the change itself can be described. */
@@ -20,6 +21,21 @@ export interface ExpenseHistoryEntry {
   summary: string;
   editedAt: string;
   changes: ExpenseHistoryChange[];
+}
+
+/** One Activity event about an Expense, as its record lists it. */
+export interface ExpenseHistoryEvent {
+  key: string;
+  /** Who acted, or "Former member". */
+  name: string;
+  /** "You" for the signed-in member, otherwise `name`. */
+  actor: string;
+  /** For example "changed the amount" or "added this Expense". */
+  action: string;
+  changes: ExpenseHistoryChange[];
+  /** The action already names the only change, so its label isn't repeated. */
+  implied: boolean;
+  at: string;
 }
 
 const formerMember = 'Former member';
@@ -85,6 +101,12 @@ function list(items: string[]) {
     ? `${unique.slice(0, -1).join(', ')} and ${unique[unique.length - 1]}`
     : (unique[0] ?? 'this Expense');
 }
+
+const changedFields = (changes: Record<string, unknown>) =>
+  Object.keys(changes).filter((field) => field !== 'moneyVersion');
+/** "the amount and the date": what an edit changed, as a member would say it. */
+const changedWhat = (changes: Record<string, unknown>) =>
+  list(changedFields(changes).map((field) => nouns[field] ?? 'other details'));
 
 function allocation(
   field: 'paidBy' | 'splitBetween',
@@ -232,6 +254,22 @@ export function memberNamer(names: Map<string, string>) {
   };
 }
 
+/** The Group's members by id, then anyone the Expense itself still names. */
+function knownNames(record: ExpenseRecord, people: { id: string; name: string }[]) {
+  const names = new Map(people.map((person) => [person.id, person.name]));
+  for (const row of [...record.paidBy, ...record.splitBetween])
+    if (row.user && row.name !== formerMember && !names.has(row.user))
+      names.set(row.user, row.name);
+  return names;
+}
+
+const tagNamer =
+  (tags: { id: string; name: string }[]) =>
+  (value: unknown): string | undefined => {
+    const id = identity(value);
+    return tags.find((tag) => tag.id === id)?.name;
+  };
+
 /**
  * Explains recorded edits in member terms, newest first: names instead of member references,
  * each amount in the currency it had at the time, and no raw values or identifiers. Anyone the
@@ -242,20 +280,14 @@ export function describeExpenseHistory(
   people: { id: string; name: string }[] = [],
   tags: { id: string; name: string }[] = [],
 ): ExpenseHistoryEntry[] {
-  const names = new Map(people.map((person) => [person.id, person.name]));
-  for (const row of [...record.paidBy, ...record.splitBetween])
-    if (row.user && row.name !== formerMember && !names.has(row.user))
-      names.set(row.user, row.name);
+  const names = knownNames(record, people);
   for (const entry of record.editHistory) {
     const editor = entry.editedBy;
     if (editor && typeof editor === 'object' && editor.name && !names.has(editor._id))
       names.set(editor._id, editor.name);
   }
   const person = memberNamer(names);
-  const tagName = (value: unknown) => {
-    const id = identity(value);
-    return tags.find((tag) => tag.id === id)?.name;
-  };
+  const tagName = tagNamer(tags);
 
   let currencyAfter = record.currency;
   return [...record.editHistory].reverse().map((entry, index) => {
@@ -268,13 +300,79 @@ export function describeExpenseHistory(
     currencyAfter = currencies.before;
     const described = describeExpenseChanges(changes, { currencies, person, tagName });
     const editor = person(entry.editedBy);
-    const fields = Object.keys(changes).filter((field) => field !== 'moneyVersion');
     return {
       key: `${entry.editedAt}:${index}`,
       editor,
-      summary: `${editor} changed ${list(fields.map((field) => nouns[field] ?? 'other details'))}`,
+      summary: `${editor} changed ${changedWhat(changes)}`,
       editedAt: formatDateTime(entry.editedAt),
       changes: described,
     };
+  });
+}
+
+/**
+ * Explains an Expense's own Activity events, newest first, in the same terms as its recorded
+ * edits: who acted, what changed with its before and after values, and each amount in the
+ * currency it had at the time. Anyone the event, Group and Expense don't name is a former
+ * member; no raw values or identifiers are shown.
+ */
+export function describeExpenseEvents(
+  events: ActivityEvent[],
+  record: ExpenseRecord,
+  {
+    currentUserId,
+    people = [],
+    tags = [],
+  }: {
+    currentUserId?: string;
+    /** The Group's current members. */
+    people?: { id: string; name: string }[];
+    tags?: { id: string; name: string }[];
+  } = {},
+): ExpenseHistoryEvent[] {
+  const person = memberNamer(knownNames(record, people));
+  const tagName = tagNamer(tags);
+  let currencyAfter = record.currency;
+  return events.map((event) => {
+    const name = person(event.actor);
+    const base = {
+      key: event._id,
+      name,
+      actor: currentUserId && event.actor?._id === currentUserId ? 'You' : name,
+      changes: [],
+      implied: false,
+      at: event.createdAt,
+    };
+    const { action, changes = {} } = event.metadata;
+    switch (event.type) {
+      case 'expense_added':
+        return { ...base, action: 'added this Expense' };
+      case 'expense_deleted':
+        return { ...base, action: 'deleted this Expense' };
+      case 'expense_updated': {
+        if (action === 'restored') return { ...base, action: 'restored this Expense' };
+        // Walking back from the current record gives each edit the currency it was made in.
+        const after = text(changes.currency?.new) || currencyAfter;
+        const currencies = { after, before: text(changes.currency?.old) || after };
+        currencyAfter = currencies.before;
+        const described = describeExpenseChanges(changes, { currencies, person, tagName });
+        const [only] = described;
+        const fields = changedFields(changes);
+        return {
+          ...base,
+          action: `changed ${changedWhat(changes)}`,
+          changes: described,
+          // "changed the amount" needs only "₹2,680.00 → ₹2,860.00"; a share keeps its name.
+          implied:
+            described.length === 1 &&
+            only.before !== undefined &&
+            only.after !== undefined &&
+            new Set(fields.map((field) => nouns[field])).size === 1 &&
+            !fields.some((field) => field === 'paidBy' || field === 'splitBetween'),
+        };
+      }
+      default:
+        return { ...base, action: 'changed this Expense' };
+    }
   });
 }

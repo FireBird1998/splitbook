@@ -62,7 +62,32 @@ export function emptyActivity(): ActivityState {
     moreStatus: 'idle',
   };
 }
-export function parseActivityPage(value: unknown, groupId: string, requestedPage: number) {
+/** A saved Expense's own events: its Group's Activity, filtered to that Expense. */
+export interface ExpenseHistoryState {
+  expenseId: string | null;
+  status: LoadStatus;
+  events: ActivityEvent[];
+  pagination: ActivityState['pagination'];
+  message: string | null;
+  moreStatus: 'idle' | 'loading' | 'error';
+}
+export function emptyExpenseHistory(): ExpenseHistoryState {
+  return {
+    expenseId: null,
+    status: 'idle',
+    events: [],
+    pagination: null,
+    message: null,
+    moreStatus: 'idle',
+  };
+}
+/** With `expenseId`, every event must be about that Expense. */
+export function parseActivityPage(
+  value: unknown,
+  groupId: string,
+  requestedPage: number,
+  expenseId?: string,
+) {
   const data = z
     .object({
       status: z.literal(200),
@@ -79,7 +104,11 @@ export function parseActivityPage(value: unknown, groupId: string, requestedPage
     .parse(value).data;
   if (
     data.pagination.page !== requestedPage ||
-    data.activities.some((event) => event.group !== groupId)
+    data.activities.some(
+      (event) =>
+        event.group !== groupId ||
+        (expenseId !== undefined && event.metadata.expenseId !== expenseId),
+    )
   )
     throw new Error('Unexpected Activity scope');
   for (const event of data.activities) {
