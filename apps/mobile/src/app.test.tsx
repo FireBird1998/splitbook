@@ -1,4 +1,3 @@
-import { Alert } from 'react-native';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -624,7 +623,7 @@ describe('App return from an Expense', () => {
         ? Promise.reject(new Error('The response was lost after sending'))
         : undefined,
     );
-    await addExpense(app, '2026-09-20');
+    await addExpense(app, ['Sunday, 20 September 2026']);
     await app.press('Save expense');
     app.use(() => undefined);
     await app.press('Back to Group');

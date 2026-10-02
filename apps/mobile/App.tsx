@@ -34,7 +34,7 @@ import {
 } from './src/runtime';
 import { ThemeContext, fonts, useTheme } from './src/ui/theme';
 import { Avatar, Button, Copy, Icon, Label, Loading, Notice } from './src/ui/primitives';
-import { Badge, CompactText, IconButton, TopBar } from './src/ui/compact';
+import { Badge, CompactText, FloatingAction, IconButton, TopBar } from './src/ui/compact';
 import { EmptyGroups, GroupCard, SignIn, TripStrip, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
@@ -49,7 +49,6 @@ import { GroupShell } from './src/ui/group-shell';
 import { GroupBalancesView } from './src/ui/group-balances';
 import { RecordPaymentSheet } from './src/ui/record-payment-sheet';
 import { GroupActivity } from './src/ui/group-activity';
-import { CompactText, FloatingAction } from './src/ui/compact';
 import type { MobileSnapshot } from './src/data/types';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 
