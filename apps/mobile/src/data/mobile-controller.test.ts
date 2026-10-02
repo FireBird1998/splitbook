@@ -535,6 +535,42 @@ describe('native session and Group boundary', () => {
     });
   });
 
+  it('ignores Back while joining, then opens the joined Group', async () => {
+    const reply = deferred<FetchResponse>();
+    let joined = false;
+    const { controller } = setup({
+      intercept: (path, init) => {
+        if (path === '/api/join/deadbeef' && init.method === 'POST') {
+          joined = true;
+          return reply.promise;
+        }
+        if (path === '/api/join/deadbeef')
+          return json({
+            data: { _id: otherGroupId, name: 'Shared Home', category: 'home', memberCount: 1 },
+            status: 200,
+          });
+        if (path === `/api/groups/${otherGroupId}` && joined)
+          return json({ data: group(sam, otherGroupId), status: 200 });
+      },
+    });
+    await controller.signIn('sam');
+    await controller.openInvitation('http://localhost:4127/join/deadbeef');
+    const join = controller.joinInvitation();
+    await controller.back();
+    await controller.cancelInvitation();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      invitation: { code: 'deadbeef', status: 'joining' },
+    });
+    reply.resolve(json({ data: { groupId: otherGroupId }, status: 201 }, 201));
+    await join;
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { status: 'ready', data: { id: otherGroupId, name: 'Shared Home' } },
+      invitation: { code: null, status: 'idle' },
+    });
+  });
+
   it('keeps a newer invitation open when a joined Group list finishes loading', async () => {
     const groupsReply = deferred<FetchResponse>();
     const groupsRequested = deferred<void>();

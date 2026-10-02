@@ -663,3 +663,33 @@ describe('App return from an Expense', () => {
     expect(app.text()).not.toContain('Expense saved');
   });
 });
+
+describe('App invitation', () => {
+  it('stays on the invitation while Joining Group…, then opens the joined Group', async () => {
+    const app = await renderApp();
+    const joinedId = 'a00000000000000000000020';
+    const post = hold();
+    app.use((path, init) => {
+      if (path === '/api/join/deadbeef')
+        return init.method === 'POST'
+          ? post.respond()
+          : json({
+              data: { _id: joinedId, name: 'Cedar Flat', category: 'home', memberCount: 2 },
+              status: 200,
+            });
+      if (path === `/api/groups/${joinedId}`)
+        return json({ data: { ...group, _id: joinedId, name: 'Cedar Flat' }, status: 200 });
+    });
+    await settle(app.controller.openInvitation('http://localhost:4138/join/deadbeef'));
+    await app.press('Join Group');
+    await post.reached;
+    expect(app.pressable('Back to Groups').props.accessibilityState).toEqual({ disabled: true });
+    expect(await app.androidBack()).toBe(true);
+    expect(app.text()).toContain('Joining Group…');
+
+    post.release(json({ data: { groupId: joinedId }, status: 201 }, 201));
+    await settle();
+    expect(() => app.pressable('Back to Home')).not.toThrow();
+    expect(app.text()).toContain('Cedar FlatHousehold · 1 member · INR');
+  });
+});

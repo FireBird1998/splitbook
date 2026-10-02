@@ -119,6 +119,7 @@ function SplitBook() {
 
   const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
   const feedback = refreshFeedback(state);
+  const joining = state.invitation.status === 'joining';
   if (configurationReady && authenticated && state.screen === 'expense')
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -156,11 +157,19 @@ function SplitBook() {
         {/* Shrinks so a long refresh status wraps instead of pushing Settings off screen. */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 }}>
           {state.screen !== 'groups' ? (
+            // Disabled while joining: the join finishes and opens its Group.
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Back to Groups"
+              accessibilityState={{ disabled: joining }}
+              disabled={joining}
               onPress={controller.back}
-              style={{ minWidth: 48, minHeight: 48, justifyContent: 'center' }}
+              style={{
+                minWidth: 48,
+                minHeight: 48,
+                justifyContent: 'center',
+                opacity: joining ? 0.4 : 1,
+              }}
             >
               <Icon name="arrow-back-outline" color={theme.text} />
             </Pressable>
