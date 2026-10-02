@@ -332,7 +332,7 @@ describe('Settlement corrections (#105)', () => {
     const { controller, backend } = await open('sam');
     controller.updateSettlement({ amount, note: 'Cash at dinner' });
     const before = backend.calls.length;
-    await controller.reviewSettlement();
+    await controller.recordSettlement();
     expect(backend.calls.slice(before)).toEqual([]);
     expect(controller.getSnapshot().settlement).toMatchObject({
       status: 'editing',
@@ -348,13 +348,11 @@ describe('Settlement corrections (#105)', () => {
     });
   });
 
-  it('reviews a corrected amount as a payment already made, keeping the above-suggestion acknowledgement', async () => {
+  it('records a corrected amount above the suggestion only once the member ticks it', async () => {
     const { controller, backend } = await open('sam');
     controller.updateSettlement({ amount: '40.5' });
     controller.touchSettlementField('amount');
     expect(controller.getSnapshot().settlement.validation.errors).toEqual({});
-    await controller.reviewSettlement();
-    expect(controller.getSnapshot().settlement).toMatchObject({ status: 'review', suggested: 30 });
     await controller.recordSettlement();
     expect(controller.getSnapshot().settlement).toMatchObject({
       status: 'review',
@@ -365,13 +363,16 @@ describe('Settlement corrections (#105)', () => {
     controller.acknowledgeSettlement();
     await controller.recordSettlement();
     expect(backend.recorded).toHaveLength(1);
-    expect(controller.getSnapshot().settlement.message).toContain('no money was transferred');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'balances',
+      snackbar: { message: 'Payment recorded' },
+    });
   });
 
-  it('retries a lost response with the same submission, so both members see one payment', async () => {
+  it('retries a lost response with the same submission, so the payment is recorded once', async () => {
     const backend = server();
     const { controller, member } = await open('sam', backend);
-    await controller.reviewSettlement();
     backend.loseNextResponse();
     await controller.recordSettlement();
     expect(controller.getSnapshot().settlement).toMatchObject({
@@ -392,14 +393,10 @@ describe('Settlement corrections (#105)', () => {
     await restarted.recordSettlement();
     expect(posts()).toHaveLength(2);
     expect(backend.recorded).toHaveLength(1);
-    expect(restarted.getSnapshot().settlement).toMatchObject({ status: 'ready', attempt: null });
-
-    const alex = device(backend).create();
-    await alex.signIn('alex');
-    await alex.openSettlements(groupId);
-    expect(alex.getSnapshot().settlement.history).toMatchObject([
-      { paidBy: { name: 'Sam' }, paidTo: { name: 'Alex' }, amount: 30, currency: 'INR' },
-    ]);
+    expect(restarted.getSnapshot()).toMatchObject({
+      screen: 'group',
+      settlement: { draft: null, attempt: null },
+    });
   });
 
   it('explains missing payment recovery storage when opening Payments, not connectivity', async () => {
@@ -423,7 +420,6 @@ describe('Settlement corrections (#105)', () => {
     await sam.signIn('sam');
     await sam.openSettlements(groupId);
     sam.selectSettlement(people.sam.id, people.alex.id, 'INR');
-    await sam.reviewSettlement();
     backend.loseNextResponse();
     await sam.recordSettlement();
     expect(sam.getSnapshot().settlement.status).toBe('uncertain');
@@ -454,7 +450,6 @@ describe('Settlement corrections (#105)', () => {
 
   it('sends nothing and explains when the recovery copy cannot be stored', async () => {
     const { controller, backend } = await open('sam', server(), { failAttemptSave: true });
-    await controller.reviewSettlement();
     await controller.recordSettlement();
     expect(backend.recorded).toHaveLength(0);
     expect(controller.getSnapshot().settlement).toMatchObject({

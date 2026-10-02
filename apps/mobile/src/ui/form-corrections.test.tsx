@@ -6,19 +6,29 @@ import { groupFields } from '../data/group-draft';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
 import { GroupCreateForm } from './group-workflows';
-import { SettlementScreen } from './settlement-screen';
+import { RecordPaymentSheet, recordPaymentFootnote } from './record-payment-sheet';
 
 // #105: rendered Group creation and Settlement corrections through the real controller.
 vi.mock('react-native', () => ({
   AccessibilityInfo: { sendAccessibilityEvent: vi.fn() },
   ActivityIndicator: 'ActivityIndicator',
+  Animated: {
+    View: 'AnimatedView',
+    Value: class {
+      setValue() {}
+    },
+    spring: () => ({ start: () => undefined }),
+  },
+  KeyboardAvoidingView: 'KeyboardAvoidingView',
   Modal: 'Modal',
+  PanResponder: { create: (config: object) => ({ panHandlers: config }) },
   Pressable: 'Pressable',
   ScrollView: 'ScrollView',
   StyleSheet: { create: <T,>(styles: T) => styles },
   Text: 'Text',
   TextInput: 'TextInput',
   View: 'View',
+  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: 1 }),
 }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
 vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
@@ -94,7 +104,10 @@ function backend() {
           byCurrency: [
             {
               currency: 'INR',
-              balances: [],
+              balances: [
+                { user: { _id: sam.id, name: 'Sam' }, balance: -30 },
+                { user: { _id: alexId, name: 'Alex' }, balance: 30 },
+              ],
               debts: [
                 {
                   from: { _id: sam.id, name: 'Sam' },
@@ -219,26 +232,19 @@ function CreateScreen({
   );
 }
 
-function PaymentsScreen({
-  controller,
-  onReveal,
-}: {
-  controller: MobileController;
-  onReveal: (section: unknown) => void;
-}) {
+function PaymentSheet({ controller }: { controller: MobileController }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   return (
-    <SettlementScreen
+    <RecordPaymentSheet
+      visible={state.screen === 'settlement'}
       state={state.settlement}
-      accountId={sam.id}
-      onSelect={controller.selectSettlement}
+      currentUserId={sam.id}
+      today="Today, Sep 28"
       onChange={controller.updateSettlement}
-      onReview={() => void controller.reviewSettlement()}
+      onLeaveField={controller.touchSettlementField}
       onAcknowledge={controller.acknowledgeSettlement}
       onRecord={() => void controller.recordSettlement()}
-      onRefresh={() => void controller.openSettlements(groupId)}
-      onLeaveField={controller.touchSettlementField}
-      onReveal={onReveal}
+      onClose={() => void controller.back()}
     />
   );
 }
@@ -270,10 +276,13 @@ async function render(which: 'create' | 'payments') {
   const harness = backend();
   await harness.controller.signIn('sam');
   if (which === 'create') harness.controller.startCreate();
-  else await harness.controller.openSettlements(groupId);
+  else {
+    await harness.controller.openSettlements(groupId);
+    harness.controller.selectSettlement(sam.id, alexId, 'INR');
+  }
   const revealed: NodeMock[] = [];
   const mocks: NodeMock[] = [];
-  const Screen = which === 'create' ? CreateScreen : PaymentsScreen;
+  const Screen = which === 'create' ? CreateScreen : PaymentSheet;
   await act(async () => {
     screen = create(
       <Screen
@@ -369,42 +378,46 @@ describe('Group creation corrections, rendered', () => {
   });
 });
 
-describe('Settlement corrections, rendered', () => {
-  it('attaches the Amount correction to its input and keeps payer, recipient, currency and note', async () => {
+describe('Record payment corrections, rendered', () => {
+  it('attaches the Amount correction to its field, keeps every entry, and records once the overpayment is ticked', async () => {
     const view = await render('payments');
-    await view.press('Review payment from Sam to Alex');
-    const amount = () => view.input('Actual amount paid, required');
+    const amount = () => view.input('Amount paid, required');
+    // The Amount card: its label, the currency and input, and the correction.
+    const amountCorrections = () =>
+      corrections(amount().parent!.parent!).filter((label) => !label.startsWith('Currency'));
     expect(amount().props.value).toBe('30');
-    await view.type('Note (optional)', 'Paid in cash');
-    await view.type('Actual amount paid, required', '12.345');
-    await view.press('Review payment');
+    const shown = text(view.root());
+    expect(shown).toContain('Suggested ₹30.00');
+    expect(shown).toContain(recordPaymentFootnote);
+    await view.press('Note, optional: Add a note');
+    await view.type('Note', 'Paid in cash');
+    await view.type('Amount paid, required', '12.345');
+    await view.press('Record payment');
 
     expect(view.writes).toEqual([]);
     const correction = 'INR amounts can have at most 2 decimal places. Nothing is rounded for you.';
-    expect(corrections(fieldOf(amount()))).toEqual([correction]);
+    expect(amountCorrections()).toEqual([correction]);
     expect(amount().props.accessibilityHint).toContain(correction);
-    expect(view.focusCount('Actual amount paid, required')).toBe(1);
-    const shown = text(view.root());
-    expect(shown).toContain('Sam paid Alex');
-    expect(shown).toContain('ACTUAL PAYMENT · INR');
+    expect(view.focusCount('Amount paid, required')).toBe(1);
+    // One correction shows once, on its field, not again as a banner.
+    expect(text(view.root()).split(correction)).toHaveLength(2);
     expect(amount().props.value).toBe('12.345');
-    expect(view.input('Note (optional)').props.value).toBe('Paid in cash');
+    expect(view.input('Note').props.value).toBe('Paid in cash');
 
-    await view.type('Actual amount paid, required', '40');
-    expect(corrections(fieldOf(amount()))).toEqual([]);
-    await view.press('Review payment');
-    const review = text(view.root());
-    expect(review).toContain('Review the payment already made');
-    expect(review).toContain('You’re recording that Sam already paid Alex ₹40.00 INR.');
-    expect(review).toContain('SplitBook doesn’t move money or contact a bank');
-
-    // Above the suggestion: Record explains why it waits for the acknowledgement.
-    const record = view.pressable('Record payment');
-    expect(record.props.disabled).toBe(true);
-    expect(record.props.accessibilityHint).toBe(
-      'Record is available once you confirm this is the actual amount paid.',
+    await view.type('Amount paid, required', '40');
+    expect(amountCorrections()).toEqual([]);
+    expect(text(view.root())).toContain(
+      'That’s ₹10.00 more than suggested. Afterwards you’d be owed ₹10.00 in this Group.',
     );
-    await view.press('Yes, this is the actual amount paid');
+    // Above the suggestion, Record says why it waits for the tick.
+    const record = view.pressable('Record payment');
+    expect(record.props.accessibilityLabel).toBe('Record payment ₹40.00');
+    expect(record.props.disabled).toBe(true);
+    expect(record.props.accessibilityHint).toBe('Tick “I meant to pay more than suggested” first.');
+    await view.press('I meant to pay more than suggested');
+    expect(view.pressable('I meant to pay more than suggested').props.accessibilityState).toEqual({
+      checked: true,
+    });
     expect(view.pressable('Record payment').props.disabled).toBe(false);
     await view.press('Record payment');
     expect(view.writes).toEqual([`POST /api/groups/${groupId}/settlements`]);

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { DISPLAY_FRESHNESS_MS, createMobileController } from './mobile-controller';
 import type { FetchResponse } from './types';
@@ -328,6 +328,51 @@ const expenseReads = `/api/groups/${groupId}/expenses?`;
 const balanceReads = `/api/groups/${groupId}/balances`;
 
 describe('cached views and coalesced reads (#103)', () => {
+  it.each(['before', 'after'] as const)(
+    'finishes cached Group reads when its request completes %s the payment sheet closes',
+    async (completion) => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(groupId, true, 'balances');
+      await controller.back();
+      f.clock.now += DISPLAY_FRESHNESS_MS + 1;
+      f.hold((path) => path === groupPath);
+      const opening = controller.openGroup(groupId, true, 'balances');
+      const held = await f.held.next(groupPath);
+      await vi.waitFor(() => {
+        expect(controller.getSnapshot()).toMatchObject({
+          detail: { status: 'loading', data: { id: groupId } },
+          financial: {
+            expenses: { status: 'loading', data: [{ description: '2026-09 rent, ledger 0' }] },
+            balances: { status: 'loading', data: [{ debts: [{ amount: 30 }] }] },
+          },
+        });
+      });
+      f.hold(() => false);
+      await controller.openRecordPayment(alex.id, sam.id, 'INR');
+      expect(controller.getSnapshot().settlement.status).toBe('editing');
+      const before = f.calls.length;
+      if (completion === 'after') await controller.back();
+      held.release(f.live());
+      await opening;
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: completion === 'before' ? 'settlement' : 'group',
+        financial: { expenses: { status: 'ready' }, balances: { status: 'ready' } },
+      });
+      if (completion === 'before') await controller.back();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        destination: 'balances',
+        financial: { expenses: { status: 'ready' }, balances: { status: 'ready' } },
+      });
+      expect(f.calls.slice(before).map((call) => [call.method, call.path.split('?')[0]])).toEqual([
+        ['GET', `/api/groups/${groupId}/expenses`],
+        ['GET', balanceReads],
+      ]);
+    },
+  );
+
   it('starts with an adjustable 30-second display freshness window', async () => {
     expect(DISPLAY_FRESHNESS_MS).toBe(30_000);
     const f = fixture({ freshness: 5_000 });
@@ -644,12 +689,11 @@ describe('cached views and coalesced reads (#103)', () => {
         await controller.updateExpenseDraft({ description: 'Dinner', amount: '12', tagId });
         await controller.saveExpense();
       } else {
-        await controller.openSettlements(groupId);
-        controller.selectSettlement(alex.id, sam.id, 'INR');
-        await controller.reviewSettlement();
+        await controller.openGroup(groupId, true, 'balances');
+        await controller.openRecordPayment(alex.id, sam.id, 'INR');
         await controller.recordSettlement();
-        expect(controller.getSnapshot().settlement.message).toContain('Payment recorded');
-        await controller.openGroup(groupId);
+        expect(controller.getSnapshot().snackbar?.message).toBe('Payment recorded');
+        await controller.selectDestination('expenses');
       }
       expect(f.state.ledger).toBe(1);
       expect(controller.getSnapshot().financial).toMatchObject({

@@ -4,12 +4,12 @@ import {
   emptySettlement,
   parseRecordedSettlement,
   parseSettlementAttempt,
-  parseSettlementHistory,
   settlementBody,
   settlementCorrectionSummary,
   settlementFields,
   settlementSuggestion,
   validateSettlementDraft,
+  type PendingPayment,
   type SettlementDraft,
   type SettlementField,
 } from './settlement';
@@ -191,6 +191,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
     restoreScroll: null,
     snackbar: null,
     settlement: emptySettlement(),
+    pendingPayment: null,
     activity: emptyActivity(),
     home: emptyHome(),
     financial: emptyFinancial(),
@@ -230,6 +231,15 @@ function origin(value: string): string {
   return parsed.origin;
 }
 
+/** A payment whose response was lost: it may be recorded, and only an explicit retry sends it. */
+const unconfirmedPayment =
+  'This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.';
+/** Another suggestion was chosen while a payment is unconfirmed: one payment at a time. */
+const earlierPayment = 'This earlier payment isn’t confirmed yet, so it comes first.';
+/** Only suggested payments are recorded, so one that's gone from the latest balances isn't. */
+const suggestionChanged =
+  'This suggested payment has changed. Close this to see the latest balances.';
+
 /**
  * Session transport and Group/financial reads. Secure credential
  * persistence is injected by the native runtime. It never imports React or a
@@ -255,6 +265,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let homeRequest = 0;
   let financialRequest = 0;
   let balancesRequest = 0;
+  let settlementRequest = 0;
+  let pendingRequest = 0;
   let activityRequest = 0;
   let activityDetailRequest = 0;
   let cacheEpoch = 0;
@@ -321,6 +333,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     listeners.forEach((listener) => listener());
   };
   const current = (owner: number) => owner === generation;
+  /** The snapshot now, after an await that TypeScript's earlier narrowing doesn't see. */
+  const latest = (): MobileSnapshot => snapshot;
   const assertCurrent = (owner: number) => {
     if (!current(owner)) throw new Superseded();
   };
@@ -1563,7 +1577,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         snapshot.expense.groupId === id ? { ...snapshot.expense, context: null } : snapshot.expense,
       settlement:
         snapshot.settlement.groupId === id
-          ? { ...snapshot.settlement, group: null, balances: [], history: [] }
+          ? { ...snapshot.settlement, group: null, balances: [] }
           : snapshot.settlement,
     });
   };
@@ -1593,13 +1607,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     return true;
   };
 
+  /** The Group, or the Record payment sheet over it. */
+  const overGroup = () => ['group', 'settlement'].includes(snapshot.screen);
   /**
    * `reuse` accepts Balances verified within the display freshness window. Any Expense
    * read since then removed them, so reused Balances always follow the latest Expense read.
    */
-  const loadBalances = async (reuse: boolean) => {
+  const readBalances = async (reuse: boolean) => {
     const group = snapshot.detail.data;
-    if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'group' || !group) return;
+    // Record payment is a sheet over the Group: Balances underneath still follow its reads.
+    if (snapshot.auth.status !== 'authenticated' || !overGroup() || !group) return;
     const owner = generation;
     const view = viewRequest;
     if (
@@ -1673,11 +1690,44 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             message:
               error instanceof RequestError
                 ? error.message
-                : 'Could not load running balances. Please try again.',
+                : 'Could not load balances. Please try again.',
           },
         },
       });
     }
+  };
+  /**
+   * The Group's unconfirmed payment, read from this device. Balances offers it whatever the
+   * suggestions say, so a payment whose response was lost can always be retried.
+   */
+  const loadPendingPayment = async (groupId: string) => {
+    const owner = generation,
+      read = ++pendingRequest,
+      lease = accountStorage(),
+      storage = dependencies.settlementAttempts;
+    if (!lease || !storage) return;
+    let pending: PendingPayment | null;
+    try {
+      const stored = await lease.write(() => storage.load(lease.accountId, groupId));
+      pending =
+        stored === null
+          ? null
+          : { groupId, draft: parseSettlementAttempt(stored, lease.accountId, groupId).draft };
+    } catch (error) {
+      if (error instanceof Superseded || !current(owner)) return;
+      // An unreadable record is left as it is; the sheet says so when it's opened.
+      pending = { groupId, draft: null };
+    }
+    if (!current(owner) || read !== pendingRequest || snapshot.detail.id !== groupId) return;
+    if (JSON.stringify(pending) !== JSON.stringify(snapshot.pendingPayment))
+      publish({ ...snapshot, pendingPayment: pending });
+  };
+  /** Balances, with the Group's unconfirmed payment read alongside. */
+  const loadBalances = async (reuse: boolean) => {
+    const groupId = overGroup() ? snapshot.detail.data?.id : undefined;
+    const pending = groupId ? loadPendingPayment(groupId) : null;
+    await readBalances(reuse);
+    await pending;
   };
   /** Retry always reads again, and keeps the Group explicit while it does. */
   const refreshBalances = () =>
@@ -1748,7 +1798,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** `reuse` (navigation, Month choice, foreground) accepts a first page verified within the window. */
   const readExpenses = async (append: boolean, reuse = false) => {
     const group = snapshot.detail.data;
-    if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'group' || !group) return;
+    // The payment sheet leaves its Group visible: finish the Expense-to-Balances read chain
+    // underneath it, even when the Group request completes after the sheet opens.
+    if (snapshot.auth.status !== 'authenticated' || !overGroup() || !group) return;
     const expenses = snapshot.financial.expenses;
     const pagination = expenses.pagination;
     const parse = (value: unknown) => parseExpensePage(value, group.id, group.defaultCurrency);
@@ -1924,7 +1976,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             : {
                 ...snapshot.financial.balances,
                 status: 'error',
-                message: 'Could not update running balances. Please try again.',
+                message: 'Could not update balances. Please try again.',
               },
           expenses: append
             ? {
@@ -1949,6 +2001,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // their independent cache only after the expense read has settled, keeping
       // recurring-materialization ordering and authorization checks intact.
       if (unavailableOffline) await loadBalances(false);
+      else await loadPendingPayment(group.id);
     }
   };
 
@@ -3108,12 +3161,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const balances = parseGroupBalances(await request(`/api/groups/${groupId}/balances`, owner));
     return { group, balances };
   };
+  /**
+   * The Record payment sheet over Balances. Its reads are live; they never cancel the Group's
+   * own reads, and leaving the Group or closing the sheet cancels them.
+   */
   const openSettlements = async (groupId: string) => {
     if (snapshot.auth.status !== 'authenticated') return;
     const owner = generation,
-      view = ++viewRequest,
+      view = viewRequest,
+      request = ++settlementRequest,
       lease = accountStorage(),
       storage = dependencies.settlementAttempts;
+    const stale = () => !current(owner) || view !== viewRequest || request !== settlementRequest;
     publish({
       ...snapshot,
       screen: 'settlement',
@@ -3131,28 +3190,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         // The stored record is left exactly as it is, for a later explicit retry.
         throw new DeviceStorageError(recoveryStorageUnreadable);
       }
-      if (!current(owner) || view !== viewRequest) return;
+      if (stale()) return;
       if (recovery) publish({ ...snapshot, settlement: { ...snapshot.settlement, ...recovery } });
       const context = await settlementContext(groupId, owner);
-      const history = parseSettlementHistory(
-        await request(`/api/groups/${groupId}/settlements`, owner),
-        groupId,
-      );
-      if (!current(owner) || view !== viewRequest) return;
+      if (stale()) return;
       publish({
         ...snapshot,
         settlement: {
           ...snapshot.settlement,
           ...context,
-          history,
           status: recovery ? 'uncertain' : 'ready',
-          message: recovery
-            ? 'A payment record is unresolved. Check the history, then explicitly retry the same submission to confirm it.'
-            : null,
+          message: recovery ? unconfirmedPayment : null,
         },
       });
     } catch (error) {
-      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      if (stale() || error instanceof Superseded) return;
       publish({
         ...snapshot,
         settlement: {
@@ -3167,7 +3219,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           message:
             error instanceof RequestError || error instanceof DeviceStorageError
               ? error.message
-              : 'Could not load payments. Reconnect and retry; retained submissions are unchanged.',
+              : 'Couldn’t check the latest balances. Close this and try again when you’re connected.',
         },
       });
     }
@@ -3223,7 +3275,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ...state,
         status: 'editing',
         draft,
-        acknowledged: false,
+        acknowledged: draft.amount === state.draft.amount && state.acknowledged,
         message: null,
         validation: { ...state.validation, errors: validateSettlementDraft(draft) },
       },
@@ -3234,7 +3286,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const state = snapshot.settlement;
     if (
       snapshot.screen !== 'settlement' ||
-      state.status !== 'editing' ||
+      !['editing', 'review'].includes(state.status) ||
       !state.draft ||
       state.validation.touched.includes(field)
     )
@@ -3247,106 +3299,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       },
     });
   };
-  const reviewSettlement = async () => {
-    const state = snapshot.settlement,
-      lease = accountStorage();
-    if (
-      snapshot.screen !== 'settlement' ||
-      !['editing', 'review'].includes(state.status) ||
-      !state.draft ||
-      !state.groupId ||
-      state.attempt ||
-      !lease
-    )
-      return;
-    // Amount corrections stay on the Amount field; payer, recipient, currency and every
-    // entered value are kept, and nothing is requested.
-    const errors = validateSettlementDraft(state.draft);
-    const rejected = rejectFields(settlementFields, state.validation, errors);
-    if (rejected) {
-      publish({
-        ...snapshot,
-        settlement: {
-          ...state,
-          status: 'editing',
-          acknowledged: false,
-          message: settlementCorrectionSummary(errors),
-          validation: rejected,
-        },
-      });
-      return;
-    }
-    const owner = generation,
-      view = viewRequest;
-    publish({ ...snapshot, settlement: { ...state, status: 'loading', message: null } });
-    try {
-      settlementBody(state.draft);
-      const context = await settlementContext(state.groupId, owner);
-      assertSettlementMembers(
-        new Set(context.group.members.map((m) => m.user.id)),
-        state.draft.paidBy,
-        state.draft.paidTo,
-      );
-      assertSettlementAuthorization(lease.accountId, state.draft.paidBy, state.draft.paidTo);
-      assertGroupCurrency(context.group.defaultCurrency, state.draft.currency);
-      if (!current(owner) || view !== viewRequest) return;
-      const suggested = settlementSuggestion(context.balances, state.draft);
-      publish({
-        ...snapshot,
-        settlement: {
-          ...state,
-          ...context,
-          status: 'review',
-          suggested,
-          acknowledged: false,
-          message:
-            suggested !== state.suggested
-              ? 'The suggested debt changed. Review the current suggestion and your actual payment.'
-              : null,
-        },
-      });
-    } catch (error) {
-      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
-      publish({
-        ...snapshot,
-        settlement: {
-          ...state,
-          status:
-            error instanceof RequestError && [403, 404].includes(error.status)
-              ? 'blocked'
-              : 'editing',
-          message:
-            error instanceof Error
-              ? error.message
-              : 'Could not review this payment. Reconnect and retry.',
-        },
-      });
-    } finally {
-      if (
-        current(owner) &&
-        view !== viewRequest &&
-        snapshot.settlement.draft === state.draft &&
-        snapshot.settlement.status === 'loading'
-      )
-        publish({
-          ...snapshot,
-          settlement: {
-            ...snapshot.settlement,
-            status: 'editing',
-            acknowledged: false,
-            message: 'Your payment details are kept. Review again before recording.',
-          },
-        });
-    }
-  };
-
-  const acknowledgeSettlement = () => {
+  /** "I meant to pay more than suggested": Record waits for it above the suggestion. */
+  const acknowledgeSettlement = (acknowledged = true) => {
     if (
       snapshot.screen === 'settlement' &&
-      snapshot.settlement.status === 'review' &&
+      ['editing', 'review'].includes(snapshot.settlement.status) &&
       !snapshot.settlement.attempt
     )
-      publish({ ...snapshot, settlement: { ...snapshot.settlement, acknowledged: true } });
+      publish({ ...snapshot, settlement: { ...snapshot.settlement, acknowledged } });
   };
   const recordSettlement = async () => {
     const state = snapshot.settlement,
@@ -3354,11 +3314,28 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       storage = dependencies.settlementAttempts;
     if (
       snapshot.screen !== 'settlement' ||
-      !['review', 'uncertain'].includes(state.status) ||
+      !['editing', 'review', 'uncertain'].includes(state.status) ||
       !state.draft ||
       !state.groupId
     )
       return;
+    // Corrections stay on their fields, every entry is kept, and nothing is requested.
+    if (!state.attempt) {
+      const errors = validateSettlementDraft(state.draft);
+      const rejected = rejectFields(settlementFields, state.validation, errors);
+      if (rejected) {
+        publish({
+          ...snapshot,
+          settlement: {
+            ...state,
+            status: 'editing',
+            message: settlementCorrectionSummary(errors),
+            validation: rejected,
+          },
+        });
+        return;
+      }
+    }
     // A payment is only sent once its retry identity is stored on this device.
     if (!lease || !storage) {
       publish({
@@ -3389,6 +3366,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       assertSettlementAuthorization(lease.accountId, draft.paidBy, draft.paidTo);
       if (!attempt) {
         const suggested = settlementSuggestion(context.balances, draft);
+        // The suggestion is gone: recording it anyway would be a payment nobody suggested.
+        if (suggested === 0) {
+          publish({
+            ...snapshot,
+            settlement: {
+              ...state,
+              ...context,
+              status: 'ready',
+              draft: null,
+              suggested: null,
+              acknowledged: false,
+              message: suggestionChanged,
+              validation: emptyFormValidation(),
+            },
+          });
+          return;
+        }
         if (suggested !== state.suggested) {
           publish({
             ...snapshot,
@@ -3398,8 +3392,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               suggested,
               status: 'review',
               acknowledged: false,
-              message:
-                'The suggested debt changed. Review this amount before recording your actual payment.',
+              message: 'The suggested amount changed. Check the amount, then record again.',
             },
           });
           return;
@@ -3451,33 +3444,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           await storage.remove(lease.accountId, groupId);
       });
       completed = true;
+      // The record is gone from this device, so Balances no longer offers it.
+      if (current(owner) && snapshot.pendingPayment?.groupId === groupId) {
+        pendingRequest += 1;
+        publish({ ...snapshot, pendingPayment: null });
+      }
       if (!current(owner) || view !== viewRequest) return;
-      const refreshing = openSettlements(groupId);
-      const refreshView = viewRequest;
-      await refreshing;
-      if (
-        current(owner) &&
-        viewRequest === refreshView &&
-        snapshot.screen === 'settlement' &&
-        snapshot.settlement.groupId === groupId
-      )
-        publish({
-          ...snapshot,
-          settlement: {
-            ...snapshot.settlement,
-            message:
-              snapshot.settlement.status === 'ready'
-                ? 'Payment recorded. The refreshed balances show what remains; no money was transferred by SplitBook.'
-                : `Payment recorded. ${snapshot.settlement.message ?? 'Could not refresh payments.'} Use Refresh payments to check the current result.`,
-          },
-        });
+      // The sheet closes onto Balances, which the refresh below reads again.
+      showSettlementGroup(groupId, { groupId, message: 'Payment recorded', viewMonth: null }, null);
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;
       const correctionCodes: Record<string, string> = {
-        CURRENCY_MISMATCH:
-          'The Group currency changed. Return to payments and review the available currency.',
+        CURRENCY_MISMATCH: 'The Group currency changed. Close this and choose the payment again.',
         INVALID_MEMBERS:
-          'The payer or recipient is no longer a Group member. Review the available payments.',
+          'The payer or recipient is no longer a Group member. Close this and choose another payment.',
         SAME_PARTY: 'Payer and recipient must be different people.',
         FORBIDDEN_SETTLEMENT: 'Only the payer or recipient can record this payment.',
         VALIDATION_ERROR: 'Check the actual amount, currency precision, and note before recording.',
@@ -3524,9 +3504,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           attempt,
           status: denied ? 'blocked' : attempt ? 'uncertain' : 'review',
           message: denied
-            ? 'This payment cannot be recorded with the current access or details. Any unresolved submission is retained; check the history and refresh access before continuing.'
+            ? 'This payment can’t be recorded with your current access or details. Any unconfirmed record stays on this device.'
             : attempt
-              ? 'The payment may already be recorded. Retry this exact submission to confirm it; it cannot be edited.'
+              ? unconfirmedPayment
               : error instanceof Error
                 ? error.message
                 : 'Could not record this payment. Your entries are kept.',
@@ -3547,12 +3527,124 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             draft: completed ? null : draft,
             status: completed ? 'ready' : attempt ? 'uncertain' : 'editing',
             message: completed
-              ? 'Payment recorded. Refresh payments to see current balances.'
+              ? 'Payment recorded.'
               : 'Your entries are retained. Review or explicitly retry after reconnecting.',
           },
         });
       if (current(owner) && completed) await refreshLedgerViews(groupId, owner, false);
     }
+  };
+
+  /**
+   * Record on a suggested payment opens the sheet over Balances, pre-filled once a live read
+   * confirms the suggestion. Recording needs a connection, so offline it does nothing.
+   */
+  const openRecordPayment = async (paidBy: string, paidTo: string, currency: string) => {
+    const groupId = snapshot.detail.data?.id;
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.screen !== 'group' ||
+      snapshot.destination !== 'balances' ||
+      !groupId ||
+      snapshot.offline.active
+    )
+      return;
+    await openSettlements(groupId);
+    // Closed while the live read ran.
+    const { screen, settlement: state } = latest();
+    if (screen !== 'settlement' || state.groupId !== groupId) return;
+    // An unconfirmed payment opens instead, and says why when it isn't the one chosen.
+    if (
+      state.status === 'uncertain' &&
+      state.draft &&
+      (state.draft.paidBy !== paidBy || state.draft.paidTo !== paidTo)
+    )
+      publish({
+        ...snapshot,
+        settlement: {
+          ...state,
+          message: `${earlierPayment} ${state.message ?? unconfirmedPayment}`,
+        },
+      });
+    if (state.status !== 'ready') return;
+    selectSettlement(paidBy, paidTo, currency);
+    if (!snapshot.settlement.draft)
+      publish({ ...snapshot, settlement: { ...snapshot.settlement, message: suggestionChanged } });
+  };
+
+  /** Check payment on Balances opens the Group's unconfirmed payment in the sheet, to retry. */
+  const openPendingPayment = async () => {
+    const groupId = snapshot.detail.data?.id;
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.screen !== 'group' ||
+      snapshot.destination !== 'balances' ||
+      !groupId ||
+      snapshot.pendingPayment?.groupId !== groupId ||
+      snapshot.offline.active
+    )
+      return;
+    await openSettlements(groupId);
+    const { screen, settlement: state } = latest();
+    // Resolved since Balances showed it: nothing is waiting any more.
+    if (screen === 'settlement' && state.groupId === groupId && state.status === 'ready')
+      publish({
+        ...snapshot,
+        settlement: {
+          ...state,
+          message: 'Nothing is waiting to be retried. Close this to see the latest balances.',
+        },
+      });
+  };
+
+  /**
+   * Show the Group's Balances under a closing sheet; late sheet reads can't reopen it.
+   * `pending` is the unconfirmed payment Balances offers afterwards.
+   */
+  const showSettlementGroup = (
+    groupId: string,
+    snackbar: GroupSnackbar | null,
+    pending: PendingPayment | null,
+  ) => {
+    settlementRequest += 1;
+    pendingRequest += 1;
+    publish({
+      ...snapshot,
+      screen: 'group',
+      destination: 'balances',
+      detail:
+        snapshot.detail.id === groupId
+          ? snapshot.detail
+          : { status: 'loading', id: groupId, data: null, message: null, refreshedAt: null },
+      settlement: emptySettlement(),
+      pendingPayment: pending,
+      snackbar,
+    });
+  };
+
+  /**
+   * Close and Android Back return to Balances; nothing is recorded. An unconfirmed payment stays
+   * on Balances, which reads again when the sheet's live read found newer balances or a payment's
+   * outcome is unknown.
+   */
+  const closeSettlement = async () => {
+    const { groupId, group, balances, attempt, draft } = snapshot.settlement;
+    if (snapshot.screen !== 'settlement' || expenseNavigationBlocked()) return;
+    if (!groupId) return showHome();
+    const shown = snapshot.detail.id === groupId && snapshot.detail.data !== null;
+    const newer =
+      attempt !== null ||
+      (group !== null &&
+        JSON.stringify(balances) !== JSON.stringify(snapshot.financial.balances.data));
+    const pending = attempt
+      ? { groupId, draft }
+      : snapshot.pendingPayment?.groupId === groupId
+        ? snapshot.pendingPayment
+        : null;
+    showSettlementGroup(groupId, null, pending);
+    if (!shown) await openGroup(groupId, true, 'balances');
+    else if (newer) await loadBalances(false);
+    else await loadPendingPayment(groupId);
   };
 
   const startCreate = () => {
@@ -4006,6 +4098,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     if (snapshot.creation.status === 'saving' || expenseNavigationBlocked()) return;
     if (snapshot.screen === 'expense') return closeExpense();
+    if (snapshot.screen === 'settlement') return closeSettlement();
     return showHome();
   };
 
@@ -4099,7 +4192,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                 status: 'blocked',
                 group: null,
                 balances: [],
-                history: [],
                 message: error.message,
               },
             });
@@ -4198,9 +4290,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openSettings,
     accountStorage,
     openSettlements,
+    openRecordPayment,
+    openPendingPayment,
+    closeSettlement,
     selectSettlement,
     updateSettlement,
-    reviewSettlement,
     recordSettlement,
     acknowledgeSettlement,
     touchSettlementField,

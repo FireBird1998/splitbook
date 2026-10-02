@@ -291,6 +291,25 @@ describe('account-scoped offline financial views', () => {
     });
   });
 
+  it('keeps Record payment closed offline, because recording needs a connection', async () => {
+    const f = fixture(),
+      first = f.create();
+    await first.signIn('alex');
+    await first.openGroup(groupId, true, 'balances');
+    first.dispose();
+    f.goOffline();
+    const restarted = f.create();
+    await restarted.restore();
+    await restarted.openGroup(groupId, true, 'balances');
+    expect(restarted.getSnapshot().offline.active).toBe(true);
+    await restarted.openRecordPayment(accountId, 'a00000000000000000000002', 'INR');
+    expect(restarted.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'balances',
+      settlement: { status: 'idle', draft: null },
+    });
+  });
+
   it('keeps an offline draft editable but never queues a write, then revalidates without discarding it', async () => {
     const f = fixture(),
       first = f.create();

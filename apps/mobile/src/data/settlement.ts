@@ -46,6 +46,14 @@ export interface SettlementAttempt {
   key: string;
   body: string;
 }
+/**
+ * A payment stored on this device whose response was lost. Balances offers it whatever the
+ * suggestions say; `draft` is null when the stored record can't be read.
+ */
+export interface PendingPayment {
+  groupId: string;
+  draft: SettlementDraft | null;
+}
 const person = z
   .union([objectId, z.object({ _id: objectId, name: z.string().optional() }), z.null()])
   .transform((value) => ({
@@ -69,7 +77,6 @@ export interface SettlementState {
   groupId: string | null;
   group: MobileGroup | null;
   balances: GroupCurrencyBalance[];
-  history: SettlementRecord[];
   status:
     | 'idle'
     | 'loading'
@@ -91,7 +98,6 @@ export const emptySettlement = (): SettlementState => ({
   groupId: null,
   group: null,
   balances: [],
-  history: [],
   status: 'idle',
   draft: null,
   attempt: null,
