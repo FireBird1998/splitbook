@@ -4,14 +4,14 @@ import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'rea
 import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
+import { expenseDifferences } from '@splitbook/shared/expense-review';
 import {
   draftFromExpense,
-  expenseDifferences,
   expenseDraftChanged,
   expenseFieldLabels,
   expenseFields,
   expenseMoney,
-  resolveExpenseReview,
+  resolveDraftReview,
   type ExpenseDraft,
   type ExpenseEditor as Editor,
   type ExpenseField,
@@ -420,7 +420,7 @@ export function ExpenseEditor({
               yours={draft}
               saved={draftFromExpense(draft.original)}
               note="The saved Expense changed these while you were editing. Choose which to keep."
-              onChoose={(field, keep) => onChange(resolveExpenseReview(draft, field, keep))}
+              onChoose={(field, keep) => onChange(resolveDraftReview(draft, field, keep))}
               {...versions}
             />
           ) : null}

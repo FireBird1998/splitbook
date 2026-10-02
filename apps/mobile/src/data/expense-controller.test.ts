@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { toDateParam } from '@splitbook/shared/date';
-import { resolveExpenseReview, type ExpenseDraft, type ExpenseField } from './expense-draft';
+import { resolveDraftReview, type ExpenseDraft, type ExpenseField } from './expense-draft';
 import { createMobileController, type MobileController } from './mobile-controller';
 import type { FetchResponse, MobileFetch } from './types';
 
@@ -1928,7 +1928,7 @@ describe('an edit that meets a newer saved Expense', () => {
   };
   const choose = (controller: MobileController, keep: 'mine' | 'saved') =>
     controller.updateExpenseDraft(
-      resolveExpenseReview(controller.getSnapshot().expense.draft!, 'amount', keep),
+      resolveDraftReview(controller.getSnapshot().expense.draft!, 'amount', keep),
     );
 
   it('keeps the member’s changes, takes the saved values for the rest, and holds a changed amount for review', async () => {

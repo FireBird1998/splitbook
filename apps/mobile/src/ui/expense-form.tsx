@@ -4,12 +4,14 @@ import { EXPENSE_CATEGORIES, getCategory } from '@splitbook/shared/categories';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import {
-  expenseFieldLabels,
   isMoneyField,
-  type ExpenseDraft,
-  type ExpenseField,
   type ExpenseMoneyField,
   type ExpenseVersionField,
+} from '@splitbook/shared/expense-review';
+import {
+  expenseFieldLabels,
+  type ExpenseDraft,
+  type ExpenseField,
   type expenseMoney,
 } from '../data/expense-draft';
 import { acceptsNumericText } from '../data/field-feedback';
