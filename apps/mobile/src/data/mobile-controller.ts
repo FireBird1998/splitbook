@@ -1,5 +1,11 @@
 import { cachedRead } from './offline-cache';
-import { emptyActivity, parseActivityPage, parseActivityExpense } from './activity';
+import {
+  emptyActivity,
+  parseActivityPage,
+  parseActivityExpense,
+  type ActivityState,
+} from './activity';
+import { createActivityReads, type ActivityPage, type ActivityShowMode } from './activity-reads';
 import {
   emptySettlement,
   parseRecordedSettlement,
@@ -105,6 +111,11 @@ function readScope(path: string) {
     : rest === '/balances'
       ? `balances:${groupId}`
       : `ledger:${groupId}`;
+}
+
+/** One page of a Group's Activity timeline, as read and saved. */
+function activityPath(groupId: string, page: number) {
+  return `/api/groups/${groupId}/activity?page=${page}&limit=20`;
 }
 
 function emptyExpenses(month: string | null = null): GroupFinancialState['expenses'] {
@@ -267,7 +278,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let balancesRequest = 0;
   let settlementRequest = 0;
   let pendingRequest = 0;
-  let activityRequest = 0;
   let activityDetailRequest = 0;
   let cacheEpoch = 0;
   // Set by returnToGroup: the next read of that Group and Month reads this many pages.
@@ -301,6 +311,44 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let creationRecovery: { ownerId: string; creation: GroupCreation } | null = null;
   let pendingQueue: Promise<unknown> = Promise.resolve();
 
+  /**
+   * #108 pilot: TanStack Query owns the Activity timeline (see activity-reads.ts). The
+   * controller supplies network reads and persistence, and projects what it observes.
+   */
+  const activityReads = createActivityReads({
+    now,
+    freshness,
+    fetchPage: async (groupId, page) => {
+      const owner = generation;
+      if (!objectId.safeParse(groupId).success)
+        throw new RequestError('This Group is unavailable.', 404);
+      if (offlineSession || snapshot.offline.active) await revalidateSession(owner);
+      let value: unknown;
+      try {
+        value = await request(activityPath(groupId, page), owner);
+      } catch (error) {
+        // A 403 removes this timeline before its read settles; the Group view still closes.
+        if (
+          current(owner) &&
+          showingActivity() &&
+          snapshot.activity.groupId === groupId &&
+          error instanceof RequestError
+        )
+          dropDeniedGroup(groupId, error);
+        throw error;
+      }
+      return {
+        value,
+        ...parseActivityPage(value, groupId, page),
+        refreshedAt: now(),
+        restored: false,
+      };
+    },
+    save: (accountId, groupId, page) => saveActivityPage(accountId, groupId, page),
+    restore: (accountId, groupId) => savedActivity(accountId, groupId),
+    onChange: () => showActivityReads(),
+  });
+
   const savePending = (code: string | null) => {
     pendingLoaded = true;
     pendingCode = code;
@@ -330,6 +378,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (next.restoreScroll && !showing(next.restoreScroll.groupId))
       next = { ...next, restoreScroll: null };
     snapshot = next;
+    // Activity is observed, and refetched on focus, only while it is on screen.
+    if (next.screen !== 'group' || next.destination !== 'activity') activityReads.hide();
     listeners.forEach((listener) => listener());
   };
   const current = (owner: number) => owner === generation;
@@ -346,6 +396,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     staleReads.clear();
     reads.clear();
     inflight.clear();
+    activityReads.clear();
     versions.clear();
     invalidatedAt.clear();
     explicit = new Map();
@@ -764,8 +815,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     for (const path of [...reads.keys()]) if (scopes.includes(readScope(path))) reads.delete(path);
   };
   /** A confirmed Expense or Settlement change affects every page, Month, Balance, Home and Activity view. */
-  const ledgerChanged = (groupId: string) =>
+  const ledgerChanged = (groupId: string) => {
     invalidateReads(`ledger:${groupId}`, `balances:${groupId}`, 'home');
+    activityReads.invalidate(groupId);
+  };
 
   /** The view a display read belongs to, for explicit refresh intent. */
   const viewOf = (path: string) =>
@@ -1075,6 +1128,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           if (id && !listed.has(id))
             invalidateReads(`group:${id}`, `ledger:${id}`, `balances:${id}`, 'home');
         }
+        activityReads.retain(listed);
       }
       const lease = accountStorage();
       if (reading && lease && dependencies.readCache && !staleReads.has(path)) {
@@ -1521,8 +1575,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             balances: balances.status === 'loading' ? { ...balances, status: 'idle' } : balances,
           },
         });
-        await readActivity(false);
-      } else await readExpenses(false, reuse);
+        await showActivity(reuse ? 'reuse' : 'force');
+      } else {
+        // An explicit refresh of the Group reads Activity again on its next visit too.
+        if (!reuse) activityReads.expire(id);
+        await readExpenses(false, reuse);
+      }
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
       if (dropDeniedGroup(id, error)) return;
@@ -1549,6 +1607,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const evictGroupContent = (id: string, status: number) => {
+    activityReads.remove(id);
     const message =
       status === 403
         ? 'You no longer have access to this group.'
@@ -1584,6 +1643,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const dropDeniedGroup = (id: string, error: unknown): boolean => {
     if (!(error instanceof RequestError) || ![403, 404].includes(error.status)) return false;
+    activityReads.remove(id);
     viewRequest += 1;
     homeRequest += 1;
     publish({
@@ -2010,87 +2070,160 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     explicitly([`group:${snapshot.detail.data?.id}`], () => readExpenses(false));
   const loadMoreExpenses = () => readExpenses(true);
 
-  const readActivity = async (append: boolean) => {
-    const previous = snapshot.activity,
-      groupId = previous.groupId;
-    if (snapshot.auth.status !== 'authenticated' || !showingActivity() || !groupId) return;
-    const pagination = previous.pagination;
-    if (
-      append &&
-      (previous.status !== 'ready' ||
-        previous.moreStatus === 'loading' ||
-        !pagination ||
-        pagination.page >= pagination.totalPages)
-    )
-      return;
-    const pageNumber = append ? pagination!.page + 1 : 1;
-    if (!append) activityDetailRequest += 1;
+  /** Saves one Activity page read from the network, as any other display read is saved. */
+  const saveActivityPage = (accountId: string, groupId: string, page: ActivityPage) => {
+    const lease = accountStorage();
+    if (!lease || lease.accountId !== accountId || !dependencies.readCache) return;
     const owner = generation,
-      view = viewRequest,
-      read = ++activityRequest;
-    publish({
-      ...snapshot,
-      activity: {
-        ...previous,
-        ...(!append ? { selected: null, target: { status: 'none' as const } } : {}),
-        status: append ? 'ready' : 'loading',
-        moreStatus: append ? 'loading' : 'idle',
-        message: null,
-      },
-    });
-    try {
-      if (!objectId.safeParse(groupId).success)
-        throw new RequestError('This Group is unavailable.', 404);
-      const page = await readCached(
-        `/api/groups/${groupId}/activity?page=${pageNumber}&limit=20`,
-        owner,
-        (value) => parseActivityPage(value, groupId, pageNumber),
-        () => current(owner) && view === viewRequest && read === activityRequest,
+      epoch = cacheEpoch,
+      path = activityPath(groupId, page.pagination.page),
+      version = versionOf(path);
+    lease
+      .write(async () => {
+        if (epoch !== cacheEpoch || version !== versionOf(path)) throw new Superseded();
+        await dependencies.readCache!.save(accountId, path, {
+          version: 1,
+          accountId,
+          path,
+          refreshedAt: page.refreshedAt,
+          value: page.value,
+        });
+      })
+      .catch((error: unknown) => {
+        if (!current(owner) || epoch !== cacheEpoch || error instanceof Superseded) return;
+        publish({
+          ...snapshot,
+          offline: {
+            ...snapshot.offline,
+            message: 'Could not save this view for offline use. Online data is still available.',
+          },
+        });
+      });
+  };
+
+  /**
+   * This account's saved Activity pages for the Group, from the first, each with its
+   * original time. Pages saved before a confirmed change or denial, or at another time
+   * than the first page (the timeline had changed), are left out.
+   */
+  const savedActivity = async (accountId: string, groupId: string) => {
+    const lease = accountStorage();
+    if (!lease || lease.accountId !== accountId || !dependencies.readCache) return null;
+    const owner = generation,
+      epoch = cacheEpoch,
+      pages: ActivityPage[] = [];
+    for (let number = 1; ; number += 1) {
+      const path = activityPath(groupId, number),
+        version = versionOf(path);
+      const stored = cachedRead(
+        await lease.write(() => dependencies.readCache!.load(accountId, path)),
+        accountId,
+        path,
+        now(),
       );
-      if (!current(owner) || view !== viewRequest || read !== activityRequest) return;
-      const events = [
-        ...new Map(
-          [...(append ? previous.events : []), ...page.events].map((event) => [event._id, event]),
-        ).values(),
-      ];
+      if (
+        !stored ||
+        !current(owner) ||
+        epoch !== cacheEpoch ||
+        version !== versionOf(path) ||
+        stored.refreshedAt <= (invalidatedAt.get(readScope(path)) ?? -Infinity)
+      )
+        break;
+      let page: ReturnType<typeof parseActivityPage>;
+      try {
+        page = parseActivityPage(stored.value, groupId, number);
+      } catch {
+        break;
+      }
+      if (pages.length && page.pagination.total !== pages[0]!.pagination.total) break;
+      pages.push({ ...page, value: stored.value, refreshedAt: stored.refreshedAt, restored: true });
+      if (page.pagination.page >= page.pagination.totalPages) break;
+    }
+    return pages.length ? pages : null;
+  };
+
+  /** The observed Activity timeline, as the snapshot shows it. */
+  const showActivityReads = () => {
+    const groupId = snapshot.activity.groupId;
+    if (snapshot.auth.status !== 'authenticated' || !showingActivity() || !groupId) return;
+    const result = activityReads.current(groupId);
+    if (!result) return;
+    const previous = snapshot.activity,
+      path = activityPath(groupId, 1),
+      pages = result.data?.pages ?? [],
+      restored = pages.filter((page) => page.restored);
+    const shown: ActivityState = {
+      ...previous,
+      // Events already read for this Group stay readable until Activity is read again.
+      events: result.data
+        ? [
+            ...new Map(
+              pages.flatMap((page) => page.events).map((event) => [event._id, event]),
+            ).values(),
+          ]
+        : previous.events,
+      pagination: pages.at(-1)?.pagination ?? previous.pagination,
+    };
+    if (result.isFetching && !result.isFetchingNextPage) {
+      // Reading the timeline again closes any event detail opened from it.
+      if (previous.status !== 'loading') activityDetailRequest += 1;
       publish({
         ...snapshot,
         activity: {
-          ...snapshot.activity,
-          events,
-          pagination: page.pagination,
-          status: 'ready',
+          ...shown,
+          selected: null,
+          target: { status: 'none' },
+          status: 'loading',
           moreStatus: 'idle',
           message: null,
         },
       });
-    } catch (error) {
-      if (
-        !current(owner) ||
-        view !== viewRequest ||
-        read !== activityRequest ||
-        error instanceof Superseded
-      )
-        return;
-      const denied = error instanceof RequestError && [403, 404].includes(error.status);
-      if (denied) dropDeniedGroup(groupId, error);
+      return;
+    }
+    if (result.isFetchingNextPage) {
       publish({
         ...snapshot,
-        activity: denied
-          ? { ...emptyActivity(), groupId, status: 'denied', message: error.message }
-          : {
-              ...previous,
-              selected: null,
-              target: { status: 'none' },
-              status: append ? 'ready' : 'error',
-              moreStatus: append ? 'error' : 'idle',
-              message:
-                error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE'
-                  ? error.message
-                  : 'Could not refresh Activity. Previously loaded events may be stale. A missing event does not mean the ledger change failed.',
-            },
+        activity: { ...shown, status: 'ready', moreStatus: 'loading', message: null },
       });
+      return;
     }
+    // A saved copy shown after a failed read is still explained by that failure.
+    const failure = result.error ?? (restored.length ? result.failureReason : null);
+    if (failure instanceof Superseded) return;
+    if (failure instanceof RequestError && [403, 404].includes(failure.status)) {
+      dropDeniedGroup(groupId, failure);
+      return;
+    }
+    const offline =
+      failure instanceof RequestError && failure.networkFailure && Boolean(dependencies.readCache);
+    if (offline) offlineSession = true;
+    const message = offline
+      ? 'This view was not saved on this device. Connect to load it.'
+      : 'Could not refresh Activity. Previously loaded events may be stale. A missing event does not mean the ledger change failed.';
+    const activity: ActivityState = result.isFetchNextPageError
+      ? { ...shown, status: 'ready', moreStatus: 'error', message }
+      : failure && !(offline && pages.length)
+        ? { ...shown, status: 'error', moreStatus: 'idle', message }
+        : { ...shown, status: result.data ? 'ready' : 'idle', moreStatus: 'idle', message: null };
+    // Saved copies and offline fallbacks show their original time.
+    if (offline || restored.length)
+      staleReads.set(
+        path,
+        pages.length
+          ? Math.min(...(offline ? pages : restored).map((page) => page.refreshedAt))
+          : null,
+      );
+    else staleReads.delete(path);
+    publish({ ...snapshot, activity });
+    publishReadFreshness();
+  };
+
+  const showActivity = async (mode: ActivityShowMode) => {
+    const groupId = snapshot.activity.groupId,
+      accountId = snapshot.auth.user?.id;
+    if (snapshot.auth.status !== 'authenticated' || !showingActivity() || !groupId || !accountId)
+      return;
+    await activityReads.show(accountId, groupId, mode);
   };
   const showingActivity = () => snapshot.screen === 'group' && snapshot.destination === 'activity';
 
@@ -2117,9 +2250,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     // A Group read still in flight reads the destination shown when it completes.
     if (snapshot.detail.status === 'loading' || !snapshot.detail.data) return;
-    if (destination === 'activity') {
-      if (snapshot.activity.status === 'idle') await readActivity(false);
-    } else if (
+    if (destination === 'activity')
+      // Activity already read since the Group was opened stays as it is.
+      await showActivity(snapshot.activity.status === 'idle' ? 'reuse' : 'keep');
+    else if (
       snapshot.financial.groupId === groupId &&
       snapshot.financial.expenses.status === 'idle'
     )
@@ -2133,8 +2267,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return selectDestination('activity');
     await openGroup(groupId, true, 'activity');
   };
-  const refreshActivity = () => readActivity(false);
-  const loadMoreActivity = () => readActivity(true);
+  /** Pull and Retry read the first page again. */
+  const refreshActivity = () => showActivity('force');
+  const loadMoreActivity = async () => {
+    const { status, moreStatus, pagination, groupId } = snapshot.activity;
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      !showingActivity() ||
+      !groupId ||
+      status !== 'ready' ||
+      moreStatus === 'loading' ||
+      !pagination ||
+      pagination.page >= pagination.totalPages
+    )
+      return;
+    await activityReads.loadMore();
+  };
 
   const selectActivity = async (eventId: string) => {
     const activity = snapshot.activity;
@@ -4135,7 +4283,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return retryInvitation();
     if (snapshot.auth.status !== 'authenticated') return restore();
     // Pulling on Activity re-reads Activity only; a Group that failed to load is read again.
-    if (showingActivity() && snapshot.detail.status === 'ready') return refreshActivity();
+    // Coming to the foreground leaves Activity to its query, which reads a stale timeline
+    // again on focus.
+    if (showingActivity() && snapshot.detail.status === 'ready')
+      return reuse ? undefined : refreshActivity();
     if (['create', 'invite', 'settings', 'expense', 'settlement'].includes(snapshot.screen)) {
       const owner = generation,
         view = viewRequest,
@@ -4329,6 +4480,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     },
     dispose: () => {
       invalidate();
+      activityReads.dispose();
       listeners.clear();
       snapshot = cleanSnapshot({ status: 'signed-out', user: null, message: null });
     },

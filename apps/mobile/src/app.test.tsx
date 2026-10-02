@@ -381,8 +381,11 @@ async function renderApp() {
       );
       return handled;
     },
-    /** Android reports the app returning to the foreground. */
-    foreground: () => native.appState.forEach((listener) => listener('active')),
+    /** Android reports the app leaving and returning to the foreground. */
+    foreground: () => {
+      native.appState.forEach((listener) => listener('background'));
+      native.appState.forEach((listener) => listener('active'));
+    },
   };
 }
 
@@ -557,6 +560,8 @@ describe('App Group Activity refresh', () => {
     const app = await onActivity();
     const read = hold();
     app.use((path) => (path.includes('/activity?') ? read.respond() : undefined));
+    // Past the display freshness window, so Activity's query reads again on focus.
+    app.clock.now += 31_000;
     app.foreground();
     await read.reached;
     await settle();

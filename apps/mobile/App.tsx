@@ -48,6 +48,7 @@ import { refreshFeedback } from './src/ui/refresh-feedback';
 import { GroupSnackbar } from './src/ui/group-snackbar';
 import { visibleFieldErrors } from './src/data/field-feedback';
 import { groupFields } from './src/data/group-draft';
+import { watchAppFocus } from './src/data/activity-reads';
 import { GroupShell } from './src/ui/group-shell';
 import { GroupBalancesView } from './src/ui/group-balances';
 import { RecordPaymentSheet } from './src/ui/record-payment-sheet';
@@ -115,6 +116,11 @@ function SplitBook() {
     const appState = AppState.addEventListener('change', (next) => {
       if (next === 'active') void controller.refresh('foreground');
     });
+    // Activity's query reads a stale timeline again when the app returns to the foreground.
+    const stopFocus = watchAppFocus((listener) => {
+      const focus = AppState.addEventListener('change', (next) => listener(next === 'active'));
+      return () => focus.remove();
+    });
     const back = BackHandler.addEventListener('hardwareBackPress', () => {
       if (controller.getSnapshot().screen !== 'groups') {
         controller.back();
@@ -124,6 +130,7 @@ function SplitBook() {
     });
     return () => {
       appState.remove();
+      stopFocus();
       links.remove();
       back.remove();
     };
