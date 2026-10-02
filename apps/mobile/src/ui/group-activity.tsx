@@ -7,6 +7,7 @@ import {
   describeActivity,
   spokenActivity,
   type ActivityLine,
+  type TextRun,
 } from './activity-format';
 import {
   Banner,
@@ -64,6 +65,23 @@ function Headline({ line, numberOfLines }: { line: ActivityLine; numberOfLines?:
   );
 }
 
+/** Text within a sentence, with its amounts in the money font. */
+function Runs({ runs }: { runs: TextRun[] }) {
+  return (
+    <>
+      {runs.map((run, index) =>
+        run.mono ? (
+          <Text key={index} style={{ fontFamily: fonts.mono, fontVariant: ['tabular-nums'] }}>
+            {run.text}
+          </Text>
+        ) : (
+          run.text
+        ),
+      )}
+    </>
+  );
+}
+
 function Details({ line, time }: { line: ActivityLine; time: string }) {
   const parts = [...line.details, { text: time }];
   return (
@@ -71,13 +89,7 @@ function Details({ line, time }: { line: ActivityLine; time: string }) {
       {parts.map((part, index) => (
         <Fragment key={index}>
           {index > 0 ? ' · ' : ''}
-          {part.mono ? (
-            <Text style={{ fontFamily: fonts.mono, fontVariant: ['tabular-nums'] }}>
-              {part.text}
-            </Text>
-          ) : (
-            part.text
-          )}
+          <Runs runs={part.runs ?? [part]} />
         </Fragment>
       ))}
     </CompactText>
@@ -313,10 +325,10 @@ function ActivityDetail({
           <SectionHeader title="What changed" />
           <Card>
             {line.changes.map((change, index) => (
-              <View key={change}>
+              <View key={index}>
                 {index > 0 ? <Divider /> : null}
                 <CompactText style={{ paddingHorizontal: 14, paddingVertical: 12 }}>
-                  {change}
+                  <Runs runs={change.runs ?? [change]} />
                 </CompactText>
               </View>
             ))}

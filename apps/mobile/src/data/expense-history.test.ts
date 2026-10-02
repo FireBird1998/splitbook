@@ -94,6 +94,13 @@ describe('describeExpenseHistory', () => {
       'Sam’s share | Not included | €20.00',
       'Former member’s share | €10.00 | Not included',
     ]);
+    // "Not included" is a word, so only the amounts are set in the money font.
+    expect(entries[0].changes.map((change) => change.money)).toEqual([
+      undefined,
+      { before: true, after: true },
+      { before: false, after: true },
+      { before: true, after: false },
+    ]);
     expect(entries[0].summary).toBe('Alex changed the split');
   });
 
