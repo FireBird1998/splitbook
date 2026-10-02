@@ -421,7 +421,7 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
               ? 'Create a Group'
               : 'You’re invited'
         }
-        leading={{ kind: 'back', label: 'Back to Groups', onPress: () => void controller.back() }}
+        leading={{ kind: 'back', label: 'Back to Home', onPress: () => void controller.back() }}
         actions={
           authenticated && state.screen !== 'settings' ? (
             <IconButton
