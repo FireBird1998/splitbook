@@ -15,6 +15,12 @@ import {
   parseDecimalUnits,
 } from '@splitbook/shared/exact-money';
 import { getCurrency } from '@splitbook/shared/currency';
+import {
+  expenseMoneyFields,
+  rebaseExpenseEntries,
+  resolveExpenseReview,
+  type ExpenseMoneyField,
+} from '@splitbook/shared/expense-review';
 import { amountError as moneyAmountError, calendarDateError } from './field-feedback';
 import { parseGroupResponse } from '@splitbook/shared/group-read';
 import { objectId, toMobileGroup } from './dto';
@@ -38,6 +44,11 @@ export const expenseDraftSchema = z.object({
   category: z.string(),
   tagId: z.string(),
   notes: z.string().max(500),
+  /**
+   * Money fields the saved Expense changed while this edit was open. Each keeps the member's
+   * entry until they choose theirs or the saved one; saving waits for every choice.
+   */
+  review: z.array(z.enum(expenseMoneyFields)).optional(),
 });
 export type ExpenseDraft = z.infer<typeof expenseDraftSchema>;
 export interface ExpenseContext {
@@ -433,6 +444,31 @@ export function sameExpenseDraft(a: ExpenseDraft, b: ExpenseDraft): boolean {
 export function expenseDraftChanged(draft: ExpenseDraft, blank: ExpenseDraft | null): boolean {
   const start = draft.original ? draftFromExpense(draft.original) : blank;
   return !start || !sameExpenseDraft(draft, start);
+}
+
+/**
+ * "Keep my version for review" against the latest saved Expense, by the shared review policy:
+ * the edit began from its `original` and now builds on `latest`.
+ */
+export function rebaseExpenseDraft(draft: ExpenseDraft, latest: ExpenseRecord): ExpenseDraft {
+  return {
+    ...rebaseExpenseEntries(draft, draftFromExpense(draft.original!), draftFromExpense(latest)),
+    original: latest,
+  };
+}
+
+/** The member's choice for a money field under review, against the Expense the draft edits. */
+export function resolveDraftReview(
+  draft: ExpenseDraft,
+  field: ExpenseMoneyField,
+  keep: 'mine' | 'saved',
+): Partial<ExpenseDraft> {
+  return resolveExpenseReview(
+    draft,
+    field,
+    keep,
+    draft.original ? draftFromExpense(draft.original) : null,
+  );
 }
 
 export function buildExpensePatch(draft: ExpenseDraft, context: ExpenseContext): string {

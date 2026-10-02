@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toDateParam } from '@splitbook/shared/date';
-import type { ExpenseDraft, ExpenseField } from './expense-draft';
-import { createMobileController } from './mobile-controller';
+import { resolveDraftReview, type ExpenseDraft, type ExpenseField } from './expense-draft';
+import { createMobileController, type MobileController } from './mobile-controller';
 import type { FetchResponse, MobileFetch } from './types';
 
 const memberIds = [
@@ -881,7 +881,7 @@ describe('native Expense creation and editing', () => {
     const expense = controller.getSnapshot().expense;
     expect(expense.status).toBe('uncertain');
     expect(expense.message).toContain(message);
-    expect(expense.message).toContain('Retry this same submission');
+    expect(expense.message).toContain('Checking reuses the same submission');
     expect(expense.attempt).not.toBeNull();
     expect([...records.values()][0]).toMatchObject({ attempt: expense.attempt });
   });
@@ -1835,6 +1835,184 @@ describe('Save straight after the last keystroke', () => {
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'expense',
       expense: { status: 'editing', persistence: 'error' },
+    });
+  });
+});
+
+describe('a save that may already be recorded', () => {
+  it('finishes from the reopened form with the same submission; Keep for later sends nothing', async () => {
+    const submissions: { key: string | null; body: string }[] = [];
+    const { controller, records } = setup((path, init) => {
+      if (!path.endsWith('/expenses') || init.method !== 'POST') return;
+      submissions.push({
+        key: new Headers(init.headers).get('Idempotency-Key'),
+        body: String(init.body),
+      });
+      return submissions.length === 1
+        ? Promise.reject(new Error('Response lost after commit'))
+        : Promise.resolve(json({ data: { _id: expenseId, group: groupId }, status: 201 }, 201));
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Shared dinner', amount: '10.00', tagId });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.status).toBe('uncertain');
+    const recovery = structuredClone([...records]);
+
+    // Keep for later returns to the Group, from the failed save and from the reopened form.
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('group');
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense.status).toBe('resume');
+    await controller.back();
+    expect(submissions).toHaveLength(1);
+    expect([...records]).toEqual(recovery);
+
+    // Check and finish saving, straight from the reopened form.
+    await controller.openExpense(groupId);
+    await controller.saveExpense();
+    expect(submissions).toHaveLength(2);
+    expect(submissions[1]).toEqual(submissions[0]);
+    expect(controller.getSnapshot().expense.status).toBe('saved');
+    expect(records.size).toBe(0);
+  });
+});
+
+describe('an edit that meets a newer saved Expense', () => {
+  // Someone else changed the description, Category, notes and amount.
+  const latest = {
+    ...savedExpense,
+    revision: 4,
+    description: 'Their dinner',
+    category: 'travel',
+    notes: 'Their notes',
+    amount: 12,
+    amountMinor: 1200,
+    paidBy: [{ user: { _id: memberIds[0], name: 'Alex' }, amount: 12, amountMinor: 1200 }],
+    splitBetween: memberIds.map((user, index) => ({
+      user: { _id: user, name: people[index].name },
+      amount: 4,
+      amountMinor: 400,
+    })),
+  };
+  /** The first save is refused as stale; later ones are accepted. */
+  const conflicted = async (changes: Partial<ExpenseDraft>) => {
+    const patches: { revision: string | null; body: Record<string, unknown> }[] = [];
+    let saved: Record<string, unknown> = savedExpense;
+    const harness = setup((path, init) => {
+      if (!path.endsWith(`/${expenseId}`)) return;
+      if (init.method === 'PATCH') {
+        patches.push({
+          revision: new Headers(init.headers).get('If-Match'),
+          body: JSON.parse(String(init.body)),
+        });
+        if (saved === savedExpense) {
+          saved = latest;
+          return Promise.resolve(json({ code: 'STALE_REVISION', status: 409 }, 409));
+        }
+        return Promise.resolve(json({ status: 200, data: { ...saved, revision: 5 } }));
+      }
+      return Promise.resolve(json({ status: 200, data: saved }));
+    });
+    await harness.controller.signIn('alex');
+    await harness.controller.openExpense(groupId, expenseId);
+    await harness.controller.editExpense();
+    await harness.controller.updateExpenseDraft(changes);
+    await harness.controller.saveExpense();
+    expect(harness.controller.getSnapshot().expense).toMatchObject({
+      status: 'conflict',
+      latest: { revision: 4 },
+      message: expect.stringContaining('Compare your version with the saved one'),
+    });
+    return { ...harness, patches };
+  };
+  const choose = (controller: MobileController, keep: 'mine' | 'saved') =>
+    controller.updateExpenseDraft(
+      resolveDraftReview(controller.getSnapshot().expense.draft!, 'amount', keep),
+    );
+
+  it('keeps the member’s changes, takes the saved values for the rest, and holds a changed amount for review', async () => {
+    const { controller, create, patches } = await conflicted({
+      notes: 'My notes',
+      participantIds: [memberIds[0], memberIds[1]],
+    });
+    await controller.reviewLatestExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      draft: {
+        original: { revision: 4 },
+        // Untouched: the saved values.
+        description: 'Their dinner',
+        category: 'travel',
+        // Changed by both: the member's.
+        notes: 'My notes',
+        // Money only the member changed: theirs.
+        participantIds: [memberIds[0], memberIds[1]],
+        // Money the saved Expense changed: neither kept nor taken until the member chooses.
+        amount: '10',
+        review: ['amount'],
+      },
+    });
+    await controller.saveExpense();
+    expect(patches).toHaveLength(1);
+
+    // The open choice survives a restart and still holds Save.
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openExpense(groupId, expenseId);
+    restarted.resumeExpenseDraft();
+    expect(restarted.getSnapshot().expense.draft?.review).toEqual(['amount']);
+    await restarted.saveExpense();
+    expect(patches).toHaveLength(1);
+
+    await choose(restarted, 'saved');
+    expect(restarted.getSnapshot().expense.draft).toMatchObject({ amount: '12' });
+    expect(restarted.getSnapshot().expense.draft?.review).toBeUndefined();
+    await restarted.saveExpense();
+    expect(patches[1].revision).toBe('4');
+    expect(patches[1].body).toMatchObject({
+      notes: 'My notes',
+      amount: 12,
+      splitBetween: [
+        { user: memberIds[0], amount: 6 },
+        { user: memberIds[1], amount: 6 },
+      ],
+    });
+    expect(Object.keys(patches[1].body)).not.toContain('description');
+    expect(Object.keys(patches[1].body)).not.toContain('category');
+    expect(restarted.getSnapshot().expense.status).toBe('saved');
+  });
+
+  it('sends the member’s own amount only once they choose to keep it', async () => {
+    const { controller, patches } = await conflicted({ notes: 'My notes' });
+    await controller.reviewLatestExpense();
+    // The member never touched the amount, yet the saved change isn't taken silently either.
+    expect(controller.getSnapshot().expense.draft).toMatchObject({
+      amount: '10',
+      review: ['amount'],
+    });
+    await choose(controller, 'mine');
+    expect(controller.getSnapshot().expense.draft?.review).toBeUndefined();
+    await controller.saveExpense();
+    expect(patches[1]).toMatchObject({ revision: '4', body: { amount: 10, notes: 'My notes' } });
+  });
+
+  it('asks nothing about money the member already changed to the saved value', async () => {
+    const { controller, patches } = await conflicted({ amount: '12.00', notes: 'My notes' });
+    await controller.reviewLatestExpense();
+    expect(controller.getSnapshot().expense.draft?.review).toBeUndefined();
+    await controller.saveExpense();
+    expect(patches[1]).toEqual({ revision: '4', body: { notes: 'My notes' } });
+  });
+
+  it('uses the saved version: drops the draft and opens the saved Expense, sending nothing more', async () => {
+    const { controller, records, patches } = await conflicted({ notes: 'My notes' });
+    await controller.acceptCurrentExpense();
+    expect(patches).toHaveLength(1);
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      draft: { description: 'Their dinner', amount: '12', original: { revision: 4 } },
     });
   });
 });

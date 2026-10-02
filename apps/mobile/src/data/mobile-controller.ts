@@ -38,6 +38,7 @@ import {
   parseExpenseContext,
   parseStoredExpenseDraft,
   previewExpense,
+  rebaseExpenseDraft,
   sameExpenseDraft,
   validateExpenseDraft,
   visibleExpenseErrors,
@@ -2486,9 +2487,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             !record || record.draft.original?._id === expenseId
               ? null
               : record.attempt
-                ? 'This Expense may already be saved. Resume to confirm it before opening another Expense; it can’t be added twice.'
+                ? 'This Expense may already be saved. Finish saving it before opening another Expense; it can’t be recorded twice.'
                 : record.mutation
-                  ? 'This change may already be saved. Resume to check it before opening another Expense.'
+                  ? 'This change may already be saved. Check the saved Expense before opening another Expense.'
                   : null,
           groupDraft: held,
           blank: record ? record.blank : blank,
@@ -2543,9 +2544,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         // Resuming answers the resume prompt, so its notices no longer apply. A save that
         // may already be recorded keeps explaining why it stays locked.
         message: editor.attempt
-          ? 'This Expense may already be saved. Retry the same submission to confirm it; its details stay locked, so retrying can’t add it twice.'
+          ? 'This Expense may already be saved. Checking reuses the same submission, so it can’t be recorded twice.'
           : editor.mutation
-            ? 'This change may already be saved. Check the current Expense before changing anything else.'
+            ? 'This change may already be saved. Check the saved Expense before changing anything else.'
             : null,
       },
     });
@@ -2563,10 +2564,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (!lease || !storage) return;
     const owner = generation;
     const groupId = snapshot.expense.groupId!;
+    // A new split method clears the old method's values, unless values for it come too.
     const draft = {
       ...snapshot.expense.draft,
       ...patch,
-      ...(patch.splitMethod && patch.splitMethod !== snapshot.expense.draft.splitMethod
+      ...(patch.splitMethod &&
+      patch.splitMethod !== snapshot.expense.draft.splitMethod &&
+      !patch.splitValues
         ? { splitValues: {} }
         : {}),
     };
@@ -2861,7 +2865,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           status: latest.isDeleted ? 'blocked' : 'conflict',
           message: latest.isDeleted
             ? 'This Expense has been deleted. Your draft is kept, but it cannot be saved.'
-            : 'Review the current saved record beside your draft. Nothing will be sent until you choose and save again.',
+            : 'Compare your version with the saved one, then choose which to keep. Nothing is sent until you save again.',
         },
       });
     } catch (error) {
@@ -2897,16 +2901,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return;
     const owner = generation,
       view = viewRequest;
-    const draft = { ...editor.draft, original: editor.latest };
+    const draft = rebaseExpenseDraft(editor.draft, editor.latest);
     publish({ ...snapshot, expense: { ...editor, persistence: 'saving' } });
     try {
       await lease.write(() =>
-        storage.save(lease.accountId, editor.groupId!, {
-          version: 1,
-          accountId: lease.accountId,
-          groupId: editor.groupId,
-          draft,
-        }),
+        expenseDraftChanged(draft, editor.blank)
+          ? storage.save(lease.accountId, editor.groupId!, {
+              version: 1,
+              accountId: lease.accountId,
+              groupId: editor.groupId,
+              draft,
+            })
+          : storage.remove(lease.accountId, editor.groupId!),
       );
       if (!current(owner) || view !== viewRequest) return;
       publish({
@@ -2919,8 +2925,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           status: 'editing',
           persistence: 'saved',
           preview: previewExpense(draft),
-          message:
-            'Your draft is ready for review against the current revision. Check every field before saving.',
+          validation: revalidateExpense(snapshot.expense.validation, draft, editor.context),
+          message: `Fields you didn’t change now show the saved values. ${
+            draft.review
+              ? 'Choose which version to keep in What’s different before saving.'
+              : 'Check your version before saving.'
+          }`,
         },
       });
     } catch {
@@ -2994,7 +3004,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !groupId ||
       !lease ||
       !storage ||
-      editor.mutation
+      editor.mutation ||
+      // A money field the saved Expense changed waits for the member's choice.
+      (kind === 'edit' && !!draft.review?.length)
     )
       return;
     if (kind === 'edit' && rejectInvalidExpense(editor, draft, editor.context)) return;
@@ -3188,7 +3200,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const storage = dependencies.expenseDrafts;
     if (
       snapshot.screen !== 'expense' ||
-      !['editing', 'uncertain'].includes(editor.status) ||
+      // An unconfirmed save is finished from where it reopens, without resuming it first.
+      !(
+        editor.status === 'editing' ||
+        (editor.attempt && ['resume', 'uncertain'].includes(editor.status))
+      ) ||
       (!editor.attempt && editor.persistence === 'error') ||
       !editor.draft ||
       !editor.groupId ||
@@ -3325,7 +3341,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           message: storing
             ? 'Could not save the submission on this device. No Expense was sent. Retry local storage before saving.'
             : attempt
-              ? `${error instanceof RequestError ? `${error.message} ` : ''}This Expense may already be saved. Retry this same submission to confirm it; its amount and participants are locked until then.`
+              ? `${error instanceof RequestError ? `${error.message} ` : ''}This Expense may already be saved. Checking reuses the same submission, so it can’t be recorded twice.`
               : expenseFailureMessage(
                   error,
                   'Could not prepare this Expense. Your draft is still here.',
