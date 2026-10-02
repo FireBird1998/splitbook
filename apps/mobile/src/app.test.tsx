@@ -593,11 +593,20 @@ describe('App Group Activity refresh', () => {
 });
 
 describe('App return from an Expense', () => {
-  const addExpense = async (app: Awaited<ReturnType<typeof renderApp>>, date: string) => {
+  /** `date` is the Date sheet's steps from this Month, such as ['Sunday, 20 September 2026']. */
+  const addExpense = async (app: Awaited<ReturnType<typeof renderApp>>, date: string[]) => {
+    const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+    vi.spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions').mockImplementation(function (
+      this: Intl.DateTimeFormat,
+    ) {
+      return { ...resolvedOptions.call(this), locale: 'en-IN' };
+    });
     await app.press('Add expense');
     await app.type('Amount, required', '12.50');
     await app.type('Description, required', 'Weekly groceries');
-    await app.type('Date, required', date);
+    await app.press('Date: ');
+    for (const step of date) await app.press(step);
+    await app.press('Close Date, keeping your entries');
     await app.press('Tag: Shared');
   };
   const created = (path: string, init: RequestInit) =>
@@ -639,7 +648,7 @@ describe('App return from an Expense', () => {
     const app = await renderApp();
     await app.press('Open Maple House');
     app.use(created);
-    await addExpense(app, '2026-09-20');
+    await addExpense(app, ['Sunday, 20 September 2026']);
     await app.press('Save expense');
 
     expect(app.text()).toContain('Expense saved · Weekly groceries');
@@ -651,7 +660,7 @@ describe('App return from an Expense', () => {
     const app = await renderApp();
     await app.press('Open Maple House');
     app.use(created);
-    await addExpense(app, '2026-08-15');
+    await addExpense(app, ['Previous month', 'Saturday, 15 August 2026']);
     await app.press('Save expense');
 
     expect(app.text()).toContain('Expense saved · Weekly groceries');

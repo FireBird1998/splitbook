@@ -4,7 +4,6 @@ import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'rea
 import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
-import { toDateParam } from '@splitbook/shared/date';
 import {
   expenseFieldLabels,
   expenseFields,
@@ -13,7 +12,7 @@ import {
   type ExpenseEditor as Editor,
   type ExpenseField,
 } from '../data/expense-draft';
-import { Field } from './group-workflows';
+import { DateSheet } from './date-sheet';
 import { Button, Copy, Icon, Loading, Notice, Panel } from './primitives';
 import {
   Banner,
@@ -296,10 +295,6 @@ export function ExpenseEditor({
           ? `Submitted Tag: ${tag?.name ?? 'unavailable'}. Recovery keeps the original Tag identity.`
           : `Saved Tag: ${tag?.name ?? 'unavailable'}. It is unavailable or archived; choose an active Tag before saving.`
       : null;
-  const today = toDateParam(new Date());
-  const yesterdayDate = new Date();
-  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-  const yesterday = toDateParam(yesterdayDate);
 
   return (
     <>
@@ -503,41 +498,16 @@ export function ExpenseEditor({
           />
         ) : null,
       )}
-      <BottomSheet
+      <DateSheet
         visible={sheet === 'date'}
-        title="Date"
-        titleAccessory={<FieldMarker kind="required" />}
+        value={draft.date}
+        locked={locked}
+        onChange={(date) => onChange({ date })}
         onDone={() => {
           setSheet(null);
           onLeaveField('date');
         }}
-      >
-        <View style={{ gap: 12 }}>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Chip
-              label="Today"
-              selected={draft.date === today}
-              onPress={() => !locked && onChange({ date: today })}
-            />
-            <Chip
-              label="Yesterday"
-              selected={draft.date === yesterday}
-              onPress={() => !locked && onChange({ date: yesterday })}
-            />
-          </View>
-          <Field
-            label="Date"
-            required
-            hint="Use YYYY-MM-DD."
-            value={draft.date}
-            maxLength={10}
-            editable={!locked}
-            error={errors.date}
-            onBlur={() => onLeaveField('date')}
-            onChangeText={(date) => onChange({ date })}
-          />
-        </View>
-      </BottomSheet>
+      />
       <BottomSheet
         visible={sheet === 'tag'}
         title="Tag"
