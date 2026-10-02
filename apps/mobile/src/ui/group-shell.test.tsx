@@ -172,6 +172,17 @@ describe('Group shell', () => {
     expect(props.onRefresh).toHaveBeenCalledOnce();
     expect(sheet().props.visible).toBe(false);
   });
+
+  it('closes Group options from outside the sheet, which has no entries to keep', () => {
+    const { root } = shell();
+    const sheet = () => root.find((node) => isHost(node, 'Modal'));
+    press(one(byRole(root, 'button', 'Group options')));
+    expect(
+      hosts(sheet(), (p) => /keeping your entries/.test(String(p.accessibilityLabel))),
+    ).toEqual([]);
+    press(one(byRole(sheet(), 'button', 'Close Group options')));
+    expect(sheet().props.visible).toBe(false);
+  });
 });
 
 const now = new Date(2026, 8, 30, 12).getTime();

@@ -123,6 +123,7 @@ export function GroupShell({
           title={group.name}
           subtitle={groupSubtitle(group)}
           onDone={close}
+          dismissLabel="Close Group options"
         >
           <Card>
             <ListRow
