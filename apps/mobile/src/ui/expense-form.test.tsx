@@ -1,5 +1,5 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { expenseMoney, type ExpenseDraft } from '../data/expense-draft';
 import { ThemeContext } from './theme';
@@ -108,6 +108,28 @@ describe('Who owes what', () => {
 
 describe('Expense date label', () => {
   const now = new Date(2026, 8, 30, 12).getTime();
+  it('stays on the Gregorian calendar in a Persian-calendar locale', () => {
+    const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+    const locale = vi
+      .spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions')
+      .mockImplementation(function (this: Intl.DateTimeFormat) {
+        return { ...resolvedOptions.call(this), locale: 'fa-IR' };
+      });
+    onTestFinished(() => locale.mockRestore());
+    expect(expenseDateLabel('2026-09-30', now)).toEqual({
+      shown: 'Today, ۳۰ سپتامبر',
+      spoken: 'Today, چهارشنبه ۳۰ سپتامبر ۲۰۲۶',
+    });
+    expect(expenseDateLabel('2026-09-29', now)).toEqual({
+      shown: 'سه‌شنبه ۲۹ سپتامبر',
+      spoken: 'Yesterday, سه‌شنبه ۲۹ سپتامبر ۲۰۲۶',
+    });
+    expect(expenseDateLabel('2025-09-24', now)).toEqual({
+      shown: '۲۴ سپتامبر ۲۰۲۵',
+      spoken: 'چهارشنبه ۲۴ سپتامبر ۲۰۲۵',
+    });
+  });
+
   it('says Today and Yesterday, and dates other days', () => {
     expect(expenseDateLabel('2026-09-30', now).shown).toMatch(/^Today, /);
     expect(expenseDateLabel('2026-09-30', now).spoken).toMatch(/^Today, .*2026/);

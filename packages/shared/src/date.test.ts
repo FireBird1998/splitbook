@@ -2,6 +2,7 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   currentMonthKey,
   getLocalMonthIsoRange,
+  gregorianLocale,
   localeFirstWeekday,
   monthGrid,
   shiftMonthKey,
@@ -207,5 +208,48 @@ describe('localeFirstWeekday', () => {
     ['en-US-u-fw-xyz', 0],
   ] as const)('prefers the fw preference in %j', (locale, weekday) => {
     expect(localeFirstWeekday(locale)).toBe(weekday);
+  });
+});
+
+describe('gregorianLocale', () => {
+  it.each([
+    ['fa-IR', 'fa-IR-u-ca-gregory'],
+    ['th-TH', 'th-TH-u-ca-gregory'],
+    ['en_IN', 'en-IN-u-ca-gregory'],
+    ['zh-Hant-TW', 'zh-Hant-TW-u-ca-gregory'],
+    ['fa-IR-u-ca-persian', 'fa-IR-u-ca-gregory'],
+    ['ar-SA-u-ca-islamic-umalqura-nu-latn', 'ar-SA-u-ca-gregory-nu-latn'],
+    ['en-US-u-fw-mon', 'en-US-u-ca-gregory-fw-mon'],
+    ['en-US-u-attr-nu-latn', 'en-US-u-attr-ca-gregory-nu-latn'],
+    ['en-US-u-nu-latn-x-private', 'en-US-u-ca-gregory-nu-latn-x-private'],
+    ['en-US-x-private', 'en-US-u-ca-gregory-x-private'],
+  ])('puts %s on the Gregorian calendar as %s', (locale, gregorian) => {
+    expect(gregorianLocale(locale)).toBe(gregorian);
+  });
+
+  it.each([
+    'fa-IR',
+    'th-TH',
+    'ar-SA-u-ca-islamic-umalqura',
+    'en-GB-u-fw-sun',
+    'ja-JP-u-ca-japanese',
+  ])('keeps %s’s language and first weekday, on the Gregorian calendar', (locale) => {
+    const format = new Intl.DateTimeFormat(gregorianLocale(locale), {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    expect(format.resolvedOptions().calendar).toBe('gregory');
+    expect(format.resolvedOptions().locale.split('-')[0]).toBe(locale.split('-')[0]);
+    expect(localeFirstWeekday(gregorianLocale(locale))).toBe(localeFirstWeekday(locale));
+  });
+
+  it('dates fa-IR in Gregorian months and years', () => {
+    const format = (locale: string) =>
+      new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(
+        new Date(2026, 8, 30),
+      );
+    expect(format('fa-IR')).toBe('۱۴۰۵ مهر');
+    expect(format(gregorianLocale('fa-IR'))).toBe('سپتامبر ۲۰۲۶');
   });
 });

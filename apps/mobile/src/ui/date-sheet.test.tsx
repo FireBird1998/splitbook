@@ -88,17 +88,18 @@ function render(initial: string, options: { locked?: boolean } = {}) {
     root,
     pressable,
     press: (label: string) => act(() => pressable(label).props.onPress()),
-    /** Every day button, each named with its full date. */
+    /** Every day button, each named with its full date (a year in any digits). */
     days: () =>
       root().findAll(
-        (node) => isHost(node, 'Pressable') && /\d{4}/.test(String(node.props.accessibilityLabel)),
+        (node) =>
+          isHost(node, 'Pressable') && /\p{Nd}{4}/u.test(String(node.props.accessibilityLabel)),
       ),
     selected: () =>
       root()
         .findAll(
           (node) =>
             isHost(node, 'Pressable') &&
-            /\d{4}/.test(String(node.props.accessibilityLabel)) &&
+            /\p{Nd}{4}/u.test(String(node.props.accessibilityLabel)) &&
             node.props.accessibilityState.selected === true,
         )
         .map((node) => node.props.accessibilityLabel as string),
@@ -205,6 +206,33 @@ describe('Date sheet calendar', () => {
     const weekdays = render('2026-09-15').weekdays();
     expect(text(weekdays)).toBe(letters);
     expect(weekdays.props.accessibilityElementsHidden).toBe(true);
+  });
+
+  it('keeps a Persian-calendar locale on the Gregorian dates it lays out', () => {
+    deviceLocale('fa-IR');
+    const sheet = render('2026-09-15');
+    expect(sheet.month()).toBe('سپتامبر ۲۰۲۶');
+    // Iran's week starts on Saturday.
+    expect(text(sheet.weekdays())).toBe('شیدسچپج');
+    const days = sheet.days();
+    expect(days).toHaveLength(30);
+    expect(days[0].props.accessibilityLabel).toBe('سه‌شنبه ۱ سپتامبر ۲۰۲۶');
+    expect(text(days[0])).toBe('۱');
+    expect(days[29].props.accessibilityLabel).toBe('چهارشنبه ۳۰ سپتامبر ۲۰۲۶, today');
+    expect(text(days[29])).toBe('۳۰');
+    // Each cell shows the day its label announces, in the heading's Month.
+    for (const day of days)
+      expect(day.props.accessibilityLabel).toContain(` ${text(day)} سپتامبر ۲۰۲۶`);
+    expect(sheet.selected()).toEqual(['سه‌شنبه ۱۵ سپتامبر ۲۰۲۶']);
+    expect(sheet.footer()).toBe('سه‌شنبه ۱۵ سپتامبر ۲۰۲۶');
+
+    sheet.press('دوشنبه ۲۸ سپتامبر ۲۰۲۶');
+    expect(changes).toEqual(['2026-09-28']);
+    expect(sheet.selected()).toEqual(['دوشنبه ۲۸ سپتامبر ۲۰۲۶']);
+    expect(sheet.footer()).toBe('دوشنبه ۲۸ سپتامبر ۲۰۲۶');
+    sheet.press('Previous month');
+    expect(sheet.month()).toBe('اوت ۲۰۲۶');
+    expect(sheet.days()).toHaveLength(31);
   });
 
   it('pages through Months and allows future dates', () => {

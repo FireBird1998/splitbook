@@ -3,6 +3,7 @@ import { Pressable, TextInput, View } from 'react-native';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import type { ExpenseDraft, ExpenseField, expenseMoney } from '../data/expense-draft';
 import { acceptsNumericText } from '../data/field-feedback';
+import { gregorianDateFormat } from './date-sheet';
 import { Field, FieldError } from './group-workflows';
 import { Icon } from './primitives';
 import {
@@ -36,9 +37,9 @@ const localDay = (date: Date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 /**
- * The Date tile's value for a YYYY-MM-DD draft date. `shown` fits a half-width tile on a
- * 360dp phone: "Today, 30 Sep", "Thu 1 Oct" or "24 Sep 2025". `spoken` is the full date,
- * such as "Yesterday, Thursday, 1 October 2026".
+ * The Date tile's value for a YYYY-MM-DD draft date, on the Gregorian calendar in the device's
+ * language. `shown` fits a half-width tile on a 360dp phone: "Today, 30 Sep", "Thu 1 Oct" or
+ * "24 Sep 2025". `spoken` is the full date, such as "Yesterday, Thursday, 1 October 2026".
  */
 export function expenseDateLabel(value: string, now = Date.now()) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -50,20 +51,20 @@ export function expenseDateLabel(value: string, now = Date.now()) {
   const today = new Date(now);
   const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
   const thisYear = date.getFullYear() === today.getFullYear();
-  const short = date.toLocaleDateString([], {
+  const short = gregorianDateFormat({
     day: 'numeric',
     month: 'short',
     ...(thisYear ? {} : { year: 'numeric' }),
-  });
-  const full = date.toLocaleDateString([], {
+  }).format(date);
+  const full = gregorianDateFormat({
     weekday: 'long',
     day: 'numeric',
     month: 'long',
     year: 'numeric',
-  });
+  }).format(date);
   if (value === localDay(today)) return { shown: `Today, ${short}`, spoken: `Today, ${full}` };
   return {
-    shown: thisYear ? `${date.toLocaleDateString([], { weekday: 'short' })} ${short}` : short,
+    shown: thisYear ? `${gregorianDateFormat({ weekday: 'short' }).format(date)} ${short}` : short,
     spoken: value === localDay(yesterday) ? `Yesterday, ${full}` : full,
   };
 }

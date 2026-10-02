@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import {
   currentMonthKey,
+  gregorianLocale,
   localeFirstWeekday,
   monthGrid,
   toDateParam,
@@ -9,6 +10,32 @@ import {
 } from '@splitbook/shared/date';
 import { BottomSheet, Chip, CompactText, IconButton, touch } from './compact';
 import { useTheme } from './theme';
+
+/** The device's locale, e.g. "en-IN" or "fa-IR". */
+const deviceLocale = () => Intl.DateTimeFormat().resolvedOptions().locale;
+
+const formats = new Map<string, Intl.DateTimeFormat>();
+/**
+ * Spells dates in the device's language on the Gregorian calendar that Splitbook's dates use,
+ * whatever the locale's own (fa-IR's is Persian). If a platform can't, they're Gregorian in
+ * English. Hermes takes the calendar from the locale's `-u-ca-` extension.
+ */
+export function gregorianDateFormat(options: Intl.DateTimeFormatOptions) {
+  const locale = deviceLocale();
+  const key = `${locale} ${JSON.stringify(options)}`;
+  let format = formats.get(key);
+  if (!format) {
+    try {
+      format = new Intl.DateTimeFormat(gregorianLocale(locale), options);
+    } catch {
+      // A locale tag the platform rejects.
+    }
+    if (format?.resolvedOptions().calendar !== 'gregory')
+      format = new Intl.DateTimeFormat('en-u-ca-gregory', options);
+    formats.set(key, format);
+  }
+  return format;
+}
 
 /** A YYYY-MM-DD string as a local date, or null when that day doesn't exist. */
 function localDay(value: string) {
@@ -43,21 +70,16 @@ export function DateSheet({
 }) {
   const theme = useTheme();
   const locale = useMemo(() => {
-    const tag = Intl.DateTimeFormat().resolvedOptions().locale;
-    const narrow = new Intl.DateTimeFormat(tag, { weekday: 'narrow' });
+    const narrow = gregorianDateFormat({ weekday: 'narrow' });
     return {
-      firstWeekday: localeFirstWeekday(tag),
+      firstWeekday: localeFirstWeekday(deviceLocale()),
       // 7 January 2024 was a Sunday.
       weekdays: Array.from({ length: 7 }, (_, weekday) =>
         narrow.format(new Date(2024, 0, 7 + weekday)),
       ),
-      month: new Intl.DateTimeFormat(tag, { month: 'long', year: 'numeric' }),
-      day: new Intl.DateTimeFormat(tag, {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      }),
+      month: gregorianDateFormat({ month: 'long', year: 'numeric' }),
+      number: gregorianDateFormat({ day: 'numeric' }),
+      day: gregorianDateFormat({ weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }),
     };
   }, []);
   const [month, setMonth] = useState(() => monthOf(value));
@@ -79,13 +101,15 @@ export function DateSheet({
       title: locale.month.format(new Date(year, number - 1, 1)),
       // Always six rows, so the arrows stay put from Month to Month.
       weeks: Array.from({ length: 6 }, (_, row) =>
-        (grid.weeks[row] ?? Array<CalendarDay | null>(7).fill(null)).map(
-          (cell) =>
-            cell && {
-              ...cell,
-              label: `${locale.day.format(new Date(year, number - 1, cell.day))}${cell.today ? ', today' : ''}`,
-            },
-        ),
+        (grid.weeks[row] ?? Array<CalendarDay | null>(7).fill(null)).map((cell) => {
+          if (!cell) return null;
+          const date = new Date(year, number - 1, cell.day);
+          return {
+            ...cell,
+            number: locale.number.format(date),
+            label: `${locale.day.format(date)}${cell.today ? ', today' : ''}`,
+          };
+        }),
       ),
       chosen: chosen ? locale.day.format(chosen) : 'Choose a date',
     };
@@ -194,7 +218,7 @@ export function DateSheet({
                       tone={cell.today ? 'brand' : 'primary'}
                       style={cell.selected ? { color: theme.brand.contrastText } : undefined}
                     >
-                      {String(cell.day)}
+                      {cell.number}
                     </CompactText>
                   </View>
                 </Pressable>

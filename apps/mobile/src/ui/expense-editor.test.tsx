@@ -711,6 +711,29 @@ describe('compact Expense form', () => {
     expect(ui.writes).toEqual([]);
   });
 
+  it('keeps the calendar and the Date tile on Gregorian dates in a Persian-calendar locale', async () => {
+    const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+    const locale = vi
+      .spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions')
+      .mockImplementation(function (this: Intl.DateTimeFormat) {
+        return { ...resolvedOptions.call(this), locale: 'fa-IR' };
+      });
+    onTestFinished(() => locale.mockRestore());
+    const ui = await render((controller) => controller.openExpense(groupId));
+    expect(ui.tile('Date').props.accessibilityLabel).toContain('۲۸ سپتامبر ۲۰۲۶');
+    await ui.press(ui.tile('Date').props.accessibilityLabel);
+    expect(openSheet(ui.root(), 'سپتامبر ۲۰۲۶')).toBe(true);
+    expect(ui.pressable('دوشنبه ۲۸ سپتامبر ۲۰۲۶').props.accessibilityState.selected).toBe(true);
+
+    await ui.press('سه‌شنبه ۱۵ سپتامبر ۲۰۲۶');
+    expect(openSheet(ui.root(), 'سه‌شنبه ۱۵ سپتامبر ۲۰۲۶')).toBe(true);
+    const sheet = ui.root().find((node) => isHost(node, 'Modal') && node.props.visible === true);
+    await act(async () => sheet.props.onRequestClose());
+    expect(ui.controller.getSnapshot().expense.draft?.date).toBe('2026-09-15');
+    expect(ui.tile('Date').props.accessibilityLabel).toBe('Date: سه‌شنبه ۱۵ سپتامبر ۲۰۲۶');
+    expect(text(ui.tile('Date'))).toContain('۱۵ سپتامبر');
+  });
+
   it('shows who owes what as soon as the amount is valid, and names it on Save', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     expect(text(ui.root())).toContain('Enter a valid amount to see who owes what.');

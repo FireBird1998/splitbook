@@ -159,6 +159,31 @@ export function localeFirstWeekday(locale: string): Weekday {
   return regionFirstDays.get(region?.toUpperCase() ?? '') ?? 1;
 }
 
+/**
+ * A BCP 47 locale on the Gregorian calendar, which Splitbook's dates use: `fa-IR` (Persian by
+ * default) becomes `fa-IR-u-ca-gregory`. Its language, region and other preferences stay.
+ */
+export function gregorianLocale(locale: string): string {
+  const subtags = locale.split(/[-_]/);
+  const unicode = subtags.findIndex((subtag) => /^u$/i.test(subtag));
+  if (unicode < 0) {
+    const privateUse = subtags.findIndex((subtag) => /^x$/i.test(subtag));
+    subtags.splice(privateUse < 0 ? subtags.length : privateUse, 0, 'u', 'ca', 'gregory');
+    return subtags.join('-');
+  }
+  let end = unicode + 1;
+  while (end < subtags.length && subtags[end].length > 1) end++;
+  // Inside -u-, keys have two characters and their values three to eight, so `ca` and its
+  // values are the calendar. Any attributes come before the first key.
+  const extension = subtags
+    .slice(unicode + 1, end)
+    .map((subtag) => `-${subtag}`)
+    .join('')
+    .replace(/-ca(?:-[a-z\d]{3,8})+/i, '')
+    .replace(/^((?:-[a-z\d]{3,8})*)/i, '$1-ca-gregory');
+  return [...subtags.slice(0, unicode + 1), extension.slice(1), ...subtags.slice(end)].join('-');
+}
+
 export interface CalendarDay {
   /** YYYY-MM-DD */
   date: string;
