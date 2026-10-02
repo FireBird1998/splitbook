@@ -112,8 +112,13 @@ describe('Trip strip', () => {
     expect(flat(strip.props.style).borderRadius).toBe(16);
     expect(texts(root).map((node) => node.shown)).toEqual(['GOA', 'TRI', '17–20 Sep', '3 MEMBERS']);
     for (const code of ['GOA', 'TRI']) expect(shown(root, code).fontFamily).toBe(fonts.mono);
+    // The dates and member count are set in mono too, at the small size.
+    expect(shown(root, '17–20 Sep')).toMatchObject({
+      fontFamily: fonts.mono,
+      fontSize: 13,
+      lineHeight: 18,
+    });
     expect(shown(root, '3 MEMBERS').fontFamily).toBe(fonts.mono);
-    expect(shown(root, '17–20 Sep').fontFamily).toBe(fonts.semibold);
     const plane = root.find((node) => isHost(node, 'Ionicons'));
     expect(plane.props.name).toBe('airplane-outline');
   });
@@ -164,6 +169,7 @@ describe('Trip strip', () => {
     // The perforation runs across, under the route.
     expect(flat(rules(root)[2].props.style)).toMatchObject({ height: 1, flexDirection: 'row' });
     expect(texts(root).map((node) => node.shown)).toEqual(['GOA', 'TRI', '17–20 Sep', '3 MEMBERS']);
+    expect(shown(root, '17–20 Sep').fontFamily).toBe(fonts.mono);
   });
 
   it.each([
@@ -188,7 +194,7 @@ describe('Trip strip', () => {
   ])('shows and reads the dates $state', ({ dates, shown: date, spoken }) => {
     const root = render(trip(dates));
     expect(image(root).props.accessibilityLabel).toBe(`Trip from GOA to TRI, ${spoken}, 3 members`);
-    shown(root, date);
+    expect(shown(root, date).fontFamily).toBe(fonts.mono);
   });
 
   it('leaves the dates out until the Trip has a start date', () => {

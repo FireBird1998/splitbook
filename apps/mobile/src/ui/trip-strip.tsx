@@ -139,7 +139,10 @@ export function TripStrip({ group }: { group: MobileGroup }) {
           }
         >
           {dates ? (
-            <CompactText variant="small" weight="semibold" style={{ color: theme.strip.text }}>
+            <CompactText
+              variant="small"
+              style={{ fontFamily: fonts.mono, color: theme.strip.text }}
+            >
               {dates.shown}
             </CompactText>
           ) : null}
