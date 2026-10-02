@@ -1,5 +1,10 @@
 import { cachedRead } from './offline-cache';
-import { emptyActivity, parseActivityPage, parseActivityExpense } from './activity';
+import {
+  activityExpenseId,
+  emptyActivity,
+  parseActivityPage,
+  parseActivityExpense,
+} from './activity';
 import {
   emptySettlement,
   parseRecordedSettlement,
@@ -292,6 +297,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let cacheEpoch = 0;
   // Set by returnToGroup: the next read of that Group and Month reads this many pages.
   let returnPages: { groupId: string; month: string | null; pages: number } | null = null;
+  // Likewise for Activity, when the task began there.
+  let returnActivityPages: { groupId: string; pages: number } | null = null;
   let offlineSession = false;
   const staleReads = new Map<string, number | null>();
   const freshness = dependencies.displayFreshnessMs ?? DISPLAY_FRESHNESS_MS;
@@ -361,7 +368,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const invalidate = () => {
     generation += 1;
     cacheEpoch += 1;
-    returnPages = null;
+    returnPages = returnActivityPages = null;
     offlineSession = false;
     staleReads.clear();
     reads.clear();
@@ -2083,6 +2090,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     const pageNumber = append ? pagination!.page + 1 : 1;
+    // A return reads the pages it left until they're shown, so its position still exists.
+    if (returnActivityPages && returnActivityPages.groupId !== groupId) returnActivityPages = null;
+    const through = append ? pageNumber : (returnActivityPages?.pages ?? 1);
     if (!append) activityDetailRequest += 1;
     const owner = generation,
       view = viewRequest,
@@ -2100,29 +2110,46 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     try {
       if (!objectId.safeParse(groupId).success)
         throw new RequestError('This Group is unavailable.', 404);
-      const page = await readCached(
-        `/api/groups/${groupId}/activity?page=${pageNumber}&limit=20`,
-        owner,
-        (value) => parseActivityPage(value, groupId, pageNumber),
-        () => current(owner) && view === viewRequest && read === activityRequest,
-      );
-      if (!current(owner) || view !== viewRequest || read !== activityRequest) return;
-      const events = [
-        ...new Map(
-          [...(append ? previous.events : []), ...page.events].map((event) => [event._id, event]),
-        ).values(),
-      ];
+      const wanted = () => current(owner) && view === viewRequest && read === activityRequest;
+      const readPage = (number: number) =>
+        readCached(
+          `/api/groups/${groupId}/activity?page=${number}&limit=20`,
+          owner,
+          (value) => parseActivityPage(value, groupId, number),
+          wanted,
+        );
+      let page = await readPage(pageNumber);
+      if (!wanted()) return;
+      const events = [...(append ? previous.events : []), ...page.events];
+      let moreStatus: 'idle' | 'error' = 'idle';
+      try {
+        while (page.pagination.page < Math.min(through, page.pagination.totalPages)) {
+          page = await readPage(page.pagination.page + 1);
+          if (!wanted()) return;
+          events.push(...page.events);
+        }
+      } catch (error) {
+        // Losing access or this view moving on is handled below; otherwise keep what was read.
+        if (
+          error instanceof Superseded ||
+          !wanted() ||
+          (error instanceof RequestError && [403, 404].includes(error.status))
+        )
+          throw error;
+        moreStatus = 'error';
+      }
       publish({
         ...snapshot,
         activity: {
           ...snapshot.activity,
-          events,
+          events: [...new Map(events.map((event) => [event._id, event])).values()],
           pagination: page.pagination,
           status: 'ready',
-          moreStatus: 'idle',
+          moreStatus,
           message: null,
         },
       });
+      if (!append) returnActivityPages = null;
     } catch (error) {
       if (
         !current(owner) ||
@@ -2222,7 +2249,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         !group.members.some((member) => member.user.id === snapshot.auth.user?.id)
       )
         throw new RequestError('You no longer have access to this Group.', 403);
-      const expenseId = event.type.startsWith('expense_') ? event.metadata.expenseId : undefined;
+      const expenseId = activityExpenseId(event);
       let target: typeof activity.target = { status: 'none' };
       if (expenseId) {
         targetRequested = true;
@@ -2264,6 +2291,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       ...snapshot,
       activity: { ...snapshot.activity, selected: null, target: { status: 'none' } },
     });
+  };
+  /**
+   * An event about an Expense opens that Expense's record, and Back returns to Activity;
+   * any other event, such as a payment, opens what was recorded.
+   */
+  const openActivityEvent = async (eventId: string, origin: { scrollY?: number } = {}) => {
+    const { activity } = snapshot;
+    const event = activity.events.find((item) => item._id === eventId);
+    const expenseId = event && activityExpenseId(event);
+    if (!expenseId || !showingActivity() || activity.status !== 'ready' || !activity.groupId)
+      return selectActivity(eventId);
+    await openExpense(activity.groupId, expenseId, origin);
   };
 
   const today = () => toDateParam(new Date(now()));
@@ -2357,12 +2396,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return null;
     const { expenses, month } = snapshot.financial;
+    const { activity, destination } = snapshot;
     return {
       groupId,
       month,
       scrollY: Number.isFinite(scrollY) ? Math.max(0, scrollY) : 0,
       pages: expenses.month === month && expenses.pagination ? expenses.pagination.page : 1,
-      destination: snapshot.destination,
+      destination,
+      activityPages:
+        destination === 'activity' && activity.groupId === groupId && activity.pagination
+          ? activity.pagination.page
+          : 1,
     };
   };
 
@@ -2377,7 +2421,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const accountId = snapshot.auth.user.id;
     const month = snapshot.financial.groupId === groupId ? snapshot.financial.month : null;
     const returnTo = expenseReturn(groupId, origin.scrollY);
-    returnPages = null;
+    returnPages = returnActivityPages = null;
     startReadView();
     publish({
       ...snapshot,
@@ -2462,7 +2506,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         (record === null || held) && expenseId
           ? await readCached(`/api/groups/${groupId}/expenses/${expenseId}`, owner, (value) =>
               parseExpenseRecord(value, groupId, expenseId),
-            )
+            ).catch((error: unknown) => {
+              // The Group was just read: what's missing is this Expense.
+              throw error instanceof RequestError && error.status === 404
+                ? new RequestError('This Expense isn’t available.', 404)
+                : error;
+            })
           : null;
       if (!current(owner) || view !== viewRequest) return;
       const draft = original ? draftFromExpense(original) : (record?.draft ?? blank);
@@ -2730,6 +2779,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.expense.returnTo?.groupId === groupId ? snapshot.expense.returnTo : null;
     const { detail, financial } = snapshot;
     returnPages = origin && { groupId, month: origin.month, pages: origin.pages };
+    returnActivityPages =
+      origin?.destination === 'activity' && !snackbar
+        ? { groupId, pages: origin.activityPages }
+        : null;
     publish({
       ...snapshot,
       screen: 'group',
@@ -2776,7 +2829,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const showHome = () => {
     viewRequest += 1;
-    returnPages = null;
+    returnPages = returnActivityPages = null;
     publish({
       ...snapshot,
       screen: 'groups',
@@ -4494,6 +4547,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openActivity,
     selectDestination,
     selectActivity,
+    openActivityEvent,
     closeActivityDetail,
     refreshActivity,
     loadMoreActivity,

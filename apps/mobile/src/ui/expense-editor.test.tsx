@@ -4,8 +4,10 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
 import { draftFromExpense } from '../data/expense-draft';
+import { expenseRecordSchema } from '../data/expense-record';
 import { ExpenseEditor } from './expense-editor';
 import { expenseDateLabel } from './expense-form';
+import { ExpenseRecordView } from './expense-record-view';
 
 // Host stand-ins: the editor renders through these names, so the tree keeps the
 // props (labels, hints, values, handlers) that Android receives.
@@ -446,7 +448,7 @@ describe('rendered Expense corrections', () => {
 
   it('shows the same Description correction when editing, without a write', async () => {
     const ui = await render((controller) => controller.openExpense(groupId, expenseId));
-    await ui.press('Edit Expense');
+    await ui.press('Edit expense');
     await ui.type('Description, required', '   ');
     await ui.press('Save changes');
 
@@ -571,11 +573,19 @@ describe('rendered draft recovery', () => {
       'This Group has an unfinished draft. Finish or discard it to edit or delete this Expense.',
     );
     const reason = 'Finish or discard the draft in this Group first.';
-    for (const action of ['Edit Expense', 'Delete Expense'])
-      expect(ui.pressable(action).props).toMatchObject({
-        disabled: true,
-        accessibilityHint: reason,
-      });
+    expect(ui.pressable('Edit expense').props).toMatchObject({
+      disabled: true,
+      accessibilityHint: reason,
+    });
+    await ui.press('Expense options');
+    const [options] = ui
+      .root()
+      .findAll((node) => isHost(node, 'Modal') && node.props.visible === true);
+    expect(
+      options.find(
+        (node) => isHost(node, 'Pressable') && node.props.accessibilityLabel === 'Delete expense',
+      ).props,
+    ).toMatchObject({ disabled: true, accessibilityHint: reason });
 
     await ui.press('Resume draft');
     expect(title()).toBe('Add expense');
@@ -826,13 +836,21 @@ describe('rendered edit history', () => {
     ],
   };
 
+  // The saved record shown beside a draft under review.
   it('names people and formats values without raw data or identifiers', async () => {
-    const ui = await render((controller) => controller.openExpense(groupId, expenseId), {
-      record: withHistory,
+    await act(async () => {
+      screen = create(
+        <ExpenseRecordView
+          record={expenseRecordSchema.parse(withHistory)}
+          title="Current saved record"
+          people={[{ id: memberId, name: 'Alex' }]}
+          tags={[{ id: tagId, name: 'Groceries' }]}
+        />,
+      );
     });
-    const shown = text(ui.root());
-    const labels = ui
-      .root()
+    const root = screen!.root;
+    const shown = text(root);
+    const labels = root
       .findAll((node) => isHost(node, 'Text') && typeof node.props.accessibilityLabel === 'string')
       .map((node) => node.props.accessibilityLabel as string);
 

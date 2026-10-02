@@ -448,6 +448,7 @@ describe('Returning from an Expense', () => {
       scrollY: 300,
       pages: 1,
       destination: 'expenses',
+      activityPages: 1,
     });
     await controller.back();
     expect(controller.getSnapshot().financial.month).toBe('2026-07');

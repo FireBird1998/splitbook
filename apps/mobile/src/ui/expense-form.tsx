@@ -318,6 +318,7 @@ export function WhoOwesWhat({
   name,
   currentUserId,
   money,
+  saved = false,
 }: {
   draft: ExpenseDraft;
   allocation: Allocation | null;
@@ -326,6 +327,8 @@ export function WhoOwesWhat({
   name: (id: string) => string;
   currentUserId?: string;
   money: (minor: number) => string;
+  /** A saved Expense's record: names the split method instead of checking the totals. */
+  saved?: boolean;
 }) {
   const theme = useTheme();
   const [all, setAll] = useState(false);
@@ -368,7 +371,13 @@ export function WhoOwesWhat({
         <CompactText variant="overline" accessibilityRole="header">
           Who owes what
         </CompactText>
-        <Badge label="Adds up" tone="positive" icon="checkmark" />
+        {saved ? (
+          <CompactText variant="caption" tone="secondary">
+            {splitSummary(draft)}
+          </CompactText>
+        ) : (
+          <Badge label="Adds up" tone="positive" icon="checkmark" />
+        )}
       </View>
       <View
         accessibilityElementsHidden
@@ -437,24 +446,30 @@ export function WhoOwesWhat({
           />
         </View>
       ) : null}
-      <View
-        style={{
-          marginTop: 4,
-          borderTopWidth: 1,
-          borderTopColor: theme.border,
-          padding: 14,
-          gap: 4,
-        }}
-      >
-        <CompactText variant="small">
-          {money(allocation.amountMinor)} paid = {money(allocation.amountMinor)} shared.
-        </CompactText>
-        {rounded ? (
-          <CompactText variant="caption" tone="secondary">
-            Shares differ by the smallest unit so the whole amount is shared.
-          </CompactText>
-        ) : null}
-      </View>
+      {saved && !rounded ? (
+        <View style={{ height: 8 }} />
+      ) : (
+        <View
+          style={{
+            marginTop: 4,
+            borderTopWidth: 1,
+            borderTopColor: theme.border,
+            padding: 14,
+            gap: 4,
+          }}
+        >
+          {saved ? null : (
+            <CompactText variant="small">
+              {money(allocation.amountMinor)} paid = {money(allocation.amountMinor)} shared.
+            </CompactText>
+          )}
+          {rounded ? (
+            <CompactText variant="caption" tone="secondary">
+              Shares differ by the smallest unit so the whole amount is shared.
+            </CompactText>
+          ) : null}
+        </View>
+      )}
     </Card>
   );
 }

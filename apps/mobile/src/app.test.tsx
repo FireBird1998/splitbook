@@ -749,6 +749,53 @@ describe('App return from an Expense', () => {
     expect(app.text()).toContain('September groceries');
   });
 
+  /** Activity names September groceries; its event opens the record from 300 down. */
+  const openFromActivity = async (app: Awaited<ReturnType<typeof renderApp>>) => {
+    const [event] = activityPage.data.activities;
+    app.use((path) =>
+      path.startsWith(`/api/groups/${groupId}/activity?`)
+        ? json({
+            ...activityPage,
+            data: {
+              ...activityPage.data,
+              activities: [{ ...event, metadata: { ...event.metadata, expenseId: september._id } }],
+            },
+          })
+        : path === `/api/groups/${groupId}/expenses/${september._id}`
+          ? json({ status: 200, data: { ...september, revision: 0, isDeleted: false } })
+          : undefined,
+    );
+    await app.press('Open Maple House');
+    await app.press('Activity');
+    await app.scrollTo(300);
+    await app.press('You added September groceries');
+  };
+
+  it('opens an Expense from its Activity event, and Back returns to Activity at the same place', async () => {
+    const app = await renderApp();
+    await openFromActivity(app);
+    expect(app.text()).toContain('September groceries');
+    expect(app.text()).toContain('You paid your share');
+    expect(app.pressable('Back to Activity')).toBeTruthy();
+
+    expect(await app.androidBack()).toBe(true);
+    expect(app.text()).toContain('Changes in this Group');
+    await app.layout(700, 1600);
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 300, animated: false });
+  });
+
+  it('settles on the nearest place when the Activity it returns to is shorter', async () => {
+    const app = await renderApp();
+    await openFromActivity(app);
+    expect(await app.androidBack()).toBe(true);
+    await app.layout(700, 800);
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 100, animated: false });
+    // Activity is shown, so content that grows later doesn't move the member.
+    native.scrollTo.mockClear();
+    await app.layout(700, 1600);
+    expect(native.scrollTo).not.toHaveBeenCalled();
+  });
+
   it('confirms a save in the Month shown without offering another Month', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');

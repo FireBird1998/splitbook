@@ -1,5 +1,5 @@
 import { canEditExpense } from '../data/expense-record';
-import { ExpenseRecordView } from './expense-record-view';
+import { ExpenseRecordScreen, ExpenseRecordView } from './expense-record-view';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
@@ -43,7 +43,7 @@ import {
   expenseDateLabel,
   splitSummary,
 } from './expense-form';
-import { fonts, useTheme } from './theme';
+import { useTheme } from './theme';
 
 /**
  * The Expense task, full screen without the Group's bottom navigation: the compact form for
@@ -223,14 +223,31 @@ export function ExpenseEditor({
     </View>
   );
 
-  if (state.status === 'loading') return frame(<Loading label="Opening your draft…" />);
+  const requested = !!state.requestedExpenseId;
+  if (state.status === 'loading')
+    return frame(<Loading label={requested ? 'Opening this Expense…' : 'Opening your draft…'} />);
   if (!draft)
     return frame(
       <Notice
-        title="Couldn’t open this draft"
+        title={requested ? 'Couldn’t open this Expense' : 'Couldn’t open this draft'}
         message={state.message ?? 'Please try again.'}
         retry={onRetry}
       />,
+    );
+  if (record)
+    return (
+      <ExpenseRecordScreen
+        state={state}
+        currentUserId={currentUserId}
+        notice={notice}
+        onClose={onClose}
+        onEdit={onEdit}
+        onReviewDelete={onReviewDelete}
+        onDelete={onDelete}
+        onCancelDelete={onCancelDelete}
+        onResume={onResume}
+        onRefresh={onRetry}
+      />
     );
   const locked = state.status !== 'editing';
   const members = context?.group.members.map(({ user }) => user) ?? [];
@@ -267,62 +284,6 @@ export function ExpenseEditor({
         : draft.review?.length
           ? 'Choose which version to keep for each change in What’s different first.'
           : null;
-
-  // The Group's draft holds Edit and Delete; the record itself stays readable.
-  const holdReason = state.groupDraft
-    ? 'Finish or discard the draft in this Group first.'
-    : undefined;
-  if (record)
-    return frame(
-      <>
-        {state.groupDraft ? (
-          <Banner
-            tone="info"
-            message="This Group has an unfinished draft. Finish or discard it to edit or delete this Expense."
-          >
-            <CompactButton label="Resume draft" variant="text" dense onPress={onResume} />
-          </Banner>
-        ) : null}
-        <ExpenseRecordView record={draft.original!} people={members} tags={context?.tags} />
-        {state.message ? <Copy accessibilityRole="alert">{state.message}</Copy> : null}
-        {state.status === 'delete-review' ? (
-          <Panel>
-            <Copy accessibilityRole="header" style={{ fontFamily: fonts.semibold }}>
-              Delete this Expense?
-            </Copy>
-            <Copy>
-              This removes the Expense from balances. Its saved history is retained. Review the
-              record above before confirming.
-            </Copy>
-            <Button label="Confirm delete Expense" onPress={onDelete} />
-            <Button label="Keep Expense" secondary onPress={onCancelDelete} />
-          </Panel>
-        ) : !draft.original!.isDeleted ? (
-          <>
-            <Button
-              label="Edit Expense"
-              onPress={onEdit}
-              disabled={!canEditExpense(draft.original!) || !!holdReason}
-              hint={holdReason}
-            />
-            {!canEditExpense(draft.original!) ? (
-              <Copy>
-                This historical Expense includes a member whose account is no longer available. It
-                can be reviewed or deleted, but not edited.
-              </Copy>
-            ) : null}
-            <Button
-              label="Delete Expense"
-              secondary
-              onPress={onReviewDelete}
-              disabled={!!holdReason}
-              hint={holdReason}
-            />
-            <Button label="Refresh Expense" secondary onPress={onRetry} />
-          </>
-        ) : null}
-      </>,
-    );
 
   const invalid = expenseFields.filter((field) => errors[field]);
   const summary = state.validation.submitted && invalid.length > 0;

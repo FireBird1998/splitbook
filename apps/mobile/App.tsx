@@ -596,7 +596,8 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     const reachable = Math.max(0, contentHeight - viewportHeight.current);
     scroll.current?.scrollTo({ y: Math.min(y, reachable), animated: false });
     scrollY.current = Math.min(y, reachable);
-    const { status } = controller.getSnapshot().financial.expenses;
+    const shown = controller.getSnapshot();
+    const { status } = shown.destination === 'activity' ? shown.activity : shown.financial.expenses;
     if (reachable >= y || status === 'ready' || status === 'error') pendingScroll.current = null;
   };
   const openExpense = (groupId: string, expenseId?: string) =>
@@ -737,7 +738,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               now={Date.now()}
               onRetry={() => void controller.refreshActivity()}
               onMore={() => void controller.loadMoreActivity()}
-              onSelect={(id) => void controller.selectActivity(id)}
+              onSelect={(id) => void controller.openActivityEvent(id, { scrollY: scrollY.current })}
               onClose={controller.closeActivityDetail}
             />
           ) : state.destination === 'balances' ? (

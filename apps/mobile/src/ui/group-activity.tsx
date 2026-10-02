@@ -1,6 +1,6 @@
 import { Fragment } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
-import type { ActivityEvent, ActivityState } from '../data/activity';
+import { activityExpenseId, type ActivityEvent, type ActivityState } from '../data/activity';
 import {
   activityDays,
   clockTime,
@@ -36,6 +36,7 @@ interface GroupActivityProps {
   now: number;
   onRetry: () => void;
   onMore: () => void;
+  /** Opens an event: its Expense's record when it names one, otherwise what was recorded. */
   onSelect: (id: string) => void;
   onClose: () => void;
 }
@@ -113,7 +114,9 @@ function ActivityRow({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={spokenActivity(line, time)}
-      accessibilityHint="Opens what was recorded"
+      accessibilityHint={
+        activityExpenseId(event) ? 'Opens this Expense' : 'Opens what was recorded'
+      }
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={() => onSelect(event._id)}
