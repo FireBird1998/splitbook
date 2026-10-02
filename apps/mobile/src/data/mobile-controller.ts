@@ -20,7 +20,11 @@ import {
   assertGroupCurrency,
 } from '@splitbook/shared/expense-validation';
 import { canEditExpense, parseExpenseRecord } from './expense-record';
-import { parseAmountMinor, MoneyValidationError } from '@splitbook/shared/exact-money';
+import {
+  parseAmountMinor,
+  MoneyValidationError,
+  toMajorAmount,
+} from '@splitbook/shared/exact-money';
 import {
   emptyExpenseEditor,
   emptyExpenseValidation,
@@ -78,6 +82,7 @@ import type {
   GroupReturnContext,
   GroupSnackbar,
   HomeFinancialState,
+  KeptDraft,
   MobileConfig,
   MobileDependencies,
   MobileGroup,
@@ -182,6 +187,16 @@ function expenseFailureMessage(error: unknown, fallback: string) {
   return (error instanceof Error && rejectionMessages[error.message]) || fallback;
 }
 
+/** A draft's typed amount, when it is a valid positive amount in its currency. */
+function enteredAmount(amount: string, currency: string) {
+  try {
+    const minor = parseAmountMinor(amount, currency);
+    return minor > 0 ? toMajorAmount(minor, currency) : null;
+  } catch {
+    return null;
+  }
+}
+
 function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
   return {
     auth,
@@ -194,6 +209,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
     snackbar: null,
     settlement: emptySettlement(),
     pendingPayment: null,
+    keptDraft: null,
     activity: emptyActivity(),
     home: emptyHome(),
     financial: emptyFinancial(),
@@ -269,6 +285,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let balancesRequest = 0;
   let settlementRequest = 0;
   let pendingRequest = 0;
+  let keptDraftRequest = 0;
   let activityRequest = 0;
   let activityDetailRequest = 0;
   let cacheEpoch = 0;
@@ -1464,6 +1481,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         refreshedAt: verified ? snapshot.detail.refreshedAt : null,
       },
       financial: retained ? snapshot.financial : { ...emptyFinancial(), groupId: id },
+      keptDraft: snapshot.keptDraft?.groupId === id ? snapshot.keptDraft : null,
       // Events already read for this Group stay readable until Activity is read again.
       activity:
         retained && snapshot.activity.groupId === id && snapshot.activity.status !== 'denied'
@@ -1477,6 +1495,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             }
           : { ...emptyActivity(), groupId: id },
     });
+    const kept = loadKeptDraft(id);
     try {
       if (!objectId.safeParse(id).success)
         throw new RequestError('This group is no longer available.', 404);
@@ -1548,6 +1567,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         },
       });
     }
+    await kept;
   };
 
   const evictGroupContent = (id: string, status: number) => {
@@ -1731,19 +1751,55 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     await readBalances(reuse);
     await pending;
   };
+  /**
+   * The Group's kept Expense draft, read from this device so Expenses can offer it. Reading
+   * never opens or changes it.
+   */
+  const loadKeptDraft = async (groupId: string) => {
+    const owner = generation,
+      read = ++keptDraftRequest,
+      lease = accountStorage(),
+      storage = dependencies.expenseDrafts;
+    if (!lease || !storage) return;
+    let kept: KeptDraft | null;
+    try {
+      const stored = await lease.write(() => storage.load(lease.accountId, groupId));
+      const record =
+        stored === null ? null : parseStoredExpenseDraft(stored, lease.accountId, groupId);
+      kept = record && {
+        groupId,
+        draft: {
+          description: record.draft.description.trim(),
+          amount: enteredAmount(record.draft.amount, record.draft.currency),
+          currency: record.draft.currency,
+          edit: !!record.draft.original,
+        },
+        unconfirmed: !!(record.attempt || record.mutation),
+      };
+    } catch (error) {
+      if (error instanceof Superseded || !current(owner)) return;
+      // An unreadable record is left as it is; opening it explains the problem.
+      kept = { groupId, draft: null, unconfirmed: false };
+    }
+    if (!current(owner) || read !== keptDraftRequest || snapshot.detail.id !== groupId) return;
+    if (JSON.stringify(kept) !== JSON.stringify(snapshot.keptDraft))
+      publish({ ...snapshot, keptDraft: kept });
+  };
   /** Retry always reads again, and keeps the Group explicit while it does. */
   const refreshBalances = () =>
     explicitly([`group:${snapshot.detail.data?.id}`], () => loadBalances(false));
 
   const expensePath = (groupId: string, category: string, month: string | null, page: number) => {
-    const params = new URLSearchParams({ page: String(page), limit: '20' });
-    if (category === 'home') {
-      params.set('includeMemberBreakdown', '1');
-      if (month) {
-        const { dateFrom, dateTo } = getLocalMonthIsoRange(month);
-        params.set('dateFrom', dateFrom);
-        params.set('dateTo', dateTo);
-      }
+    // Every Theme's summary shows the member's own share and paid amount.
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: '20',
+      includeMemberBreakdown: '1',
+    });
+    if (category === 'home' && month) {
+      const { dateFrom, dateTo } = getLocalMonthIsoRange(month);
+      params.set('dateFrom', dateFrom);
+      params.set('dateTo', dateTo);
     }
     return `/api/groups/${groupId}/expenses?${params}`;
   };
@@ -2573,6 +2629,46 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /**
+   * Resume draft, from the Group's Expenses: opens its kept draft straight into the form, or
+   * a save that may already be recorded into its recovery.
+   */
+  const resumeKeptDraft = async (origin: { scrollY?: number } = {}) => {
+    const groupId = snapshot.screen === 'group' ? snapshot.detail.id : null;
+    if (!groupId) return;
+    const opening = openExpense(groupId, undefined, origin);
+    const view = viewRequest;
+    await opening;
+    const shown = latest();
+    if (view === viewRequest && shown.screen === 'expense' && shown.expense.status === 'resume')
+      resumeExpenseDraft();
+  };
+
+  /**
+   * Discard, from the Group's Expenses: removes its ordinary draft from this device. A save
+   * that may already be recorded is never discarded here. False when it is still kept.
+   */
+  const discardKeptDraft = async () => {
+    const groupId = snapshot.screen === 'group' ? snapshot.detail.id : null;
+    const lease = accountStorage();
+    const storage = dependencies.expenseDrafts;
+    if (!groupId || !lease || !storage) return false;
+    try {
+      const removed = await lease.write(async () => {
+        const stored = await storage.load(lease.accountId, groupId);
+        if (stored === null) return true;
+        const record = parseStoredExpenseDraft(stored, lease.accountId, groupId);
+        if (record.attempt || record.mutation) return false;
+        await storage.remove(lease.accountId, groupId);
+        return true;
+      });
+      await loadKeptDraft(groupId);
+      return removed;
+    } catch (error) {
+      return error instanceof Superseded;
+    }
+  };
+
+  /**
    * A ledger write that may have reached the server, whatever its outcome, makes the
    * Group's earlier reads obsolete: they are not reused, joined or saved afterwards.
    */
@@ -2643,7 +2739,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ? origin.month
           : currentMonthKey(new Date(now()));
     const month = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date.slice(0, 7) : null;
-    return { groupId, message, viewMonth: shown && month && month !== shown ? month : null };
+    // A saved or updated Expense (dated) is highlighted while this shows; a deleted one has no row.
+    const { status, receiptId } = snapshot.expense;
+    return {
+      groupId,
+      message,
+      viewMonth: shown && month && month !== shown ? month : null,
+      ...(date && status === 'saved' && receiptId ? { expenseId: receiptId } : {}),
+    };
   };
 
   const showHome = () => {
@@ -4335,6 +4438,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     acceptCurrentExpense,
     editExpense,
     discardExpenseDraft,
+    resumeKeptDraft,
+    discardKeptDraft,
     saveExpense,
     openExpense,
     closeExpense,

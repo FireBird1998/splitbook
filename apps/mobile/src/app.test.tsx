@@ -1,3 +1,4 @@
+import { Alert } from 'react-native';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -410,8 +411,8 @@ describe('App refresh rendering', () => {
     groupRead.release(json({ data: group, status: 200 }));
     await settle();
     const shown = app.text();
-    expect(shown).toContain('AUGUST 2026');
-    expect(shown).toContain('August 2026 expense total');
+    expect(shown).toContain('August 2026');
+    expect(shown).toContain('1 expense in August');
     expect(shown).toContain('August rent');
     expect(shown).not.toContain('September');
   });
@@ -427,7 +428,8 @@ describe('App refresh rendering', () => {
     const retained = `The server could not complete this request. Please try again. Showing Maple House from ${verifiedAt}.`;
     expect(app.text()).toContain(retained);
     expect(app.text()).toContain('September groceries');
-    expect(app.text()).toContain('September 2026 expense total');
+    expect(app.text()).toContain('September 2026');
+    expect(app.text()).toContain('1 expense');
     await app.press('Balances');
     expect(app.text()).toContain(retained);
     expect(app.text()).toContain('You owe₹30.00');
@@ -630,9 +632,35 @@ describe('App return from an Expense', () => {
     await app.layout(700, 1600);
     expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 420, animated: false });
 
-    // Leaving never discarded the draft.
+    // Leaving never discarded the draft: Expenses offers it, and resuming skips the prompt.
+    expect(app.text()).toContain('Draft: Kept for later');
+    expect(() => app.pressable('Add expense')).toThrow();
+    // The banner and the floating button both resume it.
+    const resume = screen!.root.findAll(
+      (node) =>
+        (node.type as unknown) === 'Pressable' && node.props.accessibilityLabel === 'Resume draft',
+    );
+    expect(resume).toHaveLength(2);
+    await settle(Promise.resolve(resume[1].props.onPress()));
+    expect(app.text()).toContain('Add expense');
+    expect(app.text()).not.toContain('Unfinished draft');
+  });
+
+  it('discards a kept draft from Expenses only after confirming', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
     await app.press('Add expense');
-    expect(app.text()).toContain('Unfinished draft');
+    await app.type('Description, required', 'Kept for later');
+    await app.press('Back to Group');
+    expect(app.text()).toContain('Draft: Kept for later');
+
+    await app.press('Discard draft');
+    const [title, , choices] = vi.mocked(Alert.alert).mock.lastCall!;
+    expect(title).toBe('Discard this expense draft?');
+    expect(app.text()).toContain('Draft: Kept for later');
+    await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
+    expect(app.text()).not.toContain('Draft: Kept for later');
+    expect(app.pressable('Add expense').props.accessibilityRole).toBe('button');
   });
 
   it('the top-bar back arrow names the Group it returns to', async () => {
