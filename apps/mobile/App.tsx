@@ -430,7 +430,13 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
               ? 'Create a Group'
               : 'You’re invited'
         }
-        leading={{ kind: 'back', label: 'Back to Home', onPress: () => void controller.back() }}
+        // Disabled while joining: the join finishes and opens its Group (#152).
+        leading={{
+          kind: 'back',
+          label: 'Back to Home',
+          onPress: () => void controller.back(),
+          disabled: state.invitation.status === 'joining',
+        }}
         actions={
           authenticated && state.screen !== 'settings' ? (
             <IconButton

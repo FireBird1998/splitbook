@@ -20,7 +20,8 @@ export function TopBar({
 }: {
   title: string;
   subtitle?: string;
-  leading?: { kind: 'back' | 'close'; label: string; onPress: () => void };
+  /** `disabled` keeps the arrow visible but inert, as while an invitation is being joined. */
+  leading?: { kind: 'back' | 'close'; label: string; onPress: () => void; disabled?: boolean };
   status?: ReactNode;
   actions?: ReactNode;
   /** Screen titles use the title size; tasks such as the Expense form use the heading size. */
@@ -45,6 +46,7 @@ export function TopBar({
           icon={leading.kind === 'back' ? 'arrow-back' : 'close'}
           label={leading.label}
           onPress={leading.onPress}
+          disabled={leading.disabled}
         />
       ) : null}
       <View style={{ flex: 1, minWidth: 0, paddingHorizontal: 4 }}>

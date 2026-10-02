@@ -683,13 +683,13 @@ describe('App invitation', () => {
     await settle(app.controller.openInvitation('http://localhost:4138/join/deadbeef'));
     await app.press('Join Group');
     await post.reached;
-    expect(app.pressable('Back to Groups').props.accessibilityState).toEqual({ disabled: true });
+    expect(app.pressable('Back to Home').props.accessibilityState).toEqual({ disabled: true });
     expect(await app.androidBack()).toBe(true);
     expect(app.text()).toContain('Joining Group…');
 
     post.release(json({ data: { groupId: joinedId }, status: 201 }, 201));
     await settle();
-    expect(() => app.pressable('Back to Home')).not.toThrow();
+    expect(app.text()).not.toContain('You’re invited');
     expect(app.text()).toContain('Cedar FlatHousehold · 1 member · INR');
   });
 });
