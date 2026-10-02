@@ -531,18 +531,20 @@ function ChangeText({
   change: ExpenseHistoryChange;
   implied?: boolean;
 }) {
-  const face = change.money ? moneyFace : undefined;
+  // Only amounts are in the money face; a word such as "Not included" stays in the text face.
+  const before = change.money?.before ? moneyFace : undefined;
+  const after = change.money?.after ? moneyFace : undefined;
   return (
     <>
       {implied ? null : `${change.label} `}
       {change.before !== undefined && change.after !== undefined ? (
         <>
-          <Text style={face}>{change.before}</Text>
+          <Text style={before}>{change.before}</Text>
           {' → '}
-          <Text style={face}>{change.after}</Text>
+          <Text style={after}>{change.after}</Text>
         </>
       ) : change.after !== undefined ? (
-        <Text style={face}>{change.after}</Text>
+        <Text style={after}>{change.after}</Text>
       ) : (
         'changed'
       )}

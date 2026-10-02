@@ -6,6 +6,7 @@ import { createMobileController, type MobileController } from '../data/mobile-co
 import type { FetchResponse, MobileFetch } from '../data/types';
 import { clockTime } from './activity-format';
 import { ExpenseEditor } from './expense-editor';
+import { fonts } from './theme';
 
 // Host stand-ins: the record renders through these names, so the tree keeps the props
 // (roles, labels, hints, states, handlers) that Android receives.
@@ -46,6 +47,7 @@ const ids = {
   deleted: 'b00000000000000000000003',
   historical: 'b00000000000000000000004',
   weekly: 'b00000000000000000000005',
+  taxi: 'b00000000000000000000006',
 };
 const iso = '2026-09-29T14:32:00.000Z';
 const group = {
@@ -127,6 +129,14 @@ const records: Record<string, Record<string, unknown>> = {
     paidBy: [row(null, 30000)],
     splitBetween: [row(alex, 15000), row(null, 15000)],
   }),
+  [ids.taxi]: expense(ids.taxi, {
+    description: 'Airport taxi',
+    amount: 1500,
+    amountMinor: 150000,
+    paidBy: [row(alex, 150000)],
+    splitBetween: [row(alex, 50000), row(sam, 50000), row(priya, 50000)],
+    createdBy: alex.id,
+  }),
   [ids.weekly]: expense(ids.weekly, {
     description: 'Weekly groceries',
     amount: 900,
@@ -178,6 +188,22 @@ const histories: Record<string, Record<string, unknown>[]> = {
       ),
     ),
     added('d00000000000000000000200', person(alex), iso),
+  ],
+  // Priya joins the split: her earlier share is a word, not an amount.
+  [ids.taxi]: [
+    edit('d00000000000000000000400', person(sam), '2026-09-29T15:20:00.000Z', {
+      splitBetween: {
+        old: [
+          { user: alex.id, amount: 750, amountMinor: 75000 },
+          { user: sam.id, amount: 750, amountMinor: 75000 },
+        ],
+        new: [
+          { user: alex.id, amount: 500, amountMinor: 50000 },
+          { user: sam.id, amount: 500, amountMinor: 50000 },
+          { user: priya.id, amount: 500, amountMinor: 50000 },
+        ],
+      },
+    }),
   ],
   // Neither the person who edited nor one of the people on the split is named any more.
   [ids.historical]: [
@@ -526,6 +552,24 @@ describe('compact Expense record', () => {
     expect(shown).not.toContain('Last changed');
     expect(shown.join('\n')).not.toMatch(/[0-9a-f]{24}|[{}[\]]|amountMinor/);
     expect(() => ui.pressable('Load older changes')).toThrow();
+  });
+
+  it('sets amounts in the money face, and a share that wasn’t there in the text face', async () => {
+    const ui = await render(open(ids.taxi));
+    expect(lines(ui.root())).toContain('Priya Shah’s share Not included → ₹500.00');
+    const runs = (value: string) =>
+      ui
+        .root()
+        .findAll((node) => isHost(node, 'Text') && node.children.join('') === value)
+        .map(
+          (node) =>
+            [node.props.style]
+              .flat(Infinity)
+              .reduce((face, style) => style?.fontFamily ?? face, null) as string | null,
+        );
+    expect(runs('Not included')).toEqual([null]);
+    expect(runs('₹750.00')).toEqual([fonts.mono, fonts.mono]);
+    expect(runs('₹500.00')).toContain(fonts.mono);
   });
 
   it('names people who are no longer in the Group or on the Expense as former members', async () => {

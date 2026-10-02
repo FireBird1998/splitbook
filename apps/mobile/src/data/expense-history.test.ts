@@ -240,7 +240,12 @@ describe('describeExpenseEvents', () => {
       ['Alex', at(13)],
       ['Sam Chen', at(12)],
     ]);
-    expect(described[0].changes[0].money).toBe(true);
+    expect(described[0].changes[0].money).toEqual({ before: true, after: true });
+    // "Not included" is a word, not an amount (#151).
+    expect(described[1].changes[1]).toMatchObject({
+      before: 'Not included',
+      money: { before: false, after: true },
+    });
   });
 
   it('names anyone the event, Group and Expense don’t as a former member, never by reference', () => {
