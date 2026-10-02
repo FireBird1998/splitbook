@@ -36,7 +36,7 @@ import { ThemeContext, fonts, useTheme } from './src/ui/theme';
 import { Avatar, Button, Copy, Icon, Label, Loading, Notice } from './src/ui/primitives';
 import { EmptyGroups, GroupCard, SignIn, TripStrip, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
-import { SettingsScreen } from './src/ui/settings-screen';
+import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
 import { ExpenseEditor } from './src/ui/expense-editor';
 import {
   GroupExpensesView,
@@ -327,7 +327,7 @@ function SplitBook() {
                 onSignOut={() =>
                   Alert.alert(
                     'Sign out on this device?',
-                    'Your session, expense drafts, unresolved payment records and save recovery keys, unsaved Group form, saved invitation, and local account data will be cleared. If a save was interrupted, check your saved history after signing in before creating it again.',
+                    `Your ${signOutClears} will be cleared. ${signOutInterruptedSave}`,
                     [
                       { text: 'Cancel', style: 'cancel' },
                       {
