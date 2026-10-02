@@ -35,12 +35,13 @@ import {
 import { ThemeContext, fonts, useTheme } from './src/ui/theme';
 import { Avatar, Button, Copy, Icon, Label, Loading, Notice } from './src/ui/primitives';
 import { Badge, CompactText, FloatingAction, IconButton, TopBar } from './src/ui/compact';
-import { EmptyGroups, GroupCard, SignIn, TripStrip, styles } from './src/ui/screens';
+import { EmptyGroups, GroupCard, SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
 import { ExpenseEditor } from './src/ui/expense-editor';
 import { HomeBalances, RefreshStatus, RetainedNotice } from './src/ui/financial-views';
 import { GroupExpensesView } from './src/ui/group-expenses';
+import { TripStrip } from './src/ui/trip-strip';
 import { refreshFeedback } from './src/ui/refresh-feedback';
 import { GroupSnackbar } from './src/ui/group-snackbar';
 import { visibleFieldErrors } from './src/data/field-feedback';

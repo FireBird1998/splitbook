@@ -593,6 +593,61 @@ describe('App Group Activity refresh', () => {
   });
 });
 
+describe('App Trip strip', () => {
+  it('sits at the top of a Trip’s scrolling Expenses, and only a Trip’s', async () => {
+    const app = await renderApp();
+    const tripId = 'a00000000000000000000011';
+    const trip = {
+      ...group,
+      _id: tripId,
+      name: 'Goa Friends Trip',
+      category: 'trip',
+      startDate: '2026-09-17T00:00:00.000Z',
+      endDate: '2026-09-20T00:00:00.000Z',
+    };
+    const lunch = { ...expense('b00000000000000000000011', 'Beach shack lunch'), group: tripId };
+    const reads: Record<string, unknown> = {
+      '/api/groups': { data: [group, trip], status: 200 },
+      [`/api/groups/${tripId}`]: { data: trip, status: 200 },
+      [`/api/groups/${tripId}/balances`]: {
+        data: { currency: 'INR', balances: [], debts: [], byCurrency: [] },
+        status: 200,
+      },
+    };
+    app.use((path) =>
+      path.startsWith(`/api/groups/${tripId}/expenses?`)
+        ? json(page([lunch]))
+        : path in reads
+          ? json(reads[path])
+          : undefined,
+    );
+    await settle(app.controller.refresh());
+    const strips = (root: ReactTestInstance = screen!.root) =>
+      root.findAll(
+        (node) => (node.type as unknown) === 'View' && node.props.accessibilityRole === 'image',
+      );
+
+    await app.press('Open Maple House');
+    expect(app.text()).toContain('September groceries');
+    expect(strips()).toHaveLength(0);
+    await app.press('Back to Home');
+
+    await app.press('Open Goa Friends Trip');
+    expect(app.text()).toContain('Beach shack lunch');
+    const [strip, ...others] = strips();
+    expect(others).toHaveLength(0);
+    expect(strip.props.accessibilityLabel).toBe(
+      'Trip from GOA to TRI, 17 to 20 September, 1 member',
+    );
+    // Part of the scrolling content, so it scrolls away, and above the Expenses summary.
+    const content = screen!.root.findAll((node) => (node.type as unknown) === 'ScrollView')[0];
+    expect(strips(content)).toHaveLength(1);
+    const shown = app.text();
+    expect(shown.indexOf('17–20 Sep')).toBeGreaterThan(-1);
+    expect(shown.indexOf('17–20 Sep')).toBeLessThan(shown.indexOf('Spent'));
+  });
+});
+
 describe('App return from an Expense', () => {
   /** `date` is the Date sheet's steps from this Month, such as ['Sunday, 20 September 2026']. */
   const addExpense = async (app: Awaited<ReturnType<typeof renderApp>>, date: string[]) => {
