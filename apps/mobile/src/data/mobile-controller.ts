@@ -1798,7 +1798,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** `reuse` (navigation, Month choice, foreground) accepts a first page verified within the window. */
   const readExpenses = async (append: boolean, reuse = false) => {
     const group = snapshot.detail.data;
-    if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'group' || !group) return;
+    // The payment sheet leaves its Group visible: finish the Expense-to-Balances read chain
+    // underneath it, even when the Group request completes after the sheet opens.
+    if (snapshot.auth.status !== 'authenticated' || !overGroup() || !group) return;
     const expenses = snapshot.financial.expenses;
     const pagination = expenses.pagination;
     const parse = (value: unknown) => parseExpensePage(value, group.id, group.defaultCurrency);
