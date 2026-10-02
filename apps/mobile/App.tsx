@@ -34,17 +34,13 @@ import {
 } from './src/runtime';
 import { ThemeContext, fonts, useTheme } from './src/ui/theme';
 import { Avatar, Button, Copy, Icon, Label, Loading, Notice } from './src/ui/primitives';
-import { Badge, CompactText, IconButton, TopBar } from './src/ui/compact';
+import { Badge, CompactText, FloatingAction, IconButton, TopBar } from './src/ui/compact';
 import { EmptyGroups, GroupCard, SignIn, TripStrip, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
 import { ExpenseEditor } from './src/ui/expense-editor';
-import {
-  GroupExpensesView,
-  HomeBalances,
-  RefreshStatus,
-  RetainedNotice,
-} from './src/ui/financial-views';
+import { HomeBalances, RefreshStatus, RetainedNotice } from './src/ui/financial-views';
+import { GroupExpensesView } from './src/ui/group-expenses';
 import { refreshFeedback } from './src/ui/refresh-feedback';
 import { GroupSnackbar } from './src/ui/group-snackbar';
 import { visibleFieldErrors } from './src/data/field-feedback';
@@ -604,6 +600,28 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
   };
   const openExpense = (groupId: string, expenseId?: string) =>
     void controller.openExpense(groupId, expenseId, { scrollY: scrollY.current });
+  const kept = state.keptDraft?.groupId === group?.id ? state.keptDraft : null;
+  // Both open the kept record; a save that may already be recorded is checked, not resumed.
+  const keptAction = kept?.unconfirmed
+    ? { label: 'Check save', icon: 'alert-circle-outline' as const }
+    : { label: 'Resume draft', icon: 'pencil-outline' as const };
+  const resumeDraft = () => void controller.resumeKeptDraft({ scrollY: scrollY.current });
+  const discardDraft = () =>
+    Alert.alert(
+      'Discard this expense draft?',
+      'Your saved entries will be removed from this device.',
+      [
+        { text: 'Keep draft', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () =>
+            void controller.discardKeptDraft().then((discarded) => {
+              if (!discarded) Alert.alert('Couldn’t discard this draft', 'Please try again.');
+            }),
+        },
+      ],
+    );
   const shareInvite = () => {
     void (async () => {
       const url = await controller.loadInviteLink();
@@ -655,14 +673,25 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         onContentSizeChange: (_width, height) => restorePendingScroll(height),
       }}
       overlay={
-        state.snackbar && group ? (
-          <GroupSnackbar
-            notice={state.snackbar}
-            shownMonth={state.financial.month}
-            onView={() => void controller.viewSnackbarMonth()}
-            onDismiss={controller.dismissSnackbar}
-          />
-        ) : null
+        <>
+          {group && state.destination === 'expenses' ? (
+            <FloatingAction
+              label={kept ? keptAction.label : 'Add expense'}
+              icon={kept ? keptAction.icon : 'add'}
+              onPress={kept ? resumeDraft : () => openExpense(group.id)}
+              // Above the snackbar while it shows.
+              bottom={state.snackbar ? 156 : undefined}
+            />
+          ) : null}
+          {state.snackbar && group ? (
+            <GroupSnackbar
+              notice={state.snackbar}
+              shownMonth={state.financial.month}
+              onView={() => void controller.viewSnackbarMonth()}
+              onDismiss={controller.dismissSnackbar}
+            />
+          ) : null}
+        </>
       }
     >
       <OfflineNotice state={state.offline} />
@@ -728,23 +757,29 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               {getGroupTheme(group.category).header === 'strip' ? (
                 <TripStrip group={group} />
               ) : null}
-              <Button
-                label="Add expense"
-                icon="add-outline"
-                onPress={() => openExpense(group.id)}
-              />
-              {group.members.length === 1 && (
-                <Copy>Your Group is ready. Invite someone to start sharing it.</Copy>
-              )}
+              {group.members.length === 1 ? (
+                <CompactText variant="small" tone="secondary">
+                  Your Group is ready. Invite someone to start sharing it.
+                </CompactText>
+              ) : null}
               <GroupExpensesView
                 group={group}
                 currentUserId={userId}
                 state={state.financial}
+                kept={kept}
+                savedExpenseId={
+                  state.snackbar?.groupId === group.id ? (state.snackbar.expenseId ?? null) : null
+                }
+                now={Date.now()}
                 onSelectMonth={(month) => void controller.selectMonth(month)}
                 onRefreshExpenses={() => void controller.refreshExpenses()}
                 onLoadMore={() => void controller.loadMoreExpenses()}
                 onOpenExpense={(expenseId) => openExpense(group.id, expenseId)}
+                onResumeDraft={resumeDraft}
+                onDiscardDraft={discardDraft}
               />
+              {/* Room to scroll the last row above the floating button. */}
+              <View style={{ height: 56 }} />
             </>
           )}
         </>

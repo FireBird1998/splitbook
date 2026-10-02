@@ -143,6 +143,27 @@ export interface GroupSnackbar {
   message: string;
   /** The saved Expense's Month when it differs from the Month shown; offered, never switched to. */
   viewMonth: string | null;
+  /** The saved Expense, highlighted on Expenses while this shows. */
+  expenseId?: string;
+}
+
+/**
+ * This Group's Expense draft kept on the device (one per Group, ADR 0004), read so Expenses
+ * can offer it without opening it.
+ */
+export interface KeptDraft {
+  groupId: string;
+  /** Null when the stored record can't be read; opening it explains why. */
+  draft: {
+    description: string;
+    /** The entered amount when it is a valid one. */
+    amount: number | null;
+    currency: string;
+    /** Changes to a saved Expense rather than a new one. */
+    edit: boolean;
+  } | null;
+  /** A save or change that may already be recorded: finished from here, never discarded. */
+  unconfirmed: boolean;
 }
 
 export interface GroupDraft {
@@ -201,6 +222,8 @@ export interface MobileSnapshot {
   settlement: SettlementState;
   /** The current Group's unconfirmed payment, kept for an explicit retry from Balances. */
   pendingPayment: PendingPayment | null;
+  /** The current Group's kept Expense draft, offered from Expenses. */
+  keptDraft: KeptDraft | null;
   activity: ActivityState;
   home: HomeFinancialState;
   financial: GroupFinancialState;

@@ -26,6 +26,7 @@ export function Banner({
   title,
   message,
   standing = false,
+  trailing,
   children,
 }: {
   tone: BannerTone;
@@ -33,6 +34,8 @@ export function Banner({
   message: string;
   /** A notice that stays on the screen, e.g. an unconfirmed payment: announced politely. */
   standing?: boolean;
+  /** Beside the title, such as a draft's amount. */
+  trailing?: ReactNode;
   children?: ReactNode;
 }) {
   const theme = useTheme();
@@ -60,9 +63,12 @@ export function Banner({
       <Icon name={bannerIcons[tone]} size={20} color={colors[1]} />
       <View style={{ flex: 1, gap: 2 }}>
         {title ? (
-          <CompactText variant="small" weight="semibold" style={{ color: colors[1] }}>
-            {title}
-          </CompactText>
+          <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+            <CompactText variant="small" weight="semibold" style={{ flex: 1, color: colors[1] }}>
+              {title}
+            </CompactText>
+            {trailing}
+          </View>
         ) : null}
         <CompactText
           variant="small"

@@ -3,8 +3,9 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse } from '../data/types';
-import { GroupExpensesView, HomeBalances, RefreshStatus } from './financial-views';
+import { HomeBalances, RefreshStatus } from './financial-views';
 import { GroupBalancesView } from './group-balances';
+import { GroupExpensesView } from './group-expenses';
 import { refreshFeedback, refreshedLabel } from './refresh-feedback';
 
 // Host stand-ins keep the props and text Android receives.
@@ -14,6 +15,7 @@ vi.mock('react-native', () => ({
   StyleSheet: { create: <T,>(styles: T) => styles },
   Text: 'Text',
   View: 'View',
+  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: 1 }),
 }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
 vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
@@ -162,10 +164,15 @@ function Screen({ controller }: { controller: MobileController }) {
             group={state.detail.data}
             currentUserId={user.id}
             state={state.financial}
+            kept={state.keptDraft}
+            savedExpenseId={null}
+            now={new Date(2026, 8, 27, 12).getTime()}
             onSelectMonth={noop}
             onRefreshExpenses={noop}
             onLoadMore={noop}
             onOpenExpense={noop}
+            onResumeDraft={noop}
+            onDiscardDraft={noop}
           />
         </>
       ) : null}
@@ -238,15 +245,13 @@ describe('rendered refresh feedback', () => {
     const opening = controller.openGroup(groupId);
     await expenses.reached;
     await flush();
-    // Balances show placeholder rows; Expenses keep their spinner until #116.
-    expect(
-      root().findAll(
-        (node) => isHost(node, 'View') && node.props.accessibilityLabel === 'Loading balances',
-      ),
-    ).toHaveLength(1);
-    expect(text(root())).toContain('Loading September 2026 expenses…');
+    // Balances and Expenses show placeholder rows rather than a spinner.
+    for (const label of ['Loading balances', 'Loading September 2026 expenses'])
+      expect(
+        root().findAll((node) => isHost(node, 'View') && node.props.accessibilityLabel === label),
+      ).toHaveLength(1);
     expect(text(root())).not.toContain('Updating…');
-    expect(spinners(root())).toBe(1);
+    expect(spinners(root())).toBe(0);
     await expenses.release(json(page([expense('b00000000000000000000001', 'Groceries')])));
     await settle(opening);
     expect(spinners(root())).toBe(0);
@@ -268,7 +273,7 @@ describe('rendered refresh feedback', () => {
     expect(shown.match(/Updating…/g)).toHaveLength(1);
     expect(spinners(root())).toBe(0);
     expect(shown).toContain('Groceries');
-    expect(shown).toContain('September 2026 expense total');
+    expect(shown).toContain('1 expense this month');
     expect(shown).toContain('You owe₹30.00');
     expect(shown).toContain(
       `Updating balances. These figures are from ${refreshedLabel(verifiedAt)} and may change.`,
