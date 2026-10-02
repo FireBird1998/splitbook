@@ -93,11 +93,9 @@ const press = (node: ReactTestInstance) => {
     node.props.onPress();
   });
 };
-const text = (node: ReactTestInstance) =>
-  node
-    .findAll((n) => isHost(n, 'Text'))
-    .flatMap((n) => n.children.filter((c): c is string => typeof c === 'string'))
-    .join('');
+/** The text in reading order, with nested Text where it sits in its sentence. */
+const text = (node: ReactTestInstance): string =>
+  node.children.map((child) => (typeof child === 'string' ? child : text(child))).join('');
 
 function shell(overrides: Partial<Parameters<typeof GroupShell>[0]> = {}) {
   const props = {
@@ -224,6 +222,7 @@ function activity(state: ActivityState, offline = false, pulling = false) {
       state={state}
       currentUserId={you}
       currency="INR"
+      members={group.members.map(({ user }) => ({ id: user.id, name: user.name }))}
       offline={offline}
       pulling={pulling}
       now={now}
@@ -318,5 +317,40 @@ describe('Group Activity', () => {
     expect(text(root)).not.toMatch(/[0-9a-f]{24}/);
     press(one(byRole(root, 'button', 'Back to Activity')));
     expect(onClose).toHaveBeenCalledOnce();
+  });
+
+  it('says what a Group edit changed, in its row and its detail', () => {
+    const edit: ActivityEvent = {
+      _id: 'd00000000000000000000004',
+      group: group.id,
+      type: 'group_updated',
+      actor: { _id: you, name: 'Alex Rao' },
+      createdAt: at(26, 11, 5),
+      metadata: {
+        changes: {
+          memberRole: {
+            old: { userId: 'a00000000000000000000003', role: 'member' },
+            new: { userId: 'a00000000000000000000003', role: 'admin' },
+          },
+        },
+      },
+    };
+    const list = activity(ready({ events: [edit] }));
+    expect(text(list.root)).toContain('You made Priya Shah an admin');
+    one(
+      byRole(
+        list.root,
+        'button',
+        `You made Priya Shah an admin, Member role, ${clockTime(edit.createdAt)}`,
+      ),
+    );
+    act(() => {
+      renderer?.unmount();
+    });
+
+    const { root } = activity(ready({ events: [edit], selected: edit }));
+    expect(text(root)).toContain('What changed');
+    expect(text(root)).toContain('Priya Shah’s role Member → Group admin');
+    expect(text(root)).not.toMatch(/[0-9a-f]{24}/);
   });
 });

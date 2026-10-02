@@ -59,6 +59,7 @@ function Headline({ line, numberOfLines }: { line: ActivityLine; numberOfLines?:
           <Text style={strong}>{line.subject}</Text>
         </>
       ) : null}
+      {line.complement ? ` ${line.complement}` : null}
     </CompactText>
   );
 }
