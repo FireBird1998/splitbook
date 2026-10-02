@@ -439,24 +439,71 @@ describe('rendered draft recovery', () => {
     const ui = await render(async (controller) => {
       await controller.openExpense(groupId);
       await controller.updateExpenseDraft({ amount: '42.00', description: 'Milk and bread' });
-      // Opening a saved Expense while a draft exists explains why the draft comes first.
-      await controller.openExpense(groupId, expenseId);
+      await controller.openExpense(groupId);
     });
     const [info] = banner(ui.root(), 'summary');
     expect(text(info)).toContain('Unfinished draft');
     expect(text(info)).toContain('Nothing has been sent.');
     expect(banner(ui.root(), 'alert')).toEqual([]);
     expect(text(ui.root())).not.toContain('Save not confirmed');
-    expect(text(ui.root())).toContain('This Group already has an unfinished Expense draft.');
     expect(ui.pressable('Discard draft')).toBeTruthy();
 
     await ui.press('Resume draft');
     expect(text(ui.root())).not.toContain('Unfinished draft');
-    expect(text(ui.root())).not.toContain('already has an unfinished');
     expect(ui.input('Amount, required').props.value).toBe('42.00');
     expect(ui.input('Description, required').props.value).toBe('Milk and bread');
     expect(ui.input('Description, required').props.editable).toBe(true);
     expect(ui.writes).toEqual([]);
+  });
+
+  it('opens a saved Expense read-only beside a draft and offers to resume the draft', async () => {
+    const ui = await render(async (controller) => {
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ amount: '42.00', description: 'Milk and bread' });
+      await controller.openExpense(groupId, expenseId);
+    });
+    // The top bar's title is the first heading.
+    const title = () =>
+      text(
+        ui
+          .root()
+          .findAll((node) => isHost(node, 'Text') && node.props.accessibilityRole === 'header')[0],
+      );
+    expect(title()).toBe('Expense');
+    expect(text(ui.root())).toContain('Weekly groceries');
+    const [note] = banner(ui.root(), 'summary');
+    expect(text(note)).toContain(
+      'This Group has an unfinished draft. Finish or discard it to edit or delete this Expense.',
+    );
+    const reason = 'Finish or discard the draft in this Group first.';
+    for (const action of ['Edit Expense', 'Delete Expense'])
+      expect(ui.pressable(action).props).toMatchObject({
+        disabled: true,
+        accessibilityHint: reason,
+      });
+
+    await ui.press('Resume draft');
+    expect(title()).toBe('Add expense');
+    expect(ui.input('Description, required').props.value).toBe('Milk and bread');
+    expect(ui.input('Description, required').props.editable).toBe(true);
+    expect(ui.writes).toEqual([]);
+  });
+
+  it('states in the top banner why a save not confirmed comes before another Expense', async () => {
+    const ui = await render(
+      async (controller) => {
+        await controller.openExpense(groupId);
+        await controller.updateExpenseDraft({ amount: '42.00', description: 'Milk', tagId });
+        await controller.saveExpense();
+        await controller.openExpense(groupId, expenseId);
+      },
+      { loseCreate: true },
+    );
+    const [warning] = banner(ui.root(), 'alert');
+    expect(text(warning)).toContain('Save not confirmed');
+    expect(text(warning)).toContain('before opening another Expense');
+    // Stated once, at the top.
+    expect(text(ui.root()).split('before opening another Expense')).toHaveLength(2);
   });
 
   it('marks a save that may already be recorded as a warning and offers no discard', async () => {

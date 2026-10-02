@@ -326,7 +326,7 @@ describe('native Expense creation and editing', () => {
     },
   );
 
-  it('offers the existing draft before a different Expense and replaces it only on explicit discard', async () => {
+  it('reads a different Expense beside the draft and frees it only on explicit discard', async () => {
     const { controller } = setup((path) =>
       path.endsWith(`/${expenseId}`)
         ? Promise.resolve(json({ status: 200, data: savedExpense }))
@@ -336,11 +336,15 @@ describe('native Expense creation and editing', () => {
     await controller.openExpense(groupId);
     await controller.updateExpenseDraft({ description: 'Unfinished new expense', amount: '12' });
     await controller.openExpense(groupId, expenseId);
-    expect(controller.getSnapshot().expense.status).toBe('resume');
+    expect(controller.getSnapshot().expense.status).toBe('detail');
+    expect(controller.getSnapshot().expense.groupDraft?.description).toBe('Unfinished new expense');
+    controller.resumeExpenseDraft();
+    expect(controller.getSnapshot().expense.status).toBe('editing');
     expect(controller.getSnapshot().expense.draft?.description).toBe('Unfinished new expense');
     await controller.discardExpenseDraft();
     expect(controller.getSnapshot().expense.status).toBe('detail');
     expect(controller.getSnapshot().expense.draft?.original?._id).toBe(expenseId);
+    expect(controller.getSnapshot().expense.groupDraft).toBeNull();
   });
 
   it('disables edits after membership is revoked without sending a mutation', async () => {
@@ -1297,6 +1301,103 @@ describe('native Expense creation and editing', () => {
       tagId,
       participantIds: memberIds,
     });
+  });
+});
+
+describe('reading an Expense beside the Group’s draft', () => {
+  const recordWrites = (drafts: ReturnType<typeof setup>['drafts']) => {
+    const writes: string[] = [];
+    const { save, remove } = drafts;
+    drafts.save = async (accountId, id, value) => {
+      writes.push('save');
+      await save(accountId, id, value);
+    };
+    drafts.remove = async (accountId, id) => {
+      writes.push('remove');
+      await remove(accountId, id);
+    };
+    return writes;
+  };
+  const withDraft = async (intercept?: Parameters<typeof setup>[0]) => {
+    const harness = setup(
+      (path, init) =>
+        intercept?.(path, init) ??
+        (path.endsWith(`/${expenseId}`)
+          ? Promise.resolve(json({ status: 200, data: savedExpense }))
+          : undefined),
+    );
+    await harness.controller.signIn('alex');
+    await harness.controller.openExpense(groupId);
+    await harness.controller.updateExpenseDraft({ description: 'Taxi', amount: '12', tagId });
+    return { ...harness, stored: structuredClone([...harness.records]) };
+  };
+
+  it('opens another Expense read-only and leaves the draft as it was', async () => {
+    const { controller, drafts, records, stored } = await withDraft();
+    const writes = recordWrites(drafts);
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      draft: { original: { _id: expenseId } },
+      groupDraft: { description: 'Taxi', amount: '12' },
+      message: null,
+    });
+    expect(writes).toEqual([]);
+    expect([...records]).toEqual(stored);
+  });
+
+  it('refuses Edit and Delete beside the draft without writing to it', async () => {
+    let deletes = 0;
+    const { controller, drafts, records, stored } = await withDraft((path, init) => {
+      if (path.endsWith(`/${expenseId}`) && init.method === 'DELETE') deletes++;
+      return undefined;
+    });
+    const writes = recordWrites(drafts);
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    expect(controller.getSnapshot().expense.status).toBe('detail');
+    controller.reviewExpenseDeletion();
+    expect(controller.getSnapshot().expense.status).toBe('detail');
+    await controller.deleteExpense();
+    expect(deletes).toBe(0);
+    expect(writes).toEqual([]);
+    expect([...records]).toEqual(stored);
+  });
+
+  it('still resumes a draft editing this same Expense', async () => {
+    const { controller } = setup((path) =>
+      path.endsWith(`/${expenseId}`)
+        ? Promise.resolve(json({ status: 200, data: savedExpense }))
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Unfinished correction' });
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'resume',
+      draft: { notes: 'Unfinished correction' },
+      groupDraft: null,
+    });
+  });
+
+  it('puts a save that may already be recorded before any other Expense', async () => {
+    const { controller } = await withDraft((path, init) =>
+      path.endsWith('/expenses') && init.method === 'POST'
+        ? Promise.reject(new Error('Lost response'))
+        : undefined,
+    );
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.status).toBe('uncertain');
+    await controller.openExpense(groupId, expenseId);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'resume',
+      draft: { description: 'Taxi' },
+      groupDraft: null,
+    });
+    expect(controller.getSnapshot().expense.attempt).not.toBeNull();
+    expect(controller.getSnapshot().expense.message).toContain('before opening another Expense');
   });
 });
 

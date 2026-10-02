@@ -2320,7 +2320,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const stored = await lease.write(() => dependencies.expenseDrafts!.load(accountId, groupId));
       const record = stored === null ? null : parseStoredExpenseDraft(stored, accountId, groupId);
       if (!current(owner) || view !== viewRequest) return;
-      if (record)
+      // Another saved Expense opens read-only beside an ordinary draft. An unconfirmed save,
+      // and a draft editing this same Expense, still come first.
+      const held =
+        record &&
+        expenseId &&
+        record.draft.original?._id !== expenseId &&
+        !record.attempt &&
+        !record.mutation
+          ? record.draft
+          : null;
+      if (record && !held)
         publish({
           ...snapshot,
           expense: {
@@ -2340,7 +2350,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       )
         throw new RequestError('You no longer have access to this Group.', 403);
       const original =
-        record === null && expenseId
+        (record === null || held) && expenseId
           ? await readCached(`/api/groups/${groupId}/expenses/${expenseId}`, owner, (value) =>
               parseExpenseRecord(value, groupId, expenseId),
             )
@@ -2376,7 +2386,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           context,
           draft,
           preview: previewExpense(draft),
-          status: stored === null ? (original ? 'detail' : 'editing') : 'resume',
+          status: record === null || held ? (original ? 'detail' : 'editing') : 'resume',
           attempt: record?.attempt ?? null,
           mutation: record?.mutation ?? null,
           latest: null,
@@ -2385,10 +2395,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           persistence: 'saved',
           validation: emptyExpenseValidation(),
           returnTo,
+          // An unconfirmed save says why it comes before the Expense that was asked for.
           message:
-            record && record.draft.original?._id !== expenseId
-              ? 'This Group already has an unfinished Expense draft. Resume it, or explicitly discard it before opening another Expense.'
-              : null,
+            !record || record.draft.original?._id === expenseId
+              ? null
+              : record.attempt
+                ? 'This Expense may already be saved. Resume to confirm it before opening another Expense; it can’t be added twice.'
+                : record.mutation
+                  ? 'This change may already be saved. Resume to check it before opening another Expense.'
+                  : null,
+          groupDraft: held,
         },
       });
     } catch (error) {
@@ -2414,7 +2430,24 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const resumeExpenseDraft = () => {
     const editor = snapshot.expense;
-    if (snapshot.screen !== 'expense' || editor.status !== 'resume') return;
+    if (snapshot.screen !== 'expense') return;
+    // From a record read beside the Group's draft, Resume opens that draft.
+    if (editor.status === 'detail' && editor.groupDraft) {
+      const draft = editor.groupDraft;
+      publish({
+        ...snapshot,
+        expense: {
+          ...editor,
+          draft,
+          preview: previewExpense(draft),
+          status: 'editing',
+          message: null,
+          groupDraft: null,
+        },
+      });
+      return;
+    }
+    if (editor.status !== 'resume') return;
     publish({
       ...snapshot,
       expense: {
@@ -2632,6 +2665,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (
       snapshot.screen !== 'expense' ||
       editor.status !== 'detail' ||
+      editor.groupDraft ||
       !editor.draft?.original ||
       !canEditExpense(editor.draft.original)
     )
@@ -2775,6 +2809,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (
       snapshot.screen === 'expense' &&
       editor.status === 'detail' &&
+      !editor.groupDraft &&
       editor.draft?.original &&
       !editor.draft.original.isDeleted
     )
