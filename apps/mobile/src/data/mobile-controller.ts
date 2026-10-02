@@ -2266,10 +2266,27 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
   };
 
+  // A draft write still pending doesn't block leaving: closing waits for it.
   const expenseNavigationBlocked = () =>
     (snapshot.screen === 'expense' &&
-      (snapshot.expense.status === 'saving' || snapshot.expense.persistence !== 'saved')) ||
+      (snapshot.expense.status === 'saving' || snapshot.expense.persistence === 'error')) ||
     (snapshot.screen === 'settlement' && snapshot.settlement.status === 'saving');
+
+  let draftWrite: Promise<void> = Promise.resolve();
+  /** A Save accepted while Back waits for a draft write wins: Back then stays on the form. */
+  let closeRequest = 0;
+  /**
+   * Save and close wait for the latest draft write, so nothing is sent or left from entries
+   * this device doesn't hold. False when those entries couldn't be stored.
+   */
+  const draftWritten = async () => {
+    let pending: Promise<void>;
+    do {
+      pending = draftWrite;
+      await pending;
+    } while (pending !== draftWrite);
+    return snapshot.expense.persistence === 'saved';
+  };
 
   /** Opening from the Group's own view records where to return; other entry is direct. */
   const expenseReturn = (groupId: string, scrollY = 0): GroupReturnContext | null => {
@@ -2514,32 +2531,36 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         validation: revalidateExpense(snapshot.expense.validation, draft, snapshot.expense.context),
       },
     });
-    try {
-      await lease.write(() =>
-        kept
-          ? storage.save(lease.accountId, groupId, {
-              version: 1,
-              accountId: lease.accountId,
-              groupId,
-              draft,
-              ...(draft.original ? {} : { blank }),
-            })
-          : storage.remove(lease.accountId, groupId),
-      );
-      if (current(owner) && snapshot.expense.draft === draft)
-        publish({ ...snapshot, expense: { ...snapshot.expense, persistence: 'saved' } });
-    } catch {
-      if (current(owner) && snapshot.expense.draft === draft)
-        publish({
-          ...snapshot,
-          expense: {
-            ...snapshot.expense,
-            persistence: 'error',
-            message:
-              'Could not save your draft on this device. Keep this screen open and try again.',
-          },
-        });
-    }
+    const write = (async () => {
+      try {
+        await lease.write(() =>
+          kept
+            ? storage.save(lease.accountId, groupId, {
+                version: 1,
+                accountId: lease.accountId,
+                groupId,
+                draft,
+                ...(draft.original ? {} : { blank }),
+              })
+            : storage.remove(lease.accountId, groupId),
+        );
+        if (current(owner) && snapshot.expense.draft === draft)
+          publish({ ...snapshot, expense: { ...snapshot.expense, persistence: 'saved' } });
+      } catch {
+        if (current(owner) && snapshot.expense.draft === draft)
+          publish({
+            ...snapshot,
+            expense: {
+              ...snapshot.expense,
+              persistence: 'error',
+              message:
+                'Could not save your draft on this device. Keep this screen open and try again.',
+            },
+          });
+      }
+    })();
+    draftWrite = write;
+    await write;
   };
 
   const discardExpenseDraft = async () => {
@@ -2660,9 +2681,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   /** Android Back and close keep the draft on this device and return where the task began. */
   const closeExpense = async () => {
-    const editor = snapshot.expense;
     if (snapshot.screen !== 'expense' || expenseNavigationBlocked()) return;
-    if (editor.status === 'delete-review') return cancelExpenseDeletion();
+    if (snapshot.expense.status === 'delete-review') return cancelExpenseDeletion();
+    // Leaving waits for the latest entries to be stored; if that fails, the form stays open.
+    if (snapshot.expense.persistence === 'saving') {
+      const view = viewRequest,
+        close = ++closeRequest;
+      if (
+        !(await draftWritten()) ||
+        view !== viewRequest ||
+        close !== closeRequest ||
+        snapshot.screen !== 'expense' ||
+        expenseNavigationBlocked()
+      )
+        return;
+    }
+    const editor = snapshot.expense;
     const { detail } = snapshot;
     const groupId = editor.groupId;
     // A Group removed after denial has nothing to return to.
@@ -2851,7 +2885,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (
       snapshot.screen !== 'expense' ||
       editor.status !== (kind === 'delete' ? 'delete-review' : 'editing') ||
-      editor.persistence !== 'saved' ||
+      editor.persistence === 'error' ||
       !original ||
       !draft ||
       !groupId ||
@@ -2866,8 +2900,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     let mutation: MobileSnapshot['expense']['mutation'] = editor.mutation;
     let completed = false;
     let refreshed = false;
+    closeRequest += 1;
     publish({ ...snapshot, expense: { ...editor, status: 'saving', message: null } });
     try {
+      // Save tapped straight after typing sends once that draft is stored, or not at all.
+      if (editor.persistence === 'saving' && !(await draftWritten())) {
+        if (current(owner) && view === viewRequest)
+          publish({ ...snapshot, expense: { ...snapshot.expense, status: editor.status } });
+        return;
+      }
       const context = parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
       if (!current(owner) || view !== viewRequest) return;
       if (
@@ -3045,6 +3086,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (
       snapshot.screen !== 'expense' ||
       !['editing', 'uncertain'].includes(editor.status) ||
+      (!editor.attempt && editor.persistence === 'error') ||
       !editor.draft ||
       !editor.groupId ||
       !lease ||
@@ -3056,12 +3098,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (!editor.attempt && rejectInvalidExpense(editor, draft, editor.context)) return;
     const owner = generation;
     const view = viewRequest;
+    closeRequest += 1;
     publish({ ...snapshot, expense: { ...editor, status: 'saving', message: null } });
     let attempt = editor.attempt;
     let storing = false;
     let resolvedReceipt: string | null = null;
     let successHandled = false;
     try {
+      // Save tapped straight after typing sends once that draft is stored, or not at all.
+      if (editor.persistence === 'saving' && !(await draftWritten())) {
+        if (current(owner) && view === viewRequest)
+          publish({ ...snapshot, expense: { ...snapshot.expense, status: editor.status } });
+        return;
+      }
       // A successful authorized read is a connection/access check, never proof a write will succeed.
       const context = parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
       if (!current(owner) || view !== viewRequest) return;

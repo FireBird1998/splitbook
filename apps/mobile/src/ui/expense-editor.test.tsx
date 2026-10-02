@@ -307,6 +307,18 @@ const corrections = (scope: ReactTestInstance) =>
         !String(node.props.accessibilityLabel).startsWith('Draft '),
     )
     .map((node) => node.props.accessibilityLabel as string);
+/** The top bar's draft status, and whether a screen reader announces it. */
+const draftStatus = (scope: ReactTestInstance) =>
+  scope
+    .findAll(
+      (node) =>
+        isHost(node, 'View') &&
+        ['Draft saved', 'Saving draft…', 'Draft not saved'].includes(node.props.accessibilityLabel),
+    )
+    .map((node) => ({
+      label: node.props.accessibilityLabel,
+      live: node.props.accessibilityLiveRegion,
+    }));
 const text = (scope: ReactTestInstance) =>
   scope
     .findAll((node) => isHost(node, 'Text'))
@@ -434,6 +446,42 @@ describe('rendered Expense corrections', () => {
     expect(text(ui.root())).toContain(reason);
     expect(ui.pressable('Retry saving draft')).toBeTruthy();
     expect(ui.input('Description, required').props.value).toBe('Milk');
+    expect(draftStatus(ui.root())).toEqual([{ label: 'Draft not saved', live: 'polite' }]);
+  });
+
+  it('keeps Save enabled and the bar steady while a draft write is pending', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    await ui.type('Amount, required', '120');
+    await ui.press('Tag: Groceries');
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { save } = ui.drafts;
+    ui.drafts.save = async (accountId, id, value) => {
+      await gate;
+      await save(accountId, id, value);
+    };
+    await ui.type('Description, required', 'Milk');
+    expect(ui.controller.getSnapshot().expense.persistence).toBe('saving');
+
+    const button = ui.pressable('Save expense');
+    expect(button.props.disabled).toBe(false);
+    expect(button.props.accessibilityHint).toBeUndefined();
+    expect(text(ui.root())).not.toContain('Available once');
+    // A quick write changes nothing on screen and announces nothing.
+    expect(draftStatus(ui.root())).toEqual([{ label: 'Draft saved', live: 'none' }]);
+    await act(() => new Promise((resolve) => setTimeout(resolve, 450)));
+    expect(draftStatus(ui.root())).toEqual([{ label: 'Saving draft…', live: 'none' }]);
+
+    // Save waits for the write, then sends once however often it was tapped.
+    await act(async () => {
+      button.props.onPress();
+      button.props.onPress();
+    });
+    await settle();
+    expect(ui.writes).toEqual([]);
+    await act(async () => release());
+    await settle();
+    expect(ui.writes).toEqual([`POST /api/groups/${groupId}/expenses`]);
   });
 });
 
