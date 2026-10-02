@@ -5,7 +5,19 @@ import { CURRENCIES, getCurrency } from '@splitbook/shared/currency';
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupField, GroupFieldErrors } from '../data/group-draft';
 import type { GroupDraft, InvitationPreview as InvitationPreviewModel } from '../data/types';
-import { Button, Copy, Icon, Label, Loading, Notice, Panel } from './primitives';
+import {
+  Banner,
+  Card,
+  CompactButton,
+  CompactText,
+  Divider,
+  LinearProgress,
+  SectionHeader,
+  TileGrid,
+  TopBar,
+  radius,
+} from './compact';
+import { Copy, Icon } from './primitives';
 import { fonts, useTheme } from './theme';
 
 export type GroupCreateDraft = GroupDraft;
@@ -147,78 +159,71 @@ export function GroupCreateForm({
   );
 
   return (
-    <View style={{ gap: 24 }}>
-      <View style={{ gap: 10 }}>
-        <Label>A SPACE FOR YOUR PEOPLE</Label>
-        <Copy
-          accessibilityRole="header"
-          style={{ fontFamily: fonts.semibold, fontSize: 34, lineHeight: 40, letterSpacing: -0.8 }}
-        >
-          Create a Group
-        </Copy>
-        <Copy style={{ color: theme.textSecondary }}>
-          Choose a Theme, name it, then invite the people you share with.
-        </Copy>
-      </View>
+    <View style={{ gap: 12 }}>
+      <CompactText tone="secondary">
+        Choose a Theme, name it, then invite the people you share with.
+      </CompactText>
 
       {uncertain && (
-        <Panel>
-          <Icon name="help-circle-outline" color={theme.brand.main} size={28} />
-          <Copy accessibilityRole="header" style={{ fontFamily: fonts.semibold, fontSize: 21 }}>
-            Your Group may already exist
-          </Copy>
-          <Copy style={{ color: theme.textSecondary }}>
-            We couldn’t confirm whether it was created. Your entries are kept here. Check your
-            Groups before creating another one.
-          </Copy>
-          <Button label="Check my Groups" onPress={onCheckGroups} disabled={busy} />
-        </Panel>
+        <View style={{ gap: 8 }}>
+          <Banner
+            tone="warning"
+            standing
+            title="Your Group may already exist"
+            message="We couldn’t confirm whether it was created. Your entries are kept here. Check your Groups before creating another one."
+          />
+          <CompactButton label="Check my Groups" block onPress={onCheckGroups} disabled={busy} />
+        </View>
       )}
 
-      <View style={{ gap: 12 }}>
-        <Copy style={{ fontFamily: fonts.semibold }}>Theme</Copy>
-        <View
-          accessibilityRole="radiogroup"
-          style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10 }}
-        >
-          {GROUP_THEME_LIST.map((option) => {
-            const selected = option.id === draft.category;
-            return (
-              <Pressable
-                key={option.id}
-                accessibilityRole="radio"
-                accessibilityLabel={option.label}
-                accessibilityState={{ checked: selected, disabled: locked }}
-                disabled={locked}
-                onPress={() => onChange({ category: option.id })}
-                style={({ pressed }) => ({
-                  flexBasis: '45%',
-                  flexGrow: 1,
-                  minHeight: 64,
-                  paddingHorizontal: 14,
-                  paddingVertical: 13,
-                  borderWidth: 1,
-                  borderColor: selected ? theme.brand.main : theme.border,
-                  borderRadius: 14,
-                  backgroundColor: selected ? theme.brand.bg : theme.surface,
-                  opacity: locked ? 0.65 : pressed ? 0.75 : 1,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 9,
-                })}
-              >
-                <Copy accessible={false}>{option.icon}</Copy>
-                <Copy style={{ flex: 1, fontFamily: selected ? fonts.semibold : fonts.regular }}>
-                  {option.label}
-                </Copy>
-                {selected && <Icon name="checkmark-circle" size={18} color={theme.brand.main} />}
-              </Pressable>
-            );
-          })}
+      <View style={{ gap: 6 }}>
+        <SectionHeader title="Theme" />
+        <View accessibilityRole="radiogroup">
+          <TileGrid>
+            {GROUP_THEME_LIST.map((option) => {
+              const selected = option.id === draft.category;
+              return (
+                <Pressable
+                  key={option.id}
+                  accessibilityRole="radio"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ checked: selected, disabled: locked }}
+                  disabled={locked}
+                  onPress={() => onChange({ category: option.id })}
+                  style={({ pressed }) => ({
+                    minHeight: 56,
+                    paddingHorizontal: 12,
+                    borderWidth: 1,
+                    borderColor: selected ? theme.brand.main : theme.border,
+                    borderRadius: radius.tile,
+                    backgroundColor: selected
+                      ? theme.brand.bg
+                      : pressed
+                        ? theme.surfaceMuted
+                        : theme.surface,
+                    opacity: locked ? 0.6 : 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                  })}
+                >
+                  <CompactText accessible={false}>{option.icon}</CompactText>
+                  <CompactText
+                    weight={selected ? 'semibold' : 'medium'}
+                    tone={selected ? 'brand' : 'primary'}
+                    style={{ flex: 1 }}
+                  >
+                    {option.label}
+                  </CompactText>
+                  {selected && <Icon name="checkmark" size={18} color={theme.brand.main} />}
+                </Pressable>
+              );
+            })}
+          </TileGrid>
         </View>
-        <Copy style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 21 }}>
+        <CompactText variant="small" tone="secondary" style={{ paddingHorizontal: 2 }}>
           {descriptor.tagline}
-        </Copy>
+        </CompactText>
       </View>
 
       <View ref={section('name')}>
@@ -252,71 +257,76 @@ export function GroupCreateForm({
             setChoosingCurrency(true);
           }}
           style={({ pressed }) => ({
-            minHeight: 56,
-            padding: 15,
+            minHeight: 52,
+            paddingHorizontal: 14,
             borderWidth: 1,
             borderColor: theme.border,
-            borderRadius: 12,
-            backgroundColor: theme.surface,
+            borderRadius: radius.tile,
+            backgroundColor: locked || pressed ? theme.surfaceMuted : theme.surface,
             flexDirection: 'row',
             alignItems: 'center',
             gap: 12,
-            opacity: locked ? 0.65 : pressed ? 0.75 : 1,
           })}
         >
-          <Copy style={{ fontFamily: fonts.mono }}>{draft.defaultCurrency}</Copy>
-          <Copy style={{ color: theme.textSecondary, flex: 1 }}>{currency?.name}</Copy>
+          <CompactText style={{ fontFamily: fonts.mono }}>{draft.defaultCurrency}</CompactText>
+          <CompactText tone="secondary" style={{ flex: 1 }}>
+            {currency?.name}
+          </CompactText>
           <Icon name="chevron-down-outline" size={18} />
         </Pressable>
-        <Copy style={{ fontSize: 13, lineHeight: 19, color: theme.textSecondary }}>
+        <CompactText variant="small" tone="secondary">
           New expenses use this currency. Choose it before recording shared costs.
-        </Copy>
+        </CompactText>
       </View>
 
       {descriptor.dates === 'bounded' && (
-        <Panel>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-            <Icon name="calendar-outline" color={theme.brand.main} size={20} />
-            <Copy style={{ fontFamily: fonts.semibold }}>Trip dates</Copy>
+        <Card padded>
+          <View style={{ gap: 12 }}>
+            <View style={{ gap: 2 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Icon name="calendar-outline" color={theme.brand.main} size={20} />
+                <CompactText variant="heading">Trip dates</CompactText>
+              </View>
+              <CompactText variant="small" tone="secondary">
+                Optional. Leave these blank if your plans are still taking shape.
+              </CompactText>
+            </View>
+            <View ref={section('startDate')}>
+              <Field
+                label="Start date"
+                inputRef={input('startDate')}
+                error={errors.startDate}
+                value={draft.startDate}
+                onChangeText={(startDate) => onChange({ startDate })}
+                onBlur={() => onLeaveField('startDate')}
+                placeholder="YYYY-MM-DD"
+                hint="Year-month-day, for example 2026-10-15."
+                autoCorrect={false}
+                autoCapitalize="none"
+                maxLength={10}
+                returnKeyType="done"
+                editable={!locked}
+              />
+            </View>
+            <View ref={section('endDate')}>
+              <Field
+                label="End date"
+                inputRef={input('endDate')}
+                error={errors.endDate}
+                value={draft.endDate}
+                onChangeText={(endDate) => onChange({ endDate })}
+                onBlur={() => onLeaveField('endDate')}
+                placeholder="YYYY-MM-DD"
+                hint="On or after the start date."
+                autoCorrect={false}
+                autoCapitalize="none"
+                maxLength={10}
+                returnKeyType="done"
+                editable={!locked}
+              />
+            </View>
           </View>
-          <Copy style={{ color: theme.textSecondary, fontSize: 14, lineHeight: 21 }}>
-            Optional. Leave these blank if your plans are still taking shape.
-          </Copy>
-          <View ref={section('startDate')}>
-            <Field
-              label="Start date"
-              inputRef={input('startDate')}
-              error={errors.startDate}
-              value={draft.startDate}
-              onChangeText={(startDate) => onChange({ startDate })}
-              onBlur={() => onLeaveField('startDate')}
-              placeholder="YYYY-MM-DD"
-              hint="Year-month-day, for example 2026-10-15."
-              autoCorrect={false}
-              autoCapitalize="none"
-              maxLength={10}
-              returnKeyType="done"
-              editable={!locked}
-            />
-          </View>
-          <View ref={section('endDate')}>
-            <Field
-              label="End date"
-              inputRef={input('endDate')}
-              error={errors.endDate}
-              value={draft.endDate}
-              onChangeText={(endDate) => onChange({ endDate })}
-              onBlur={() => onLeaveField('endDate')}
-              placeholder="YYYY-MM-DD"
-              hint="On or after the start date."
-              autoCorrect={false}
-              autoCapitalize="none"
-              maxLength={10}
-              returnKeyType="done"
-              editable={!locked}
-            />
-          </View>
-        </Panel>
+        </Card>
       )}
 
       <Field
@@ -330,16 +340,13 @@ export function GroupCreateForm({
         editable={!locked}
       />
 
-      {message && (
-        <Copy accessibilityRole="alert" style={{ color: theme.status.negative }}>
-          {message}
-        </Copy>
-      )}
-      <View style={{ gap: 10 }}>
+      {message && <Banner tone={uncertain ? 'warning' : 'error'} message={message} />}
+      <View style={{ gap: 8 }}>
         {!uncertain && (
           // Create stays available for incomplete input so it can explain what is missing.
-          <Button
+          <CompactButton
             label={busy ? 'Creating your Group…' : `Create ${noun}`}
+            block
             icon={busy ? undefined : 'add-outline'}
             hint={busy ? creating : undefined}
             disabled={busy}
@@ -347,21 +354,20 @@ export function GroupCreateForm({
           />
         )}
         {busy && (
-          <Copy style={{ fontSize: 14, color: theme.textSecondary, textAlign: 'center' }}>
+          <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
             {creating}
-          </Copy>
+          </CompactText>
         )}
-        <Button
+        <CompactButton
           label={uncertain ? 'Leave this form' : 'Cancel'}
-          secondary
+          variant="tonal"
+          block
           disabled={busy}
           onPress={onDiscard}
         />
-        <Copy
-          style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 19, textAlign: 'center' }}
-        >
+        <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
           You’ll be the first member and Group admin. Invite others after creation.
-        </Copy>
+        </CompactText>
       </View>
 
       <Modal
@@ -370,13 +376,18 @@ export function GroupCreateForm({
         onRequestClose={() => setChoosingCurrency(false)}
       >
         <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-          <View style={{ padding: 24, gap: 18 }}>
-            <Copy
-              accessibilityRole="header"
-              style={{ fontFamily: fonts.semibold, fontSize: 28, lineHeight: 34 }}
-            >
-              Choose currency
-            </Copy>
+          <TopBar
+            title="Choose currency"
+            actions={
+              <CompactButton
+                label="Done"
+                variant="text"
+                dense
+                onPress={() => setChoosingCurrency(false)}
+              />
+            }
+          />
+          <View style={{ paddingHorizontal: 16, paddingBottom: 12 }}>
             <Field
               label="Search currencies"
               value={currencySearch}
@@ -386,42 +397,45 @@ export function GroupCreateForm({
               autoCapitalize="none"
               returnKeyType="done"
             />
-            <Button label="Done" secondary onPress={() => setChoosingCurrency(false)} />
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 24 }}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 24 }}
           >
-            {matchingCurrencies.map((item) => (
-              <Pressable
-                key={item.code}
-                accessibilityRole="radio"
-                accessibilityLabel={`${item.code}, ${item.name}`}
-                accessibilityState={{ checked: item.code === draft.defaultCurrency }}
-                onPress={() => {
-                  onChange({ defaultCurrency: item.code });
-                  setChoosingCurrency(false);
-                }}
-                style={({ pressed }) => ({
-                  minHeight: 64,
-                  paddingVertical: 16,
-                  borderBottomWidth: 1,
-                  borderColor: theme.border,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 16,
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <Copy style={{ fontFamily: fonts.mono }}>{item.code}</Copy>
-                <Copy style={{ flex: 1 }}>{item.name}</Copy>
-                {item.code === draft.defaultCurrency && (
-                  <Icon name="checkmark" color={theme.brand.main} />
-                )}
-              </Pressable>
-            ))}
-            {!matchingCurrencies.length && (
-              <Copy style={{ color: theme.textSecondary }}>No currencies match your search.</Copy>
+            {matchingCurrencies.length ? (
+              <Card>
+                {matchingCurrencies.map((item, index) => (
+                  <View key={item.code}>
+                    {index > 0 ? <Divider /> : null}
+                    <Pressable
+                      accessibilityRole="radio"
+                      accessibilityLabel={`${item.code}, ${item.name}`}
+                      accessibilityState={{ checked: item.code === draft.defaultCurrency }}
+                      onPress={() => {
+                        onChange({ defaultCurrency: item.code });
+                        setChoosingCurrency(false);
+                      }}
+                      style={({ pressed }) => ({
+                        minHeight: 56,
+                        paddingVertical: 8,
+                        paddingHorizontal: 14,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 12,
+                        backgroundColor: pressed ? theme.surfaceMuted : undefined,
+                      })}
+                    >
+                      <CompactText style={{ fontFamily: fonts.mono }}>{item.code}</CompactText>
+                      <CompactText style={{ flex: 1 }}>{item.name}</CompactText>
+                      {item.code === draft.defaultCurrency && (
+                        <Icon name="checkmark" color={theme.brand.main} />
+                      )}
+                    </Pressable>
+                  </View>
+                ))}
+              </Card>
+            ) : (
+              <CompactText tone="secondary">No currencies match your search.</CompactText>
             )}
           </ScrollView>
         </SafeAreaView>
@@ -455,21 +469,22 @@ export function InvitationPreview({
   onRetry,
   onCancel,
 }: InvitationPreviewProps) {
-  const theme = useTheme();
   const descriptor = preview ? getGroupTheme(preview.category) : null;
   const joining = status === 'joining';
   if (status === 'loading') {
     return (
-      <View style={{ gap: 16 }}>
-        <Loading label="Opening your invitation…" />
-        <Button label="Cancel" secondary onPress={onCancel} />
+      <View style={{ gap: 12 }}>
+        <LinearProgress label="Opening your invitation…" />
+        <CompactText tone="secondary">Opening your invitation…</CompactText>
+        <CompactButton label="Cancel" variant="tonal" block onPress={onCancel} />
       </View>
     );
   }
   if (!preview || !descriptor || ['invalid', 'denied', 'error'].includes(status)) {
     return (
-      <View style={{ gap: 16 }}>
-        <Notice
+      <View style={{ gap: 12 }}>
+        <Banner
+          tone="error"
           title={
             status === 'invalid'
               ? 'This invitation isn’t available'
@@ -480,73 +495,63 @@ export function InvitationPreview({
           message={
             message ?? 'The link may have expired. Ask a Group member for a current invitation.'
           }
-          icon={status === 'error' ? 'cloud-offline-outline' : 'lock-closed-outline'}
-          retry={status === 'error' ? onRetry : undefined}
-        />
-        <Button label="Back" secondary onPress={onCancel} />
+        >
+          {status === 'error' ? (
+            <CompactButton label="Try again" variant="text" dense onPress={onRetry} />
+          ) : null}
+        </Banner>
+        <CompactButton label="Back" variant="tonal" block onPress={onCancel} />
       </View>
     );
   }
   return (
-    <View style={{ gap: 24 }}>
-      <View style={{ gap: 12 }}>
-        <Label>YOU’RE INVITED</Label>
-        <Copy
-          accessibilityRole="header"
-          style={{ fontFamily: fonts.semibold, fontSize: 34, lineHeight: 40, letterSpacing: -0.8 }}
-        >
-          A place for you, too.
-        </Copy>
-      </View>
-      <Panel>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <Copy accessible={false} style={{ fontSize: 26, lineHeight: 32 }}>
-            {descriptor.icon}
-          </Copy>
-          <Label>{descriptor.label.toUpperCase()}</Label>
+    <View style={{ gap: 12 }}>
+      <CompactText tone="secondary">A place for you, too.</CompactText>
+      <Card padded>
+        <View style={{ gap: 10 }}>
+          <View style={{ gap: 4 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <CompactText accessible={false}>{descriptor.icon}</CompactText>
+              <CompactText variant="overline">{descriptor.label}</CompactText>
+            </View>
+            <CompactText variant="title" accessibilityRole="header">
+              {preview.name}
+            </CompactText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Icon name="people-outline" size={18} />
+              <CompactText tone="secondary">
+                {preview.memberCount} {preview.memberCount === 1 ? 'member' : 'members'}
+              </CompactText>
+            </View>
+          </View>
+          <CompactText variant="small" tone="secondary">
+            {alreadyMember
+              ? 'You’re already a member. Open your Group to pick up where you left off.'
+              : 'Opening this invitation hasn’t added you. Join when you’re ready to share this Group.'}
+          </CompactText>
+          {message && <Banner tone="error" message={message} />}
+          <CompactButton
+            label={
+              joining
+                ? 'Joining Group…'
+                : alreadyMember
+                  ? 'Open Group'
+                  : signedIn
+                    ? 'Join Group'
+                    : 'Sign in to continue'
+            }
+            block
+            disabled={joining}
+            onPress={alreadyMember ? onOpenGroup : onJoin}
+            icon={joining ? undefined : 'arrow-forward-outline'}
+          />
         </View>
-        <Copy
-          accessibilityRole="header"
-          style={{ fontFamily: fonts.semibold, fontSize: 27, lineHeight: 34 }}
-        >
-          {preview.name}
-        </Copy>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-          <Icon name="people-outline" size={18} />
-          <Copy style={{ color: theme.textSecondary }}>
-            {preview.memberCount} {preview.memberCount === 1 ? 'member' : 'members'}
-          </Copy>
-        </View>
-        <Copy style={{ color: theme.textSecondary }}>
-          {alreadyMember
-            ? 'You’re already a member. Open your Group to pick up where you left off.'
-            : 'Opening this invitation hasn’t added you. Join when you’re ready to share this Group.'}
-        </Copy>
-        {message && (
-          <Copy accessibilityRole="alert" style={{ color: theme.status.negative }}>
-            {message}
-          </Copy>
-        )}
-        <Button
-          label={
-            joining
-              ? 'Joining Group…'
-              : alreadyMember
-                ? 'Open Group'
-                : signedIn
-                  ? 'Join Group'
-                  : 'Sign in to continue'
-          }
-          disabled={joining}
-          onPress={alreadyMember ? onOpenGroup : onJoin}
-          icon={joining ? undefined : 'arrow-forward-outline'}
-        />
-      </Panel>
-      <Copy style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 20 }}>
+      </Card>
+      <CompactText variant="small" tone="secondary">
         You’ll need an account approved for the private beta. An invitation doesn’t grant account
         access.
-      </Copy>
-      <Button label="Not now" secondary disabled={joining} onPress={onCancel} />
+      </CompactText>
+      <CompactButton label="Not now" variant="tonal" block disabled={joining} onPress={onCancel} />
     </View>
   );
 }
