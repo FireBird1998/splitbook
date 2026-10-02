@@ -137,6 +137,7 @@ export function RecordPaymentSheet({
   const amountInput = useRef<TextInput | null>(null);
   const noteInput = useRef<TextInput | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
+  const [amountFocused, setAmountFocused] = useState(false);
   const focus = state.validation.focus;
   useEffect(() => {
     // Each rejected Record asks once for the first invalid field; later edits never move focus.
@@ -145,7 +146,9 @@ export function RecordPaymentSheet({
     (focus.field === 'amount' ? amountInput : noteInput).current?.focus();
   }, [focus?.request]);
   useEffect(() => {
-    if (!visible) setNoteOpen(false);
+    if (visible) return;
+    setNoteOpen(false);
+    setAmountFocused(false);
   }, [visible]);
 
   const fullName = (id: string) =>
@@ -258,7 +261,20 @@ export function RecordPaymentSheet({
                 </CompactText>
                 <FieldMarker kind="required" />
               </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              {/* As on the Expense form: a transparent border keeps blur from shifting layout. */}
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 10,
+                  marginHorizontal: -10,
+                  paddingHorizontal: 8,
+                  paddingVertical: 2,
+                  borderWidth: 2,
+                  borderRadius: radius.tile,
+                  borderColor: amountFocused && editable ? theme.focus : 'transparent',
+                }}
+              >
                 <View
                   accessible
                   accessibilityLabel={`Currency ${draft.currency}, the Group’s currency`}
@@ -289,7 +305,11 @@ export function RecordPaymentSheet({
                     if (amount !== draft.amount && acceptsNumericText(amount, draft.amount))
                       onChange({ amount });
                   }}
-                  onBlur={() => onLeaveField('amount')}
+                  onFocus={() => setAmountFocused(true)}
+                  onBlur={() => {
+                    setAmountFocused(false);
+                    onLeaveField('amount');
+                  }}
                   style={{
                     flex: 1,
                     minHeight: 48,

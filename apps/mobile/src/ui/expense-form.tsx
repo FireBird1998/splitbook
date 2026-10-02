@@ -17,6 +17,7 @@ import {
   Money,
   SelectorTile,
   TileGrid,
+  radius,
 } from './compact';
 import { fonts, useTheme } from './theme';
 
@@ -82,6 +83,7 @@ export function AmountDescriptionCard({
   children?: ReactNode;
 }) {
   const theme = useTheme();
+  const [amountFocused, setAmountFocused] = useState(false);
   const input = {
     color: theme.text,
     paddingVertical: 4,
@@ -101,7 +103,20 @@ export function AmountDescriptionCard({
       <View ref={section('amount')} style={{ gap: 6 }}>
         {label('Amount', errors.amount)}
         <View style={{ gap: 4 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          {/* The focus ring sits outside the content and stays as a transparent border on blur. */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+              marginHorizontal: -10,
+              paddingHorizontal: 8,
+              paddingVertical: 2,
+              borderWidth: 2,
+              borderRadius: radius.tile,
+              borderColor: amountFocused && !locked ? theme.focus : 'transparent',
+            }}
+          >
             <View
               accessible
               accessibilityLabel={`Currency ${draft.currency}, ${draft.original ? 'the Expense’s currency' : 'the Group’s currency'}`}
@@ -134,7 +149,11 @@ export function AmountDescriptionCard({
                 if (amount !== draft.amount && acceptsNumericText(amount, draft.amount))
                   onChange({ amount });
               }}
-              onBlur={() => onLeave('amount')}
+              onFocus={() => setAmountFocused(true)}
+              onBlur={() => {
+                setAmountFocused(false);
+                onLeave('amount');
+              }}
               onSubmitEditing={onAmountDone}
               style={[
                 input,
