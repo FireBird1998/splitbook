@@ -2186,7 +2186,7 @@ describe('native Expense field corrections', () => {
     expect(expense.status).toBe('editing');
     expect(expense.draft?.tagId).toBe(tagId);
     expect(expense.validation.errors).toEqual({
-      tag: 'This Tag is no longer available. Choose an active Tag.',
+      tag: '“Groceries” is no longer active in this Group. Choose another Tag; nothing is swapped in for you.',
     });
     expect(expense.validation.focus?.field).toBe('tag');
   });
