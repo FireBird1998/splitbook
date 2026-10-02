@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { ActivityEvent } from '../data/activity';
-import { activityDays, dayLabel, describeActivity, describeChanges } from './activity-format';
+import {
+  activityDays,
+  dayLabel,
+  describeActivity,
+  describeChanges,
+  spokenActivity,
+  type ActivityLine,
+} from './activity-format';
 
 const now = new Date(2026, 8, 30, 12).getTime();
 const at = (day: number, hour = 10) => new Date(2026, 8, day, hour).toISOString();
@@ -150,5 +157,114 @@ describe('Activity headlines', () => {
       subject: null,
     });
     expect(line.details.map((detail) => detail.text)).toEqual(['Priya Shah → Sam Chen', '₹200.00']);
+  });
+});
+
+describe('Group edits in plain language', () => {
+  const you = 'a00000000000000000000009';
+  const priya = 'a00000000000000000000001';
+  const context = {
+    currentUserId: you,
+    currency: 'INR',
+    members: [
+      { id: you, name: 'Alex Rao' },
+      { id: priya, name: 'Priya Shah' },
+    ],
+  };
+  const edit = (changes: Record<string, { old?: unknown; new?: unknown }>, actor = you) =>
+    describeActivity(
+      event({
+        type: 'group_updated',
+        actor: { _id: actor, name: context.members.find((member) => member.id === actor)?.name },
+        metadata: { changes },
+      }),
+      context,
+    );
+  const read = (line: ActivityLine) => ({
+    headline: spokenActivity(line, '11:05'),
+    details: line.details.map((detail) => detail.text),
+    changes: line.changes,
+  });
+  const role = (userId: string, old: string, now: string) => ({
+    memberRole: { old: { userId, role: old }, new: { userId, role: now } },
+  });
+
+  it('says who was made an admin or a member, by name or as you', () => {
+    expect(read(edit(role(priya, 'member', 'admin')))).toEqual({
+      headline: 'You made Priya Shah an admin, Member role, 11:05',
+      details: ['Member role'],
+      changes: ['Priya Shah’s role Member → Group admin'],
+    });
+    expect(read(edit(role(you, 'admin', 'member'), priya))).toEqual({
+      headline: 'Priya Shah made you a member, Member role, 11:05',
+      details: ['Member role'],
+      changes: ['Your role Group admin → Member'],
+    });
+    expect(read(edit(role(priya, 'admin', 'member'), priya)).headline).toBe(
+      'Priya Shah made themselves a member, Member role, 11:05',
+    );
+  });
+
+  it('calls someone the Group no longer has a former member, never a reference', () => {
+    const line = edit(role('a00000000000000000000004', 'member', 'admin'));
+    expect(read(line)).toEqual({
+      headline: 'You made a former member an admin, Member role, 11:05',
+      details: ['Member role'],
+      changes: ['Former member’s role Member → Group admin'],
+    });
+    expect(JSON.stringify(line)).not.toMatch(/[0-9a-f]{24}/);
+  });
+
+  it('shows a rename, a currency change and archiving plainly', () => {
+    expect(read(edit({ name: { old: 'Maple House', new: 'Maple Flat' } }))).toEqual({
+      headline: 'You renamed the Group, “Maple House” → “Maple Flat”, 11:05',
+      details: ['“Maple House” → “Maple Flat”'],
+      changes: ['Name “Maple House” → “Maple Flat”'],
+    });
+    expect(read(edit({ defaultCurrency: { old: 'INR', new: 'USD' } }))).toEqual({
+      headline: 'You changed the currency, INR → USD, 11:05',
+      details: ['INR → USD'],
+      changes: ['Currency INR → USD'],
+    });
+    expect(read(edit({ isArchived: { old: false, new: true } }))).toEqual({
+      headline: 'You archived the Group, 11:05',
+      details: [],
+      changes: ['Status Active → Archived'],
+    });
+  });
+
+  it('leads with the first change and lists every change for the detail', () => {
+    const line = edit({
+      name: { old: 'Maple House', new: 'Maple Flat' },
+      description: { old: '', new: 'Flat 302' },
+      category: { old: 'home', new: 'trip' },
+      startDate: { old: null, new: '2026-10-01T00:00:00.000Z' },
+    });
+    expect(read(line)).toEqual({
+      headline: 'You renamed the Group, “Maple House” → “Maple Flat”, 3 more, 11:05',
+      details: ['“Maple House” → “Maple Flat”', '3 more'],
+      changes: [
+        'Name “Maple House” → “Maple Flat”',
+        'Description None → “Flat 302”',
+        'Theme Household → Trip',
+        'Start date None → Oct 1, 2026',
+      ],
+    });
+  });
+
+  it('keeps today’s wording for a change it doesn’t know, after the ones it does', () => {
+    expect(read(edit({ coverImage: { old: null, new: 'x' } }))).toEqual({
+      headline: 'You updated the Group details, 11:05',
+      details: [],
+      changes: ['Other details changed'],
+    });
+    expect(
+      read(edit({ coverImage: { old: null, new: 'x' }, name: { old: 'A', new: 'B' } })).changes,
+    ).toEqual(['Name “A” → “B”', 'Other details changed']);
+    expect(read(edit({}))).toEqual({
+      headline: 'You updated the Group details, 11:05',
+      details: [],
+      changes: [],
+    });
   });
 });
