@@ -1,6 +1,8 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { expenseMoney, type ExpenseDraft } from '../data/expense-draft';
+import { ThemeContext } from './theme';
 
 vi.mock('react-native', () => ({
   ActivityIndicator: 'ActivityIndicator',
@@ -17,7 +19,7 @@ vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' 
 vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const { WhoOwesWhat, expenseDateLabel } = await import('./expense-form');
+const { AmountDescriptionCard, WhoOwesWhat, expenseDateLabel } = await import('./expense-form');
 
 const people = ['Alex Rao', 'Sam Chen', 'Priya Shah', 'Jo Park', 'Kim Lee'];
 const ids = people.map((_, index) => `a0000000000000000000000${index + 1}`);
@@ -112,5 +114,60 @@ describe('Expense date label', () => {
     expect(expenseDateLabel('2026-09-24', now)).toMatch(/24/);
     expect(expenseDateLabel('2026-02-30', now)).toBe('2026-02-30');
     expect(expenseDateLabel('', now)).toBe('Choose a date');
+  });
+});
+
+describe('Amount focus ring', () => {
+  function card(mode: 'light' | 'dark', locked = false) {
+    const onLeave = vi.fn();
+    act(() => {
+      renderer = create(
+        <ThemeContext.Provider value={getSemanticTokens(mode)}>
+          <AmountDescriptionCard
+            draft={draft('1249.50')}
+            locked={locked}
+            errors={{}}
+            amountRef={() => undefined}
+            descriptionRef={() => undefined}
+            section={() => () => undefined}
+            onChange={() => undefined}
+            onLeave={onLeave}
+            onAmountDone={() => undefined}
+          />
+        </ThemeContext.Provider>,
+      );
+    });
+    const root = renderer!.root;
+    const input = () =>
+      root.find(
+        (node) => isHost(node, 'TextInput') && node.props.accessibilityLabel === 'Amount, required',
+      );
+    return {
+      onLeave,
+      // The row holding the currency and the input.
+      ring: () => input().parent!.props.style,
+      focus: () => act(() => input().props.onFocus()),
+      blur: () => act(() => input().props.onBlur()),
+    };
+  }
+
+  it.each(['light', 'dark'] as const)(
+    'outlines Amount in the %s focus colour while it has focus, without moving it',
+    (mode) => {
+      const amount = card(mode);
+      const unfocused = amount.ring();
+      expect(unfocused).toMatchObject({ borderWidth: 2, borderColor: 'transparent' });
+      amount.focus();
+      expect(amount.ring()).toEqual({ ...unfocused, borderColor: getSemanticTokens(mode).focus });
+      amount.blur();
+      expect(amount.ring()).toEqual(unfocused);
+      expect(amount.onLeave).toHaveBeenCalledExactlyOnceWith('amount');
+    },
+  );
+
+  it('shows no ring on a locked Amount', () => {
+    const amount = card('light', true);
+    amount.focus();
+    expect(amount.ring()).toMatchObject({ borderColor: 'transparent' });
   });
 });

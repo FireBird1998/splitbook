@@ -1,5 +1,6 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { emptySettlement, type SettlementState } from '../data/settlement';
 import type { GroupCurrencyBalance, GroupFinancialState, MobileGroup } from '../data/types';
 import { GroupBalancesView, recordNeedsConnection } from './group-balances';
@@ -271,7 +272,7 @@ describe('Record payment sheet states', () => {
     ...overrides,
   });
   const sheet = (state: SettlementState) => {
-    const calls = { record: vi.fn(), close: vi.fn(), change: vi.fn() };
+    const calls = { record: vi.fn(), close: vi.fn(), change: vi.fn(), leave: vi.fn() };
     const root = render(
       <RecordPaymentSheet
         visible
@@ -279,7 +280,7 @@ describe('Record payment sheet states', () => {
         currentUserId={you}
         today="Today, Oct 1"
         onChange={calls.change}
-        onLeaveField={() => undefined}
+        onLeaveField={calls.leave}
         onAcknowledge={() => undefined}
         onRecord={calls.record}
         onClose={calls.close}
@@ -319,6 +320,19 @@ describe('Record payment sheet states', () => {
     expect(calls.change).not.toHaveBeenCalled();
     act(() => amount().props.onChangeText('-1060'));
     expect(calls.change).toHaveBeenCalledWith({ amount: '-1060' });
+  });
+
+  it('outlines the amount while it has focus, without moving it, and checks it on blur', () => {
+    const { root, calls } = sheet(base({}));
+    const amount = () => labelled(root, 'Amount paid, required')[0];
+    const ring = () => amount().parent!.props.style;
+    const unfocused = ring();
+    expect(unfocused).toMatchObject({ borderWidth: 2, borderColor: 'transparent' });
+    act(() => amount().props.onFocus());
+    expect(ring()).toEqual({ ...unfocused, borderColor: getSemanticTokens('light').focus });
+    act(() => amount().props.onBlur());
+    expect(ring()).toEqual(unfocused);
+    expect(calls.leave).toHaveBeenCalledExactlyOnceWith('amount');
   });
 
   it('shows one progress bar while checking the latest balances', () => {
