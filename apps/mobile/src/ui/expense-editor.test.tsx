@@ -719,6 +719,33 @@ describe('rendered edit conflict', () => {
     ]);
   });
 
+  it('brings the choice left after keeping a version into view, and Save leads back to it', async () => {
+    const ui = await render(editDescription, { conflict: theirs });
+    const focused = () =>
+      vi
+        .mocked(AccessibilityInfo.sendAccessibilityEvent)
+        .mock.calls.map(([node, event]) => [
+          (node as unknown as NodeMock).element.props.accessibilityLabel,
+          event,
+        ]);
+    const revealed = () => ui.revealed.map((node) => node.element.props.accessibilityLabel);
+
+    await ui.press('Keep my version for review');
+    expect(revealed()).toEqual(['What’s different']);
+    expect(focused()).toEqual([['What’s different', 'focus']]);
+
+    // Scrolled away, the disabled Save still leads back to the choice.
+    expect(ui.pressable('Save changes').props.disabled).toBe(true);
+    await ui.press('Go to What’s different');
+    expect(revealed()).toEqual(['What’s different', 'What’s different']);
+    expect(focused()).toHaveLength(2);
+
+    // Choosing doesn't move focus, and nothing is left to go back to.
+    await ui.press('Use the saved amount');
+    expect(focused()).toHaveLength(2);
+    expect(() => ui.pressable('Go to What’s different')).toThrow();
+  });
+
   it('uses the saved version without sending anything', async () => {
     const ui = await render(editDescription, { conflict: theirs });
     await ui.press('Use the saved version');

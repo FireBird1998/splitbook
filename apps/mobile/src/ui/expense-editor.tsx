@@ -126,6 +126,19 @@ export function ExpenseEditor({
     // Each rejected save asks once for the first invalid field; later edits never move focus.
     if (focus) goTo(focus.field);
   }, [focus?.request]);
+  const review = useRef<View>(null);
+  /** Brings the choices left in What’s different into view and to the screen reader. */
+  const showReview = () => {
+    const node = review.current;
+    if (!node) return;
+    reveal(node);
+    AccessibilityInfo.sendAccessibilityEvent(node, 'focus');
+  };
+  // Keeping a version leaves money choices that Save waits for; they open in view, once.
+  const reviewing = state.status === 'editing' && !!state.draft?.review?.length;
+  useEffect(() => {
+    if (reviewing) showReview();
+  }, [reviewing]);
   const errors = state.validation.errors;
   const section = (field: ExpenseField) => (node: View | null) => {
     sections.current[field] = node;
@@ -400,8 +413,9 @@ export function ExpenseEditor({
                 {...versions}
               />
             </>
-          ) : state.status === 'editing' && draft.review?.length && draft.original ? (
+          ) : reviewing && draft.review && draft.original ? (
             <WhatsDifferent
+              ref={review}
               fields={draft.review}
               yours={draft}
               saved={draftFromExpense(draft.original)}
@@ -568,6 +582,10 @@ export function ExpenseEditor({
             }
             blocked={saveBlocked}
             onSave={onSave}
+            // Save's reason leads back to the choices it waits for, wherever the form is scrolled.
+            secondary={
+              reviewing ? { label: 'Go to What’s different', onPress: showReview } : undefined
+            }
           />
         ) : null,
       )}

@@ -535,6 +535,7 @@ export function WhatsDifferent({
   saved,
   note,
   onChoose,
+  ref,
   ...names
 }: {
   fields: readonly ExpenseVersionField[];
@@ -543,6 +544,8 @@ export function WhatsDifferent({
   /** What choosing does, under the table. */
   note: string;
   onChoose?: (field: ExpenseMoneyField, keep: 'mine' | 'saved') => void;
+  /** The heading, where the table is scrolled to and focused. */
+  ref?: Ref<View>;
 } & VersionNames) {
   const theme = useTheme();
   // At large text sizes each version gets its own line instead of a column.
@@ -566,10 +569,14 @@ export function WhatsDifferent({
   };
   return (
     <Card>
-      <View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4 }}>
-        <CompactText variant="overline" accessibilityRole="header">
-          What’s different
-        </CompactText>
+      <View
+        ref={ref}
+        accessible
+        accessibilityRole="header"
+        accessibilityLabel="What’s different"
+        style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4 }}
+      >
+        <CompactText variant="overline">What’s different</CompactText>
       </View>
       {fields.length && !large ? (
         <View
