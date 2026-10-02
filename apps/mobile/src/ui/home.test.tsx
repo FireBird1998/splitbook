@@ -189,7 +189,12 @@ describe('Home balances', () => {
         onRefresh={onRefresh}
       />,
     );
-    expect(text(loading)).toContain('Loading your balances…');
+    // Placeholders, never a spinner; the screen's one progress bar is under the top bar.
+    const placeholder = loading.find(
+      (node) => isHost(node, 'View') && node.props.accessibilityLabel === 'Loading your balances',
+    );
+    expect(placeholder.props.accessibilityState).toEqual({ busy: true });
+    expect(loading.findAll((node) => isHost(node, 'ActivityIndicator'))).toHaveLength(0);
     expect(text(loading)).not.toContain('Updated');
 
     const failed = render(

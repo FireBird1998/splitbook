@@ -445,14 +445,14 @@ describe('App refresh rendering', () => {
     await retried.reached;
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
-    expect(app.text()).toContain(`Saved ${verifiedAt} · updating`);
+    expect(app.text()).toContain(`Saved ${verifiedAt} · refreshing`);
     expect(app.text()).toContain('You owe₹30.00');
 
     app.use(() => undefined);
     retried.release(json({ data: group, status: 200 }));
     await settle();
     expect(app.text()).not.toContain('Showing Maple House from');
-    expect(app.text()).not.toContain('· updating');
+    expect(app.text()).not.toContain('· refreshing');
     expect(app.text()).toContain('You owe₹30.00');
     expect(app.refreshControl().refreshing).toBe(false);
     await app.press('Expenses');
@@ -478,7 +478,7 @@ describe('App refresh rendering', () => {
     await settle();
     expect(reads).toEqual([]);
     expect(app.text()).toContain('September groceries');
-    expect(app.text()).not.toContain('· updating');
+    expect(app.text()).not.toContain('· refreshing');
 
     // After it: the same figures stay, labelled with when they were verified.
     await app.press('Back to Home');
@@ -488,32 +488,32 @@ describe('App refresh rendering', () => {
     await app.press('Open Maple House');
     await groupRead.reached;
     await settle();
-    expect(app.text()).toContain(`Saved ${verifiedAt} · updating`);
+    expect(app.text()).toContain(`Saved ${verifiedAt} · refreshing`);
     expect(app.text()).toContain('September groceries');
     await app.press('Balances');
-    expect(app.text()).toContain(`Saved ${verifiedAt} · updating`);
+    expect(app.text()).toContain(`Saved ${verifiedAt} · refreshing`);
     expect(app.text()).toContain('You owe₹30.00');
     expect(app.refreshControl().refreshing).toBe(false);
     app.use(() => undefined);
     groupRead.release(json({ data: group, status: 200 }));
     await settle();
-    expect(app.text()).not.toContain('· updating');
+    expect(app.text()).not.toContain('· refreshing');
     expect(app.text()).toContain('You owe₹30.00');
   });
 
-  it('turns on the pull indicator for a pull but never for an automatic refresh', async () => {
+  it('turns on the pull indicator for a pull, and keeps an automatic refresh silent', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');
     const expenses = hold();
     app.use((path) => (path.includes('/expenses?') ? expenses.respond() : undefined));
 
-    const verifiedAt = refreshedLabel(app.clock.now);
     app.clock.now += 31_000;
     app.foreground();
     await expenses.reached;
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
-    expect(app.text()).toContain(`Saved ${verifiedAt} · updating`);
+    expect(app.text()).not.toContain('· refreshing');
+    expect(app.progressbars()).toBe(0);
     expect(app.text()).toContain('September groceries');
     expenses.release(json(page([september])));
     await settle();
@@ -524,7 +524,7 @@ describe('App refresh rendering', () => {
     await pulled.reached;
     await settle();
     expect(app.refreshControl().refreshing).toBe(true);
-    expect(app.text()).not.toContain('· updating');
+    expect(app.text()).not.toContain('· refreshing');
     expect(app.text()).toContain('September groceries');
     pulled.release(json(page([september])));
     await settle();
@@ -578,7 +578,7 @@ describe('App Group Activity refresh', () => {
     expect(app.refreshControl().refreshing).toBe(false);
   });
 
-  it('shows one quiet header status for an automatic refresh of Activity', async () => {
+  it('keeps an automatic refresh of Activity silent, and a retry quiet', async () => {
     const app = await onActivity();
     const read = hold();
     app.use((path) => (path.includes('/activity?') ? read.respond() : undefined));
@@ -586,14 +586,24 @@ describe('App Group Activity refresh', () => {
     await read.reached;
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
-    expect(app.text()).toContain('Updating…');
+    expect(app.text()).not.toContain('Refreshing');
     expect(app.progressbars()).toBe(0);
     expect(app.text()).toContain('September groceries');
-
-    app.use(() => undefined);
     read.release(json(activityPage));
     await settle();
-    expect(app.text()).not.toContain('Updating…');
+
+    const retried = hold();
+    app.use((path) => (path.includes('/activity?') ? retried.respond() : undefined));
+    await app.press('Group options');
+    app.pressable('Refresh').props.onPress();
+    await retried.reached;
+    await settle();
+    expect(app.text()).toMatch(/Saved .+ · refreshing/);
+    expect(app.progressbars()).toBe(0);
+    app.use(() => undefined);
+    retried.release(json(activityPage));
+    await settle();
+    expect(app.text()).not.toContain('· refreshing');
   });
 });
 

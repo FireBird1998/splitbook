@@ -237,6 +237,44 @@ export function Skeleton({
   );
 }
 
+/**
+ * A first load's placeholder list: rows with a leading tile (or avatar), two lines and, for
+ * tiles, an amount. Announced as busy under `label`.
+ */
+export function SkeletonRows({
+  label,
+  rows = 3,
+  avatar = false,
+}: {
+  label: string;
+  rows?: number;
+  avatar?: boolean;
+}) {
+  return (
+    <View accessibilityLabel={label} accessibilityState={{ busy: true }}>
+      <Card>
+        {Array.from({ length: rows }, (_, row) => (
+          <View
+            key={row}
+            style={{ flexDirection: 'row', gap: 12, padding: 14, alignItems: 'center' }}
+          >
+            {avatar ? (
+              <Skeleton width={32} height={32} rounded={11} />
+            ) : (
+              <Skeleton width={40} height={40} rounded={12} />
+            )}
+            <View style={{ flex: 1, gap: 6 }}>
+              <Skeleton width="65%" />
+              <Skeleton width="40%" height={12} />
+            </View>
+            {avatar ? null : <Skeleton width={64} />}
+          </View>
+        ))}
+      </Card>
+    </View>
+  );
+}
+
 /** One thin indeterminate bar under the top bar: the single progress cue for a screen. */
 export function LinearProgress({ label }: { label: string }) {
   const theme = useTheme();

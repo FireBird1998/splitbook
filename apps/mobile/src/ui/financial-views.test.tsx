@@ -251,14 +251,14 @@ describe('rendered refresh feedback', () => {
       expect(
         root().findAll((node) => isHost(node, 'View') && node.props.accessibilityLabel === label),
       ).toHaveLength(1);
-    expect(text(root())).not.toContain('Updating…');
+    expect(text(root())).not.toContain('Refreshing…');
     expect(spinners(root())).toBe(0);
     await expenses.release(json(page([expense('b00000000000000000000001', 'Groceries')])));
     await settle(opening);
     expect(spinners(root())).toBe(0);
   });
 
-  it('keeps the Group readable during an automatic refresh with one quiet cue and unverified Balances', async () => {
+  it('keeps the Group readable during a retry with one quiet cue and unverified Balances', async () => {
     const { controller, clock, use } = backend();
     await controller.signIn('sam');
     await controller.openGroup(groupId);
@@ -271,7 +271,7 @@ describe('rendered refresh feedback', () => {
     await expenses.reached;
     await flush();
     const shown = text(root());
-    expect(shown.match(/Updating…/g)).toHaveLength(1);
+    expect(shown.match(/Refreshing…/g)).toHaveLength(1);
     expect(spinners(root())).toBe(0);
     expect(shown).toContain('Groceries');
     expect(shown).toContain('1 expense this month');
@@ -290,6 +290,7 @@ describe('rendered refresh feedback', () => {
     await settle(refresh);
     expect(text(root())).toContain('Rent');
     expect(text(root())).not.toContain('Updating');
+    expect(text(root())).not.toContain('Refreshing');
   });
 
   it('keeps figures with their original time and a retry when an automatic refresh fails', async () => {
@@ -350,7 +351,7 @@ describe('rendered refresh feedback', () => {
     await next.reached;
     await flush();
     expect(text(root())).toContain('Loading more expenses…');
-    expect(text(root())).not.toContain('Updating…');
+    expect(text(root())).not.toContain('Refreshing…');
     expect(spinners(root())).toBe(1);
     expect(buttons(root())).not.toContain('Load more expenses');
     expect(text(root())).toContain('Item 20');

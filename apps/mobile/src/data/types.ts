@@ -227,8 +227,17 @@ export interface PendingInvitationStore {
 
 export interface MobileSnapshot {
   offline: { active: boolean; refreshedAt: number | null; message: string | null };
-  /** A pull-to-refresh is running; foreground refreshes and retries never set this. */
-  pull: boolean;
+  /**
+   * The view (`shownView`) a running pull-to-refresh started on. Only that view shows the pull
+   * indicator; foreground refreshes and retries never set this.
+   */
+  pull: string | null;
+  /** Likewise for an automatic (foreground) refresh, which its view never announces. */
+  automatic: string | null;
+  /**
+   * `restoring` with a user is the cold-start check: the saved Home of the account that last
+   * signed in on this device is shown, and nothing is sent until the session is confirmed.
+   */
   auth: {
     status: 'restoring' | 'signed-out' | 'signing-in' | 'authenticated' | 'error';
     user: SessionUser | null;

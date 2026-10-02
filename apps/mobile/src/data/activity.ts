@@ -49,6 +49,8 @@ export interface ActivityState {
   pagination: { page: number; limit: number; total: number; totalPages: number } | null;
   message: string | null;
   moreStatus: 'idle' | 'loading' | 'error';
+  /** When the events shown were read: the first page's time, which a saved copy keeps. */
+  refreshedAt: number | null;
 }
 export function emptyActivity(): ActivityState {
   return {
@@ -60,6 +62,7 @@ export function emptyActivity(): ActivityState {
     pagination: null,
     message: null,
     moreStatus: 'idle',
+    refreshedAt: null,
   };
 }
 /** A saved Expense's own events: its Group's Activity, filtered to that Expense. */

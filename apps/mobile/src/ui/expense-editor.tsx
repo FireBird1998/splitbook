@@ -55,6 +55,7 @@ export function ExpenseEditor({
   currentUserId,
   onClose,
   notice,
+  offline = false,
   onChange,
   onSave,
   onResume,
@@ -79,6 +80,8 @@ export function ExpenseEditor({
   onClose?: () => void;
   /** Shown above the content, such as the offline notice. */
   notice?: ReactNode;
+  /** Saving and checking a save need a connection; the draft stays editable. */
+  offline?: boolean;
   onChange: (patch: Partial<ExpenseDraft>) => void;
   /** Called when a field loses focus, so its correction can appear. */
   onLeaveField: (field: ExpenseField) => void;
@@ -289,11 +292,13 @@ export function ExpenseEditor({
   const saveBlocked =
     state.status === 'saving'
       ? 'Sending this Expense. Keep this screen open until SplitBook confirms it.'
-      : state.persistence === 'error'
-        ? 'Save is unavailable until this draft is stored on this device. Retry saving the draft first.'
-        : draft.review?.length
-          ? 'Choose which version to keep for each change in What’s different first.'
-          : null;
+      : offline
+        ? 'Saving needs a connection.'
+        : state.persistence === 'error'
+          ? 'Save is unavailable until this draft is stored on this device. Retry saving the draft first.'
+          : draft.review?.length
+            ? 'Choose which version to keep for each change in What’s different first.'
+            : null;
 
   const invalid = expenseFields.filter((field) => errors[field]);
   const summary = state.validation.submitted && invalid.length > 0;
@@ -509,7 +514,7 @@ export function ExpenseEditor({
         unconfirmed ? (
           <SaveBar
             label={state.attempt ? 'Check and finish saving' : 'Check the saved Expense'}
-            blocked={null}
+            blocked={offline ? 'Checking needs a connection.' : null}
             onSave={state.attempt ? onSave : onReconcile}
             secondary={onClose && { label: 'Keep for later', onPress: onClose }}
           />

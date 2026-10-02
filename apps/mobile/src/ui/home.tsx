@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ActivityIndicator, Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -14,6 +14,7 @@ import type {
   MobileSnapshot,
 } from '../data/types';
 import {
+  Badge,
   Banner,
   Card,
   CompactAvatar,
@@ -26,10 +27,13 @@ import {
   Money,
   RowAmount,
   SectionHeader,
+  Skeleton,
+  SkeletonRows,
   useLargeText,
 } from './compact';
 import { RetainedNotice } from './financial-views';
-import { Loading, type IconName } from './primitives';
+import { NotAvailableOffline } from './offline-notice';
+import type { IconName } from './primitives';
 import { refreshedLabel } from './refresh-feedback';
 import { fonts, useTheme } from './theme';
 
@@ -48,12 +52,14 @@ export function HomeTopBar({
   userName,
   status,
   accountDisabled = false,
+  refreshDisabled = false,
   onRefresh,
   onAccount,
 }: {
   userName: string;
   status?: ReactNode;
   accountDisabled?: boolean;
+  refreshDisabled?: boolean;
   onRefresh: () => void;
   onAccount: () => void;
 }) {
@@ -87,7 +93,12 @@ export function HomeTopBar({
         </Text>
         {status}
       </View>
-      <IconButton icon="refresh-outline" label="Refresh Home" onPress={onRefresh} />
+      <IconButton
+        icon="refresh-outline"
+        label="Refresh Home"
+        disabled={refreshDisabled}
+        onPress={onRefresh}
+      />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Account and settings"
@@ -181,22 +192,36 @@ function CurrencyRow({ bucket }: { bucket: HomeCurrencyBalance }) {
   );
 }
 
-/** One row per currency, each kept separate, with when the figures were read. */
+/**
+ * One row per currency, each kept separate, with when the figures were read: "Saved" when
+ * they come from this device offline. `silent` keeps an automatic refresh unannounced.
+ */
 export function HomeBalances({
   state,
+  offline = false,
+  silent = false,
   onRefresh,
 }: {
   state: HomeFinancialState;
+  offline?: boolean;
+  silent?: boolean;
   onRefresh: () => void;
 }) {
   const theme = useTheme();
   const loading = state.status === 'idle' || state.status === 'loading';
+  if (state.data === null && state.status === 'error' && offline)
+    return (
+      <NotAvailableOffline
+        message="Your balances haven’t been saved on this phone yet. Connect to load them."
+        onRetry={onRefresh}
+      />
+    );
   return (
     <View style={{ gap: 8 }}>
       {state.data !== null && (
         <RetainedNotice
           status={state.status}
-          stale={state.stale}
+          stale={state.stale && !silent}
           refreshedAt={state.refreshedAt}
           message={state.message}
           subject="your balances"
@@ -210,19 +235,24 @@ export function HomeBalances({
             Your balances
           </CompactText>
           {state.data !== null && state.refreshedAt !== null ? (
-            <CompactText variant="caption" tone="muted">
-              Updated {refreshedLabel(state.refreshedAt)}
-            </CompactText>
+            offline ? (
+              <Badge label={`Saved ${refreshedLabel(state.refreshedAt)}`} />
+            ) : (
+              <CompactText variant="caption" tone="muted">
+                Updated {refreshedLabel(state.refreshedAt)}
+              </CompactText>
+            )
           ) : null}
         </View>
         {state.data === null ? (
           loading ? (
             <View
-              accessibilityLiveRegion="polite"
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 }}
+              accessibilityLabel="Loading your balances"
+              accessibilityState={{ busy: true }}
+              style={{ gap: 8, paddingVertical: 12 }}
             >
-              <ActivityIndicator color={theme.brand.main} />
-              <CompactText tone="secondary">Loading your balances…</CompactText>
+              <Skeleton width="55%" height={18} />
+              <Skeleton width="80%" height={14} />
             </View>
           ) : (
             <View style={{ gap: 8, paddingTop: 10, alignItems: 'flex-start' }}>
@@ -263,12 +293,17 @@ function draftAmount({ amount, currency }: ExpenseDraftSummary) {
   }
 }
 
-/** Every Expense draft on this device; saves that weren't confirmed come first, in warning. */
+/**
+ * Every Expense draft on this device; saves that weren't confirmed come first, in warning.
+ * `disabled` rows can't be opened yet, as while the session is checked.
+ */
 export function ContinueDrafts({
   drafts,
+  disabled = false,
   onOpen,
 }: {
   drafts: ExpenseDraftSummary[];
+  disabled?: boolean;
   onOpen: (draft: ExpenseDraftSummary) => void;
 }) {
   if (!drafts.length) return null;
@@ -298,7 +333,7 @@ export function ContinueDrafts({
                 accessibilityLabel={[status, description, amount, draft.groupName]
                   .filter(Boolean)
                   .join(', ')}
-                onPress={() => onOpen(draft)}
+                onPress={disabled ? undefined : () => onOpen(draft)}
               />
             </View>
           );
@@ -344,7 +379,7 @@ function GroupRow({
   group: MobileGroup;
   /** Undefined while the member's balance in this Group is unknown. */
   balances: HomeGroupBalance[] | undefined;
-  onPress: () => void;
+  onPress?: () => void;
 }) {
   const descriptor = getGroupTheme(group.category);
   const count = group.members.length;
@@ -403,11 +438,16 @@ function NoGroups({ onRefresh }: { onRefresh: () => void }) {
   );
 }
 
-/** The member's Groups, each with their balance in it, and New Group. */
+/**
+ * The member's Groups, each with their balance in it, and New Group. `disabled` keeps them
+ * from opening yet, as while the session is checked.
+ */
 export function HomeGroups({
   groups,
   byGroup,
   newGroupLabel,
+  offline = false,
+  disabled = false,
   onNewGroup,
   onOpen,
   onRetry,
@@ -415,11 +455,14 @@ export function HomeGroups({
   groups: MobileSnapshot['groups'];
   byGroup: HomeFinancialState['byGroup'];
   newGroupLabel: string;
+  offline?: boolean;
+  disabled?: boolean;
   onNewGroup: () => void;
   onOpen: (groupId: string) => void;
   onRetry: () => void;
 }) {
   const known = groups.status === 'ready' || groups.data.length > 0;
+  const unsaved = groups.status === 'error' && offline && !groups.data.length;
   return (
     <View style={{ gap: 6 }}>
       <SectionHeader
@@ -430,11 +473,18 @@ export function HomeGroups({
             icon="add"
             variant="text"
             dense
+            disabled={disabled}
             onPress={onNewGroup}
           />
         }
       />
-      {(groups.status === 'error' || groups.status === 'denied') && (
+      {unsaved ? (
+        <NotAvailableOffline
+          message="Your Groups haven’t been saved on this phone yet. Connect to load them."
+          onRetry={onRetry}
+        />
+      ) : null}
+      {(groups.status === 'error' || groups.status === 'denied') && !unsaved && (
         <Banner
           tone="error"
           title="Couldn’t load your Groups"
@@ -448,7 +498,7 @@ export function HomeGroups({
         </Banner>
       )}
       {groups.status === 'loading' && !groups.data.length ? (
-        <Loading label="Finding your Groups…" />
+        <SkeletonRows label="Loading your Groups" />
       ) : groups.status === 'ready' && !groups.data.length ? (
         <NoGroups onRefresh={onRetry} />
       ) : groups.data.length ? (
@@ -459,7 +509,7 @@ export function HomeGroups({
               <GroupRow
                 group={group}
                 balances={byGroup[group.id]}
-                onPress={() => onOpen(group.id)}
+                onPress={disabled ? undefined : () => onOpen(group.id)}
               />
             </View>
           ))}

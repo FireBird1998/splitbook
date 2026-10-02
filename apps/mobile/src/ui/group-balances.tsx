@@ -5,6 +5,7 @@ import { canRecordSettlement } from '@splitbook/shared/settlement-authorization'
 import type { PendingPayment } from '../data/settlement';
 import type { GroupCurrencyBalance, GroupFinancialState, MobileGroup } from '../data/types';
 import {
+  Badge,
   Banner,
   Card,
   CompactAvatar,
@@ -17,6 +18,7 @@ import {
   Skeleton,
 } from './compact';
 import { RetainedNotice } from './financial-views';
+import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
 import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
@@ -124,11 +126,14 @@ function MemberBalanceCard({
   bucket,
   currentUserId,
   refreshedAt,
+  offline,
   monthLens,
 }: {
   bucket: GroupCurrencyBalance;
   currentUserId: string;
   refreshedAt: number | null;
+  /** The figures come from this device: "Saved", not "Updated". */
+  offline: boolean;
   monthLens: boolean;
 }) {
   const own = bucket.balances.find(({ user }) => user.id === currentUserId)?.balance ?? 0;
@@ -141,11 +146,13 @@ function MemberBalanceCard({
           <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
             All-time balance · {bucket.currency}
           </CompactText>
-          {refreshedAt !== null ? (
+          {refreshedAt === null ? null : offline ? (
+            <Badge label={`Saved ${refreshedLabel(refreshedAt)}`} />
+          ) : (
             <CompactText variant="caption" tone="muted">
               Updated {refreshedLabel(refreshedAt)}
             </CompactText>
-          ) : null}
+          )}
         </View>
         {label ? (
           <View
@@ -356,7 +363,7 @@ function Everyone({
 /**
  * The Balances destination: an unconfirmed payment first, then the member's all-time balance
  * per currency, the suggested payments they can record, and everyone's net position.
- * Choosing a Month never changes it.
+ * Choosing a Month never changes it. `silent` keeps an automatic refresh unannounced.
  */
 export function GroupBalancesView({
   group,
@@ -364,6 +371,7 @@ export function GroupBalancesView({
   state,
   pending,
   offline,
+  silent = false,
   onRecord,
   onCheckPayment,
   onRefreshBalances,
@@ -374,6 +382,7 @@ export function GroupBalancesView({
   /** This Group's unconfirmed payment, if one is stored on the device. */
   pending: PendingPayment | null;
   offline: boolean;
+  silent?: boolean;
   onRecord: (paidBy: string, paidTo: string, currency: string) => void;
   onCheckPayment: () => void;
   onRefreshBalances: () => void;
@@ -390,6 +399,16 @@ export function GroupBalancesView({
       />
     ) : null;
   if (balances.data === null) {
+    if (balances.status === 'error' && offline)
+      return (
+        <View style={{ gap: 10 }}>
+          {notice}
+          <NotAvailableOffline
+            message="These balances haven’t been opened on this phone yet. Connect to load them."
+            onRetry={onRefreshBalances}
+          />
+        </View>
+      );
     if (balances.status === 'error')
       return (
         <View style={{ gap: 10 }}>
@@ -422,7 +441,7 @@ export function GroupBalancesView({
     <View style={{ gap: 14 }}>
       <RetainedNotice
         status={balances.status}
-        stale={balances.stale}
+        stale={balances.stale && !silent}
         refreshedAt={balances.refreshedAt}
         message={balances.message}
         subject="balances"
@@ -443,6 +462,7 @@ export function GroupBalancesView({
             bucket={bucket}
             currentUserId={currentUserId}
             refreshedAt={balances.refreshedAt}
+            offline={offline}
             monthLens={group.category === 'home'}
           />
         ))

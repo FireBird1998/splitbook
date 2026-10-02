@@ -9,6 +9,7 @@ import {
   GroupNavBar,
   IconButton,
   IconTile,
+  LinearProgress,
   ListRow,
   TopBar,
 } from './compact';
@@ -21,13 +22,15 @@ export function groupSubtitle(group: MobileGroup) {
 }
 
 interface GroupShellProps {
-  /** Null until the Group has been read. */
+  /** Null until the Group is known, from its read or the saved Groups list. */
   group: MobileGroup | null;
   destination: GroupDestination;
   onDestination: (destination: GroupDestination) => void;
   back: { label: string; onPress: () => void };
   /** Quiet refresh status beside the title. */
   status?: ReactNode;
+  /** A first load's label: one progress bar under the top bar. */
+  progress?: string | null;
   invite: { onPress: () => void; disabled: boolean; offline: boolean };
   /** Opens Members and Group details. */
   onMembers: () => void;
@@ -54,6 +57,7 @@ export function GroupShell({
   onDestination,
   back,
   status,
+  progress,
   invite,
   onMembers,
   onRefresh,
@@ -93,6 +97,7 @@ export function GroupShell({
           ) : null
         }
       />
+      {progress ? <LinearProgress label={progress} /> : null}
       <ScrollView
         // Each destination starts at its own top.
         key={destination}

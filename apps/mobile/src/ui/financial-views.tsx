@@ -5,15 +5,17 @@ import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
 
 /**
- * The one quiet cue for an automatic refresh or retry of content that stays on screen,
- * with when that content was verified when known.
+ * The one quiet cue for a refresh or retry of content that stays on screen, with when that
+ * content was saved when known; `checking` marks the saved Home while the session is checked.
  */
 export function RefreshStatus({
   visible,
   savedAt = null,
+  checking = false,
 }: {
   visible: boolean;
   savedAt?: number | null;
+  checking?: boolean;
 }) {
   const theme = useTheme();
   if (!visible) return null;
@@ -21,7 +23,11 @@ export function RefreshStatus({
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
       <Icon name="sync-outline" size={15} />
       <Copy style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 20, flexShrink: 1 }}>
-        {savedAt === null ? 'Updating…' : `Saved ${refreshedLabel(savedAt)} · updating`}
+        {savedAt === null
+          ? checking
+            ? 'Checking…'
+            : 'Refreshing…'
+          : `Saved ${refreshedLabel(savedAt)} · ${checking ? 'checking' : 'refreshing'}`}
       </Copy>
     </View>
   );
