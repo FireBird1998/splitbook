@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { calculateSplitAmountsMinor } from '@splitbook/shared/split-calculation';
-import { expensePosition } from './expense-position';
+import { mobileExpensePosition } from './expense-position';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse, MobileFetch } from './types';
 
@@ -271,14 +271,17 @@ describe('Expenses read through the controller', () => {
     ]);
     await server.controller.openGroup(tripId);
     const shown = server.controller.getSnapshot().financial.expenses.data;
-    expect(shown.map((row) => [row.description, expensePosition(row, alex.id)])).toEqual([
+    expect(shown.map((row) => [row.description, mobileExpensePosition(row, alex.id)])).toEqual([
       ['Weekly groceries', { kind: 'lent', amountMinor: 83300, amount: 833 }],
       ['Villa stay', { kind: 'lent', amountMinor: 100000, amount: 1000 }],
       ['Electricity bill', { kind: 'owe', amountMinor: 95334, amount: 953.34 }],
       ['Beach shack lunch', null],
     ]);
-    expect(expensePosition(shown[1], sam.id)).toBeNull();
-    expect(expensePosition(shown[2], priya.id)).toMatchObject({ kind: 'owe', amount: 953.33 });
+    expect(mobileExpensePosition(shown[1], sam.id)).toBeNull();
+    expect(mobileExpensePosition(shown[2], priya.id)).toMatchObject({
+      kind: 'owe',
+      amount: 953.33,
+    });
   });
 
   it('reads legacy allocations without float drift', async () => {
@@ -297,12 +300,12 @@ describe('Expenses read through the controller', () => {
     server.expenses.set(tripId, [legacy]);
     await server.controller.openGroup(tripId);
     const [row] = server.controller.getSnapshot().financial.expenses.data;
-    expect(expensePosition(row, alex.id)).toEqual({
+    expect(mobileExpensePosition(row, alex.id)).toEqual({
       kind: 'owe',
       amountMinor: 3333,
       amount: 33.33,
     });
-    expect(expensePosition(row, priya.id)).toEqual({
+    expect(mobileExpensePosition(row, priya.id)).toEqual({
       kind: 'lent',
       amountMinor: 6666,
       amount: 66.66,

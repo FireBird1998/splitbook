@@ -1,7 +1,7 @@
 import { ActivityIndicator, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
-import { expensePosition } from '../data/expense-position';
+import { mobileExpensePosition } from '../data/expense-position';
 import type {
   ExpenseWindowSummary,
   GroupFinancialState,
@@ -93,7 +93,7 @@ function ExpenseRow({
   saved: boolean;
   onOpen: () => void;
 }) {
-  const position = expensePosition(expense, currentUserId);
+  const position = mobileExpensePosition(expense, currentUserId);
   const total = formatCurrency(expense.amount, expense.currency);
   const paid = payers(expense, currentUserId);
   const effect = position
