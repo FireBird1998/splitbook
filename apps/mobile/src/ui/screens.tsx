@@ -1,8 +1,6 @@
 import { GoogleSignInButton } from 'react-native-nitro-google-signin';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
-import { deriveTripCodes } from '@splitbook/shared/trip-codes';
 import type { MobileGroup } from '../data';
 import {
   Banner,
@@ -13,7 +11,7 @@ import {
   IconTile,
   SectionHeader,
 } from './compact';
-import { Button, Copy, Icon, Label, Panel, type IconName } from './primitives';
+import { Button, Copy, Icon, Panel, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
 
 const themeIcons: Record<string, IconName> = {
@@ -246,56 +244,6 @@ export function GroupCard({ group, onPress }: { group: MobileGroup; onPress: () 
   );
 }
 
-/**
- * The Trip Theme's boarding-pass strip, kept at the top of Expenses until the slim strip
- * (#117) replaces it.
- */
-export function TripStrip({ group }: { group: MobileGroup }) {
-  const theme = useTheme();
-  const descriptor = getGroupTheme(group.category);
-  const codes = deriveTripCodes(group.name);
-  return (
-    <LinearGradient
-      colors={theme.strip.gradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={{ borderRadius: 20, overflow: 'hidden' }}
-    >
-      <View style={{ padding: 24, gap: 20 }}>
-        <View style={styles.between}>
-          <Label light>YOUR SHARED ADVENTURE</Label>
-          <Icon name="airplane" size={21} color={theme.strip.text} />
-        </View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 18 }}>
-          <Copy style={[styles.routeCode, { color: theme.strip.text }]}>{codes.from}</Copy>
-          <View style={{ flex: 1, height: 1, backgroundColor: theme.strip.muted }} />
-          <Icon name="airplane-outline" color={theme.strip.text} size={21} />
-          <View style={{ flex: 1, height: 1, backgroundColor: theme.strip.muted }} />
-          <Copy style={[styles.routeCode, { color: theme.strip.text }]}>{codes.to}</Copy>
-        </View>
-        <Label light>GROUP CODE · {descriptor.label.toUpperCase()}</Label>
-      </View>
-      <View
-        style={[
-          styles.between,
-          {
-            borderTopWidth: 1,
-            borderStyle: 'dashed',
-            borderColor: theme.strip.muted,
-            backgroundColor: theme.strip.stub,
-            padding: 20,
-          },
-        ]}
-      >
-        <Copy style={{ color: theme.strip.text, fontSize: 14 }}>{dateRange(group)}</Copy>
-        <Copy style={{ color: theme.strip.text, fontFamily: fonts.mono, fontSize: 12 }}>
-          {group.members.length} {group.members.length === 1 ? 'MEMBER' : 'MEMBERS'}
-        </Copy>
-      </View>
-    </LinearGradient>
-  );
-}
-
 export function EmptyGroups({ onRefresh }: { onRefresh: () => void }) {
   const theme = useTheme();
   return (
@@ -315,5 +263,4 @@ export function EmptyGroups({ onRefresh }: { onRefresh: () => void }) {
 export const styles = StyleSheet.create({
   content: { padding: 24, paddingBottom: 40, gap: 20 },
   between: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
-  routeCode: { fontFamily: fonts.mono, fontSize: 27, lineHeight: 36, letterSpacing: 2 },
 });
