@@ -494,7 +494,8 @@ function versionText(
     case 'description':
       return draft.description.trim();
     case 'date':
-      return expenseDateLabel(draft.date);
+      // The tile's short form, which fits the table's narrow columns.
+      return expenseDateLabel(draft.date).shown;
     case 'payers': {
       const payers = draft.multiPayer
         ? draft.payers

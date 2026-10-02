@@ -3,6 +3,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
+import { draftFromExpense } from '../data/expense-draft';
 import { ExpenseEditor } from './expense-editor';
 import { expenseDateLabel } from './expense-form';
 
@@ -754,6 +755,18 @@ describe('rendered edit conflict', () => {
       draft: { amount: '12', notes: 'Paid in cash' },
     });
     expect(ui.writes).toHaveLength(1);
+  });
+
+  it('names a changed date the way the Date tile shows it', async () => {
+    const ui = await render(editDescription, {
+      conflict: { ...theirs, date: '2026-09-20T10:00:00.000Z' },
+    });
+    const { draft, latest } = ui.controller.getSnapshot().expense;
+    const yours = expenseDateLabel(draft!.date).shown;
+    const saved = expenseDateLabel(draftFromExpense(latest!).date).shown;
+    expect(yours).not.toBe(saved);
+    expect(labelled(ui.root(), `Date: yours ${yours}, saved now ${saved}`)).toHaveLength(1);
+    expect(text(ui.root())).not.toContain('[object Object]');
   });
 
   it('checks an unconfirmed edit, and says when the saved Expense hasn’t changed', async () => {
