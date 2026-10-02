@@ -6,12 +6,13 @@ import { ThemeContext, fonts } from './theme';
 import { TripStrip } from './trip-strip';
 
 // #117: the Trip Theme's slim boarding-pass strip, rendered.
+const device = vi.hoisted(() => ({ fontScale: 1 }));
 vi.mock('react-native', () => ({
   Pressable: 'Pressable',
   StyleSheet: { create: <T,>(styles: T) => styles },
   Text: 'Text',
   View: 'View',
-  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: 1 }),
+  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: device.fontScale }),
 }));
 vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
@@ -48,6 +49,7 @@ let screen: ReactTestRenderer | null = null;
 afterEach(() => {
   act(() => screen?.unmount());
   screen = null;
+  device.fontScale = 1;
 });
 function render(group: MobileGroup, mode: 'light' | 'dark' = 'light') {
   act(() => {
@@ -66,15 +68,31 @@ const flat = (style: unknown): Style =>
 const texts = (root: ReactTestInstance) =>
   root
     .findAll((node) => isHost(node, 'Text'))
-    .map((node) => ({ shown: node.children.join(''), style: flat(node.props.style) }));
+    .map((node) => ({ node, shown: node.children.join(''), style: flat(node.props.style) }));
 const shown = (root: ReactTestInstance, value: string) => {
   const matches = texts(root).filter((node) => node.shown === value);
   expect(matches).toHaveLength(1);
   return matches[0].style;
 };
-/** The two route dashes and the perforation. */
-const dashes = (root: ReactTestInstance) =>
-  root.findAll((node) => isHost(node, 'View') && flat(node.props.style).borderStyle === 'dashed');
+/** The style of the View holding this text. */
+const holder = (root: ReactTestInstance, value: string) => {
+  let node = texts(root).find((text) => text.shown === value)!.node.parent;
+  while (node && typeof node.type !== 'string') node = node.parent;
+  return flat(node!.props.style);
+};
+const gradient = (root: ReactTestInstance) =>
+  flat(root.find((node) => isHost(node, 'LinearGradient')).props.style);
+/** The two route dashes, then the perforation. */
+const rules = (root: ReactTestInstance) =>
+  root.findAll((node) => isHost(node, 'View') && typeof node.props.onLayout === 'function');
+const segments = (rule: ReactTestInstance) =>
+  rule.children.filter((child): child is ReactTestInstance => typeof child !== 'string');
+/** Native layout gives every rule 67 across and 48 down. */
+const lay = (root: ReactTestInstance) =>
+  act(() => {
+    for (const rule of rules(root))
+      rule.props.onLayout({ nativeEvent: { layout: { x: 0, y: 0, width: 67, height: 48 } } });
+  });
 const image = (root: ReactTestInstance) => {
   const images = root.findAll(
     (node) => typeof node.type === 'string' && node.props.accessibilityRole === 'image',
@@ -92,17 +110,60 @@ describe('Trip strip', () => {
       'Trip from GOA to TRI, 17 to 20 September, 3 members',
     );
     expect(flat(strip.props.style).borderRadius).toBe(16);
-    // About 72 high, growing with large text rather than clipping it.
-    const box = flat(root.find((node) => isHost(node, 'LinearGradient')).props.style);
-    expect(box.minHeight).toBe(72);
-    expect(box.height).toBeUndefined();
     expect(texts(root).map((node) => node.shown)).toEqual(['GOA', 'TRI', '17–20 Sep', '3 MEMBERS']);
     for (const code of ['GOA', 'TRI']) expect(shown(root, code).fontFamily).toBe(fonts.mono);
     expect(shown(root, '3 MEMBERS').fontFamily).toBe(fonts.mono);
     expect(shown(root, '17–20 Sep').fontFamily).toBe(fonts.semibold);
     const plane = root.find((node) => isHost(node, 'Ionicons'));
     expect(plane.props.name).toBe('airplane-outline');
-    expect(dashes(root)).toHaveLength(3);
+  });
+
+  it('sizes itself from its text, with the dates beside the route', () => {
+    const root = render(trip());
+    // About 72 high and growing with the text: nothing stretches the strip.
+    const box = gradient(root);
+    expect(box).toMatchObject({ minHeight: 72, flexDirection: 'row' });
+    for (const key of ['height', 'flex', 'flexGrow', 'position'])
+      expect(box).not.toHaveProperty(key);
+    // The route takes only the width the stub leaves; the stub keeps its natural width.
+    expect(holder(root, 'GOA').flex).toBe(1);
+    const stub = holder(root, '17–20 Sep');
+    expect(holder(root, '3 MEMBERS')).toEqual(stub);
+    for (const key of ['width', 'flex', 'flexGrow', 'flexShrink', 'flexBasis'])
+      expect(stub).not.toHaveProperty(key);
+    const perforation = flat(rules(root)[2].props.style);
+    expect(perforation).toMatchObject({ width: 1, alignSelf: 'stretch' });
+    expect(perforation).not.toHaveProperty('flex');
+  });
+
+  it('draws its dashes as short segments, which Android can’t render solid', () => {
+    const root = render(trip());
+    expect(
+      root.findAll((node) => isHost(node, 'View') && 'borderStyle' in flat(node.props.style)),
+    ).toHaveLength(0);
+    expect(rules(root).map((rule) => segments(rule).length)).toEqual([0, 0, 0]);
+    lay(root);
+    // As many 4-long dashes, 3 apart, as fit: 10 across 67 and 7 down 48.
+    expect(rules(root).map((rule) => segments(rule).length)).toEqual([10, 10, 7]);
+    const [route, , perforation] = rules(root);
+    expect(flat(segments(route)[0].props.style)).toMatchObject({ width: 4, height: 1 });
+    expect(flat(segments(perforation)[0].props.style)).toMatchObject({ width: 1, height: 4 });
+  });
+
+  it('moves the dates below the route at large text', () => {
+    device.fontScale = 1.3;
+    const root = render(trip());
+    expect(image(root).props.accessibilityLabel).toBe(
+      'Trip from GOA to TRI, 17 to 20 September, 3 members',
+    );
+    const box = gradient(root);
+    expect(box.minHeight).toBe(72);
+    expect(box).not.toHaveProperty('flexDirection');
+    expect(holder(root, 'GOA')).not.toHaveProperty('flex');
+    expect(holder(root, '17–20 Sep')).toMatchObject({ flexDirection: 'row', flexWrap: 'wrap' });
+    // The perforation runs across, under the route.
+    expect(flat(rules(root)[2].props.style)).toMatchObject({ height: 1, flexDirection: 'row' });
+    expect(texts(root).map((node) => node.shown)).toEqual(['GOA', 'TRI', '17–20 Sep', '3 MEMBERS']);
   });
 
   it.each([
@@ -155,8 +216,9 @@ describe('Trip strip', () => {
     for (const value of ['GOA', 'TRI', '17–20 Sep', '3 MEMBERS'])
       expect(shown(root, value).color).toBe(strip.text);
     expect(root.find((node) => isHost(node, 'Ionicons')).props.color).toBe(strip.text);
-    expect(dashes(root).map((line) => flat(line.props.style).borderColor)).toEqual(
-      Array(3).fill(strip.muted),
-    );
+    lay(root);
+    const dashes = rules(root).flatMap(segments);
+    expect(dashes).toHaveLength(27);
+    for (const dash of dashes) expect(flat(dash.props.style).backgroundColor).toBe(strip.muted);
   });
 });
