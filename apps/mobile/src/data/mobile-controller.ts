@@ -3931,7 +3931,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
+  /** Not now, Android Back and the arrow; a join in progress finishes and opens its Group. */
   const cancelInvitation = async () => {
+    if (snapshot.invitation.status === 'joining') return;
     const view = ++viewRequest;
     const owner = generation;
     publish({
