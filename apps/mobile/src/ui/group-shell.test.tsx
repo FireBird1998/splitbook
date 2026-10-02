@@ -353,4 +353,48 @@ describe('Group Activity', () => {
     expect(text(root)).toContain('Priya Shah’s role Member → Group admin');
     expect(text(root)).not.toMatch(/[0-9a-f]{24}/);
   });
+
+  it('sets an edit’s amounts in the money font, in its row and its detail', () => {
+    const edit: ActivityEvent = {
+      ...events[1],
+      metadata: {
+        ...events[1].metadata,
+        changes: {
+          amount: { old: 899, new: 999 },
+          amountMinor: { old: 89900, new: 99900 },
+          splitBetween: {
+            old: [{ user: you, amount: 899, amountMinor: 89900 }],
+            new: [
+              { user: you, amount: 499.5, amountMinor: 49950 },
+              { user: 'a00000000000000000000002', amount: 499.5, amountMinor: 49950 },
+            ],
+          },
+        },
+      },
+    };
+    const amounts = (node: ReactTestInstance) =>
+      node
+        .findAll(
+          (n) => isHost(n, 'Text') && JSON.stringify(n.props.style ?? {}).includes('IBMPlexMono'),
+        )
+        .map(text);
+
+    const list = activity(ready({ events: [edit] }));
+    const row = one(
+      byRole(
+        list.root,
+        'button',
+        `Priya Shah edited Wi-Fi, Amount ₹899.00 → ₹999.00, 2 more, ${clockTime(edit.createdAt)}`,
+      ),
+    );
+    expect(amounts(row)).toEqual(['₹899.00', '₹999.00']);
+    act(() => {
+      renderer?.unmount();
+    });
+
+    const { root } = activity(ready({ events: [edit], selected: edit }));
+    expect(text(root)).toContain('Amount ₹899.00 → ₹999.00');
+    expect(text(root)).toContain('Sam Chen’s share Not included → ₹499.50');
+    expect(amounts(root)).toEqual(['₹899.00', '₹999.00', '₹899.00', '₹499.50', '₹499.50']);
+  });
 });

@@ -95,11 +95,11 @@ export function ExpenseRecordView({
                   {change.before && change.after ? (
                     <>
                       {': '}
-                      <Copy style={change.money ? { fontFamily: fonts.mono } : undefined}>
+                      <Copy style={change.money?.before ? { fontFamily: fonts.mono } : undefined}>
                         {change.before}
                       </Copy>
                       {' → '}
-                      <Copy style={change.money ? { fontFamily: fonts.mono } : undefined}>
+                      <Copy style={change.money?.after ? { fontFamily: fonts.mono } : undefined}>
                         {change.after}
                       </Copy>
                     </>

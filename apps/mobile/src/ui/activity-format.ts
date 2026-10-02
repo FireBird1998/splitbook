@@ -17,13 +17,21 @@ export interface ActivityLine {
   /** Short details shown under the headline, e.g. the amount or what an edit changed. */
   details: ActivityDetail[];
   /** Every change an edit made, for the event's detail view. */
-  changes: string[];
+  changes: ActivityDetail[];
 }
 
-/** A standalone amount is `mono`, so it can use the money font. */
-export interface ActivityDetail {
+/** A run of text; an amount is `mono`, so it can use the money font. */
+export interface TextRun {
   text: string;
   mono?: boolean;
+}
+
+/**
+ * A detail such as an amount or a change. `text` is how it reads; a change is also split into
+ * `runs`, so only its amounts use the money font.
+ */
+export interface ActivityDetail extends TextRun {
+  runs?: TextRun[];
 }
 
 export interface ActivityDay {
@@ -73,27 +81,41 @@ function money(value: unknown, currency: string) {
     : null;
 }
 
-const changeLine = ({ label, before, after }: ExpenseHistoryChange) =>
-  before !== undefined && after !== undefined
-    ? `${label} ${before} → ${after}`
-    : after !== undefined
-      ? `${label} ${after}`
-      : `${label} changed`;
+function changeDetail({
+  label,
+  before,
+  after,
+  money: amounts,
+}: ExpenseHistoryChange): ActivityDetail {
+  const runs: TextRun[] =
+    before !== undefined && after !== undefined
+      ? [
+          { text: `${label} ` },
+          { text: before, mono: amounts?.before },
+          { text: ' → ' },
+          { text: after, mono: amounts?.after },
+        ]
+      : after !== undefined
+        ? [{ text: `${label} ` }, { text: after, mono: amounts?.after }]
+        : [{ text: `${label} changed` }];
+  return { text: runs.map((run) => run.text).join(''), runs };
+}
 
 /**
- * What an Expense edit changed, one line per change: "Amount ₹899.00 → ₹999.00", or
- * "Sam Chen’s share ₹300.00 → ₹350.00". Uses the same wording as the Expense's history.
+ * What an Expense edit changed, one detail per change: "Amount ₹899.00 → ₹999.00", or
+ * "Sam Chen’s share Not included → ₹350.00". Uses the same wording as the Expense's history.
+ * Amounts are mono runs; words such as "Not included" are not.
  */
 export function describeChanges(
   changes: Record<string, { old?: unknown; new?: unknown }> | undefined,
   { currency, members = [] }: { currency: string; members?: { id: string; name: string }[] },
-): string[] {
+): ActivityDetail[] {
   if (!changes) return [];
   const after = text(changes.currency?.new) ?? currency;
   return describeExpenseChanges(changes, {
     currencies: { before: text(changes.currency?.old) ?? after, after },
     person: memberNamer(new Map(members.map((member) => [member.id, member.name]))),
-  }).map(changeLine);
+  }).map(changeDetail);
 }
 
 /** One change a Group edit made, from the headline it leads to its line under "What changed". */
@@ -281,9 +303,13 @@ export function describeActivity(
         currency: meta.currency ?? currency,
         members,
       });
-      const shown = changes.slice(0, 1);
-      if (changes.length > 1) shown.push(`${changes.length - 1} more`);
-      return { ...line('edited', subject ?? 'an Expense', shown), changes };
+      return {
+        ...line('edited', subject ?? 'an Expense', [
+          changes[0] ?? null,
+          changes.length > 1 ? `${changes.length - 1} more` : null,
+        ]),
+        changes,
+      };
     }
     case 'settlement_recorded':
       return line('recorded a payment', null, [
@@ -316,7 +342,7 @@ export function describeActivity(
           changes.length > 1 ? `${changes.length - 1} more` : null,
         ]),
         complement: first.headline.complement,
-        changes: changes.map((change) => changeLine(change.line)),
+        changes: changes.map((change) => changeDetail(change.line)),
       };
     }
     default:

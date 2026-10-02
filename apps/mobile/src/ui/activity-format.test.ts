@@ -6,6 +6,7 @@ import {
   describeActivity,
   describeChanges,
   spokenActivity,
+  type ActivityDetail,
   type ActivityLine,
 } from './activity-format';
 
@@ -53,26 +54,26 @@ describe('Expense edits in plain language', () => {
     { id: 'a00000000000000000000002', name: 'Sam Chen' },
   ];
 
+  const edit = {
+    amount: { old: 899, new: 999 },
+    amountMinor: { old: 89900, new: 99900 },
+    description: { old: 'Wifi', new: 'Wi-Fi' },
+    paidBy: {
+      old: [{ user: 'a00000000000000000000001', amount: 899, amountMinor: 89900 }],
+      new: [{ user: 'a00000000000000000000001', amount: 999, amountMinor: 99900 }],
+    },
+    splitBetween: {
+      old: [{ user: 'a00000000000000000000002', amount: 899, amountMinor: 89900 }],
+      new: [{ user: 'a00000000000000000000009', amount: 999, amountMinor: 99900 }],
+    },
+    tagId: { old: 'c00000000000000000000001', new: 'c00000000000000000000002' },
+    tag: { old: 'Utilities', new: 'Internet' },
+  };
+  const read = (details: ActivityDetail[]) => details.map((detail) => detail.text);
+
   it('reads like the Expense history: amounts, names and shares, never references', () => {
-    const lines = describeChanges(
-      {
-        amount: { old: 899, new: 999 },
-        amountMinor: { old: 89900, new: 99900 },
-        description: { old: 'Wifi', new: 'Wi-Fi' },
-        paidBy: {
-          old: [{ user: 'a00000000000000000000001', amount: 899, amountMinor: 89900 }],
-          new: [{ user: 'a00000000000000000000001', amount: 999, amountMinor: 99900 }],
-        },
-        splitBetween: {
-          old: [{ user: 'a00000000000000000000002', amount: 899, amountMinor: 89900 }],
-          new: [{ user: 'a00000000000000000000009', amount: 999, amountMinor: 99900 }],
-        },
-        tagId: { old: 'c00000000000000000000001', new: 'c00000000000000000000002' },
-        tag: { old: 'Utilities', new: 'Internet' },
-      },
-      { currency: 'INR', members },
-    );
-    expect(lines).toEqual([
+    const lines = describeChanges(edit, { currency: 'INR', members });
+    expect(read(lines)).toEqual([
       'Amount ₹899.00 → ₹999.00',
       'Description “Wifi” → “Wi-Fi”',
       'Priya Shah’s payment ₹899.00 → ₹999.00',
@@ -80,22 +81,34 @@ describe('Expense edits in plain language', () => {
       'Sam Chen’s share ₹899.00 → Not included',
       'Tag Utilities → Internet',
     ]);
-    expect(lines.join(' ')).not.toMatch(/[0-9a-f]{24}/);
+    expect(JSON.stringify(lines)).not.toMatch(/[0-9a-f]{24}/);
+  });
+
+  it('sets each amount apart for the money font, but not words such as “Not included”', () => {
+    const lines = describeChanges(edit, { currency: 'INR', members });
+    expect(
+      lines.map((line) => (line.runs ?? []).filter((run) => run.mono).map((run) => run.text)),
+    ).toEqual([['₹899.00', '₹999.00'], [], ['₹899.00', '₹999.00'], ['₹999.00'], ['₹899.00'], []]);
+    expect(lines.every((line) => line.runs?.map((run) => run.text).join('') === line.text)).toBe(
+      true,
+    );
   });
 
   it('keeps each amount in the currency it had when the edit changes currency', () => {
     expect(
-      describeChanges(
-        { amount: { old: 10, new: 12 }, currency: { old: 'INR', new: 'USD' } },
-        { currency: 'INR' },
+      read(
+        describeChanges(
+          { amount: { old: 10, new: 12 }, currency: { old: 'INR', new: 'USD' } },
+          { currency: 'INR' },
+        ),
       ),
     ).toEqual(['Amount ₹10.00 → $12.00', 'Currency INR → USD']);
   });
 
   it('names a change it can only report, such as an unknown field', () => {
-    expect(describeChanges({ receipt: { old: null, new: 'x' } }, { currency: 'INR' })).toEqual([
-      'Other details changed',
-    ]);
+    expect(
+      read(describeChanges({ receipt: { old: null, new: 'x' } }, { currency: 'INR' })),
+    ).toEqual(['Other details changed']);
   });
 });
 
@@ -133,6 +146,10 @@ describe('Activity headlines', () => {
     expect(line.details.map((detail) => detail.text)).toEqual([
       'Amount ₹899.00 → ₹999.00',
       '1 more',
+    ]);
+    expect(line.details[0].runs?.filter((run) => run.mono).map((run) => run.text)).toEqual([
+      '₹899.00',
+      '₹999.00',
     ]);
     expect(line.changes).toHaveLength(2);
   });
@@ -183,7 +200,7 @@ describe('Group edits in plain language', () => {
   const read = (line: ActivityLine) => ({
     headline: spokenActivity(line, '11:05'),
     details: line.details.map((detail) => detail.text),
-    changes: line.changes,
+    changes: line.changes.map((change) => change.text),
   });
   const role = (userId: string, old: string, now: string) => ({
     memberRole: { old: { userId, role: old }, new: { userId, role: now } },

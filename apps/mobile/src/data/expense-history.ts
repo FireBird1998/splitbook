@@ -9,8 +9,8 @@ export interface ExpenseHistoryChange {
   label: string;
   before?: string;
   after?: string;
-  /** Amounts, which the design sets in the monospace money face. */
-  money?: boolean;
+  /** Which values are amounts, which the design sets in the monospace money face. */
+  money?: { before: boolean; after: boolean };
 }
 
 export interface ExpenseHistoryEntry {
@@ -101,8 +101,8 @@ function allocation(
     );
   const before = amounts(change.old, currencies.before);
   const after = amounts(change.new, currencies.after);
-  const absent = (currency: string) =>
-    field === 'paidBy' ? formatCurrency(0, currency) : 'Not included';
+  // Someone missing from the split is "Not included", which is a word, not an amount.
+  const absent = (currency: string) => (field === 'paidBy' ? formatCurrency(0, currency) : null);
   return [...new Set([...after.keys(), ...before.keys()])].flatMap((key) => {
     const was = before.get(key)?.amount ?? absent(currencies.before);
     const now = after.get(key)?.amount ?? absent(currencies.after);
@@ -111,9 +111,9 @@ function allocation(
     return [
       {
         label: field === 'paidBy' ? `${who}’s payment` : `${who}’s share`,
-        before: was,
-        after: now,
-        money: true,
+        before: was ?? 'Not included',
+        after: now ?? 'Not included',
+        money: { before: was !== null, after: now !== null },
       },
     ];
   });
@@ -155,7 +155,7 @@ export function describeExpenseChanges(
             label: 'Amount',
             before: money({ amountMinor: change.old }, currencies.before) ?? undefined,
             after: money({ amountMinor: change.new }, currencies.after) ?? undefined,
-            money: true,
+            money: { before: true, after: true },
           },
         ];
       case 'description':
@@ -175,7 +175,7 @@ export function describeExpenseChanges(
             label: 'Amount',
             before: money({ amount: change.old }, currencies.before) ?? undefined,
             after: money({ amount: change.new }, currencies.after) ?? undefined,
-            money: true,
+            money: { before: true, after: true },
           },
         ];
       case 'currency':
