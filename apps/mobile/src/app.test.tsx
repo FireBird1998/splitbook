@@ -578,7 +578,7 @@ describe('App Group Activity refresh', () => {
     expect(app.refreshControl().refreshing).toBe(false);
   });
 
-  it('keeps an automatic refresh of Activity silent, and a retry quiet', async () => {
+  it('keeps an automatic refresh of Activity silent, and shows a retry with one bar', async () => {
     const app = await onActivity();
     const read = hold();
     app.use((path) => (path.includes('/activity?') ? read.respond() : undefined));
@@ -599,11 +599,12 @@ describe('App Group Activity refresh', () => {
     await retried.reached;
     await settle();
     expect(app.text()).toMatch(/Saved .+ · refreshing/);
-    expect(app.progressbars()).toBe(0);
+    expect(app.progressbars()).toBe(1);
     app.use(() => undefined);
     retried.release(json(activityPage));
     await settle();
     expect(app.text()).not.toContain('· refreshing');
+    expect(app.progressbars()).toBe(0);
   });
 });
 

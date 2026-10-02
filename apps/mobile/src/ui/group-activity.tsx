@@ -10,7 +10,6 @@ import {
   type TextRun,
 } from './activity-format';
 import {
-  Badge,
   Banner,
   Card,
   CompactAvatar,
@@ -21,8 +20,8 @@ import {
   SectionHeader,
   SkeletonRows,
 } from './compact';
+import { Freshness } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
-import { refreshedLabel } from './refresh-feedback';
 import { fonts, useTheme } from './theme';
 
 interface GroupActivityProps {
@@ -34,6 +33,8 @@ interface GroupActivityProps {
   members?: { id: string; name: string }[];
   /** Events come from this device's saved copy. */
   offline: boolean;
+  /** Shown events are read again: their freshness says so. */
+  refreshing?: boolean;
   now: number;
   onRetry: () => void;
   onMore: () => void;
@@ -146,6 +147,7 @@ function ActivityList({
   currency,
   members,
   offline,
+  refreshing = false,
   now,
   onRetry,
   onMore,
@@ -163,8 +165,8 @@ function ActivityList({
       <SectionHeader
         title="Changes in this Group"
         trailing={
-          offline && state.events.length > 0 && state.refreshedAt !== null ? (
-            <Badge label={`Saved ${refreshedLabel(state.refreshedAt)}`} />
+          (offline || refreshing) && state.events.length > 0 && state.refreshedAt !== null ? (
+            <Freshness refreshedAt={state.refreshedAt} refreshing={refreshing} offline={offline} />
           ) : (
             <CompactText variant="caption" tone="secondary">
               Newest first

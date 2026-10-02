@@ -57,6 +57,12 @@ function fixture() {
     return { reached, release };
   };
   let clearing: Promise<void> | null = null;
+  // Reads from this device, which can be slow on a phone: while `slow`, each waits for a round.
+  const storage = { slow: false, waiting: [] as (() => void)[] };
+  const read = <T>(value: () => T) =>
+    storage.slow
+      ? new Promise<T>((resolve) => storage.waiting.push(() => resolve(value())))
+      : Promise.resolve(value());
   const respond = (path: string, init: RequestInit): FetchResponse => {
     if (path.endsWith('/sign-in'))
       return new Response(JSON.stringify({ user }), {
@@ -137,7 +143,7 @@ function fixture() {
         now: () => clock.now,
         newSubmissionKey: () => 'loading-states-test-0001',
         credentials: {
-          load: async () => cookie,
+          load: () => read(() => cookie),
           save: async (value) => {
             cookie = value;
           },
@@ -146,7 +152,7 @@ function fixture() {
           },
         },
         offlineIdentity: {
-          load: async () => structuredClone(identity),
+          load: () => read(() => structuredClone(identity)),
           save: async (value) => {
             identity = structuredClone(value);
           },
@@ -157,7 +163,7 @@ function fixture() {
         readCache: {
           retainGroups: async () => undefined,
           invalidateGroup: async () => undefined,
-          load: async (account, key) => structuredClone(cache.get(account + key) ?? null),
+          load: (account, key) => read(() => structuredClone(cache.get(account + key) ?? null)),
           save: async (account, key, value) => {
             cache.set(account + key, structuredClone(value));
           },
@@ -166,7 +172,8 @@ function fixture() {
           },
         },
         expenseDrafts: {
-          load: async (account, id) => structuredClone(drafts.get(`${account}:${id}`) ?? null),
+          load: (account, id) =>
+            read(() => structuredClone(drafts.get(`${account}:${id}`) ?? null)),
           save: async (account, id, value) => {
             drafts.set(`${account}:${id}`, structuredClone(value));
           },
@@ -176,17 +183,24 @@ function fixture() {
           clear: async () => {
             drafts.clear();
           },
-          list: async (account) =>
-            [...drafts]
-              .filter(([key]) => key.startsWith(`${account}:`))
-              .map(([key, value]) => ({
-                groupId: key.split(':')[1],
-                value: structuredClone(value),
-              })),
+          list: (account) =>
+            read(() =>
+              [...drafts]
+                .filter(([key]) => key.startsWith(`${account}:`))
+                .map(([key, value]) => ({
+                  groupId: key.split(':')[1],
+                  value: structuredClone(value),
+                })),
+            ),
+        },
+        pendingInvitation: {
+          load: () => read(() => null),
+          save: async () => undefined,
+          clear: async () => undefined,
         },
         accountLocal: {
           owner: {
-            load: async () => owner,
+            load: () => read(() => owner),
             save: async (value) => {
               owner = value;
             },
@@ -195,7 +209,7 @@ function fixture() {
             },
           },
           cleanupMarker: {
-            load: async () => state.cleanup,
+            load: () => read(() => state.cleanup),
             mark: async () => {
               state.cleanup = true;
             },
@@ -235,6 +249,22 @@ function fixture() {
     requests,
     hold,
     create,
+    /** From now on, each read from this device waits for `answerReads`. */
+    slowStorage: () => {
+      storage.slow = true;
+    },
+    /** Answers the reads waiting now: one round. Returns how many there were. */
+    answerReads: async () => {
+      const answers = storage.waiting.splice(0);
+      answers.forEach((answer) => answer());
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      return answers.length;
+    },
+    /** Answers every read at once again. */
+    fastStorage: () => {
+      storage.slow = false;
+      storage.waiting.splice(0).forEach((answer) => answer());
+    },
     /** Account cleanup waits for this until it settles. */
     holdCleanup: () => {
       let release!: () => void;
@@ -271,6 +301,57 @@ function record(controller: ReturnType<ReturnType<typeof fixture>['create']>) {
 }
 
 describe('cold start (#127 decision): the saved Home while the session is checked', () => {
+  it('shows the saved Home after three rounds of reads from a slow device, then checks the session', async () => {
+    const f = fixture();
+    await previousSession(f);
+    f.requests.length = 0;
+    f.slowStorage();
+    const check = f.hold('/api/auth/get-session');
+    const restarted = f.create();
+    const restoring = restarted.restore();
+    let rounds = 0;
+    while (restarted.getSnapshot().auth.user === null && rounds < 10) {
+      await f.answerReads();
+      rounds += 1;
+    }
+    // The sign-out cleanup marker first, then the session cookie and the saved Home together.
+    expect(rounds).toBe(3);
+    expect(restarted.getSnapshot()).toMatchObject({
+      auth: { status: 'restoring', user: { id: accountId } },
+      groups: { data: [{ id: maple }, { id: lisbon }] },
+      drafts: [{ groupId: maple }],
+    });
+    // Only the session check follows it.
+    expect(f.requests).toEqual(['/api/auth/get-session']);
+    f.fastStorage();
+    await check.reached;
+    check.release();
+    await restoring;
+    expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+  });
+
+  it('shows the saved Home before the first request resolves', async () => {
+    const f = fixture();
+    const savedAt = await previousSession(f);
+    f.requests.length = 0;
+    // Whatever goes out first stays unanswered until the saved Home has been checked.
+    const first = f.hold('/');
+    const restarted = f.create();
+    const restoring = restarted.restore();
+    await first.reached;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(f.requests).toEqual(['/api/auth/get-session']);
+    expect(restarted.getSnapshot()).toMatchObject({
+      auth: { status: 'restoring', user: { id: accountId } },
+      groups: { data: [{ id: maple }, { id: lisbon }] },
+      home: { refreshedAt: savedAt },
+      drafts: [{ groupId: maple, description: 'Weekly groceries' }],
+    });
+    first.release();
+    await restoring;
+    expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+  });
+
   it('shows the last account’s saved Home, marked as checking, and sends nothing else until confirmed', async () => {
     const f = fixture();
     const savedAt = await previousSession(f);

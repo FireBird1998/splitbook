@@ -684,7 +684,6 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         label: eventOpen ? 'Back to Activity' : 'Back to Home',
         onPress: () => void controller.back(),
       }}
-      status={<RefreshStatus visible={feedback.quiet} savedAt={feedback.savedAt} />}
       progress={feedback.progress}
       invite={{
         onPress: shareInvite,
@@ -781,6 +780,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               currency={group.defaultCurrency}
               members={group.members.map(({ user }) => ({ id: user.id, name: user.name }))}
               offline={state.offline.active}
+              refreshing={feedback.quiet}
               now={Date.now()}
               onRetry={() => void controller.refreshActivity()}
               onMore={() => void controller.loadMoreActivity()}
@@ -794,6 +794,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               state={state.financial}
               pending={state.pendingPayment}
               offline={state.offline.active}
+              refreshing={feedback.quiet}
               silent={feedback.silent}
               onRecord={(paidBy, paidTo, currency) =>
                 void controller.openRecordPayment(paidBy, paidTo, currency)
@@ -820,6 +821,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                   state.snackbar?.groupId === group.id ? (state.snackbar.expenseId ?? null) : null
                 }
                 offline={state.offline.active}
+                refreshing={feedback.quiet}
                 now={Date.now()}
                 onSelectMonth={(month) => void controller.selectMonth(month)}
                 onRefreshExpenses={() => void controller.refreshExpenses()}

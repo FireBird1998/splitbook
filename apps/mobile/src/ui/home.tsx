@@ -14,7 +14,6 @@ import type {
   MobileSnapshot,
 } from '../data/types';
 import {
-  Badge,
   Banner,
   Card,
   CompactAvatar,
@@ -31,10 +30,9 @@ import {
   SkeletonRows,
   useLargeText,
 } from './compact';
-import { RetainedNotice } from './financial-views';
+import { Freshness, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
-import { refreshedLabel } from './refresh-feedback';
 import { fonts, useTheme } from './theme';
 
 const themeIcons: Record<GroupCategory, IconName> = {
@@ -234,14 +232,8 @@ export function HomeBalances({
           <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
             Your balances
           </CompactText>
-          {state.data !== null && state.refreshedAt !== null ? (
-            offline ? (
-              <Badge label={`Saved ${refreshedLabel(state.refreshedAt)}`} />
-            ) : (
-              <CompactText variant="caption" tone="muted">
-                Updated {refreshedLabel(state.refreshedAt)}
-              </CompactText>
-            )
+          {state.data !== null ? (
+            <Freshness refreshedAt={state.refreshedAt} offline={offline} tone="muted" />
           ) : null}
         </View>
         {state.data === null ? (

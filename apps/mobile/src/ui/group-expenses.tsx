@@ -10,7 +10,6 @@ import type {
   MobileGroup,
 } from '../data/types';
 import {
-  Badge,
   Banner,
   Card,
   CompactButton,
@@ -26,10 +25,9 @@ import {
   SummaryStats,
   type SummaryStat,
 } from './compact';
-import { RetainedNotice } from './financial-views';
+import { Freshness, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
-import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
 
 const categoryIcons: Record<string, IconName> = {
@@ -210,6 +208,7 @@ function ExpenseSummary({
   summary,
   currentUserId,
   refreshedAt,
+  refreshing,
   offline,
   loading,
   now,
@@ -220,6 +219,8 @@ function ExpenseSummary({
   summary: ExpenseWindowSummary | null;
   currentUserId: string;
   refreshedAt: number | null;
+  /** Read again while they stay on screen. */
+  refreshing: boolean;
   /** The figures come from this device: "Saved", not "Updated". */
   offline: boolean;
   loading: boolean;
@@ -227,14 +228,7 @@ function ExpenseSummary({
   onSelectMonth: (month: string | null) => void;
 }) {
   const figures = summary ? summaryStats(summary, currentUserId) : null;
-  const updated =
-    refreshedAt === null ? null : offline ? (
-      <Badge label={`Saved ${refreshedLabel(refreshedAt)}`} />
-    ) : (
-      <CompactText variant="caption" tone="secondary">
-        Updated {refreshedLabel(refreshedAt)}
-      </CompactText>
-    );
+  const updated = <Freshness refreshedAt={refreshedAt} refreshing={refreshing} offline={offline} />;
   const count = summary ? `${summary.count} ${summary.count === 1 ? 'expense' : 'expenses'}` : '';
   const within = !month
     ? ''
@@ -377,6 +371,7 @@ export function GroupExpensesView({
   state,
   kept,
   savedExpenseId,
+  refreshing = false,
   offline = false,
   now,
   onSelectMonth,
@@ -393,6 +388,8 @@ export function GroupExpensesView({
   kept: KeptDraft | null;
   /** Highlighted after a save while its confirmation shows. */
   savedExpenseId: string | null;
+  /** Shown Expenses are read again: their freshness says so. */
+  refreshing?: boolean;
   /** Figures come from this device's saved copy. */
   offline?: boolean;
   now: number;
@@ -425,6 +422,7 @@ export function GroupExpensesView({
         summary={summary}
         currentUserId={currentUserId}
         refreshedAt={listed ? expenses.refreshedAt : null}
+        refreshing={refreshing}
         offline={offline}
         loading={!listed && expenses.status !== 'error'}
         now={now}

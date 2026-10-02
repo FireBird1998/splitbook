@@ -81,6 +81,7 @@ import { parseInvitationLink } from './invitation-links';
 import { parseExpensePage, parseGroupBalances, parseHomeBalances } from './financial-dto';
 import type {
   AccountStorageLease,
+  ExpenseDraftSummary,
   FetchResponse,
   GroupCreation,
   GroupDestination,
@@ -133,6 +134,43 @@ export function shownView({
 /** The open Group: as read, or from the saved Groups list until it has been. */
 export function shownGroup({ detail, groups }: Pick<MobileSnapshot, 'detail' | 'groups'>) {
   return detail.data ?? groups.data.find((group) => group.id === detail.id) ?? null;
+}
+
+/**
+ * Home's Expense drafts in this account's listed Groups. A draft with a submission or change
+ * pending may already be recorded, so it's first; an unreadable one is left to its Group's form.
+ */
+function draftSummaries(
+  records: { groupId: string; value: unknown }[],
+  accountId: string,
+  groups: MobileGroup[],
+): ExpenseDraftSummary[] {
+  const position = (groupId: string) => groups.findIndex((group) => group.id === groupId);
+  return records
+    .flatMap(({ groupId, value }) => {
+      const group = groups.find((item) => item.id === groupId);
+      if (!group) return [];
+      try {
+        const { draft, attempt, mutation } = parseStoredExpenseDraft(value, accountId, groupId);
+        return [
+          {
+            groupId,
+            groupName: group.name,
+            expenseId: draft.original?._id ?? null,
+            description: draft.description,
+            amount: draft.amount,
+            currency: draft.currency,
+            unconfirmed: attempt !== null || mutation !== null,
+          },
+        ];
+      } catch {
+        return [];
+      }
+    })
+    .sort(
+      (a, b) =>
+        Number(b.unconfirmed) - Number(a.unconfirmed) || position(a.groupId) - position(b.groupId),
+    );
 }
 
 function emptyExpenses(month: string | null = null): GroupFinancialState['expenses'] {
@@ -1060,76 +1098,73 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       : {};
 
   /**
-   * Cold start: the saved Home of the account that last signed in on this device, shown while
-   * its session is checked. Only this device is read, after any sign-out cleanup has finished.
-   * `auth.status` stays 'restoring', so nothing is sent and every action waits for the check.
+   * Cold start: the saved Home of the account that last signed in on this device. Read straight
+   * from this device, every part at once and outside the account queue, so nothing waits on the
+   * network or on another account write. Null without a readable saved Groups list.
    */
-  const showSavedHome = async (owner: number) => {
+  const readSavedHome = async () => {
     const local = dependencies.accountLocal,
       identity = dependencies.offlineIdentity,
       cache = dependencies.readCache;
-    if (!local || !identity || !cache || accountCleanupRequired) return;
+    if (!local || !identity || !cache) return null;
     try {
-      const accountId = await local.owner.load();
-      const session = parseSession(await identity.load());
-      assertCurrent(owner);
+      const [accountId, stored] = await Promise.all([local.owner.load(), identity.load()]);
+      const session = parseSession(stored);
       if (
         !accountId ||
         !session ||
         session.user.id !== accountId ||
         session.expiresAt.getTime() <= now()
       )
-        return;
-      const lease: AccountStorageLease = {
-        accountId,
-        write: (operation) =>
-          queueAccount(async () => {
-            assertCurrent(owner);
-            const result = await operation();
-            assertCurrent(owner);
-            return result;
-          }),
-      };
+        return null;
       const saved = async <T>(path: string, parse: (value: unknown) => T) => {
-        const stored = cachedRead(
-          await lease.write(() => cache.load(accountId, path)),
-          accountId,
-          path,
-          now(),
-        );
-        return stored && { value: parse(stored.value), refreshedAt: stored.refreshedAt };
+        const read = cachedRead(await cache.load(accountId, path), accountId, path, now());
+        return read && { value: parse(read.value), refreshedAt: read.refreshedAt };
       };
-      const groups = await saved('/api/groups', parseGroups);
+      const [groups, home, drafts] = await Promise.all([
+        saved('/api/groups', parseGroups),
+        saved('/api/user/balances', parseHomeBalances).catch(() => null),
+        (async () => (await dependencies.expenseDrafts?.list?.(accountId)) ?? [])().catch(() => []),
+      ]);
       if (
         !groups?.value.every((group) =>
           group.members.some((member) => member.user.id === accountId),
         )
       )
-        return;
-      const home = await saved('/api/user/balances', parseHomeBalances).catch((error) => {
-        if (error instanceof Superseded) throw error;
         return null;
-      });
-      if (!current(owner) || accountCleanupRequired) return;
-      publish({
-        ...snapshot,
-        auth: { status: 'restoring', user: session.user, message: null },
-        groups: { status: 'loading', data: groups.value, message: null },
-        home: home
-          ? {
-              ...emptyHome(),
-              status: 'loading',
-              data: home.value.buckets,
-              byGroup: home.value.byGroup,
-              refreshedAt: home.refreshedAt,
-            }
-          : emptyHome(),
-      });
-      await listDrafts(lease);
-    } catch (error) {
-      if (error instanceof Superseded) throw error;
+      return {
+        user: session.user,
+        groups: groups.value,
+        home,
+        drafts: draftSummaries(drafts, accountId, groups.value),
+      };
+    } catch {
       // Without a readable saved copy, the session check shows on its own.
+      return null;
     }
+  };
+
+  /**
+   * Shown while the session is checked, never once a sign-out cleanup has started. `auth.status`
+   * stays 'restoring', so nothing is sent and every action waits for the check.
+   */
+  const showSavedHome = (owner: number, saved: Awaited<ReturnType<typeof readSavedHome>>) => {
+    if (!saved || !current(owner) || accountCleanupRequired) return;
+    publish({
+      ...snapshot,
+      auth: { status: 'restoring', user: saved.user, message: null },
+      groups: { status: 'loading', data: saved.groups, message: null },
+      home: saved.home
+        ? {
+            ...emptyHome(),
+            status: 'loading',
+            data: saved.home.value.buckets,
+            byGroup: saved.home.value.byGroup,
+            refreshedAt: saved.home.refreshedAt,
+          }
+        : emptyHome(),
+      drafts: saved.drafts,
+    });
   };
 
   const restoreOffline = async (owner: number) => {
@@ -1365,50 +1400,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
     }
   };
-  /**
-   * Home's Expense drafts in this account's listed Groups, read from this device whenever Home
-   * loads. A draft with a submission or change pending may already be recorded, so it's first.
-   */
-  const listDrafts = async (lease = accountStorage()) => {
+  /** Home's Expense drafts (`draftSummaries`), read from this device whenever Home loads. */
+  const listDrafts = async () => {
+    const lease = accountStorage();
     const storage = dependencies.expenseDrafts;
     if (!lease || !storage?.list) return;
     const owner = generation;
     try {
       const records = await lease.write(() => storage.list!(lease.accountId));
       if (!current(owner)) return;
-      const groups = snapshot.groups.data;
-      const position = (groupId: string) => groups.findIndex((group) => group.id === groupId);
-      const drafts = records.flatMap(({ groupId, value }) => {
-        const group = groups.find((item) => item.id === groupId);
-        if (!group) return [];
-        try {
-          const { draft, attempt, mutation } = parseStoredExpenseDraft(
-            value,
-            lease.accountId,
-            groupId,
-          );
-          return [
-            {
-              groupId,
-              groupName: group.name,
-              expenseId: draft.original?._id ?? null,
-              description: draft.description,
-              amount: draft.amount,
-              currency: draft.currency,
-              unconfirmed: attempt !== null || mutation !== null,
-            },
-          ];
-        } catch {
-          // An unreadable draft is left to its Group's form, which explains it.
-          return [];
-        }
+      publish({
+        ...snapshot,
+        drafts: draftSummaries(records, lease.accountId, snapshot.groups.data),
       });
-      drafts.sort(
-        (a, b) =>
-          Number(b.unconfirmed) - Number(a.unconfirmed) ||
-          position(a.groupId) - position(b.groupId),
-      );
-      publish({ ...snapshot, drafts });
     } catch {
       // Home keeps the drafts it lists; each one is still in its Group.
     }
@@ -1434,6 +1438,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return;
       }
       if (cleanupRequired) await clearSaved(owner);
+      // Any pending sign-out cleanup has finished, so this device's saved Home can be read,
+      // alongside the session cookie and before anything is sent.
+      const deviceHome = readSavedHome();
       await loadPending();
       assertCurrent(owner);
       const saved = await store(owner, () => dependencies.credentials.load());
@@ -1447,7 +1454,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return;
       }
       cookie = saved;
-      await showSavedHome(owner);
+      showSavedHome(owner, await deviceHome);
       await verifyAndLoad(owner);
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;

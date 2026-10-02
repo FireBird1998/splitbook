@@ -5,7 +5,6 @@ import { canRecordSettlement } from '@splitbook/shared/settlement-authorization'
 import type { PendingPayment } from '../data/settlement';
 import type { GroupCurrencyBalance, GroupFinancialState, MobileGroup } from '../data/types';
 import {
-  Badge,
   Banner,
   Card,
   CompactAvatar,
@@ -17,10 +16,9 @@ import {
   SectionHeader,
   Skeleton,
 } from './compact';
-import { RetainedNotice } from './financial-views';
+import { Freshness, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
-import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
 
 export const recordNeedsConnection = 'Recording a payment needs a connection.';
@@ -126,12 +124,15 @@ function MemberBalanceCard({
   bucket,
   currentUserId,
   refreshedAt,
+  refreshing,
   offline,
   monthLens,
 }: {
   bucket: GroupCurrencyBalance;
   currentUserId: string;
   refreshedAt: number | null;
+  /** Read again while they stay on screen. */
+  refreshing: boolean;
   /** The figures come from this device: "Saved", not "Updated". */
   offline: boolean;
   monthLens: boolean;
@@ -146,13 +147,12 @@ function MemberBalanceCard({
           <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
             All-time balance · {bucket.currency}
           </CompactText>
-          {refreshedAt === null ? null : offline ? (
-            <Badge label={`Saved ${refreshedLabel(refreshedAt)}`} />
-          ) : (
-            <CompactText variant="caption" tone="muted">
-              Updated {refreshedLabel(refreshedAt)}
-            </CompactText>
-          )}
+          <Freshness
+            refreshedAt={refreshedAt}
+            refreshing={refreshing}
+            offline={offline}
+            tone="muted"
+          />
         </View>
         {label ? (
           <View
@@ -371,6 +371,7 @@ export function GroupBalancesView({
   state,
   pending,
   offline,
+  refreshing = false,
   silent = false,
   onRecord,
   onCheckPayment,
@@ -382,6 +383,8 @@ export function GroupBalancesView({
   /** This Group's unconfirmed payment, if one is stored on the device. */
   pending: PendingPayment | null;
   offline: boolean;
+  /** Shown Balances are read again: their freshness says so. */
+  refreshing?: boolean;
   silent?: boolean;
   onRecord: (paidBy: string, paidTo: string, currency: string) => void;
   onCheckPayment: () => void;
@@ -462,6 +465,8 @@ export function GroupBalancesView({
             bucket={bucket}
             currentUserId={currentUserId}
             refreshedAt={balances.refreshedAt}
+            // Unverified Balances already say they're updating.
+            refreshing={refreshing && !balances.stale}
             offline={offline}
             monthLens={group.category === 'home'}
           />

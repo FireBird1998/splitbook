@@ -320,11 +320,11 @@ async function start(phone: ReturnType<typeof device>) {
   const root = () => screen!.root;
   const hosts = (match: (props: Record<string, unknown>) => boolean) =>
     root().findAll((node) => typeof node.type === 'string' && match(node.props));
-  const text = () =>
-    root()
-      .findAll((node) => (node.type as unknown) === 'Text')
-      .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
-      .join('');
+  const strings = (nodes: ReactTestInstance[]) =>
+    nodes.flatMap((node) => node.children.filter((child) => typeof child === 'string')).join('');
+  const texts = (scope: ReactTestInstance) =>
+    scope.findAll((node) => (node.type as unknown) === 'Text');
+  const text = () => strings(texts(root()));
   const button = (label: string) => {
     const found = hosts(
       (p) =>
@@ -334,6 +334,14 @@ async function start(phone: ReturnType<typeof device>) {
   };
   return {
     text,
+    /** The visible destination's own content, below the top bar; and everything else. */
+    content: () => {
+      const inside = texts(root().findAll((node) => (node.type as unknown) === 'ScrollView')[0]);
+      return {
+        inside: strings(inside),
+        outside: strings(texts(root()).filter((node) => !inside.includes(node))),
+      };
+    },
     hosts,
     button,
     press: (label: string) => settle(Promise.resolve(button(label)!.props.onPress())),
@@ -441,6 +449,34 @@ describe('first load and refresh', () => {
     activity.release();
     expenses.release();
     await settle();
+  });
+
+  it('keeps the top bar whole while refreshing, saying so in each destination’s own slot', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press('Open Maple House, Household · 2 members');
+    const refresh = async (path: string, destination: string) => {
+      if (destination !== 'Expenses') await app.press(destination);
+      const read = phone.hold(path);
+      await app.press('Group options');
+      app.tap('Refresh, Check for the latest changes');
+      await read.reached;
+      await settle();
+      expect(app.headers()[0]).toBe('Maple House');
+      expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Refreshing']);
+      const { inside, outside } = app.content();
+      expect(inside).toMatch(/Saved .+ · refreshing/);
+      expect(outside).not.toContain('refreshing');
+      read.release();
+      await settle();
+      expect(app.progress()).toHaveLength(0);
+      expect(app.text()).not.toContain('· refreshing');
+    };
+    await refresh(`/api/groups/${maple}`, 'Expenses');
+    await refresh(`/api/groups/${maple}`, 'Balances');
+    await refresh(`/api/groups/${maple}/activity?`, 'Activity');
   });
 
   it('keeps Invite available while the Group refreshes', async () => {

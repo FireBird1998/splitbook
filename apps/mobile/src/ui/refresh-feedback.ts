@@ -4,15 +4,21 @@ import type { LoadStatus, MobileSnapshot } from '../data/types';
 export interface RefreshFeedback {
   /** The native pull indicator: only while a pull that started on this view runs. */
   pull: boolean;
-  /** One quiet status line while visible content is re-read or retried. */
+  /**
+   * Visible content is re-read or retried: Home's top bar says so, and in a Group each
+   * destination's own freshness slot reads "Saved hh:mm · refreshing".
+   */
   quiet: boolean;
-  /** When the oldest figures being re-read on screen were verified, shown with the quiet status. */
+  /** When the oldest figures being re-read on Home were verified, shown with its status. */
   savedAt: number | null;
   /** An automatic refresh of this view is running: nothing says so, not even an updating label. */
   silent: boolean;
   /** Cold start: the saved Home shows while the session is checked. */
   checking: boolean;
-  /** A first load of this view with nothing to keep on screen: one progress bar, so labelled. */
+  /**
+   * The one progress bar under the top bar, so labelled: a first load with nothing to keep on
+   * screen, or a Group's quiet refresh, which leaves its top bar intact.
+   */
   progress: string | null;
 }
 
@@ -105,13 +111,14 @@ export function refreshFeedback(state: MobileSnapshot): RefreshFeedback {
           ];
   const active = refreshing.filter((item) => item.active);
   const times = active.map((item) => item.time).filter((time): time is number => time !== null);
+  const quiet = active.length > 0 && !checking && !pull && !silent;
   return {
     pull,
-    quiet: active.length > 0 && !checking && !pull && !silent,
+    quiet,
     savedAt: checking ? home.refreshedAt : times.length ? Math.min(...times) : null,
     silent,
     checking,
-    progress,
+    progress: progress ?? (group && quiet ? 'Refreshing' : null),
   };
 }
 

@@ -27,9 +27,7 @@ interface GroupShellProps {
   destination: GroupDestination;
   onDestination: (destination: GroupDestination) => void;
   back: { label: string; onPress: () => void };
-  /** Quiet refresh status beside the title. */
-  status?: ReactNode;
-  /** A first load's label: one progress bar under the top bar. */
+  /** One progress bar under the top bar, so labelled: a first load, or a refresh. */
   progress?: string | null;
   invite: { onPress: () => void; disabled: boolean; offline: boolean };
   /** Opens Members and Group details. */
@@ -56,7 +54,6 @@ export function GroupShell({
   destination,
   onDestination,
   back,
-  status,
   progress,
   invite,
   onMembers,
@@ -76,7 +73,6 @@ export function GroupShell({
         title={group?.name ?? 'Group'}
         subtitle={group ? groupSubtitle(group) : undefined}
         leading={{ kind: 'back', ...back }}
-        status={status}
         actions={
           group ? (
             <>

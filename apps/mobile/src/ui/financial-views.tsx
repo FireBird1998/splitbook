@@ -1,5 +1,6 @@
 import { View } from 'react-native';
 import type { LoadStatus } from '../data/types';
+import { Badge, CompactText, type TextTone } from './compact';
 import { Button, Copy, Icon } from './primitives';
 import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
@@ -30,6 +31,31 @@ export function RefreshStatus({
           : `Saved ${refreshedLabel(savedAt)} · ${checking ? 'checking' : 'refreshing'}`}
       </Copy>
     </View>
+  );
+}
+
+/**
+ * A view's own freshness slot: "Updated hh:mm", "Saved hh:mm · refreshing" while it is read
+ * again, or a "Saved hh:mm" badge when its figures come from this device offline.
+ */
+export function Freshness({
+  refreshedAt,
+  refreshing = false,
+  offline = false,
+  tone = 'secondary',
+}: {
+  refreshedAt: number | null;
+  refreshing?: boolean;
+  offline?: boolean;
+  tone?: TextTone;
+}) {
+  if (refreshedAt === null) return null;
+  const time = refreshedLabel(refreshedAt);
+  if (offline) return <Badge label={`Saved ${time}`} />;
+  return (
+    <CompactText variant="caption" tone={tone}>
+      {refreshing ? `Saved ${time} · refreshing` : `Updated ${time}`}
+    </CompactText>
   );
 }
 
