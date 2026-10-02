@@ -2,6 +2,9 @@ import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
   currentMonthKey,
   getLocalMonthIsoRange,
+  gregorianLocale,
+  localeFirstWeekday,
+  monthGrid,
   shiftMonthKey,
   toInclusiveDateToBound,
 } from './date';
@@ -61,4 +64,192 @@ describe('local calendar Months', () => {
       expect(() => getLocalMonthIsoRange(month)).toThrow('Choose a valid Month.');
     },
   );
+});
+
+describe('monthGrid', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
+  type Grid = ReturnType<typeof monthGrid>;
+  const days = (grid: Grid) => grid.weeks.map((week) => week.map((cell) => cell?.day ?? null));
+  const flagged = (grid: Grid, flag: 'today' | 'selected') =>
+    grid.weeks.flat().flatMap((cell) => (cell?.[flag] ? [cell.date] : []));
+
+  it('lays out a Month in weeks from a Sunday start', () => {
+    const grid = monthGrid('2026-09', { firstWeekday: 0, today: '2026-09-30' });
+    expect(grid.weekdays).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(days(grid)).toEqual([
+      [null, null, 1, 2, 3, 4, 5],
+      [6, 7, 8, 9, 10, 11, 12],
+      [13, 14, 15, 16, 17, 18, 19],
+      [20, 21, 22, 23, 24, 25, 26],
+      [27, 28, 29, 30, null, null, null],
+    ]);
+    expect(grid.weeks[4][3]).toEqual({
+      date: '2026-09-30',
+      day: 30,
+      weekday: 3,
+      today: true,
+      selected: false,
+    });
+  });
+
+  it.each([
+    [1, [1, 2, 3, 4, 5, 6, 0], [null, 1, 2, 3, 4, 5, 6]],
+    [6, [6, 0, 1, 2, 3, 4, 5], [null, null, null, 1, 2, 3, 4]],
+    [5, [5, 6, 0, 1, 2, 3, 4], [null, null, null, null, 1, 2, 3]],
+    [2, [2, 3, 4, 5, 6, 0, 1], [1, 2, 3, 4, 5, 6, 7]],
+  ] as const)('starts weeks on weekday %i', (firstWeekday, weekdays, firstWeek) => {
+    const grid = monthGrid('2026-09', { firstWeekday, today: '2026-09-30' });
+    expect(grid.weekdays).toEqual(weekdays);
+    expect(days(grid)[0]).toEqual(firstWeek);
+    for (const week of grid.weeks)
+      week.forEach((cell, column) => {
+        if (cell) expect(cell.weekday).toBe(weekdays[column]);
+      });
+  });
+
+  it.each([
+    ['2026-01', 31],
+    ['2026-04', 30],
+    ['2026-02', 28],
+    ['2024-02', 29],
+    ['2000-02', 29],
+    ['2100-02', 28],
+    ['2026-12', 31],
+  ])('gives %s its %i days and pads each week to seven', (month, length) => {
+    const grid = monthGrid(month, { firstWeekday: 1, today: '2026-09-30' });
+    const cells = grid.weeks.flat().filter((cell) => cell !== null);
+    expect(cells.map((cell) => cell.day)).toEqual(Array.from({ length }, (_, day) => day + 1));
+    expect(cells.at(-1)!.date).toBe(`${month}-${length}`);
+    for (const week of grid.weeks) expect(week).toHaveLength(7);
+  });
+
+  it('uses four to six weeks, as the Month needs', () => {
+    const weeks = (month: string) =>
+      monthGrid(month, { firstWeekday: 0, today: '2026-09-30' }).weeks.length;
+    expect(weeks('2026-02')).toBe(4);
+    expect(weeks('2026-09')).toBe(5);
+    expect(weeks('2026-08')).toBe(6);
+  });
+
+  it('flags only today and the selection, and neither outside their Month', () => {
+    const options = { firstWeekday: 1, today: '2026-09-30', selected: '2026-09-15' } as const;
+    const september = monthGrid('2026-09', options);
+    expect(flagged(september, 'today')).toEqual(['2026-09-30']);
+    expect(flagged(september, 'selected')).toEqual(['2026-09-15']);
+    const october = monthGrid('2026-10', options);
+    expect(flagged(october, 'today')).toEqual([]);
+    expect(flagged(october, 'selected')).toEqual([]);
+    const both = monthGrid('2026-09', { ...options, selected: '2026-09-30' });
+    expect(both.weeks.flat().filter((cell) => cell?.today && cell.selected)).toHaveLength(1);
+  });
+
+  it.each(['2026-02-30', '2026-02-29', '2026-2-3', '', undefined])(
+    'selects nothing for %j',
+    (selected) => {
+      const grid = monthGrid('2026-02', { firstWeekday: 1, today: '2026-02-01', selected });
+      expect(flagged(grid, 'selected')).toEqual([]);
+    },
+  );
+
+  it.each(['Pacific/Kiritimati', 'America/Los_Angeles', 'Asia/Kolkata', 'UTC'])(
+    'gives the same days in %s',
+    (timezone) => {
+      vi.stubEnv('TZ', timezone);
+      const grid = monthGrid('2026-03', { firstWeekday: 0, today: '2026-03-08' });
+      expect(days(grid)[0]).toEqual([1, 2, 3, 4, 5, 6, 7]);
+      expect(grid.weeks[1][0]).toMatchObject({ date: '2026-03-08', weekday: 0, today: true });
+    },
+  );
+
+  it('names the neighbouring Months within the years a Month key can hold', () => {
+    const options = { firstWeekday: 1, today: '2026-09-30' } as const;
+    expect(monthGrid('2026-01', options)).toMatchObject({ previous: '2025-12', next: '2026-02' });
+    expect(monthGrid('2026-12', options)).toMatchObject({ previous: '2026-11', next: '2027-01' });
+    expect(monthGrid('1000-01', options)).toMatchObject({ previous: null, next: '1000-02' });
+    expect(monthGrid('9999-12', options)).toMatchObject({ previous: '9999-11', next: null });
+  });
+
+  it.each(['2026-13', '0999-12', '2026-09-01', ''])('rejects the Month key %j', (month) => {
+    expect(() => monthGrid(month, { firstWeekday: 1, today: '2026-09-30' })).toThrow(
+      'Choose a valid Month.',
+    );
+  });
+});
+
+describe('localeFirstWeekday', () => {
+  it.each([
+    ['en-IN', 0],
+    ['hi-IN', 0],
+    ['en-US', 0],
+    ['ja-JP', 0],
+    ['pt-BR', 0],
+    ['zh-Hant-TW', 0],
+    ['en_US', 0],
+    ['en-GB', 1],
+    ['de-DE', 1],
+    ['en-AU', 1],
+    ['zh-CN', 1],
+    ['ar-AE', 1],
+    ['ar-EG', 6],
+    ['fa-IR', 6],
+    ['dv-MV', 5],
+    ['en', 1],
+    ['es-419', 1],
+    ['', 1],
+  ] as const)('starts %j weeks on weekday %i by region', (locale, weekday) => {
+    expect(localeFirstWeekday(locale)).toBe(weekday);
+  });
+
+  it.each([
+    ['en-GB-u-fw-sun', 0],
+    ['en-IN-u-ca-gregory-fw-mon', 1],
+    ['en-US-u-fw-sat-nu-latn', 6],
+    ['en-US-u-fw-xyz', 0],
+  ] as const)('prefers the fw preference in %j', (locale, weekday) => {
+    expect(localeFirstWeekday(locale)).toBe(weekday);
+  });
+});
+
+describe('gregorianLocale', () => {
+  it.each([
+    ['fa-IR', 'fa-IR-u-ca-gregory'],
+    ['th-TH', 'th-TH-u-ca-gregory'],
+    ['en_IN', 'en-IN-u-ca-gregory'],
+    ['zh-Hant-TW', 'zh-Hant-TW-u-ca-gregory'],
+    ['fa-IR-u-ca-persian', 'fa-IR-u-ca-gregory'],
+    ['ar-SA-u-ca-islamic-umalqura-nu-latn', 'ar-SA-u-ca-gregory-nu-latn'],
+    ['en-US-u-fw-mon', 'en-US-u-ca-gregory-fw-mon'],
+    ['en-US-u-attr-nu-latn', 'en-US-u-attr-ca-gregory-nu-latn'],
+    ['en-US-u-nu-latn-x-private', 'en-US-u-ca-gregory-nu-latn-x-private'],
+    ['en-US-x-private', 'en-US-u-ca-gregory-x-private'],
+  ])('puts %s on the Gregorian calendar as %s', (locale, gregorian) => {
+    expect(gregorianLocale(locale)).toBe(gregorian);
+  });
+
+  it.each([
+    'fa-IR',
+    'th-TH',
+    'ar-SA-u-ca-islamic-umalqura',
+    'en-GB-u-fw-sun',
+    'ja-JP-u-ca-japanese',
+  ])('keeps %s’s language and first weekday, on the Gregorian calendar', (locale) => {
+    const format = new Intl.DateTimeFormat(gregorianLocale(locale), {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    expect(format.resolvedOptions().calendar).toBe('gregory');
+    expect(format.resolvedOptions().locale.split('-')[0]).toBe(locale.split('-')[0]);
+    expect(localeFirstWeekday(gregorianLocale(locale))).toBe(localeFirstWeekday(locale));
+  });
+
+  it('dates fa-IR in Gregorian months and years', () => {
+    const format = (locale: string) =>
+      new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(
+        new Date(2026, 8, 30),
+      );
+    expect(format('fa-IR')).toBe('۱۴۰۵ مهر');
+    expect(format(gregorianLocale('fa-IR'))).toBe('سپتامبر ۲۰۲۶');
+  });
 });

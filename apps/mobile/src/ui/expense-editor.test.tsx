@@ -1,9 +1,10 @@
 import { useSyncExternalStore, type ReactElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
 import { ExpenseEditor } from './expense-editor';
+import { expenseDateLabel } from './expense-form';
 
 // Host stand-ins: the editor renders through these names, so the tree keeps the
 // props (labels, hints, values, handlers) that Android receives.
@@ -342,8 +343,11 @@ describe('rendered Expense corrections', () => {
   });
 
   it('shows every correction beside its own control and focuses the first one', async () => {
-    const ui = await render((controller) => controller.openExpense(groupId));
-    await ui.type('Date, required', '2026-02-30');
+    // A draft stored before the calendar can still hold a date that doesn't exist.
+    const ui = await render(async (controller) => {
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ date: '2026-02-30' });
+    });
     await ui.press('Save expense');
 
     expect(ui.writes).toEqual([]);
@@ -353,9 +357,12 @@ describe('rendered Expense corrections', () => {
     expect(corrections(fieldOf(ui.input('Description, required')))).toEqual([
       'Add a description, such as Groceries.',
     ]);
-    expect(corrections(fieldOf(ui.input('Date, required')))).toEqual([
+    expect(ui.tile('Date').props.accessibilityLabel).toBe(
+      'Date: 2026-02-30. 2026-02-30 isn’t a real date. Check the day and month.',
+    );
+    expect(corrections(ui.root())).toContain(
       '2026-02-30 isn’t a real date. Check the day and month.',
-    ]);
+    );
     expect(ui.tile('Tag').props.accessibilityLabel).toBe(
       'Tag, required: Choose a Tag. Choose a Tag for this Expense.',
     );
@@ -364,7 +371,6 @@ describe('rendered Expense corrections', () => {
     for (const field of ['Amount', 'Description', 'Date', 'Tag'])
       expect(ui.pressable(`Go to ${field}`)).toBeTruthy();
     expect(ui.focusCount('Amount, required')).toBe(1);
-    expect(ui.focusCount('Date, required')).toBe(0);
   });
 
   it('waits until a field is left before showing its correction', async () => {
@@ -693,6 +699,56 @@ describe('compact Expense form', () => {
     await ui.press('Tag: Groceries');
     expect(ui.tile('Tag').props.accessibilityLabel).toBe('Tag, required: Groceries');
     expect(openSheet(ui.root(), 'Only this Group’s active Tags are listed.')).toBe(false);
+  });
+
+  it('picks the date from a calendar, and closing the sheet keeps it on the Date tile', async () => {
+    const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+    const locale = vi
+      .spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions')
+      .mockImplementation(function (this: Intl.DateTimeFormat) {
+        return { ...resolvedOptions.call(this), locale: 'en-IN' };
+      });
+    onTestFinished(() => locale.mockRestore());
+    const ui = await render((controller) => controller.openExpense(groupId));
+    await ui.press(ui.tile('Date').props.accessibilityLabel);
+    expect(openSheet(ui.root(), 'September 2026')).toBe(true);
+    expect(() => ui.input('Date, required')).toThrow();
+    expect(ui.pressable('Monday, 28 September 2026').props.accessibilityState.selected).toBe(true);
+
+    await ui.press('Tuesday, 15 September 2026');
+    expect(openSheet(ui.root(), 'Tuesday, 15 September 2026')).toBe(true);
+    // Back, like swiping down or tapping outside, behaves like Done.
+    const sheet = ui.root().find((node) => isHost(node, 'Modal') && node.props.visible === true);
+    await act(async () => sheet.props.onRequestClose());
+    expect(openSheet(ui.root(), 'September 2026')).toBe(false);
+    const label = expenseDateLabel('2026-09-15');
+    expect(ui.tile('Date').props.accessibilityLabel).toBe(`Date: ${label.spoken}`);
+    expect(text(ui.tile('Date'))).toBe(`Date${label.shown}`);
+    expect(ui.controller.getSnapshot().expense.draft?.date).toBe('2026-09-15');
+    expect(ui.writes).toEqual([]);
+  });
+
+  it('keeps the calendar and the Date tile on Gregorian dates in a Persian-calendar locale', async () => {
+    const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+    const locale = vi
+      .spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions')
+      .mockImplementation(function (this: Intl.DateTimeFormat) {
+        return { ...resolvedOptions.call(this), locale: 'fa-IR' };
+      });
+    onTestFinished(() => locale.mockRestore());
+    const ui = await render((controller) => controller.openExpense(groupId));
+    expect(ui.tile('Date').props.accessibilityLabel).toContain('۲۸ سپتامبر ۲۰۲۶');
+    await ui.press(ui.tile('Date').props.accessibilityLabel);
+    expect(openSheet(ui.root(), 'سپتامبر ۲۰۲۶')).toBe(true);
+    expect(ui.pressable('دوشنبه ۲۸ سپتامبر ۲۰۲۶').props.accessibilityState.selected).toBe(true);
+
+    await ui.press('سه‌شنبه ۱۵ سپتامبر ۲۰۲۶');
+    expect(openSheet(ui.root(), 'سه‌شنبه ۱۵ سپتامبر ۲۰۲۶')).toBe(true);
+    const sheet = ui.root().find((node) => isHost(node, 'Modal') && node.props.visible === true);
+    await act(async () => sheet.props.onRequestClose());
+    expect(ui.controller.getSnapshot().expense.draft?.date).toBe('2026-09-15');
+    expect(ui.tile('Date').props.accessibilityLabel).toBe('Date: سه‌شنبه ۱۵ سپتامبر ۲۰۲۶');
+    expect(text(ui.tile('Date'))).toContain('۱۵ سپتامبر');
   });
 
   it('shows who owes what as soon as the amount is valid, and names it on Save', async () => {

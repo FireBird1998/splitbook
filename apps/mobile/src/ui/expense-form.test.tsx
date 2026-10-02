@@ -1,5 +1,5 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { expenseMoney, type ExpenseDraft } from '../data/expense-draft';
 import { ThemeContext } from './theme';
@@ -108,13 +108,51 @@ describe('Who owes what', () => {
 
 describe('Expense date label', () => {
   const now = new Date(2026, 8, 30, 12).getTime();
-  it('says Today and Yesterday, and dates other days', () => {
-    expect(expenseDateLabel('2026-09-30', now)).toMatch(/^Today, /);
-    expect(expenseDateLabel('2026-09-29', now)).toMatch(/^Yesterday, /);
-    expect(expenseDateLabel('2026-09-24', now)).toMatch(/24/);
-    expect(expenseDateLabel('2026-02-30', now)).toBe('2026-02-30');
-    expect(expenseDateLabel('', now)).toBe('Choose a date');
+  it('stays on the Gregorian calendar in a Persian-calendar locale', () => {
+    const resolvedOptions = Intl.DateTimeFormat.prototype.resolvedOptions;
+    const locale = vi
+      .spyOn(Intl.DateTimeFormat.prototype, 'resolvedOptions')
+      .mockImplementation(function (this: Intl.DateTimeFormat) {
+        return { ...resolvedOptions.call(this), locale: 'fa-IR' };
+      });
+    onTestFinished(() => locale.mockRestore());
+    expect(expenseDateLabel('2026-09-30', now)).toEqual({
+      shown: 'Today, ۳۰ سپتامبر',
+      spoken: 'Today, چهارشنبه ۳۰ سپتامبر ۲۰۲۶',
+    });
+    expect(expenseDateLabel('2026-09-29', now)).toEqual({
+      shown: 'سه‌شنبه ۲۹ سپتامبر',
+      spoken: 'Yesterday, سه‌شنبه ۲۹ سپتامبر ۲۰۲۶',
+    });
+    expect(expenseDateLabel('2025-09-24', now)).toEqual({
+      shown: '۲۴ سپتامبر ۲۰۲۵',
+      spoken: 'چهارشنبه ۲۴ سپتامبر ۲۰۲۵',
+    });
   });
+
+  it('says Today and Yesterday, and dates other days', () => {
+    expect(expenseDateLabel('2026-09-30', now).shown).toMatch(/^Today, /);
+    expect(expenseDateLabel('2026-09-30', now).spoken).toMatch(/^Today, .*2026/);
+    expect(expenseDateLabel('2026-09-29', now).spoken).toMatch(/^Yesterday, .*29.*2026/);
+    expect(expenseDateLabel('2026-09-24', now).shown).toMatch(/24/);
+    expect(expenseDateLabel('2025-09-24', now).shown).toMatch(/2025/);
+    expect(expenseDateLabel('2026-02-30', now)).toEqual({
+      shown: '2026-02-30',
+      spoken: '2026-02-30',
+    });
+    expect(expenseDateLabel('', now)).toEqual({ shown: 'Choose a date', spoken: 'Choose a date' });
+  });
+
+  // A half-width tile on a 360dp phone fits about 14 characters ("Today, 30 Sept").
+  it.each(['2026-09-30', '2026-09-29', '2026-09-24', '2026-01-31', '2025-12-31', '2027-05-17'])(
+    'keeps %s short enough for a half-width tile and speaks it in full',
+    (date) => {
+      const { shown, spoken } = expenseDateLabel(date, now);
+      expect(shown.length).toBeLessThanOrEqual(14);
+      expect(shown).not.toContain('Yesterday');
+      expect(spoken).toMatch(/\d{4}$/);
+    },
+  );
 });
 
 describe('Amount focus ring', () => {

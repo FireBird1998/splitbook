@@ -127,3 +127,117 @@ export function getLocalMonthIsoRange(month: string): { dateFrom: string; dateTo
     dateTo: new Date(next.getTime() - 1).toISOString(),
   };
 }
+
+/** 0 is Sunday and 6 is Saturday, as `Date.prototype.getDay` counts them. */
+export type Weekday = 0 | 1 | 2 | 3 | 4 | 5 | 6;
+
+const weekdayCodes = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+// CLDR 48 week data: the regions whose week doesn't start on Monday, the world default.
+const regionFirstDays = new Map(
+  (
+    [
+      [
+        0,
+        'AG AS BD BR BS BT BW BZ CA CO DM DO ET GT GU HK HN ID IL IN IS JM JP KE KH KR LA MH MM MO MT MX MZ NI NP PA PE PH PK PR PT PY SA SG SV TH TT TW UM US VE VI WS YE ZA ZW',
+      ],
+      [5, 'MV'],
+      [6, 'AF BH DJ DZ EG IQ IR JO KW LY OM QA SD SY'],
+    ] as const
+  ).flatMap(([weekday, regions]) => regions.split(' ').map((region) => [region, weekday] as const)),
+);
+
+/**
+ * The first day of the week for a BCP 47 locale such as `en-IN`: its `fw` preference when it
+ * has one, otherwise its region's, otherwise Monday. Hermes has no `Intl.Locale` week info.
+ */
+export function localeFirstWeekday(locale: string): Weekday {
+  const preference = /-u-(?:[a-z\d]{2,8}-)*?fw-([a-z]{3})(?:-|$)/i.exec(locale)?.[1];
+  const preferred = weekdayCodes.indexOf(preference?.toLowerCase() ?? '');
+  if (preferred >= 0) return preferred as Weekday;
+  const region = /^[a-z]{2,3}(?:[-_][a-z]{4})?[-_]([a-z]{2})(?:[-_]|$)/i.exec(locale)?.[1];
+  return regionFirstDays.get(region?.toUpperCase() ?? '') ?? 1;
+}
+
+/**
+ * A BCP 47 locale on the Gregorian calendar, which Splitbook's dates use: `fa-IR` (Persian by
+ * default) becomes `fa-IR-u-ca-gregory`. Its language, region and other preferences stay.
+ */
+export function gregorianLocale(locale: string): string {
+  const subtags = locale.split(/[-_]/);
+  const unicode = subtags.findIndex((subtag) => /^u$/i.test(subtag));
+  if (unicode < 0) {
+    const privateUse = subtags.findIndex((subtag) => /^x$/i.test(subtag));
+    subtags.splice(privateUse < 0 ? subtags.length : privateUse, 0, 'u', 'ca', 'gregory');
+    return subtags.join('-');
+  }
+  let end = unicode + 1;
+  while (end < subtags.length && subtags[end].length > 1) end++;
+  // Inside -u-, keys have two characters and their values three to eight, so `ca` and its
+  // values are the calendar. Any attributes come before the first key.
+  const extension = subtags
+    .slice(unicode + 1, end)
+    .map((subtag) => `-${subtag}`)
+    .join('')
+    .replace(/-ca(?:-[a-z\d]{3,8})+/i, '')
+    .replace(/^((?:-[a-z\d]{3,8})*)/i, '$1-ca-gregory');
+  return [...subtags.slice(0, unicode + 1), extension.slice(1), ...subtags.slice(end)].join('-');
+}
+
+export interface CalendarDay {
+  /** YYYY-MM-DD */
+  date: string;
+  day: number;
+  weekday: Weekday;
+  today: boolean;
+  selected: boolean;
+}
+
+export interface CalendarMonth {
+  month: string;
+  /** The column order, starting with the first weekday. */
+  weekdays: Weekday[];
+  /** Rows of seven; cells before the 1st and after the last day are null. */
+  weeks: (CalendarDay | null)[][];
+  /** The neighbouring Months, or null beyond the years a Month key can hold. */
+  previous: string | null;
+  next: string | null;
+}
+
+/**
+ * Lay out a calendar Month (`YYYY-MM`) in weeks starting on `firstWeekday`. Days are compared
+ * as YYYY-MM-DD strings, so no timezone can shift today or the selection onto another day.
+ */
+export function monthGrid(
+  month: string,
+  { firstWeekday, today, selected }: { firstWeekday: Weekday; today: string; selected?: string },
+): CalendarMonth {
+  const start = monthDate(month);
+  const year = start.getFullYear(),
+    index = start.getMonth();
+  const length = new Date(Date.UTC(year, index + 1, 0)).getUTCDate();
+  const first = new Date(Date.UTC(year, index, 1)).getUTCDay();
+  const cells: (CalendarDay | null)[] = Array((first - firstWeekday + 7) % 7).fill(null);
+  for (let day = 1; day <= length; day++) {
+    const date = `${month}-${String(day).padStart(2, '0')}`;
+    cells.push({
+      date,
+      day,
+      weekday: ((first + day - 1) % 7) as Weekday,
+      today: date === today,
+      selected: date === selected,
+    });
+  }
+  while (cells.length % 7) cells.push(null);
+  const neighbour = (offset: number) => {
+    const key = shiftMonthKey(month, offset);
+    return /^[1-9]\d{3}-/.test(key) ? key : null;
+  };
+  return {
+    month,
+    weekdays: Array.from({ length: 7 }, (_, column) => ((firstWeekday + column) % 7) as Weekday),
+    weeks: Array.from({ length: cells.length / 7 }, (_, row) => cells.slice(row * 7, row * 7 + 7)),
+    previous: neighbour(-1),
+    next: neighbour(1),
+  };
+}

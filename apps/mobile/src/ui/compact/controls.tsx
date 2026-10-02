@@ -114,6 +114,7 @@ export function SelectorTile({
   icon,
   label,
   value,
+  spokenValue,
   onPress,
   required = false,
   error,
@@ -122,6 +123,8 @@ export function SelectorTile({
   icon: IconName;
   label: string;
   value: string;
+  /** The full value for screen readers when `value` is shortened to fit, e.g. a date. */
+  spokenValue?: string;
   onPress?: () => void;
   required?: boolean;
   error?: string;
@@ -129,7 +132,7 @@ export function SelectorTile({
 }) {
   const theme = useTheme();
   const spoken = [
-    `${label}${required ? ', required' : ''}: ${value}`,
+    `${label}${required ? ', required' : ''}: ${spokenValue ?? value}`,
     error,
     locked ? 'locked' : undefined,
   ]

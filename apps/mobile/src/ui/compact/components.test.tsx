@@ -160,6 +160,20 @@ describe('Selector tile', () => {
     expect(tile.props.accessibilityState).toEqual({ disabled: true });
     expect(tile.props.disabled).toBe(true);
   });
+
+  it('shows a shortened value but speaks it in full', () => {
+    const root = render(
+      <SelectorTile
+        icon="calendar-outline"
+        label="Date"
+        value="Thu 1 Oct"
+        spokenValue="Yesterday, Thursday, 1 October 2026"
+        onPress={vi.fn()}
+      />,
+    );
+    const tile = one(byRole(root, 'button', 'Date: Yesterday, Thursday, 1 October 2026'));
+    expect(text(tile)).toBe('Date Thu 1 Oct');
+  });
 });
 
 describe('Choice controls', () => {
