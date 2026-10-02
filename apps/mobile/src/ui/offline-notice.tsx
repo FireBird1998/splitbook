@@ -1,6 +1,6 @@
 import { View } from 'react-native';
 import type { MobileSnapshot } from '../data/types';
-import { Banner, CompactButton, CompactText } from './compact';
+import { Banner, Card, CompactButton, CompactText } from './compact';
 import { Icon } from './primitives';
 import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
@@ -37,33 +37,59 @@ export function OfflineNotice({
 
 /**
  * In place of a view this device has no saved copy of while offline: a compact message with
- * Try again. The rest of the screen, such as a Group's navigation, stays.
+ * Try again. The rest of the screen, such as a Group's navigation, stays. A `compact` one sits
+ * in a destination below saved content, starting at the left, so a floating action clears it;
+ * the full one stands alone, as for a Group never opened here.
  */
 export function NotAvailableOffline({
   message,
   onRetry,
+  compact = false,
 }: {
   message: string;
   onRetry: () => void;
+  compact?: boolean;
 }) {
   const theme = useTheme();
+  const icon = (
+    <View
+      style={{
+        width: compact ? 40 : 56,
+        height: compact ? 40 : 56,
+        borderRadius: compact ? 12 : 16,
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: theme.surfaceMuted,
+      }}
+    >
+      <Icon name="cloud-offline-outline" size={compact ? 20 : 26} />
+    </View>
+  );
+  if (compact)
+    return (
+      <Card padded>
+        <View accessibilityLiveRegion="polite" style={{ flexDirection: 'row', gap: 12 }}>
+          {icon}
+          <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+            <CompactText variant="heading" accessibilityRole="header">
+              Not available offline
+            </CompactText>
+            <CompactText variant="small" tone="secondary">
+              {message}
+            </CompactText>
+            <View style={{ marginTop: 6 }}>
+              <CompactButton label="Try again" variant="tonal" dense onPress={onRetry} />
+            </View>
+          </View>
+        </View>
+      </Card>
+    );
   return (
     <View
       accessibilityLiveRegion="polite"
       style={{ alignItems: 'center', gap: 10, paddingHorizontal: 12, paddingVertical: 32 }}
     >
-      <View
-        style={{
-          width: 56,
-          height: 56,
-          borderRadius: 16,
-          alignItems: 'center',
-          justifyContent: 'center',
-          backgroundColor: theme.surfaceMuted,
-        }}
-      >
-        <Icon name="cloud-offline-outline" size={26} />
-      </View>
+      {icon}
       <CompactText variant="heading" accessibilityRole="header" style={{ textAlign: 'center' }}>
         Not available offline
       </CompactText>

@@ -445,6 +445,7 @@ export function GroupExpensesView({
       {!listed ? (
         expenses.status === 'error' && offline ? (
           <NotAvailableOffline
+            compact
             message={
               state.month
                 ? `${monthLabel(state.month)} hasn’t been opened on this phone yet. Connect to load it.`

@@ -659,6 +659,11 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     ? { label: 'Check save', icon: 'alert-circle-outline' as const }
     : { label: 'Resume draft', icon: 'pencil-outline' as const };
   const resumeDraft = () => void controller.resumeKeptDraft({ scrollY: scrollY.current });
+  // On Expenses, also while the Group is first read; not when it can't be.
+  const floating =
+    known && (group || state.detail.status === 'loading') && state.destination === 'expenses'
+      ? known
+      : null;
   const discardDraft = () =>
     Alert.alert(
       'Discard this expense draft?',
@@ -685,6 +690,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         onPress: () => void controller.back(),
       }}
       progress={feedback.progress}
+      floating={floating !== null}
       invite={{
         onPress: shareInvite,
         // Known is enough: a refresh in flight doesn't change who can be invited.
@@ -710,14 +716,11 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
       }}
       overlay={
         <>
-          {/* Also while the Group is first read; not when it can't be. */}
-          {known &&
-          (group || state.detail.status === 'loading') &&
-          state.destination === 'expenses' ? (
+          {floating ? (
             <FloatingAction
               label={kept ? keptAction.label : 'Add expense'}
               icon={kept ? keptAction.icon : 'add'}
-              onPress={kept ? resumeDraft : () => openExpense(known.id)}
+              onPress={kept ? resumeDraft : () => openExpense(floating.id)}
               // Above the snackbar while it shows.
               bottom={state.snackbar ? 156 : undefined}
             />
@@ -830,8 +833,6 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                 onResumeDraft={resumeDraft}
                 onDiscardDraft={discardDraft}
               />
-              {/* Room to scroll the last row above the floating button. */}
-              <View style={{ height: 56 }} />
             </>
           )}
         </>

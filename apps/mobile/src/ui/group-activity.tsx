@@ -176,6 +176,7 @@ function ActivityList({
       />
       {state.status === 'error' && offline && !state.events.length ? (
         <NotAvailableOffline
+          compact
           message="This Group’s activity hasn’t been opened on this phone yet. Connect to load it."
           onRetry={onRetry}
         />

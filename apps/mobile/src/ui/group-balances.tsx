@@ -407,6 +407,7 @@ export function GroupBalancesView({
         <View style={{ gap: 10 }}>
           {notice}
           <NotAvailableOffline
+            compact
             message="These balances haven’t been opened on this phone yet. Connect to load them."
             onRetry={onRefreshBalances}
           />

@@ -30,6 +30,7 @@ vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const { GroupShell } = await import('./group-shell');
+const { FloatingAction } = await import('./compact');
 const { GroupActivity } = await import('./group-activity');
 const { clockTime } = await import('./activity-format');
 
@@ -155,6 +156,25 @@ describe('Group shell', () => {
       one(byRole(offline.root, 'button', 'Invite people. Inviting needs a connection')).props
         .accessibilityState,
     ).toEqual({ disabled: true });
+  });
+
+  it('leaves room to scroll everything clear of a floating action', () => {
+    const fab = <FloatingAction label="Add expense" icon="add" onPress={vi.fn()} />;
+    // The destination's scroll view: the one with pull-to-refresh, not the options sheet's.
+    const room = (root: ReactTestInstance) =>
+      one(hosts(root, (p) => p.refreshControl !== undefined)).props.contentContainerStyle
+        .paddingBottom as number;
+    const { root } = shell({ overlay: fab, floating: true });
+    // The floating action covers this much of the content above the navigation.
+    const action = one(byRole(root, 'button', 'Add expense')).props.style({ pressed: false });
+    const navigation = one(byRole(root, 'tablist')).props.style.minHeight as number;
+    const covered = action.bottom - navigation + action.minHeight;
+    expect(room(root)).toBeGreaterThan(covered);
+    act(() => {
+      renderer?.unmount();
+    });
+    // Without one, the content keeps its ordinary bottom padding.
+    expect(room(shell().root)).toBeLessThan(covered);
   });
 
   it('opens Group options with Members and Group details and Refresh', () => {

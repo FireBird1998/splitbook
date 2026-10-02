@@ -210,6 +210,7 @@ export function HomeBalances({
   if (state.data === null && state.status === 'error' && offline)
     return (
       <NotAvailableOffline
+        compact
         message="Your balances haven’t been saved on this phone yet. Connect to load them."
         onRetry={onRefresh}
       />
@@ -472,6 +473,7 @@ export function HomeGroups({
       />
       {unsaved ? (
         <NotAvailableOffline
+          compact
           message="Your Groups haven’t been saved on this phone yet. Connect to load them."
           onRetry={onRetry}
         />

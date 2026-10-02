@@ -571,5 +571,30 @@ describe('offline', () => {
     expect(app.text().match(/You’re offline/g)).toHaveLength(1);
     expect(app.button('Try again')).not.toBeNull();
     expect(app.progress()).toHaveLength(0);
+    // Add expense stays, and the content leaves room to scroll the message clear of it.
+    const action = app.button('Add expense')!.props.style({ pressed: false });
+    const navigation = app.hosts((p) => p.accessibilityRole === 'tablist')[0].props.style;
+    const content = app.hosts((p) => p.refreshControl !== undefined)[0].props.contentContainerStyle;
+    expect(content.paddingBottom).toBeGreaterThan(
+      action.bottom - navigation.minHeight + action.minHeight,
+    );
+  });
+
+  it('says Activity never opened here isn’t available offline, with nothing floating over it', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const first = phone.controller();
+    await first.restore();
+    await first.openGroup(lisbon);
+    first.dispose();
+    phone.network.online = false;
+    const app = await start(phone);
+    await settle();
+    await app.press('Open Lisbon Offsite, Work · 2 members');
+    expect(app.text()).toContain('No expenses yet');
+    await app.press('Activity');
+    expect(app.text()).toContain('This Group’s activity hasn’t been opened on this phone yet.');
+    expect(app.button('Try again')).not.toBeNull();
+    expect(app.button('Add expense')).toBeNull();
   });
 });

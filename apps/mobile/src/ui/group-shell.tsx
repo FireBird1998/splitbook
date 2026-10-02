@@ -15,6 +15,9 @@ import {
 } from './compact';
 import { useTheme } from './theme';
 
+/** Under the floating action: it sits 16 above the navigation and is 56 tall, then a gap. */
+export const floatingRoom = 16 + 56 + 16;
+
 /** "Household · 3 members · INR" */
 export function groupSubtitle(group: MobileGroup) {
   const count = group.members.length;
@@ -42,6 +45,8 @@ interface GroupShellProps {
   >;
   /** Floats above the bottom navigation, such as the save snackbar. */
   overlay?: ReactNode;
+  /** A floating action shows over the content, which leaves room to scroll clear of it. */
+  floating?: boolean;
   children: ReactNode;
 }
 
@@ -62,6 +67,7 @@ export function GroupShell({
   scrollRef,
   scroll,
   overlay,
+  floating = false,
   children,
 }: GroupShellProps) {
   const theme = useTheme();
@@ -100,7 +106,12 @@ export function GroupShell({
         ref={scrollRef}
         {...scroll}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingTop: 4,
+          paddingBottom: floating ? floatingRoom : 24,
+          gap: 12,
+        }}
         refreshControl={
           <RefreshControl
             refreshing={pull.refreshing}
