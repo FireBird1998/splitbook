@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 import { androidInvitationFilters, developmentConfig, mobileConfig } from './config';
 
@@ -43,20 +46,108 @@ describe('development build configuration', () => {
   });
 });
 
-describe('Android invitation link configuration', () => {
-  it('builds staging with the package published by its domain association', async () => {
-    vi.stubEnv('EXPO_PUBLIC_APP_ENV', 'staging');
+describe('native app configuration per environment', () => {
+  const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+  const brand = JSON.parse(
+    readFileSync(resolve(appRoot, '../../assets/brand/brand.json'), 'utf8'),
+  ) as { colors: Record<'ink' | 'paper', string> };
+  async function loadAppConfig(mode: string, authOrigin: string) {
+    vi.stubEnv('EXPO_PUBLIC_APP_ENV', mode);
+    vi.stubEnv('EXPO_PUBLIC_AUTH_ORIGIN', authOrigin);
+    vi.stubEnv('EXPO_PUBLIC_INVITE_ORIGIN', authOrigin);
     try {
       vi.resetModules();
-      const { default: config } = await import('../app.config');
-      expect(config.name).toBe('SplitBook Staging');
-      expect(config.android.package).toBe('com.splitbook.app.staging');
-      expect(config.scheme).toBe('splitbook-staging');
+      return (await import('../app.config')).default;
     } finally {
       vi.unstubAllEnvs();
       vi.resetModules();
     }
+  }
+  const invitationFilter = (scheme: string, host: string, autoVerify: boolean, port?: string) => ({
+    action: 'VIEW',
+    autoVerify,
+    data: [{ scheme, host, ...(port ? { port } : {}), pathPrefix: '/join/' }],
+    category: ['BROWSABLE', 'DEFAULT'],
   });
+  it.each([
+    {
+      mode: 'development',
+      origin: 'http://127.0.0.1:4138',
+      name: 'SplitBook Dev',
+      identifier: 'com.splitbook.app.dev',
+      scheme: 'splitbook-dev',
+      intentFilters: [invitationFilter('http', '127.0.0.1', false, '4138')],
+    },
+    {
+      mode: 'staging',
+      origin: 'https://staging.splitbook.test',
+      name: 'SplitBook Staging',
+      identifier: 'com.splitbook.app.staging',
+      scheme: 'splitbook-staging',
+      intentFilters: [invitationFilter('https', 'staging.splitbook.test', true)],
+    },
+    {
+      mode: 'production',
+      origin: 'https://splitbook.test',
+      name: 'SplitBook',
+      identifier: 'com.splitbook.app',
+      scheme: 'splitbook',
+      intentFilters: [],
+    },
+  ])(
+    'keeps the $mode identity and shows the brand icon and splash',
+    async ({ mode, origin, name, identifier, scheme, intentFilters }) => {
+      const config = await loadAppConfig(mode, origin);
+      expect(config).toMatchObject({
+        name,
+        scheme,
+        ios: { bundleIdentifier: identifier },
+        android: { package: identifier, intentFilters },
+      });
+      expect(config.plugins).toEqual(
+        expect.arrayContaining([
+          'expo-secure-store',
+          'expo-font',
+          ['expo-build-properties', { android: { usesCleartextTraffic: mode === 'development' } }],
+        ]),
+      );
+      expect(config.icon).toBe('./assets/brand/app-icon.png');
+      expect(config.android.adaptiveIcon).toEqual({
+        foregroundImage: './assets/brand/android-foreground.png',
+        monochromeImage: './assets/brand/android-monochrome.png',
+        backgroundColor: brand.colors.ink,
+      });
+      expect(config.plugins).toContainEqual([
+        'expo-splash-screen',
+        {
+          image: './assets/brand/splash-light.png',
+          imageWidth: 288,
+          backgroundColor: brand.colors.paper,
+          dark: { image: './assets/brand/splash-dark.png', backgroundColor: brand.colors.ink },
+        },
+      ]);
+    },
+  );
+  it('names brand files that exist, with each splash image covering the whole splash icon', async () => {
+    const config = await loadAppConfig('production', 'https://splitbook.test');
+    const splash = config.plugins.find(
+      (plugin) => Array.isArray(plugin) && plugin[0] === 'expo-splash-screen',
+    )?.[1] as { image: string; imageWidth: number; dark: { image: string } };
+    const { foregroundImage, monochromeImage } = config.android.adaptiveIcon;
+    for (const file of [config.icon, foregroundImage, monochromeImage])
+      expect(existsSync(resolve(appRoot, file)), file).toBe(true);
+    // Android draws the splash icon on a 288 dp canvas; 4x pixels keep xxxhdpi from upscaling.
+    for (const file of [splash.image, splash.dark.image]) {
+      const png = readFileSync(resolve(appRoot, file));
+      expect([png.readUInt32BE(16), png.readUInt32BE(20)], file).toEqual([
+        splash.imageWidth * 4,
+        splash.imageWidth * 4,
+      ]);
+    }
+  });
+});
+
+describe('Android invitation link configuration', () => {
   it('registers the exact development host and port for web invitation paths', () => {
     expect(androidInvitationFilters(local)).toEqual([
       {

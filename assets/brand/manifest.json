@@ -107,6 +107,16 @@
       "sha256": "c5b82cfb285d17d46a816b007722089631cab5490ab0489cb713fb340d256597"
     },
     {
+      "file": "assets/brand/svg/splash-light.svg",
+      "bytes": 906,
+      "sha256": "5799b8be2ca6745c052b5ae4a82bda0024af209e1d6336525e1eed4f16e0bb37"
+    },
+    {
+      "file": "assets/brand/svg/splash-dark.svg",
+      "bytes": 906,
+      "sha256": "fd01b6eb667fac4e3d55e7cc2bd903b60fd9fc104b5a82e57434232b97d1e1ba"
+    },
+    {
       "file": "assets/brand/svg/favicon.svg",
       "bytes": 965,
       "sha256": "bf89813d179c9637b3012b9484277d88284c73e464f1a0a08db30f6ec373f185"
@@ -872,6 +882,22 @@
       "alpha": true
     },
     {
+      "file": "assets/brand/png/splash-light-1152.png",
+      "bytes": 21759,
+      "sha256": "048cbb905425f692f1c9b85cd7f03bdb175e676869346b68a777a59d8d50e11c",
+      "width": 1152,
+      "height": 1152,
+      "alpha": true
+    },
+    {
+      "file": "assets/brand/png/splash-dark-1152.png",
+      "bytes": 21272,
+      "sha256": "2cdc15a6d5cf5a5d5375c8fd906f21d0f3682c9c153bbfeb3538a62ea1a3f14a",
+      "width": 1152,
+      "height": 1152,
+      "alpha": true
+    },
+    {
       "file": "assets/brand/png/maskable-192.png",
       "bytes": 4420,
       "sha256": "1ab557ef7fb5f4daed5b7fe305b5421cddbe18c549269e3f5fb1122e9c16822c",
@@ -1021,6 +1047,22 @@
       "sha256": "ee7f734b731a3b1ebbac5fd100c108a409f57173ad50dd98d722f8996b8c052f",
       "width": 1024,
       "height": 1024,
+      "alpha": true
+    },
+    {
+      "file": "apps/mobile/assets/brand/splash-light.png",
+      "bytes": 21759,
+      "sha256": "048cbb905425f692f1c9b85cd7f03bdb175e676869346b68a777a59d8d50e11c",
+      "width": 1152,
+      "height": 1152,
+      "alpha": true
+    },
+    {
+      "file": "apps/mobile/assets/brand/splash-dark.png",
+      "bytes": 21272,
+      "sha256": "2cdc15a6d5cf5a5d5375c8fd906f21d0f3682c9c153bbfeb3538a62ea1a3f14a",
+      "width": 1152,
+      "height": 1152,
       "alpha": true
     },
     {
