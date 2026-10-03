@@ -58,7 +58,7 @@ import {
   HomeTopBar,
 } from './src/ui/home';
 import { refreshFeedback } from './src/ui/refresh-feedback';
-import { GroupSnackbar } from './src/ui/group-snackbar';
+import { GroupSnackbar, HomeSnackbar } from './src/ui/group-snackbar';
 import { visibleFieldErrors } from './src/data/field-feedback';
 import { groupFields } from './src/data/group-draft';
 import { GroupShell } from './src/ui/group-shell';
@@ -588,6 +588,9 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
           {environment.label}
         </CompactText>
       </ScrollView>
+      {state.homeSnackbar ? (
+        <HomeSnackbar notice={state.homeSnackbar} onDismiss={controller.dismissSnackbar} />
+      ) : null}
     </>
   );
 }
@@ -864,6 +867,14 @@ function MembersScreen({ state }: { state: MobileSnapshot }) {
         onPress: shareInvite,
         disabled: state.share.status === 'loading' || !group,
         offline: state.offline.active,
+      }}
+      leave={{
+        state: state.leave,
+        offline: state.offline.active,
+        onOpen: () => void controller.reviewLeaveGroup(),
+        onConfirm: () => void controller.leaveGroup(),
+        onCancel: controller.cancelLeaveGroup,
+        onCheck: () => void controller.showLeaveCheck(),
       }}
       notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
       unavailable={state.detail.message}

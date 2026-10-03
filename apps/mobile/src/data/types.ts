@@ -194,6 +194,32 @@ export interface KeptDraft {
   unconfirmed: boolean;
 }
 
+/**
+ * Leave Group's confirm sheet over Members and Group details. Leaving needs a connection, a
+ * settled-up member, and nothing on this device for that Group that may already be recorded.
+ */
+export interface LeaveGroupState {
+  groupId: string | null;
+  /**
+   * 'checking' reads what this device keeps for the Group; 'blocked' is a save or payment that
+   * may already be recorded, so nothing is sent; 'refused' is the server's answer (`code`);
+   * 'error' is any other failure, after which Leave Group can be tried again.
+   */
+  status: 'closed' | 'checking' | 'confirm' | 'leaving' | 'blocked' | 'refused' | 'error';
+  /** Why the server refused: OPEN_BALANCE, LAST_ADMIN or LEAVE_CONFLICT. */
+  code: string | null;
+  message: string | null;
+  /** This Group's Expense draft is kept on this device; leaving discards it. */
+  draft: boolean;
+  /** The Group destination that shows what blocks leaving, such as Balances for an open balance. */
+  check: GroupDestination | null;
+}
+
+/** Confirms something that ended on Home, such as leaving a Group. Leaving Home ends it. */
+export interface HomeSnackbar {
+  message: string;
+}
+
 export interface GroupDraft {
   name: string;
   description: string;
@@ -265,6 +291,9 @@ export interface MobileSnapshot {
    */
   restoreScroll: { groupId: string; y: number; request: number } | null;
   snackbar: GroupSnackbar | null;
+  homeSnackbar: HomeSnackbar | null;
+  /** Leave Group, a sheet over Members and Group details. */
+  leave: LeaveGroupState;
   settlement: SettlementState;
   /** The current Group's unconfirmed payment, kept for an explicit retry from Balances. */
   pendingPayment: PendingPayment | null;

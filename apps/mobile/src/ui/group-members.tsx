@@ -2,14 +2,16 @@ import type { ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupCategory } from '@splitbook/shared/types';
-import type { MobileGroup } from '../data/types';
+import type { LeaveGroupState, MobileGroup } from '../data/types';
 import {
   Banner,
+  BottomSheet,
   Card,
   CompactAvatar,
   CompactButton,
   CompactText,
   Divider,
+  LinearProgress,
   ListRow,
   SectionHeader,
   TopBar,
@@ -26,6 +28,22 @@ const themeIcons: Record<GroupCategory, IconName> = {
 };
 
 const inviteNeedsConnection = 'Inviting needs a connection.';
+export const leaveNeedsConnection = 'Leaving a Group needs a connection.';
+export const leaveExplanation =
+  'You won’t see this Group or its balances any more. Its Expenses and Activity stay for the others. You can rejoin with an invite.';
+export const leaveDiscardsDraft =
+  'Your Expense draft for this Group is kept on this device. Leaving discards it.';
+
+/** Leave Group: the sheet's state and what each of its buttons does. */
+export interface LeaveGroupActions {
+  state: LeaveGroupState;
+  offline: boolean;
+  onOpen: () => void;
+  onConfirm: () => void;
+  onCancel: () => void;
+  /** Go to Balances or Go to Expenses, where what blocks leaving shows. */
+  onCheck: () => void;
+}
 
 /** A label on the left and its value on the right, read as one "Label: value". */
 function DetailRow({
@@ -104,14 +122,82 @@ function GroupDetails({ group }: { group: MobileGroup }) {
 }
 
 /**
- * Members and Group details: the Group's details, then its members with their roles and Invite.
- * Role changes and removals stay on the web.
+ * Leave Group's confirm sheet: what leaving means and the draft it discards. A save or payment
+ * that may already be recorded blocks it, and the server's refusals show in its own words; an
+ * open balance or unconfirmed save offers the Group destination that shows it. Leave Group stays
+ * for a concurrent change or a failure, to try again.
+ */
+function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGroupActions }) {
+  const { state, offline } = leave;
+  const leaving = state.status === 'leaving';
+  const retryable =
+    state.status !== 'blocked' && (state.status !== 'refused' || state.code === 'LEAVE_CONFLICT');
+  const ready = ['confirm', 'refused', 'error'].includes(state.status);
+  return (
+    <BottomSheet
+      visible={state.status !== 'closed' && state.groupId === group.id}
+      title={`Leave ${group.name}?`}
+      doneLabel="Cancel"
+      dismissLabel="Cancel, staying in this Group"
+      dismissible={!leaving}
+      onDone={leave.onCancel}
+      footer={
+        <>
+          {state.check ? (
+            <CompactButton
+              label={state.check === 'balances' ? 'Go to Balances' : 'Go to Expenses'}
+              variant="tonal"
+              block
+              onPress={leave.onCheck}
+            />
+          ) : null}
+          {retryable ? (
+            <CompactButton
+              label="Leave Group"
+              icon="exit-outline"
+              destructive
+              block
+              disabled={!ready || offline}
+              hint={offline ? leaveNeedsConnection : undefined}
+              onPress={leave.onConfirm}
+            />
+          ) : null}
+          {retryable && offline ? (
+            <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+              {leaveNeedsConnection}
+            </CompactText>
+          ) : null}
+        </>
+      }
+    >
+      {state.status === 'checking' || leaving ? (
+        <View style={{ marginHorizontal: -20 }}>
+          <LinearProgress
+            label={leaving ? 'Leaving this Group' : 'Checking this device for unsaved work'}
+          />
+        </View>
+      ) : null}
+      <CompactText>{leaveExplanation}</CompactText>
+      {state.draft && state.status !== 'blocked' ? (
+        <Banner tone="info" message={leaveDiscardsDraft} />
+      ) : null}
+      {state.message ? (
+        <Banner tone={state.status === 'blocked' ? 'warning' : 'error'} message={state.message} />
+      ) : null}
+    </BottomSheet>
+  );
+}
+
+/**
+ * Members and Group details: the Group's details, then its members with their roles and Invite,
+ * and Leave Group. Role changes and removals stay on the web.
  */
 export function GroupMembers({
   group,
   currentUserId,
   back,
   invite,
+  leave,
   notice,
   unavailable,
 }: {
@@ -120,6 +206,7 @@ export function GroupMembers({
   currentUserId: string;
   back: { label: string; onPress: () => void };
   invite: { onPress: () => void; disabled: boolean; offline: boolean };
+  leave: LeaveGroupActions;
   /** Shown above the details, e.g. the offline notice. */
   notice?: ReactNode;
   unavailable?: string | null;
@@ -195,9 +282,27 @@ export function GroupMembers({
             <CompactText variant="small" tone="secondary">
               Changing roles or removing members is done on the web for now.
             </CompactText>
+            <View style={{ gap: 6, paddingTop: 12 }}>
+              <CompactButton
+                label="Leave Group"
+                icon="exit-outline"
+                variant="tonal"
+                destructive
+                block
+                disabled={leave.offline}
+                hint={leave.offline ? leaveNeedsConnection : undefined}
+                onPress={leave.onOpen}
+              />
+              {leave.offline ? (
+                <CompactText variant="small" tone="secondary">
+                  {leaveNeedsConnection}
+                </CompactText>
+              ) : null}
+            </View>
           </>
         )}
       </ScrollView>
+      {group ? <LeaveGroupSheet group={group} leave={leave} /> : null}
     </View>
   );
 }

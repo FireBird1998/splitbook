@@ -1,10 +1,20 @@
 import type { ReactElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { MobileGroup } from '../data/types';
+import type { LeaveGroupState, MobileGroup } from '../data/types';
 
 // Host stand-ins keep the props (roles, labels, states, handlers) that Android receives.
 vi.mock('react-native', () => ({
+  Animated: {
+    View: 'AnimatedView',
+    Value: class {
+      setValue() {}
+    },
+    spring: () => ({ start: () => undefined }),
+  },
+  KeyboardAvoidingView: 'KeyboardAvoidingView',
+  Modal: 'Modal',
+  PanResponder: { create: (config: object) => ({ panHandlers: config }) },
   Pressable: 'Pressable',
   ScrollView: 'ScrollView',
   StyleSheet: { create: <T,>(styles: T) => styles },
@@ -16,7 +26,8 @@ vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' 
 vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const { GroupMembers } = await import('./group-members');
+const { GroupMembers, leaveDiscardsDraft, leaveExplanation, leaveNeedsConnection } =
+  await import('./group-members');
 
 const you = 'a00000000000000000000001';
 const member = (id: string, name: string, role: 'admin' | 'member') => ({
@@ -62,8 +73,15 @@ function render(element: ReactElement) {
   return renderer!.root;
 }
 const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
+/** Inside the Leave Group sheet, which stays mounted (hidden) so it can slide in and out. */
+const inSheet = (node: ReactTestInstance | null): boolean =>
+  !!node && (isHost(node, 'Modal') || inSheet(node.parent));
+/** On the page itself; `sheet()` reads the Leave Group sheet. */
 const hosts = (root: ReactTestInstance, match: (props: Record<string, unknown>) => boolean) =>
-  root.findAll((node) => typeof node.type === 'string' && match(node.props));
+  root.findAll(
+    (node) =>
+      typeof node.type === 'string' && match(node.props) && (inSheet(root) || !inSheet(node)),
+  );
 const byRole = (root: ReactTestInstance, role: string, label?: string) =>
   hosts(
     root,
@@ -75,7 +93,7 @@ const one = (nodes: ReactTestInstance[]) => {
 };
 const text = (node: ReactTestInstance) =>
   node
-    .findAll((n) => isHost(n, 'Text'))
+    .findAll((n) => isHost(n, 'Text') && (inSheet(node) || !inSheet(n)))
     .flatMap((n) => n.children.filter((c): c is string => typeof c === 'string'))
     .join('');
 /** What TalkBack reads for each element that groups its contents. */
@@ -84,16 +102,36 @@ const spoken = (root: ReactTestInstance) =>
     (node) => node.props.accessibilityLabel as string,
   );
 
+const closed: LeaveGroupState = {
+  groupId: null,
+  status: 'closed',
+  code: null,
+  message: null,
+  draft: false,
+  check: null,
+};
+const leaveActions = (state: Partial<LeaveGroupState> = {}, offline = false) => ({
+  state: { ...closed, ...(state.status ? { groupId: household.id } : {}), ...state },
+  offline,
+  onOpen: vi.fn(),
+  onConfirm: vi.fn(),
+  onCancel: vi.fn(),
+  onCheck: vi.fn(),
+});
+
 function page(overrides: Partial<Parameters<typeof GroupMembers>[0]> = {}) {
   const props = {
     group: household,
     currentUserId: you,
     back: { label: 'Back to Group', onPress: vi.fn() },
     invite: { onPress: vi.fn(), disabled: false, offline: false },
+    leave: leaveActions(),
     ...overrides,
   };
   return { root: render(<GroupMembers {...props} />), props };
 }
+/** The Leave Group sheet, and whether it shows. */
+const sheet = (root: ReactTestInstance) => one(root.findAll((node) => isHost(node, 'Modal')));
 
 describe('Members and Group details', () => {
   it('titles the page with the Group and returns from the back arrow', () => {
@@ -177,5 +215,128 @@ describe('Members and Group details', () => {
     const { root } = page({ group: null, unavailable: 'You no longer have access to this group.' });
     expect(text(one(byRole(root, 'alert')))).toBe('You no longer have access to this group.');
     expect(byRole(root, 'button', 'Invite people')).toHaveLength(0);
+  });
+});
+
+describe('Leave Group', () => {
+  it('is the last action on the page, a destructive one that opens the sheet', () => {
+    const { root, props } = page();
+    const buttons = byRole(root, 'button');
+    const leave = buttons.at(-1)!;
+    expect(leave.props.accessibilityLabel).toBe('Leave Group');
+    expect(leave.props.accessibilityState).toEqual({ disabled: false });
+    expect(sheet(root).props.visible).toBe(false);
+    act(() => {
+      leave.props.onPress();
+    });
+    expect(props.leave.onOpen).toHaveBeenCalledOnce();
+  });
+
+  it('says leaving needs a connection while offline', () => {
+    const { root } = page({ leave: leaveActions({}, true) });
+    const leave = one(byRole(root, 'button', 'Leave Group'));
+    expect(leave.props.accessibilityState).toEqual({ disabled: true });
+    expect(leave.props.accessibilityHint).toBe(leaveNeedsConnection);
+    expect(text(root)).toContain(leaveNeedsConnection);
+  });
+
+  it('confirms in a sheet titled with the Group, explaining what leaving means', () => {
+    const { root, props } = page({ leave: leaveActions({ status: 'confirm' }) });
+    const modal = sheet(root);
+    expect(modal.props.visible).toBe(true);
+    expect(byRole(modal, 'header').map(text)).toEqual(['Leave Maple House?']);
+    expect(text(modal)).toContain(leaveExplanation);
+    expect(text(modal)).not.toContain(leaveDiscardsDraft);
+    expect(byRole(modal, 'button', 'Go to Balances')).toHaveLength(0);
+    const confirm = one(byRole(modal, 'button', 'Leave Group'));
+    expect(confirm.props.accessibilityState).toEqual({ disabled: false });
+    act(() => {
+      confirm.props.onPress();
+    });
+    expect(props.leave.onConfirm).toHaveBeenCalledOnce();
+    act(() => {
+      one(byRole(modal, 'button', 'Cancel')).props.onPress();
+    });
+    expect(props.leave.onCancel).toHaveBeenCalledOnce();
+  });
+
+  it('says a draft kept on this device will be discarded', () => {
+    const { root } = page({ leave: leaveActions({ status: 'confirm', draft: true }) });
+    expect(text(sheet(root))).toContain(leaveDiscardsDraft);
+  });
+
+  it('disables the sheet and shows progress while leaving', () => {
+    const { root } = page({ leave: leaveActions({ status: 'leaving' }) });
+    const modal = sheet(root);
+    expect(one(byRole(modal, 'button', 'Leave Group')).props.accessibilityState).toEqual({
+      disabled: true,
+    });
+    expect(one(byRole(modal, 'button', 'Cancel')).props.accessibilityState).toEqual({
+      disabled: true,
+    });
+    expect(one(byRole(modal, 'progressbar')).props.accessibilityLabel).toBe('Leaving this Group');
+  });
+
+  it('can’t be confirmed offline', () => {
+    const { root } = page({ leave: leaveActions({ status: 'confirm' }, true) });
+    const confirm = one(byRole(sheet(root), 'button', 'Leave Group'));
+    expect(confirm.props.accessibilityState).toEqual({ disabled: true });
+    expect(confirm.props.accessibilityHint).toBe(leaveNeedsConnection);
+  });
+
+  it('shows an open balance in the server’s words and offers Balances', () => {
+    const message = 'Settle up before you leave: you owe ₹1,480.00 in this Group.';
+    const { root, props } = page({
+      leave: leaveActions({ status: 'refused', code: 'OPEN_BALANCE', message, check: 'balances' }),
+    });
+    const modal = sheet(root);
+    expect(text(one(byRole(modal, 'alert')))).toBe(message);
+    expect(byRole(modal, 'button', 'Leave Group')).toHaveLength(0);
+    act(() => {
+      one(byRole(modal, 'button', 'Go to Balances')).props.onPress();
+    });
+    expect(props.leave.onCheck).toHaveBeenCalledOnce();
+  });
+
+  it('only closes when the member is the last admin', () => {
+    const message = 'Make someone else an admin before you leave.';
+    const { root } = page({
+      leave: leaveActions({ status: 'refused', code: 'LAST_ADMIN', message }),
+    });
+    const modal = sheet(root);
+    expect(text(one(byRole(modal, 'alert')))).toBe(message);
+    expect(byRole(modal, 'button').map((button) => button.props.accessibilityLabel)).toEqual([
+      'Cancel, staying in this Group',
+      'Cancel',
+    ]);
+  });
+
+  it('offers to try again after a concurrent change', () => {
+    const { root } = page({
+      leave: leaveActions({
+        status: 'refused',
+        code: 'LEAVE_CONFLICT',
+        message: 'This Group changed while you were leaving. Try again.',
+      }),
+    });
+    expect(one(byRole(sheet(root), 'button', 'Leave Group')).props.accessibilityState).toEqual({
+      disabled: false,
+    });
+  });
+
+  it('blocks leaving while a save may already be recorded, offering Expenses', () => {
+    const message =
+      'An Expense save in this Group isn’t confirmed yet. Check it on Expenses first: it may already be recorded and change your balance.';
+    const { root, props } = page({
+      leave: leaveActions({ status: 'blocked', message, check: 'expenses', draft: true }),
+    });
+    const modal = sheet(root);
+    expect(text(one(byRole(modal, 'alert')))).toBe(message);
+    expect(text(modal)).not.toContain(leaveDiscardsDraft);
+    expect(byRole(modal, 'button', 'Leave Group')).toHaveLength(0);
+    act(() => {
+      one(byRole(modal, 'button', 'Go to Expenses')).props.onPress();
+    });
+    expect(props.leave.onCheck).toHaveBeenCalledOnce();
   });
 });

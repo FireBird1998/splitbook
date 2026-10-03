@@ -7,6 +7,7 @@ import { CompactText, FieldMarker, Money } from './text';
 /**
  * Primary, tonal (brand.bg) or text button. `amount` renders a monospace value after the label,
  * as in "Save expense ₹1,249.50". Disabled buttons should carry a `hint` saying why.
+ * `destructive` uses the coral status colour instead of the brand, as for Leave Group.
  */
 export function CompactButton({
   label,
@@ -17,6 +18,7 @@ export function CompactButton({
   icon,
   amount,
   disabled = false,
+  destructive = false,
   hint,
   accessibilityLabel,
 }: {
@@ -28,11 +30,15 @@ export function CompactButton({
   icon?: IconName;
   amount?: string;
   disabled?: boolean;
+  destructive?: boolean;
   hint?: string;
   accessibilityLabel?: string;
 }) {
   const theme = useTheme();
-  const color = variant === 'primary' ? theme.brand.contrastText : theme.brand.main;
+  const tones = destructive
+    ? { main: theme.status.negative, bg: theme.negative.bg }
+    : { main: theme.brand.main, bg: theme.brand.bg };
+  const color = variant === 'primary' ? theme.brand.contrastText : tones.main;
   return (
     <Pressable
       accessibilityRole="button"
@@ -52,11 +58,7 @@ export function CompactButton({
         justifyContent: 'center',
         gap: 8,
         backgroundColor:
-          variant === 'primary'
-            ? theme.brand.main
-            : variant === 'tonal'
-              ? theme.brand.bg
-              : 'transparent',
+          variant === 'primary' ? tones.main : variant === 'tonal' ? tones.bg : 'transparent',
         opacity: disabled ? 0.45 : pressed ? 0.8 : 1,
       })}
     >

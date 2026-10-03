@@ -250,6 +250,30 @@ describe('Buttons and rows', () => {
     expect(button.props.accessibilityHint).toBe('Saving needs a connection.');
   });
 
+  it('a destructive button uses the coral status colour instead of the brand', async () => {
+    const { lightTokens } = await import('@splitbook/shared/design-tokens');
+    const root = render(
+      <>
+        <CompactButton label="Leave Group" variant="tonal" destructive onPress={vi.fn()} />
+        <CompactButton label="Confirm leaving" destructive onPress={vi.fn()} />
+      </>,
+    );
+    const background = (label: string) =>
+      one(byRole(root, 'button', label)).props.style({ pressed: false }).backgroundColor;
+    const labelColor = (label: string) =>
+      one(byRole(root, 'button', label))
+        .findAll((node) => isHost(node, 'Text'))
+        .map((node) => node.props.style)
+        .flat()
+        // The label's own colour comes last, over the text's default.
+        .filter((style) => style && 'color' in style)
+        .at(-1)?.color;
+    expect(background('Leave Group')).toBe(lightTokens.negative.bg);
+    expect(labelColor('Leave Group')).toBe(lightTokens.status.negative);
+    expect(background('Confirm leaving')).toBe(lightTokens.status.negative);
+    expect(labelColor('Confirm leaving')).toBe(lightTokens.brand.contrastText);
+  });
+
   it('list rows that open something are buttons that say everything they show', () => {
     const open = vi.fn();
     const root = render(

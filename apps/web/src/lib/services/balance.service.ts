@@ -2,7 +2,14 @@ import connectDB from '@/lib/db';
 import Expense from '@/lib/models/Expense';
 import Settlement from '@/lib/models/Settlement';
 import Group from '@/lib/models/Group';
-import { calculateNetBalances, simplifyDebts } from '@splitbook/shared/debt-simplifier';
+import User from '@/lib/models/User';
+import {
+  calculateNetBalances,
+  calculateNetBalancesMinor,
+  simplifyDebts,
+  type BalanceExpense,
+  type BalanceSettlement,
+} from '@splitbook/shared/debt-simplifier';
 import { aggregateCurrencyBalances } from '@splitbook/shared/dashboard';
 import { assertStoredExpenseMoney } from '@splitbook/shared/exact-money';
 import type { DashboardGroupBalance, GroupCategory } from '@splitbook/shared/types';
@@ -54,35 +61,42 @@ export class BalanceService {
       });
     }
 
+    const memberIds = new Set(userMap.keys());
+    const netByCurrency = currencies.map((currency) => ({
+      currency,
+      netBalances: calculateNetBalances(
+        expensesIn(expenses, currency),
+        settlementsIn(settlements, currency),
+        currency,
+      ),
+    }));
+
+    // People who left or were removed keep their place in the ledger. A settled
+    // former member is left out; one with an open balance is named from their account.
+    const formerIds = [
+      ...new Set(
+        netByCurrency.flatMap(({ netBalances }) =>
+          netBalances
+            .filter((balance) => balance.amount !== 0 && !userMap.has(balance.userId))
+            .map((balance) => balance.userId),
+        ),
+      ),
+    ];
+    if (formerIds.length > 0) {
+      const former = await User.find({ _id: { $in: formerIds } })
+        .select('name email image')
+        .lean();
+      for (const user of former) {
+        const id = String(user._id);
+        userMap.set(id, { _id: id, name: user.name, email: user.email, image: user.image });
+      }
+    }
+
     const userInfo = (id: string) => userMap.get(id) || { _id: id, name: 'Unknown', email: '' };
-    const byCurrency = currencies.map((currency) => {
-      const expenseData = expenses
-        .filter((expense) => expense.currency === currency)
-        .map((expense) => ({
-          currency: expense.currency,
-          moneyVersion: expense.moneyVersion,
-          paidBy: expense.paidBy.map((payer) => ({
-            user: String(payer.user),
-            amount: payer.amount,
-            amountMinor: payer.amountMinor,
-          })),
-          splitBetween: expense.splitBetween.map((participant) => ({
-            user: String(participant.user),
-            amount: participant.amount,
-            amountMinor: participant.amountMinor,
-          })),
-        }));
-      const settlementData = settlements
-        .filter((settlement) => settlement.currency === currency)
-        .map((settlement) => ({
-          currency: settlement.currency,
-          moneyVersion: settlement.moneyVersion,
-          paidBy: String(settlement.paidBy),
-          paidTo: String(settlement.paidTo),
-          amount: settlement.amount,
-          amountMinor: settlement.amountMinor,
-        }));
-      const netBalances = calculateNetBalances(expenseData, settlementData, currency);
+    const byCurrency = netByCurrency.map(({ currency, netBalances: allBalances }) => {
+      const netBalances = allBalances.filter(
+        (balance) => balance.amount !== 0 || memberIds.has(balance.userId),
+      );
       return {
         currency,
         balances: netBalances.map((balance) => ({
@@ -102,6 +116,40 @@ export class BalanceService {
       byCurrency,
       hasMixedCurrencies,
     };
+  }
+
+  /**
+   * The member's non-zero balances in a Group, one per currency, in minor units.
+   * Positive: they are owed; negative: they owe. Empty when they are settled up.
+   */
+  async getMemberOpenBalances(groupId: string, userId: string) {
+    await connectDB();
+
+    const [expenses, settlements] = await Promise.all([
+      Expense.find({ group: groupId, isDeleted: false })
+        .select('group currency moneyVersion amount amountMinor paidBy splitBetween')
+        .lean(),
+      Settlement.find({ group: groupId })
+        .select('group currency moneyVersion amount amountMinor paidBy paidTo')
+        .lean(),
+    ]);
+
+    for (const expense of expenses) assertStoredExpenseMoney(expense);
+    const currencies = [
+      ...new Set([
+        ...expenses.map((expense) => expense.currency),
+        ...settlements.map((settlement) => settlement.currency),
+      ]),
+    ].sort();
+
+    return currencies.flatMap((currency) => {
+      const own = calculateNetBalancesMinor(
+        expensesIn(expenses, currency),
+        settlementsIn(settlements, currency),
+        currency,
+      ).find((balance) => balance.userId === userId);
+      return own && own.amountMinor !== 0 ? [{ currency, amountMinor: own.amountMinor }] : [];
+    });
   }
 
   /**
@@ -246,3 +294,62 @@ export class BalanceService {
 }
 
 export const balanceService = new BalanceService();
+
+interface StoredParticipant {
+  user: unknown;
+  amount: number;
+  amountMinor?: number;
+}
+
+/** The fields of a stored Expense that balances read. */
+interface StoredExpenseMoney {
+  currency: string;
+  moneyVersion?: number;
+  paidBy: StoredParticipant[];
+  splitBetween: StoredParticipant[];
+}
+
+/** The fields of a stored Settlement that balances read. */
+interface StoredSettlementMoney {
+  currency: string;
+  moneyVersion?: number;
+  paidBy: unknown;
+  paidTo: unknown;
+  amount: number;
+  amountMinor?: number;
+}
+
+const participant = ({ user, amount, amountMinor }: StoredParticipant) => ({
+  user: String(user),
+  amount,
+  amountMinor,
+});
+
+/** One currency's Expenses, shaped for the shared balance calculation. */
+function expensesIn(expenses: StoredExpenseMoney[], currency: string): BalanceExpense[] {
+  return expenses
+    .filter((expense) => expense.currency === currency)
+    .map((expense) => ({
+      currency: expense.currency,
+      moneyVersion: expense.moneyVersion,
+      paidBy: expense.paidBy.map(participant),
+      splitBetween: expense.splitBetween.map(participant),
+    }));
+}
+
+/** One currency's Settlements, shaped for the shared balance calculation. */
+function settlementsIn(
+  settlements: StoredSettlementMoney[],
+  currency: string,
+): BalanceSettlement[] {
+  return settlements
+    .filter((settlement) => settlement.currency === currency)
+    .map((settlement) => ({
+      currency: settlement.currency,
+      moneyVersion: settlement.moneyVersion,
+      paidBy: String(settlement.paidBy),
+      paidTo: String(settlement.paidTo),
+      amount: settlement.amount,
+      amountMinor: settlement.amountMinor,
+    }));
+}

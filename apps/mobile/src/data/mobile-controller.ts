@@ -74,6 +74,7 @@ import {
   parseInvitationPreview,
   parseInviteLink,
   parseJoinedGroup,
+  parseLeftGroup,
   parseSession,
   parseSignIn,
 } from './dto';
@@ -91,6 +92,7 @@ import type {
   GroupSnackbar,
   HomeFinancialState,
   KeptDraft,
+  LeaveGroupState,
   MobileConfig,
   MobileDependencies,
   MobileGroup,
@@ -229,6 +231,8 @@ class RequestError extends Error {
     readonly status = 0,
     readonly code: string | null = null,
     readonly networkFailure = false,
+    /** The server's own `error` text, shown only where it is known to be member-facing copy. */
+    readonly serverMessage: string | null = null,
   ) {
     super(message);
   }
@@ -263,6 +267,23 @@ function enteredAmount(amount: string, currency: string) {
   }
 }
 
+function closedLeave(): LeaveGroupState {
+  return { groupId: null, status: 'closed', code: null, message: null, draft: false, check: null };
+}
+
+/** The server's refusals to let a member leave, with fallbacks for its own words. */
+const leaveRefusals: Record<string, string> = {
+  OPEN_BALANCE: 'Settle up before you leave this Group.',
+  LAST_ADMIN: 'Make someone else an admin before you leave.',
+  LEAVE_CONFLICT: 'This Group changed while you were leaving. Try again.',
+};
+const unconfirmedSaveBeforeLeaving =
+  'An Expense save in this Group isn’t confirmed yet. Check it on Expenses first: it may already be recorded and change your balance.';
+const unconfirmedPaymentBeforeLeaving =
+  'A payment in this Group isn’t confirmed yet. Check it on Balances first: it may already be recorded and change your balance.';
+const keptWorkUnreadable =
+  'Couldn’t check this device for drafts or unconfirmed saves in this Group, so you haven’t left. Close this and try again.';
+
 function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
   return {
     auth,
@@ -274,6 +295,8 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
     expense: emptyExpenseEditor(),
     restoreScroll: null,
     snackbar: null,
+    homeSnackbar: null,
+    leave: closedLeave(),
     settlement: emptySettlement(),
     pendingPayment: null,
     keptDraft: null,
@@ -421,6 +444,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (next.snackbar && !showing(next.snackbar.groupId)) next = { ...next, snackbar: null };
     if (next.restoreScroll && !showing(next.restoreScroll.groupId))
       next = { ...next, restoreScroll: null };
+    // Likewise Home's, and the Leave Group sheet belongs to Members and Group details.
+    if (next.homeSnackbar && next.screen !== 'groups') next = { ...next, homeSnackbar: null };
+    if (next.leave.status !== 'closed' && next.screen !== 'members')
+      next = { ...next, leave: closedLeave() };
     snapshot = next;
     listeners.forEach((listener) => listener());
   };
@@ -692,29 +719,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           (response.status === 403 ||
             (response.status === 404 && path === `/api/groups/${deniedGroup}`)) &&
           deniedGroup
-        ) {
-          cacheEpoch += 1;
-          invalidateReads(
-            `group:${deniedGroup}`,
-            `ledger:${deniedGroup}`,
-            `balances:${deniedGroup}`,
-            'groups',
-            'home',
-          );
-          evictGroupContent(deniedGroup, response.status);
-          const lease = accountStorage();
-          if (lease && dependencies.readCache) {
-            try {
-              await lease.write(() =>
-                dependencies.readCache!.invalidateGroup(lease.accountId, deniedGroup),
-              );
-            } catch (error) {
-              if (!current(owner) || error instanceof Superseded) throw error;
-              await signOut();
-              throw new Superseded();
-            }
-          }
-        }
+        )
+          await forgetGroup(deniedGroup, response.status, owner);
         const message =
           response.status === 403
             ? 'You no longer have access to this group.'
@@ -731,7 +737,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           typeof details.code === 'string'
             ? details.code
             : null;
-        throw new RequestError(message, response.status, code);
+        const serverMessage =
+          details &&
+          typeof details === 'object' &&
+          'error' in details &&
+          typeof details.error === 'string'
+            ? details.error
+            : null;
+        throw new RequestError(message, response.status, code, false, serverMessage);
       }
       const body = await response.json();
       assertCurrent(owner);
@@ -1811,6 +1824,32 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ? { ...snapshot.settlement, group: null, balances: [] }
           : snapshot.settlement,
     });
+  };
+
+  /**
+   * The member can no longer see this Group (denied, gone, or left): its reads, its saved copy on
+   * this device and its content on screen go, and the Groups list and Home read again.
+   */
+  const forgetGroup = async (groupId: string, status: number, owner: number) => {
+    cacheEpoch += 1;
+    invalidateReads(
+      `group:${groupId}`,
+      `ledger:${groupId}`,
+      `balances:${groupId}`,
+      'groups',
+      'home',
+    );
+    evictGroupContent(groupId, status);
+    const lease = accountStorage();
+    if (lease && dependencies.readCache) {
+      try {
+        await lease.write(() => dependencies.readCache!.invalidateGroup(lease.accountId, groupId));
+      } catch (error) {
+        if (!current(owner) || error instanceof Superseded) throw error;
+        await signOut();
+        throw new Superseded();
+      }
+    }
   };
 
   const dropDeniedGroup = (id: string, error: unknown): boolean => {
@@ -3162,7 +3201,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (month) await selectMonth(month);
   };
   const dismissSnackbar = () => {
-    if (snapshot.snackbar) publish({ ...snapshot, snackbar: null });
+    if (snapshot.snackbar || snapshot.homeSnackbar)
+      publish({ ...snapshot, snackbar: null, homeSnackbar: null });
   };
 
   const editExpense = async () => {
@@ -4243,7 +4283,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   /** Android Back and the arrow return to the destination, Month and scroll it opened from. */
   const closeMembers = async () => {
-    if (snapshot.screen !== 'members') return;
+    if (snapshot.screen !== 'members' || snapshot.leave.status === 'leaving') return;
     const { id } = snapshot.detail;
     const origin = membersReturn?.groupId === id ? membersReturn : null;
     membersReturn = null;
@@ -4259,6 +4299,245 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     // Reads what the Group view missed while the page was open; recent reads are reused.
     await openGroup(id);
+  };
+
+  /** Changes whenever the Leave Group sheet opens or closes, so a late answer can't reopen it. */
+  let leaveRequest = 0;
+  /**
+   * What this device keeps for a Group: its Expense draft, and a save or payment that may
+   * already be recorded. A draft that can't be read may hold such a save, so it counts as one.
+   */
+  const keptForGroup = async (groupId: string) => {
+    const lease = accountStorage(),
+      drafts = dependencies.expenseDrafts,
+      payments = dependencies.settlementAttempts;
+    if (!lease) return { draft: false, unconfirmed: null };
+    const [expense, payment] = await lease.write(() =>
+      Promise.all([
+        drafts ? drafts.load(lease.accountId, groupId) : null,
+        payments ? payments.load(lease.accountId, groupId) : null,
+      ]),
+    );
+    let pendingSave = false;
+    if (expense !== null) {
+      try {
+        const record = parseStoredExpenseDraft(expense, lease.accountId, groupId);
+        pendingSave = !!(record.attempt || record.mutation);
+      } catch {
+        pendingSave = true;
+      }
+    }
+    return {
+      draft: expense !== null,
+      unconfirmed: payment !== null ? 'payment' : pendingSave ? 'expense' : null,
+    } as const;
+  };
+  /** The sheet once this device is checked: anything that may already be recorded comes first. */
+  const leaveChecked = async (groupId: string): Promise<Partial<LeaveGroupState>> => {
+    try {
+      const { draft, unconfirmed } = await keptForGroup(groupId);
+      if (!unconfirmed) return { status: 'confirm', draft };
+      return {
+        status: 'blocked',
+        draft,
+        message:
+          unconfirmed === 'payment'
+            ? unconfirmedPaymentBeforeLeaving
+            : unconfirmedSaveBeforeLeaving,
+        check: unconfirmed === 'payment' ? 'balances' : 'expenses',
+      };
+    } catch (error) {
+      if (error instanceof Superseded) throw error;
+      return { status: 'blocked', message: keptWorkUnreadable, check: null };
+    }
+  };
+
+  /**
+   * Leave Group, from Members and Group details: opens its confirm sheet once this device has
+   * been checked for the Group's draft and for anything that may already be recorded. Leaving
+   * needs a connection, so offline it does nothing.
+   */
+  const reviewLeaveGroup = async () => {
+    const group = shownGroup(snapshot);
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.screen !== 'members' ||
+      !group ||
+      snapshot.offline.active ||
+      snapshot.leave.status !== 'closed'
+    )
+      return;
+    const owner = generation,
+      attempt = ++leaveRequest,
+      groupId = group.id;
+    publish({ ...snapshot, leave: { ...closedLeave(), groupId, status: 'checking' } });
+    try {
+      const checked = await leaveChecked(groupId);
+      if (!current(owner) || attempt !== leaveRequest || snapshot.screen !== 'members') return;
+      publish({ ...snapshot, leave: { ...snapshot.leave, ...checked } });
+    } catch {
+      // Superseded: a sign-out or account change has already replaced the screen.
+    }
+  };
+
+  /** Cancel, Back and the scrim close the sheet; nothing was sent. Not while leaving. */
+  const cancelLeaveGroup = () => {
+    if (['closed', 'leaving'].includes(snapshot.leave.status)) return;
+    leaveRequest += 1;
+    publish({ ...snapshot, leave: closedLeave() });
+  };
+
+  /**
+   * Leave Group on the sheet. Sent only online, after this device is checked again for a save or
+   * payment in the Group that may already be recorded. Once left, the Group's content and draft
+   * go from this device and Home shows, read again, with a snackbar. A refusal (an open balance,
+   * the last admin, a concurrent change) stays on the sheet in the server's words.
+   */
+  const leaveGroup = async () => {
+    const state = snapshot.leave,
+      group = shownGroup(snapshot);
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.screen !== 'members' ||
+      !group ||
+      state.groupId !== group.id ||
+      !['confirm', 'refused', 'error'].includes(state.status) ||
+      snapshot.offline.active
+    )
+      return;
+    const owner = generation,
+      attempt = ++leaveRequest,
+      groupId = group.id,
+      name = group.name;
+    const shown = () => current(owner) && attempt === leaveRequest && latest().screen === 'members';
+    publish({
+      ...snapshot,
+      leave: { ...state, status: 'leaving', code: null, message: null, check: null },
+    });
+    let draft = false,
+      archived = false;
+    try {
+      const checked = await leaveChecked(groupId);
+      if (!shown()) return;
+      if (checked.status !== 'confirm') {
+        publish({ ...snapshot, leave: { ...snapshot.leave, ...checked } });
+        return;
+      }
+      draft = !!checked.draft;
+      archived = parseLeftGroup(
+        await request(`/api/groups/${groupId}/leave`, owner, { method: 'POST' }).finally(() => {
+          // Whatever the answer, the membership, Balances and Home may have changed.
+          if (current(owner))
+            invalidateReads(`group:${groupId}`, `balances:${groupId}`, 'groups', 'home');
+        }),
+      ).archived;
+    } catch (error) {
+      if (!current(owner) || error instanceof Superseded) return;
+      const refusal =
+        error instanceof RequestError && error.status === 409 && error.code
+          ? leaveRefusals[error.code]
+          : undefined;
+      if (refusal && error instanceof RequestError) {
+        if (shown())
+          publish({
+            ...snapshot,
+            leave: {
+              ...snapshot.leave,
+              status: 'refused',
+              code: error.code,
+              message: error.serverMessage?.trim() || refusal,
+              check: error.code === 'OPEN_BALANCE' ? 'balances' : null,
+            },
+          });
+        return;
+      }
+      // Not a member, or no Group: the page says it isn't available, as on any denial.
+      if (error instanceof RequestError && [403, 404].includes(error.status)) {
+        try {
+          // A 403 was already forgotten by the request itself.
+          if (error.status === 404) await forgetGroup(groupId, 404, owner);
+        } catch {
+          return;
+        }
+        if (attempt === leaveRequest) publish({ ...snapshot, leave: closedLeave() });
+        return;
+      }
+      if (shown())
+        publish({
+          ...snapshot,
+          leave: {
+            ...snapshot.leave,
+            status: 'error',
+            message:
+              error instanceof RequestError
+                ? error.message
+                : 'Couldn’t confirm that you left this Group. Please try again.',
+          },
+        });
+      return;
+    }
+    // Left. The Group's draft goes with it; a failure only leaves it unlisted on this device.
+    const lease = accountStorage(),
+      drafts = dependencies.expenseDrafts;
+    if (draft && lease && drafts)
+      await lease.write(() => drafts.remove(lease.accountId, groupId)).catch(() => undefined);
+    if (!current(owner)) return;
+    const showingLeave = attempt === leaveRequest && snapshot.screen === 'members';
+    const kept = {
+      keptDraft: snapshot.keptDraft?.groupId === groupId ? null : snapshot.keptDraft,
+      pendingPayment: snapshot.pendingPayment?.groupId === groupId ? null : snapshot.pendingPayment,
+    };
+    if (showingLeave) {
+      // Home opens before the Group is forgotten, so the page just left never shows the
+      // "no longer have access" notice that a lost membership would.
+      viewRequest += 1;
+      returnPages = returnActivityPages = null;
+      membersReturn = null;
+      publish({
+        ...snapshot,
+        ...kept,
+        screen: 'groups',
+        detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
+        financial: emptyFinancial(),
+        leave: closedLeave(),
+        homeSnackbar: {
+          message: archived
+            ? `You left ${name}. It’s archived because nobody else was in it.`
+            : `You left ${name}.`,
+        },
+      });
+    } else {
+      publish({ ...snapshot, ...kept });
+    }
+    try {
+      await forgetGroup(groupId, 403, owner);
+    } catch {
+      return;
+    }
+    // Something else opened while the request ran; it stays, and its Groups list is already updated.
+    if (!showingLeave || !current(owner)) return;
+    await loadGroups(owner);
+    if (current(owner)) await refreshHome();
+  };
+
+  /**
+   * Go to Balances (or Expenses) on the Leave Group sheet: closes it and this page, and opens the
+   * Group where what blocks leaving shows, such as an open balance or an unconfirmed save.
+   */
+  const showLeaveCheck = async () => {
+    const { groupId, check, status } = snapshot.leave;
+    if (
+      snapshot.screen !== 'members' ||
+      !groupId ||
+      !check ||
+      status === 'leaving' ||
+      snapshot.detail.id !== groupId
+    )
+      return;
+    leaveRequest += 1;
+    membersReturn = null;
+    publish({ ...snapshot, screen: 'group', destination: check, leave: closedLeave() });
+    await openGroup(groupId, true, check);
   };
 
   /** Needs the Group to be known, not read just now; inviting needs a connection. */
@@ -4706,6 +4985,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.creation.status === 'saving' || expenseNavigationBlocked()) return;
     if (snapshot.screen === 'expense') return closeExpense();
     if (snapshot.screen === 'settlement') return closeSettlement();
+    // The Leave Group sheet closes first; while leaving, Back waits for the answer.
+    if (snapshot.screen === 'members' && snapshot.leave.status !== 'closed')
+      return cancelLeaveGroup();
     if (snapshot.screen === 'members') return closeMembers();
     return showHome();
   };
@@ -4911,6 +5193,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openSettings,
     openMembers,
     closeMembers,
+    reviewLeaveGroup,
+    cancelLeaveGroup,
+    leaveGroup,
+    showLeaveCheck,
     accountStorage,
     openSettlements,
     openRecordPayment,

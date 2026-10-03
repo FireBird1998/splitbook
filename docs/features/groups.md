@@ -124,15 +124,16 @@ See [api.md](../api.md#groups) for full endpoint documentation.
 
 Enforced today:
 
-- Cannot demote or remove the last admin — but the error currently surfaces as a
-  **500** with a generic message, not a clear 4xx
-- Cannot remove yourself (same caveat)
+- Leaving a Group (`POST /api/groups/[id]/leave`, web Group settings and Android
+  Members and Group details): the member must be settled up in every currency;
+  the last admin must make someone else an admin first; the last member's leaving
+  archives the Group
+- Cannot demote or remove the last admin (**409** with the reason)
+- Cannot remove yourself (**400**, pointing to leaving instead)
 - An invite code resolves to at most one group (unique partial index)
 
 **Not implemented** — described in earlier drafts, no code behind them:
 
-- Leave group — there is no leave endpoint at all, so "creator cannot leave
-  unless they transfer admin" is moot
 - Blocking archive when balances are unsettled
 - Group name uniqueness per user
 - A maximum member count

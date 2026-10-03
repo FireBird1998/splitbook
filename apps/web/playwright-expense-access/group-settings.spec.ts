@@ -87,7 +87,7 @@ test('a member action from a stale admin page is refused, not announced as done'
   await demote.click();
 
   // The refusal refreshes the page, which now reflects Alex's actual access.
-  await expect(page.getByText('Only group admins can access settings.')).toBeVisible();
+  await expect(page.getByText('Only admins can change this Group’s settings.')).toBeVisible();
   expect(await alerts()).not.toContain('Demoted to member');
   expect(await memberRoles(ledger.sam, ledger.groupA)).toEqual({
     [DEMO_PERSONA_IDS.alex]: 'member',
@@ -153,5 +153,102 @@ test.describe('new entry dates follow the viewer’s calendar day', () => {
       .click();
     const dialog = page.getByRole('dialog', { name: 'Add recurring expense' });
     await expect(dialog.getByLabel('Starts on')).toHaveValue('2026-09-29');
+  });
+});
+
+const leavePath = (group: string) => `/api/groups/${group}/leave`;
+
+test('leaving waits until the member is settled up and another admin remains', async ({
+  ledger,
+}) => {
+  await joinGroup(ledger.alex, ledger.sam, ledger.groupA);
+  await dataOf(
+    await ledger.alex.post(`/api/groups/${ledger.groupA}/expenses`, {
+      data: {
+        description: 'Groceries',
+        amount: 300,
+        currency: 'INR',
+        category: 'food',
+        tag: 'Groceries',
+        date: new Date().toISOString(),
+        paidBy: [{ user: DEMO_PERSONA_IDS.alex, amount: 300 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: DEMO_PERSONA_IDS.alex }, { user: DEMO_PERSONA_IDS.sam }],
+      },
+    }),
+    201,
+  );
+
+  const owing = await ledger.sam.post(leavePath(ledger.groupA));
+  expect(owing.status(), await owing.text()).toBe(409);
+  const owingBody = await owing.json();
+  expect(owingBody).toMatchObject({
+    code: 'OPEN_BALANCE',
+    balances: [{ currency: 'INR', amount: -150 }],
+  });
+  expect(owingBody.error).toMatch(
+    /^Settle up before you leave: you owe .*150\.00 in this Group\.$/,
+  );
+
+  const lastAdmin = await ledger.alex.post(leavePath(ledger.groupA));
+  expect(lastAdmin.status(), await lastAdmin.text()).toBe(409);
+  expect(await lastAdmin.json()).toMatchObject({
+    code: 'LAST_ADMIN',
+    error: 'Make someone else an admin before you leave.',
+  });
+
+  await dataOf(
+    await ledger.sam.post(`/api/groups/${ledger.groupA}/settlements`, {
+      data: { paidTo: DEMO_PERSONA_IDS.alex, amount: 150, currency: 'INR' },
+    }),
+    201,
+  );
+  expect(await dataOf(await ledger.sam.post(leavePath(ledger.groupA)))).toEqual({
+    message: 'Left group',
+    archived: false,
+  });
+  expect(await memberRoles(ledger.alex, ledger.groupA)).toEqual({
+    [DEMO_PERSONA_IDS.alex]: 'admin',
+  });
+  expect((await ledger.sam.get(`/api/groups/${ledger.groupA}`)).status()).toBe(403);
+});
+
+test('the last member leaving archives the Group', async ({ ledger }) => {
+  expect(await dataOf(await ledger.alex.post(leavePath(ledger.groupA)))).toEqual({
+    message: 'Left group',
+    archived: true,
+  });
+  const groups = await dataOf(await ledger.alex.get('/api/groups'));
+  expect(groups.map((group: { _id: string }) => group._id)).not.toContain(ledger.groupA);
+});
+
+test('a member leaves from Group settings and lands on Home', async ({ page, ledger }) => {
+  await enter(page, ledger.sam, `/groups/${ledger.groupB}/settings`);
+  await expect(page.getByText('Only admins can change this Group’s settings.')).toBeVisible();
+
+  await page.getByRole('button', { name: 'Leave Group' }).click();
+  const dialog = page.getByRole('dialog', { name: /^Leave/ });
+  await dialog.getByRole('button', { name: 'Leave Group' }).click();
+
+  await expect(page).toHaveURL(/\/dashboard$/);
+  expect(await memberRoles(ledger.priya, ledger.groupB)).toEqual({
+    [DEMO_PERSONA_IDS.priya]: 'admin',
+  });
+});
+
+test('a refused leave explains why and keeps the member in the Group', async ({ page, ledger }) => {
+  await joinGroup(ledger.alex, ledger.sam, ledger.groupA);
+  await enter(page, ledger.alex, `/groups/${ledger.groupA}/settings`);
+
+  await page.getByRole('button', { name: 'Leave Group' }).click();
+  const dialog = page.getByRole('dialog', { name: /^Leave/ });
+  await dialog.getByRole('button', { name: 'Leave Group' }).click();
+
+  await expect(
+    dialog.getByRole('alert').filter({ hasText: 'Make someone else an admin before you leave.' }),
+  ).toBeVisible();
+  expect(await memberRoles(ledger.alex, ledger.groupA)).toEqual({
+    [DEMO_PERSONA_IDS.alex]: 'admin',
+    [DEMO_PERSONA_IDS.sam]: 'member',
   });
 });

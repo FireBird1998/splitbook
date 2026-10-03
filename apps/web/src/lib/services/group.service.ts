@@ -4,6 +4,7 @@ import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
 import Group from '@/lib/models/Group';
 import '@/lib/models/User'; // Ensure User model is registered for populate()
 import { activityService } from './activity.service';
+import { balanceService } from './balance.service';
 import { buildDefaultGroupTags } from '@splitbook/shared/default-tags';
 import type { CreateGroupInput, UpdateGroupInput } from '@splitbook/shared/validators/group';
 import crypto from 'crypto';
@@ -11,6 +12,18 @@ import { escapeRegex } from '@splitbook/shared/escape-regex';
 import Expense from '@/lib/models/Expense';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import Settlement from '@/lib/models/Settlement';
+
+/** Why a member can't leave yet: an open balance, or they are the last admin. */
+export class LeaveBlockedError extends Error {
+  constructor(
+    readonly code: 'OPEN_BALANCE' | 'LAST_ADMIN',
+    /** For OPEN_BALANCE: the member's non-zero balance in each currency, in minor units. */
+    readonly balances: { currency: string; amountMinor: number }[] = [],
+  ) {
+    super(code);
+    this.name = 'LeaveBlockedError';
+  }
+}
 
 export class GroupService {
   /**
@@ -320,6 +333,78 @@ export class GroupService {
     });
 
     return group.populate('members.user', 'name email image');
+  }
+
+  /**
+   * The member leaves the Group. They must be settled up in every currency,
+   * and the last admin must hand over first. The last member's leaving also
+   * archives the Group, since nobody would be left to reach it.
+   * Returns null when the Group doesn't exist.
+   */
+  async leave(groupId: string, actorId: string): Promise<{ archived: boolean } | null> {
+    await connectDB();
+
+    // A concurrent join or leave can change who remains between the read and
+    // the conditional update; the update then matches nothing and we decide again.
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const group = await Group.findById(groupId).select('members isArchived').lean();
+      if (!group) return null;
+
+      const self = group.members.find((m) => m.user.toString() === actorId);
+      if (!self) throw new Error('FORBIDDEN');
+      const others = group.members.filter((m) => m.user.toString() !== actorId);
+
+      if (others.length === 0) {
+        // Nobody is left to settle with or to hand over to, so the Group is archived.
+        const left = await Group.findOneAndUpdate(
+          { _id: groupId, 'members.user': actorId, members: { $size: 1 } },
+          {
+            $pull: { members: { user: actorId } },
+            $set: { isArchived: true },
+            // Member changes that load and save() the Group check this version.
+            $inc: { __v: 1 },
+          },
+        );
+        if (!left) continue;
+        await activityService.log(groupId, 'member_left', actorId, {
+          userId: actorId,
+          method: 'left',
+        });
+        if (!group.isArchived) {
+          await activityService.log(groupId, 'group_updated', actorId, {
+            changes: { isArchived: { old: false, new: true } },
+          });
+        }
+        return { archived: true };
+      }
+
+      if (self.role === 'admin' && !others.some((m) => m.role === 'admin')) {
+        throw new LeaveBlockedError('LAST_ADMIN');
+      }
+
+      const open = await balanceService.getMemberOpenBalances(groupId, actorId);
+      if (open.length > 0) throw new LeaveBlockedError('OPEN_BALANCE', open);
+
+      // An admin may leave only while another admin remains at the moment of the update.
+      const stillHandedOver =
+        self.role === 'admin'
+          ? { members: { $elemMatch: { role: 'admin', user: { $ne: actorId } } } }
+          : { 'members.1': { $exists: true } };
+      const left = await Group.findOneAndUpdate(
+        { $and: [{ _id: groupId }, { 'members.user': actorId }, stillHandedOver] },
+        // The version bump makes a role change or removal loaded before this leave fail
+        // instead of writing to a shifted member index.
+        { $pull: { members: { user: actorId } }, $inc: { __v: 1 } },
+      );
+      if (!left) continue;
+
+      await activityService.log(groupId, 'member_left', actorId, {
+        userId: actorId,
+        method: 'left',
+      });
+      return { archived: false };
+    }
+    throw new Error('LEAVE_CONFLICT');
   }
 
   // ─── Tag Management ─────────────────────────────────

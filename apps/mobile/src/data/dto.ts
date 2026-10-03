@@ -86,6 +86,13 @@ export function parseJoinedGroup(value: unknown): string {
     .parse(value).data.groupId;
 }
 
+/** Whether leaving archived the Group: true when the member was the last one in it. */
+export function parseLeftGroup(value: unknown): { archived: boolean } {
+  return z
+    .object({ data: z.object({ archived: z.boolean() }), status: z.literal(200) })
+    .parse(value).data;
+}
+
 export function parseInviteLink(value: unknown) {
   return z
     .object({
