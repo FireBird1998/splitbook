@@ -57,6 +57,7 @@ import { GroupShell } from './src/ui/group-shell';
 import { GroupBalancesView } from './src/ui/group-balances';
 import { RecordPaymentSheet } from './src/ui/record-payment-sheet';
 import { GroupActivity } from './src/ui/group-activity';
+import { GroupMembers } from './src/ui/group-members';
 import type { MobileSnapshot } from './src/data/types';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 
@@ -141,6 +142,12 @@ function SplitBook() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <GroupScreen state={state} />
+      </SafeAreaView>
+    );
+  if (configurationReady && authenticated && state.screen === 'members')
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
+        <MembersScreen state={state} />
       </SafeAreaView>
     );
   // Settings, Create Group and an invitation, which also opens before sign-in once the session
@@ -553,6 +560,26 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
   );
 }
 
+/** Shares the open Group's invitation link through Android's share sheet. */
+function shareInvite() {
+  void (async () => {
+    const url = await controller.loadInviteLink();
+    if (!url) {
+      const message = controller.getSnapshot().share.message;
+      if (message) Alert.alert('Couldn’t get an invitation link', message);
+      return;
+    }
+    try {
+      await Share.share({
+        message: `Join our Group on SplitBook: ${url}`,
+        title: 'SplitBook invitation',
+      });
+    } catch {
+      Alert.alert('Couldn’t open sharing', 'Your invitation link is still available. Try again.');
+    }
+  })();
+}
+
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
 function GroupScreen({ state }: { state: MobileSnapshot }) {
   const feedback = refreshFeedback(state);
@@ -612,28 +639,9 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         },
       ],
     );
-  const shareInvite = () => {
-    void (async () => {
-      const url = await controller.loadInviteLink();
-      if (!url) {
-        const message = controller.getSnapshot().share.message;
-        if (message) Alert.alert('Couldn’t get an invitation link', message);
-        return;
-      }
-      try {
-        await Share.share({
-          message: `Join our Group on SplitBook: ${url}`,
-          title: 'SplitBook invitation',
-        });
-      } catch {
-        Alert.alert('Couldn’t open sharing', 'Your invitation link is still available. Try again.');
-      }
-    })();
-  };
   return (
     <GroupShell
       group={group}
-      currentUserId={userId}
       destination={state.destination}
       onDestination={(destination) => void controller.selectDestination(destination)}
       back={{
@@ -646,6 +654,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         disabled: state.share.status === 'loading' || state.detail.status !== 'ready',
         offline: state.offline.active,
       }}
+      onMembers={() => controller.openMembers({ scrollY: scrollY.current })}
       onRefresh={() => void controller.refresh()}
       pull={{ refreshing: feedback.pull, onRefresh: () => void controller.refresh('pull') }}
       scrollRef={scroll}
@@ -786,6 +795,24 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         onClose={() => void controller.back()}
       />
     </GroupShell>
+  );
+}
+
+/** Members and Group details: a full screen over the Group, which Back returns to. */
+function MembersScreen({ state }: { state: MobileSnapshot }) {
+  return (
+    <GroupMembers
+      group={state.detail.data}
+      currentUserId={state.auth.user!.id}
+      back={{ label: 'Back to Group', onPress: () => void controller.back() }}
+      invite={{
+        onPress: shareInvite,
+        disabled: state.share.status === 'loading' || state.detail.status !== 'ready',
+        offline: state.offline.active,
+      }}
+      notice={<OfflineNotice state={state.offline} />}
+      unavailable={state.detail.message}
+    />
   );
 }
 

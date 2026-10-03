@@ -4110,6 +4110,35 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({ ...snapshot, screen: 'settings' });
   };
 
+  /** Where Members and Group details returns: the Group view, Month and scroll it opened from. */
+  let membersReturn: GroupReturnContext | null = null;
+  /** Shows the Group as already read; a Group read still in flight updates the page. */
+  const openMembers = (origin: { scrollY?: number } = {}) => {
+    const groupId = snapshot.detail.data?.id;
+    if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'group' || !groupId) return;
+    membersReturn = expenseReturn(groupId, origin.scrollY);
+    publish({ ...snapshot, screen: 'members' });
+  };
+  /** Android Back and the arrow return to the destination, Month and scroll it opened from. */
+  const closeMembers = async () => {
+    if (snapshot.screen !== 'members') return;
+    const { id, data } = snapshot.detail;
+    const origin = membersReturn?.groupId === id ? membersReturn : null;
+    membersReturn = null;
+    if (!id || !data) return showHome();
+    returnPages = origin && { groupId: id, month: origin.month, pages: origin.pages };
+    // Activity's older events are read again too, as on return from an Expense.
+    returnActivityPages =
+      origin?.destination === 'activity' ? { groupId: id, pages: origin.activityPages } : null;
+    publish({
+      ...snapshot,
+      screen: 'group',
+      restoreScroll: origin ? { groupId: id, y: origin.scrollY, request: ++scrollRequests } : null,
+    });
+    // Reads what the Group view missed while the page was open; recent reads are reused.
+    await openGroup(id);
+  };
+
   const loadInviteLink = async (): Promise<string | null> => {
     if (
       snapshot.auth.status !== 'authenticated' ||
@@ -4552,6 +4581,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.creation.status === 'saving' || expenseNavigationBlocked()) return;
     if (snapshot.screen === 'expense') return closeExpense();
     if (snapshot.screen === 'settlement') return closeSettlement();
+    if (snapshot.screen === 'members') return closeMembers();
     return showHome();
   };
 
@@ -4589,7 +4619,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.auth.status !== 'authenticated') return restore();
     // Pulling on Activity re-reads Activity only; a Group that failed to load is read again.
     if (showingActivity() && snapshot.detail.status === 'ready') return refreshActivity();
-    if (['create', 'invite', 'settings', 'expense', 'settlement'].includes(snapshot.screen)) {
+    if (
+      ['create', 'invite', 'settings', 'expense', 'settlement', 'members'].includes(snapshot.screen)
+    ) {
       const owner = generation,
         view = viewRequest,
         screen = snapshot.screen;
@@ -4745,6 +4777,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     signInWithGoogle,
     startCreate,
     openSettings,
+    openMembers,
+    closeMembers,
     accountStorage,
     openSettlements,
     openRecordPayment,

@@ -234,7 +234,16 @@ export interface MobileSnapshot {
     user: SessionUser | null;
     message: string | null;
   };
-  screen: 'groups' | 'group' | 'create' | 'invite' | 'settings' | 'expense' | 'settlement';
+  /** 'members' is the Group's Members and Group details page; Back returns to the Group. */
+  screen:
+    | 'groups'
+    | 'group'
+    | 'create'
+    | 'invite'
+    | 'settings'
+    | 'expense'
+    | 'settlement'
+    | 'members';
   /**
    * The Group destination shown while `screen` is 'group'. Back from an Expense task returns
    * to the destination it opened from; a confirmed change returns to Expenses.

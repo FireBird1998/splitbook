@@ -652,6 +652,67 @@ describe('App Trip strip', () => {
   });
 });
 
+describe('App Members and Group details', () => {
+  const openMembers = async (app: Awaited<ReturnType<typeof renderApp>>) => {
+    await app.press('Group options');
+    await app.press('Members and Group details');
+    expect(app.text()).toContain('Members and details');
+  };
+  const selected = (app: Awaited<ReturnType<typeof renderApp>>) =>
+    ['Expenses', 'Balances', 'Activity'].filter(
+      (label) => app.pressable(label).props.accessibilityState.selected,
+    );
+
+  it('opens from ⋮ as a full screen, and Android Back returns to the destination and scroll', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Balances');
+    await app.scrollTo(240);
+    await openMembers(app);
+    expect(app.text()).toContain('Sam Chen · YouMember');
+    expect(app.text()).toContain('Expenses shown byMonth');
+    expect(() => app.pressable('Balances')).toThrow();
+
+    expect(await app.androidBack()).toBe(true);
+    expect(selected(app)).toEqual(['Balances']);
+    expect(app.text()).toContain('You owe₹30.00');
+    await app.layout(700, 1600);
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 240, animated: false });
+  });
+
+  it('the back arrow returns to Activity', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Activity');
+    await openMembers(app);
+    await app.press('Back to Group');
+    expect(selected(app)).toEqual(['Activity']);
+    expect(app.text()).toContain('September groceries');
+  });
+
+  it('invites from the page through the share sheet', async () => {
+    const { Share } = await import('react-native');
+    const app = await renderApp();
+    const inviteUrl = 'http://localhost:4138/join/deadbeef';
+    app.use((path) =>
+      path === `/api/groups/${groupId}/invite-link`
+        ? json({
+            data: { inviteCode: 'deadbeef', inviteUrl, expiresAt: '2030-01-01T00:00:00.000Z' },
+            status: 200,
+          })
+        : undefined,
+    );
+    await app.press('Open Maple House');
+    await openMembers(app);
+    await app.press('Invite people');
+    expect(Share.share).toHaveBeenLastCalledWith({
+      message: `Join our Group on SplitBook: ${inviteUrl}`,
+      title: 'SplitBook invitation',
+    });
+    expect(app.text()).toContain('Members and details');
+  });
+});
+
 describe('App return from an Expense', () => {
   /** `date` is the Date sheet's steps from this Month, such as ['Sunday, 20 September 2026']. */
   const addExpense = async (app: Awaited<ReturnType<typeof renderApp>>, date: string[]) => {
