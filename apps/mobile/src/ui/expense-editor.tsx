@@ -5,7 +5,7 @@ import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-nativ
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { expenseDifferences } from '@splitbook/shared/expense-review';
-import { enteredPayers } from '../data/payer-remainder';
+import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import {
   draftFromExpense,
   expenseDraftChanged,

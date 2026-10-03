@@ -1,8 +1,6 @@
 import { Pressable, TextInput, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
-import type { ExpenseDraft } from '../data/expense-draft';
-import { acceptsNumericText } from '../data/field-feedback';
 import {
   enteredPayers,
   giveRest,
@@ -10,7 +8,10 @@ import {
   payerRemainder,
   restRecipient,
   setPayerAmount,
-} from '../data/payer-remainder';
+} from '@splitbook/shared/payer-remainder';
+import type { ExpenseDraft } from '../data/expense-draft';
+import { acceptsNumericText } from '../data/field-feedback';
+import { payerEntryError } from '../data/payer-remainder';
 import {
   Badge,
   BottomSheet,
@@ -73,7 +74,7 @@ export function PayerSheet({
   const remainder = payerRemainder(draft);
   const { totalMinor, assignedMinor } = remainder;
   const left = remainder.remainingMinor ?? 0;
-  const invalid = Object.keys(remainder.errors).length > 0;
+  const invalid = Object.keys(remainder.problems).length > 0;
 
   const person = (id: string) => (
     <>
@@ -159,7 +160,7 @@ export function PayerSheet({
       </CompactText>
       {rows.map((id) => {
         const entry = draft.payers.find((payer) => payer.user === id)?.amount ?? '';
-        const error = remainder.errors[id];
+        const error = payerEntryError(entry, currency);
         const gone = unavailable(id);
         return (
           <View key={id} style={{ gap: 6 }}>

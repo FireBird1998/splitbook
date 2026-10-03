@@ -22,8 +22,8 @@ import {
   type ExpenseMoneyField,
 } from '@splitbook/shared/expense-review';
 import { amountError as moneyAmountError, calendarDateError } from './field-feedback';
-import { enteredPayers } from './payer-remainder';
 import { parseGroupResponse } from '@splitbook/shared/group-read';
+import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import { objectId, toMobileGroup } from './dto';
 import type { GroupReturnContext, MobileGroup } from './types';
 

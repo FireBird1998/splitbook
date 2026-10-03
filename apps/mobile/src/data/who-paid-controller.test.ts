@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { giveRest, payerRemainder } from '@splitbook/shared/payer-remainder';
 import { createMobileController } from './mobile-controller';
-import { giveRest, payerRemainder } from './payer-remainder';
 import type { MobileFetch } from './types';
 
 // #122: the Who paid sheet's arithmetic and "Give the rest" through the controller's draft.
