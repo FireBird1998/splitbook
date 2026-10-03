@@ -515,6 +515,34 @@ describe('native Expense creation and editing', () => {
     expect(controller.getSnapshot().expense.status).toBe('saved');
   });
 
+  it('keeps a saved payer of 0 while the payers are unchanged, so a metadata edit sends no money', async () => {
+    // An entry of 0 counts as blank (#187), but a saved Expense may list someone who paid 0.
+    const zeroPayer = {
+      ...savedExpense,
+      paidBy: [
+        ...savedExpense.paidBy,
+        { user: { _id: memberIds[1], name: 'Sam' }, amount: 0, amountMinor: 0 },
+      ],
+    };
+    const bodies: unknown[] = [];
+    const { controller } = setup((path, init) => {
+      if (!path.endsWith(`/${expenseId}`)) return undefined;
+      if (init.method === 'PATCH') {
+        const body = JSON.parse(String(init.body));
+        bodies.push(body);
+        return Promise.resolve(json({ data: { ...zeroPayer, ...body, revision: 4 }, status: 200 }));
+      }
+      return Promise.resolve(json({ data: zeroPayer, status: 200 }));
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Corrected dinner' });
+    await controller.saveExpense();
+    expect(bodies).toEqual([{ description: 'Corrected dinner' }]);
+    expect(controller.getSnapshot().expense.status).toBe('saved');
+  });
+
   it('opens authorized Expense detail with historical allocations and edit history', async () => {
     const { controller } = setup((path) =>
       path.endsWith(`/${expenseId}`)

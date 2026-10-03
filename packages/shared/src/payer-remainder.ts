@@ -1,5 +1,10 @@
 import { getCurrencyPrecision } from './currency';
-import { MAX_EXPENSE_AMOUNT, parseAmountMinor, parseExpenseAmountMinor } from './exact-money';
+import {
+  MAX_EXPENSE_AMOUNT,
+  parseAmountMinor,
+  parseDecimalUnits,
+  parseExpenseAmountMinor,
+} from './exact-money';
 
 /**
  * Who paid, with several people: what the entries add up to and what is left of the Expense
@@ -26,11 +31,23 @@ export interface PayerEntries {
  */
 export type PayerEntryProblem = 'invalid' | 'negative' | 'too-large';
 
-/** A blank entry means that person paid nothing, so they aren't a payer. */
-export const enteredPayers = (payers: PayerEntry[]) =>
-  payers.filter((payer) => payer.amount.trim());
+/** "0", "0.00" or "-0": nothing, in any currency's precision. Unreadable text isn't 0. */
+function isZero(amount: string) {
+  try {
+    return parseDecimalUnits(amount, 0) === 0;
+  } catch {
+    return false;
+  }
+}
 
-/** Why one person's entry can't count yet. Blank entries are simply empty; 0 counts. */
+/**
+ * A blank entry, or one of 0, means that person paid nothing, so they aren't a payer (#187).
+ * Their entry stays as typed, so "0" can still become "0.50".
+ */
+export const enteredPayers = (payers: PayerEntry[]) =>
+  payers.filter((payer) => payer.amount.trim() && !isZero(payer.amount));
+
+/** Why one person's entry can't count yet. Blank entries and 0 are simply empty. */
 export function payerEntryProblem(amount: string, currency: string): PayerEntryProblem | undefined {
   if (!amount.trim()) return undefined;
   let minor: number;

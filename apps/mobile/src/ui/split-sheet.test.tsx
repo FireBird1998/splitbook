@@ -562,6 +562,56 @@ describe('Split sheet', () => {
   });
 });
 
+describe('An Amounts entry above the largest Expense amount (#187)', () => {
+  const huge = '88888888888888.01';
+  const correction = 'That’s more than the Expense total.';
+
+  it('is a correction beside the entry, never a crash', async () => {
+    const ui = await withAmount('100');
+    await ui.press('Amounts');
+    await ui.type('Amount for you', huge);
+    expect(ui.input('Amount for you').props.value).toBe(huge);
+    expect(ui.input('Amount for you').props.accessibilityHint).toBe(correction);
+    expect(spoken(ui.sheet()!, correction)).toHaveLength(1);
+    expect(text(ui.sheet()!)).toContain('Correct the entry marked above.');
+    // No share is worked out from the entry.
+    expect(ui.people()[0]).toEqual({ label: 'You', checked: true });
+
+    await ui.type('Amount for you', '100');
+    expect(ui.input('Amount for you').props.accessibilityHint).toBeUndefined();
+    expect(ui.writes).toEqual([]);
+  });
+
+  it('reopens from a stored draft with the correction, so the draft is never lost', async () => {
+    const ui = await render(async (controller) => {
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({
+        amount: '100',
+        description: 'Stored before the bound',
+        splitMethod: 'unequal',
+        participantIds: [alexId, samId],
+      });
+      await controller.updateExpenseDraft({ splitValues: { [alexId]: huge, [samId]: '5' } });
+      await controller.back();
+      await controller.openExpense(groupId);
+    });
+    expect(text(ui.root())).toContain('Unfinished draft');
+    expect(ui.controller.getSnapshot().expense.draft?.splitValues).toEqual({
+      [alexId]: huge,
+      [samId]: '5',
+    });
+
+    await ui.press('Resume draft');
+    await ui.openSplit();
+    expect(ui.input('Amount for you').props.value).toBe(huge);
+    expect(ui.input('Amount for you').props.accessibilityHint).toBe(correction);
+    expect(text(ui.sheet()!)).toContain('Correct the entry marked above.');
+    await ui.done();
+    expect(ui.splitTile().props.accessibilityLabel).toMatch(/^Split: By amounts · 2\. /);
+    expect(ui.writes).toEqual([]);
+  });
+});
+
 describe('A draft stored with only spaces in a split entry', () => {
   // Typing can't enter spaces; an earlier version could store them.
   it.each([

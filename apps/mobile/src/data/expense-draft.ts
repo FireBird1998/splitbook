@@ -205,13 +205,38 @@ export function expenseMoney(draft: ExpenseDraft) {
     ? decideExpenseMoneyEdit(storedExpenseMoney(draft.original), input).money
     : normalizeExpenseMoney(input);
 }
+/**
+ * Who paid, as the draft sends it. An entry of 0 isn't a payer (#187), yet a saved Expense may
+ * list someone who paid 0: while the entries still pay what it records, its payers stay as
+ * saved, so leaving them alone is never a money change.
+ */
+function draftPaidBy(draft: ExpenseDraft): { user: string; amount: string | number }[] {
+  if (!draft.multiPayer) return [{ user: draft.payerId, amount: draft.amount }];
+  const entered = enteredPayers(draft.payers);
+  if (!draft.original || draft.currency !== draft.original.currency) return entered;
+  try {
+    const saved = readExpenseMoney(storedExpenseMoney(draft.original)).paidBy;
+    const paid = new Map(
+      saved.filter((row) => row.amountMinor).map((row) => [row.user, row.amountMinor]),
+    );
+    const entries = new Map(
+      entered.map((row) => [row.user, parseAmountMinor(row.amount, draft.currency)]),
+    );
+    const unchanged =
+      entries.size === entered.length &&
+      entries.size === paid.size &&
+      [...entries].every(([user, minor]) => paid.get(user) === minor);
+    return unchanged ? saved.map(({ user, amount }) => ({ user, amount })) : entered;
+  } catch {
+    // An entry that can't be read is explained beside it; the money rules refuse it as entered.
+    return entered;
+  }
+}
 function expenseMoneyInput(draft: ExpenseDraft) {
   return {
     amount: draft.amount,
     currency: draft.currency,
-    paidBy: draft.multiPayer
-      ? enteredPayers(draft.payers)
-      : [{ user: draft.payerId, amount: draft.amount }],
+    paidBy: draftPaidBy(draft),
     splitMethod: draft.splitMethod,
     splitBetween: draft.participantIds.map((user) => ({
       user,
