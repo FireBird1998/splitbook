@@ -23,6 +23,7 @@ import {
 } from '@splitbook/shared/expense-review';
 import { amountError as moneyAmountError, calendarDateError } from './field-feedback';
 import { parseGroupResponse } from '@splitbook/shared/group-read';
+import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import { objectId, toMobileGroup } from './dto';
 import { emptyExpenseHistory, type ExpenseHistoryState } from './activity';
 import type { GroupReturnContext, MobileGroup } from './types';
@@ -208,7 +209,9 @@ function expenseMoneyInput(draft: ExpenseDraft) {
   return {
     amount: draft.amount,
     currency: draft.currency,
-    paidBy: draft.multiPayer ? draft.payers : [{ user: draft.payerId, amount: draft.amount }],
+    paidBy: draft.multiPayer
+      ? enteredPayers(draft.payers)
+      : [{ user: draft.payerId, amount: draft.amount }],
     splitMethod: draft.splitMethod,
     splitBetween: draft.participantIds.map((user) => ({
       user,
@@ -259,14 +262,16 @@ function allocationErrors(draft: ExpenseDraft, context: ExpenseContext | null): 
     money = expenseMoney(draft);
   } catch (error) {
     const code = moneyCode(error);
-    const payerIds = draft.multiPayer ? draft.payers.map((payer) => payer.user) : [draft.payerId];
+    const payerIds = draft.multiPayer
+      ? enteredPayers(draft.payers).map((payer) => payer.user)
+      : [draft.payerId];
     if (code === 'EMPTY_PARTICIPANTS')
       return payerIds.length
         ? { split: 'Choose at least one person to share this Expense.' }
         : { payers: 'Choose who paid.' };
     const unreadablePayer =
       draft.multiPayer &&
-      draft.payers.some((payer) => {
+      enteredPayers(draft.payers).some((payer) => {
         try {
           parseAmountMinor(payer.amount, draft.currency);
           return false;

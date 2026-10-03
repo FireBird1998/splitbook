@@ -19,8 +19,8 @@ export const splitMethods = [
 ] as const;
 
 /**
- * The full-screen payer and split editors, opened from the Paid by and Split tiles until the
- * Who paid (#122) and Split (#123) sheets replace them. Done and Android Back keep entries.
+ * The full-screen split editor, opened from the Split tile until the Split sheet (#123) replaces
+ * it; Paid by opens the Who paid sheet. Done and Android Back keep entries.
  */
 export function AllocationEditor({
   editor,
@@ -79,7 +79,7 @@ export function AllocationEditor({
     </Pressable>
   );
   return (
-    <Modal visible={editor !== null} animationType="slide" onRequestClose={onClose}>
+    <Modal visible={editor === 'split'} animationType="slide" onRequestClose={onClose}>
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <KeyboardAvoidingView style={{ flex: 1 }} behavior="height">
           <View style={{ padding: 20, gap: 12 }}>
@@ -87,7 +87,7 @@ export function AllocationEditor({
               accessibilityRole="header"
               style={{ fontFamily: fonts.semibold, fontSize: 26, lineHeight: 32 }}
             >
-              {editor === 'payers' ? 'Who paid?' : 'Choose the split'}
+              Choose the split
             </Copy>
             <Button label="Done" onPress={onClose} />
           </View>
@@ -95,80 +95,7 @@ export function AllocationEditor({
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ padding: 20, gap: 16 }}
           >
-            {editor === 'payers' ? (
-              <>
-                {choice('multiple', 'Multiple payers', draft.multiPayer, () =>
-                  onChange({
-                    multiPayer: !draft.multiPayer,
-                    ...(draft.multiPayer || draft.payers.length
-                      ? {}
-                      : { payers: [{ user: draft.payerId, amount: draft.amount }] }),
-                  }),
-                )}
-                <Copy>
-                  {draft.multiPayer
-                    ? 'Enter what each person paid. The amounts must add up to the Expense total.'
-                    : 'One person paid the full Expense amount.'}
-                </Copy>
-                {members.map((member) => (
-                  <View key={member.id} style={{ gap: 8 }}>
-                    {choice(
-                      member.id,
-                      `Paid by ${member.name}`,
-                      draft.multiPayer
-                        ? draft.payers.some((payer) => payer.user === member.id)
-                        : draft.payerId === member.id,
-                      () =>
-                        onChange(
-                          draft.multiPayer
-                            ? {
-                                payers: draft.payers.some((payer) => payer.user === member.id)
-                                  ? draft.payers.filter((payer) => payer.user !== member.id)
-                                  : [...draft.payers, { user: member.id, amount: '' }],
-                              }
-                            : { payerId: member.id },
-                        ),
-                      !draft.multiPayer,
-                    )}
-                    {draft.multiPayer && draft.payers.some((payer) => payer.user === member.id) && (
-                      <Field
-                        label={`Paid by ${member.name} (${draft.currency})`}
-                        value={draft.payers.find((payer) => payer.user === member.id)!.amount}
-                        keyboardType="decimal-pad"
-                        maxLength={40}
-                        editable={!locked}
-                        onChangeText={(amount) => {
-                          const current = draft.payers.find((payer) => payer.user === member.id);
-                          if (current && acceptsNumericText(amount, current.amount))
-                            onChange({
-                              payers: draft.payers.map((payer) =>
-                                payer.user === member.id ? { ...payer, amount } : payer,
-                              ),
-                            });
-                        }}
-                      />
-                    )}
-                  </View>
-                ))}
-                {draft.multiPayer &&
-                  draft.payers.some(
-                    (payer) => !members.some((member) => member.id === payer.user),
-                  ) && (
-                    <Button
-                      label="Remove unavailable payers"
-                      secondary
-                      disabled={locked}
-                      onPress={() =>
-                        onChange({
-                          payers: draft.payers.filter((payer) =>
-                            members.some((member) => member.id === payer.user),
-                          ),
-                        })
-                      }
-                    />
-                  )}
-              </>
-            ) : (
+            {editor === 'split' && (
               <>
                 <View accessibilityRole="radiogroup" style={{ gap: 8 }}>
                   {splitMethods.map((item) =>

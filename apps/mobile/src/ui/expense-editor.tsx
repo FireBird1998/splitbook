@@ -5,6 +5,7 @@ import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-nativ
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { expenseDifferences } from '@splitbook/shared/expense-review';
+import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import {
   draftFromExpense,
   expenseDraftChanged,
@@ -32,6 +33,7 @@ import {
 } from './compact';
 import { TagSheet, inactiveTagReport } from './tag-sheet';
 import { AllocationEditor } from './allocation-editors';
+import { PayerSheet, paidBySummary } from './payer-sheet';
 import {
   AmountDescriptionCard,
   ExpenseTiles,
@@ -266,7 +268,9 @@ export function ExpenseEditor({
   const invalidMembers =
     context &&
     [
-      ...(draft.multiPayer ? draft.payers.map((payer) => payer.user) : [draft.payerId]),
+      ...(draft.multiPayer
+        ? enteredPayers(draft.payers).map((payer) => payer.user)
+        : [draft.payerId]),
       ...draft.participantIds,
     ].some((id) => !members.some((member) => member.id === id));
   let allocation: ReturnType<typeof expenseMoney> | null = null;
@@ -445,11 +449,7 @@ export function ExpenseEditor({
             errors={{ ...errors, tag: errors.tag ?? tagReport.error }}
             values={{
               date: expenseDateLabel(draft.date),
-              payers: draft.multiPayer
-                ? `${draft.payers.length} ${draft.payers.length === 1 ? 'person' : 'people'}`
-                : draft.payerId === currentUserId
-                  ? 'You'
-                  : name(draft.payerId),
+              payers: paidBySummary(draft, (id) => (id === currentUserId ? 'You' : name(id))),
               split: splitSummary(draft),
               tag:
                 tag?.name ??
@@ -597,6 +597,20 @@ export function ExpenseEditor({
         allocationError={allocationError}
         onChange={onChange}
         onClose={() => setEditor(null)}
+      />
+      <PayerSheet
+        visible={editor === 'payers'}
+        draft={draft}
+        members={context ? members : null}
+        currentUserId={currentUserId}
+        locked={locked}
+        persistence={state.persistence}
+        name={name}
+        onChange={onChange}
+        onDone={() => {
+          setEditor(null);
+          onLeaveField('payers');
+        }}
       />
     </>
   );
