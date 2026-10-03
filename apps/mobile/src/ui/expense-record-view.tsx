@@ -1,5 +1,5 @@
-import { useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { Fragment, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
 import { getCategory } from '@splitbook/shared/categories';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
@@ -9,7 +9,12 @@ import {
   expenseMoney,
   type ExpenseEditor as Editor,
 } from '../data/expense-draft';
-import { describeExpenseHistory } from '../data/expense-history';
+import type { ExpenseHistoryState } from '../data/activity';
+import {
+  describeExpenseEvents,
+  describeExpenseHistory,
+  type ExpenseHistoryChange,
+} from '../data/expense-history';
 import { canEditExpense, storedExpenseMoney, type ExpenseRecord } from '../data/expense-record';
 import { expenseRecordPosition } from '@splitbook/shared/expense-position';
 import { clockTime } from './activity-format';
@@ -59,8 +64,8 @@ function recordTime(iso: string, now = Date.now()) {
 
 /**
  * A saved Expense, read-only: what it was for, the member's position, who owes what, its
- * details and when it was added and last changed. Edit is in the top bar and Delete in ⋮,
- * behind the existing confirmation. While the Group holds another draft, both wait for it.
+ * details and its history. Edit is in the top bar and Delete in ⋮, behind the existing
+ * confirmation. While the Group holds another draft, both wait for it.
  */
 export function ExpenseRecordScreen({
   state,
@@ -73,6 +78,8 @@ export function ExpenseRecordScreen({
   onCancelDelete,
   onResume,
   onRefresh,
+  onLoadOlderHistory,
+  onRetryHistory,
 }: {
   state: Editor;
   currentUserId?: string;
@@ -86,6 +93,9 @@ export function ExpenseRecordScreen({
   /** Opens the Group's draft that holds Edit and Delete. */
   onResume: () => void;
   onRefresh: () => void;
+  onLoadOlderHistory?: () => void;
+  /** Reads the Expense's changes again after they couldn't be read. */
+  onRetryHistory?: () => void;
 }) {
   const theme = useTheme();
   const [options, setOptions] = useState(false);
@@ -264,7 +274,16 @@ export function ExpenseRecordScreen({
             {record.notes ? <DetailRow label="Notes" value={record.notes} /> : null}
           </Card>
         ) : null}
-        <RecordHistory record={record} currentUserId={currentUserId} name={name} />
+        <RecordHistory
+          record={record}
+          history={state.history}
+          currentUserId={currentUserId}
+          name={name}
+          people={members}
+          tags={context?.tags}
+          onLoadOlder={onLoadOlderHistory}
+          onRetry={onRetryHistory}
+        />
       </ScrollView>
       <BottomSheet
         visible={options}
@@ -355,18 +374,36 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * When the Expense was added and last changed. This Expense's own changes will be listed
- * here once they can be read for one Expense.
+ * This Expense's changes, newest first, with who made them and their before and after values.
+ * Until they're read, and when they can't be, it says when the Expense was added and last
+ * changed; older changes load on request.
  */
 function RecordHistory({
   record,
+  history,
   currentUserId,
   name,
+  people,
+  tags,
+  onLoadOlder,
+  onRetry,
 }: {
   record: ExpenseRecord;
+  history: ExpenseHistoryState;
   currentUserId?: string;
   name: (id: string) => string;
+  people: { id: string; name: string }[];
+  tags?: { id: string; name: string }[];
+  onLoadOlder?: () => void;
+  onRetry?: () => void;
 }) {
+  const theme = useTheme();
+  const read = history.status === 'ready' && history.expenseId === record._id;
+  const events = read
+    ? describeExpenseEvents(history.events, record, { currentUserId, people, tags })
+    : [];
+  const more =
+    read && !!history.pagination && history.pagination.page < history.pagination.totalPages;
   const creator = record.createdBy;
   const creatorId = typeof creator === 'object' && creator ? creator._id : creator;
   const creatorName =
@@ -375,11 +412,43 @@ function RecordHistory({
       : creatorId
         ? name(creatorId)
         : null;
+  // The record's own times stand in until its changes are read; the oldest page may also
+  // lack the event that added it, for an Expense older than Activity.
+  const times = !events.length;
+  const added = times || (!more && !history.events.some((event) => event.type === 'expense_added'));
+  const progress = (label: string) => (
+    <View
+      accessibilityLiveRegion="polite"
+      style={{
+        minHeight: 48,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 10,
+      }}
+    >
+      <ActivityIndicator color={theme.brand.main} />
+      <CompactText tone="secondary">{label}</CompactText>
+    </View>
+  );
   return (
     <View style={{ gap: 8 }}>
       <SectionHeader title="History" />
       <Card>
-        {record.isDeleted ? (
+        {events.map((event, index) => (
+          <Fragment key={event.key}>
+            {index > 0 ? <Divider inset={58} /> : null}
+            <HistoryRow
+              icon="create-outline"
+              actor={{ name: event.name, label: event.actor }}
+              title={event.action}
+              changes={event.changes}
+              implied={event.implied}
+              time={event.at}
+            />
+          </Fragment>
+        ))}
+        {times && record.isDeleted ? (
           <>
             <HistoryRow
               icon="trash-outline"
@@ -388,37 +457,125 @@ function RecordHistory({
             />
             <Divider inset={58} />
           </>
-        ) : record.updatedAt !== record.createdAt ? (
+        ) : times && record.updatedAt !== record.createdAt ? (
           <>
             <HistoryRow icon="time-outline" title="Last changed" time={record.updatedAt} />
             <Divider inset={58} />
           </>
         ) : null}
-        <HistoryRow
-          icon="add-outline"
-          actor={
-            creatorName
-              ? { name: creatorName, label: creatorId === currentUserId ? 'You' : creatorName }
-              : undefined
-          }
-          title={creatorName ? 'added this Expense' : 'Added'}
-          time={record.createdAt}
-        />
+        {added ? (
+          <>
+            {times ? null : <Divider inset={58} />}
+            <HistoryRow
+              icon="add-outline"
+              actor={
+                creatorName
+                  ? { name: creatorName, label: creatorId === currentUserId ? 'You' : creatorName }
+                  : undefined
+              }
+              title={creatorName ? 'added this Expense' : 'Added'}
+              time={record.createdAt}
+            />
+          </>
+        ) : null}
       </Card>
+      {history.status === 'loading' ? (
+        progress('Loading this Expense’s changes…')
+      ) : history.status === 'error' ? (
+        <View
+          style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 4 }}
+        >
+          <CompactText variant="small" tone="secondary" style={{ flexShrink: 1 }}>
+            {history.message ?? 'Couldn’t load this Expense’s changes.'}
+          </CompactText>
+          {onRetry ? (
+            <CompactButton
+              label="Try again"
+              accessibilityLabel="Try loading this Expense’s changes again"
+              variant="text"
+              dense
+              onPress={onRetry}
+            />
+          ) : null}
+        </View>
+      ) : more && history.moreStatus === 'loading' ? (
+        progress('Loading older changes…')
+      ) : more && onLoadOlder ? (
+        <>
+          {history.moreStatus === 'error' ? (
+            <CompactText variant="small" tone="negative" accessibilityRole="alert">
+              Couldn’t load older changes. The changes shown are still here.
+            </CompactText>
+          ) : null}
+          <CompactButton
+            label={
+              history.moreStatus === 'error' ? 'Try loading older changes' : 'Load older changes'
+            }
+            variant="tonal"
+            block
+            onPress={onLoadOlder}
+          />
+        </>
+      ) : null}
     </View>
   );
 }
 
-/** "{actor} {title}" with its time; a row without an actor leads with an icon. */
+const moneyFace = { fontFamily: fonts.mono, fontVariant: ['tabular-nums' as const] };
+
+/** "Amount ₹899.00 → ₹999.00", or only the values when the row's title names the change. */
+function ChangeText({
+  change,
+  implied = false,
+}: {
+  change: ExpenseHistoryChange;
+  implied?: boolean;
+}) {
+  // Only amounts are in the money face; a word such as "Not included" stays in the text face.
+  const before = change.money?.before ? moneyFace : undefined;
+  const after = change.money?.after ? moneyFace : undefined;
+  return (
+    <>
+      {implied ? null : `${change.label} `}
+      {change.before !== undefined && change.after !== undefined ? (
+        <>
+          <Text style={before}>{change.before}</Text>
+          {' → '}
+          <Text style={after}>{change.after}</Text>
+        </>
+      ) : change.after !== undefined ? (
+        <Text style={after}>{change.after}</Text>
+      ) : (
+        'changed'
+      )}
+    </>
+  );
+}
+
+const spokenChange = ({ label, before, after }: ExpenseHistoryChange) =>
+  before !== undefined && after !== undefined
+    ? `${label} from ${before} to ${after}`
+    : after !== undefined
+      ? `${label} ${after}`
+      : `${label} changed`;
+
+/**
+ * "{actor} {title}" with what changed and its time; a row without an actor leads with an icon.
+ * One change shares the time's line, as in "₹2,680.00 → ₹2,860.00 · 29 Sep, 21:10".
+ */
 function HistoryRow({
   actor,
   icon,
   title,
+  changes = [],
+  implied = false,
   time,
 }: {
   actor?: { name: string; label: string };
   icon: IconName;
   title: string;
+  changes?: ExpenseHistoryChange[];
+  implied?: boolean;
   time: string;
 }) {
   const theme = useTheme();
@@ -426,7 +583,11 @@ function HistoryRow({
   return (
     <View
       accessible
-      accessibilityLabel={`${actor ? `${actor.label} ${title}` : title}, ${when}`}
+      accessibilityLabel={[
+        actor ? `${actor.label} ${title}` : title,
+        ...changes.map(spokenChange),
+        when,
+      ].join(', ')}
       style={{
         minHeight: 60,
         flexDirection: 'row',
@@ -462,7 +623,20 @@ function HistoryRow({
             title
           )}
         </CompactText>
+        {changes.length > 1
+          ? changes.map((change, index) => (
+              <CompactText key={`${change.label}:${index}`} variant="caption" tone="secondary">
+                <ChangeText change={change} />
+              </CompactText>
+            ))
+          : null}
         <CompactText variant="caption" tone="secondary">
+          {changes.length === 1 ? (
+            <>
+              <ChangeText change={changes[0]} implied={implied} />
+              {' · '}
+            </>
+          ) : null}
           {when}
         </CompactText>
       </View>

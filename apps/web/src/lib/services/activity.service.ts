@@ -225,21 +225,31 @@ export class ActivityService {
   }
 
   /**
-   * Get paginated activity feed for a group.
+   * Get paginated activity feed for a group, or only its events about one of its Expenses.
+   * An Expense the Group doesn't have, including another Group's, has no events here.
    */
-  async getGroupActivity(groupId: string, page: number = 1, limit: number = 20) {
+  async getGroupActivity(
+    groupId: string,
+    page: number = 1,
+    limit: number = 20,
+    expenseId?: string,
+  ) {
     await connectDB();
     await this.recoverGroupActivity(groupId);
     const skip = (page - 1) * limit;
+    const filter = {
+      group: groupId,
+      ...(expenseId === undefined ? {} : { 'metadata.expenseId': expenseId }),
+    };
 
     const [activities, total] = await Promise.all([
-      Activity.find({ group: groupId })
+      Activity.find(filter)
         .sort({ createdAt: -1, _id: -1 })
         .skip(skip)
         .limit(limit)
         .populate('actor', 'name email image')
         .lean(),
-      Activity.countDocuments({ group: groupId }),
+      Activity.countDocuments(filter),
     ]);
 
     return {

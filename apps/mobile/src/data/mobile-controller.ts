@@ -2,6 +2,7 @@ import { cachedRead } from './offline-cache';
 import {
   activityExpenseId,
   emptyActivity,
+  emptyExpenseHistory,
   parseActivityPage,
   parseActivityExpense,
 } from './activity';
@@ -302,6 +303,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let keptDraftRequest = 0;
   let activityRequest = 0;
   let activityDetailRequest = 0;
+  let historyRequest = 0;
   let cacheEpoch = 0;
   // Set by returnToGroup: the next read of that Group and Month reads this many pages.
   let returnPages: { groupId: string; month: string | null; pages: number } | null = null;
@@ -1647,12 +1649,28 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     await kept;
   };
 
+  /**
+   * The open Expense once its Group refuses this member: its changes are cleared and no read
+   * still on its way can bring them back. A saved record being viewed gives way to a notice
+   * that it's unavailable. A draft or a save that may already be recorded stays, since it lives
+   * on this device and can still be recovered.
+   */
+  const withdrawExpense = (message: string): MobileSnapshot['expense'] => {
+    const editor = snapshot.expense;
+    historyRequest += 1;
+    const withdrawn = { ...editor, context: null, history: emptyExpenseHistory() };
+    return ['detail', 'delete-review'].includes(editor.status)
+      ? { ...withdrawn, status: 'blocked', draft: null, preview: null, latest: null, message }
+      : withdrawn;
+  };
+
   const evictGroupContent = (id: string, status: number) => {
     const message =
       status === 403
         ? 'You no longer have access to this group.'
         : 'This group is no longer available.';
     homeRequest += 1;
+    const expense = snapshot.expense.groupId === id ? withdrawExpense(message) : snapshot.expense;
     publish({
       ...snapshot,
       groups: { ...snapshot.groups, data: snapshot.groups.data.filter((group) => group.id !== id) },
@@ -1672,8 +1690,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         snapshot.activity.groupId === id
           ? { ...emptyActivity(), groupId: id, status: 'denied', message }
           : snapshot.activity,
-      expense:
-        snapshot.expense.groupId === id ? { ...snapshot.expense, context: null } : snapshot.expense,
+      expense,
       settlement:
         snapshot.settlement.groupId === id
           ? { ...snapshot.settlement, group: null, balances: [] }
@@ -2611,8 +2628,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                   : null,
           groupDraft: held,
           blank: record ? record.blank : blank,
+          history: emptyExpenseHistory(),
         },
       });
+      // The record is shown first; its changes follow when they've been read.
+      if (original) await readExpenseHistory(false);
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
       publish({
@@ -2633,6 +2653,87 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
     }
   };
+
+  /**
+   * The shown record's changes, newest first: its Group's Activity filtered to this Expense.
+   * Until they're read, or when they can't be, the record keeps its added and last-changed
+   * times; a failed read never affects the record itself.
+   */
+  const readExpenseHistory = async (append: boolean) => {
+    const editor = snapshot.expense,
+      previous = editor.history,
+      groupId = editor.groupId,
+      expenseId = editor.draft?.original?._id;
+    if (
+      snapshot.screen !== 'expense' ||
+      !['detail', 'delete-review'].includes(editor.status) ||
+      !groupId ||
+      !expenseId
+    )
+      return;
+    const pagination = previous.expenseId === expenseId ? previous.pagination : null;
+    if (
+      append &&
+      (previous.status !== 'ready' ||
+        previous.moreStatus === 'loading' ||
+        !pagination ||
+        pagination.page >= pagination.totalPages)
+    )
+      return;
+    const pageNumber = append ? pagination!.page + 1 : 1;
+    const owner = generation,
+      view = viewRequest,
+      read = ++historyRequest;
+    const wanted = () => current(owner) && view === viewRequest && read === historyRequest;
+    const publishHistory = (history: Partial<typeof previous>) =>
+      publish({
+        ...snapshot,
+        expense: { ...snapshot.expense, history: { ...previous, ...history } },
+      });
+    publishHistory(
+      append
+        ? { moreStatus: 'loading' }
+        : { ...emptyExpenseHistory(), expenseId, status: 'loading' },
+    );
+    try {
+      const page = await readCached(
+        `/api/groups/${groupId}/activity?expenseId=${expenseId}&page=${pageNumber}&limit=20`,
+        owner,
+        (value) => parseActivityPage(value, groupId, pageNumber, expenseId),
+        wanted,
+      );
+      if (!wanted()) return;
+      const events = [...(append ? previous.events : []), ...page.events];
+      publishHistory({
+        expenseId,
+        status: 'ready',
+        events: [...new Map(events.map((event) => [event._id, event])).values()],
+        pagination: page.pagination,
+        message: null,
+        moreStatus: 'idle',
+      });
+    } catch (error) {
+      if (!wanted() || error instanceof Superseded) return;
+      // Refused, not merely unread: the record and its changes are withdrawn, not kept.
+      if (error instanceof RequestError && error.status === 403)
+        return publish({ ...snapshot, expense: withdrawExpense(error.message) });
+      publishHistory(
+        append
+          ? { moreStatus: 'error' }
+          : {
+              ...emptyExpenseHistory(),
+              expenseId,
+              status: 'error',
+              message:
+                error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE'
+                  ? 'This Expense’s changes aren’t saved on this device. Connect to see them.'
+                  : 'Couldn’t load this Expense’s changes.',
+            },
+      );
+    }
+  };
+  const refreshExpenseHistory = () => readExpenseHistory(false);
+  const loadOlderExpenseHistory = () => readExpenseHistory(true);
 
   const resumeExpenseDraft = () => {
     const editor = snapshot.expense;
@@ -4530,9 +4631,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             publish({
               ...snapshot,
               expense: {
-                ...snapshot.expense,
+                ...withdrawExpense(error.message),
                 status: 'blocked',
-                context: null,
                 message: error.message,
               },
             });
@@ -4620,6 +4720,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     closeActivityDetail,
     refreshActivity,
     loadMoreActivity,
+    refreshExpenseHistory,
+    loadOlderExpenseHistory,
     reviewExpenseDeletion,
     cancelExpenseDeletion,
     deleteExpense: () => saveExpenseEdit('delete'),

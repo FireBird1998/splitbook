@@ -67,6 +67,8 @@ export function ExpenseEditor({
   onAcceptCurrent,
   onLeaveField,
   onReveal,
+  onLoadOlderHistory,
+  onRetryHistory,
 }: {
   state: Editor;
   /** Shown as "You" in the form. */
@@ -91,6 +93,9 @@ export function ExpenseEditor({
   onReconcile: () => void;
   onReviewLatest: () => void;
   onAcceptCurrent: () => void;
+  /** The saved record's older changes, and another read of its changes after a failure. */
+  onLoadOlderHistory?: () => void;
+  onRetryHistory?: () => void;
 }) {
   const theme = useTheme();
   const [editor, setEditor] = useState<'payers' | 'split' | null>(null);
@@ -246,6 +251,8 @@ export function ExpenseEditor({
         onCancelDelete={onCancelDelete}
         onResume={onResume}
         onRefresh={onRetry}
+        onLoadOlderHistory={onLoadOlderHistory}
+        onRetryHistory={onRetryHistory}
       />
     );
   const locked = state.status !== 'editing';

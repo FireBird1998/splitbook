@@ -641,6 +641,11 @@ with the group's default currency.
 **Query params:** `?page=1&limit=20` (the client requests `limit=50` and renders
 a single page — there is no Load More control).
 
+`expenseId` narrows the feed to the events whose `metadata.expenseId` is that
+Expense, with the same shape, pagination and membership check. An Expense the
+Group doesn't have, including another Group's, returns an empty page. The
+Android Expense record reads its history this way.
+
 **Response:**
 
 ```json

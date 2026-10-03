@@ -24,6 +24,7 @@ import {
 import { amountError as moneyAmountError, calendarDateError } from './field-feedback';
 import { parseGroupResponse } from '@splitbook/shared/group-read';
 import { objectId, toMobileGroup } from './dto';
+import { emptyExpenseHistory, type ExpenseHistoryState } from './activity';
 import type { GroupReturnContext, MobileGroup } from './types';
 
 // Historical missing identities are local read/delete-recovery keys, never API identities.
@@ -102,6 +103,8 @@ export interface ExpenseEditor {
    * stored by earlier versions. An edit starts from its saved Expense.
    */
   blank: ExpenseDraft | null;
+  /** The saved Expense's changes, read while its record is shown. */
+  history: ExpenseHistoryState;
 }
 /** Correctable Expense inputs, in the order they appear on screen. */
 export const expenseFields = ['amount', 'description', 'date', 'payers', 'split', 'tag'] as const;
@@ -147,6 +150,7 @@ export function emptyExpenseEditor(): ExpenseEditor {
     returnTo: null,
     groupDraft: null,
     blank: null,
+    history: emptyExpenseHistory(),
   };
 }
 export function parseExpenseContext(value: unknown): ExpenseContext {
