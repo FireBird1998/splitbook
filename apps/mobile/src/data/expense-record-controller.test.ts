@@ -276,3 +276,23 @@ describe('Opening an Expense record', () => {
     });
   });
 });
+
+describe('Returning from Members and Group details to Activity', () => {
+  it('reads again the older events Activity showed, so its scroll position still exists', async () => {
+    const { controller, activityPages } = await signedIn();
+    await controller.openActivity(groupId);
+    await controller.loadMoreActivity();
+    activityPages();
+
+    controller.openMembers({ scrollY: 1800 });
+    expect(controller.getSnapshot().screen).toBe('members');
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'activity',
+      restoreScroll: { y: 1800 },
+      activity: { status: 'ready', pagination: { page: 2 } },
+    });
+    expect(activityPages()).toEqual([1, 2]);
+  });
+});

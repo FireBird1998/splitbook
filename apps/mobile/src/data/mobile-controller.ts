@@ -4026,6 +4026,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     membersReturn = null;
     if (!id || !data) return showHome();
     returnPages = origin && { groupId: id, month: origin.month, pages: origin.pages };
+    // Activity's older events are read again too, as on return from an Expense.
+    returnActivityPages =
+      origin?.destination === 'activity' ? { groupId: id, pages: origin.activityPages } : null;
     publish({
       ...snapshot,
       screen: 'group',
