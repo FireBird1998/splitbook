@@ -1,15 +1,9 @@
 import type { ReactNode } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { escapeRegex } from '@splitbook/shared/escape-regex';
+import { splitChoiceOf, splitMethodFor, type SplitChoice } from '@splitbook/shared/expense-split';
 import type { ExpenseDraft } from '../data/expense-draft';
-import {
-  previewSplit,
-  roundingNote,
-  splitChoiceOf,
-  splitMethodFor,
-  type SplitChoice,
-  type SplitStatus,
-} from '../data/expense-split';
+import { previewSplit, roundingNote, type SplitStatus } from '../data/expense-split';
 import { acceptsNumericText } from '../data/field-feedback';
 import { FieldError } from './group-workflows';
 import { Icon } from './primitives';
@@ -93,7 +87,7 @@ export function SplitSheet({
   ].sort((a, b) => Number(b === currentUserId) - Number(a === currentUserId));
 
   const choose = (next: SplitChoice) => {
-    const splitMethod = splitMethodFor(next, draft);
+    const splitMethod = splitMethodFor(next, draft.splitMethod, draft.original?.splitMethod);
     if (locked || splitMethod === draft.splitMethod) return;
     onChange({ splitMethod });
     // A method change clears the previous values; Shares then start at one each.
