@@ -12,6 +12,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import LogoutIcon from '@mui/icons-material/Logout';
+import { apiFetch } from '@/lib/utils/api-fetch';
 
 interface LeaveGroupSectionProps {
   groupId: string;
@@ -42,7 +43,7 @@ export default function LeaveGroupSection({ groupId, groupName }: LeaveGroupSect
     setLeaving(true);
     setRefusal(null);
     try {
-      const res = await fetch(`/api/groups/${groupId}/leave`, { method: 'POST' });
+      const res = await apiFetch(`/api/groups/${groupId}/leave`, { method: 'POST' });
       if (res.ok) {
         window.location.href = '/dashboard';
         return;

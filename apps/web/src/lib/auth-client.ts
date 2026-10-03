@@ -5,6 +5,7 @@
 
 import { createAuthClient } from 'better-auth/react';
 import { demoPersonaClient } from '@/lib/auth/demo-persona-client';
+import { leaveExpectedAccount } from '@/lib/utils/api-fetch';
 
 export const authClient = createAuthClient({
   plugins: [demoPersonaClient()],
@@ -37,6 +38,8 @@ export async function signInWithGoogle(callbackURL: string) {
 
 /** Sign out, then reload at the landing page (persona picker or marketing page). */
 export async function signOutToHome() {
+  // This tab navigates on its own; its session guard must not reload it first.
+  leaveExpectedAccount();
   await authClient.signOut();
   window.location.assign('/');
 }

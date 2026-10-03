@@ -3,6 +3,8 @@ import { redirect } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Sidebar from '@/components/layout/Sidebar';
 import Navbar from '@/components/layout/Navbar';
+import ExpectedAccountProvider from '@/components/layout/ExpectedAccountProvider';
+import SessionGuard from '@/components/layout/SessionGuard';
 import { isDemoMode } from '@/lib/auth-mode';
 import { NAV_HEIGHT, SIDEBAR_WIDTH } from '@/lib/theme/tokens';
 
@@ -14,7 +16,8 @@ export default async function MainLayout({ children }: { children: React.ReactNo
   }
 
   return (
-    <>
+    <ExpectedAccountProvider accountId={user.id}>
+      <SessionGuard accountId={user.id} />
       <Box
         sx={{
           minHeight: '100vh',
@@ -41,6 +44,6 @@ export default async function MainLayout({ children }: { children: React.ReactNo
           </Box>
         </Box>
       </Box>
-    </>
+    </ExpectedAccountProvider>
   );
 }

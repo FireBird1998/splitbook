@@ -51,6 +51,7 @@ import {
   parseAmountMinor,
   toMajorAmount,
 } from '@splitbook/shared/exact-money';
+import { apiFetch } from '@/lib/utils/api-fetch';
 
 interface RecurringExpensesSectionProps {
   groupId: string;
@@ -344,7 +345,7 @@ export default function RecurringExpensesSection({
       const url = editing
         ? `/api/groups/${groupId}/recurring/${editing._id}`
         : `/api/groups/${groupId}/recurring`;
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method: editing ? 'PATCH' : 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -375,7 +376,7 @@ export default function RecurringExpensesSection({
     setActionError('');
     setActionConflict(false);
     try {
-      const res = await fetch(`/api/groups/${groupId}/recurring/${selected._id}`, {
+      const res = await apiFetch(`/api/groups/${groupId}/recurring/${selected._id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'If-Match': String(selected.revision ?? 0) },
         body: JSON.stringify({ isPaused: !selected.isPaused }),
@@ -402,7 +403,7 @@ export default function RecurringExpensesSection({
     setActionError('');
     setActionConflict(false);
     try {
-      const res = await fetch(`/api/groups/${groupId}/recurring/${selected._id}`, {
+      const res = await apiFetch(`/api/groups/${groupId}/recurring/${selected._id}`, {
         method: 'DELETE',
         headers: { 'If-Match': String(selected.revision ?? 0) },
       });

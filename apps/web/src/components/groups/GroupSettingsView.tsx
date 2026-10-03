@@ -48,6 +48,7 @@ import ErrorState from '@/components/common/ErrorState';
 import { validateTripDates } from '@splitbook/shared/trip-setup';
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
 import RecurringExpensesSection from '@/components/groups/RecurringExpensesSection';
+import { apiFetch } from '@/lib/utils/api-fetch';
 
 interface GroupSettingsViewProps {
   groupId: string;
@@ -188,7 +189,7 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
     if (tripDateError) return;
     setGeneralSaving(true);
     try {
-      const res = await fetch(`/api/groups/${groupId}`, {
+      const res = await apiFetch(`/api/groups/${groupId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -219,7 +220,7 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
   const handleSaveCurrency = async () => {
     setCurrencySaving(true);
     try {
-      const res = await fetch(`/api/groups/${groupId}`, {
+      const res = await apiFetch(`/api/groups/${groupId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ defaultCurrency, alternateCurrencies }),
@@ -243,10 +244,10 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
     try {
       const res =
         action === 'remove'
-          ? await fetch(`/api/groups/${groupId}/members/${selectedMember}`, {
+          ? await apiFetch(`/api/groups/${groupId}/members/${selectedMember}`, {
               method: 'DELETE',
             })
-          : await fetch(`/api/groups/${groupId}/members/${selectedMember}`, {
+          : await apiFetch(`/api/groups/${groupId}/members/${selectedMember}`, {
               method: 'PATCH',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -280,7 +281,7 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
   const handleGenerateInviteLink = async () => {
     setInviteLinkLoading(true);
     try {
-      const res = await fetch(`/api/groups/${groupId}/invite-link`, {
+      const res = await apiFetch(`/api/groups/${groupId}/invite-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expiresInDays: 7 }),
@@ -310,7 +311,7 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
   const handleArchive = async () => {
     setArchiveLoading(true);
     try {
-      const res = await fetch(`/api/groups/${groupId}`, { method: 'DELETE' });
+      const res = await apiFetch(`/api/groups/${groupId}`, { method: 'DELETE' });
       if (!res.ok) {
         setSnackbar({ open: true, message: await failureMessage(res, 'Failed to archive group') });
         return;
@@ -331,7 +332,7 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
     if (!newTagName.trim()) return;
     setTagLoading(true);
     try {
-      const res = await fetch(`/api/groups/${groupId}/tags`, {
+      const res = await apiFetch(`/api/groups/${groupId}/tags`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: newTagName.trim() }),
@@ -359,7 +360,7 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
     setTagLoading(true);
     setRenameTagError('');
     try {
-      const res = await fetch(`/api/groups/${groupId}/tags/${selectedTag}`, {
+      const res = await apiFetch(`/api/groups/${groupId}/tags/${selectedTag}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: renameTagName.trim() }),
@@ -388,7 +389,7 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
     if (!selectedTag || !selectedTagData) return;
     setTagLoading(true);
     try {
-      const res = await fetch(`/api/groups/${groupId}/tags/${selectedTag}`, {
+      const res = await apiFetch(`/api/groups/${groupId}/tags/${selectedTag}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ isArchived: !selectedTagData.isArchived }),
@@ -416,7 +417,7 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
     setTagLoading(true);
     setDeleteTagError('');
     try {
-      const res = await fetch(`/api/groups/${groupId}/tags/${selectedTag}`, {
+      const res = await apiFetch(`/api/groups/${groupId}/tags/${selectedTag}`, {
         method: 'DELETE',
       });
       const data = await res.json();

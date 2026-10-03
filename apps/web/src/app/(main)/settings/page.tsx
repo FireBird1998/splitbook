@@ -16,6 +16,7 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import { CURRENCIES, CURRENCY_CODES } from '@splitbook/shared/currency';
 import { updateProfileSchema } from '@splitbook/shared/validators/profile';
 import { authClient, signOutToHome } from '@/lib/auth-client';
+import { apiFetch } from '@/lib/utils/api-fetch';
 
 export default function SettingsPage() {
   const { data: session } = authClient.useSession();
@@ -34,7 +35,7 @@ export default function SettingsPage() {
     const controller = new AbortController();
     async function loadProfile() {
       try {
-        const res = await fetch('/api/user/profile', { signal: controller.signal });
+        const res = await apiFetch('/api/user/profile', { signal: controller.signal });
         const data = await res.json();
         if (!res.ok || !data.data)
           throw new Error('Could not load your profile. Please try again.');
@@ -72,7 +73,7 @@ export default function SettingsPage() {
     setNameError('');
     setLoading(true);
     try {
-      const res = await fetch('/api/user/profile', {
+      const res = await apiFetch('/api/user/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(parsed.data),
