@@ -54,10 +54,36 @@ export interface ReadFreshness {
   stale: boolean;
 }
 
+/** The member's balance in one of a Group's currencies: negative owes, positive is owed. */
+export interface HomeGroupBalance {
+  currency: string;
+  balance: number;
+}
+
 export interface HomeFinancialState extends ReadFreshness {
   status: LoadStatus;
   data: HomeCurrencyBalance[] | null;
+  /**
+   * From the same response, by Group id: the currencies the member isn't settled in. An empty
+   * list is settled up; a Group without an entry is unknown.
+   */
+  byGroup: Record<string, HomeGroupBalance[]>;
   message: string | null;
+}
+
+/** An Expense draft kept on this device, as Home lists it to resume. */
+export interface ExpenseDraftSummary {
+  groupId: string;
+  /** From the saved Groups list. */
+  groupName: string;
+  /** The saved Expense the draft edits; null for a new Expense. */
+  expenseId: string | null;
+  description: string;
+  /** As typed, so it may not be a valid amount yet. */
+  amount: string;
+  currency: string;
+  /** A save or change was sent without a confirmed result, so it may already be recorded. */
+  unconfirmed: boolean;
 }
 
 export interface GroupCurrencyBalance {
@@ -228,6 +254,8 @@ export interface MobileSnapshot {
   keptDraft: KeptDraft | null;
   activity: ActivityState;
   home: HomeFinancialState;
+  /** This account's Expense drafts in listed Groups, unconfirmed saves first, then by Group. */
+  drafts: ExpenseDraftSummary[];
   financial: GroupFinancialState;
   creation: GroupCreation;
   share: {

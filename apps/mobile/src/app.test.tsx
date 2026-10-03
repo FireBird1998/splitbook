@@ -195,6 +195,10 @@ function backend() {
           drafts.delete(`${accountId}:${id}`);
         },
         clear: async () => drafts.clear(),
+        list: async (accountId) =>
+          [...drafts]
+            .filter(([key]) => key.startsWith(`${accountId}:`))
+            .map(([key, value]) => ({ groupId: key.split(':')[1], value: structuredClone(value) })),
       },
       accountLocal: {
         owner: {
@@ -531,7 +535,7 @@ describe('App refresh rendering', () => {
 describe('App Settings sign-out', () => {
   it('lists in Settings everything the sign-out confirmation says is cleared', async () => {
     const app = await renderApp();
-    await app.press('Settings');
+    await app.press('Account and settings');
     const panel = app.text();
     expect(panel).toContain('Expense drafts');
     expect(panel).toContain('unresolved payment records and save recovery keys');
@@ -852,5 +856,42 @@ describe('App invitation', () => {
     await settle();
     expect(app.text()).not.toContain('You’re invited');
     expect(app.text()).toContain('Cedar FlatHousehold · 1 member · INR');
+  });
+});
+
+describe('App Home', () => {
+  it('shows each Group’s balance and resumes a draft in its Group’s form', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Add expense');
+    await app.type('Amount, required', '12.50');
+    await app.type('Description, required', 'Kept for later');
+    expect(await app.androidBack()).toBe(true);
+
+    // Past the display freshness window, so Home reads its balances again.
+    app.clock.now += 31_000;
+    app.use((path) =>
+      path === '/api/user/balances'
+        ? json({
+            status: 200,
+            data: {
+              buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }],
+              groups: [{ groupId, balances: [{ currency: 'INR', balance: -30 }] }],
+            },
+          })
+        : undefined,
+    );
+    expect(await app.androidBack()).toBe(true);
+    expect(app.pressable('Open Maple House').props.accessibilityLabel).toBe(
+      'Open Maple House, Household · 1 member, You owe ₹30.00',
+    );
+    expect(app.text()).toContain('Continue where you left off');
+
+    // Direct entry: Back returns to that Group's Expenses.
+    await app.press('Draft, Kept for later, ₹12.50, Maple House');
+    expect(app.text()).toContain('Unfinished draft');
+    expect(await app.androidBack()).toBe(true);
+    expect(app.text()).toContain('September groceries');
+    expect(app.pressable('Back to Home')).toBeTruthy();
   });
 });

@@ -33,15 +33,22 @@ import {
   googleSignInEnabled,
 } from './src/runtime';
 import { ThemeContext, fonts, useTheme } from './src/ui/theme';
-import { Avatar, Button, Copy, Icon, Label, Loading, Notice } from './src/ui/primitives';
+import { Button, Copy, Icon, Label, Loading, Notice } from './src/ui/primitives';
 import { Badge, CompactText, FloatingAction, IconButton, TopBar } from './src/ui/compact';
-import { EmptyGroups, GroupCard, SignIn, styles } from './src/ui/screens';
+import { SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
 import { ExpenseEditor } from './src/ui/expense-editor';
-import { HomeBalances, RefreshStatus, RetainedNotice } from './src/ui/financial-views';
+import { RefreshStatus, RetainedNotice } from './src/ui/financial-views';
 import { GroupExpensesView } from './src/ui/group-expenses';
 import { TripStrip } from './src/ui/trip-strip';
+import {
+  ContinueDrafts,
+  GroupCreationCheck,
+  HomeBalances,
+  HomeGroups,
+  HomeTopBar,
+} from './src/ui/home';
 import { refreshFeedback } from './src/ui/refresh-feedback';
 import { GroupSnackbar } from './src/ui/group-snackbar';
 import { visibleFieldErrors } from './src/data/field-feedback';
@@ -146,6 +153,12 @@ function SplitBook() {
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <TaskScreen state={state} authenticated={authenticated} />
+      </SafeAreaView>
+    );
+  if (configurationReady && authenticated && state.screen === 'groups')
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
+        <HomeScreen state={state} />
       </SafeAreaView>
     );
   return (
@@ -291,93 +304,7 @@ function SplitBook() {
             }
           >
             <OfflineNotice state={state.offline} />
-            {state.screen === 'groups' ? (
-              <>
-                <View style={{ gap: 12, marginBottom: 6 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-                    <Avatar name={state.auth.user!.name} small />
-                    <Copy style={{ fontSize: 14, color: theme.textSecondary }}>
-                      Hey, {state.auth.user!.name.split(' ')[0]}
-                    </Copy>
-                  </View>
-                  <Copy
-                    accessibilityRole="header"
-                    style={{
-                      fontFamily: fonts.semibold,
-                      fontSize: 36,
-                      lineHeight: 42,
-                      letterSpacing: -1,
-                    }}
-                  >
-                    Your overview
-                  </Copy>
-                  <Copy style={{ color: theme.textSecondary }}>
-                    Balances and shared spaces, together.
-                  </Copy>
-                </View>
-                <HomeBalances state={state.home} onRefresh={() => void controller.refreshHome()} />
-                <Button
-                  label={state.creation.draft.name ? 'Continue Group form' : 'Create Group'}
-                  icon="add-outline"
-                  onPress={controller.startCreate}
-                />
-                {state.creation.status === 'uncertain' && (
-                  <View style={{ gap: 12 }}>
-                    <Copy accessibilityRole="alert">{state.creation.message}</Copy>
-                    <Button
-                      label="Refresh my Groups"
-                      secondary
-                      onPress={() => void controller.checkCreatedGroups()}
-                    />
-                    <Button
-                      label="I checked — return to my form"
-                      secondary
-                      disabled={state.groups.status !== 'ready'}
-                      onPress={controller.resumeCreationAfterCheck}
-                    />
-                    <Button
-                      label="Discard this form"
-                      secondary
-                      onPress={controller.discardCreation}
-                    />
-                  </View>
-                )}
-                <View style={styles.between}>
-                  <Label>YOUR GROUPS</Label>
-                  <Copy
-                    style={{ fontFamily: fonts.mono, fontSize: 12, color: theme.textSecondary }}
-                  >
-                    {state.groups.data.length.toString().padStart(2, '0')}
-                  </Copy>
-                </View>
-                {(state.groups.status === 'error' || state.groups.status === 'denied') && (
-                  <Notice
-                    title="Couldn’t load your Groups"
-                    message={
-                      state.groups.data.length
-                        ? `${state.groups.message ?? 'Please try again.'} Showing previously verified Groups.`
-                        : (state.groups.message ?? 'Please try again.')
-                    }
-                    retry={() => void controller.refresh()}
-                  />
-                )}
-                {state.groups.status === 'loading' && !state.groups.data.length ? (
-                  <Loading label="Finding your Groups…" />
-                ) : state.groups.status === 'ready' && !state.groups.data.length ? (
-                  <EmptyGroups onRefresh={() => void controller.refresh()} />
-                ) : (
-                  state.groups.data.map((group) => (
-                    <GroupCard
-                      key={group.id}
-                      group={group}
-                      onPress={() => void controller.openGroup(group.id)}
-                    />
-                  ))
-                )}
-              </>
-            ) : (
-              <Loading label="Opening your Group…" />
-            )}
+            <Loading label="Opening your Group…" />
             <View
               style={{
                 alignItems: 'center',
@@ -561,6 +488,67 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+    </>
+  );
+}
+
+/** Home: balances by currency, drafts to resume, and the member's balance in each Group. */
+function HomeScreen({ state }: { state: MobileSnapshot }) {
+  const theme = useTheme();
+  const feedback = refreshFeedback(state);
+  const refresh = () => void controller.refresh();
+  return (
+    <>
+      <HomeTopBar
+        userName={state.auth.user!.name}
+        status={<RefreshStatus visible={feedback.quiet} savedAt={feedback.savedAt} />}
+        accountDisabled={
+          state.creation.status === 'saving' || state.invitation.status === 'joining'
+        }
+        onRefresh={refresh}
+        onAccount={controller.openSettings}
+      />
+      <ScrollView
+        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={feedback.pull}
+            onRefresh={() => void controller.refresh('pull')}
+            tintColor={theme.brand.main}
+            colors={[theme.brand.main]}
+          />
+        }
+      >
+        <OfflineNotice state={state.offline} />
+        <HomeBalances state={state.home} onRefresh={() => void controller.refreshHome()} />
+        {state.creation.status === 'uncertain' && (
+          <GroupCreationCheck
+            message={state.creation.message}
+            groupsReady={state.groups.status === 'ready'}
+            onCheck={() => void controller.checkCreatedGroups()}
+            onResume={controller.resumeCreationAfterCheck}
+            onDiscard={controller.discardCreation}
+          />
+        )}
+        {/* Direct entry: the form returns to that Group's Expenses. */}
+        <ContinueDrafts
+          drafts={state.drafts}
+          onOpen={(draft) =>
+            void controller.openExpense(draft.groupId, draft.expenseId ?? undefined)
+          }
+        />
+        <HomeGroups
+          groups={state.groups}
+          byGroup={state.home.byGroup}
+          newGroupLabel={state.creation.draft.name ? 'Continue Group form' : 'New Group'}
+          onNewGroup={controller.startCreate}
+          onOpen={(groupId) => void controller.openGroup(groupId)}
+          onRetry={refresh}
+        />
+        <CompactText variant="caption" tone="muted" style={{ textAlign: 'center' }}>
+          {environment.label}
+        </CompactText>
+      </ScrollView>
     </>
   );
 }

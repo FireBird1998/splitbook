@@ -10,6 +10,7 @@ import { objectId } from './dto';
 import type {
   GroupCurrencyBalance,
   HomeCurrencyBalance,
+  HomeGroupBalance,
   MobileExpense,
   FinancialPerson,
 } from './types';
@@ -173,20 +174,44 @@ export function parseExpensePage(value: unknown, groupId: string, defaultCurrenc
   };
 }
 
-export function parseHomeBalances(value: unknown): HomeCurrencyBalance[] {
+/** Home's totals by currency, and the member's balances in each Group they come from. */
+export function parseHomeBalances(value: unknown): {
+  buckets: HomeCurrencyBalance[];
+  byGroup: Record<string, HomeGroupBalance[]>;
+} {
   const body = z
     .object({
       data: z.object({
         buckets: z.array(
           z.object({ currency, youOwe: amount.nonnegative(), youAreOwed: amount.nonnegative() }),
         ),
+        // Without it, Home still shows its totals and leaves each Group's balance unknown.
+        groups: z
+          .array(
+            z.object({
+              groupId: objectId,
+              balances: z.array(z.object({ currency, balance: amount })),
+            }),
+          )
+          .optional(),
       }),
       status: z.literal(200),
     })
     .parse(value);
-  return body.data.buckets.map((bucket) => ({
-    currency: bucket.currency,
-    youOwe: exact(bucket.youOwe, bucket.currency),
-    youAreOwed: exact(bucket.youAreOwed, bucket.currency),
-  }));
+  return {
+    buckets: body.data.buckets.map((bucket) => ({
+      currency: bucket.currency,
+      youOwe: exact(bucket.youOwe, bucket.currency),
+      youAreOwed: exact(bucket.youAreOwed, bucket.currency),
+    })),
+    byGroup: Object.fromEntries(
+      (body.data.groups ?? []).map((group) => [
+        group.groupId,
+        group.balances.map((row) => ({
+          currency: row.currency,
+          balance: exact(row.balance, row.currency),
+        })),
+      ]),
+    ),
+  };
 }
