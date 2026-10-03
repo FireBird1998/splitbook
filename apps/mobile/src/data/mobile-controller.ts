@@ -4481,35 +4481,41 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       drafts = dependencies.expenseDrafts;
     if (draft && lease && drafts)
       await lease.write(() => drafts.remove(lease.accountId, groupId)).catch(() => undefined);
+    if (!current(owner)) return;
+    const showingLeave = attempt === leaveRequest && snapshot.screen === 'members';
+    const kept = {
+      keptDraft: snapshot.keptDraft?.groupId === groupId ? null : snapshot.keptDraft,
+      pendingPayment: snapshot.pendingPayment?.groupId === groupId ? null : snapshot.pendingPayment,
+    };
+    if (showingLeave) {
+      // Home opens before the Group is forgotten, so the page just left never shows the
+      // "no longer have access" notice that a lost membership would.
+      viewRequest += 1;
+      returnPages = returnActivityPages = null;
+      membersReturn = null;
+      publish({
+        ...snapshot,
+        ...kept,
+        screen: 'groups',
+        detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
+        financial: emptyFinancial(),
+        leave: closedLeave(),
+        homeSnackbar: {
+          message: archived
+            ? `You left ${name}. It’s archived because nobody else was in it.`
+            : `You left ${name}.`,
+        },
+      });
+    } else {
+      publish({ ...snapshot, ...kept });
+    }
     try {
       await forgetGroup(groupId, 403, owner);
     } catch {
       return;
     }
-    if (!current(owner)) return;
-    const showingLeave = attempt === leaveRequest && snapshot.screen === 'members';
-    publish({
-      ...snapshot,
-      keptDraft: snapshot.keptDraft?.groupId === groupId ? null : snapshot.keptDraft,
-      pendingPayment: snapshot.pendingPayment?.groupId === groupId ? null : snapshot.pendingPayment,
-    });
     // Something else opened while the request ran; it stays, and its Groups list is already updated.
-    if (!showingLeave) return;
-    viewRequest += 1;
-    returnPages = returnActivityPages = null;
-    membersReturn = null;
-    publish({
-      ...snapshot,
-      screen: 'groups',
-      detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
-      financial: emptyFinancial(),
-      leave: closedLeave(),
-      homeSnackbar: {
-        message: archived
-          ? `You left ${name}. It’s archived because nobody else was in it.`
-          : `You left ${name}.`,
-      },
-    });
+    if (!showingLeave || !current(owner)) return;
     await loadGroups(owner);
     if (current(owner)) await refreshHome();
   };

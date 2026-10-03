@@ -298,7 +298,20 @@ describe('Leave Group', () => {
     });
     expect(f.sent()).toEqual([]);
 
+    // Every state on the way Home: the page being left never reads as lost access.
+    const seen: { screen: string; detail: string; message: string | null }[] = [];
+    const stop = f.controller.subscribe(() => {
+      const shown = f.controller.getSnapshot();
+      seen.push({
+        screen: shown.screen,
+        detail: shown.detail.status,
+        message: shown.detail.message,
+      });
+    });
     await f.controller.leaveGroup();
+    stop();
+    expect(seen.filter(({ detail }) => detail === 'denied')).toEqual([]);
+    expect(seen.map(({ message }) => message).filter(Boolean)).toEqual([]);
     const sent = f.sent();
     expect(leaveRequests(sent)).toHaveLength(1);
     // Home is read again after leaving.
