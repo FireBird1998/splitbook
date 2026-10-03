@@ -48,7 +48,7 @@ The Android controller (`createMobileController`) has become a hand-written quer
 **Web, shared code and sign-in**
 
 - The web app keeps SWR.
-- `@splitbook/shared` gains query key factories, path builders and Zod response decoders, with no new dependency. A lint rule keeps React, Next, MUI, SWR, TanStack, Better Auth, the database drivers and DOM APIs out of it (ADR 0002).
+- `@splitbook/shared` gains query key factories, path builders and Zod response decoders, with no new dependency. Android uses them from the engine swap on. A lint rule keeps React, Next, MUI, SWR, TanStack, Better Auth, the database drivers and DOM APIs out of it (ADR 0002).
 - The hand-rolled Better Auth exchange stays.
 
 ## Migration and gates
@@ -56,16 +56,17 @@ The Android controller (`createMobileController`) has become a hand-written quer
 The order:
 
 1. Move the transport out.
-2. Swap the cache engine under the existing read path, for every resource, in one change.
-3. Make the route one explicit value.
-4. Move the Groups list and Home to declarative queries, with their saved copies on the new persister.
-5. Move the other views the same way, in this order: a Group with its Expenses and Balances; an Expense record and its history; Activity.
-6. Cap saved copies at 20 MB and delete the old saved-copy store.
-7. Delete the controller cache and the view tokens.
+2. Move Android's response parsing to the shared decoders, and build query keys with the shared key factories.
+3. Swap the cache engine under the existing read path, for every resource, in one change.
+4. Make the route one explicit value.
+5. Move the Groups list and Home to declarative queries, with their saved copies on the new persister.
+6. Move the other views the same way, in this order: a Group with its Expenses and Balances; an Expense record and its history; Activity. Each list gets its 5-page window and "Load newer" in the same change.
+7. Cap saved copies at 20 MB and delete the old saved-copy store.
+8. Delete the controller cache and the view tokens.
 
 The beta fixes under #184 land first, in the current controller. Their tests become migration gates.
 
-Next, a pilot of about one agent-week covers steps 2 to 4. It passes only if all of these hold:
+Next, a pilot of about one agent-week covers steps 3 to 5. It lands on an integration branch, and main gets it only if the owner decides to continue. It passes only if all of these hold:
 
 - the behaviour suite passes unchanged;
 - the checks for restarting offline (with original verification times), account switch, losing access, delayed responses and delayed saves to disk pass;
@@ -74,7 +75,7 @@ Next, a pilot of about one agent-week covers steps 2 to 4. It passes only if all
 - no mutation is ever persisted;
 - the app bundle grows by no more than 10 KB gzip.
 
-If any gate fails, we stop and deepen the existing cache instead (#145).
+If any gate fails, we stop and deepen the existing cache instead (#145). The route change (step 4) still moves to main, because it helps either way.
 
 Every pull request runs a ratchet: no render or request count may rise unless the owner approves a re-record. One re-record is planned: re-reading loaded pages on refresh sends more requests than today. Device numbers are recorded before the migration and measured again at the end.
 
