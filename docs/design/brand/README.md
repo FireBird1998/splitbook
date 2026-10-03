@@ -25,6 +25,7 @@ All paths below are relative to the repository root. Generated files come from t
 | Native app / iOS base / store artwork       | `apps/mobile/assets/brand/app-icon.png`                            | 1024 × 1024, RGB, fully opaque            |
 | Android adaptive foreground                 | `apps/mobile/assets/brand/android-foreground.png`                  | 1024 × 1024 with transparent padding      |
 | Android themed icon                         | `apps/mobile/assets/brand/android-monochrome.png`                  | Same geometry, black alpha mask           |
+| Native splash, light and dark               | `apps/mobile/assets/brand/splash-light.png`, `splash-dark.png`     | 1152 × 1152 = the 288 dp splash icon @4x  |
 
 The primary app icon is white on Ink. The indigo app-icon SVG is an alternate for marketing; keep a release's launcher identity consistent. Rounded corners on the overview are mask previews. Native upload files are full squares; the operating system supplies its mask.
 
@@ -89,11 +90,25 @@ android: {
     backgroundColor: '#172033',
   },
 },
+plugins: [
+  // Preserve the existing plugins.
+  [
+    'expo-splash-screen',
+    {
+      image: './assets/brand/splash-light.png',
+      imageWidth: 288,
+      backgroundColor: '#F8F9FC',
+      dark: { image: './assets/brand/splash-dark.png', backgroundColor: '#172033' },
+    },
+  ],
+],
 ```
+
+The splash uses the loading-UI marks: Indigo on Paper in light, On-dark indigo on Ink in dark. Each splash PNG is the whole 288 dp canvas Android 12+ gives the splash icon, with the 128 dp mark inside the central 192 dp circle that Android keeps. That is why `imageWidth` is 288, not the mark's width. The splash follows the system light/dark setting, because it shows before the app can read its own appearance preference.
 
 For logos inside React Native screens, use an existing SVG rendering setup if present, or import a generated PNG and set its display dimensions explicitly with `resizeMode="contain"`. A raw SVG file is not automatically a React Native component. Launcher-icon changes require rebuilding the native binary; this kit does not itself update an installed app or an App Store listing.
 
-The adaptive foreground is centered inside Android's circular 66/108 safe region and checked pixel-by-pixel by the export tool. The maskable web icon uses its own larger safe region. Keep those assets separate: their padding serves different platform masks. Platform references: [Expo icon configuration](https://docs.expo.dev/develop/user-interface/splash-screen-and-app-icon/), [Android adaptive icon guidance](https://developer.android.com/develop/ui/compose/system/icon_design_adaptive), [Apple app icon configuration](https://developer.apple.com/documentation/xcode/configuring-your-app-icon).
+The adaptive foreground is centered inside Android's circular 66/108 safe region, the splash mark inside the splash's 192/288 circle, and the export tool checks both pixel by pixel. The maskable web icon uses its own larger safe region. Keep those assets separate: their padding serves different platform masks. Platform references: [Expo icon configuration](https://docs.expo.dev/develop/user-interface/splash-screen-and-app-icon/), [Android adaptive icon guidance](https://developer.android.com/develop/ui/compose/system/icon_design_adaptive), [Apple app icon configuration](https://developer.apple.com/documentation/xcode/configuring-your-app-icon).
 
 ## Agent workflow and completion
 

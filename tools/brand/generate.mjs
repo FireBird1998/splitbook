@@ -99,6 +99,19 @@ assets.set(
 // Android's essential content fits the central 66/108 diameter circle, not just a square.
 assets.set('android-foreground', svg(1024, 1024, mark(c.white, 594, 215, 215)));
 assets.set('android-monochrome', svg(1024, 1024, mark('#000000', 594, 215, 215)));
+// Android 12+ draws the splash icon on a 288 dp canvas masked to its central 192 dp circle.
+// The canvas is 288 dp at 4x, so no density upscales it; the mark is 128 dp.
+const splashCanvas = 288 * 4;
+const splashMark = 128 * 4;
+const splashInset = (splashCanvas - splashMark) / 2;
+for (const [name, color] of [
+  ['splash-light', c.indigo],
+  ['splash-dark', c.indigoOnDark],
+])
+  assets.set(
+    name,
+    svg(splashCanvas, splashCanvas, mark(color, splashMark, splashInset, splashInset)),
+  );
 assets.set('favicon', svg(64, 64, rect(0, 0, 64, 64, c.ink, 14) + mark(c.white, 48, 8, 8)));
 
 async function png(source, width, height, opaque = false) {
@@ -179,6 +192,11 @@ for (const size of config.sizes.adaptive)
   for (const name of ['android-foreground', 'android-monochrome']) {
     await output(`assets/brand/png/${name}-${size}.png`, await png(assets.get(name), size));
   }
+for (const name of ['splash-light', 'splash-dark'])
+  await output(
+    `assets/brand/png/${name}-${splashCanvas}.png`,
+    await png(assets.get(name), splashCanvas),
+  );
 for (const size of [192, 512])
   await output(
     `assets/brand/png/maskable-${size}.png`,
@@ -232,6 +250,11 @@ for (const name of ['app-icon', 'android-foreground', 'android-monochrome']) {
     generated.get(`assets/brand/png/${name}-1024.png`),
   );
 }
+for (const name of ['splash-light', 'splash-dark'])
+  await output(
+    `apps/mobile/assets/brand/${name}.png`,
+    generated.get(`assets/brand/png/${name}-${splashCanvas}.png`),
+  );
 for (const name of ['mark-indigo', 'mark-white'])
   await output(`apps/mobile/assets/brand/${name}.svg`, assets.get(name));
 
@@ -309,8 +332,14 @@ for (const [name, data] of generated)
     if (/<(image|text|script)\b|href=|url\(/.test(data.toString()))
       throw new Error(`External or non-vector content: ${name}`);
   }
-for (const name of ['android-foreground', 'android-monochrome']) {
-  const data = generated.get(`assets/brand/png/${name}-1024.png`);
+// Each layer's visible pixels must fit the circle Android keeps: radius as a canvas fraction.
+for (const [name, file, radius] of [
+  ['android-foreground', 'android-foreground-1024', 33 / 108],
+  ['android-monochrome', 'android-monochrome-1024', 33 / 108],
+  ['splash-light', `splash-light-${splashCanvas}`, 96 / 288],
+  ['splash-dark', `splash-dark-${splashCanvas}`, 96 / 288],
+]) {
+  const data = generated.get(`assets/brand/png/${file}.png`);
   const { data: raw, info } = await sharp(data)
     .ensureAlpha()
     .raw()
@@ -320,7 +349,7 @@ for (const name of ['android-foreground', 'android-monochrome']) {
     for (let x = 0; x < info.width; x++)
       if (raw[(y * info.width + x) * 4 + 3] > 0) {
         nonempty = true;
-        if (Math.hypot(x + 0.5 - 512, y + 0.5 - 512) > (1024 * 33) / 108)
+        if (Math.hypot(x + 0.5 - info.width / 2, y + 0.5 - info.height / 2) > info.width * radius)
           throw new Error(`${name} exceeds Android circular safe zone`);
       }
   if (!nonempty) throw new Error(`${name} is blank`);

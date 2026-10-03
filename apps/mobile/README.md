@@ -65,6 +65,10 @@ The future staging build uses `EXPO_PUBLIC_APP_ENV=staging`, an explicit HTTPS i
 
 No real staging domain or certificate is configured here. Ticket [#60](https://github.com/FireBird1998/splitbook/issues/60) must verify that the actual host serves the JSON over HTTPS without redirects, the installed APK uses the matching signing certificate, and Android reports the domain verified. Recheck warm and cold invitation opening plus absent-app browser fallback on that deployment. The manifest and local HTTP smoke alone do not establish domain ownership. See [Expo Android App Links](https://docs.expo.dev/linking/android-app-links/) and [Android domain verification](https://developer.android.com/training/app-links/verify-applinks).
 
+## App icon and splash (#188)
+
+Every environment uses the brand kit's launcher icon, adaptive foreground, themed (monochrome) icon and splash from `assets/brand/`. Regenerate them with the exporter in `tools/brand`, never by hand; see [the brand README](../../docs/design/brand/README.md#mobile-integration). The splash follows the system light/dark setting, not the in-app appearance choice, because it shows before the app starts. Icon and splash changes take effect only after rebuilding the binary. Expo warns that development builds don't show the splash faithfully, so confirm it on a release build too (`pnpm mobile android --variant release`, or `build:staging`).
+
 ## Boundaries
 
 - `src/data` owns authentication, JSON validation, dates, transport, and session-local Group state. UI never calls fetch directly. It reuses the shared Group Theme/currency modules; it does not calculate balances from Group-list data.
