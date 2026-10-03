@@ -1649,12 +1649,28 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     await kept;
   };
 
+  /**
+   * The open Expense once its Group refuses this member: its changes are cleared and no read
+   * still on its way can bring them back. A saved record being viewed gives way to a notice
+   * that it's unavailable. A draft or a save that may already be recorded stays, since it lives
+   * on this device and can still be recovered.
+   */
+  const withdrawExpense = (message: string): MobileSnapshot['expense'] => {
+    const editor = snapshot.expense;
+    historyRequest += 1;
+    const withdrawn = { ...editor, context: null, history: emptyExpenseHistory() };
+    return ['detail', 'delete-review'].includes(editor.status)
+      ? { ...withdrawn, status: 'blocked', draft: null, preview: null, latest: null, message }
+      : withdrawn;
+  };
+
   const evictGroupContent = (id: string, status: number) => {
     const message =
       status === 403
         ? 'You no longer have access to this group.'
         : 'This group is no longer available.';
     homeRequest += 1;
+    const expense = snapshot.expense.groupId === id ? withdrawExpense(message) : snapshot.expense;
     publish({
       ...snapshot,
       groups: { ...snapshot.groups, data: snapshot.groups.data.filter((group) => group.id !== id) },
@@ -1674,8 +1690,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         snapshot.activity.groupId === id
           ? { ...emptyActivity(), groupId: id, status: 'denied', message }
           : snapshot.activity,
-      expense:
-        snapshot.expense.groupId === id ? { ...snapshot.expense, context: null } : snapshot.expense,
+      expense,
       settlement:
         snapshot.settlement.groupId === id
           ? { ...snapshot.settlement, group: null, balances: [] }
@@ -2699,6 +2714,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
     } catch (error) {
       if (!wanted() || error instanceof Superseded) return;
+      // Refused, not merely unread: the record and its changes are withdrawn, not kept.
+      if (error instanceof RequestError && error.status === 403)
+        return publish({ ...snapshot, expense: withdrawExpense(error.message) });
       publishHistory(
         append
           ? { moreStatus: 'error' }
@@ -4613,9 +4631,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             publish({
               ...snapshot,
               expense: {
-                ...snapshot.expense,
+                ...withdrawExpense(error.message),
                 status: 'blocked',
-                context: null,
                 message: error.message,
               },
             });

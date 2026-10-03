@@ -76,6 +76,8 @@ function setup() {
   let account: string | null = null;
   let offline = false;
   let failing = false;
+  // Access withdrawn: the Expense's changes only, or the whole Group.
+  let denied: 'history' | 'group' | null = null;
   // A backend that ignores the filter sends the whole Group's Activity.
   let unfiltered = false;
   const drafts = new Map<string, unknown>();
@@ -148,13 +150,19 @@ function setup() {
           });
         if (path === '/api/groups') return json({ status: 200, data: [group] });
         if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
-        if (path === `/api/groups/${groupId}`) return json({ status: 200, data: group });
+        if (path === `/api/groups/${groupId}`)
+          return denied === 'group'
+            ? json({ error: 'Forbidden', status: 403 }, 403)
+            : json({ status: 200, data: group });
         const id = path.split('/').pop()!;
         if (path === `/api/groups/${groupId}/expenses/${id}` && records[id])
           return json({ status: 200, data: records[id] });
         if (path === `/api/groups/${groupId}/activity`) {
           const expenseId = address.searchParams.get('expenseId');
+          // Decided as the read arrives: one already under way when access goes still answers.
+          const refused = denied !== null;
           await holds.get(expenseId ?? '');
+          if (refused) return json({ error: 'Forbidden', status: 403 }, 403);
           if (failing) return json({ error: 'Unavailable', status: 500 }, 500);
           const page = Number(address.searchParams.get('page'));
           const matching = events.filter(
@@ -193,6 +201,8 @@ function setup() {
     activityReads: () => reads.splice(0).filter((path) => path.includes('/activity')),
     setOffline: (value: boolean) => (offline = value),
     setFailing: (value: boolean) => (failing = value),
+    setDenied: (value: typeof denied) => (denied = value),
+    drafts,
     ignoreFilter: () => (unfiltered = true),
   };
 }
@@ -378,5 +388,81 @@ describe('An Expense record’s history', () => {
     await controller.loadOlderExpenseHistory();
     await controller.refreshExpenseHistory();
     expect(activityReads()).toEqual([]);
+  });
+});
+
+describe('An Expense record once access to its Group is withdrawn', () => {
+  /** The record and its changes are gone; what's left says why. */
+  const expectWithdrawn = (controller: ReturnType<typeof setup>['controller']) =>
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'blocked',
+      draft: null,
+      latest: null,
+      context: null,
+      message: 'You no longer have access to this group.',
+      history: { status: 'idle', events: [], pagination: null },
+    });
+
+  it('clears the record when its changes are refused as it opens, and offers nothing to act on', async () => {
+    const { controller, setDenied, activityReads } = await signedIn();
+    setDenied('history');
+    await controller.openExpense(groupId, ids.bill);
+    expectWithdrawn(controller);
+
+    await controller.editExpense();
+    await controller.loadOlderExpenseHistory();
+    await controller.refreshExpenseHistory();
+    expect(controller.getSnapshot().expense.status).toBe('blocked');
+    expect(activityReads()).toEqual([
+      `/api/groups/${groupId}/activity?expenseId=${ids.bill}&page=1&limit=20`,
+    ]);
+  });
+
+  it('clears the shown changes when reading them again is refused', async () => {
+    const { controller, setDenied } = await signedIn();
+    await controller.openExpense(groupId, ids.bill);
+    expect(controller.getSnapshot().expense.history.events).toHaveLength(20);
+    setDenied('history');
+    await controller.refreshExpenseHistory();
+    expectWithdrawn(controller);
+  });
+
+  it('clears the shown changes when older ones are refused', async () => {
+    const { controller, setDenied } = await signedIn();
+    await controller.openExpense(groupId, ids.bill);
+    setDenied('history');
+    await controller.loadOlderExpenseHistory();
+    expectWithdrawn(controller);
+  });
+
+  it('never restores changes from a read that answers after access was withdrawn', async () => {
+    const { controller, hold, setDenied } = await signedIn();
+    await controller.openExpense(groupId, ids.bill);
+    const release = hold(ids.bill);
+    const older = controller.loadOlderExpenseHistory();
+    // Refreshing finds the Group refused while the older page is still on its way.
+    setDenied('group');
+    await controller.refresh();
+    expectWithdrawn(controller);
+
+    release();
+    await older;
+    expectWithdrawn(controller);
+  });
+
+  it('keeps an edit in progress, on screen and on this device', async () => {
+    const { controller, setDenied, drafts } = await signedIn();
+    await controller.openExpense(groupId, ids.bill);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Meter read on the 20th' });
+    setDenied('group');
+    await controller.refresh();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      draft: { notes: 'Meter read on the 20th', original: { _id: ids.bill } },
+      history: { events: [] },
+    });
+    expect(drafts.get(`${sam.id}:${groupId}`)).toMatchObject({
+      draft: { notes: 'Meter read on the 20th' },
+    });
   });
 });
