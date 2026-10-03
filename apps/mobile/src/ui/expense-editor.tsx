@@ -44,13 +44,104 @@ import {
   splitSummary,
 } from './expense-form';
 import { SplitSheet } from './split-sheet';
+import { ErrorBoundary } from './error-boundary';
 import { useTheme } from './theme';
+
+/** The form for a draft, rather than loading, a notice or a saved record. */
+const showsForm = ({ draft, status }: Editor) =>
+  !!draft &&
+  status !== 'loading' &&
+  !(draft.original && ['detail', 'delete-review'].includes(status));
 
 /**
  * The Expense task, full screen without the Group's bottom navigation: the compact form for
  * adding and editing, and the saved record. Close and Android Back keep the draft.
+ *
+ * An unexpected rendering error shows a recoverable view instead of closing the app (#187). It
+ * never renders the draft, and the task is tried again only for another draft.
  */
-export function ExpenseEditor({
+export function ExpenseEditor(props: Parameters<typeof ExpenseTask>[0]) {
+  const { state } = props;
+  const form = showsForm(state);
+  // A save, change or deletion that may already be recorded is never discarded here.
+  const unconfirmed = state.attempt ? 'save' : (state.mutation?.kind ?? null);
+  return (
+    <ErrorBoundary
+      resetKey={state.draft}
+      fallback={
+        <ExpenseProblem
+          draft={form}
+          unconfirmed={form ? unconfirmed : null}
+          onKeep={props.onClose}
+          onDiscard={
+            form && !unconfirmed && ['editing', 'resume'].includes(state.status)
+              ? props.onDiscard
+              : undefined
+          }
+        />
+      }
+    >
+      <ExpenseTask {...props} />
+    </ErrorBoundary>
+  );
+}
+
+/** What the Expense task shows after an unexpected rendering error: never the draft itself. */
+function ExpenseProblem({
+  draft,
+  unconfirmed,
+  onKeep,
+  onDiscard,
+}: {
+  draft: boolean;
+  unconfirmed: 'save' | 'edit' | 'delete' | null;
+  onKeep?: () => void;
+  onDiscard?: () => void;
+}) {
+  const theme = useTheme();
+  const message = !draft
+    ? 'This Expense couldn’t be shown.'
+    : `This form couldn’t be shown. Your draft is kept on this device.${
+        unconfirmed
+          ? ` It may already be ${unconfirmed === 'delete' ? 'deleted' : 'saved'}, so check it from the Group before trying again.`
+          : ''
+      }`;
+  return (
+    <View style={{ flex: 1, backgroundColor: theme.bg }}>
+      <TopBar
+        title="Expense"
+        prominent={false}
+        leading={
+          onKeep
+            ? {
+                kind: 'close',
+                label: draft ? 'Back to Group, keeping your draft' : 'Back to Group',
+                onPress: onKeep,
+              }
+            : undefined
+        }
+      />
+      <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
+        <Banner tone="error" title="Something went wrong" message={message}>
+          {onKeep ? (
+            <CompactButton
+              label={draft ? 'Keep draft' : 'Back to Group'}
+              accessibilityLabel={draft ? 'Keep draft and return to the Group' : 'Back to Group'}
+              variant="tonal"
+              dense
+              onPress={onKeep}
+            />
+          ) : null}
+          {onDiscard ? (
+            <CompactButton label="Discard draft" variant="text" dense onPress={onDiscard} />
+          ) : null}
+        </Banner>
+      </View>
+    </View>
+  );
+}
+
+function ExpenseTask({
   state,
   currentUserId,
   onClose,
@@ -160,7 +251,7 @@ export function ExpenseEditor({
   };
   const { draft, context } = state;
   const record = !!draft?.original && ['detail', 'delete-review'].includes(state.status);
-  const form = !!draft && !record && state.status !== 'loading';
+  const form = showsForm(state);
   // A save that may already be recorded stays locked until it is checked.
   const unconfirmed =
     form && ['resume', 'uncertain'].includes(state.status) && !!(state.attempt || state.mutation);

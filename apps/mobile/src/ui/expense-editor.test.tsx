@@ -1067,3 +1067,178 @@ describe('compact Expense form', () => {
     ).toHaveLength(1);
   });
 });
+
+describe('an unexpected rendering error in the Expense task (#187)', () => {
+  type Editor = ReturnType<MobileController['getSnapshot']>['expense'];
+  /** How often the task's content was rendered. */
+  let attempts = 0;
+  /** Stands in for any rendering error: it throws while `crash` holds. */
+  function Crash({ crash }: { crash: boolean }) {
+    attempts++;
+    if (crash) throw new Error('Forced rendering error');
+    return null;
+  }
+  function CrashingScreen({
+    controller,
+    crash,
+  }: {
+    controller: MobileController;
+    crash: (editor: Editor) => boolean;
+  }) {
+    const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+    return (
+      <ExpenseEditor
+        state={state.expense}
+        currentUserId={memberId}
+        notice={<Crash crash={crash(state.expense)} />}
+        // Keep and Discard do what the app's Close and Discard do.
+        onClose={() => void controller.back()}
+        onDiscard={() => void controller.discardExpenseDraft()}
+        onChange={(patch) => void controller.updateExpenseDraft(patch)}
+        onLeaveField={controller.touchExpenseField}
+        onSave={() => void controller.saveExpense()}
+        onResume={controller.resumeExpenseDraft}
+        onEdit={noop}
+        onRetry={noop}
+        onReviewDelete={noop}
+        onDelete={noop}
+        onCancelDelete={noop}
+        onReconcile={noop}
+        onReviewLatest={noop}
+        onAcceptCurrent={noop}
+      />
+    );
+  }
+  async function crashing(
+    crash: (editor: Editor) => boolean,
+    open: (controller: MobileController) => Promise<void> = (controller) =>
+      controller.openExpense(groupId),
+    options?: Parameters<typeof backend>[0],
+  ) {
+    const harness = backend(options);
+    await harness.controller.signIn('alex');
+    await open(harness.controller);
+    await act(async () => {
+      screen = create(<CrashingScreen controller={harness.controller} crash={crash} />);
+    });
+    const root = () => screen!.root;
+    const pressable = (label: string) =>
+      root().find((node) => isHost(node, 'Pressable') && node.props.accessibilityLabel === label);
+    const input = (label: string) =>
+      root().find((node) => isHost(node, 'TextInput') && node.props.accessibilityLabel === label);
+    const run = async (action: () => void) => {
+      await act(async () => action());
+      await settle();
+    };
+    return {
+      ...harness,
+      root,
+      pressable,
+      input,
+      stored: () => harness.drafts.load(memberId, groupId),
+      type: (label: string, value: string) => run(() => input(label).props.onChangeText(value)),
+      press: (label: string) => run(() => pressable(label).props.onPress()),
+    };
+  }
+  const typedBoom = (editor: Editor) => editor.draft?.description === 'Boom';
+  const problem = (root: ReactTestInstance) =>
+    root.findAll(
+      (node) =>
+        isHost(node, 'View') &&
+        node.props.accessibilityRole === 'alert' &&
+        text(node).includes('Something went wrong'),
+    );
+
+  afterEach(() => {
+    attempts = 0;
+  });
+  // React reports each caught error; the member sees the recoverable view instead.
+  const quiet = () => {
+    const reported = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    onTestFinished(() => reported.mockRestore());
+    return reported;
+  };
+
+  it('shows a recoverable view instead of the form, without rendering the draft again', async () => {
+    const reported = quiet();
+    const ui = await crashing(typedBoom);
+    await ui.type('Description, required', 'Boom');
+    expect(reported).toHaveBeenCalled();
+    const [view] = problem(ui.root());
+    expect(text(view)).toContain('This form couldn’t be shown. Your draft is kept on this device.');
+    expect(text(ui.root())).not.toContain('Boom');
+    expect(ui.root().findAll((node) => isHost(node, 'TextInput'))).toEqual([]);
+    expect(ui.pressable('Keep draft and return to the Group')).toBeTruthy();
+    expect(ui.pressable('Discard draft')).toBeTruthy();
+    expect(await ui.stored()).toMatchObject({ draft: { description: 'Boom' } });
+
+    // Later snapshots for the same draft never render the form again.
+    const tried = attempts;
+    await act(async () => ui.controller.touchExpenseField('amount'));
+    await settle();
+    expect(attempts).toBe(tried);
+    expect(problem(ui.root())).toHaveLength(1);
+    expect(ui.writes).toEqual([]);
+  });
+
+  it('keeps the draft and returns to the Group', async () => {
+    quiet();
+    const ui = await crashing(typedBoom);
+    await ui.type('Description, required', 'Boom');
+    await ui.press('Keep draft and return to the Group');
+    expect(ui.controller.getSnapshot().screen).toBe('group');
+    expect(await ui.stored()).toMatchObject({ draft: { description: 'Boom' } });
+    expect(ui.writes).toEqual([]);
+  });
+
+  it('discards the draft and starts the form again', async () => {
+    quiet();
+    const ui = await crashing(typedBoom);
+    await ui.type('Description, required', 'Boom');
+    await ui.press('Discard draft');
+    expect(await ui.stored()).toBeNull();
+    expect(problem(ui.root())).toEqual([]);
+    expect(ui.input('Description, required').props.value).toBe('');
+    expect(ui.writes).toEqual([]);
+  });
+
+  it('never offers to discard a save that may already be recorded', async () => {
+    quiet();
+    const ui = await crashing(
+      (editor) => !!editor.attempt,
+      async (controller) => {
+        await controller.openExpense(groupId);
+        await controller.updateExpenseDraft({ amount: '42.00', description: 'Milk', tagId });
+      },
+      { loseCreate: true },
+    );
+    await ui.press('Save expense ₹42.00');
+    const [view] = problem(ui.root());
+    expect(text(view)).toContain('may already be saved');
+    expect(() => ui.pressable('Discard draft')).toThrow();
+    await ui.press('Keep draft and return to the Group');
+    expect(ui.controller.getSnapshot().screen).toBe('group');
+    expect(ui.submissions).toHaveLength(1);
+    expect(await ui.stored()).toMatchObject({ attempt: { key: 'native-expense-test-0001' } });
+  });
+
+  it('never offers to discard an edit that may already be saved', async () => {
+    quiet();
+    const ui = await crashing(
+      (editor) => !!editor.mutation,
+      async (controller) => {
+        await controller.openExpense(groupId, expenseId);
+        await controller.editExpense();
+        await controller.updateExpenseDraft({ description: 'Weekly groceries and milk' });
+        await controller.saveExpense();
+      },
+      { losePatch: true },
+    );
+    const [view] = problem(ui.root());
+    expect(text(view)).toContain('It may already be saved, so check it from the Group');
+    expect(() => ui.pressable('Discard draft')).toThrow();
+    expect(ui.pressable('Keep draft and return to the Group')).toBeTruthy();
+    expect(await ui.stored()).toMatchObject({ mutation: { kind: 'edit' } });
+    expect(ui.writes).toHaveLength(1);
+  });
+});

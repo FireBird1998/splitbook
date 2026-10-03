@@ -515,6 +515,80 @@ describe('native Expense creation and editing', () => {
     expect(controller.getSnapshot().expense.status).toBe('saved');
   });
 
+  it('keeps a saved payer of 0 while the payers are unchanged, so a metadata edit sends no money', async () => {
+    // An entry of 0 counts as blank (#187), but a saved Expense may list someone who paid 0.
+    const zeroPayer = {
+      ...savedExpense,
+      paidBy: [
+        ...savedExpense.paidBy,
+        { user: { _id: memberIds[1], name: 'Sam' }, amount: 0, amountMinor: 0 },
+      ],
+    };
+    const bodies: unknown[] = [];
+    const { controller } = setup((path, init) => {
+      if (!path.endsWith(`/${expenseId}`)) return undefined;
+      if (init.method === 'PATCH') {
+        const body = JSON.parse(String(init.body));
+        bodies.push(body);
+        return Promise.resolve(json({ data: { ...zeroPayer, ...body, revision: 4 }, status: 200 }));
+      }
+      return Promise.resolve(json({ data: zeroPayer, status: 200 }));
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Corrected dinner' });
+    await controller.saveExpense();
+    expect(bodies).toEqual([{ description: 'Corrected dinner' }]);
+    expect(controller.getSnapshot().expense.status).toBe('saved');
+  });
+
+  it('drops a saved payer of 0 who left the Group from a money edit, instead of blocking it', async () => {
+    // The 0 row has no entry to remove on Paid by, so a money edit must not carry it.
+    const formerId = 'a00000000000000000000099';
+    const zeroFormer = {
+      ...savedExpense,
+      paidBy: [
+        ...savedExpense.paidBy,
+        { user: { _id: formerId, name: 'Former' }, amount: 0, amountMinor: 0 },
+      ],
+    };
+    // What the server saves for the edit below.
+    const edited = {
+      ...savedExpense,
+      revision: 4,
+      splitBetween: memberIds.slice(0, 2).map((user, index) => ({
+        user: { _id: user, name: people[index].name },
+        amount: 5,
+        amountMinor: 500,
+      })),
+    };
+    const bodies: Record<string, unknown>[] = [];
+    const { controller } = setup((path, init) => {
+      if (!path.endsWith(`/${expenseId}`)) return undefined;
+      if (init.method === 'PATCH') {
+        bodies.push(JSON.parse(String(init.body)));
+        return Promise.resolve(json({ data: edited, status: 200 }));
+      }
+      return Promise.resolve(json({ data: zeroFormer, status: 200 }));
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ participantIds: memberIds.slice(0, 2) });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({});
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({
+      paidBy: [{ user: memberIds[0], amount: 10 }],
+      splitBetween: [
+        { user: memberIds[0], amount: 5 },
+        { user: memberIds[1], amount: 5 },
+      ],
+    });
+    expect(controller.getSnapshot().expense.status).toBe('saved');
+  });
+
   it('opens authorized Expense detail with historical allocations and edit history', async () => {
     const { controller } = setup((path) =>
       path.endsWith(`/${expenseId}`)
