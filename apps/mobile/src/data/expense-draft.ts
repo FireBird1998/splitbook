@@ -295,7 +295,8 @@ function allocationErrors(draft: ExpenseDraft, context: ExpenseContext | null): 
     };
   return {};
 }
-function tagError(draft: ExpenseDraft, context: ExpenseContext | null) {
+/** Why the draft's Tag can't be saved. Nothing is swapped in for an inactive Tag. */
+export function expenseTagError(draft: ExpenseDraft, context: ExpenseContext | null) {
   const original = draft.original;
   // Editing keeps an existing historical Tag association unless the member changes it.
   if (original && draft.tagId === (original.tagId ?? '')) return undefined;
@@ -309,7 +310,10 @@ function tagError(draft: ExpenseDraft, context: ExpenseContext | null) {
     );
     return undefined;
   } catch {
-    return 'This Tag is no longer available. Choose an active Tag.';
+    const tag = context.tags.find((item) => item.id === draft.tagId);
+    return tag
+      ? `“${tag.name}” is no longer active in this Group. Choose another Tag; nothing is swapped in for you.`
+      : 'This Tag is no longer available. Choose an active Tag.';
   }
 }
 
@@ -332,7 +336,7 @@ export function validateExpenseDraft(
         : 'Add a description, such as Groceries.',
     date: calendarDateError(draft.date, today),
     ...(amount ? {} : allocationErrors(draft, context)),
-    tag: tagError(draft, context),
+    tag: expenseTagError(draft, context),
   };
   return Object.fromEntries(
     expenseFields.filter((field) => found[field]).map((field) => [field, found[field]]),

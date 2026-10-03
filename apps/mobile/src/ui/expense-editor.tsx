@@ -23,15 +23,14 @@ import {
   Banner,
   BottomSheet,
   Card,
-  Chip,
   CompactButton,
   CompactText,
-  FieldMarker,
   IconButton,
   IconTile,
   ListRow,
   TopBar,
 } from './compact';
+import { TagSheet, inactiveTagReport } from './tag-sheet';
 import { AllocationEditor } from './allocation-editors';
 import {
   AmountDescriptionCard,
@@ -295,14 +294,8 @@ export function ExpenseEditor({
         [draft.original, state.latest].find((saved) => saved?.tagId === id)?.tag ??
         'Unavailable Tag');
   const versions = { name, tagName, currentUserId };
-  const tagNotice =
-    !errors.tag && draft.tagId && context && (!tag || tag.isArchived || tag.isDeleted)
-      ? draft.original && draft.tagId === (draft.original.tagId ?? '')
-        ? `Historical Tag: ${tag?.name ?? draft.original.tag}. This association is retained.`
-        : state.attempt
-          ? `Submitted Tag: ${tag?.name ?? 'unavailable'}. Recovery keeps the original Tag identity.`
-          : `Saved Tag: ${tag?.name ?? 'unavailable'}. It is unavailable or archived; choose an active Tag before saving.`
-      : null;
+  const tagReport = inactiveTagReport(state);
+  const tagNotice = errors.tag ? undefined : tagReport.notice;
 
   return (
     <>
@@ -442,7 +435,7 @@ export function ExpenseEditor({
           </AmountDescriptionCard>
           <ExpenseTiles
             locked={locked}
-            errors={errors}
+            errors={{ ...errors, tag: errors.tag ?? tagReport.error }}
             values={{
               date: expenseDateLabel(draft.date),
               payers: draft.multiPayer
@@ -464,11 +457,6 @@ export function ExpenseEditor({
           {tagNotice ? (
             <CompactText variant="small" tone="warning" accessibilityRole="alert">
               {tagNotice}
-            </CompactText>
-          ) : null}
-          {context && !activeTags.length ? (
-            <CompactText variant="small" tone="secondary">
-              This Group needs an active Tag. Add one on the web, then reopen this draft.
             </CompactText>
           ) : null}
           {invalidMembers && !errors.payers && !errors.split && (
@@ -560,41 +548,22 @@ export function ExpenseEditor({
           onLeaveField('date');
         }}
       />
-      <BottomSheet
+      <TagSheet
         visible={sheet === 'tag'}
-        title="Tag"
-        titleAccessory={<FieldMarker kind="required" />}
+        tags={context ? activeTags : null}
+        tagId={draft.tagId}
+        error={tagReport.error}
+        notice={tagNotice}
+        locked={locked}
+        onChoose={(tagId) => {
+          onChange({ tagId });
+          setSheet(null);
+        }}
         onDone={() => {
           setSheet(null);
           onLeaveField('tag');
         }}
-        footer={
-          <CompactText variant="small" tone="secondary">
-            Only this Group’s active Tags are listed.
-          </CompactText>
-        }
-      >
-        <View
-          accessibilityRole="radiogroup"
-          accessibilityLabel="Tag"
-          style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}
-        >
-          {activeTags.map((item) => (
-            <Chip
-              key={item.id}
-              role="radio"
-              label={item.name}
-              accessibilityLabel={`Tag: ${item.name}`}
-              selected={draft.tagId === item.id}
-              onPress={() => {
-                if (locked) return;
-                onChange({ tagId: item.id });
-                setSheet(null);
-              }}
-            />
-          ))}
-        </View>
-      </BottomSheet>
+      />
       <BottomSheet
         visible={sheet === 'options'}
         title="Expense options"
