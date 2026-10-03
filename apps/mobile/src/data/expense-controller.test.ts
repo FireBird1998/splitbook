@@ -543,6 +543,52 @@ describe('native Expense creation and editing', () => {
     expect(controller.getSnapshot().expense.status).toBe('saved');
   });
 
+  it('drops a saved payer of 0 who left the Group from a money edit, instead of blocking it', async () => {
+    // The 0 row has no entry to remove on Paid by, so a money edit must not carry it.
+    const formerId = 'a00000000000000000000099';
+    const zeroFormer = {
+      ...savedExpense,
+      paidBy: [
+        ...savedExpense.paidBy,
+        { user: { _id: formerId, name: 'Former' }, amount: 0, amountMinor: 0 },
+      ],
+    };
+    // What the server saves for the edit below.
+    const edited = {
+      ...savedExpense,
+      revision: 4,
+      splitBetween: memberIds.slice(0, 2).map((user, index) => ({
+        user: { _id: user, name: people[index].name },
+        amount: 5,
+        amountMinor: 500,
+      })),
+    };
+    const bodies: Record<string, unknown>[] = [];
+    const { controller } = setup((path, init) => {
+      if (!path.endsWith(`/${expenseId}`)) return undefined;
+      if (init.method === 'PATCH') {
+        bodies.push(JSON.parse(String(init.body)));
+        return Promise.resolve(json({ data: edited, status: 200 }));
+      }
+      return Promise.resolve(json({ data: zeroFormer, status: 200 }));
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ participantIds: memberIds.slice(0, 2) });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.validation.errors).toEqual({});
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toMatchObject({
+      paidBy: [{ user: memberIds[0], amount: 10 }],
+      splitBetween: [
+        { user: memberIds[0], amount: 5 },
+        { user: memberIds[1], amount: 5 },
+      ],
+    });
+    expect(controller.getSnapshot().expense.status).toBe('saved');
+  });
+
   it('opens authorized Expense detail with historical allocations and edit history', async () => {
     const { controller } = setup((path) =>
       path.endsWith(`/${expenseId}`)

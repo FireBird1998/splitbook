@@ -1221,4 +1221,24 @@ describe('an unexpected rendering error in the Expense task (#187)', () => {
     expect(ui.submissions).toHaveLength(1);
     expect(await ui.stored()).toMatchObject({ attempt: { key: 'native-expense-test-0001' } });
   });
+
+  it('never offers to discard an edit that may already be saved', async () => {
+    quiet();
+    const ui = await crashing(
+      (editor) => !!editor.mutation,
+      async (controller) => {
+        await controller.openExpense(groupId, expenseId);
+        await controller.editExpense();
+        await controller.updateExpenseDraft({ description: 'Weekly groceries and milk' });
+        await controller.saveExpense();
+      },
+      { losePatch: true },
+    );
+    const [view] = problem(ui.root());
+    expect(text(view)).toContain('It may already be saved, so check it from the Group');
+    expect(() => ui.pressable('Discard draft')).toThrow();
+    expect(ui.pressable('Keep draft and return to the Group')).toBeTruthy();
+    expect(await ui.stored()).toMatchObject({ mutation: { kind: 'edit' } });
+    expect(ui.writes).toHaveLength(1);
+  });
 });
