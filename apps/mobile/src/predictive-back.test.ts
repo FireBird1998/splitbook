@@ -3,7 +3,8 @@ import { AndroidConfig } from 'expo/config-plugins';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 // On Android 13–15, React Native 0.86 forwards Back to the app only when the manifest leaves
-// predictive Back off (react-native#58407). Opted in, Back leaves the app from every screen.
+// predictive Back off (facebook/react-native#58407). Opted in, Back leaves the app from every
+// screen.
 async function buildConfig(mode: string) {
   vi.stubEnv('EXPO_PUBLIC_APP_ENV', mode);
   vi.resetModules();
