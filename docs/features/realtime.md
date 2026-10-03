@@ -156,8 +156,8 @@ function useGroupEvents(groupId: string) {
 | User balances | 30s      | Polling + focus             |
 | Invitations   | 30s      | Polling + focus             |
 
-> **Polling drives writes.** `GET /api/groups/[id]` and
-> `GET /api/groups/[id]/expenses` both materialize due recurring expenses before
-> responding. An open Household group page therefore issues a write-capable
-> request every 10–30 seconds. Generation is idempotent, so this is safe, but it
-> means these polls are not read-only.
+> **Polling drives writes.** `GET /api/groups/[id]`,
+> `GET /api/groups/[id]/expenses` and `GET /api/groups/[id]/balances` all
+> materialize due recurring expenses before responding. An open Household group
+> page therefore issues a write-capable request every 10–30 seconds. Generation
+> is idempotent, so this is safe, but it means these polls are not read-only.
