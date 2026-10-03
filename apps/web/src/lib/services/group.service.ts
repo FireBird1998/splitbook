@@ -358,7 +358,12 @@ export class GroupService {
         // Nobody is left to settle with or to hand over to, so the Group is archived.
         const left = await Group.findOneAndUpdate(
           { _id: groupId, 'members.user': actorId, members: { $size: 1 } },
-          { $pull: { members: { user: actorId } }, $set: { isArchived: true } },
+          {
+            $pull: { members: { user: actorId } },
+            $set: { isArchived: true },
+            // Member changes that load and save() the Group check this version.
+            $inc: { __v: 1 },
+          },
         );
         if (!left) continue;
         await activityService.log(groupId, 'member_left', actorId, {
@@ -387,7 +392,9 @@ export class GroupService {
           : { 'members.1': { $exists: true } };
       const left = await Group.findOneAndUpdate(
         { $and: [{ _id: groupId }, { 'members.user': actorId }, stillHandedOver] },
-        { $pull: { members: { user: actorId } } },
+        // The version bump makes a role change or removal loaded before this leave fail
+        // instead of writing to a shifted member index.
+        { $pull: { members: { user: actorId } }, $inc: { __v: 1 } },
       );
       if (!left) continue;
 

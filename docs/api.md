@@ -709,4 +709,3 @@ Documented in earlier drafts but absent from the codebase:
   either Zod schema, so no request can populate it. See
   [`features/receipts.md`](features/receipts.md).
 - **`GET /api/groups/[id]/balances/simplified`** — folded into `/balances`.
-- **Leave group** — no endpoint; members can only be removed by an admin.

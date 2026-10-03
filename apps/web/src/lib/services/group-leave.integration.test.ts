@@ -161,6 +161,23 @@ describe('leaving a Group', () => {
     expect(stored!.members.filter((member) => member.role === 'admin')).toHaveLength(1);
   });
 
+  it('makes a member change loaded before the leave fail instead of hitting a shifted index', async () => {
+    const groupId = await createTrip();
+    // An admin's role change has loaded the Group, with carol at index 2, before bob leaves.
+    const stale = await Group.findById(groupId);
+    const carolEntry = stale!.members.find((member) => member.user.toString() === carol)!;
+
+    await expect(groupService.leave(groupId, bob)).resolves.toEqual({ archived: false });
+
+    carolEntry.role = 'admin';
+    await expect(stale!.save()).rejects.toBeInstanceOf(mongoose.Error.VersionError);
+    const stored = await Group.findById(groupId).lean();
+    expect(stored!.members.map((member) => [String(member.user), member.role])).toEqual([
+      [alice, 'admin'],
+      [carol, 'member'],
+    ]);
+  });
+
   it('archives the Group when its last member leaves', async () => {
     const groupId = await createTrip([]);
 
