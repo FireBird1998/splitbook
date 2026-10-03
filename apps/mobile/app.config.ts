@@ -22,7 +22,9 @@ export default {
   ios: { bundleIdentifier: appIdentifier },
   android: {
     package: appIdentifier,
-    predictiveBackGestureEnabled: true,
+    // Off until react-native#58407 is fixed in the React Native version in use. Opted in,
+    // Android 13–15 never forward Back to the app, so it leaves from every screen, even mid-save.
+    predictiveBackGestureEnabled: false,
     intentFilters: androidInvitationFilters({
       mode: process.env.EXPO_PUBLIC_APP_ENV,
       inviteOrigin: process.env.EXPO_PUBLIC_INVITE_ORIGIN,
