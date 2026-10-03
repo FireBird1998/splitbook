@@ -132,3 +132,22 @@ Verification:
 - Mobile lint, changed-script formatting and syntax checks pass. Independent Standards and Spec follow-up reviews each report zero findings.
 - The original APK already uploaded to Google Drive was separately inspected and contains the correct real staging audience, with no probe. The change fixes future rebuilds; it does not require replacing that uploaded candidate.
 - Real Android approved/denied login and authenticated device journeys remain pending. No merge is performed by this follow-up.
+
+## Physical-phone report and emulator follow-up, September 30
+
+The owner reported that creating an Expense from their Android phone left the General `Test` Group empty. The exact phone error is still requested; do not mark that specific report resolved without a phone retry or captured symptom.
+
+A repeatable native UI check on the signed-in emulator created `QAphoneSave` for INR 25.75 in that same Group and returned `Expense saved.`. The test entry was retained. The earlier Household QA run also created an Expense successfully. Creation is therefore not consistently broken across every request.
+
+Two separate defects were reproduced and fixed:
+
+- A cold `/api/user/balances` worker returned 500 with `MissingSchemaError: User`. The balance service populated Group members without registering the User model. A real isolated MongoDB test reproduces the same error without importing fixture services that would warm the model registry. Explicit registration fixes it.
+- An Expense edit committed, but hosting replaced the response with HTTP 412 `PRECONDITION_FAILED`. The app used `If-Match` for numeric business revisions. An unauthenticated staging handshake probe returned 200 normally, 412 with `If-Match: 0`, and 200 with `X-Splitbook-Revision: 0`. Updated mobile and web clients use `X-Splitbook-Revision`; the server accepts it with the same stale/malformed revision protections and retains the legacy header fallback during rollout. The old APK still needs updating to avoid hosting's interpretation of the old header.
+
+Regression validation: 259 shared + 214 mobile + 294 web tests (767 total), workspace typecheck, and lint pass. The cold-worker and host-response regressions were observed failing before their fixes. Format and diff checks pass. No diagnostic logging was added to production source.
+
+Staging deployment `dpl_2ttAKxAUyGwhGLzf1jPjzRM5nuua` is READY at `https://splitbook-staging.vercel.app`. It was built from an isolated tracked-source snapshot plus the tested changes; unrelated untracked work was excluded. The live production ledger was not deployed or modified.
+
+The rebuilt signed APK was installed in place on emulator-5554, preserving the Google session. Balances loaded successfully from the fresh staging deployment. Editing `QAphoneSave` to INR 26.75 returned `Expense updated.`; deployed request logs confirm PATCH 200 instead of 412. Screenshot and repeatable ADB harnesses are under `/tmp/splitbook-debug-2026-09-30/`.
+
+The existing APK in the owner's `Splidbook` Drive folder was updated in place, retaining its link and parents. APK SHA-256: `b44f473831faa4bed67f99f74a4dbd2b100761ba3443df9f4e7daee8047a8b12`; size 33,088,337 bytes. The staging signing certificate is unchanged. Real denied-account sign-in, invitations, and multi-member settlement verification remain open gates.

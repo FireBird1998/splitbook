@@ -660,7 +660,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             ? {}
             : { 'Content-Type': 'application/json' }),
           ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
-          ...(options.revision === undefined ? {} : { 'If-Match': String(options.revision) }),
+          ...(options.revision === undefined
+            ? {}
+            : { 'X-Splitbook-Revision': String(options.revision) }),
           ...(outgoingCookie ? { Cookie: outgoingCookie } : {}),
         },
         credentials: 'omit',
