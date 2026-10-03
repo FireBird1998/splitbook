@@ -2,7 +2,7 @@
 
 > **Note (2026-10-04, #221).** This record's "revert" answers #108's question, which is about Activity alone. Whether every display read moves to TanStack Query is decided in ADR 0006 ([#195](https://github.com/FireBird1998/splitbook/issues/195)).
 >
-> - **Numbers.** The measurements are as taken at `35abf4e` and were not re-run.
+> - **Numbers.** The measurements are as taken at `35abf4e` and were not updated.
 > - **Corrections on landing.** The controller diff was +231 −79, so production code grows by 387 lines net, not 369. The comparison for Activity after a confirmed create is not like-for-like. The ownership map predates a second Activity reader.
 > - **Pilot code.** Of the pilot commit, only the measurement script is on `main`, without its TanStack import. `apps/mobile/src/data/activity-reads.ts`, `apps/mobile/src/data/activity-query-controller.test.ts` and the pilot's other changes stay as reference on PR #173's branch, at commit `f5873f0`.
 > - **Gates.** The 10 public-controller checks and 8 mutation checks under [Gates](#gates) are the per-resource checklist for the migration to declarative queries (#176), starting with #217.
@@ -83,7 +83,7 @@ What would change this decision: moving _every_ display read onto TanStack, so t
   - It creates and archives its own Household Group, with 24 seeded Expenses (two Activity pages).
   - It adds 300 ms to every request.
   - It counts requests per journey and times first content (Activity shown with events) and settling.
-  - A foreground event is what App.tsx does on Android: the controller's foreground refresh plus a focus event. The script on `main` sends no focus event, because its `@tanstack/query-core` import was removed. Without a `QueryClient` that event did nothing, so the `main` and controller numbers do not depend on it.
+  - In these runs, from `35abf4e`, a foreground event was what the pilot's App.tsx did on Android: the controller's foreground refresh plus a focus event. Without a `QueryClient` the focus event did nothing, so the `main` and controller numbers do not depend on it. The script on `main` sends only the foreground refresh, as App.tsx on `main` does, because its `@tanstack/query-core` import was removed.
   - Command, inside `apps/mobile` as the `verify:*` scripts run, against a fictional backend (`apps/mobile/scripts/dev-backend/README.md`): `MOBILE_VERIFY_URL=http://127.0.0.1:<port> node --import tsx scripts/measure-activity-reads.ts`. `MOBILE_VERIFY_URL` must be a loopback origin and defaults to `http://127.0.0.1:4138`; `MEASURE_LATENCY_MS` changes the 300 ms.
 - **Environment:**
   - Backend: `apps/web` at `35abf4e` (Next 16.1.6 dev server) through `apps/mobile/scripts/dev-backend` on `127.0.0.1:4138`, database `splitbook_mobile_50`.
@@ -109,7 +109,7 @@ What would change this decision: moving _every_ display read onto TanStack, so t
 | Offline restart: open on Activity               | 603 ms, 20 events             | **305 ms, 27 events** | **305 ms**, 20 events |
 | **All journeys**                                | 22 requests, 8 Activity reads | 21, 7                 | 20, 6                 |
 
-- **Activity after the create is not like-for-like.** When it reads Activity again, `main` reads page 1 and drops the older page it had loaded (`apps/mobile/src/data/mobile-controller.ts:2296` and `:2326` at `7afd15e`; `readActivity` did the same at `35abf4e`). The controller variant leaves that unchanged. TanStack keeps both pages by reading them again, in sequence, which is its second read and most of its extra time. The row compares keeping the older page with dropping it.
+- **Activity after the create is not like-for-like.** After a confirmed change, or on a refresh, `main` reads page 1 and drops the older page it had loaded (`apps/mobile/src/data/mobile-controller.ts:2296` and `:2326` at `7afd15e`; `readActivity` did the same at `35abf4e`). The controller variant leaves that unchanged. TanStack keeps both pages by reading them again, in sequence, which is its second read and most of its extra time. The row compares keeping the older page with dropping it.
 - **Restart (saved views).** Activity now appears from the device copy while the network read runs. On `main` it waits for the read.
 - **Offline restart.** The pilot also restores the consistently saved older page (27 events, against 20). That is the only gain the controller variant lacks; it is a small addition to `savedActivity`-style restore and does not need TanStack.
 - **Slow device saves.** `main` and the controller variant show a read only after it is saved (`sharedRead` awaits the write). The pilot shows it first. This applies to every view and could be changed in `sharedRead` itself.

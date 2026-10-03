@@ -206,7 +206,7 @@ async function run() {
       state.destination === 'activity' &&
       state.activity.groupId === groupId &&
       state.activity.events.length >= minimum;
-  const describing = (text: string) => (state: MobileSnapshot) =>
+  const activityHasDescription = (text: string) => (state: MobileSnapshot) =>
     activityShown()(state) &&
     state.activity.events.some((event) => event.metadata.description?.startsWith(text));
 
@@ -295,10 +295,10 @@ async function run() {
     await measure(
       'Activity after the confirmed create',
       () => controller!.selectDestination('activity'),
-      describing('QA108 confirmed write'),
+      activityHasDescription('QA108 confirmed write'),
     );
     assert.ok(
-      describing('QA108 confirmed write')(controller.getSnapshot()),
+      activityHasDescription('QA108 confirmed write')(controller.getSnapshot()),
       'The confirmed Expense is missing from Activity after the write.',
     );
     controller.dispose();
