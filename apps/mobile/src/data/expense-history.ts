@@ -311,6 +311,31 @@ export function describeExpenseHistory(
 }
 
 /**
+ * The currency in force just after a moment in an Expense's life, from every currency change
+ * its record or events show. Events read on another occasion than the record, such as older
+ * ones saved on this device, still get the currency they were made in, even when a change
+ * between them and the record isn't among them.
+ */
+function currencyTimeline(record: ExpenseRecord, events: ActivityEvent[]) {
+  const changes = [
+    ...record.editHistory.map((entry) => ({ at: entry.editedAt, change: entry.changes.currency })),
+    ...events.map((event) => ({ at: event.createdAt, change: event.metadata.changes?.currency })),
+  ]
+    .flatMap(({ at, change }) => {
+      const before = text(change?.old),
+        after = text(change?.new);
+      return before && after ? [{ at: Date.parse(at), before, after }] : [];
+    })
+    .sort((a, b) => a.at - b.at);
+  return (at: string) => {
+    const time = Date.parse(at);
+    const later = changes.find((change) => change.at > time);
+    if (later) return later.before;
+    return changes.at(-1)?.after ?? record.currency;
+  };
+}
+
+/**
  * Explains an Expense's own Activity events, newest first, in the same terms as its recorded
  * edits: who acted, what changed with its before and after values, and each amount in the
  * currency it had at the time. Anyone the event, Group and Expense don't name is a former
@@ -332,7 +357,7 @@ export function describeExpenseEvents(
 ): ExpenseHistoryEvent[] {
   const person = memberNamer(knownNames(record, people));
   const tagName = tagNamer(tags);
-  let currencyAfter = record.currency;
+  const currencyAfter = currencyTimeline(record, events);
   return events.map((event) => {
     const name = person(event.actor);
     const base = {
@@ -351,10 +376,8 @@ export function describeExpenseEvents(
         return { ...base, action: 'deleted this Expense' };
       case 'expense_updated': {
         if (action === 'restored') return { ...base, action: 'restored this Expense' };
-        // Walking back from the current record gives each edit the currency it was made in.
-        const after = text(changes.currency?.new) || currencyAfter;
+        const after = text(changes.currency?.new) || currencyAfter(event.createdAt);
         const currencies = { after, before: text(changes.currency?.old) || after };
-        currencyAfter = currencies.before;
         const described = describeExpenseChanges(changes, { currencies, person, tagName });
         const [only] = described;
         const fields = changedFields(changes);

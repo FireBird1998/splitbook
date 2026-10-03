@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { describeExpenseEvents } from './expense-history';
 import { createMobileController } from './mobile-controller';
 
 // Fictional people and Groups only.
@@ -78,6 +79,10 @@ function setup() {
   let failing = false;
   // Access withdrawn: the Expense's changes only, or the whole Group.
   let denied: 'history' | 'group' | null = null;
+  // Changes can't be reached while the record still can.
+  let historyOffline = false;
+  // What the server holds now for Expenses a test changes.
+  const saved = new Map<string, { record: unknown; events: unknown[] }>();
   // A backend that ignores the filter sends the whole Group's Activity.
   let unfiltered = false;
   const drafts = new Map<string, unknown>();
@@ -155,9 +160,11 @@ function setup() {
             ? json({ error: 'Forbidden', status: 403 }, 403)
             : json({ status: 200, data: group });
         const id = path.split('/').pop()!;
-        if (path === `/api/groups/${groupId}/expenses/${id}` && records[id])
-          return json({ status: 200, data: records[id] });
+        const current = saved.get(id)?.record ?? records[id];
+        if (path === `/api/groups/${groupId}/expenses/${id}` && current)
+          return json({ status: 200, data: current });
         if (path === `/api/groups/${groupId}/activity`) {
+          if (historyOffline) throw new Error('Offline');
           const expenseId = address.searchParams.get('expenseId');
           // Decided as the read arrives: one already under way when access goes still answers.
           const refused = denied !== null;
@@ -165,7 +172,8 @@ function setup() {
           if (refused) return json({ error: 'Forbidden', status: 403 }, 403);
           if (failing) return json({ error: 'Unavailable', status: 500 }, 500);
           const page = Number(address.searchParams.get('page'));
-          const matching = events.filter(
+          const own = saved.get(expenseId ?? '')?.events as typeof events | undefined;
+          const matching = (own ?? events).filter(
             (event) => unfiltered || !expenseId || event.metadata.expenseId === expenseId,
           );
           return json({
@@ -202,6 +210,9 @@ function setup() {
     setOffline: (value: boolean) => (offline = value),
     setFailing: (value: boolean) => (failing = value),
     setDenied: (value: typeof denied) => (denied = value),
+    setHistoryOffline: (value: boolean) => (historyOffline = value),
+    /** Replaces what the server holds for one Expense. */
+    save: (id: string, record: unknown, own: unknown[]) => saved.set(id, { record, events: own }),
     drafts,
     ignoreFilter: () => (unfiltered = true),
   };
@@ -464,5 +475,58 @@ describe('An Expense record once access to its Group is withdrawn', () => {
     expect(drafts.get(`${sam.id}:${groupId}`)).toMatchObject({
       draft: { notes: 'Meter read on the 20th' },
     });
+  });
+});
+
+describe('An Expense record’s changes read before its currency changed', () => {
+  it('keeps their amounts in that currency beside the record read since', async () => {
+    const { controller, save, setHistoryOffline } = await signedIn();
+    const fare = 'b00000000000000000000003';
+    const amountAt = '2026-09-25T10:00:00.000Z',
+      currencyAt = '2026-09-26T10:00:00.000Z';
+    const amountEdit = { amount: { old: 20, new: 30 }, amountMinor: { old: 2000, new: 3000 } };
+    const event = (id: string, at: string, changes: Record<string, unknown>) => ({
+      _id: id,
+      group: groupId,
+      actor: person(priya),
+      createdAt: at,
+      type: 'expense_updated',
+      metadata: { expenseId: fare, description: 'Ferry', changes },
+    });
+    const fareRecord = (currency: string, editHistory: unknown[]) => ({
+      ...record(fare, 'Ferry'),
+      currency,
+      editHistory,
+    });
+    const edited = (at: string, changes: Record<string, unknown>) => ({
+      editedBy: person(priya),
+      editedAt: at,
+      changes,
+    });
+    // Read while it was in INR: its amount change is saved on this device.
+    save(fare, fareRecord('INR', [edited(amountAt, amountEdit)]), [
+      event('e00000000000000000000001', amountAt, amountEdit),
+    ]);
+    await controller.openExpense(groupId, fare);
+    expect(controller.getSnapshot().expense.history.events).toHaveLength(1);
+    await controller.back();
+
+    // Since then its currency became EUR; its changes can't be reached, its record can.
+    const currencyEdit = { currency: { old: 'INR', new: 'EUR' } };
+    save(
+      fare,
+      fareRecord('EUR', [edited(amountAt, amountEdit), edited(currencyAt, currencyEdit)]),
+      [
+        event('e00000000000000000000002', currencyAt, currencyEdit),
+        event('e00000000000000000000001', amountAt, amountEdit),
+      ],
+    );
+    setHistoryOffline(true);
+    await controller.openExpense(groupId, fare);
+    const { draft, history } = controller.getSnapshot().expense;
+    expect(draft?.original?.currency).toBe('EUR');
+    expect(history.events.map((event) => event._id)).toEqual(['e00000000000000000000001']);
+    const [amount] = describeExpenseEvents(history.events, draft!.original!)[0].changes;
+    expect(amount).toMatchObject({ before: '₹20.00', after: '₹30.00' });
   });
 });

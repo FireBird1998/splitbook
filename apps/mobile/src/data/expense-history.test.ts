@@ -306,4 +306,34 @@ describe('describeExpenseEvents', () => {
       'Alex changed the amount /  | ₹3,200.00 | ₹3,500.00',
     ]);
   });
+
+  it('keeps the currency of older events read before the record changed it', () => {
+    // A copy of the changes saved before the currency became EUR, beside the current record.
+    const saved = record([
+      { ...edit({ amount: { old: 20, new: 30 } }), editedAt: at(12) },
+      { ...edit({ currency: { old: 'INR', new: 'EUR' } }), editedAt: at(15) },
+    ]);
+    const described = describeExpenseEvents(
+      [event('expense_updated', { changes: { amount: { old: 20, new: 30 } } })],
+      saved,
+    );
+    expect(lines(described)).toEqual(['Alex changed the amount /  | ₹20.00 | ₹30.00']);
+  });
+
+  it('uses a currency change among the events that the record doesn’t know of yet', () => {
+    // A record read before the change to EUR, beside changes read since.
+    const described = describeExpenseEvents(
+      [
+        event('expense_updated', { changes: { amount: { old: 40, new: 45 } } }, undefined, 14),
+        event(
+          'expense_updated',
+          { changes: { currency: { old: 'INR', new: 'EUR' } } },
+          undefined,
+          13,
+        ),
+      ],
+      record([], 'INR'),
+    );
+    expect(lines(described)[0]).toBe('Alex changed the amount /  | €40.00 | €45.00');
+  });
 });
