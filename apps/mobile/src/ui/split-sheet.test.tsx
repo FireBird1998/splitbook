@@ -561,3 +561,49 @@ describe('Split sheet', () => {
     ]);
   });
 });
+
+describe('A draft stored with only spaces in a split entry', () => {
+  // Typing can't enter spaces; an earlier version could store them.
+  it.each([
+    {
+      method: 'Amounts',
+      splitMethod: 'unequal',
+      field: 'Amount for you',
+      correction: 'Use digits and one decimal point, such as 250.50.',
+    },
+    {
+      method: 'Percentage',
+      splitMethod: 'percentage',
+      field: 'Percentage for you',
+      correction: 'Use digits and one decimal point, such as 33.5.',
+    },
+  ] as const)(
+    'reopens by $method with the sheet closed, keeps the draft, and marks the entry to correct',
+    async ({ splitMethod, field, correction }) => {
+      const ui = await render(async (controller) => {
+        await controller.openExpense(groupId);
+        await controller.updateExpenseDraft({
+          amount: '100',
+          description: 'Older draft',
+          splitMethod,
+          participantIds: [alexId],
+        });
+        await controller.updateExpenseDraft({ splitValues: { [alexId]: ' ' } });
+        await controller.back();
+        await controller.openExpense(groupId);
+      });
+      expect(ui.sheet()).toBeUndefined();
+      expect(ui.controller.getSnapshot().expense.draft?.splitValues).toEqual({ [alexId]: ' ' });
+
+      await ui.press('Resume draft');
+      await ui.openSplit();
+      expect(ui.input(field).props.accessibilityHint).toBe(correction);
+      expect(text(ui.sheet()!)).toContain('Correct the entry marked above.');
+
+      await ui.type(field, '100');
+      expect(ui.input(field).props.accessibilityHint).toBeUndefined();
+      expect(ui.controller.getSnapshot().expense.draft?.splitValues).toEqual({ [alexId]: '100' });
+      expect(ui.writes).toEqual([]);
+    },
+  );
+});

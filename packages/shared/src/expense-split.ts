@@ -95,13 +95,17 @@ export type SplitEntryProblem = 'not-whole' | 'too-precise' | 'too-large' | 'inv
 const entryDigits = (choice: SplitChoice, currency: string) =>
   choice === 'percentage' ? 2 : choice === 'shares' ? 0 : getCurrencyPrecision(currency);
 
-/** Why one person's entry can't be used. Nothing is rounded or corrected for the member. */
+/**
+ * Why one person's entry can't be used. Nothing is rounded or corrected for the member. Only an
+ * empty entry is blank: saving reads every other entry as typed, so one of only spaces, which an
+ * earlier version could store, is checked like any other text.
+ */
 export function splitEntryProblem(
   choice: SplitChoice,
   value: string,
   currency: string,
 ): SplitEntryProblem | undefined {
-  if (choice === 'equal' || !value.trim()) return undefined;
+  if (choice === 'equal' || value === '') return undefined;
   const digits = entryDigits(choice, currency);
   let units: number;
   try {

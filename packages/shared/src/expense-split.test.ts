@@ -167,8 +167,16 @@ describe('split entry problems', () => {
   it('accepts 0, 100% and blank entries, and never checks Equal', () => {
     expect(splitEntryProblem('amounts', '0', 'INR')).toBeUndefined();
     expect(splitEntryProblem('percentage', '100', 'INR')).toBeUndefined();
-    expect(splitEntryProblem('shares', '  ', 'INR')).toBeUndefined();
+    expect(splitEntryProblem('shares', '', 'INR')).toBeUndefined();
+    expect(splitEntryProblem('amounts', ' 5 ', 'INR')).toBeUndefined();
     expect(splitEntryProblem('equal', 'abc', 'INR')).toBeUndefined();
+  });
+
+  it('checks an entry of only spaces like any other text, as saving would', () => {
+    // Saving reads it as typed and refuses it, so it isn't blank.
+    expect(splitEntryProblem('amounts', ' ', 'INR')).toBe('invalid');
+    expect(splitEntryProblem('percentage', '  ', 'INR')).toBe('invalid');
+    expect(splitEntryProblem('shares', '\t', 'INR')).toBe('not-whole');
   });
 });
 
@@ -227,6 +235,18 @@ describe('split preview', () => {
     );
     expect(percentage.problems).toEqual({ [you]: 'too-large' });
     expect(percentage.status).toEqual({ kind: 'problem', reason: 'marked-entry' });
+  });
+
+  it('marks an entry of only spaces to correct instead of reading it', () => {
+    for (const [splitMethod, problem] of [
+      ['unequal', 'invalid'],
+      ['percentage', 'invalid'],
+      ['shares', 'not-whole'],
+    ] as const) {
+      const preview = breakdown(entries({ splitMethod, splitValues: { [you]: ' ', [sam]: '1' } }));
+      expect(preview.problems).toEqual({ [you]: problem });
+      expect(preview.status).toEqual({ kind: 'problem', reason: 'marked-entry' });
+    }
   });
 
   it('explains missing participants and an empty set of shares', () => {
