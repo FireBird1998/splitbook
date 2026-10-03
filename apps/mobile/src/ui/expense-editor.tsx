@@ -32,7 +32,6 @@ import {
   TopBar,
 } from './compact';
 import { TagSheet, inactiveTagReport } from './tag-sheet';
-import { AllocationEditor } from './allocation-editors';
 import { PayerSheet, paidBySummary } from './payer-sheet';
 import {
   AmountDescriptionCard,
@@ -44,6 +43,7 @@ import {
   expenseDateLabel,
   splitSummary,
 } from './expense-form';
+import { SplitSheet } from './split-sheet';
 import { useTheme } from './theme';
 
 /**
@@ -100,8 +100,8 @@ export function ExpenseEditor({
   onRetryHistory?: () => void;
 }) {
   const theme = useTheme();
-  const [editor, setEditor] = useState<'payers' | 'split' | null>(null);
-  const [sheet, setSheet] = useState<'date' | 'tag' | 'options' | null>(null);
+  const [editor, setEditor] = useState<'payers' | null>(null);
+  const [sheet, setSheet] = useState<'date' | 'split' | 'tag' | 'options' | null>(null);
   const scroll = useRef<ScrollView>(null);
   const content = useRef<View>(null);
   const sections = useRef<Partial<Record<ExpenseField, View | null>>>({});
@@ -457,9 +457,7 @@ export function ExpenseEditor({
             }}
             correction={correction}
             section={section}
-            onOpen={(tile) =>
-              tile === 'payers' || tile === 'split' ? setEditor(tile) : setSheet(tile)
-            }
+            onOpen={(tile) => (tile === 'payers' ? setEditor(tile) : setSheet(tile))}
           />
           {tagNotice ? (
             <CompactText variant="small" tone="warning" accessibilityRole="alert">
@@ -555,6 +553,21 @@ export function ExpenseEditor({
           onLeaveField('date');
         }}
       />
+      <SplitSheet
+        visible={sheet === 'split'}
+        draft={draft}
+        members={context ? members : null}
+        currentUserId={currentUserId}
+        locked={locked}
+        persistence={state.persistence}
+        name={name}
+        money={money}
+        onChange={onChange}
+        onDone={() => {
+          setSheet(null);
+          onLeaveField('split');
+        }}
+      />
       <TagSheet
         visible={sheet === 'tag'}
         tags={context ? activeTags : null}
@@ -588,16 +601,6 @@ export function ExpenseEditor({
           />
         </Card>
       </BottomSheet>
-      <AllocationEditor
-        editor={editor}
-        draft={draft}
-        members={members}
-        locked={locked}
-        persistence={state.persistence}
-        allocationError={allocationError}
-        onChange={onChange}
-        onClose={() => setEditor(null)}
-      />
       <PayerSheet
         visible={editor === 'payers'}
         draft={draft}

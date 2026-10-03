@@ -955,11 +955,11 @@ describe('compact Expense form', () => {
     expect(ui.input('Amount, required').props.value).toBe('12.5');
 
     await ui.press(ui.tile('Split').props.accessibilityLabel);
-    await ui.press('Shares');
-    await ui.type('Shares for Alex', '1.5');
-    expect(ui.input('Shares for Alex').props.value).toBe('1.5');
-    await ui.type('Shares for Alex', '1.5a');
-    expect(ui.input('Shares for Alex').props.value).toBe('1.5');
+    await ui.press('Amounts');
+    await ui.type('Amount for you', '-1.5');
+    expect(ui.input('Amount for you').props.value).toBe('-1.5');
+    await ui.type('Amount for you', '-1.5a');
+    expect(ui.input('Amount for you').props.value).toBe('-1.5');
   });
 
   it('shows each value on its tile and opens its editor', async () => {
