@@ -17,7 +17,7 @@ describe('fetcher', () => {
     );
 
     await expect(fetcher('/api/test')).resolves.toEqual(body);
-    expect(fetch).toHaveBeenCalledWith('/api/test');
+    expect(fetch).toHaveBeenCalledWith('/api/test', { headers: expect.any(Headers) });
   });
 
   it('throws with server error message when !res.ok', async () => {

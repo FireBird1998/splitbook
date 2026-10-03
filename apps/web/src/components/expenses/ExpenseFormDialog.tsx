@@ -46,6 +46,7 @@ import {
 } from './expense-form-helpers';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupRead } from '@splitbook/shared/group-read';
+import { apiFetch } from '@/lib/utils/api-fetch';
 
 // ─── Types ─────────────────────────────────────────────
 interface ExpenseFormDialogProps {
@@ -261,7 +262,7 @@ function ExpenseDraftDialog({
     try {
       if (submission.checkDuplicate) {
         try {
-          const response = await fetch(
+          const response = await apiFetch(
             buildDuplicateCheckUrl({
               groupId: submission.groupId,
               description: submission.description,
@@ -291,7 +292,7 @@ function ExpenseDraftDialog({
       if (!mounted.current) return;
       setDraft((current) => current.attempt(submission));
       const url = `/api/groups/${submission.groupId}/expenses${submission.expenseId ? `/${submission.expenseId}` : ''}`;
-      const response = await fetch(url, {
+      const response = await apiFetch(url, {
         method: submission.expenseId ? 'PATCH' : 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -343,7 +344,7 @@ function ExpenseDraftDialog({
     if (!expense || transportBusy.current) return;
     transportBusy.current = true;
     try {
-      const response = await fetch(`/api/groups/${groupId}/expenses/${expense._id}`);
+      const response = await apiFetch(`/api/groups/${groupId}/expenses/${expense._id}`);
       if (!response.ok) throw new Error('Could not reload this Expense.');
       const latest = (await response.json()).data;
       if (mounted.current) setDraft((current) => current.reload(latest));

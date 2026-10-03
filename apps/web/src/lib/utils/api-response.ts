@@ -2,6 +2,11 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { auth } from '@/lib/auth';
 import { MoneyValidationError } from '@splitbook/shared/exact-money';
+import {
+  ACCOUNT_CHANGED,
+  ACCOUNT_CHANGED_STATUS,
+  EXPECTED_ACCOUNT_HEADER,
+} from '@/lib/expected-account';
 
 export interface AuthUser {
   /** 24-hex user id, byte-for-byte the stored ObjectId string. */
@@ -15,10 +20,21 @@ export interface AuthUser {
  * Get the authenticated user from the Better Auth session (validated against
  * the database, or the five-minute cookie cache). Returns null if not
  * authenticated. Works in API routes and server components.
+ *
+ * A web page sends the account it was rendered for as `X-Expected-Account`.
+ * When that header is present and names anyone but the session user, the
+ * session moved to another account in a different tab: this throws
+ * `ACCOUNT_CHANGED`, which `serverError` answers as 419 with no data, before
+ * the route reads or writes anything. Without the header nothing changes.
  */
 export async function getAuthUser(): Promise<AuthUser | null> {
-  const session = await auth.api.getSession({ headers: await headers() });
+  const requestHeaders = await headers();
+  const session = await auth.api.getSession({ headers: requestHeaders });
   if (!session?.user?.id) return null;
+  const expectedAccount = requestHeaders.get(EXPECTED_ACCOUNT_HEADER);
+  if (expectedAccount !== null && expectedAccount !== session.user.id) {
+    throw new Error(ACCOUNT_CHANGED);
+  }
   const { id, name, email, image } = session.user;
   return { id, name, email, image: image ?? null };
 }
@@ -82,6 +98,10 @@ export function serverError(err?: unknown) {
         503,
       ],
       INVALID_MONEY: ['Enter a positive amount with the currency’s supported precision.', 422],
+      [ACCOUNT_CHANGED]: [
+        'The signed-in account changed in another tab. Reload this page to continue.',
+        ACCOUNT_CHANGED_STATUS,
+      ],
     };
     if (err.name === 'VersionError')
       return error(messages.STALE_REVISION[0], 409, 'STALE_REVISION');

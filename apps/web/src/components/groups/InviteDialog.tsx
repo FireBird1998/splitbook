@@ -16,6 +16,7 @@ import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CloseIcon from '@mui/icons-material/Close';
 import CheckIcon from '@mui/icons-material/Check';
 import Snackbar from '@mui/material/Snackbar';
+import { apiFetch } from '@/lib/utils/api-fetch';
 
 const INVITATION_SAVED_MESSAGE =
   'Invitation saved. No email is sent - share the invite link, or they will see it after signing in with that email.';
@@ -43,7 +44,7 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
     setEmailError('');
 
     try {
-      const res = await fetch(`/api/groups/${groupId}/invite`, {
+      const res = await apiFetch(`/api/groups/${groupId}/invite`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -68,7 +69,7 @@ export default function InviteDialog({ open, onClose, groupId }: InviteDialogPro
   const handleGenerateLink = async () => {
     setLinkLoading(true);
     try {
-      const res = await fetch(`/api/groups/${groupId}/invite-link`, {
+      const res = await apiFetch(`/api/groups/${groupId}/invite-link`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ expiresInDays: 7 }),

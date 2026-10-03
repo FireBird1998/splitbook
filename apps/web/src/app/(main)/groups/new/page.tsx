@@ -24,6 +24,7 @@ import {
 } from '@splitbook/shared/trip-setup';
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupCategory } from '@splitbook/shared/types';
+import { apiFetch } from '@/lib/utils/api-fetch';
 
 export default function NewGroupPage() {
   const router = useRouter();
@@ -49,7 +50,7 @@ export default function NewGroupPage() {
     const controller = new AbortController();
     async function loadPreference() {
       try {
-        const response = await fetch('/api/user/profile', { signal: controller.signal });
+        const response = await apiFetch('/api/user/profile', { signal: controller.signal });
         if (!response.ok) return;
         const profile = (await response.json()).data;
         if (!controller.signal.aborted && CURRENCY_CODES.includes(profile?.preferredCurrency)) {
@@ -96,7 +97,7 @@ export default function NewGroupPage() {
     setError('');
 
     try {
-      const res = await fetch('/api/groups', {
+      const res = await apiFetch('/api/groups', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -122,7 +123,7 @@ export default function NewGroupPage() {
 
       await Promise.allSettled(
         inviteEmails.map((email) =>
-          fetch(`/api/groups/${groupId}/invite`, {
+          apiFetch(`/api/groups/${groupId}/invite`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email }),

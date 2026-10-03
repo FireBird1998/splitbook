@@ -10,6 +10,7 @@ import DialogActions from '@mui/material/DialogActions';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import { formatCurrency } from '@splitbook/shared/currency';
+import { apiFetch } from '@/lib/utils/api-fetch';
 
 interface DeleteExpenseDialogProps {
   open: boolean;
@@ -36,7 +37,7 @@ export default function DeleteExpenseDialog({
     setError('');
 
     try {
-      const res = await fetch(`/api/groups/${groupId}/expenses/${expense._id}`, {
+      const res = await apiFetch(`/api/groups/${groupId}/expenses/${expense._id}`, {
         method: 'DELETE',
         headers: { 'If-Match': String(expense.revision ?? 0) },
       });

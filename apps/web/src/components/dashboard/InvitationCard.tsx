@@ -7,6 +7,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import { apiFetch } from '@/lib/utils/api-fetch';
 
 interface InvitationCardProps {
   invitation: Record<string, unknown>;
@@ -22,7 +23,7 @@ export default function InvitationCard({ invitation, onAction }: InvitationCardP
   const handleAction = async (action: 'accept' | 'decline') => {
     setLoading(action);
     try {
-      await fetch(`/api/invitations/${invitation._id}`, {
+      await apiFetch(`/api/invitations/${invitation._id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
