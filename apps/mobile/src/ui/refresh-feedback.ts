@@ -43,21 +43,24 @@ export function refreshFeedback(state: MobileSnapshot): RefreshFeedback {
   const listed =
     expenses.month === financial.month &&
     (expenses.status === 'ready' || expenses.summary !== null || expenses.data.length > 0);
+  // A list read empty is loaded: refreshing it is no first load. Activity was read once it
+  // has a page.
   const first =
     state.screen === 'groups'
       ? !checking &&
-        ((groups.status === 'loading' && !groups.data.length) ||
+        ((groups.status === 'loading' && !groups.loaded) ||
           (['idle', 'loading'].includes(home.status) && home.data === null))
       : group && !detail.data
         ? detail.status === 'loading'
         : group && state.destination === 'activity'
-          ? reading(activity.status, detail.status) && !activity.events.length
+          ? reading(activity.status, detail.status) && activity.pagination === null
           : group && state.destination === 'balances'
             ? reading(balances.status, detail.status) && balances.data === null
             : group && reading(expenses.status, detail.status) && !listed;
   const shown = group ? shownGroup(state) : null;
+  // An automatic refresh says nothing, even of a view it reads for the first time.
   const progress =
-    first && !pull
+    first && !pull && !silent
       ? state.screen === 'groups'
         ? 'Loading Home'
         : !detail.data
@@ -67,7 +70,7 @@ export function refreshFeedback(state: MobileSnapshot): RefreshFeedback {
   const refreshing =
     state.screen === 'groups'
       ? [
-          { active: groups.status === 'loading' && groups.data.length > 0, time: null },
+          { active: groups.status === 'loading' && groups.loaded, time: null },
           {
             // Unverified Home figures already carry their own "Updating" label.
             active: home.status === 'loading' && home.data !== null && !home.stale,
@@ -85,7 +88,7 @@ export function refreshFeedback(state: MobileSnapshot): RefreshFeedback {
               ? [
                   {
                     // Older pages have their own footer; a first load shows its placeholder.
-                    active: activity.status === 'loading' && activity.events.length > 0,
+                    active: activity.status === 'loading' && activity.pagination !== null,
                     time: activity.refreshedAt,
                   },
                 ]

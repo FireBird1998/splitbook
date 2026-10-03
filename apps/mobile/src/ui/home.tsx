@@ -454,7 +454,7 @@ export function HomeGroups({
   onOpen: (groupId: string) => void;
   onRetry: () => void;
 }) {
-  const known = groups.status === 'ready' || groups.data.length > 0;
+  const known = groups.loaded || groups.data.length > 0;
   const unsaved = groups.status === 'error' && offline && !groups.data.length;
   return (
     <View style={{ gap: 6 }}>
@@ -491,9 +491,10 @@ export function HomeGroups({
           <CompactButton label="Try again" variant="text" dense onPress={onRetry} />
         </Banner>
       )}
-      {groups.status === 'loading' && !groups.data.length ? (
+      {/* A list read empty stays empty while it's read again. */}
+      {groups.status === 'loading' && !groups.loaded ? (
         <SkeletonRows label="Loading your Groups" />
-      ) : groups.status === 'ready' && !groups.data.length ? (
+      ) : ['ready', 'loading'].includes(groups.status) && !groups.data.length ? (
         <NoGroups onRefresh={onRetry} />
       ) : groups.data.length ? (
         <Card>

@@ -31,6 +31,10 @@ function fixture() {
     /** get-session: a session, none, an expired one, or an HTTP status. */
     session: 'valid' as 'valid' | 'none' | 'expired' | number,
     cleanup: false,
+    /** The member has no Groups, so Home is empty. */
+    noGroups: false,
+    /** Activity has no events. */
+    noActivity: false,
   };
   let cookie: string | null = null,
     owner: string | null = null,
@@ -80,11 +84,13 @@ function fixture() {
         },
       });
     }
-    if (path === '/api/groups') return json({ status: 200, data: groups });
+    if (path === '/api/groups') return json({ status: 200, data: state.noGroups ? [] : groups });
     if (path === '/api/user/balances')
       return json({
         status: 200,
-        data: { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }] },
+        data: {
+          buckets: state.noGroups ? [] : [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }],
+        },
       });
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
     const found = groups.find((item) => item._id === id);
@@ -108,17 +114,21 @@ function fixture() {
       return json({
         status: 200,
         data: {
-          activities: [
-            {
-              _id: 'd00000000000000000000001',
-              group: id,
-              type: 'group_created',
-              actor: { _id: accountId, name: 'Alex' },
-              metadata: {},
-              createdAt: iso,
-            },
-          ],
-          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+          activities: state.noActivity
+            ? []
+            : [
+                {
+                  _id: 'd00000000000000000000001',
+                  group: id,
+                  type: 'group_created',
+                  actor: { _id: accountId, name: 'Alex' },
+                  metadata: {},
+                  createdAt: iso,
+                },
+              ],
+          pagination: state.noActivity
+            ? { page: 1, limit: 20, total: 0, totalPages: 0 }
+            : { page: 1, limit: 20, total: 1, totalPages: 1 },
         },
       });
     if (path.endsWith('/invite-link') && init.method !== 'POST')
@@ -571,6 +581,85 @@ describe('refresh feedback (#127)', () => {
     expect(refreshFeedback(state).quiet).toBe(false);
     home.release();
     await back;
+  });
+
+  it('keeps an empty Home loaded: silent when refreshed automatically, refreshing when asked', async () => {
+    const f = fixture();
+    f.state.noGroups = true;
+    const controller = f.create();
+    // A first load still shows its one progress cue.
+    const first = f.hold('/api/groups');
+    const signingIn = controller.signIn('alex');
+    await first.reached;
+    expect(refreshFeedback(controller.getSnapshot())).toMatchObject({ progress: 'Loading Home' });
+    first.release();
+    await signingIn;
+    expect(controller.getSnapshot().groups).toMatchObject({ status: 'ready', data: [] });
+
+    f.clock.now += 31_000;
+    const automatic = f.hold('/api/groups');
+    const foreground = controller.refresh('foreground');
+    await automatic.reached;
+    expect(controller.getSnapshot().groups).toMatchObject({ status: 'loading', data: [] });
+    expect(refreshFeedback(controller.getSnapshot())).toMatchObject({
+      silent: true,
+      quiet: false,
+      progress: null,
+    });
+    automatic.release();
+    await foreground;
+
+    const asked = f.hold('/api/groups');
+    const refreshing = controller.refresh();
+    await asked.reached;
+    expect(refreshFeedback(controller.getSnapshot())).toMatchObject({
+      silent: false,
+      quiet: true,
+      progress: null,
+    });
+    asked.release();
+    await refreshing;
+  });
+
+  it('keeps an empty Activity loaded: silent when refreshed automatically, refreshing when asked', async () => {
+    const f = fixture();
+    f.state.noActivity = true;
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(maple);
+    const first = f.hold(`/api/groups/${maple}/activity`);
+    const opening = controller.openActivity(maple);
+    await first.reached;
+    expect(refreshFeedback(controller.getSnapshot())).toMatchObject({
+      progress: 'Loading Activity',
+    });
+    first.release();
+    await opening;
+    expect(controller.getSnapshot().activity).toMatchObject({ status: 'ready', events: [] });
+
+    f.clock.now += 31_000;
+    const automatic = f.hold(`/api/groups/${maple}/activity`);
+    const foreground = controller.refresh('foreground');
+    await automatic.reached;
+    expect(controller.getSnapshot().activity).toMatchObject({ status: 'loading', events: [] });
+    expect(refreshFeedback(controller.getSnapshot())).toMatchObject({
+      silent: true,
+      quiet: false,
+      progress: null,
+    });
+    automatic.release();
+    await foreground;
+
+    const asked = f.hold(`/api/groups/${maple}/activity`);
+    const refreshing = controller.refresh();
+    await asked.reached;
+    expect(refreshFeedback(controller.getSnapshot())).toMatchObject({
+      silent: false,
+      quiet: true,
+      progress: 'Refreshing',
+    });
+    asked.release();
+    await refreshing;
   });
 
   it('shows a first load with one progress cue and no quiet status', async () => {

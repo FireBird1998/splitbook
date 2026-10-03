@@ -1,6 +1,6 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMobileController } from './data/mobile-controller';
+import { createMobileController, type MobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
 
@@ -111,7 +111,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 /** One phone: its stored session and saved views outlive each controller, as across restarts. */
 function device() {
   const clock = { now: new Date(2026, 8, 27, 10, 42).getTime() };
-  const network = { online: true, session: 200 };
+  const network = { online: true, session: 200, noGroups: false, noActivity: false };
   let cookie: string | null = null,
     owner: string | null = null,
     identity: unknown = null;
@@ -127,10 +127,12 @@ function device() {
       return network.session === 200
         ? json({ user: alex, session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00Z' } })
         : json({}, network.session);
-    if (path === '/api/groups') return json({ data: groups, status: 200 });
+    if (path === '/api/groups') return json({ data: network.noGroups ? [] : groups, status: 200 });
     if (path === '/api/user/balances')
       return json({
-        data: { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }] },
+        data: {
+          buckets: network.noGroups ? [] : [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }],
+        },
         status: 200,
       });
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
@@ -172,17 +174,21 @@ function device() {
       return json({
         status: 200,
         data: {
-          activities: [
-            {
-              _id: 'd00000000000000000000001',
-              group: id,
-              actor: { _id: alex.id, name: alex.name },
-              type: 'group_created',
-              createdAt: iso,
-              metadata: {},
-            },
-          ],
-          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+          activities: network.noActivity
+            ? []
+            : [
+                {
+                  _id: 'd00000000000000000000001',
+                  group: id,
+                  actor: { _id: alex.id, name: alex.name },
+                  type: 'group_created',
+                  createdAt: iso,
+                  metadata: {},
+                },
+              ],
+          pagination: network.noActivity
+            ? { page: 1, limit: 20, total: 0, totalPages: 0 }
+            : { page: 1, limit: 20, total: 1, totalPages: 1 },
         },
       });
     return json({}, 404);
@@ -477,6 +483,52 @@ describe('first load and refresh', () => {
     await refresh(`/api/groups/${maple}`, 'Expenses');
     await refresh(`/api/groups/${maple}`, 'Balances');
     await refresh(`/api/groups/${maple}/activity?`, 'Activity');
+  });
+
+  it('keeps an empty Home on screen while it refreshes automatically', async () => {
+    const phone = device();
+    phone.network.noGroups = true;
+    const first = phone.controller();
+    await first.signIn('alex');
+    first.dispose();
+    const app = await start(phone);
+    await settle();
+    expect(app.text()).toContain('A shared space starts here.');
+
+    phone.clock.now += 31_000;
+    const read = phone.hold('/api/groups');
+    void (native.controller as MobileController).refresh('foreground');
+    await read.reached;
+    await settle();
+    expect(app.progress()).toHaveLength(0);
+    expect(app.hosts((p) => p.accessibilityLabel === 'Loading your Groups')).toHaveLength(0);
+    expect(app.text()).toContain('A shared space starts here.');
+    read.release();
+    await settle();
+    expect(app.text()).toContain('A shared space starts here.');
+  });
+
+  it('keeps an empty Activity on screen while it refreshes automatically', async () => {
+    const phone = device();
+    phone.network.noActivity = true;
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press('Open Maple House, Household · 2 members');
+    await app.press('Activity');
+    expect(app.text()).toContain('No changes yet');
+
+    phone.clock.now += 31_000;
+    const read = phone.hold(`/api/groups/${maple}/activity?`);
+    void (native.controller as MobileController).refresh('foreground');
+    await read.reached;
+    await settle();
+    expect(app.progress()).toHaveLength(0);
+    expect(app.hosts((p) => p.accessibilityLabel === 'Loading Activity')).toHaveLength(0);
+    expect(app.text()).toContain('No changes yet');
+    read.release();
+    await settle();
+    expect(app.text()).toContain('No changes yet');
   });
 
   it('keeps Invite available while the Group refreshes', async () => {

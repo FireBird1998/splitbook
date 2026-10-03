@@ -297,7 +297,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
     },
     invitation: { code: null, status: 'idle', preview: null, message: null },
     share: { status: 'idle', url: null, message: null },
-    groups: { status: 'idle', data: [], message: null },
+    groups: { status: 'idle', data: [], message: null, loaded: false },
     detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
   };
 }
@@ -1153,7 +1153,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({
       ...snapshot,
       auth: { status: 'restoring', user: saved.user, message: null },
-      groups: { status: 'loading', data: saved.groups, message: null },
+      groups: { status: 'loading', data: saved.groups, message: null, loaded: true },
       home: saved.home
         ? {
             ...emptyHome(),
@@ -1212,7 +1212,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({
       ...snapshot,
       screen: 'groups',
-      groups: { status: 'loading', data: snapshot.groups.data, message: null },
+      groups: { ...snapshot.groups, status: 'loading', message: null },
       detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
     });
     try {
@@ -1228,7 +1228,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           !snapshot.groups.data.length &&
           memberOfAll(saved.value)
         )
-          publish({ ...snapshot, groups: { ...snapshot.groups, data: saved.value } });
+          publish({ ...snapshot, groups: { ...snapshot.groups, data: saved.value, loaded: true } });
       }
       const groups = fresh ? parseGroups(fresh.value) : await reading!;
       assertCurrent(owner);
@@ -1263,12 +1263,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         }
         if (!current(owner) || view !== viewRequest) return;
       }
-      publish({ ...snapshot, groups: { status: 'ready', data: groups, message: null } });
+      publish({
+        ...snapshot,
+        groups: { status: 'ready', data: groups, message: null, loaded: true },
+      });
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
       publish({
         ...snapshot,
         groups: {
+          ...snapshot.groups,
           status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
           data: error instanceof RequestError && error.status === 403 ? [] : snapshot.groups.data,
           message:
@@ -4634,6 +4638,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           // A keyed retry returns the Group that a read after its lost response already listed.
           data: [group, ...snapshot.groups.data.filter((item) => item.id !== group.id)],
           message: null,
+          loaded: true,
         },
         ...(view === viewRequest
           ? ({

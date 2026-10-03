@@ -287,7 +287,13 @@ export interface MobileSnapshot {
     preview: InvitationPreview | null;
     message: string | null;
   };
-  groups: { status: LoadStatus; data: MobileGroup[]; message: string | null };
+  groups: {
+    status: LoadStatus;
+    data: MobileGroup[];
+    message: string | null;
+    /** A list has been read for this account, from the server or this device; it may be empty. */
+    loaded: boolean;
+  };
   detail: {
     status: LoadStatus;
     id: string | null;

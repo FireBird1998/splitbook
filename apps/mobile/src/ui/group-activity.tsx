@@ -198,9 +198,10 @@ function ActivityList({
           <CompactButton label="Try again" variant="text" dense onPress={onRetry} />
         </Banner>
       ) : null}
-      {loading && !state.events.length ? (
+      {/* Activity read empty stays empty while it's read again. */}
+      {loading && state.pagination === null ? (
         <SkeletonRows label="Loading Activity" avatar />
-      ) : state.status === 'ready' && !state.events.length ? (
+      ) : (state.status === 'ready' || loading) && !state.events.length ? (
         <Card padded>
           <CompactText weight="semibold">No changes yet</CompactText>
           <CompactText variant="small" tone="secondary">

@@ -262,7 +262,7 @@ describe('Home Groups', () => {
     const handlers = { onNewGroup: vi.fn(), onOpen: vi.fn(), onRetry: vi.fn() };
     const root = render(
       <HomeGroups
-        groups={{ status: 'ready', data: groupsList, message: null, ...groups }}
+        groups={{ status: 'ready', data: groupsList, message: null, loaded: true, ...groups }}
         byGroup={home().byGroup}
         newGroupLabel="New Group"
         {...handlers}
@@ -312,5 +312,18 @@ describe('Home Groups', () => {
     expect(text(failed.root)).toContain('Maple House');
     act(() => button(failed.root, 'Try again').props.onPress());
     expect(failed.onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows placeholders only for a list never read, and keeps an empty list while it is read again', () => {
+    const placeholders = (root: ReactTestInstance) =>
+      root.findAll((node) => node.props.accessibilityLabel === 'Loading your Groups');
+    const first = view({ status: 'loading', data: [], loaded: false });
+    expect(placeholders(first.root)).not.toHaveLength(0);
+    expect(headers(first.root)).toEqual(['Groups']);
+
+    const again = view({ status: 'loading', data: [], loaded: true });
+    expect(placeholders(again.root)).toHaveLength(0);
+    expect(headers(again.root)).toEqual(['Groups · 0']);
+    expect(text(again.root)).toContain('A shared space starts here.');
   });
 });
