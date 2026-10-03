@@ -430,11 +430,11 @@ describe('cached views and coalesced reads (#103)', () => {
     const controller = f.create();
     await controller.signIn('alex');
     await controller.openGroup(groupId);
-    const pulls: boolean[] = [];
+    const pulls: (string | null)[] = [];
     controller.subscribe(() => pulls.push(controller.getSnapshot().pull));
 
     await controller.refresh('pull');
-    expect(pulls).toContain(true);
+    expect(pulls).toContain(`group:${groupId}:expenses`);
     expect([f.reads(groupPath), f.reads(expenseReads), f.reads(balanceReads)]).toEqual([2, 2, 2]);
 
     pulls.length = 0;
@@ -442,7 +442,7 @@ describe('cached views and coalesced reads (#103)', () => {
     await controller.refreshExpenses();
     await controller.refreshBalances();
     await controller.refresh('foreground');
-    expect(pulls).not.toContain(true);
+    expect(pulls.every((pull) => pull === null)).toBe(true);
     expect([f.reads(groupPath), f.reads(expenseReads), f.reads(balanceReads)]).toEqual([3, 4, 5]);
 
     await controller.back();
@@ -461,12 +461,12 @@ describe('cached views and coalesced reads (#103)', () => {
     const refreshes = [controller.refresh('foreground'), controller.refresh('foreground')];
     const read = await f.held.next(groupPath);
     refreshes.push(controller.refresh('pull'), controller.refresh('foreground'));
-    expect(controller.getSnapshot().pull).toBe(true);
+    expect(controller.getSnapshot().pull).toBe(`group:${groupId}:expenses`);
     read.release(f.live());
     await Promise.all(refreshes);
     expect([f.reads(groupPath), f.reads(expenseReads), f.reads(balanceReads)]).toEqual([2, 2, 2]);
     expect(controller.getSnapshot()).toMatchObject({
-      pull: false,
+      pull: null,
       detail: { status: 'ready' },
       financial: { expenses: { status: 'ready' }, balances: { status: 'ready', stale: false } },
     });
@@ -489,7 +489,7 @@ describe('cached views and coalesced reads (#103)', () => {
     await Promise.all([pulling, foreground]);
     expect([f.reads(groupPath), f.reads(expenseReads), f.reads(balanceReads)]).toEqual([2, 2, 2]);
     expect(controller.getSnapshot()).toMatchObject({
-      pull: false,
+      pull: null,
       financial: {
         expenses: { status: 'ready', data: [{ description: '2026-09 rent, ledger 1' }] },
         balances: { status: 'ready', stale: false, data: [{ debts: [{ amount: 31 }] }] },

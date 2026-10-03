@@ -81,6 +81,7 @@ import { parseInvitationLink } from './invitation-links';
 import { parseExpensePage, parseGroupBalances, parseHomeBalances } from './financial-dto';
 import type {
   AccountStorageLease,
+  ExpenseDraftSummary,
   FetchResponse,
   GroupCreation,
   GroupDestination,
@@ -119,6 +120,57 @@ function readScope(path: string) {
     : rest === '/balances'
       ? `balances:${groupId}`
       : `ledger:${groupId}`;
+}
+
+/** The view on screen, which a pull or an automatic refresh belongs to. */
+export function shownView({
+  screen,
+  detail,
+  destination,
+}: Pick<MobileSnapshot, 'screen' | 'detail' | 'destination'>) {
+  return screen === 'group' ? `group:${detail.id}:${destination}` : screen;
+}
+
+/** The open Group: as read, or from the saved Groups list until it has been. */
+export function shownGroup({ detail, groups }: Pick<MobileSnapshot, 'detail' | 'groups'>) {
+  return detail.data ?? groups.data.find((group) => group.id === detail.id) ?? null;
+}
+
+/**
+ * Home's Expense drafts in this account's listed Groups. A draft with a submission or change
+ * pending may already be recorded, so it's first; an unreadable one is left to its Group's form.
+ */
+function draftSummaries(
+  records: { groupId: string; value: unknown }[],
+  accountId: string,
+  groups: MobileGroup[],
+): ExpenseDraftSummary[] {
+  const position = (groupId: string) => groups.findIndex((group) => group.id === groupId);
+  return records
+    .flatMap(({ groupId, value }) => {
+      const group = groups.find((item) => item.id === groupId);
+      if (!group) return [];
+      try {
+        const { draft, attempt, mutation } = parseStoredExpenseDraft(value, accountId, groupId);
+        return [
+          {
+            groupId,
+            groupName: group.name,
+            expenseId: draft.original?._id ?? null,
+            description: draft.description,
+            amount: draft.amount,
+            currency: draft.currency,
+            unconfirmed: attempt !== null || mutation !== null,
+          },
+        ];
+      } catch {
+        return [];
+      }
+    })
+    .sort(
+      (a, b) =>
+        Number(b.unconfirmed) - Number(a.unconfirmed) || position(a.groupId) - position(b.groupId),
+    );
 }
 
 function emptyExpenses(month: string | null = null): GroupFinancialState['expenses'] {
@@ -215,7 +267,8 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
   return {
     auth,
     offline: { active: false, refreshedAt: null, message: null },
-    pull: false,
+    pull: null,
+    automatic: null,
     screen: 'groups',
     destination: 'expenses',
     expense: emptyExpenseEditor(),
@@ -244,7 +297,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
     },
     invitation: { code: null, status: 'idle', preview: null, message: null },
     share: { status: 'idle', url: null, message: null },
-    groups: { status: 'idle', data: [], message: null },
+    groups: { status: 'idle', data: [], message: null, loaded: false },
     detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
   };
 }
@@ -337,6 +390,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let pendingLoaded = false;
   let creationRecovery: { ownerId: string; creation: GroupCreation } | null = null;
   let pendingQueue: Promise<unknown> = Promise.resolve();
+  /** Pulls and automatic refreshes still running, by the view each started on; newest last. */
+  let running: Record<'pull' | 'automatic', string[]> = { pull: [], automatic: [] };
 
   const savePending = (code: string | null) => {
     pendingLoaded = true;
@@ -387,6 +442,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     invalidatedAt.clear();
     explicit = new Map();
     materializing = new Map();
+    running = { pull: [], automatic: [] };
     viewRequest += 1;
     requests.forEach((request) => request.abort());
     requests.clear();
@@ -1035,6 +1091,82 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
+  /** The saved Home shown while checking, kept for the same account so it never blanks. */
+  const savedHome = (userId: string) =>
+    snapshot.auth.status === 'restoring' && snapshot.auth.user?.id === userId
+      ? { groups: snapshot.groups, home: snapshot.home, drafts: snapshot.drafts }
+      : {};
+
+  /**
+   * Cold start: the saved Home of the account that last signed in on this device. Read straight
+   * from this device, every part at once and outside the account queue, so nothing waits on the
+   * network or on another account write. Null without a readable saved Groups list.
+   */
+  const readSavedHome = async () => {
+    const local = dependencies.accountLocal,
+      identity = dependencies.offlineIdentity,
+      cache = dependencies.readCache;
+    if (!local || !identity || !cache) return null;
+    try {
+      const [accountId, stored] = await Promise.all([local.owner.load(), identity.load()]);
+      const session = parseSession(stored);
+      if (
+        !accountId ||
+        !session ||
+        session.user.id !== accountId ||
+        session.expiresAt.getTime() <= now()
+      )
+        return null;
+      const saved = async <T>(path: string, parse: (value: unknown) => T) => {
+        const read = cachedRead(await cache.load(accountId, path), accountId, path, now());
+        return read && { value: parse(read.value), refreshedAt: read.refreshedAt };
+      };
+      const [groups, home, drafts] = await Promise.all([
+        saved('/api/groups', parseGroups),
+        saved('/api/user/balances', parseHomeBalances).catch(() => null),
+        (async () => (await dependencies.expenseDrafts?.list?.(accountId)) ?? [])().catch(() => []),
+      ]);
+      if (
+        !groups?.value.every((group) =>
+          group.members.some((member) => member.user.id === accountId),
+        )
+      )
+        return null;
+      return {
+        user: session.user,
+        groups: groups.value,
+        home,
+        drafts: draftSummaries(drafts, accountId, groups.value),
+      };
+    } catch {
+      // Without a readable saved copy, the session check shows on its own.
+      return null;
+    }
+  };
+
+  /**
+   * Shown while the session is checked, never once a sign-out cleanup has started. `auth.status`
+   * stays 'restoring', so nothing is sent and every action waits for the check.
+   */
+  const showSavedHome = (owner: number, saved: Awaited<ReturnType<typeof readSavedHome>>) => {
+    if (!saved || !current(owner) || accountCleanupRequired) return;
+    publish({
+      ...snapshot,
+      auth: { status: 'restoring', user: saved.user, message: null },
+      groups: { status: 'loading', data: saved.groups, message: null, loaded: true },
+      home: saved.home
+        ? {
+            ...emptyHome(),
+            status: 'loading',
+            data: saved.home.value.buckets,
+            byGroup: saved.home.value.byGroup,
+            refreshedAt: saved.home.refreshedAt,
+          }
+        : emptyHome(),
+      drafts: saved.drafts,
+    });
+  };
+
   const restoreOffline = async (owner: number) => {
     if (
       !cookie ||
@@ -1052,6 +1184,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       offlineSession = true;
       publish({
         ...cleanSnapshot({ status: 'authenticated', user: session.user, message: null }),
+        ...savedHome(session.user.id),
         offline: { active: true, refreshedAt: null, message: null },
       });
       await loadGroups(owner);
@@ -1079,7 +1212,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({
       ...snapshot,
       screen: 'groups',
-      groups: { status: 'loading', data: snapshot.groups.data, message: null },
+      groups: { ...snapshot.groups, status: 'loading', message: null },
       detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
     });
     try {
@@ -1095,7 +1228,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           !snapshot.groups.data.length &&
           memberOfAll(saved.value)
         )
-          publish({ ...snapshot, groups: { ...snapshot.groups, data: saved.value } });
+          publish({ ...snapshot, groups: { ...snapshot.groups, data: saved.value, loaded: true } });
       }
       const groups = fresh ? parseGroups(fresh.value) : await reading!;
       assertCurrent(owner);
@@ -1130,12 +1263,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         }
         if (!current(owner) || view !== viewRequest) return;
       }
-      publish({ ...snapshot, groups: { status: 'ready', data: groups, message: null } });
+      publish({
+        ...snapshot,
+        groups: { status: 'ready', data: groups, message: null, loaded: true },
+      });
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
       publish({
         ...snapshot,
         groups: {
+          ...snapshot.groups,
           status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
           data: error instanceof RequestError && error.status === 403 ? [] : snapshot.groups.data,
           message:
@@ -1155,6 +1292,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await failSession(owner, expiredMessage);
       return;
     }
+    // A saved Home of another account goes before that account's data is cleared.
+    if (snapshot.auth.user && snapshot.auth.user.id !== session.user.id)
+      publish(cleanSnapshot({ status: 'restoring', user: null, message: null }));
     if (dependencies.accountLocal) {
       try {
         const savedOwner = await dependencies.accountLocal.owner.load();
@@ -1172,7 +1312,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         throw new AccountCleanupError();
       }
     }
-    publish(cleanSnapshot({ status: 'authenticated', user: session.user, message: null }));
+    publish({
+      ...cleanSnapshot({ status: 'authenticated', user: session.user, message: null }),
+      ...savedHome(session.user.id),
+    });
     await saveVerifiedIdentity(session, owner);
     await loadGroups(owner);
     if (current(owner)) await refreshHome();
@@ -1261,10 +1404,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
     }
   };
-  /**
-   * Home's Expense drafts in this account's listed Groups, read from this device whenever Home
-   * loads. A draft with a submission or change pending may already be recorded, so it's first.
-   */
+  /** Home's Expense drafts (`draftSummaries`), read from this device whenever Home loads. */
   const listDrafts = async () => {
     const lease = accountStorage();
     const storage = dependencies.expenseDrafts;
@@ -1273,39 +1413,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     try {
       const records = await lease.write(() => storage.list!(lease.accountId));
       if (!current(owner)) return;
-      const groups = snapshot.groups.data;
-      const position = (groupId: string) => groups.findIndex((group) => group.id === groupId);
-      const drafts = records.flatMap(({ groupId, value }) => {
-        const group = groups.find((item) => item.id === groupId);
-        if (!group) return [];
-        try {
-          const { draft, attempt, mutation } = parseStoredExpenseDraft(
-            value,
-            lease.accountId,
-            groupId,
-          );
-          return [
-            {
-              groupId,
-              groupName: group.name,
-              expenseId: draft.original?._id ?? null,
-              description: draft.description,
-              amount: draft.amount,
-              currency: draft.currency,
-              unconfirmed: attempt !== null || mutation !== null,
-            },
-          ];
-        } catch {
-          // An unreadable draft is left to its Group's form, which explains it.
-          return [];
-        }
+      publish({
+        ...snapshot,
+        drafts: draftSummaries(records, lease.accountId, snapshot.groups.data),
       });
-      drafts.sort(
-        (a, b) =>
-          Number(b.unconfirmed) - Number(a.unconfirmed) ||
-          position(a.groupId) - position(b.groupId),
-      );
-      publish({ ...snapshot, drafts });
     } catch {
       // Home keeps the drafts it lists; each one is still in its Group.
     }
@@ -1331,6 +1442,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return;
       }
       if (cleanupRequired) await clearSaved(owner);
+      // Any pending sign-out cleanup has finished, so this device's saved Home can be read,
+      // alongside the session cookie and before anything is sent.
+      const deviceHome = readSavedHome();
       await loadPending();
       assertCurrent(owner);
       const saved = await store(owner, () => dependencies.credentials.load());
@@ -1344,6 +1458,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return;
       }
       cookie = saved;
+      showSavedHome(owner, await deviceHome);
       await verifyAndLoad(owner);
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;
@@ -2197,9 +2312,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (!objectId.safeParse(groupId).success)
         throw new RequestError('This Group is unavailable.', 404);
       const wanted = () => current(owner) && view === viewRequest && read === activityRequest;
+      const pagePath = (number: number) =>
+        `/api/groups/${groupId}/activity?page=${number}&limit=20`;
       const readPage = (number: number) =>
         readCached(
-          `/api/groups/${groupId}/activity?page=${number}&limit=20`,
+          pagePath(number),
           owner,
           (value) => parseActivityPage(value, groupId, number),
           wanted,
@@ -2233,6 +2350,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           status: 'ready',
           moreStatus,
           message: null,
+          refreshedAt: append ? snapshot.activity.refreshedAt : readAt(pagePath(1)),
         },
       });
       if (!append) returnActivityPages = null;
@@ -3221,6 +3339,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (
       snapshot.screen !== 'expense' ||
       editor.status !== (kind === 'delete' ? 'delete-review' : 'editing') ||
+      // Saving needs a connection; the form says so.
+      (kind === 'edit' && snapshot.offline.active) ||
       editor.persistence === 'error' ||
       !original ||
       !draft ||
@@ -3423,6 +3543,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const storage = dependencies.expenseDrafts;
     if (
       snapshot.screen !== 'expense' ||
+      // Saving needs a connection; the form says so.
+      snapshot.offline.active ||
       // An unconfirmed save is finished from where it reopens, without resuming it first.
       !(
         editor.status === 'editing' ||
@@ -4112,9 +4234,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   /** Where Members and Group details returns: the Group view, Month and scroll it opened from. */
   let membersReturn: GroupReturnContext | null = null;
-  /** Shows the Group as already read; a Group read still in flight updates the page. */
+  /** Shows the Group as known so far; a Group read still in flight updates the page. */
   const openMembers = (origin: { scrollY?: number } = {}) => {
-    const groupId = snapshot.detail.data?.id;
+    const groupId = shownGroup(snapshot)?.id;
     if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'group' || !groupId) return;
     membersReturn = expenseReturn(groupId, origin.scrollY);
     publish({ ...snapshot, screen: 'members' });
@@ -4122,10 +4244,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** Android Back and the arrow return to the destination, Month and scroll it opened from. */
   const closeMembers = async () => {
     if (snapshot.screen !== 'members') return;
-    const { id, data } = snapshot.detail;
+    const { id } = snapshot.detail;
     const origin = membersReturn?.groupId === id ? membersReturn : null;
     membersReturn = null;
-    if (!id || !data) return showHome();
+    if (!id || !shownGroup(snapshot)) return showHome();
     returnPages = origin && { groupId: id, month: origin.month, pages: origin.pages };
     // Activity's older events are read again too, as on return from an Expense.
     returnActivityPages =
@@ -4139,11 +4261,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     await openGroup(id);
   };
 
+  /** Needs the Group to be known, not read just now; inviting needs a connection. */
   const loadInviteLink = async (): Promise<string | null> => {
     if (
       snapshot.auth.status !== 'authenticated' ||
-      snapshot.detail.status !== 'ready' ||
+      !shownGroup(snapshot) ||
       !snapshot.detail.id ||
+      snapshot.offline.active ||
       snapshot.share.status === 'loading'
     )
       return null;
@@ -4514,6 +4638,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           // A keyed retry returns the Group that a read after its lost response already listed.
           data: [group, ...snapshot.groups.data.filter((item) => item.id !== group.id)],
           message: null,
+          loaded: true,
         },
         ...(view === viewRequest
           ? ({
@@ -4585,22 +4710,29 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     return showHome();
   };
 
-  let pulls = 0;
   /**
-   * Re-read the visible view. Only a pull-to-refresh shows the native pull indicator;
-   * foreground refreshes and Retry buttons use the quiet status. Pull and Retry always
-   * read again; a foreground refresh reuses reads verified within the display freshness
-   * window and joins identical reads already in flight.
+   * Re-read the visible view. A pull-to-refresh shows only the native pull indicator, and an
+   * automatic (foreground) refresh nothing, each on the view it started on; Retry buttons use
+   * the quiet status. Pull and Retry always read again; a foreground refresh reuses reads
+   * verified within the display freshness window and joins identical reads already in flight.
    */
   const refresh = async (origin: 'pull' | 'retry' | 'foreground' = 'retry') => {
-    if (origin !== 'pull') return refreshView(origin === 'foreground');
-    pulls += 1;
-    if (!snapshot.pull) publish({ ...snapshot, pull: true });
+    if (origin === 'retry') return refreshView(false);
+    const kind = origin === 'pull' ? 'pull' : 'automatic';
+    const views = running[kind];
+    const mark = (view: string | null) => {
+      if (snapshot[kind] !== view)
+        publish(kind === 'pull' ? { ...snapshot, pull: view } : { ...snapshot, automatic: view });
+    };
+    const view = shownView(snapshot);
+    views.push(view);
+    mark(view);
     try {
-      await refreshView(false);
+      await refreshView(origin === 'foreground');
     } finally {
-      pulls -= 1;
-      if (pulls === 0 && snapshot.pull) publish({ ...snapshot, pull: false });
+      views.splice(views.lastIndexOf(view), 1);
+      // A sign-out or restore since then has already cleared it.
+      if (running[kind] === views) mark(views.at(-1) ?? null);
     }
   };
 

@@ -9,10 +9,14 @@ import {
   GroupNavBar,
   IconButton,
   IconTile,
+  LinearProgress,
   ListRow,
   TopBar,
 } from './compact';
 import { useTheme } from './theme';
+
+/** Under the floating action: it sits 16 above the navigation and is 56 tall, then a gap. */
+export const floatingRoom = 16 + 56 + 16;
 
 /** "Household · 3 members · INR" */
 export function groupSubtitle(group: MobileGroup) {
@@ -21,13 +25,13 @@ export function groupSubtitle(group: MobileGroup) {
 }
 
 interface GroupShellProps {
-  /** Null until the Group has been read. */
+  /** Null until the Group is known, from its read or the saved Groups list. */
   group: MobileGroup | null;
   destination: GroupDestination;
   onDestination: (destination: GroupDestination) => void;
   back: { label: string; onPress: () => void };
-  /** Quiet refresh status beside the title. */
-  status?: ReactNode;
+  /** One progress bar under the top bar, so labelled: a first load, or a refresh. */
+  progress?: string | null;
   invite: { onPress: () => void; disabled: boolean; offline: boolean };
   /** Opens Members and Group details. */
   onMembers: () => void;
@@ -41,6 +45,8 @@ interface GroupShellProps {
   >;
   /** Floats above the bottom navigation, such as the save snackbar. */
   overlay?: ReactNode;
+  /** A floating action shows over the content, which leaves room to scroll clear of it. */
+  floating?: boolean;
   children: ReactNode;
 }
 
@@ -53,7 +59,7 @@ export function GroupShell({
   destination,
   onDestination,
   back,
-  status,
+  progress,
   invite,
   onMembers,
   onRefresh,
@@ -61,6 +67,7 @@ export function GroupShell({
   scrollRef,
   scroll,
   overlay,
+  floating = false,
   children,
 }: GroupShellProps) {
   const theme = useTheme();
@@ -72,7 +79,6 @@ export function GroupShell({
         title={group?.name ?? 'Group'}
         subtitle={group ? groupSubtitle(group) : undefined}
         leading={{ kind: 'back', ...back }}
-        status={status}
         actions={
           group ? (
             <>
@@ -93,13 +99,19 @@ export function GroupShell({
           ) : null
         }
       />
+      {progress ? <LinearProgress label={progress} /> : null}
       <ScrollView
         // Each destination starts at its own top.
         key={destination}
         ref={scrollRef}
         {...scroll}
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
+        contentContainerStyle={{
+          paddingHorizontal: 16,
+          paddingTop: 4,
+          paddingBottom: floating ? floatingRoom : 24,
+          gap: 12,
+        }}
         refreshControl={
           <RefreshControl
             refreshing={pull.refreshing}

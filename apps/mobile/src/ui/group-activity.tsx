@@ -18,8 +18,10 @@ import {
   Divider,
   LinearProgress,
   SectionHeader,
-  Skeleton,
+  SkeletonRows,
 } from './compact';
+import { Freshness } from './financial-views';
+import { NotAvailableOffline } from './offline-notice';
 import { fonts, useTheme } from './theme';
 
 interface GroupActivityProps {
@@ -29,10 +31,10 @@ interface GroupActivityProps {
   currency: string;
   /** The Group's members, to name people in edits; anyone else is a former member. */
   members?: { id: string; name: string }[];
-  /** Figures come from this device's saved copy. */
+  /** Events come from this device's saved copy. */
   offline: boolean;
-  /** A pull-to-refresh is running; its native indicator is the only cue. */
-  pulling: boolean;
+  /** Shown events are read again: their freshness says so. */
+  refreshing?: boolean;
   now: number;
   onRetry: () => void;
   onMore: () => void;
@@ -145,7 +147,7 @@ function ActivityList({
   currency,
   members,
   offline,
-  pulling,
+  refreshing = false,
   now,
   onRetry,
   onMore,
@@ -158,21 +160,27 @@ function ActivityList({
     state.pagination !== null &&
     state.pagination.page < state.pagination.totalPages;
   return (
+    // A first load's progress bar is the screen's, under the top bar.
     <View style={{ gap: 12 }}>
-      {/* One cue per operation: a pull has its native indicator and a refresh of shown events
-          the header's quiet status, so only a first load draws a bar. */}
-      {loading && !state.events.length && !pulling ? (
-        <LinearProgress label="Loading Activity" />
-      ) : null}
       <SectionHeader
         title="Changes in this Group"
         trailing={
-          <CompactText variant="caption" tone="secondary">
-            Newest first
-          </CompactText>
+          (offline || refreshing) && state.events.length > 0 && state.refreshedAt !== null ? (
+            <Freshness refreshedAt={state.refreshedAt} refreshing={refreshing} offline={offline} />
+          ) : (
+            <CompactText variant="caption" tone="secondary">
+              Newest first
+            </CompactText>
+          )
         }
       />
-      {state.status === 'denied' ? (
+      {state.status === 'error' && offline && !state.events.length ? (
+        <NotAvailableOffline
+          compact
+          message="This Group’s activity hasn’t been opened on this phone yet. Connect to load it."
+          onRetry={onRetry}
+        />
+      ) : state.status === 'denied' ? (
         <Banner
           tone="error"
           title="This Group isn’t available"
@@ -190,22 +198,10 @@ function ActivityList({
           <CompactButton label="Try again" variant="text" dense onPress={onRetry} />
         </Banner>
       ) : null}
-      {loading && !state.events.length ? (
-        <Card>
-          {[0, 1, 2].map((row) => (
-            <View
-              key={row}
-              style={{ flexDirection: 'row', gap: 12, padding: 14, alignItems: 'center' }}
-            >
-              <Skeleton width={32} height={32} rounded={11} />
-              <View style={{ flex: 1, gap: 6 }}>
-                <Skeleton width="70%" />
-                <Skeleton width="40%" height={12} />
-              </View>
-            </View>
-          ))}
-        </Card>
-      ) : state.status === 'ready' && !state.events.length ? (
+      {/* Activity read empty stays empty while it's read again. */}
+      {loading && state.pagination === null ? (
+        <SkeletonRows label="Loading Activity" avatar />
+      ) : (state.status === 'ready' || loading) && !state.events.length ? (
         <Card padded>
           <CompactText weight="semibold">No changes yet</CompactText>
           <CompactText variant="small" tone="secondary">

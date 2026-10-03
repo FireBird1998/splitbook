@@ -1,19 +1,22 @@
 import { View } from 'react-native';
 import type { LoadStatus } from '../data/types';
+import { Badge, CompactText, type TextTone } from './compact';
 import { Button, Copy, Icon } from './primitives';
 import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
 
 /**
- * The one quiet cue for an automatic refresh or retry of content that stays on screen,
- * with when that content was verified when known.
+ * The one quiet cue for a refresh or retry of content that stays on screen, with when that
+ * content was saved when known; `checking` marks the saved Home while the session is checked.
  */
 export function RefreshStatus({
   visible,
   savedAt = null,
+  checking = false,
 }: {
   visible: boolean;
   savedAt?: number | null;
+  checking?: boolean;
 }) {
   const theme = useTheme();
   if (!visible) return null;
@@ -21,9 +24,38 @@ export function RefreshStatus({
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
       <Icon name="sync-outline" size={15} />
       <Copy style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 20, flexShrink: 1 }}>
-        {savedAt === null ? 'Updating…' : `Saved ${refreshedLabel(savedAt)} · updating`}
+        {savedAt === null
+          ? checking
+            ? 'Checking…'
+            : 'Refreshing…'
+          : `Saved ${refreshedLabel(savedAt)} · ${checking ? 'checking' : 'refreshing'}`}
       </Copy>
     </View>
+  );
+}
+
+/**
+ * A view's own freshness slot: "Updated hh:mm", "Saved hh:mm · refreshing" while it is read
+ * again, or a "Saved hh:mm" badge when its figures come from this device offline.
+ */
+export function Freshness({
+  refreshedAt,
+  refreshing = false,
+  offline = false,
+  tone = 'secondary',
+}: {
+  refreshedAt: number | null;
+  refreshing?: boolean;
+  offline?: boolean;
+  tone?: TextTone;
+}) {
+  if (refreshedAt === null) return null;
+  const time = refreshedLabel(refreshedAt);
+  if (offline) return <Badge label={`Saved ${time}`} />;
+  return (
+    <CompactText variant="caption" tone={tone}>
+      {refreshing ? `Saved ${time} · refreshing` : `Updated ${time}`}
+    </CompactText>
   );
 }
 

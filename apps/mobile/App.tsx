@@ -1,4 +1,4 @@
-import { OfflineNotice } from './src/ui/offline-notice';
+import { NotAvailableOffline, OfflineNotice } from './src/ui/offline-notice';
 import { useCallback, useEffect, useRef, useSyncExternalStore, type RefObject } from 'react';
 import {
   AppState,
@@ -34,7 +34,15 @@ import {
 } from './src/runtime';
 import { ThemeContext, fonts, useTheme } from './src/ui/theme';
 import { Button, Copy, Icon, Label, Loading, Notice } from './src/ui/primitives';
-import { Badge, CompactText, FloatingAction, IconButton, TopBar } from './src/ui/compact';
+import {
+  Badge,
+  CompactText,
+  FloatingAction,
+  IconButton,
+  LinearProgress,
+  SkeletonRows,
+  TopBar,
+} from './src/ui/compact';
 import { SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
@@ -59,6 +67,7 @@ import { RecordPaymentSheet } from './src/ui/record-payment-sheet';
 import { GroupActivity } from './src/ui/group-activity';
 import { GroupMembers } from './src/ui/group-members';
 import type { MobileSnapshot } from './src/data/types';
+import { shownGroup } from './src/data/mobile-controller';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 
 export default function App() {
@@ -124,6 +133,8 @@ function SplitBook() {
 
   const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
   const feedback = refreshFeedback(state);
+  // Cold start: the saved Home of the account that last signed in, while its session is checked.
+  const checking = state.auth.status === 'restoring' && state.auth.user !== null;
   const joining = state.invitation.status === 'joining';
   if (configurationReady && authenticated && state.screen === 'expense')
     return (
@@ -162,7 +173,7 @@ function SplitBook() {
         <TaskScreen state={state} authenticated={authenticated} />
       </SafeAreaView>
     );
-  if (configurationReady && authenticated && state.screen === 'groups')
+  if (configurationReady && (authenticated || checking) && state.screen === 'groups')
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <HomeScreen state={state} />
@@ -499,26 +510,39 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
   );
 }
 
-/** Home: balances by currency, drafts to resume, and the member's balance in each Group. */
+/**
+ * Home: balances by currency, drafts to resume, and the member's balance in each Group. At cold
+ * start it is the saved Home, read-only until the session is confirmed.
+ */
 function HomeScreen({ state }: { state: MobileSnapshot }) {
   const theme = useTheme();
   const feedback = refreshFeedback(state);
+  const { checking } = feedback;
   const refresh = () => void controller.refresh();
   return (
     <>
       <HomeTopBar
         userName={state.auth.user!.name}
-        status={<RefreshStatus visible={feedback.quiet} savedAt={feedback.savedAt} />}
-        accountDisabled={
-          state.creation.status === 'saving' || state.invitation.status === 'joining'
+        status={
+          <RefreshStatus
+            visible={feedback.quiet || checking}
+            savedAt={feedback.savedAt}
+            checking={checking}
+          />
         }
+        accountDisabled={
+          checking || state.creation.status === 'saving' || state.invitation.status === 'joining'
+        }
+        refreshDisabled={checking}
         onRefresh={refresh}
         onAccount={controller.openSettings}
       />
+      {feedback.progress ? <LinearProgress label={feedback.progress} /> : null}
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
         refreshControl={
           <RefreshControl
+            enabled={!checking}
             refreshing={feedback.pull}
             onRefresh={() => void controller.refresh('pull')}
             tintColor={theme.brand.main}
@@ -527,7 +551,12 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
         }
       >
         <OfflineNotice state={state.offline} />
-        <HomeBalances state={state.home} onRefresh={() => void controller.refreshHome()} />
+        <HomeBalances
+          state={state.home}
+          offline={state.offline.active}
+          silent={feedback.silent}
+          onRefresh={() => void controller.refreshHome()}
+        />
         {state.creation.status === 'uncertain' && (
           <GroupCreationCheck
             message={state.creation.message}
@@ -540,6 +569,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
         {/* Direct entry: the form returns to that Group's Expenses. */}
         <ContinueDrafts
           drafts={state.drafts}
+          disabled={checking}
           onOpen={(draft) =>
             void controller.openExpense(draft.groupId, draft.expenseId ?? undefined)
           }
@@ -548,6 +578,8 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
           groups={state.groups}
           byGroup={state.home.byGroup}
           newGroupLabel={state.creation.draft.name ? 'Continue Group form' : 'New Group'}
+          offline={state.offline.active}
+          disabled={checking}
           onNewGroup={controller.startCreate}
           onOpen={(groupId) => void controller.openGroup(groupId)}
           onRetry={refresh}
@@ -584,6 +616,10 @@ function shareInvite() {
 function GroupScreen({ state }: { state: MobileSnapshot }) {
   const feedback = refreshFeedback(state);
   const group = state.detail.data;
+  // The top bar keeps the Group's name and actions while it is first read.
+  const known = shownGroup(state);
+  // Never opened on this phone, and offline: the navigation stays, without a banner.
+  const unavailable = !group && state.detail.status === 'error' && state.offline.active;
   const userId = state.auth.user!.id;
   const eventOpen = state.destination === 'activity' && state.activity.selected !== null;
   const scroll = useRef<ScrollView>(null);
@@ -617,12 +653,17 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
   };
   const openExpense = (groupId: string, expenseId?: string) =>
     void controller.openExpense(groupId, expenseId, { scrollY: scrollY.current });
-  const kept = state.keptDraft?.groupId === group?.id ? state.keptDraft : null;
+  const kept = state.keptDraft?.groupId === known?.id ? state.keptDraft : null;
   // Both open the kept record; a save that may already be recorded is checked, not resumed.
   const keptAction = kept?.unconfirmed
     ? { label: 'Check save', icon: 'alert-circle-outline' as const }
     : { label: 'Resume draft', icon: 'pencil-outline' as const };
   const resumeDraft = () => void controller.resumeKeptDraft({ scrollY: scrollY.current });
+  // On Expenses, also while the Group is first read; not when it can't be.
+  const floating =
+    known && (group || state.detail.status === 'loading') && state.destination === 'expenses'
+      ? known
+      : null;
   const discardDraft = () =>
     Alert.alert(
       'Discard this expense draft?',
@@ -641,17 +682,19 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     );
   return (
     <GroupShell
-      group={group}
+      group={known}
       destination={state.destination}
       onDestination={(destination) => void controller.selectDestination(destination)}
       back={{
         label: eventOpen ? 'Back to Activity' : 'Back to Home',
         onPress: () => void controller.back(),
       }}
-      status={<RefreshStatus visible={feedback.quiet} savedAt={feedback.savedAt} />}
+      progress={feedback.progress}
+      floating={floating !== null}
       invite={{
         onPress: shareInvite,
-        disabled: state.share.status === 'loading' || state.detail.status !== 'ready',
+        // Known is enough: a refresh in flight doesn't change who can be invited.
+        disabled: state.share.status === 'loading' || !known,
         offline: state.offline.active,
       }}
       onMembers={() => controller.openMembers({ scrollY: scrollY.current })}
@@ -673,11 +716,11 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
       }}
       overlay={
         <>
-          {group && state.destination === 'expenses' ? (
+          {floating ? (
             <FloatingAction
               label={kept ? keptAction.label : 'Add expense'}
               icon={kept ? keptAction.icon : 'add'}
-              onPress={kept ? resumeDraft : () => openExpense(group.id)}
+              onPress={kept ? resumeDraft : () => openExpense(floating.id)}
               // Above the snackbar while it shows.
               bottom={state.snackbar ? 156 : undefined}
             />
@@ -693,7 +736,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         </>
       }
     >
-      <OfflineNotice state={state.offline} />
+      {unavailable ? null : <OfflineNotice state={state.offline} />}
       {state.detail.status === 'denied' ? (
         <Notice
           title="This Group isn’t available"
@@ -702,6 +745,11 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
           retry={() => void controller.back()}
           retryLabel="Back to Home"
         />
+      ) : unavailable ? (
+        <NotAvailableOffline
+          message={`${known?.name ?? 'This Group'} hasn’t been opened on this phone yet, so there’s no saved copy. Connect to load it.`}
+          onRetry={() => void controller.refresh()}
+        />
       ) : state.detail.status === 'error' && !group ? (
         <Notice
           title="Couldn’t open this Group"
@@ -709,7 +757,11 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
           retry={() => void controller.refresh()}
         />
       ) : !group ? (
-        <Loading label="Opening your Group…" />
+        <SkeletonRows
+          label="Loading this Group"
+          rows={5}
+          avatar={state.destination === 'activity'}
+        />
       ) : (
         <>
           {/* A failed refresh keeps the whole Group readable, with its time and a retry. */}
@@ -731,7 +783,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               currency={group.defaultCurrency}
               members={group.members.map(({ user }) => ({ id: user.id, name: user.name }))}
               offline={state.offline.active}
-              pulling={feedback.pull}
+              refreshing={feedback.quiet}
               now={Date.now()}
               onRetry={() => void controller.refreshActivity()}
               onMore={() => void controller.loadMoreActivity()}
@@ -745,6 +797,8 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               state={state.financial}
               pending={state.pendingPayment}
               offline={state.offline.active}
+              refreshing={feedback.quiet}
+              silent={feedback.silent}
               onRecord={(paidBy, paidTo, currency) =>
                 void controller.openRecordPayment(paidBy, paidTo, currency)
               }
@@ -769,6 +823,8 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                 savedExpenseId={
                   state.snackbar?.groupId === group.id ? (state.snackbar.expenseId ?? null) : null
                 }
+                offline={state.offline.active}
+                refreshing={feedback.quiet}
                 now={Date.now()}
                 onSelectMonth={(month) => void controller.selectMonth(month)}
                 onRefreshExpenses={() => void controller.refreshExpenses()}
@@ -777,8 +833,6 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                 onResumeDraft={resumeDraft}
                 onDiscardDraft={discardDraft}
               />
-              {/* Room to scroll the last row above the floating button. */}
-              <View style={{ height: 56 }} />
             </>
           )}
         </>
@@ -800,17 +854,18 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
 
 /** Members and Group details: a full screen over the Group, which Back returns to. */
 function MembersScreen({ state }: { state: MobileSnapshot }) {
+  const group = shownGroup(state);
   return (
     <GroupMembers
-      group={state.detail.data}
+      group={group}
       currentUserId={state.auth.user!.id}
       back={{ label: 'Back to Group', onPress: () => void controller.back() }}
       invite={{
         onPress: shareInvite,
-        disabled: state.share.status === 'loading' || state.detail.status !== 'ready',
+        disabled: state.share.status === 'loading' || !group,
         offline: state.offline.active,
       }}
-      notice={<OfflineNotice state={state.offline} />}
+      notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
       unavailable={state.detail.message}
     />
   );
@@ -822,7 +877,8 @@ function ExpenseScreen({ state }: { state: MobileSnapshot }) {
     <ExpenseEditor
       state={state.expense}
       currentUserId={state.auth.user?.id}
-      notice={<OfflineNotice state={state.offline} />}
+      notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
+      offline={state.offline.active}
       onClose={() => void controller.back()}
       onEdit={() => void controller.editExpense()}
       onReviewDelete={controller.reviewExpenseDeletion}

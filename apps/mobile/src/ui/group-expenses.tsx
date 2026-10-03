@@ -21,12 +21,13 @@ import {
   Money,
   RowAmount,
   Skeleton,
+  SkeletonRows,
   SummaryStats,
   type SummaryStat,
 } from './compact';
-import { RetainedNotice } from './financial-views';
+import { Freshness, RetainedNotice } from './financial-views';
+import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
-import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
 
 const categoryIcons: Record<string, IconName> = {
@@ -207,6 +208,8 @@ function ExpenseSummary({
   summary,
   currentUserId,
   refreshedAt,
+  refreshing,
+  offline,
   loading,
   now,
   onSelectMonth,
@@ -216,17 +219,16 @@ function ExpenseSummary({
   summary: ExpenseWindowSummary | null;
   currentUserId: string;
   refreshedAt: number | null;
+  /** Read again while they stay on screen. */
+  refreshing: boolean;
+  /** The figures come from this device: "Saved", not "Updated". */
+  offline: boolean;
   loading: boolean;
   now: number;
   onSelectMonth: (month: string | null) => void;
 }) {
   const figures = summary ? summaryStats(summary, currentUserId) : null;
-  const updated =
-    refreshedAt !== null ? (
-      <CompactText variant="caption" tone="secondary">
-        Updated {refreshedLabel(refreshedAt)}
-      </CompactText>
-    ) : null;
+  const updated = <Freshness refreshedAt={refreshedAt} refreshing={refreshing} offline={offline} />;
   const count = summary ? `${summary.count} ${summary.count === 1 ? 'expense' : 'expenses'}` : '';
   const within = !month
     ? ''
@@ -369,6 +371,8 @@ export function GroupExpensesView({
   state,
   kept,
   savedExpenseId,
+  refreshing = false,
+  offline = false,
   now,
   onSelectMonth,
   onRefreshExpenses,
@@ -384,6 +388,10 @@ export function GroupExpensesView({
   kept: KeptDraft | null;
   /** Highlighted after a save while its confirmation shows. */
   savedExpenseId: string | null;
+  /** Shown Expenses are read again: their freshness says so. */
+  refreshing?: boolean;
+  /** Figures come from this device's saved copy. */
+  offline?: boolean;
   now: number;
   onSelectMonth: (month: string | null) => void;
   onRefreshExpenses: () => void;
@@ -414,6 +422,8 @@ export function GroupExpensesView({
         summary={summary}
         currentUserId={currentUserId}
         refreshedAt={listed ? expenses.refreshedAt : null}
+        refreshing={refreshing}
+        offline={offline}
         loading={!listed && expenses.status !== 'error'}
         now={now}
         onSelectMonth={onSelectMonth}
@@ -433,7 +443,17 @@ export function GroupExpensesView({
         <KeptDraftNotice kept={kept} onResume={onResumeDraft} onDiscard={onDiscardDraft} />
       ) : null}
       {!listed ? (
-        expenses.status === 'error' ? (
+        expenses.status === 'error' && offline ? (
+          <NotAvailableOffline
+            compact
+            message={
+              state.month
+                ? `${monthLabel(state.month)} hasn’t been opened on this phone yet. Connect to load it.`
+                : 'These expenses haven’t been opened on this phone yet. Connect to load them.'
+            }
+            onRetry={onRefreshExpenses}
+          />
+        ) : expenses.status === 'error' ? (
           <View style={{ gap: 10 }}>
             <Banner
               tone="error"
@@ -442,26 +462,7 @@ export function GroupExpensesView({
             <CompactButton label="Retry expenses" variant="tonal" onPress={onRefreshExpenses} />
           </View>
         ) : (
-          <View
-            accessibilityLabel={`Loading ${scope} expenses`}
-            accessibilityState={{ busy: true }}
-          >
-            <Card>
-              {[0, 1, 2].map((row) => (
-                <View
-                  key={row}
-                  style={{ flexDirection: 'row', gap: 12, padding: 14, alignItems: 'center' }}
-                >
-                  <Skeleton width={40} height={40} rounded={12} />
-                  <View style={{ flex: 1, gap: 6 }}>
-                    <Skeleton width="65%" />
-                    <Skeleton width="40%" height={12} />
-                  </View>
-                  <Skeleton width={64} />
-                </View>
-              ))}
-            </Card>
-          </View>
+          <SkeletonRows label={`Loading ${scope} expenses`} />
         )
       ) : expenses.data.length ? (
         <Card>

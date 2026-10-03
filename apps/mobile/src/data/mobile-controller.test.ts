@@ -1058,6 +1058,7 @@ describe('native session and Group boundary', () => {
       status: 'ready',
       data: verified,
       message: null,
+      loaded: true,
     });
     await controller.signOut();
     expect(controller.getSnapshot().groups.data).toEqual([]);
@@ -1070,7 +1071,13 @@ describe('native session and Group boundary', () => {
     });
     await controller.restore();
     expect(controller.getSnapshot().auth.status).toBe('authenticated');
-    expect(controller.getSnapshot().groups).toEqual({ status: 'ready', data: [], message: null });
+    // Read and empty, which is not the same as never read.
+    expect(controller.getSnapshot().groups).toEqual({
+      status: 'ready',
+      data: [],
+      message: null,
+      loaded: true,
+    });
     expect(fetch.mock.calls[0][0]).toContain('/api/auth/get-session');
   });
 

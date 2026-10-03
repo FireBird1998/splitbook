@@ -313,7 +313,7 @@ describe('Members and Group details', () => {
     expect(reads()).toEqual([]);
   });
 
-  it('opens only from a Group that has been read', async () => {
+  it('opens only from a Group, which the saved Groups list names while it is first read', async () => {
     const { controller, hold } = held((path) => path === `/api/groups/${groupId}`);
     await controller.signIn('sam');
     controller.openMembers();
@@ -322,7 +322,10 @@ describe('Members and Group details', () => {
     const opening = controller.openGroup(groupId);
     await hold.reached;
     controller.openMembers();
-    expect(controller.getSnapshot().screen).toBe('group');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'members',
+      detail: { status: 'loading', data: null },
+    });
     hold.release();
     await opening;
   });
