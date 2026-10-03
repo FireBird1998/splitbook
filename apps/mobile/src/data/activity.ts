@@ -92,6 +92,10 @@ export function parseActivityPage(value: unknown, groupId: string, requestedPage
   };
 }
 
+/** The Expense an event is about, when it names one. */
+export const activityExpenseId = (event: ActivityEvent) =>
+  event.type.startsWith('expense_') ? event.metadata.expenseId : undefined;
+
 export function parseActivityExpense(value: unknown, groupId: string, expenseId: string) {
   const record = z
     .object({

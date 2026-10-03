@@ -1,5 +1,5 @@
 import { useState, type ReactNode, type Ref } from 'react';
-import { Pressable, TextInput, View } from 'react-native';
+import { Pressable, TextInput, View, useWindowDimensions } from 'react-native';
 import { EXPENSE_CATEGORIES, getCategory } from '@splitbook/shared/categories';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
@@ -318,6 +318,7 @@ export function WhoOwesWhat({
   name,
   currentUserId,
   money,
+  saved = false,
 }: {
   draft: ExpenseDraft;
   allocation: Allocation | null;
@@ -326,9 +327,15 @@ export function WhoOwesWhat({
   name: (id: string) => string;
   currentUserId?: string;
   money: (minor: number) => string;
+  /** A saved Expense's record: names the split method instead of checking the totals. */
+  saved?: boolean;
 }) {
   const theme = useTheme();
   const [all, setAll] = useState(false);
+  // At large text or on a narrow screen, each person's amounts sit under their name.
+  const large = useLargeText();
+  const { width } = useWindowDimensions();
+  const stacked = large || width < 360;
   const person = (id: string) => (id === currentUserId ? 'You' : name(id));
   if (!allocation)
     return (
@@ -351,8 +358,17 @@ export function WhoOwesWhat({
     draft.splitMethod === 'equal' &&
     shareValues.length > 1 &&
     Math.max(...shareValues) !== Math.min(...shareValues);
-  // Wide enough for "₹1,24,999.50" in the table face; names wrap rather than clip.
-  const column = { width: 84, textAlign: 'right' as const };
+  // Wide enough for "₹1,24,999.50" in the table face. Money is never cut short: a longer
+  // amount widens its column, and names wrap instead.
+  const column = { minWidth: 84, alignItems: 'flex-end' as const };
+  const amount = (minor: number | undefined) =>
+    minor === undefined ? (
+      <CompactText tone="muted">–</CompactText>
+    ) : (
+      <Money size="table" numberOfLines={0}>
+        {money(minor)}
+      </Money>
+    );
   return (
     <Card>
       <View
@@ -368,25 +384,39 @@ export function WhoOwesWhat({
         <CompactText variant="overline" accessibilityRole="header">
           Who owes what
         </CompactText>
-        <Badge label="Adds up" tone="positive" icon="checkmark" />
+        {saved ? (
+          <CompactText variant="caption" tone="secondary">
+            {splitSummary(draft)}
+          </CompactText>
+        ) : (
+          <Badge label="Adds up" tone="positive" icon="checkmark" />
+        )}
       </View>
-      <View
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        style={{
-          flexDirection: 'row',
-          justifyContent: 'flex-end',
-          paddingHorizontal: 14,
-          paddingTop: 6,
-        }}
-      >
-        <CompactText variant="caption" tone="secondary" style={column}>
-          Paid
-        </CompactText>
-        <CompactText variant="caption" tone="secondary" style={column}>
-          Share
-        </CompactText>
-      </View>
+      {stacked ? (
+        <View style={{ height: 6 }} />
+      ) : (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'flex-end',
+            paddingHorizontal: 14,
+            paddingTop: 6,
+          }}
+        >
+          {['Paid', 'Share'].map((heading) => (
+            <CompactText
+              key={heading}
+              variant="caption"
+              tone="secondary"
+              style={{ minWidth: column.minWidth, textAlign: 'right' }}
+            >
+              {heading}
+            </CompactText>
+          ))}
+        </View>
+      )}
       {shown.map((id) => {
         const paidMinor = paid.get(id);
         const shareMinor = shares.get(id) ?? 0;
@@ -397,33 +427,52 @@ export function WhoOwesWhat({
             accessibilityLabel={`${person(id)}: paid ${paidMinor === undefined ? 'nothing' : money(paidMinor)}, share ${money(shareMinor)}`}
             style={{
               minHeight: 48,
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 10,
+              justifyContent: 'center',
+              gap: 2,
               paddingHorizontal: 14,
-              paddingVertical: 4,
+              paddingVertical: stacked ? 6 : 4,
             }}
           >
-            <CompactAvatar name={name(id)} small />
-            <CompactText numberOfLines={2} style={{ flex: 1, minWidth: 0 }}>
-              {person(id)}
-            </CompactText>
-            <View style={column}>
-              {paidMinor === undefined ? (
-                <CompactText tone="muted" style={{ textAlign: 'right' }}>
-                  –
-                </CompactText>
-              ) : (
-                <Money size="table" style={{ textAlign: 'right' }}>
-                  {money(paidMinor)}
-                </Money>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <CompactAvatar name={name(id)} small />
+              <CompactText numberOfLines={stacked ? undefined : 2} style={{ flex: 1, minWidth: 0 }}>
+                {person(id)}
+              </CompactText>
+              {stacked ? null : (
+                <>
+                  <View style={column}>{amount(paidMinor)}</View>
+                  <View style={column}>{amount(shareMinor)}</View>
+                </>
               )}
             </View>
-            <View style={column}>
-              <Money size="table" style={{ textAlign: 'right' }}>
-                {money(shareMinor)}
-              </Money>
-            </View>
+            {stacked ? (
+              <View
+                style={{
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  columnGap: 16,
+                  rowGap: 2,
+                  paddingLeft: 36,
+                }}
+              >
+                {(
+                  [
+                    ['Paid', paidMinor],
+                    ['Share', shareMinor],
+                  ] as const
+                ).map(([label, minor]) => (
+                  <View
+                    key={label}
+                    style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}
+                  >
+                    <CompactText variant="caption" tone="secondary">
+                      {label}
+                    </CompactText>
+                    {amount(minor)}
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
         );
       })}
@@ -437,24 +486,30 @@ export function WhoOwesWhat({
           />
         </View>
       ) : null}
-      <View
-        style={{
-          marginTop: 4,
-          borderTopWidth: 1,
-          borderTopColor: theme.border,
-          padding: 14,
-          gap: 4,
-        }}
-      >
-        <CompactText variant="small">
-          {money(allocation.amountMinor)} paid = {money(allocation.amountMinor)} shared.
-        </CompactText>
-        {rounded ? (
-          <CompactText variant="caption" tone="secondary">
-            Shares differ by the smallest unit so the whole amount is shared.
-          </CompactText>
-        ) : null}
-      </View>
+      {saved && !rounded ? (
+        <View style={{ height: 8 }} />
+      ) : (
+        <View
+          style={{
+            marginTop: 4,
+            borderTopWidth: 1,
+            borderTopColor: theme.border,
+            padding: 14,
+            gap: 4,
+          }}
+        >
+          {saved ? null : (
+            <CompactText variant="small">
+              {money(allocation.amountMinor)} paid = {money(allocation.amountMinor)} shared.
+            </CompactText>
+          )}
+          {rounded ? (
+            <CompactText variant="caption" tone="secondary">
+              Shares differ by the smallest unit so the whole amount is shared.
+            </CompactText>
+          ) : null}
+        </View>
+      )}
     </Card>
   );
 }

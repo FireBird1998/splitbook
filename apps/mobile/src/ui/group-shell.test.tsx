@@ -257,6 +257,19 @@ describe('Group Activity', () => {
     expect(text(root)).not.toMatch(/[0-9a-f]{24}/);
   });
 
+  it('says which events open their Expense and which open what was recorded', () => {
+    const { root, onSelect } = activity(ready());
+    const rows = byRole(root, 'button').slice(0, 3);
+    expect(rows.map((row) => row.props.accessibilityHint)).toEqual([
+      // An event that doesn't name its Expense can only show what was recorded.
+      'Opens what was recorded',
+      'Opens this Expense',
+      'Opens what was recorded',
+    ]);
+    press(rows[1]);
+    expect(onSelect).toHaveBeenCalledWith('d00000000000000000000002');
+  });
+
   it('loads older activity with its own progress, and recovers from a failure', () => {
     const idle = activity(ready());
     press(one(byRole(idle.root, 'button', 'Load older activity')));

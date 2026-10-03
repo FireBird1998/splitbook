@@ -135,6 +135,8 @@ export interface GroupReturnContext {
   pages: number;
   /** The bottom-navigation destination at entry; Back and close return to it. */
   destination: GroupDestination;
+  /** Activity pages loaded at entry from Activity, read again on return. */
+  activityPages: number;
 }
 
 /** Confirms a ledger change on the Group view it returned to. */
