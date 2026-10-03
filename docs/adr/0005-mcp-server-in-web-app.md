@@ -1,6 +1,7 @@
 ---
 status: proposed
 date: 2026-10-01
+revised: 2026-10-04
 ---
 
 # The MCP server is a route in the web app, authorized by Better Auth
@@ -16,7 +17,11 @@ Members want to ask an AI assistant about their ledger ("who still owes me for G
 
 ## Consequences
 
-- Better Auth moves from 1.7.3 to at least 1.7.7 (the plugin's peer range) and gains the `jwt`, `mcp` and `cimd` plugins plus their collections. MCP access tokens are JWTs verified against the app's own JWKS, so a revoked consent stops refreshes immediately but an issued access token stays valid until it expires; access tokens are therefore short-lived.
+- Better Auth moves from 1.7.3 to at least 1.7.7 (the plugin's peer range) and gains the `jwt`, `mcp` and `cimd` plugins plus their collections. MCP access tokens are short-lived JWTs verified against the app's own JWKS.
+- Revised 2026-10-04: every MCP call also checks that the member's consent still exists, so disconnecting takes effect immediately rather than when the last access token expires. Connections unused for 90 days expire.
+- Revised 2026-10-04: clients identify themselves only with Client ID Metadata Documents; dynamic client registration stays off, so assistants without metadata documents can't connect yet.
+- Revised 2026-10-04: an assistant reaches only the member's Groups minus their Excluded Groups and minus Groups whose Assistant rule is Not allowed. The operations module enforces this on every call, and unreachable Groups are indistinguishable from unknown ones.
+- Revised 2026-10-04: the first version is read-only, plus insights computed in `@splitbook/shared`. See [Connected assistants: decisions](../connected-assistants/decisions.md).
 - `/api/mcp` is authorized by bearer token, not the session cookie. The proxy must let it through so the route can answer 401 with the `WWW-Authenticate` challenge MCP clients need for discovery; every other `/api` path keeps the cookie gate.
 - The MCP route is stateless (one request per call, no protocol sessions), which suits Vercel functions and needs no Redis.
 - Route handlers stop owning authorization and read-time behavior such as recurring Expense materialization; they parse HTTP, call the operations module and map its errors. This is useful without MCP and is the first delivery step.

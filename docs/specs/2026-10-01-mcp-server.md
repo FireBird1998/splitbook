@@ -4,6 +4,22 @@ Status: draft, 2026-10-01. Written in the spec-issue format so it can be filed a
 
 Decision record: [ADR 0005](../adr/0005-mcp-server-in-web-app.md). Backend design: [MCP backend design](2026-10-01-mcp-backend-design.md).
 
+## Amendments, 2026-10-04
+
+The owner's decisions in [Connected assistants: decisions](../connected-assistants/decisions.md) change this spec. They win wherever the text below disagrees.
+
+- **Scope.** The first version is read-only. Phase 2 (stories 21–31) is deferred, and recording comes later, one step at a time.
+- **Insights.** Four insight tools join the read tools: spending summary, trends against previous Months, across my Groups, and Trip summary. Splitbook computes them in one shared module, so assistants never add up money. See [Tools and insights](../connected-assistants/tools-and-insights.md).
+- **Access.**
+  - An assistant reaches every Group the member belongs to except their **Excluded Groups**, and Groups joined later are included. The assistant is never told Excluded Groups exist.
+  - Each Group's admins set an **Assistant rule**: Allowed (the default) or Not allowed. Admins see which members' assistants can reach their Group.
+  - Other members appear by name and id only.
+  - See [Access and safety](../connected-assistants/access-and-safety.md).
+- **Lifetime.** Disconnecting takes effect immediately, because the approval is checked on every call (this replaces "revoking ends refresh"). Connections unused for 90 days expire.
+- **Clients.** Client ID Metadata Documents only, with dynamic client registration off. No assistant is targeted first; tests use the official MCP SDK. This answers Further Notes question 1.
+- **Rollout.** Staging first, then private beta members who switch Connected assistants on in Settings. This answers Further Notes question 2.
+- **Settings.** Members see "last used" and expiry for each connection, but no call log.
+
 ## Problem Statement
 
 Members keep asking the same questions of their ledger: who still owes whom in a Trip, what a Household Month cost, what they spent on food across Groups. Today each answer means opening the app, finding the Group and reading screens. Members increasingly work inside AI assistants (Claude, ChatGPT) that can answer such questions directly if they can read the member's data, and could record an Expense from a sentence like "dinner ₹2,400, I paid, split with Sam and Priya".
