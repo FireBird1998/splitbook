@@ -17,7 +17,9 @@ pnpm mobile backend:seed
 pnpm mobile backend:start
 ```
 
-The [backend helper](scripts/dev-backend/README.md) requires a local Mongo server (default port 27018). Set `SPLITBOOK_NATIVE_MONGO_PORT=27017` on both seed/start commands if your server uses 27017. It claims only an empty or already-owned `splitbook_mobile_50` database, seeds fictional personas/Groups, and listens on `127.0.0.1:4138`. It refuses root/web environment files; leave existing application environments untouched and use a clean worktree.
+The [backend helper](scripts/dev-backend/README.md) requires a local Mongo server (default port 27018). Set `SPLITBOOK_NATIVE_MONGO_PORT=27017` on both seed/start commands if your server uses 27017. By default it claims only an empty or already-owned `splitbook_mobile_50` database, seeds fictional personas/Groups, and listens on `127.0.0.1:4138`. It refuses root/web environment files; leave existing application environments untouched and use a clean worktree.
+
+Each worktree can run its own backend: set `SPLITBOOK_NATIVE_ORIGIN_PORT` and `SPLITBOOK_NATIVE_DATABASE` (a name starting with `splitbook_mobile_`) for seed and start, then point the verifiers at it with `MOBILE_VERIFY_URL`. The recipe is in [one backend per worktree](scripts/dev-backend/README.md#one-backend-per-worktree). The steps below use the default port 4138.
 
 Start an Android emulator from Android Studio's Device Manager, then in another terminal:
 
@@ -43,9 +45,12 @@ pnpm mobile verify:api
 pnpm mobile verify:groups
 pnpm mobile verify:settings
 TZ=Asia/Kolkata pnpm mobile verify:financial
+TZ=Asia/Kolkata pnpm mobile verify:all
 ```
 
-`verify:api` uses the actual mobile controller and HTTP server. It checks session creation/restoration, normalized Group/member dates, authorization denial, server logout, local purge, and disabled development authentication. It never accepts a remote server or prints session values.
+Every `verify:*` script takes its backend from `MOBILE_VERIFY_URL` (default `http://127.0.0.1:4138`) and refuses anything but a plain loopback HTTP origin. `verify:all` runs each of them against that one backend, continues past a failure, and lists the result of each.
+
+`verify:api` uses the actual mobile controller and HTTP server. It checks session creation/restoration, normalized Group/member dates, authorization denial, server logout, local purge, and disabled development authentication. The fictional database may also hold test Groups from earlier runs, so it checks that Sam's list includes the seed Trip and Household and contains only Groups Sam belongs to, not an exact count. It never accepts a remote server or prints session values.
 
 For a native smoke, verify persona → Group list → Trip and Household details → Android Back → app restart → refreshed session/Groups → sign-out → restart. With Sam signed in, the fixture helper can revoke Household membership or expire Sam's sessions before returning to the app:
 

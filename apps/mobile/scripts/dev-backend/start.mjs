@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { resolve } from 'node:path';
-import { webApp, isolatedEnv, origin, databaseName } from './environment.mjs';
+import { webApp, isolatedEnv, origin, originPort, databaseName } from './environment.mjs';
 import { withIsolatedDatabase } from './database.mjs';
 
 async function main() {
@@ -16,7 +16,7 @@ async function main() {
       '--hostname',
       '127.0.0.1',
       '--port',
-      '4138',
+      String(originPort),
     ],
     { cwd: webApp, env: environment, stdio: 'inherit' },
   );

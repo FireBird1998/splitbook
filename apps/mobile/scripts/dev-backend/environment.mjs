@@ -4,21 +4,65 @@ import { tmpdir } from 'node:os';
 
 export const repository = resolve(import.meta.dirname, '../../../..');
 export const webApp = resolve(repository, 'apps/web');
-export const origin = 'http://127.0.0.1:4138';
-export const databaseName = 'splitbook_mobile_50';
 export const marker = 'splitbook-native-ticket-50-fictional-only';
 
-function localMongoPort(value = '27018') {
-  if (!/^\d{1,5}$/.test(value))
-    throw new Error('SPLITBOOK_NATIVE_MONGO_PORT must be a local TCP port');
-  const port = Number(value);
-  if (port < 1 || port > 65535)
-    throw new Error('SPLITBOOK_NATIVE_MONGO_PORT must be between 1 and 65535');
-  return port;
+function tcpPort(name, value) {
+  if (!/^[1-9]\d{0,4}$/.test(value) || Number(value) > 65535) {
+    throw new Error(`${name} must be a TCP port number between 1 and 65535`);
+  }
+  return Number(value);
 }
 
-export const mongoPort = localMongoPort(process.env.SPLITBOOK_NATIVE_MONGO_PORT);
-export const mongoUri = `mongodb://127.0.0.1:${mongoPort}/${databaseName}?directConnection=true`;
+function fictionalDatabaseName(value) {
+  // Mongo allows 63 characters. Lowercase only, so two names never differ by case alone.
+  if (!/^splitbook_mobile_[a-z0-9_]+$/.test(value) || value.length > 63) {
+    throw new Error(
+      'SPLITBOOK_NATIVE_DATABASE must start with splitbook_mobile_ and continue with lowercase letters, digits or underscores, 63 characters at most',
+    );
+  }
+  return value;
+}
+
+/**
+ * The fictional backend this process targets. Each worktree can run its own backend,
+ * with its own origin port and database; without the variables it is the default
+ * backend. The origin and Mongo stay on loopback, and invalid values are refused.
+ */
+export function backendTarget(env) {
+  const mongoPort = tcpPort(
+    'SPLITBOOK_NATIVE_MONGO_PORT',
+    env.SPLITBOOK_NATIVE_MONGO_PORT ?? '27018',
+  );
+  const originPort = tcpPort(
+    'SPLITBOOK_NATIVE_ORIGIN_PORT',
+    env.SPLITBOOK_NATIVE_ORIGIN_PORT ?? '4138',
+  );
+  if (originPort === mongoPort) {
+    throw new Error('SPLITBOOK_NATIVE_ORIGIN_PORT must differ from SPLITBOOK_NATIVE_MONGO_PORT');
+  }
+  const databaseName = fictionalDatabaseName(
+    env.SPLITBOOK_NATIVE_DATABASE ?? 'splitbook_mobile_50',
+  );
+  return {
+    origin: `http://127.0.0.1:${originPort}`,
+    originPort,
+    databaseName,
+    mongoPort,
+    mongoUri: `mongodb://127.0.0.1:${mongoPort}/${databaseName}?directConnection=true`,
+  };
+}
+
+/** The variables that make a child process, such as the seed, resolve the same backend. */
+export function targetVariables(target) {
+  return {
+    SPLITBOOK_NATIVE_ORIGIN_PORT: String(target.originPort),
+    SPLITBOOK_NATIVE_DATABASE: target.databaseName,
+    SPLITBOOK_NATIVE_MONGO_PORT: String(target.mongoPort),
+  };
+}
+
+const target = backendTarget(process.env);
+export const { origin, originPort, databaseName, mongoPort, mongoUri } = target;
 export const identities = {
   alex: 'a00000000000000000000001',
   sam: 'a00000000000000000000002',
@@ -55,6 +99,6 @@ export function isolatedEnv() {
     AUTH_RATE_LIMIT_ENABLED: 'false',
     NEXT_PUBLIC_APP_URL: origin,
     MONGODB_URI: mongoUri,
-    SPLITBOOK_NATIVE_MONGO_PORT: String(mongoPort),
+    ...targetVariables(target),
   };
 }

@@ -48,7 +48,8 @@ async function verify() {
       'Sam was not authenticated. Check demo mode and synthetic fixtures.',
     );
     assert.ok(state.groups.status === 'ready', 'The real Group list did not load.');
-    assert.ok(state.groups.data.length === 2, 'Sam must have exactly the two synthetic Groups.');
+    // The fictional database may also hold other test Groups, so the seed Groups are
+    // checked by identity, and every listed Group must be one Sam belongs to.
     assert.ok(
       state.groups.data.some((group) => group.id === tripId),
       'The synthetic Trip is missing.',
@@ -56,6 +57,14 @@ async function verify() {
     assert.ok(
       state.groups.data.some((group) => group.id === householdId),
       'The synthetic Household is missing.',
+    );
+    assert.ok(
+      !state.groups.data.some((group) => group.id === alexOnlyId),
+      'The Alex-only Group appeared in Sam’s list.',
+    );
+    assert.ok(
+      state.groups.data.every((group) => group.members.some((member) => member.user.id === samId)),
+      'The Group list included a Group Sam is not a member of.',
     );
     assert.ok(
       state.groups.data.every(
