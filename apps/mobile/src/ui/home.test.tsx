@@ -9,29 +9,10 @@ import type {
 } from '../data/types';
 import { ContinueDrafts, HomeBalances, HomeGroups, HomeTopBar } from './home';
 import { refreshedLabel } from './refresh-feedback';
+import { setFileWindow, setWindow } from '../test-utils/native';
 
 // #126: Home's balances, drafts to resume and Groups, rendered.
-const screen = vi.hoisted(() => ({ fontScale: 1 }));
-vi.mock('react-native', () => ({
-  ActivityIndicator: 'ActivityIndicator',
-  Animated: {
-    View: 'AnimatedView',
-    Value: class {
-      setValue() {}
-    },
-    spring: () => ({ start: () => undefined }),
-  },
-  Modal: 'Modal',
-  PanResponder: { create: (config: object) => ({ panHandlers: config }) },
-  Pressable: 'Pressable',
-  ScrollView: 'ScrollView',
-  StyleSheet: { create: <T,>(styles: T) => styles },
-  Text: 'Text',
-  View: 'View',
-  useWindowDimensions: () => ({ width: 360, height: 640, scale: 2, fontScale: screen.fontScale }),
-}));
-vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
-vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
+setFileWindow({ width: 360, height: 640 });
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const at = new Date('2026-10-01T10:42:00');
@@ -105,7 +86,6 @@ let renderer: ReactTestRenderer | undefined;
 afterEach(() => {
   act(() => renderer?.unmount());
   renderer = undefined;
-  screen.fontScale = 1;
 });
 const render = (element: ReactElement) => {
   act(() => {
@@ -164,7 +144,7 @@ describe('Home balances', () => {
   it.each([1, 1.3])(
     'shows one row per currency with You owe, Owed to you and the update time at %sx text',
     (fontScale) => {
-      screen.fontScale = fontScale;
+      setWindow({ fontScale });
       const root = render(<HomeBalances state={home()} onRefresh={vi.fn()} />);
       expect(headers(root)).toContain('Your balances');
       expect(text(root)).toContain(`Updated ${refreshedLabel(at.getTime())}`);

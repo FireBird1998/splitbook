@@ -1,28 +1,10 @@
 import type { ReactElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { setFileWindow } from '../test-utils/native';
 
 // #127: the compact offline, not-available and refreshing states.
-vi.mock('react-native', () => ({
-  Animated: {
-    View: 'AnimatedView',
-    Value: class {
-      setValue() {}
-    },
-    spring: () => ({ start: () => undefined }),
-  },
-  Modal: 'Modal',
-  PanResponder: { create: (config: object) => ({ panHandlers: config }) },
-  Pressable: 'Pressable',
-  RefreshControl: 'RefreshControl',
-  ScrollView: 'ScrollView',
-  StyleSheet: { create: <T,>(styles: T) => styles },
-  Text: 'Text',
-  View: 'View',
-  useWindowDimensions: () => ({ width: 360, height: 640, scale: 2, fontScale: 1 }),
-}));
-vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
-vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
+setFileWindow({ width: 360, height: 640 });
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const { NotAvailableOffline, OfflineNotice } = await import('./offline-notice');

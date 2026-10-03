@@ -13,29 +13,6 @@ import { ExpenseEditor } from './expense-editor';
 import { TagSheet } from './tag-sheet';
 
 // #124: the Tag sheet and how the form reports a Tag the Group no longer offers, rendered.
-vi.mock('react-native', () => ({
-  AccessibilityInfo: { sendAccessibilityEvent: vi.fn() },
-  ActivityIndicator: 'ActivityIndicator',
-  Animated: {
-    View: 'AnimatedView',
-    Value: class {
-      setValue() {}
-    },
-    spring: () => ({ start: () => undefined }),
-  },
-  KeyboardAvoidingView: 'KeyboardAvoidingView',
-  Modal: 'Modal',
-  PanResponder: { create: (config: object) => ({ panHandlers: config }) },
-  Pressable: 'Pressable',
-  ScrollView: 'ScrollView',
-  StyleSheet: { create: <T,>(styles: T) => styles },
-  Text: 'Text',
-  TextInput: 'TextInput',
-  View: 'View',
-  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: 1 }),
-}));
-vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
-vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const memberId = 'a00000000000000000000001';

@@ -1,19 +1,8 @@
 import type { ReactElement } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { setWindow } from '../../test-utils/native';
 
-// Host stand-ins keep the props (roles, labels, states, handlers) that Android receives.
-const screen = vi.hoisted(() => ({ fontScale: 1 }));
-vi.mock('react-native', () => ({
-  ActivityIndicator: 'ActivityIndicator',
-  Pressable: 'Pressable',
-  StyleSheet: { create: <T,>(styles: T) => styles },
-  Text: 'Text',
-  View: 'View',
-  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: screen.fontScale }),
-}));
-vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
-vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const {
@@ -38,7 +27,6 @@ afterEach(() => {
     renderer?.unmount();
   });
   renderer = undefined;
-  screen.fontScale = 1;
 });
 
 function render(element: ReactElement) {
@@ -354,7 +342,7 @@ describe('Large text', () => {
   it.each([1, 1.15, 1.3, 2])(
     'keeps every tile a button and every stat announced, in order, at %sx text',
     (fontScale) => {
-      screen.fontScale = fontScale;
+      setWindow({ fontScale });
       const root = render(
         <>
           {tiles}

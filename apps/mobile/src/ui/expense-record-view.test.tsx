@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { emptyExpenseEditor } from '../data/expense-draft';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
@@ -8,31 +8,6 @@ import { clockTime } from './activity-format';
 import { ExpenseEditor } from './expense-editor';
 import { fonts } from './theme';
 
-// Host stand-ins: the record renders through these names, so the tree keeps the props
-// (roles, labels, hints, states, handlers) that Android receives.
-vi.mock('react-native', () => ({
-  AccessibilityInfo: { sendAccessibilityEvent: vi.fn() },
-  ActivityIndicator: 'ActivityIndicator',
-  Animated: {
-    View: 'AnimatedView',
-    Value: class {
-      setValue() {}
-    },
-    spring: () => ({ start: () => undefined }),
-  },
-  KeyboardAvoidingView: 'KeyboardAvoidingView',
-  Modal: 'Modal',
-  PanResponder: { create: (config: object) => ({ panHandlers: config }) },
-  Pressable: 'Pressable',
-  ScrollView: 'ScrollView',
-  StyleSheet: { create: <T,>(styles: T) => styles },
-  Text: 'Text',
-  TextInput: 'TextInput',
-  View: 'View',
-  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: 1 }),
-}));
-vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
-vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 // Fictional people and Groups only.

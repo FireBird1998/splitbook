@@ -4,19 +4,10 @@ import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import type { MobileGroup } from '../data/types';
 import { ThemeContext, fonts } from './theme';
 import { TripStrip } from './trip-strip';
+import { setWindow } from '../test-utils/native';
 
 // #117: the Trip Theme's slim boarding-pass strip, rendered.
-const device = vi.hoisted(() => ({ fontScale: 1 }));
-vi.mock('react-native', () => ({
-  Pressable: 'Pressable',
-  StyleSheet: { create: <T,>(styles: T) => styles },
-  Text: 'Text',
-  View: 'View',
-  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: device.fontScale }),
-}));
-vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
-vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const at = new Date('2026-09-01T10:42:00.000Z');
@@ -49,7 +40,6 @@ let screen: ReactTestRenderer | null = null;
 afterEach(() => {
   act(() => screen?.unmount());
   screen = null;
-  device.fontScale = 1;
 });
 function render(group: MobileGroup, mode: 'light' | 'dark' = 'light') {
   act(() => {
@@ -156,7 +146,7 @@ describe('Trip strip', () => {
   });
 
   it('moves the dates below the route at large text', () => {
-    device.fontScale = 1.3;
+    setWindow({ fontScale: 1.3 });
     const root = render(trip());
     expect(image(root).props.accessibilityLabel).toBe(
       'Trip from GOA to TRI, 17 to 20 September, 3 members',

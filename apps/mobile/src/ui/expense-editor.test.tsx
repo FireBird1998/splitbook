@@ -9,32 +9,6 @@ import { ExpenseEditor } from './expense-editor';
 import { expenseDateLabel } from './expense-form';
 import { ExpenseRecordView } from './expense-record-view';
 
-// Host stand-ins: the editor renders through these names, so the tree keeps the
-// props (labels, hints, values, handlers) that Android receives.
-vi.mock('react-native', () => ({
-  AccessibilityInfo: { sendAccessibilityEvent: vi.fn() },
-  ActivityIndicator: 'ActivityIndicator',
-  Animated: {
-    View: 'AnimatedView',
-    Value: class {
-      setValue() {}
-    },
-    spring: () => ({ start: () => undefined }),
-  },
-  KeyboardAvoidingView: 'KeyboardAvoidingView',
-  Modal: 'Modal',
-  PanResponder: { create: (config: object) => ({ panHandlers: config }) },
-  Pressable: 'Pressable',
-  ScrollView: 'ScrollView',
-  StyleSheet: { create: <T,>(styles: T) => styles },
-  Text: 'Text',
-  TextInput: 'TextInput',
-  View: 'View',
-  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: 1 }),
-}));
-vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
-vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
-
 const { AccessibilityInfo } = await import('react-native');
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
