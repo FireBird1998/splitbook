@@ -40,6 +40,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import LabelIcon from '@mui/icons-material/Label';
 import { CURRENCIES, getSortedCurrencies } from '@splitbook/shared/currency';
+import LeaveGroupSection from '@/components/groups/LeaveGroupSection';
 import { formatDate } from '@splitbook/shared/date';
 import { useGroup } from '@/lib/hooks/use-groups';
 import { isGroupReadKey } from '@/lib/group-read';
@@ -161,17 +162,20 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
   if (!isAdmin) {
     return (
       <Container maxWidth="md" disableGutters>
-        <Box sx={{ textAlign: 'center', py: 6 }}>
-          <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
-            Access denied
-          </Typography>
-          <Typography color="text.secondary" sx={{ mb: 2 }}>
-            Only group admins can access settings.
-          </Typography>
-          <Button component={Link} href={`/groups/${groupId}`} variant="outlined">
-            Back to Group
-          </Button>
-        </Box>
+        <Stack spacing={3} sx={{ py: 3 }}>
+          <Box>
+            <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
+              {group.name}
+            </Typography>
+            <Typography color="text.secondary" sx={{ mb: 2 }}>
+              Only admins can change this Group’s settings.
+            </Typography>
+            <Button component={Link} href={`/groups/${groupId}`} variant="outlined">
+              Back to Group
+            </Button>
+          </Box>
+          <LeaveGroupSection groupId={groupId} groupName={group.name} />
+        </Stack>
       </Container>
     );
   }
@@ -1004,6 +1008,8 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
             </Stack>
           )}
         </Paper>
+
+        <LeaveGroupSection groupId={groupId} groupName={group.name} />
 
         {/* ─── Danger Zone ─────────────────────────── */}
         <Paper sx={{ p: 3, border: 2, borderColor: 'error.light' }}>

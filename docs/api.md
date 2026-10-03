@@ -210,18 +210,35 @@ create expenses (see [Recurring expenses](#recurring-expenses)).
 
 ## Members
 
-| Method | Path                                | Description        |
-| ------ | ----------------------------------- | ------------------ |
-| PATCH  | `/api/groups/[id]/members/[userId]` | Change member role |
-| DELETE | `/api/groups/[id]/members/[userId]` | Remove from group  |
+| Method | Path                                | Description                 |
+| ------ | ----------------------------------- | --------------------------- |
+| PATCH  | `/api/groups/[id]/members/[userId]` | Change member role          |
+| DELETE | `/api/groups/[id]/members/[userId]` | Remove from group           |
+| POST   | `/api/groups/[id]/leave`            | The signed-in member leaves |
 
-Both are admin-only. **Body** for PATCH is `{ "role": "admin" | "member" }`.
+PATCH and DELETE are admin-only. **Body** for PATCH is `{ "role": "admin" | "member" }`.
+Demoting or removing the last admin returns **409**; removing yourself returns
+**400** `You cannot remove yourself. Use leave group instead.`
 
-Three user-error cases — demoting the last admin, removing the last admin, and
-removing yourself — currently return **500** with the generic
-`"Internal server error"` body, because they are routed through `serverError`.
-The intended explanation never reaches the client. There is no leave-group
-endpoint.
+### POST /api/groups/[id]/leave
+
+Any member may leave, with no body. The rules:
+
+- **Settled up first.** The member's balance must be zero in every currency.
+  Otherwise **409** with `code: "OPEN_BALANCE"`, a readable `error` such as
+  `Settle up before you leave: you owe ₹150.00 in this Group.`, and
+  `balances: [{ "currency": "INR", "amount": -150 }]` (negative: they owe;
+  positive: they are owed).
+- **The last admin hands over first.** While other members remain, the only admin
+  gets **409** `code: "LAST_ADMIN"`, `Make someone else an admin before you leave.`
+- **The last member archives the Group.** Nobody would be left to reach it, so the
+  Group is archived in the same step.
+
+**Response:** `{ "data": { "message": "Left group", "archived": false } }`
+(`archived: true` when the last member left). Activity records `member_left`
+with `{ userId, method: "left" }`, plus the archive change when it happens.
+A stranger gets **403**; a race with another leave or join that can't be
+resolved after three tries gets **409** `code: "LEAVE_CONFLICT"`.
 
 ---
 
@@ -622,6 +639,10 @@ per-member balances and the minimum-transaction debt list.
 
 Balances are **running and cumulative** — never reset by month. `debts` is the
 simplified (minimum-transfer) set, not the raw pairwise ledger.
+
+People who left or were removed stay in the ledger. A settled former member is
+left out of `balances`; one who still has a balance appears under their own
+account name.
 
 `hasMixedCurrencies` is true when any expense or settlement differs from the
 group default. The write path forbids that, so it can only arise from legacy
