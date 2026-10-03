@@ -289,7 +289,8 @@ async function staleSignIn(page: Page, ledger: Ledger, options?: { passDuplicate
   const samOnly = await giveSamDistinctFigures(ledger);
   // A local dev server compiles a route on its first visit and then refreshes open pages;
   // a refreshed picker would follow Alex's session to his Dashboard. Compile them first.
-  for (const path of ['/dashboard', '/groups', `/groups/${ledger.groupA}`])
+  const group = `/groups/${ledger.groupA}`;
+  for (const path of ['/dashboard', '/groups', group, `${group}/settings`])
     expect((await ledger.alex.get(path)).status()).toBe(200);
   const picker = await page.context().newPage();
   await picker.goto(appURL('/'));
@@ -418,11 +419,17 @@ test('stale sign-in path, visible tab: following the Groups link never shows Sam
   expectOnlyAlexRequests(api, lastAlexDocument);
 });
 
-async function ledgerSnapshot(ledger: Ledger) {
-  const group = `/api/groups/${ledger.groupA}`;
+/** What a stale write could change in one Group, read through Alex's own API session. */
+async function ledgerSnapshot(ledger: Ledger, groupId: string) {
+  const group = `/api/groups/${groupId}`;
   const expenses = await dataOf(await ledger.alex.get(`${group}/expenses`));
   const activity = await dataOf(await ledger.alex.get(`${group}/activity`));
+  const { members } = await dataOf(await ledger.alex.get(group));
   return {
+    members: members.map((member: { user: { _id: string }; role: string }) => ({
+      user: member.user._id,
+      role: member.role,
+    })),
     expenses: expenses.expenses.map(
       (expense: { _id: string; description: string; revision?: number; createdBy: unknown }) => ({
         id: expense._id,
@@ -431,17 +438,32 @@ async function ledgerSnapshot(ledger: Ledger) {
         createdBy: expense.createdBy,
       }),
     ),
-    editedRecord: await dataOf(await ledger.alex.get(expensePath(ledger.groupA, ledger.expenseA))),
+    editedRecord:
+      groupId === ledger.groupA
+        ? await dataOf(await ledger.alex.get(expensePath(ledger.groupA, ledger.expenseA)))
+        : null,
     settlements: await dataOf(await ledger.alex.get(`${group}/settlements`)),
     activity: activity.activities.map((event: { _id: string; type: string }) => event._id),
   };
 }
 
-const writes = [
+/** A write tab 1 can start: the Group it touches, the page it starts from and the request it sends. */
+type StaleWrite = {
+  name: string;
+  prepare: (
+    ledger: Ledger,
+  ) => Promise<{ group: string; page: string; method: string; path: string }>;
+  open: (page: Page) => Promise<ReturnType<Page['getByRole']>>;
+  /** Shows the refused write was one the new session could really have made. */
+  stillPossible?: (ledger: Ledger, group: string) => Promise<void>;
+};
+
+const writes: StaleWrite[] = [
   {
     name: 'create an Expense with Alex as payer',
-    path: (ledger: Ledger) => `/groups/${ledger.groupA}`,
-    request: (ledger: Ledger) => ({
+    prepare: async (ledger) => ({
+      group: ledger.groupA,
+      page: `/groups/${ledger.groupA}`,
       method: 'POST',
       path: `/api/groups/${ledger.groupA}/expenses`,
     }),
@@ -456,8 +478,9 @@ const writes = [
   },
   {
     name: 'edit Alex’s Expense',
-    path: (ledger: Ledger) => `/groups/${ledger.groupA}`,
-    request: (ledger: Ledger) => ({
+    prepare: async (ledger) => ({
+      group: ledger.groupA,
+      page: `/groups/${ledger.groupA}`,
       method: 'PATCH',
       path: expensePath(ledger.groupA, ledger.expenseA),
     }),
@@ -472,8 +495,9 @@ const writes = [
   },
   {
     name: 'record a settlement from Alex to Sam',
-    path: (ledger: Ledger) => `/groups/${ledger.groupA}?tab=balances`,
-    request: (ledger: Ledger) => ({
+    prepare: async (ledger) => ({
+      group: ledger.groupA,
+      page: `/groups/${ledger.groupA}?tab=balances`,
       method: 'POST',
       path: `/api/groups/${ledger.groupA}/settlements`,
     }),
@@ -486,6 +510,37 @@ const writes = [
       return dialog.getByRole('button', { name: 'Save settlement', exact: true });
     },
   },
+  {
+    name: 'leave a Group',
+    // A Group Sam could really leave (settled up, and Alex stays its admin), so a
+    // leave sent with Sam's session would succeed unless the server refuses it.
+    prepare: async (ledger) => {
+      const created = await dataOf(
+        await ledger.alex.post('/api/groups', {
+          data: { name: 'Synthetic leave household', category: 'other', defaultCurrency: 'INR' },
+        }),
+        201,
+      );
+      await joinGroup(ledger.alex, ledger.sam, created._id);
+      return {
+        group: created._id,
+        page: `/groups/${created._id}/settings`,
+        method: 'POST',
+        path: `/api/groups/${created._id}/leave`,
+      };
+    },
+    open: async (page: Page) => {
+      await page.getByRole('button', { name: 'Leave Group' }).click();
+      const dialog = page.getByRole('dialog', { name: /^Leave/ });
+      return dialog.getByRole('button', { name: 'Leave Group' });
+    },
+    stillPossible: async (ledger, group) => {
+      expect(await dataOf(await ledger.sam.post(`/api/groups/${group}/leave`))).toEqual({
+        message: 'Left group',
+        archived: false,
+      });
+    },
+  },
 ];
 
 for (const write of writes) {
@@ -495,11 +550,12 @@ for (const write of writes) {
   }) => {
     await page.clock.install();
     const { api, switchToSam } = await staleSignIn(page, ledger, { passDuplicateCheck: true });
-    await page.goto(appURL(write.path(ledger)));
+    const { group, page: start, method, path } = await write.prepare(ledger);
+    await page.goto(appURL(start));
     const save = await write.open(page);
     await expect(save).toBeEnabled();
     const lastAlexDocument = api.document;
-    const before = await ledgerSnapshot(ledger);
+    const before = await ledgerSnapshot(ledger, group);
     const dialogFeedback = await watchCurrentDocument(page, [
       { within: '[role="dialog"] [role="alert"]' },
     ]);
@@ -510,15 +566,15 @@ for (const write of writes) {
     await waitForReload(api, lastAlexDocument);
     await page.clock.resume();
 
-    const { method, path } = write.request(ledger);
     expect(
       (api.answers.get(lastAlexDocument) ?? []).filter(
         (answer) => answer.method === method && answer.path === path,
       ),
     ).toEqual([{ method, path, status: 419, code: 'ACCOUNT_CHANGED', data: false }]);
-    expect(await ledgerSnapshot(ledger)).toEqual(before);
+    expect(await ledgerSnapshot(ledger, group)).toEqual(before);
     await expectFreshPageForSam(page);
     expect(dialogFeedback).toEqual([]);
     expectOnlyAlexRequests(api, lastAlexDocument);
+    await write.stillPossible?.(ledger, group);
   });
 }
