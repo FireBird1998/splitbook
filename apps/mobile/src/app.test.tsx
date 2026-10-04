@@ -12,7 +12,7 @@ import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
-import { emitAppState, pressBack } from './test-utils/native';
+import { backListenerCount, emitAppState, pressBack } from './test-utils/native';
 import { GroupExpensesView } from './ui/group-expenses';
 import { GroupActivity } from './ui/group-activity';
 
@@ -1875,7 +1875,7 @@ describe('App Home', () => {
     expect(app.pressable('Open Maple House')).toBeTruthy();
 
     // Not handled: Android's own Back runs and leaves the app.
-    expect(native.back).not.toHaveLength(0);
+    expect(backListenerCount()).not.toBe(0);
     expect(await app.androidBack()).toBe(false);
     expect(app.pressable('Open Maple House')).toBeTruthy();
   });
