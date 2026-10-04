@@ -919,6 +919,20 @@ function ExpenseScreen({ state }: { state: MobileSnapshot }) {
           state.expense.requestedExpenseId ?? undefined,
         )
       }
+      onDiscardUnconfirmed={() =>
+        Alert.alert(
+          'Discard this unconfirmed save?',
+          'Check this Group’s Expenses first. If this Expense is already there, discard this save and don’t save the draft again. If it isn’t, discard this save, then correct the draft and save it. Discarding sends nothing.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Discard',
+              style: 'destructive',
+              onPress: () => void controller.discardUnconfirmedExpense(),
+            },
+          ],
+        )
+      }
       onDiscard={() =>
         Alert.alert(
           'Discard this expense draft?',

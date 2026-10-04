@@ -44,6 +44,7 @@ import {
   parseExpenseContext,
   parseStoredExpenseDraft,
   previewExpense,
+  refusedRetryNotice,
   rebaseExpenseDraft,
   sameExpenseDraft,
   validateExpenseDraft,
@@ -249,6 +250,20 @@ function expenseRejectionMessage(error: unknown) {
   return error instanceof RequestError && error.status === 422 && error.code
     ? rejectionMessages[error.code]
     : undefined;
+}
+
+/**
+ * A retry the server definitely refused. Its first try may still be recorded, so the save is kept
+ * until the member discards it on purpose. 401 is the session's, 403 and 404 mean lost access,
+ * and 408 and 429 pass.
+ */
+function refusesRetry(error: unknown) {
+  return (
+    error instanceof RequestError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    ![401, 403, 404, 408, 429].includes(error.status)
+  );
 }
 
 /** Human copy only: parser and schema errors are never shown to members. */
@@ -2771,6 +2786,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           preview: previewExpense(draft),
           status: record === null || held ? (original ? 'detail' : 'editing') : 'resume',
           attempt: record?.attempt ?? null,
+          attemptRejected: !!record?.attempt && record.attemptRejected,
           mutation: record?.mutation ?? null,
           latest: null,
           requestedExpenseId: expenseId ?? null,
@@ -2924,7 +2940,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         // Resuming answers the resume prompt, so its notices no longer apply. A save that
         // may already be recorded keeps explaining why it stays locked.
         message: editor.attempt
-          ? 'This Expense may already be saved. Checking reuses the same submission, so it can’t be recorded twice.'
+          ? editor.attemptRejected
+            ? `SplitBook refused a retry of this save. ${refusedRetryNotice}`
+            : 'This Expense may already be saved. Checking reuses the same submission, so it can’t be recorded twice.'
           : editor.mutation
             ? 'This change may already be saved. Check the saved Expense before changing anything else.'
             : null,
@@ -3029,6 +3047,75 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         publish({
           ...snapshot,
           expense: { ...editor, message: 'Could not discard this draft. Please retry.' },
+        });
+    }
+  };
+
+  /**
+   * Discard, after the server refused a retry of an unconfirmed save and the member was told to
+   * check the Group's Expenses first. Removes the save's submission from this device and keeps
+   * the draft; nothing is sent, and a later Save is a new submission.
+   */
+  const discardUnconfirmedExpense = async () => {
+    const editor = snapshot.expense;
+    const lease = accountStorage();
+    const storage = dependencies.expenseDrafts;
+    if (
+      snapshot.screen !== 'expense' ||
+      !['resume', 'uncertain'].includes(editor.status) ||
+      !editor.attempt ||
+      !editor.attemptRejected ||
+      !editor.draft ||
+      !editor.groupId ||
+      !lease ||
+      !storage
+    )
+      return;
+    const { groupId, draft, attempt } = editor;
+    const owner = generation;
+    const view = viewRequest;
+    publish({ ...snapshot, expense: { ...editor, status: 'loading' } });
+    try {
+      const discarded = await lease.write(async () => {
+        const stored = await storage.load(lease.accountId, groupId);
+        const saved =
+          stored === null ? null : parseStoredExpenseDraft(stored, lease.accountId, groupId);
+        // Only the save this form shows; anything else this device holds now stays.
+        if (
+          !saved?.attempt ||
+          saved.attempt.key !== attempt.key ||
+          saved.attempt.body !== attempt.body
+        )
+          return false;
+        await storage.save(lease.accountId, groupId, {
+          version: 1,
+          accountId: lease.accountId,
+          groupId,
+          draft,
+          blank: editor.blank,
+        });
+        return true;
+      });
+      if (!current(owner) || view !== viewRequest) return;
+      // What the device holds changed: show that instead.
+      if (!discarded) return await openExpense(groupId, editor.requestedExpenseId ?? undefined);
+      publish({
+        ...snapshot,
+        expense: {
+          ...editor,
+          attempt: null,
+          attemptRejected: false,
+          status: 'editing',
+          persistence: 'saved',
+          message:
+            'The unconfirmed save is discarded. If this Expense is already in the Group’s Expenses, discard this draft too. If it isn’t, correct the draft and save it.',
+        },
+      });
+    } catch {
+      if (current(owner) && view === viewRequest)
+        publish({
+          ...snapshot,
+          expense: { ...editor, message: 'Could not discard this unconfirmed save. Please retry.' },
         });
     }
   };
@@ -3678,6 +3765,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           status: 'saved',
           receiptId,
           attempt: null,
+          attemptRejected: false,
           draft: null,
           preview: null,
           message: 'Expense saved.',
@@ -3692,7 +3780,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
       const rejection = expenseRejectionMessage(error);
-      if (attempt && rejection) {
+      // Only a first send's rejection frees the draft. A retry's first try may be recorded.
+      if (attempt && !editor.attempt && rejection) {
         try {
           await lease.write(() =>
             storage.save(lease.accountId, groupId, {
@@ -3719,22 +3808,44 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           /* Preserve the immutable attempt until local cleanup succeeds. */
         }
       }
+      const refused = !!editor.attempt && refusesRetry(error);
+      if (refused && current(owner)) {
+        // Stored with the save, so Discard is still offered after reopening or a restart.
+        try {
+          await lease.write(async () => {
+            const stored = await storage.load(lease.accountId, groupId);
+            if (stored === null) return;
+            const saved = parseStoredExpenseDraft(stored, lease.accountId, groupId);
+            if (saved.attempt?.key === attempt!.key && saved.attempt.body === attempt!.body)
+              await storage.save(lease.accountId, groupId, {
+                ...(stored as object),
+                attemptRejected: true,
+              });
+          });
+        } catch (storeError) {
+          if (storeError instanceof Superseded) return;
+          /* This form still offers Discard; only a reopened one won't. */
+        }
+      }
       if (!current(owner) || view !== viewRequest) return;
       publish({
         ...snapshot,
         expense: {
           ...snapshot.expense,
           attempt,
+          attemptRejected: refused || snapshot.expense.attemptRejected,
           persistence: storing ? 'error' : snapshot.expense.persistence,
           status: attempt ? 'uncertain' : 'editing',
           message: storing
             ? 'Could not save the submission on this device. No Expense was sent. Retry local storage before saving.'
-            : attempt
-              ? `${error instanceof RequestError ? `${error.message} ` : ''}This Expense may already be saved. Checking reuses the same submission, so it can’t be recorded twice.`
-              : expenseFailureMessage(
-                  error,
-                  'Could not prepare this Expense. Your draft is still here.',
-                ),
+            : refused
+              ? `SplitBook refused this retry.${rejection ? ` ${rejection}` : ''} ${refusedRetryNotice}`
+              : attempt
+                ? `${error instanceof RequestError ? `${error.message} ` : ''}This Expense may already be saved. Checking reuses the same submission, so it can’t be recorded twice.`
+                : expenseFailureMessage(
+                    error,
+                    'Could not prepare this Expense. Your draft is still here.',
+                  ),
         },
       });
     } finally {
@@ -3753,6 +3864,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             ...snapshot.expense,
             status: resolvedReceipt ? 'saved' : attempt ? 'uncertain' : 'editing',
             attempt: resolvedReceipt ? null : attempt,
+            attemptRejected: !resolvedReceipt && snapshot.expense.attemptRejected,
             draft: resolvedReceipt ? null : draft,
             preview: resolvedReceipt ? null : snapshot.expense.preview,
             receiptId: resolvedReceipt,
@@ -5180,6 +5292,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     acceptCurrentExpense,
     editExpense,
     discardExpenseDraft,
+    discardUnconfirmedExpense,
     resumeKeptDraft,
     discardKeptDraft,
     saveExpense,

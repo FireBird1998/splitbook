@@ -12,6 +12,7 @@ import {
   expenseFieldLabels,
   expenseFields,
   expenseMoney,
+  refusedRetryNotice,
   resolveDraftReview,
   type ExpenseDraft,
   type ExpenseEditor as Editor,
@@ -151,6 +152,7 @@ function ExpenseTask({
   onSave,
   onResume,
   onDiscard,
+  onDiscardUnconfirmed,
   onRetry,
   onEdit,
   onReviewDelete,
@@ -181,6 +183,8 @@ function ExpenseTask({
   onSave: () => void;
   onResume: () => void;
   onDiscard: () => void;
+  /** Offered once the server refused a retry of an unconfirmed save; the app confirms it. */
+  onDiscardUnconfirmed?: () => void;
   onRetry: () => void;
   onEdit: () => void;
   onReviewDelete: () => void;
@@ -435,10 +439,21 @@ function ExpenseTask({
               message={
                 state.message ??
                 (state.attempt
-                  ? `This Expense may already be in ${context?.group.name ?? 'the Group'}. Checking reuses the same submission, so it can’t be recorded twice.`
+                  ? state.attemptRejected
+                    ? `SplitBook refused a retry of this save. ${refusedRetryNotice}`
+                    : `This Expense may already be in ${context?.group.name ?? 'the Group'}. Checking reuses the same submission, so it can’t be recorded twice.`
                   : `${state.mutation?.kind === 'delete' ? 'This Expense may already be deleted.' : 'This change may already be saved.'} Checking reads the saved Expense first, so nothing is sent twice.`)
               }
-            />
+            >
+              {state.attemptRejected && onDiscardUnconfirmed && (
+                <CompactButton
+                  label="Discard unconfirmed save"
+                  variant="text"
+                  dense
+                  onPress={onDiscardUnconfirmed}
+                />
+              )}
+            </Banner>
           ) : state.status === 'resume' ? (
             <Banner
               tone="info"
