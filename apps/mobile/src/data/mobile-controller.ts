@@ -380,6 +380,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let activityRequest = 0;
   let activityDetailRequest = 0;
   let historyRequest = 0;
+  /** The Groups list's own read token: only a newer list read supersedes a list read. */
+  let groupsRequest = 0;
+  /** The latest Groups list read ended without an answer to show, so Home reads it again. */
+  let groupsUnanswered = false;
   let cacheEpoch = 0;
   // Set by returnToGroup: the next read of that Group and Month reads this many pages.
   let returnPages: { groupId: string; month: string | null; pages: number } | null = null;
@@ -471,6 +475,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     materializing = new Map();
     running = { pull: [], automatic: [] };
     viewRequest += 1;
+    groupsUnanswered = false;
     requests.forEach((request) => request.abort());
     requests.clear();
     cookie = null;
@@ -1060,7 +1065,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const lease = accountStorage(),
       view = viewRequest,
       epoch = cacheEpoch,
-      shown = wanted ?? (() => view === viewRequest);
+      shown = wanted ?? (() => view === viewRequest),
+      // Home's Groups list keeps its provenance while another view is open (startReadView),
+      // so its read records where its answer came from on whatever screen it lands.
+      recorded = path === '/api/groups' ? shown : () => view === viewRequest;
     try {
       let result = await sharedRead(path, owner, parse);
       // A confirmed change during the read made its response obsolete: read once more,
@@ -1072,7 +1080,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       )
         result = await sharedRead(path, owner, parse);
       const parsed = parse(result.value);
-      if (view === viewRequest && current(owner)) {
+      if (recorded() && current(owner)) {
         staleReads.delete(path);
         publishReadFreshness();
       }
@@ -1089,8 +1097,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const stored = await lease.write(() => dependencies.readCache!.load(lease.accountId, path));
       const cached = cachedRead(stored, lease.accountId, path, now());
       if (!current(owner) || epoch !== cacheEpoch) throw new Superseded();
-      if (view === viewRequest) {
-        offlineSession = true;
+      if (view === viewRequest) offlineSession = true;
+      if (recorded()) {
         staleReads.set(path, cached?.refreshedAt ?? null);
         publishReadFreshness();
       }
@@ -1217,9 +1225,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** `reuse` accepts a list verified within the display freshness window. */
   const loadGroups = (owner: number, reuse = false) =>
     reuse ? listGroups(owner, true) : explicitly(['groups'], () => listGroups(owner, false));
-  const listGroups = async (owner: number, reuse: boolean) => {
+  /** Home's Groups list is read again when its latest read ended without an answer. */
+  const rereadGroups = (owner: number) =>
+    groupsUnanswered && current(owner) ? loadGroups(owner, true) : Promise.resolve();
+  /**
+   * Shows Home and reads the Groups list. The read has its own token, so it publishes its
+   * answer (the list or a failure) whatever screen the member has moved to; only a newer list
+   * read supersedes it. A read that ends with no answer leaves Home to read the list again.
+   */
+  const listGroups = async (owner: number, reuse: boolean): Promise<void> => {
     assertCurrent(owner);
-    const view = ++viewRequest;
+    viewRequest += 1;
+    const listRead = ++groupsRequest;
+    groupsUnanswered = false;
     const path = '/api/groups';
     startReadView();
     publish({
@@ -1230,38 +1248,55 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     try {
       const fresh = reuse ? freshRead(path) : null;
-      const reading = fresh ? null : readCached(path, owner, parseGroups);
+      const reading = fresh
+        ? null
+        : readCached(path, owner, parseGroups, () => listRead === groupsRequest);
       reading?.catch(() => undefined);
+      // The list's version when it answered: a confirmed change or denial since makes it obsolete.
+      const answered = reading?.then(() => versionOf(path));
+      answered?.catch(() => undefined);
       if (reading && !snapshot.groups.data.length) {
         const saved = await peek(path, owner, parseGroups);
         if (
           saved &&
           current(owner) &&
-          view === viewRequest &&
+          listRead === groupsRequest &&
           !snapshot.groups.data.length &&
           memberOfAll(saved.value)
         )
           publish({ ...snapshot, groups: { ...snapshot.groups, data: saved.value, loaded: true } });
       }
       const groups = fresh ? parseGroups(fresh.value) : await reading!;
+      const version = answered ? await answered : versionOf(path);
       assertCurrent(owner);
-      if (view !== viewRequest) return;
+      if (listRead !== groupsRequest) return;
+      if (version !== versionOf(path)) throw new Superseded();
       // Do not display a malformed server response as somebody else's groups.
       if (!memberOfAll(groups)) {
         throw new RequestError('The server returned invalid group membership. Please refresh.');
       }
+      // The list leaves out a Group this session shows, has read or is reading.
+      let dropped = false;
       if (reading && !staleReads.has(path)) {
         // Groups no longer listed lose everything read for them, and Home with them.
         const listed = new Set(groups.map((group) => group.id));
+        const unlisted = (key: string) => {
+          const id = /^\/api\/groups\/([a-f\d]{24})/i.exec(key)?.[1];
+          return id && !listed.has(id) ? id : null;
+        };
+        dropped =
+          snapshot.groups.data.some(({ id }) => !listed.has(id)) ||
+          [...reads.keys(), ...inflight.keys()].some(unlisted);
         for (const read of [...reads.keys()]) {
-          const id = /^\/api\/groups\/([a-f\d]{24})/i.exec(read)?.[1];
-          if (id && !listed.has(id))
-            invalidateReads(`group:${id}`, `ledger:${id}`, `balances:${id}`, 'home');
+          const id = unlisted(read);
+          if (id) invalidateReads(`group:${id}`, `ledger:${id}`, `balances:${id}`, 'home');
         }
       }
       const lease = accountStorage();
       if (reading && lease && dependencies.readCache && !staleReads.has(path)) {
-        cacheEpoch += 1;
+        // Trimming such a Group's saved copies supersedes whatever is still being saved. When the
+        // list keeps every one, reads still running for another view or Home's figures go on.
+        if (dropped) cacheEpoch += 1;
         try {
           await lease.write(() =>
             dependencies.readCache!.retainGroups(
@@ -1274,14 +1309,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           await signOut();
           throw new Superseded();
         }
-        if (!current(owner) || view !== viewRequest) return;
+        if (!current(owner) || listRead !== groupsRequest) return;
+        if (version !== versionOf(path)) throw new Superseded();
       }
       publish({
         ...snapshot,
         groups: { status: 'ready', data: groups, message: null, loaded: true },
       });
     } catch (error) {
-      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      if (!current(owner) || listRead !== groupsRequest) return;
+      if (error instanceof Superseded) {
+        // No answer to show: Home reads the list again, at once if it's showing.
+        groupsUnanswered = true;
+        if (snapshot.screen === 'groups') await rereadGroups(owner);
+        return;
+      }
       publish({
         ...snapshot,
         groups: {
@@ -3163,7 +3205,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
       financial: emptyFinancial(),
     });
-    return loadHome(true);
+    // Home's content shows where it came from, including a list read that landed elsewhere.
+    publishReadFreshness();
+    if (!groupsUnanswered) return loadHome(true);
+    // The Groups list's latest read ended without an answer: read it again, then the figures.
+    const owner = generation;
+    return rereadGroups(owner).then(() => (current(owner) ? loadHome(true) : undefined));
   };
 
   /** Android Back and close keep the draft on this device and return where the task began. */
