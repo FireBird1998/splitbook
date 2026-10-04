@@ -229,6 +229,13 @@ Any member may leave, with no body. The rules:
   `Settle up before you leave: you owe ₹150.00 in this Group.`, and
   `balances: [{ "currency": "INR", "amount": -150 }]` (negative: they owe;
   positive: they are owed).
+- **Due recurring Expenses count.** While other members remain, the recurring
+  Expenses already due are added first, as every Group read does, and only then
+  is the balance checked. A Rent that fell due this month is therefore part of
+  the settle-up. If adding them doesn't finish, the leave is refused with **409**
+  `code: "LEAVE_CONFLICT"`; trying again adds what is still missing. A template in
+  its problem state (for example, its Tag archived) doesn't hold up the leave: its
+  missed periods are not generated for the departing member.
 - **The last admin hands over first.** While other members remain, the only admin
   gets **409** `code: "LAST_ADMIN"`, `Make someone else an admin before you leave.`
 - **The last member archives the Group.** Nobody would be left to reach it, so the
@@ -238,7 +245,8 @@ Any member may leave, with no body. The rules:
 (`archived: true` when the last member left). Activity records `member_left`
 with `{ userId, method: "left" }`, plus the archive change when it happens.
 A stranger gets **403**; a race with another leave or join that can't be
-resolved after three tries gets **409** `code: "LEAVE_CONFLICT"`.
+resolved after three tries, or a due recurring Expense that couldn't be added,
+gets **409** `code: "LEAVE_CONFLICT"`.
 
 ---
 
@@ -507,7 +515,8 @@ soft-deleted expense. Each edit appends a diff to the expense's `editHistory`.
 ## Recurring expenses
 
 Household-themed groups only (`category: "home"`). Templates materialize
-expenses lazily when the group, its expense list or its balances are read.
+expenses lazily when the group, its expense list or its balances are read, and
+before a member's leave is checked.
 
 | Method | Path                                       | Description     |
 | ------ | ------------------------------------------ | --------------- |

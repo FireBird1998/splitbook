@@ -5,6 +5,7 @@ import Group from '@/lib/models/Group';
 import '@/lib/models/User'; // Ensure User model is registered for populate()
 import { activityService } from './activity.service';
 import { balanceService } from './balance.service';
+import { recurringExpenseService } from './recurring-expense.service';
 import { buildDefaultGroupTags } from '@splitbook/shared/default-tags';
 import type { CreateGroupInput, UpdateGroupInput } from '@splitbook/shared/validators/group';
 import crypto from 'crypto';
@@ -337,7 +338,8 @@ export class GroupService {
 
   /**
    * The member leaves the Group. They must be settled up in every currency,
-   * and the last admin must hand over first. The last member's leaving also
+   * counting the recurring Expenses already due, which are added first. The
+   * last admin must hand over first. The last member's leaving also
    * archives the Group, since nobody would be left to reach it.
    * Returns null when the Group doesn't exist.
    */
@@ -381,6 +383,11 @@ export class GroupService {
       if (self.role === 'admin' && !others.some((m) => m.role === 'admin')) {
         throw new LeaveBlockedError('LAST_ADMIN');
       }
+
+      // Balances follow Expense reads: add the recurring Expenses already due before
+      // checking, and never let the member go on a run that may have missed one.
+      const due = await recurringExpenseService.materializeDueExpenses(groupId);
+      if (!due.complete) throw new Error('LEAVE_CONFLICT');
 
       const open = await balanceService.getMemberOpenBalances(groupId, actorId);
       if (open.length > 0) throw new LeaveBlockedError('OPEN_BALANCE', open);

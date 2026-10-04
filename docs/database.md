@@ -232,8 +232,10 @@ Templates that materialize monthly expenses. **Household groups only**
 
 **Generation model** — lazy on read. `generateDueExpenses` runs from
 `GET /api/groups/[id]`, `GET /api/groups/[id]/expenses` and
-`GET /api/groups/[id]/balances`, after the membership check. Safety rests on
-four things:
+`GET /api/groups/[id]/balances`, after the membership check. Leaving a Group
+(`POST /api/groups/[id]/leave`) runs the same generation before its settle-up
+check, through `materializeDueExpenses`, which also reports whether the run
+finished; the leave is refused when it didn't. Safety rests on four things:
 
 1. the unique partial index on `Expense.{recurringExpense, period}`,
 2. duplicate-key errors being absorbed as "a concurrent reader already did this",
