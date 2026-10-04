@@ -1,0 +1,150 @@
+# tools/swarm
+
+Tooling for agents that each work in their own worktree. It gives each worktree its own fictional backend, runs every gate a ticket needs with one verdict, and checks the install before anything else. Run it from the worktree's root:
+
+```sh
+pnpm swarm check   # fail unless the install matches pnpm-lock.yaml
+pnpm swarm up      # start this worktree's backend and print its MOBILE_VERIFY_URL
+pnpm swarm gate    # run every gate and write tools/swarm/out/verdict.json
+pnpm swarm down    # stop this worktree's backend and drop this worktree's databases
+```
+
+It is a pnpm workspace package (`@splitbook/swarm`), so the root `pnpm lint`, `pnpm typecheck` and `pnpm test` cover it in CI. It is written with [Effect 4](https://effect.website/docs/v4/getting-started/installation), which ADR 0006 allows only in standalone tooling like this; no package under `apps/` or `packages/` may depend on it, and a unit test checks that. Effect 4 needs TypeScript 5.9 or later with `strict`, and Node 22.18 or later, which also runs the TypeScript sources directly, so the package declares `"node": ">=22.18"` and checks it before loading.
+
+## The shared-resource rule
+
+The backend on port **4138** with database **`splitbook_mobile_50`**, and **emulator-5554**, are shared single resources: one agent at a time uses them. This tool never uses either. Each worktree gets its own backend on a free loopback port with its own database, so worktrees no longer queue for 4138. It adds no emulators: emulator-5554 stays one device, used by one agent at a time.
+
+Every backend shares the one local Mongo server (port 27018 by default), each on its own database. Next allows one `next dev` per app directory, so a worktree runs one backend at a time.
+
+**One swarm command at a time per worktree.** `up`, `down` and `gate` each hold `tools/swarm/out/swarm.lock` while they run, so a gate can't take down a backend an `up` is still starting, and two `up`s can't both start one. A second command is refused with the first one's name and pid; wait for it to finish. The lock names its holder by pid and start time, so a lock left by a command that was killed is replaced, even when its pid has been reused.
+
+## `pnpm swarm check`
+
+Compares `node_modules/.pnpm/lock.yaml`, the lockfile pnpm last installed, with `pnpm-lock.yaml`. It fails when the worktree has no install, or when the two differ, and prints the fix:
+
+```sh
+pnpm install --frozen-lockfile --offline   # about 10 s with a warm store
+```
+
+Drop `--offline` if a package is missing from the store. A stale install looks like broken code (missing packages fail rendered tests and typecheck), so `up` refuses to start on one and the gate checks it first. `check` loads only Node built-ins, so it runs even where `effect` itself isn't installed.
+
+## `pnpm swarm up`
+
+1. Picks a port the operating system reports free on 127.0.0.1, skipping 4138 and every port the Fetch standard blocks, and a fresh database name with this worktree's prefix (below).
+2. Seeds it with the existing fictional seed (`apps/mobile/scripts/dev-backend/seed.mjs`: the web app's demo seed, the Household and the Alex-only Group).
+3. Starts the backend (`start.mjs`) through #185's `SPLITBOOK_NATIVE_ORIGIN_PORT`, `SPLITBOOK_NATIVE_DATABASE` and `SPLITBOOK_NATIVE_MONGO_PORT`, in its own process group, and waits until `GET /api/auth/ok` answers.
+4. Prints `MOBILE_VERIFY_URL` and the three `SPLITBOOK_NATIVE_*` variables for this backend, and returns. Give the verifiers `MOBILE_VERIFY_URL`, and the backend's controls (`control.mjs`) the three `SPLITBOOK_NATIVE_*` variables, so they act on this worktree's database, never `splitbook_mobile_50`. The backend keeps running until `pnpm swarm down`; its log is `tools/swarm/out/backend.log`.
+
+`up` records the backend in `tools/swarm/out/backend.json` before it seeds, so `down` can always find the database and its Mongo port, and adds the backend's pid and start time once it starts.
+
+When this worktree's backend is already up and answering, `up` prints it again instead of starting another. When it is running but not answering (still compiling, or busy), `up` waits for it up to the ready timeout, then refuses; it never tears a running backend down. A record whose backend is gone (after a crash or a reboot) is cleaned up first, as `down` would.
+
+| Flag (or variable)                                     | Default                  | Accepted                                                                             |
+| ------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------ |
+| `--origin` (or `SPLITBOOK_NATIVE_ORIGIN_PORT`, a port) | a free port on 127.0.0.1 | `http://127.0.0.1:<port>`, a free port from 1024, never 4138 or a Fetch-blocked port |
+| `--database` (or `SPLITBOOK_NATIVE_DATABASE`)          | a fresh name             | this worktree's prefix, then `[a-z0-9_]`, 63 characters at most                      |
+| `--mongo-port` (or `SPLITBOOK_NATIVE_MONGO_PORT`)      | `27018`                  | the local Mongo server's port                                                        |
+| `--ready-timeout <seconds>`                            | 180                      |                                                                                      |
+
+#185's variables, when set, are requests like the flags: they are checked, never trusted. `up` refuses, before anything connects or starts:
+
+- a database name without the tool's prefix, `splitbook_mobile_50`, a demo database (`splitbook`, `splitbook-demo`), or another worktree's database;
+- a database that already exists: `up` never adopts one;
+- an origin other than `http://127.0.0.1:<port>`, port 4138, the Mongo port, and a port in use;
+- a port the [Fetch standard blocks](https://fetch.spec.whatwg.org/#port-blocking), such as 4190, 5060, 6000, 6665 to 6669, 6697 and 10080. Node's `fetch`, which the verifiers use, refuses those with "bad port" before it connects, so every verifier would fail. The list is Node 22's, and a unit test checks that Node's `fetch` blocks no port missing from it.
+
+A backend that never answers fails `up` after the timeout with a clear error; the backend is stopped and its database dropped. Ctrl-C (or SIGTERM) while `up` runs does the same. If that drop fails, `up` says so and keeps the record, so `pnpm swarm down` can finish it.
+
+The backend's own scripts keep their rules: they refuse root and `apps/web` `.env` files, accept only loopback Mongo and `splitbook_mobile_*` names, and claim a database with the fictional ownership marker. The tool passes them only `PATH` and the three variables above; it never reads `.env` files, `MONGODB_URI` or any credential.
+
+## `pnpm swarm down`
+
+Stops this worktree's backend and drops **every database whose name starts with this worktree's prefix**, and nothing else:
+
+```text
+splitbook_mobile_swarm_<first 10 hex characters of sha256(worktree path)>_<random>
+```
+
+`splitbook_mobile_swarm_` is the tool's prefix, inside #185's `splitbook_mobile_` rule. A record naming `splitbook_mobile_50`, a demo database, a name without the tool's prefix or another worktree's database is refused, and nothing is stopped or dropped.
+
+Every drop the tool makes, from `down` or from a failed `up`, goes through one check: the name must start with this worktree's prefix, and the database must hold the fictional ownership marker. A database with this worktree's prefix but no marker is left in place with a warning, and the others are still dropped. When a drop fails (Mongo went away), `down` says so and keeps the record, so it can run again.
+
+It stops a process group (SIGTERM, then SIGKILL after 10 s), so no `next dev` is left behind, only when:
+
+- its leader is this worktree's own `start.mjs`, by absolute path, with the start time recorded when it started. The shared backend, started from the main checkout, has the same command line there, and a reused pid has a later start time, so neither is ever stopped;
+- or that leader is gone (killed, or out of memory) and every process left in its group traces back, through its parents in the group, to a process running from this worktree's `apps/`, such as `next-server` under `next dev`. Otherwise the group is left alone with a warning naming its pids.
+
+As it exits, Next starts its own telemetry flush (`next/dist/telemetry/detached-flush.js`) outside that group; it ends by itself within a couple of seconds.
+
+## `pnpm swarm gate`
+
+Runs these steps in the worktree, in order, and prints one verdict:
+
+| Step                          | Command                                                       | Timeout       |
+| ----------------------------- | ------------------------------------------------------------- | ------------- |
+| install check                 | as `pnpm swarm check`; on failure every other step is skipped | none          |
+| lint, typecheck, format check | `pnpm lint`, `pnpm typecheck`, `pnpm format:check`            | 15, 15, 5 min |
+| unit tests                    | `pnpm --recursive --workspace-concurrency=1 test:unit`        | 20 min        |
+| ceilings                      | #206's comparison script, against the base commit             | 5 min         |
+| backend                       | this worktree's backend: the one `up` started, or a new one   | 3 min         |
+| `verify:*`, one after another | `pnpm --dir apps/mobile run verify:<name>`                    | 10 min each   |
+
+- **Unit tests, not integration tests.** The web integration tests name their databases per test file, so two worktrees running them at once on one Mongo would share databases. CI keeps running them; the gate never does.
+- **vitest workers are capped**, so gates running at once don't fight over the CPU (each vitest run otherwise uses all cores but one). The cap defaults to **2** workers and applies to the whole step: the packages run one after another, each with `VITEST_MAX_WORKERS` set to the cap. Change it per run with `--vitest-workers <n>` or `SWARM_VITEST_WORKERS=<n>`.
+- **Verifiers** run one after another, because several assume exclusive use of the Sam persona on their backend (#228), each with `MOBILE_VERIFY_URL` and the three `SPLITBOOK_NATIVE_*` variables set to this worktree's backend, and `TZ=Asia/Kolkata`, which `verify:financial`'s fixtures need. The list is every `verify:*` script in `apps/mobile/package.json` except `verify:all`.
+- **No step inherits credentials or another backend.** Steps get the gate's environment without database and auth settings (`MONGO*`, `TEST_MONGO*`, `DATABASE_URL`, `AUTH_*`, `BETTER_AUTH*`, `NEXTAUTH*`, `GOOGLE_*`, `ALLOW_*`, `NEXT_PUBLIC_*`), without anything that looks like a credential (names containing `SECRET`, `TOKEN`, `PASSWORD`, `CREDENTIAL`, `API_KEY`, `PRIVATE_KEY` or `ACCESS_KEY`), and without any `SPLITBOOK_*` or `MOBILE_VERIFY_URL` of another backend.
+- **Ceilings.** A raised render or request ceiling fails with "needs the re-record label". #206 builds the comparison as a plain script CI runs; the gate calls that script, never a copy: `ceilings:compare` in `apps/mobile/package.json`, run as `pnpm --dir apps/mobile run ceilings:compare --base <base commit>`, which exits non-zero when a ceiling rose or a journey was removed. Until #206 adds it, the step reports that no ceilings are recorded and is skipped.
+- **The backend.** When `up` has started this worktree's backend, the gate uses it and leaves it running. Otherwise it starts one for the verifiers, and stops it and drops its database when it ends.
+
+The gate holds the worktree lock while it runs; when another swarm command holds it, the gate is refused and writes no verdict. A failing step doesn't stop the others (except the install check), and the last lines of its log are printed. Each step's output is in `tools/swarm/out/gate/<step>.log`. A step that passes its timeout is stopped with everything it started and fails. Ctrl-C (or SIGTERM) stops the running step's process group and the backend the gate started, drops its database, and records the verdict as interrupted.
+
+The verdict says pass or fail, with each step's result and time, the worktree's commit and its base commit: the merge-base of `HEAD` with `origin/main` (or `main`), or with `--base <ref>`. `--step-timeout <seconds>` replaces every step's timeout, and `--mongo-port` and `--ready-timeout` work as for `up`. The gate exits non-zero on any failure and writes the same verdict to `tools/swarm/out/verdict.json`:
+
+```json
+{
+  "verdict": "pass",
+  "interrupted": false,
+  "worktree": "/path/to/worktree",
+  "commit": "<HEAD>",
+  "base": { "ref": "origin/main", "commit": "<merge-base>" },
+  "startedAt": "2026-10-04T02:31:40.565Z",
+  "seconds": 94.5,
+  "vitestWorkers": 2,
+  "backend": {
+    "origin": "http://127.0.0.1:52920",
+    "database": "splitbook_mobile_swarm_…",
+    "startedByGate": false
+  },
+  "steps": [
+    {
+      "name": "lint",
+      "status": "pass",
+      "seconds": 9.4,
+      "log": "/path/to/worktree/tools/swarm/out/gate/lint.log"
+    }
+  ]
+}
+```
+
+`status` is `pass`, `fail` or `skip`. The gate covers the behaviour and cost layers of the gate kit; the device layer stays with #194.
+
+## Measured on this machine
+
+Measured on 2026-10-04 on an Apple M3 Pro (11 cores, 36 GB of memory), Node 22.22.2, Next 16.1.6 (`next dev` with Turbopack), Mongo on 127.0.0.1:27018:
+
+- **Time to ready:** 4.8 s for one backend in a fresh worktree, from start to the first answer of `/api/auth/ok`; 4.2 s for another started at the same time in a second fresh worktree; 1.9 s once the worktree's `.next` cache is warm. The seed adds about 2 s before that, so `up` takes about 7 s.
+- **Memory:** about 0.9 to 1.1 GB resident for one backend's process group once ready, almost all of it the `next-server` process (0.7 GB with a warm cache), rising to 1.3 to 1.7 GB after a gate has run every verifier against it, since `next dev` keeps every route it compiled. Budget about 1.7 GB per running backend.
+- **Two gates at once,** each in its own worktree with its own backend from `up`: both passed, in 82 s and 92 s, with the default cap of 2 vitest workers.
+
+## Files
+
+Everything the tool writes is under `tools/swarm/out/`, which the root `.gitignore` already ignores (`out/`): `swarm.lock` (while a command runs), `backend.json` (the backend), `backend.log`, `verdict.json` and `gate/<step>.log`.
+
+## Tests
+
+```sh
+pnpm --filter @splitbook/swarm test
+```
+
+The unit tests drive each command's public function (`up`, `down`, `gate`, `checkInstall`) with fake processes, Mongo and network, and real fixture directories. `src/live.test.ts` runs `up` and `gate` on real processes, with stand-in backend scripts that never become ready, to show that a timeout or an interruption leaves no process behind, and tests the live services' guards: the drop check, `ps` start times and process groups, and Node's blocked ports. No test needs a Mongo server.

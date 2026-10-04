@@ -1,0 +1,28 @@
+{
+  "name": "@splitbook/swarm",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "swarm": "node bin/swarm.mjs",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "effect": "^4.0.0",
+    "mongodb": "^7.1.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^22.20.1",
+    "eslint": "^9.39.2",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.55.0",
+    "vitest": "^4.1.10"
+  }
+}

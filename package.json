@@ -18,7 +18,8 @@
     "test:integration": "pnpm -r test:integration",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "mobile": "pnpm -C apps/mobile"
+    "mobile": "pnpm -C apps/mobile",
+    "swarm": "node tools/swarm/bin/swarm.mjs"
   },
   "devDependencies": {
     "prettier": "^3.8.1"
