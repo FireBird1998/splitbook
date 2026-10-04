@@ -233,7 +233,9 @@ Any member may leave, with no body. The rules:
   Expenses already due are added first, as every Group read does, and only then
   is the balance checked. A Rent that fell due this month is therefore part of
   the settle-up. If adding them doesn't finish, the leave is refused with **409**
-  `code: "LEAVE_CONFLICT"`; trying again adds what is still missing.
+  `code: "LEAVE_CONFLICT"`; trying again adds what is still missing. A template in
+  its problem state (for example, its Tag archived) doesn't hold up the leave: its
+  missed periods are not generated for the departing member.
 - **The last admin hands over first.** While other members remain, the only admin
   gets **409** `code: "LAST_ADMIN"`, `Make someone else an admin before you leave.`
 - **The last member archives the Group.** Nobody would be left to reach it, so the

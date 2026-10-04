@@ -268,7 +268,6 @@ export class RecurringExpenseService {
     let complete = true;
     try {
       await connectDB();
-      await ensureLedgerWriteIndexes();
 
       const templates = await RecurringExpense.find({ group: groupId });
       if (templates.length === 0) return { generated: 0, complete };
@@ -302,6 +301,11 @@ export class RecurringExpenseService {
         } catch {
           continue; // Problem state — visible in the settings list.
         }
+
+        // The unique (recurringExpense, period) index makes the inserts below
+        // idempotent. Only a run that inserts needs it (the call is memoized), so a
+        // Trip Group or a Household with nothing due never depends on it.
+        await ensureLedgerWriteIndexes();
 
         // Advance only through the unbroken materialized prefix: a period that
         // fails unexpectedly is retried on the next read instead of being lost.

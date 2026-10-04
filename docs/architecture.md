@@ -271,7 +271,9 @@ check _role_. Expense mutation stops at membership.
 > side-effect free. Balances materialize too because clients start the Balances
 > read beside the Group and Expense reads; computing first would show last
 > month's figures next to this month's Expense (#240). The cross-group
-> `GET /api/user/balances` does not materialize.
+> `GET /api/user/balances` does not materialize. Leaving a Group
+> (`POST /api/groups/[id]/leave`) materializes too, before its settle-up check,
+> and is refused with `LEAVE_CONFLICT` when that run didn't finish (#253).
 
 ### Real-time Sync Flow
 

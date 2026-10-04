@@ -385,4 +385,55 @@ describe('leaving a Household with a recurring Expense due', () => {
     expect(blocked.balances).toEqual([{ currency: 'INR', amountMinor: -1000000 }]);
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(1);
   });
+
+  it('refuses the leave when a due period’s marker cannot move', async () => {
+    const { groupId, templateId } = await householdWithRentDue();
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(RecurringExpense, 'updateOne').mockImplementationOnce(
+      () =>
+        Promise.reject(new Error('marker interrupted')) as unknown as ReturnType<
+          typeof RecurringExpense.updateOne
+        >,
+    );
+
+    expect(await leaveThroughRoute(groupId, bob)).toEqual({
+      status: 409,
+      body: {
+        error: 'This Group changed while you were leaving. Try again.',
+        status: 409,
+        code: 'LEAVE_CONFLICT',
+      },
+    });
+
+    expect(await memberIds(groupId)).toEqual([alice, bob, carol].sort());
+    expect(await Activity.countDocuments({ group: groupId, type: 'member_left' })).toBe(0);
+    // This month's Rent was added; only its marker failed to move.
+    expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(1);
+    const stored = await RecurringExpense.findById(templateId).lean();
+    expect(stored?.lastGeneratedFor).toBe(PREVIOUS_PERIOD);
+
+    // Trying again finds this month's Rent already added, moves the marker and
+    // finds the member owing it, without a second Rent.
+    const blocked = await blockedCode(groupService.leave(groupId, bob));
+    expect(blocked.balances).toEqual([{ currency: 'INR', amountMinor: -1000000 }]);
+    expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(1);
+  });
+
+  it('does not hold up the leave for a template in its problem state', async () => {
+    const { groupId, templateId } = await householdWithRentDue();
+    const group = await groupService.getById(groupId);
+    const rentTag = group!.tags.find((tag) => tag.name === 'Rent')!;
+    await groupService.updateTag(groupId, String(rentTag._id), { isArchived: true }, alice);
+
+    // The Rent no longer validates, so it is skipped as reads skip it, and the run
+    // still counts as finished.
+    expect(await recurringExpenseService.materializeDueExpenses(groupId)).toEqual({
+      generated: 0,
+      complete: true,
+    });
+    await expect(groupService.leave(groupId, bob)).resolves.toEqual({ archived: false });
+
+    expect(await memberIds(groupId)).toEqual([alice, carol].sort());
+    expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);
+  });
 });
