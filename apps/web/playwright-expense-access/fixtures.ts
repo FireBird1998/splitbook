@@ -42,7 +42,7 @@ export const expensePath = (group: string, expense: string) =>
 /** Read the version before an authorized mutation; contexts remain unmodified. */
 export async function expenseRevisionHeaders(actor: APIRequestContext, path: string) {
   const expense = await dataOf(await actor.get(path));
-  return { 'If-Match': String(expense.revision ?? 0) };
+  return { 'X-Splitbook-Revision': String(expense.revision ?? 0) };
 }
 
 export type Ledger = {

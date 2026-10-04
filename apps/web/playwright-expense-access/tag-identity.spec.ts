@@ -36,7 +36,7 @@ test('Tag rename preserves manual and recurring reads, filtering and archive gua
   const current = await dataOf(await ledger.priya.get(expensePath(ledger.groupB, ledger.expenseB)));
   const edited = await dataOf(
     await ledger.priya.patch(expensePath(ledger.groupB, ledger.expenseB), {
-      headers: { 'If-Match': String(current.revision ?? 0) },
+      headers: { 'X-Splitbook-Revision': String(current.revision ?? 0) },
       data: {
         description: 'Corrected tagged expense',
         tagId: rent._id,

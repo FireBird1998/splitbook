@@ -68,7 +68,7 @@ test('stale expense edit keeps its draft and conflict until an explicit reload',
   await dataOf(
     await ledger.priya.patch(path, {
       data: { description: 'Saved in another browser' },
-      headers: { 'If-Match': String(expense.revision ?? 0) },
+      headers: { 'X-Splitbook-Revision': String(expense.revision ?? 0) },
     }),
   );
   // Saving first checks duplicates; assert the conflict only after the stale

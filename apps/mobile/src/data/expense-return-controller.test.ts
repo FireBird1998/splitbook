@@ -191,7 +191,7 @@ function ledger() {
     const record = records.get(route.split('/').pop()!);
     if (!record || record.group !== target._id) return json({ status: 404 }, 404);
     if (method === 'PATCH') {
-      if (new Headers(init.headers).get('If-Match') !== String(record.revision))
+      if (new Headers(init.headers).get('X-Splitbook-Revision') !== String(record.revision))
         return json({ code: 'STALE_REVISION', status: 409 }, 409);
       const patch = JSON.parse(String(init.body));
       const changes = Object.fromEntries(

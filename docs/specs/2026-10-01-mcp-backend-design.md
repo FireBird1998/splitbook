@@ -54,7 +54,7 @@ Expense, settlement, recurring, member, Tag and Group-settings **commands** alre
 
 **HTTP parsing in the route (stays there).**
 
-- `If-Match` goes through `requestRevision`; a missing or malformed header becomes `NaN` and then `428 REVISION_REQUIRED`.
+- The revision header goes through `requestRevision`: `X-Splitbook-Revision`, or `If-Match` from older clients that send only that. A missing or malformed revision becomes `NaN` and then `428 REVISION_REQUIRED`.
 - `Idempotency-Key` goes through `parseIdempotencyKey`.
 - Query strings are parsed with defaults and no bounds. Activity `page`/`limit` can reach MongoDB as `NaN`. Expense `limit` has no maximum.
 

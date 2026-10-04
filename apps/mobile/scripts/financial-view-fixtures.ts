@@ -75,6 +75,8 @@ export class FixtureActor {
     body?: unknown,
     expectedStatus = 200,
     revision?: number,
+    /** Sent as well, such as the `If-Match` revision of an app released before #186. */
+    extraHeaders: Readonly<Record<string, string>> = {},
   ): Promise<unknown> {
     assert.ok(
       path.startsWith('/api/') && !path.includes('://'),
@@ -85,7 +87,8 @@ export class FixtureActor {
       headers: {
         Origin: this.origin,
         Accept: 'application/json',
-        ...(revision === undefined ? {} : { 'If-Match': String(revision) }),
+        ...(revision === undefined ? {} : { 'X-Splitbook-Revision': String(revision) }),
+        ...extraHeaders,
         ...(this.cookie ? { Cookie: this.cookie } : {}),
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         ...(method === 'POST' && path.endsWith('/expenses')

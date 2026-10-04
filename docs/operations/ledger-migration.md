@@ -101,7 +101,7 @@ The [rehearsal script](../../apps/web/scripts/rehearse-ledger-reads.mjs) creates
 
 ## Client compatibility
 
-Expense and recurring-template reads expose `revision` (legacy records start at `0`). Their PATCH and DELETE requests must send that displayed revision in `If-Match`. Missing or malformed revisions return 428; stale revisions return 409. Retain the user's draft and reload explicitly before retrying. Restore uses the revision returned by the preceding delete, so an intervening edit cannot be overwritten by Undo.
+Expense and recurring-template reads expose `revision` (legacy records start at `0`). Their PATCH and DELETE requests must send that displayed revision in `X-Splitbook-Revision`. Don't send it in `If-Match`: a host may evaluate that header as an HTTP precondition and answer 412 after the change was saved. The server still reads `If-Match` from older clients that send only that; when both are sent, `X-Splitbook-Revision` decides. Missing or malformed revisions return 428; stale revisions return 409. Retain the user's draft and reload explicitly before retrying. Restore uses the revision returned by the preceding delete, so an intervening edit cannot be overwritten by Undo.
 
 Expense and Settlement POST requests accept `Idempotency-Key` values of 8–128 ASCII letters, digits, `.`, `_`, `:` or `-`, beginning with a letter or digit. Scope is the operation, Group and authenticated actor. Keep the same key and payload after an uncertain response; choose a fresh key for a genuinely new submission. Reusing a key for changed data returns 409. Keys remain attached to records after edits or soft deletion. Older unkeyed creates remain supported but do not have retry deduplication.
 

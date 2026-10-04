@@ -395,13 +395,70 @@ describe('native Expense creation and editing', () => {
     expect(controller.getSnapshot().expense.draft?.notes).toBe('My note');
   });
 
+  it('sends the displayed revision of an edit and a deletion in X-Splitbook-Revision, never If-Match', async () => {
+    let saved: typeof savedExpense = savedExpense;
+    const writes: { method: string; revision: string | null; ifMatch: string | null }[] = [];
+    const { controller } = setup((path, init) => {
+      if (!path.endsWith(`/${expenseId}`)) return;
+      if (init.method === 'PATCH' || init.method === 'DELETE') {
+        const headers = new Headers(init.headers);
+        writes.push({
+          method: init.method,
+          revision: headers.get('X-Splitbook-Revision'),
+          ifMatch: headers.get('If-Match'),
+        });
+        saved =
+          init.method === 'PATCH'
+            ? { ...saved, ...JSON.parse(String(init.body)), revision: saved.revision + 1 }
+            : { ...saved, isDeleted: true, revision: saved.revision + 1 };
+        // The route has committed. A host that evaluates If-Match as an HTTP precondition
+        // then replaces the route's answer with its own 412, as staging's host did.
+        if (headers.has('If-Match'))
+          return Promise.resolve(new Response('Precondition Failed', { status: 412 }));
+        return Promise.resolve(
+          json({
+            status: 200,
+            data:
+              init.method === 'PATCH'
+                ? saved
+                : { revision: saved.revision, message: 'Expense deleted' },
+          }),
+        );
+      }
+      return Promise.resolve(json({ status: 200, data: saved }));
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Corrected dinner' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'saved',
+      mutation: null,
+      message: 'Expense updated.',
+    });
+
+    await controller.openExpense(groupId, expenseId);
+    controller.reviewExpenseDeletion();
+    await controller.deleteExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'saved',
+      mutation: null,
+      message: 'Expense deleted.',
+    });
+    expect(writes).toEqual([
+      { method: 'PATCH', revision: '3', ifMatch: null },
+      { method: 'DELETE', revision: '4', ifMatch: null },
+    ]);
+  });
+
   it('requires delete review, uses its revision, and confirms the soft-deleted authorized record', async () => {
     let deleted = false;
     const writes: string[] = [];
     const { controller } = setup((path, init) => {
       if (path.endsWith(`/${expenseId}`)) {
         if (init.method === 'DELETE') {
-          writes.push(new Headers(init.headers).get('If-Match')!);
+          writes.push(new Headers(init.headers).get('X-Splitbook-Revision')!);
           deleted = true;
           return Promise.resolve(
             json({ status: 200, data: { revision: 4, message: 'Expense deleted' } }),
@@ -439,7 +496,7 @@ describe('native Expense creation and editing', () => {
     const { controller, create } = setup((path, init) => {
       if (path.endsWith(`/${expenseId}`)) {
         if (init.method === 'PATCH') {
-          writes.push(new Headers(init.headers).get('If-Match')!);
+          writes.push(new Headers(init.headers).get('X-Splitbook-Revision')!);
           if (writes.length === 1) {
             revision = 4;
             return Promise.resolve(json({ code: 'STALE_REVISION', status: 409 }, 409));
@@ -495,7 +552,7 @@ describe('native Expense creation and editing', () => {
           writes.push({
             method: init.method,
             body,
-            revision: new Headers(init.headers).get('If-Match'),
+            revision: new Headers(init.headers).get('X-Splitbook-Revision'),
           });
           return Promise.resolve(
             json({ data: { ...savedExpense, ...body, revision: 4 }, status: 200 }),
@@ -1903,7 +1960,7 @@ describe('an edit that meets a newer saved Expense', () => {
       if (!path.endsWith(`/${expenseId}`)) return;
       if (init.method === 'PATCH') {
         patches.push({
-          revision: new Headers(init.headers).get('If-Match'),
+          revision: new Headers(init.headers).get('X-Splitbook-Revision'),
           body: JSON.parse(String(init.body)),
         });
         if (saved === savedExpense) {
