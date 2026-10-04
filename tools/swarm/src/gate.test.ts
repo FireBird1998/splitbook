@@ -1,8 +1,10 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Effect, Fiber } from 'effect';
 import { afterEach, describe, expect, it } from 'vitest';
 import { up } from './backend.ts';
 import { defaultVitestWorkers, gate, verdictPath, type Verdict } from './gate.ts';
+import { lockPath } from './lock.ts';
 import {
   fakeLayer,
   fakeWorld,
@@ -102,6 +104,9 @@ describe('gate', () => {
     for (const launch of verifiers) {
       expect(launch.env).toMatchObject({
         MOBILE_VERIFY_URL: verdict.backend?.origin,
+        SPLITBOOK_NATIVE_ORIGIN_PORT: '53001',
+        SPLITBOOK_NATIVE_DATABASE: verdict.backend?.database,
+        SPLITBOOK_NATIVE_MONGO_PORT: '27018',
         TZ: 'Asia/Kolkata',
       });
     }
@@ -154,6 +159,80 @@ describe('gate', () => {
     expect(printed).toContain(head.slice(0, 7));
     expect(printed).toContain(base.slice(0, 7));
     expect(printed).toMatch(/Gate: FAIL/);
+  });
+
+  it('passes no step credentials, database settings or another backend', async () => {
+    const planted = {
+      MONGODB_URI: 'mongodb://127.0.0.1:27018/splitbook_mobile_50',
+      TEST_MONGODB_URI: 'mongodb://127.0.0.1:27017/',
+      AUTH_SECRET: 'fictional-secret',
+      AUTH_GOOGLE_ID: 'fictional-id',
+      BETTER_AUTH_SECRET: 'fictional-secret',
+      GOOGLE_CLIENT_SECRET: 'fictional-secret',
+      ALLOW_DEMO_AUTH: 'true',
+      NEXT_PUBLIC_APP_URL: 'http://127.0.0.1:4138',
+      SPLITBOOK_NATIVE_DATABASE: 'splitbook_mobile_50',
+      SPLITBOOK_NATIVE_ORIGIN_PORT: '4138',
+      MOBILE_VERIFY_URL: 'http://127.0.0.1:4138',
+      SOME_API_KEY: 'fictional-key',
+      NPM_TOKEN: 'fictional-token',
+      DB_PASSWORD: 'fictional-password',
+    };
+    const saved = { ...process.env };
+    Object.assign(process.env, planted);
+    try {
+      const fake = world();
+      const verdict = await runGate(fake, { root: worktree() });
+
+      const steps = fake.launches.filter((launch) => launch.command === 'pnpm');
+      expect(steps.length).toBeGreaterThan(4);
+      for (const launch of steps) {
+        for (const name of Object.keys(planted)) {
+          if (isVerifier(launch) && /^(SPLITBOOK_NATIVE_|MOBILE_VERIFY_URL)/.test(name)) continue;
+          expect({ name, value: launch.env[name] }).toEqual({ name, value: undefined });
+        }
+        expect(launch.env.PATH).toBe(process.env.PATH);
+      }
+      for (const launch of steps.filter(isVerifier)) {
+        expect(launch.env).toMatchObject({
+          MOBILE_VERIFY_URL: verdict.backend?.origin,
+          SPLITBOOK_NATIVE_DATABASE: verdict.backend?.database,
+          SPLITBOOK_NATIVE_ORIGIN_PORT: '53001',
+        });
+      }
+    } finally {
+      for (const name of Object.keys(planted)) delete process.env[name];
+      Object.assign(process.env, saved);
+    }
+  });
+
+  it('is refused while another swarm command holds the worktree lock, and writes no verdict', async () => {
+    const root = worktree();
+    const fake = world();
+    fake.startTimes.set(4999, 'then');
+    mkdirSync(join(root, 'tools/swarm/out'), { recursive: true });
+    writeFileSync(lockPath(root), JSON.stringify({ pid: 4999, started: 'then', command: 'up' }));
+
+    const error = await Effect.runPromise(
+      Effect.flip(gate({ root })).pipe(Effect.provide(fakeLayer(fake))),
+    );
+
+    expect(error.message).toMatch(/Another pnpm swarm up \(pid 4999\)/);
+    expect(fake.launches).toEqual([]);
+    expect(existsSync(verdictPath(root))).toBe(false);
+  });
+
+  it('records a failed step instead of stopping when apps/mobile/package.json cannot be read', async () => {
+    const fake = world();
+    const verdict = await runGate(fake, {
+      root: fixtureWorktree({ 'apps/mobile/package.json': '{ not json' }),
+    });
+    expect(verdict.verdict).toBe('fail');
+    expect(step(verdict, 'verifiers')).toMatchObject({
+      status: 'fail',
+      detail: expect.stringMatching(/apps\/mobile\/package\.json/),
+    });
+    expect(step(verdict, 'unit tests')?.status).toBe('pass');
   });
 
   it('writes the same verdict as JSON for the orchestrator', async () => {
@@ -225,7 +304,7 @@ describe('gate', () => {
     });
     expect(commands(fake).slice(before)).not.toContainEqual(expect.stringMatching(/seed|start/));
     expect(fake.stopped).toEqual([]);
-    expect(fake.running.has(backend.pid)).toBe(true);
+    expect(fake.running.has(backend.pid ?? -1)).toBe(true);
   });
 
   it('stops the backend it started, and drops its database, when it ends', async () => {

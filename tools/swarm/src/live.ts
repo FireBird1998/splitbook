@@ -7,7 +7,7 @@ import { closeSync, openSync } from 'node:fs';
 import { createServer, type AddressInfo } from 'node:net';
 import { Effect, Layer } from 'effect';
 import { MongoClient } from 'mongodb';
-import { toolPrefix } from './backend.ts';
+import { fictionalMarker, guardedDrop } from './names.ts';
 import {
   Databases,
   MongoFailed,
@@ -15,15 +15,9 @@ import {
   Output,
   Processes,
   ProcessFailed,
-  Refused,
+  type GroupMember,
   type Launch,
 } from './platform.ts';
-
-/**
- * The fictional backend's ownership marker (apps/mobile/scripts/dev-backend/environment.mjs).
- * Its seed writes it first; a test keeps the two in step.
- */
-export const fictionalMarker = 'splitbook-native-ticket-50-fictional-only';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -124,11 +118,37 @@ export const ProcessesLive = Layer.succeed(Processes, {
       );
     }),
 
-  commandLine: (pid) =>
+  startTime: (pid) =>
     Effect.callback<string | undefined>((resume) => {
       if (!Number.isInteger(pid) || pid <= 1) return resume(Effect.succeed(undefined));
-      execFile('ps', ['-o', 'command=', '-p', String(pid)], (error, stdout) =>
-        resume(Effect.succeed(error ? undefined : stdout.trim() || undefined)),
+      execFile('ps', ['-o', 'lstart=', '-p', String(pid)], (error, stdout) =>
+        resume(Effect.succeed(error ? undefined : stdout.trim().replace(/\s+/g, ' ') || undefined)),
+      );
+    }),
+
+  group: (pgid) =>
+    Effect.callback<readonly GroupMember[]>((resume) => {
+      if (!Number.isInteger(pgid) || pgid <= 1) return resume(Effect.succeed([]));
+      // -A and -o work the same on macOS and Linux.
+      execFile(
+        'ps',
+        ['-A', '-o', 'pid=,ppid=,pgid=,command='],
+        { maxBuffer: 16 * 1024 * 1024 },
+        (error, stdout) => {
+          if (error) return resume(Effect.succeed([]));
+          const members: GroupMember[] = [];
+          for (const line of stdout.split('\n')) {
+            const match = /^\s*(\d+)\s+(\d+)\s+(\d+)\s+(.*)$/.exec(line);
+            if (match && Number(match[3]) === pgid) {
+              members.push({
+                pid: Number(match[1]),
+                ppid: Number(match[2]),
+                command: match[4] ?? '',
+              });
+            }
+          }
+          resume(Effect.succeed(members));
+        },
       );
     }),
 
@@ -161,21 +181,25 @@ export const DatabasesLive = Layer.succeed(Databases, {
       const { databases } = await client.db('admin').admin().listDatabases({ nameOnly: true });
       return databases.map((database) => database.name);
     }),
-  isFictional: (mongoPort, name) =>
-    withMongo(mongoPort, async (client) => {
-      const marker = await client
-        .db(name)
-        .collection<{ _id: string; fictional?: unknown }>('native_verification')
-        .findOne({ _id: fictionalMarker });
-      return marker?.fictional === true;
-    }),
-  drop: (mongoPort, name) =>
-    // A last guard under the commands' own checks: only the tool's databases are dropped.
-    name.startsWith(toolPrefix) && /^[a-z0-9_]+$/.test(name)
-      ? withMongo(mongoPort, async (client) => {
-          await client.db(name).dropDatabase();
-        })
-      : Effect.fail(new Refused({ message: `Refusing to drop ${name}: it is not the tool's.` })),
+  drop: (mongoPort, name, prefix) =>
+    guardedDrop(name, prefix, (use) =>
+      withMongo(mongoPort, (client) => {
+        const database = client.db(name);
+        return use({
+          exists: async () =>
+            (await database.listCollections({}, { nameOnly: true }).toArray()).length > 0,
+          isFictional: async () => {
+            const marker = await database
+              .collection<{ _id: string; fictional?: unknown }>('native_verification')
+              .findOne({ _id: fictionalMarker });
+            return marker?.fictional === true;
+          },
+          drop: async () => {
+            await database.dropDatabase();
+          },
+        });
+      }),
+    ),
 });
 
 const listen = (port: number) =>

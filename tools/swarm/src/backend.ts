@@ -5,17 +5,23 @@
  * databases.
  *
  * Safety rules, enforced before anything connects or starts:
- * - the origin is http://127.0.0.1:<port>, never port 4138 (the shared backend's);
+ * - the origin is http://127.0.0.1:<port>, never port 4138 (the shared backend's) or a
+ *   port the Fetch standard blocks;
  * - every database name starts with this worktree's prefix inside splitbook_mobile_swarm_,
  *   so it is never splitbook_mobile_50, a demo database or another worktree's;
  * - `up` never adopts a database that already exists;
- * - `down` stops a process only when it is this worktree's own start.mjs, and drops only
- *   databases with this worktree's prefix that hold the fictional ownership marker.
+ * - one swarm command runs at a time per worktree (lock.ts), and a backend that is still
+ *   starting or not answering is never torn down by another command;
+ * - a process group is signalled only when its leader is this worktree's own start.mjs with
+ *   the recorded start time, or, once that leader is gone, when every process left in it
+ *   traces back to this worktree;
+ * - every drop goes through one check (names.ts): this worktree's prefix and the fictional
+ *   ownership marker.
  *
  * The backend's own scripts keep refusing .env files and build the server's environment
  * themselves; this module passes them only PATH and the three SPLITBOOK_NATIVE_* variables.
  */
-import { createHash, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import {
   closeSync,
   fstatSync,
@@ -28,6 +34,8 @@ import {
 } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Duration, Effect, Exit, type Scope } from 'effect';
+import { withWorktreeLock } from './lock.ts';
+import { toolPrefix, worktreePrefix } from './names.ts';
 import {
   Databases,
   Network,
@@ -35,12 +43,14 @@ import {
   Processes,
   ProcessFailed,
   Refused,
+  MongoFailed,
+  type GroupMember,
   type Launch,
   type SwarmError,
 } from './platform.ts';
 
-/** Every database the tool creates starts with this, inside #185's splitbook_mobile_ rule. */
-export const toolPrefix = 'splitbook_mobile_swarm_';
+export { toolPrefix, worktreePrefix } from './names.ts';
+
 /** The backend's default Mongo port (apps/mobile/scripts/dev-backend/environment.mjs). */
 export const defaultMongoPort = 27018;
 /** The shared fictional backend, which the tool never uses. */
@@ -70,11 +80,14 @@ export interface Backend {
   readonly port: number;
   readonly database: string;
   readonly mongoPort: number;
-  /** The process group leader: the backend's start.mjs. */
-  readonly pid: number;
   readonly log: string;
+  /** When `up` (or the gate) began starting it. */
   readonly startedAt: string;
-  /** Seconds from start to the first answer; undefined while it starts. */
+  /** The backend's start.mjs, leader of its process group; undefined while seeding. */
+  readonly pid: number | undefined;
+  /** When that process started, as `ps -o lstart` prints it, to tell it from a reused pid. */
+  readonly processStart: string | undefined;
+  /** Seconds from start to the first answer; undefined until it answers. */
   readonly readySeconds: number | undefined;
 }
 
@@ -96,15 +109,28 @@ export interface DownOptions {
   readonly mongoPort?: number | undefined;
 }
 
-/** This worktree's databases start with this: the tool prefix and a hash of the worktree path. */
-export function worktreePrefix(root: string): string {
-  return `${toolPrefix}${createHash('sha256').update(root).digest('hex').slice(0, 10)}_`;
+export interface DownResult {
+  /** The process group that was stopped, if any. */
+  readonly stopped: number | undefined;
+  readonly dropped: readonly string[];
+  /** This worktree's databases left in place: they had no ownership marker. */
+  readonly skipped: readonly string[];
 }
 
 export const outDirectory = (root: string) => join(root, 'tools/swarm/out');
 export const statePath = (root: string) => join(outDirectory(root), 'backend.json');
 const backendScript = (root: string, name: 'seed.mjs' | 'start.mjs') =>
   join(root, 'apps/mobile/scripts/dev-backend', name);
+
+/** The variables that point the verifiers and the backend's controls at this backend. */
+export function backendVariables(backend: Backend): Record<string, string> {
+  return {
+    MOBILE_VERIFY_URL: backend.origin,
+    SPLITBOOK_NATIVE_ORIGIN_PORT: String(backend.port),
+    SPLITBOOK_NATIVE_DATABASE: backend.database,
+    SPLITBOOK_NATIVE_MONGO_PORT: String(backend.mongoPort),
+  };
+}
 
 /** The backend `up` recorded for this worktree, or undefined when there is none. */
 export function readBackend(root: string): Backend | undefined {
@@ -118,12 +144,21 @@ export function readBackend(root: string): Backend | undefined {
   return JSON.parse(text) as Backend;
 }
 
-function writeBackend(root: string, backend: Backend) {
-  mkdirSync(dirname(statePath(root)), { recursive: true });
-  writeFileSync(statePath(root), `${JSON.stringify(backend, null, 2)}\n`);
-}
+const fileFailure = (action: string, error: unknown) =>
+  new ProcessFailed({
+    message: `Could not ${action}: ${error instanceof Error ? error.message : String(error)}`,
+  });
 
-const forgetBackend = (root: string) => rmSync(statePath(root), { force: true });
+const writeBackend = (root: string, backend: Backend) =>
+  Effect.try({
+    try: () => {
+      mkdirSync(dirname(statePath(root)), { recursive: true });
+      writeFileSync(statePath(root), `${JSON.stringify(backend, null, 2)}\n`);
+    },
+    catch: (error) => fileFailure(`write ${statePath(root)}`, error),
+  });
+
+const forgetBackend = (root: string) => Effect.sync(() => rmSync(statePath(root), { force: true }));
 
 /** The last lines of a log, without stack frames, to show why something failed. */
 export function logTail(path: string, lines = 20): string {
@@ -237,7 +272,9 @@ function recordRefusal(record: Backend, root: string): string | undefined {
   if (record.origin !== `http://127.0.0.1:${record.port}`) {
     return `Refusing origin ${record.origin}: the tool records only http://127.0.0.1:<port>.`;
   }
-  if (!Number.isInteger(record.pid) || record.pid <= 1) return `Refusing pid ${record.pid}.`;
+  if (record.pid !== undefined && (!Number.isInteger(record.pid) || record.pid <= 1)) {
+    return `Refusing pid ${record.pid}.`;
+  }
   return mongoPortRefusal(Number(record.mongoPort));
 }
 
@@ -252,27 +289,69 @@ const readRecord = (root: string) =>
       }),
   });
 
-/** Whether the process is this worktree's own backend: its start.mjs, by absolute path. */
-const isOwnBackend = (pid: number, root: string) =>
+const hasToken = (command: string, token: string) => ` ${command} `.includes(` ${token} `);
+
+/** Whether the process, or one of its ancestors in the group, runs from this worktree's apps. */
+function tracesToWorktree(member: GroupMember, members: readonly GroupMember[], root: string) {
+  const byPid = new Map(members.map((each) => [each.pid, each]));
+  const seen = new Set<number>();
+  for (let current: GroupMember | undefined = member; current; current = byPid.get(current.ppid)) {
+    // apps/ under the root, so a worktree nested inside this checkout doesn't count.
+    if (current.command.includes(`${root}/apps/`)) return true;
+    if (seen.has(current.pid)) return false;
+    seen.add(current.pid);
+  }
+  return false;
+}
+
+/**
+ * What is left of a recorded backend's process group:
+ * - `ours`: its leader is this worktree's start.mjs, started when the record says;
+ * - `orphaned`: the leader is gone (killed or out of memory), and every process left in
+ *   the group traces back to this worktree, such as next-server under `next dev`;
+ * - `foreign`: anything else, never signalled;
+ * - `none`: no process is left.
+ */
+const groupState = (root: string, pid: number | undefined, processStart: string | undefined) =>
   Effect.gen(function* () {
-    const line = yield* (yield* Processes).commandLine(pid);
-    return line !== undefined && ` ${line} `.includes(` ${backendScript(root, 'start.mjs')} `);
+    if (pid === undefined) return { kind: 'none' as const, members: [] };
+    const processes = yield* Processes;
+    const members = yield* processes.group(pid);
+    if (members.length === 0) return { kind: 'none' as const, members };
+    const leader = members.find((member) => member.pid === pid);
+    if (leader) {
+      const ours =
+        hasToken(leader.command, backendScript(root, 'start.mjs')) &&
+        processStart !== undefined &&
+        (yield* processes.startTime(pid)) === processStart;
+      return { kind: ours ? ('ours' as const) : ('foreign' as const), members };
+    }
+    const traced = members.every((member) => tracesToWorktree(member, members, root));
+    return { kind: traced ? ('orphaned' as const) : ('foreign' as const), members };
   });
 
-/** The recorded backend, when it is this worktree's own, still running, and answering. */
-const runningBackend = (root: string) =>
+/** Stops a recorded backend's process group when it is this worktree's; never otherwise. */
+const stopOwnGroup = (root: string, pid: number | undefined, processStart: string | undefined) =>
   Effect.gen(function* () {
-    const record = yield* readRecord(root);
-    if (!record || recordRefusal(record, root)) return undefined;
-    if (!(yield* isOwnBackend(record.pid, root))) return undefined;
-    const answers = yield* (yield* Network).answers(`${record.origin}${readinessPath}`);
-    return answers ? record : undefined;
+    const state = yield* groupState(root, pid, processStart);
+    if (pid !== undefined && (state.kind === 'ours' || state.kind === 'orphaned')) {
+      yield* (yield* Processes).stopGroup(pid);
+      return pid;
+    }
+    if (state.kind === 'foreign') {
+      yield* (yield* Output).line(
+        `Left process group ${pid} alone: its processes (${state.members
+          .map((member) => member.pid)
+          .join(', ')}) are not this worktree's backend.`,
+      );
+    }
+    return undefined;
   });
 
 const pickPort = (mongoPort: number) =>
   Effect.gen(function* () {
     const network = yield* Network;
-    for (let attempt = 0; attempt < 10; attempt += 1) {
+    for (let attempt = 0; attempt < 20; attempt += 1) {
       const port = yield* network.freePort;
       if (!portRefusal(port, mongoPort)) return port;
     }
@@ -281,66 +360,87 @@ const pickPort = (mongoPort: number) =>
 
 const seconds = (input: Duration.Input) => Math.round(Duration.toSeconds(input) * 10) / 10;
 
-const waitUntilReady = (backend: Backend, root: string, timeout: Duration.Input) =>
+/**
+ * Waits until the backend answers. Fails when its process group is no longer this
+ * worktree's backend; gives up after the timeout.
+ */
+const waitForAnswer = (backend: Backend, root: string, timeout: Duration.Input) =>
   Effect.gen(function* () {
     const network = yield* Network;
     for (;;) {
-      if (yield* network.answers(`${backend.origin}${readinessPath}`)) return;
-      if (!(yield* isOwnBackend(backend.pid, root))) {
-        return yield* Effect.fail(
-          new ProcessFailed({
-            message: withLog(
-              'The backend exited before it was ready, so its database was dropped.',
-              backend.log,
-            ),
-          }),
-        );
-      }
+      if (yield* network.answers(`${backend.origin}${readinessPath}`)) return 'answered' as const;
+      const state = yield* groupState(root, backend.pid, backend.processStart);
+      if (state.kind !== 'ours') return 'exited' as const;
       yield* Effect.sleep('250 millis');
     }
   }).pipe(
-    Effect.timeoutOrElse({
-      duration: timeout,
-      orElse: () =>
-        Effect.fail(
-          new ProcessFailed({
-            message: withLog(
-              `The backend at ${backend.origin} was not ready after ${seconds(timeout)} s, so it was stopped and its database dropped.`,
-              backend.log,
-            ),
-          }),
-        ),
-    }),
+    Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.succeed('timeout' as const) }),
   );
+
+interface Plan {
+  readonly mongoPort: number;
+  readonly database: string;
+  readonly port: number | undefined;
+}
+
+/** Checks the requested target before anything connects, starts or stops. */
+function plan(options: UpOptions): Plan | string {
+  const mongoPort = options.mongoPort ?? defaultMongoPort;
+  const mongoRefusal = mongoPortRefusal(mongoPort);
+  if (mongoRefusal) return mongoRefusal;
+  const database =
+    options.database ?? `${worktreePrefix(options.root)}${randomBytes(4).toString('hex')}`;
+  const nameRefusal = databaseRefusal(database, options.root);
+  if (nameRefusal) return nameRefusal;
+  if (options.origin === undefined) return { mongoPort, database, port: undefined };
+  const port = requestedPort(options.origin, mongoPort);
+  return typeof port === 'string' ? port : { mongoPort, database, port };
+}
+
+/**
+ * Drops a database `up` or the gate created and failed to finish starting. A failure is
+ * reported and the record kept, so `pnpm swarm down` can finish the job.
+ */
+const dropAfterFailure = (root: string, backend: Backend) =>
+  Effect.gen(function* () {
+    const output = yield* Output;
+    const outcome = yield* (yield* Databases)
+      .drop(backend.mongoPort, backend.database, worktreePrefix(root))
+      .pipe(Effect.result);
+    if (outcome._tag === 'Success') {
+      if (outcome.success === 'dropped') yield* output.line(`Dropped ${backend.database}.`);
+      return yield* forgetBackend(root);
+    }
+    if (outcome.failure._tag === 'Refused') {
+      yield* output.line(`Left ${backend.database} in place. ${outcome.failure.message}`);
+      return yield* forgetBackend(root);
+    }
+    yield* output.line(
+      `Could not drop ${backend.database}: ${outcome.failure.message} The record ${statePath(root)} is kept; run pnpm swarm down to finish.`,
+    );
+  });
 
 /**
  * Seeds a fresh database and starts a backend on it. Until the backend answers, a
- * failure, a timeout or an interruption stops the process group and drops the database.
+ * failure, a timeout or an interruption stops its process group and drops the database.
  */
-const launch = (options: UpOptions) =>
+const launch = (options: UpOptions, target: Plan) =>
   Effect.gen(function* () {
     const { root } = options;
     const processes = yield* Processes;
     const databases = yield* Databases;
     const network = yield* Network;
     const output = yield* Output;
+    const { mongoPort, database } = target;
 
-    const mongoPort = options.mongoPort ?? defaultMongoPort;
-    const mongoRefusal = mongoPortRefusal(mongoPort);
-    if (mongoRefusal) return yield* refuse(mongoRefusal);
-    const database = options.database ?? `${worktreePrefix(root)}${randomBytes(4).toString('hex')}`;
-    const nameRefusal = databaseRefusal(database, root);
-    if (nameRefusal) return yield* refuse(nameRefusal);
     let port: number;
-    if (options.origin === undefined) {
+    if (target.port === undefined) {
       port = yield* pickPort(mongoPort);
     } else {
-      const requested = requestedPort(options.origin, mongoPort);
-      if (typeof requested === 'string') return yield* refuse(requested);
-      if (!(yield* network.isPortFree(requested))) {
-        return yield* refuse(`Refusing port ${requested}: it is in use.`);
+      if (!(yield* network.isPortFree(target.port))) {
+        return yield* refuse(`Refusing port ${target.port}: it is in use.`);
       }
-      port = requested;
+      port = target.port;
     }
     const origin = `http://127.0.0.1:${port}`;
 
@@ -350,9 +450,14 @@ const launch = (options: UpOptions) =>
       );
     }
 
-    mkdirSync(outDirectory(root), { recursive: true });
     const log = join(outDirectory(root), 'backend.log');
-    writeFileSync(log, `# ${origin} on ${database}, Mongo port ${mongoPort}\n`);
+    yield* Effect.try({
+      try: () => {
+        mkdirSync(outDirectory(root), { recursive: true });
+        writeFileSync(log, `# ${origin} on ${database}, Mongo port ${mongoPort}\n`);
+      },
+      catch: (error) => fileFailure(`write ${log}`, error),
+    });
     const env = {
       PATH: process.env.PATH ?? '',
       SPLITBOOK_NATIVE_ORIGIN_PORT: String(port),
@@ -366,17 +471,27 @@ const launch = (options: UpOptions) =>
       env,
       log,
     });
+    const started = Date.now();
+    const seeding: Backend = {
+      origin,
+      port,
+      database,
+      mongoPort,
+      log,
+      startedAt: new Date(started).toISOString(),
+      pid: undefined,
+      processStart: undefined,
+      readySeconds: undefined,
+    };
+    // Recorded before anything is created, so `down` knows the database and its Mongo port
+    // even if this process dies.
+    yield* writeBackend(root, seeding);
 
     return yield* Effect.scoped(
       Effect.gen(function* () {
-        // From here on, anything but success drops the database and the record.
+        // Anything but success drops the database, after the backend is stopped.
         yield* Effect.acquireRelease(Effect.void, (_, exit) =>
-          Exit.isSuccess(exit)
-            ? Effect.void
-            : databases.drop(mongoPort, database).pipe(
-                Effect.catch(() => Effect.void),
-                Effect.andThen(Effect.sync(() => forgetBackend(root))),
-              ),
+          Exit.isSuccess(exit) ? Effect.void : dropAfterFailure(root, seeding),
         );
 
         yield* output.line(`Seeding ${database} on the Mongo server at 127.0.0.1:${mongoPort}`);
@@ -398,38 +513,55 @@ const launch = (options: UpOptions) =>
         if (seeded.exitCode !== 0) {
           return yield* Effect.fail(
             new ProcessFailed({
-              message: withLog(
-                `The seed failed (exit code ${seeded.exitCode}), so its database was dropped.`,
-                log,
-              ),
+              message: withLog(`The seed failed (exit code ${seeded.exitCode}).`, log),
             }),
           );
         }
 
         yield* output.line(`Starting the backend at ${origin}`);
-        const startedAt = Date.now();
-        const { pid } = yield* Effect.acquireRelease(
-          processes.start(script('start.mjs')),
-          (child, exit) => (Exit.isSuccess(exit) ? Effect.void : processes.stopGroup(child.pid)),
+        const startedBackend = Date.now();
+        const child = yield* Effect.acquireRelease(
+          processes
+            .start(script('start.mjs'))
+            .pipe(
+              Effect.flatMap(({ pid }) =>
+                Effect.map(processes.startTime(pid), (processStart) => ({ pid, processStart })),
+              ),
+            ),
+          ({ pid, processStart }, exit) =>
+            Exit.isSuccess(exit)
+              ? Effect.void
+              : Effect.gen(function* () {
+                  if ((yield* stopOwnGroup(root, pid, processStart)) !== undefined) {
+                    yield* output.line(`Stopped the backend at ${origin}.`);
+                  }
+                }),
         );
-        const starting: Backend = {
-          origin,
-          port,
-          database,
-          mongoPort,
-          pid,
-          log,
-          startedAt: new Date(startedAt).toISOString(),
-          readySeconds: undefined,
-        };
-        // Recorded at once, so `down` finds it even if this process dies.
-        writeBackend(root, starting);
-        yield* waitUntilReady(starting, root, options.readyTimeout ?? defaultReadyTimeout);
-        const ready = {
+        const starting: Backend = { ...seeding, pid: child.pid, processStart: child.processStart };
+        yield* writeBackend(root, starting);
+
+        const readyTimeout = options.readyTimeout ?? defaultReadyTimeout;
+        const outcome = yield* waitForAnswer(starting, root, readyTimeout);
+        if (outcome === 'exited') {
+          return yield* Effect.fail(
+            new ProcessFailed({ message: withLog('The backend exited before it was ready.', log) }),
+          );
+        }
+        if (outcome === 'timeout') {
+          return yield* Effect.fail(
+            new ProcessFailed({
+              message: withLog(
+                `The backend at ${origin} was not ready after ${seconds(readyTimeout)} s.`,
+                log,
+              ),
+            }),
+          );
+        }
+        const ready: Backend = {
           ...starting,
-          readySeconds: Math.round((Date.now() - startedAt) / 100) / 10,
+          readySeconds: Math.round((Date.now() - startedBackend) / 100) / 10,
         };
-        writeBackend(root, ready);
+        yield* writeBackend(root, ready);
         return ready;
       }),
     );
@@ -443,15 +575,55 @@ const announce = (backend: Backend, reused: boolean) =>
         ? `This worktree's backend is already up at ${backend.origin}.`
         : `The backend is ready at ${backend.origin} after ${backend.readySeconds} s.`,
     );
+    yield* output.line(`Log ${backend.log}`);
     yield* output.line(
-      `Database ${backend.database}, Mongo port ${backend.mongoPort}, log ${backend.log}`,
+      'Point the verifiers and the backend controls (control.mjs) at it with these variables:',
     );
-    yield* output.line(`MOBILE_VERIFY_URL=${backend.origin}`);
+    for (const [name, value] of Object.entries(backendVariables(backend))) {
+      yield* output.line(`${name}=${value}`);
+    }
+  });
+
+/**
+ * This worktree's recorded backend when it is up. A backend that is running but not
+ * answering (still compiling, or busy) is waited for, then refused, and never torn down.
+ * A record whose backend is gone is cleaned up, as `down` would.
+ */
+const reuseOrClean = (options: UpOptions) =>
+  Effect.gen(function* () {
+    const { root } = options;
+    const record = yield* readRecord(root);
+    if (!record) return undefined;
+    const refusal = recordRefusal(record, root);
+    if (refusal) {
+      return yield* refuse(
+        `${refusal} The record is ${statePath(root)}; nothing was stopped or dropped.`,
+      );
+    }
+    const state = yield* groupState(root, record.pid, record.processStart);
+    if (state.kind === 'ours') {
+      if (yield* (yield* Network).answers(`${record.origin}${readinessPath}`)) return record;
+      const timeout = options.readyTimeout ?? defaultReadyTimeout;
+      yield* (yield* Output).line(
+        `This worktree's backend at ${record.origin} is running but not answering yet; waiting up to ${seconds(timeout)} s.`,
+      );
+      const outcome = yield* waitForAnswer(record, root, timeout);
+      if (outcome === 'answered') return record;
+      if (outcome === 'timeout') {
+        return yield* refuse(
+          `This worktree's backend (pid ${record.pid}) is running but has not answered at ${record.origin}. It was left running. See ${record.log}; pnpm swarm down stops it.`,
+        );
+      }
+    }
+    // The leader is gone, or the pid is now another process: clean up after it first.
+    yield* downUnlocked({ root, mongoPort: options.mongoPort });
+    return undefined;
   });
 
 /**
  * Starts this worktree's backend, or reuses it when it is already up. Prints the
- * MOBILE_VERIFY_URL to use. The backend keeps running after `up` returns.
+ * MOBILE_VERIFY_URL and SPLITBOOK_NATIVE_* variables to use. The backend keeps running
+ * after `up` returns.
  */
 export const up = (
   options: UpOptions,
@@ -461,31 +633,36 @@ export const up = (
   Processes | Databases | Network | Output
 > =>
   Effect.gen(function* () {
-    const existing = yield* runningBackend(options.root);
-    if (existing) {
-      if (
-        (options.origin !== undefined && options.origin !== existing.origin) ||
-        (options.database !== undefined && options.database !== existing.database)
-      ) {
-        return yield* refuse(
-          `This worktree's backend is already up at ${existing.origin} on ${existing.database}. Run pnpm swarm down first.`,
-        );
-      }
-      yield* announce(existing, true);
-      return { backend: existing, reused: true };
-    }
-    // A record without a running backend: a crash or a reboot. Clean up after it first.
-    if (yield* readRecord(options.root)) {
-      yield* down({ root: options.root, mongoPort: options.mongoPort });
-    }
-    const backend = yield* launch(options);
-    yield* announce(backend, false);
-    return { backend, reused: false };
+    const target = plan(options);
+    if (typeof target === 'string') return yield* refuse(target);
+    return yield* withWorktreeLock(
+      options.root,
+      'up',
+      Effect.gen(function* () {
+        const existing = yield* reuseOrClean(options);
+        if (existing) {
+          if (
+            (options.origin !== undefined && options.origin !== existing.origin) ||
+            (options.database !== undefined && options.database !== existing.database)
+          ) {
+            return yield* refuse(
+              `This worktree's backend is already up at ${existing.origin} on ${existing.database}. Run pnpm swarm down first.`,
+            );
+          }
+          yield* announce(existing, true);
+          return { backend: existing, reused: true };
+        }
+        const backend = yield* launch(options, target);
+        yield* announce(backend, false);
+        return { backend, reused: false };
+      }),
+    );
   });
 
 /**
  * This worktree's backend for the length of a scope: the one `up` started, or a new one
- * that is stopped, with its database dropped, when the scope closes.
+ * that is stopped, with its database dropped, when the scope closes. The caller holds the
+ * worktree lock.
  */
 export const backendForScope = (
   options: UpOptions,
@@ -495,16 +672,15 @@ export const backendForScope = (
   Processes | Databases | Network | Output | Scope.Scope
 > =>
   Effect.gen(function* () {
-    const existing = yield* runningBackend(options.root);
+    const target = plan(options);
+    if (typeof target === 'string') return yield* refuse(target);
+    const existing = yield* reuseOrClean(options);
     if (existing) return { backend: existing, startedHere: false };
-    if (yield* readRecord(options.root)) {
-      yield* down({ root: options.root, mongoPort: options.mongoPort });
-    }
     const output = yield* Output;
     const backend = yield* Effect.acquireRelease(
-      launch(options),
+      launch(options, target),
       (started) =>
-        down({ root: options.root, mongoPort: started.mongoPort }).pipe(
+        downUnlocked({ root: options.root, mongoPort: started.mongoPort }).pipe(
           Effect.catch((error) => output.line(`Could not take the backend down: ${error.message}`)),
         ),
       // Starting can take minutes; an interruption must reach it. launch cleans up after itself.
@@ -513,21 +689,11 @@ export const backendForScope = (
     return { backend, startedHere: true };
   });
 
-/**
- * Stops this worktree's backend and drops this worktree's databases, and nothing else.
- * The record is checked before anything is stopped, and every database before any is
- * dropped. The record is kept until the databases are gone, so `down` can run again.
- */
-export const down = (
+const downUnlocked = (
   options: DownOptions,
-): Effect.Effect<
-  { readonly stopped: number | undefined; readonly dropped: readonly string[] },
-  SwarmError,
-  Processes | Databases | Output
-> =>
+): Effect.Effect<DownResult, SwarmError, Processes | Databases | Output> =>
   Effect.gen(function* () {
     const { root } = options;
-    const processes = yield* Processes;
     const databases = yield* Databases;
     const output = yield* Output;
 
@@ -544,34 +710,48 @@ export const down = (
     const mongoRefusal = mongoPortRefusal(mongoPort);
     if (mongoRefusal) return yield* refuse(mongoRefusal);
 
-    // Stopping comes first: the process is this worktree's own start.mjs, so stopping it
-    // is always safe, even when Mongo is down and nothing can be dropped yet.
-    let stopped: number | undefined;
-    if (record && (yield* isOwnBackend(record.pid, root))) {
-      yield* processes.stopGroup(record.pid);
-      stopped = record.pid;
+    // Stopping comes first, so a live backend can't write to a database being dropped.
+    const stopped = record ? yield* stopOwnGroup(root, record.pid, record.processStart) : undefined;
+    if (record && stopped !== undefined)
       yield* output.line(`Stopped the backend at ${record.origin}.`);
-    }
 
-    const own = (yield* databases.list(mongoPort)).filter((name) =>
-      name.startsWith(worktreePrefix(root)),
-    );
+    const prefix = worktreePrefix(root);
+    const own = (yield* databases.list(mongoPort)).filter((name) => name.startsWith(prefix));
+    const dropped: string[] = [];
+    const skipped: string[] = [];
+    const failed: string[] = [];
     for (const name of own) {
-      const refusal = databaseRefusal(name, root);
-      if (refusal) return yield* refuse(`${refusal} Nothing was dropped.`);
-      if (!(yield* databases.isFictional(mongoPort, name))) {
-        return yield* refuse(
-          `Refusing to drop ${name}: it has no fictional ownership marker, so the tool did not create it. Nothing was dropped.`,
-        );
+      const outcome = yield* databases.drop(mongoPort, name, prefix).pipe(Effect.result);
+      if (outcome._tag === 'Success') {
+        dropped.push(name);
+        yield* output.line(`Dropped ${name}.`);
+      } else if (outcome.failure._tag === 'Refused') {
+        skipped.push(name);
+        yield* output.line(`Warning: left ${name} in place. ${outcome.failure.message}`);
+      } else {
+        failed.push(`${name}: ${outcome.failure.message}`);
       }
     }
-    for (const name of own) {
-      yield* databases.drop(mongoPort, name);
-      yield* output.line(`Dropped ${name}.`);
+    if (failed.length) {
+      return yield* Effect.fail(
+        new MongoFailed({
+          message: `Could not drop ${failed.join('; ')}. The record ${statePath(root)} is kept, so pnpm swarm down can run again.`,
+        }),
+      );
     }
-    forgetBackend(root);
+    yield* forgetBackend(root);
     if (stopped === undefined && own.length === 0) {
       yield* output.line('This worktree has no backend and no databases.');
     }
-    return { stopped, dropped: own };
+    return { stopped, dropped, skipped };
   });
+
+/**
+ * Stops this worktree's backend and drops this worktree's databases, and nothing else.
+ * A database without the ownership marker is left in place with a warning. The record is
+ * kept when a drop fails, so `down` can run again.
+ */
+export const down = (
+  options: DownOptions,
+): Effect.Effect<DownResult, SwarmError, Processes | Databases | Output> =>
+  withWorktreeLock(options.root, 'down', downUnlocked(options));

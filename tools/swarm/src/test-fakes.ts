@@ -7,6 +7,7 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Effect, Layer } from 'effect';
+import { guardedDrop } from './names.ts';
 import {
   Databases,
   MongoFailed,
@@ -15,6 +16,7 @@ import {
   Processes,
   ProcessFailed,
   type Finished,
+  type GroupMember,
   type Launch,
 } from './platform.ts';
 
@@ -22,11 +24,20 @@ export interface FakeWorld {
   /** Database name -> whether it holds the fictional ownership marker. */
   readonly databases: Map<string, boolean>;
   readonly dropped: string[];
+  /** Databases whose drop fails as if Mongo went away mid-way. */
+  readonly failingDrops: Set<string>;
   mongoDown: boolean;
   /** Every process started (detached) or run to completion, in order. */
   readonly launches: Launch[];
-  /** pid -> command line, for processes still running. */
+  /** pid -> command line, for processes still running. Each leads its own group. */
   readonly running: Map<number, string>;
+  /**
+   * pid -> start time, where it differs from the default (`started <pid>` for a running
+   * process): a reused pid, or a lock holder that isn't one of the fake's processes.
+   */
+  readonly startTimes: Map<number, string>;
+  /** pgid -> processes left in a group besides its leader, such as next-server. */
+  readonly members: Map<number, GroupMember[]>;
   readonly stopped: number[];
   nextPid: number;
   /** Exit code of a run process, by the script or command it runs. Default 0. */
@@ -49,9 +60,12 @@ export function fakeWorld(): FakeWorld {
   const world: FakeWorld = {
     databases: new Map(),
     dropped: [],
+    failingDrops: new Set(),
     mongoDown: false,
     launches: [],
     running: new Map(),
+    startTimes: new Map(),
+    members: new Map(),
     stopped: [],
     nextPid: 4100,
     exitCodes: () => 0,
@@ -80,12 +94,28 @@ export function fakeLayer(world: FakeWorld) {
   return Layer.mergeAll(
     Layer.succeed(Databases, {
       list: () => mongo(() => [...world.databases.keys()]),
-      isFictional: (_port, name) => mongo(() => world.databases.get(name) === true),
-      drop: (_port, name) =>
-        mongo(() => {
-          world.databases.delete(name);
-          world.dropped.push(name);
-        }),
+      // The same guard as the live service, over the in-memory server.
+      drop: (_port, name, prefix) =>
+        guardedDrop(name, prefix, (use) =>
+          world.failingDrops.has(name)
+            ? Effect.fail(
+                new MongoFailed({ message: `The connection closed while dropping ${name}.` }),
+              )
+            : mongo(() => undefined).pipe(
+                Effect.andThen(
+                  Effect.promise(() =>
+                    use({
+                      exists: async () => world.databases.has(name),
+                      isFictional: async () => world.databases.get(name) === true,
+                      drop: async () => {
+                        world.databases.delete(name);
+                        world.dropped.push(name);
+                      },
+                    }),
+                  ),
+                ),
+              ),
+        ),
     }),
     Layer.succeed(Processes, {
       start: (launch) =>
@@ -117,11 +147,26 @@ export function fakeLayer(world: FakeWorld) {
           return Effect.succeed({ exitCode: code });
         }),
       output: (command, args) => Effect.sync(() => world.outputs.get([command, ...args].join(' '))),
-      commandLine: (pid) => Effect.sync(() => world.running.get(pid)),
+      startTime: (pid) =>
+        Effect.sync(() =>
+          world.running.has(pid)
+            ? (world.startTimes.get(pid) ?? `started ${pid}`)
+            : pid === process.pid
+              ? 'this process'
+              : world.startTimes.get(pid),
+        ),
+      group: (pgid) =>
+        Effect.sync(() => [
+          ...(world.running.has(pgid)
+            ? [{ pid: pgid, ppid: 1, command: world.running.get(pgid) ?? '' }]
+            : []),
+          ...(world.members.get(pgid) ?? []),
+        ]),
       stopGroup: (pid) =>
         Effect.sync(() => {
           world.running.delete(pid);
           world.listening.delete(pid);
+          world.members.delete(pid);
           world.stopped.push(pid);
         }),
     }),

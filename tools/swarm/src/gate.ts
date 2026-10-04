@@ -9,14 +9,23 @@
  *
  * A failing step does not stop the others, except the install check. Each step has a
  * timeout. A timeout, Ctrl-C or a signal stops the step's whole process group and the
- * backend the gate started.
+ * backend the gate started. The gate holds the worktree lock while it runs, and no step
+ * inherits credentials or another backend's variables.
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Duration, Effect } from 'effect';
-import { backendForScope, logTail, outDirectory } from './backend.ts';
+import { backendForScope, backendVariables, logTail, outDirectory } from './backend.ts';
 import { checkInstall } from './install.ts';
-import { Output, Processes, type Databases, type Network } from './platform.ts';
+import { withWorktreeLock } from './lock.ts';
+import {
+  Output,
+  Processes,
+  type Databases,
+  type Network,
+  type ProcessFailed,
+  type Refused,
+} from './platform.ts';
 import {
   defaultVitestWorkers,
   renderVerdict,
@@ -63,28 +72,60 @@ interface Command {
   readonly explain?: (detail: string) => string;
 }
 
-const mobileScripts = (root: string): Record<string, string> => {
-  const manifest = JSON.parse(readFileSync(join(root, 'apps/mobile/package.json'), 'utf8')) as {
-    scripts?: Record<string, string>;
-  };
-  return manifest.scripts ?? {};
-};
+/** apps/mobile's scripts, or why they could not be read. */
+function mobileScripts(root: string): Record<string, string> | string {
+  try {
+    const manifest = JSON.parse(readFileSync(join(root, 'apps/mobile/package.json'), 'utf8')) as {
+      scripts?: Record<string, string>;
+    };
+    return manifest.scripts ?? {};
+  } catch (error) {
+    return `Could not read apps/mobile/package.json: ${(error as Error).message}`;
+  }
+}
 
 /** Every verify:* script, in package order. verify:all would only run them again. */
-const verifierNames = (root: string) =>
-  Object.keys(mobileScripts(root)).filter(
-    (name) => name.startsWith('verify:') && name !== 'verify:all',
-  );
+const verifierNames = (scripts: Record<string, string>) =>
+  Object.keys(scripts).filter((name) => name.startsWith('verify:') && name !== 'verify:all');
 
 const seconds = (since: number) => Math.round((Date.now() - since) / 100) / 10;
 const timeoutSeconds = (input: Duration.Input) => Math.round(Duration.toSeconds(input) * 10) / 10;
 
-const inheritedEnv = () =>
-  Object.fromEntries(
+/**
+ * Variables no step inherits: database and auth settings, credentials of any kind, and
+ * another backend's variables. The verifiers get this backend's own instead.
+ */
+const scrubbed = [
+  /^MONGO/i,
+  /^TEST_MONGO/i,
+  /^DATABASE_URL$/i,
+  /^AUTH_/i,
+  /^BETTER_AUTH/i,
+  /^NEXTAUTH/i,
+  /^GOOGLE_/i,
+  /^ALLOW_/i,
+  /^NEXT_PUBLIC_/i,
+  /^SPLITBOOK_/i,
+  /^MOBILE_VERIFY_URL$/i,
+  /SECRET/i,
+  /TOKEN/i,
+  /PASSWORD/i,
+  /PASSWD/i,
+  /CREDENTIAL/i,
+  /API_?KEY/i,
+  /PRIVATE_?KEY/i,
+  /ACCESS_?KEY/i,
+];
+
+const stepEnvironment = (extra: Readonly<Record<string, string>> = {}) => ({
+  ...Object.fromEntries(
     Object.entries(process.env).filter(
-      (entry): entry is [string, string] => entry[1] !== undefined,
+      (entry): entry is [string, string] =>
+        entry[1] !== undefined && !scrubbed.some((pattern) => pattern.test(entry[0])),
     ),
-  );
+  ),
+  ...extra,
+});
 
 const resolveBase = (root: string, ref: string | undefined) =>
   Effect.gen(function* () {
@@ -98,10 +139,16 @@ const resolveBase = (root: string, ref: string | undefined) =>
   });
 
 /**
- * Runs the gate in a worktree. It never fails: every outcome is in the verdict, which is
- * printed and written to tools/swarm/out/verdict.json.
+ * Runs the gate in a worktree. Every outcome is in the verdict, which is printed and
+ * written to tools/swarm/out/verdict.json. It fails only when it can't take the worktree
+ * lock, because another swarm command is running there; then it writes no verdict.
  */
 export const gate = (
+  options: GateOptions,
+): Effect.Effect<Verdict, Refused | ProcessFailed, Processes | Databases | Network | Output> =>
+  withWorktreeLock(options.root, 'gate', gateUnlocked(options));
+
+const gateUnlocked = (
   options: GateOptions,
 ): Effect.Effect<Verdict, never, Processes | Databases | Network | Output> =>
   Effect.gen(function* () {
@@ -163,10 +210,26 @@ export const gate = (
     const logDirectory = join(outDirectory(root), 'gate');
     const runCommand = (command: Command) =>
       Effect.gen(function* () {
-        mkdirSync(logDirectory, { recursive: true });
-        const log = join(logDirectory, `${command.name.replace(/[^a-z0-9]+/gi, '-')}.log`);
-        writeFileSync(log, '');
         const since = Date.now();
+        const log = join(logDirectory, `${command.name.replace(/[^a-z0-9]+/gi, '-')}.log`);
+        const unwritable = yield* Effect.try({
+          try: () => {
+            mkdirSync(logDirectory, { recursive: true });
+            writeFileSync(log, '');
+          },
+          catch: (error) => `Could not write ${log}: ${(error as Error).message}`,
+        }).pipe(
+          Effect.as(undefined),
+          Effect.catch((message) => Effect.succeed(message)),
+        );
+        if (unwritable) {
+          return yield* record({
+            name: command.name,
+            status: 'fail',
+            seconds: 0,
+            detail: unwritable,
+          });
+        }
         current = { name: command.name, since, log };
         const timeout = options.stepTimeout ?? command.timeout;
         const detail = yield* processes
@@ -174,7 +237,7 @@ export const gate = (
             command: 'pnpm',
             args: command.args,
             cwd: root,
-            env: { ...inheritedEnv(), ...command.env },
+            env: stepEnvironment(command.env),
             log,
           })
           .pipe(
@@ -200,7 +263,8 @@ export const gate = (
       });
 
     yield* output.line(`Gate in ${root}`);
-    const verifiers = verifierNames(root);
+    const scripts = mobileScripts(root);
+    const verifiers = typeof scripts === 'string' ? [] : verifierNames(scripts);
 
     const run = Effect.gen(function* () {
       const install = checkInstall(root);
@@ -228,7 +292,11 @@ export const gate = (
         env: { VITEST_MAX_WORKERS: String(vitestWorkers) },
       });
 
-      if (!(ceilingScript in mobileScripts(root))) {
+      if (typeof scripts === 'string') {
+        yield* record({ name: 'verifiers', status: 'fail', seconds: 0, detail: scripts });
+        return yield* skip(['ceilings', 'backend'], 'skipped: no list of verifiers');
+      }
+      if (!(ceilingScript in scripts)) {
         yield* record({
           name: 'ceilings',
           status: 'skip',
@@ -290,26 +358,27 @@ export const gate = (
               name,
               args: ['--dir', 'apps/mobile', 'run', name],
               timeout: timeouts.verifier,
-              env: { MOBILE_VERIFY_URL: outcome.backend.origin, TZ: verifierTimeZone },
+              // This backend's variables, so a control.mjs run hits this worktree's database.
+              env: { ...backendVariables(outcome.backend), TZ: verifierTimeZone },
             });
           }
         }),
       );
     });
 
-    yield* run.pipe(
-      Effect.onInterrupt(() =>
-        Effect.gen(function* () {
-          const verdict = verdictOf(true);
-          writeVerdict(verdict);
-          yield* output.line(renderVerdict(verdict));
-        }),
-      ),
-    );
+    const save = (verdict: Verdict) =>
+      Effect.try({
+        try: () => writeVerdict(verdict),
+        catch: (error) => (error as Error).message,
+      }).pipe(
+        Effect.catch((message) => output.line(`Could not write the verdict: ${message}`)),
+        Effect.andThen(output.line(renderVerdict(verdict))),
+      );
+
+    yield* run.pipe(Effect.onInterrupt(() => save(verdictOf(true))));
 
     const verdict = verdictOf(false);
-    writeVerdict(verdict);
     yield* output.line('');
-    yield* output.line(renderVerdict(verdict));
+    yield* save(verdict);
     return verdict;
   });

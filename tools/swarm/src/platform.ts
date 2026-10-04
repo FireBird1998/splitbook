@@ -33,6 +33,12 @@ export interface Finished {
   readonly exitCode: number | null;
 }
 
+export interface GroupMember {
+  readonly pid: number;
+  readonly ppid: number;
+  readonly command: string;
+}
+
 export class Processes extends Context.Service<
   Processes,
   {
@@ -52,8 +58,14 @@ export class Processes extends Context.Service<
       args: readonly string[],
       cwd: string,
     ) => Effect.Effect<string | undefined>;
-    /** The command line of a running process, or undefined when there is none. */
-    readonly commandLine: (pid: number) => Effect.Effect<string | undefined>;
+    /**
+     * When a running process started, as `ps -o lstart` prints it, or undefined when there
+     * is no such process. With the pid, it tells one process from a later one that reuses
+     * the pid.
+     */
+    readonly startTime: (pid: number) => Effect.Effect<string | undefined>;
+    /** Every process in a process group, whether or not its leader is still running. */
+    readonly group: (pgid: number) => Effect.Effect<readonly GroupMember[]>;
     /** Stops a process group: SIGTERM, then SIGKILL if it is still there after a grace period. */
     readonly stopGroup: (pid: number) => Effect.Effect<void>;
   }
@@ -64,9 +76,17 @@ export class Databases extends Context.Service<
   {
     /** The names of every database on the loopback Mongo server at this port. */
     readonly list: (mongoPort: number) => Effect.Effect<readonly string[], MongoFailed>;
-    /** Whether the database holds the fictional backend's ownership marker. */
-    readonly isFictional: (mongoPort: number, name: string) => Effect.Effect<boolean, MongoFailed>;
-    readonly drop: (mongoPort: number, name: string) => Effect.Effect<void, MongoFailed | Refused>;
+    /**
+     * Drops a database only when its name starts with the given worktree prefix (the
+     * tool's prefix and a worktree hash) and it holds the fictional ownership marker.
+     * Every drop the tool makes goes through this one check. A database that doesn't
+     * exist is `absent`.
+     */
+    readonly drop: (
+      mongoPort: number,
+      name: string,
+      worktreePrefix: string,
+    ) => Effect.Effect<'dropped' | 'absent', MongoFailed | Refused>;
   }
 >()('swarm/Databases') {}
 
