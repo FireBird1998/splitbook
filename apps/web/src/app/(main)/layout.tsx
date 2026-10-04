@@ -5,6 +5,7 @@ import Sidebar from '@/components/layout/Sidebar';
 import Navbar from '@/components/layout/Navbar';
 import ExpectedAccountProvider from '@/components/layout/ExpectedAccountProvider';
 import SessionGuard from '@/components/layout/SessionGuard';
+import SettlementAttemptsOwner from '@/components/settlements/SettlementAttemptsOwner';
 import { isDemoMode } from '@/lib/auth-mode';
 import { NAV_HEIGHT, SIDEBAR_WIDTH } from '@/lib/theme/tokens';
 
@@ -18,6 +19,7 @@ export default async function MainLayout({ children }: { children: React.ReactNo
   return (
     <ExpectedAccountProvider accountId={user.id}>
       <SessionGuard accountId={user.id} />
+      <SettlementAttemptsOwner accountId={user.id} />
       <Box
         sx={{
           minHeight: '100vh',
