@@ -966,4 +966,16 @@ describe('App Home', () => {
     expect(app.text()).toContain('September groceries');
     expect(app.pressable('Back to Home')).toBeTruthy();
   });
+
+  it('leaves Back on Home to Android, so the app closes', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    expect(await app.androidBack()).toBe(true);
+    expect(app.pressable('Open Maple House')).toBeTruthy();
+
+    // Not handled: Android's own Back runs and leaves the app.
+    expect(native.back).not.toHaveLength(0);
+    expect(await app.androidBack()).toBe(false);
+    expect(app.pressable('Open Maple House')).toBeTruthy();
+  });
 });
