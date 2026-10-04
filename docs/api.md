@@ -235,7 +235,8 @@ Any member may leave, with no body. The rules:
   the settle-up. If adding them doesn't finish, the leave is refused with **409**
   `code: "LEAVE_CONFLICT"`; trying again adds what is still missing. A template in
   its problem state (for example, its Tag archived) doesn't hold up the leave: its
-  missed periods are not generated for the departing member.
+  missed periods are not generated for the departing member. An archived Group
+  adds none.
 - **The last admin hands over first.** While other members remain, the only admin
   gets **409** `code: "LAST_ADMIN"`, `Make someone else an admin before you leave.`
 - **The last member archives the Group.** Nobody would be left to reach it, so the
@@ -516,7 +517,7 @@ soft-deleted expense. Each edit appends a diff to the expense's `editHistory`.
 
 Household-themed groups only (`category: "home"`). Templates materialize
 expenses lazily when the group, its expense list or its balances are read, and
-before a member's leave is checked.
+before a member's leave is checked. An archived Group materializes nothing.
 
 | Method | Path                                       | Description     |
 | ------ | ------------------------------------------ | --------------- |

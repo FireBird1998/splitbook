@@ -241,6 +241,7 @@ export class RecurringExpenseService {
    * A template whose configuration no longer validates against group state
    * (tag archived, member removed, currency drift) is skipped without
    * advancing its marker — the settings list surfaces that problem state.
+   * An archived Group generates nothing, and generation moves none of its markers.
    * This method never throws into the read path, and reads ignore whether the
    * run finished: a period that failed is retried on the next read.
    */
@@ -276,6 +277,9 @@ export class RecurringExpenseService {
       if (!group || !getGroupTheme(group.category).recurringExpenses) {
         return { generated: 0, complete };
       }
+      // An archived Group creates no recurring Expenses. Markers stay where they
+      // are, so nothing is lost: were it un-archived, the next read catches up.
+      if (group.isArchived) return { generated: 0, complete };
 
       const currentPeriod = toPeriod(now);
 

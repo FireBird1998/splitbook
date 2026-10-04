@@ -6,6 +6,9 @@
  * The Group page starts the Group read, the Expense count read and the Balances read in the
  * same render. The first two materialize due recurring Expenses, so Balances must as well, or
  * the page shows last month's figures beside this month's Expense (#240).
+ *
+ * An archived Group creates no recurring Expenses, so none of the three reads adds one to an
+ * archived Household, and each still answers as before (#254).
  */
 
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -193,6 +196,49 @@ describe('GET /api/groups/[id]/balances with a recurring Expense due', () => {
       body: { error: 'Unauthorized', status: 401 },
     });
 
+    expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);
+  });
+});
+
+describe('Group page reads of an archived Household with a recurring Expense due', () => {
+  /** The same Household, archived by Alice before anyone read this month's Rent. */
+  async function archivedHouseholdWithRentDue() {
+    const household = await householdWithRentDue();
+    await groupService.archive(household.groupId, alice);
+    session.userId = bob;
+    return household;
+  }
+
+  it('reads the Group as before without adding this month’s Rent', async () => {
+    const { groupId, templateId } = await archivedHouseholdWithRentDue();
+
+    const { status, body } = await read(readGroup, groupId, '');
+
+    expect(status).toBe(200);
+    expect(body.data).toMatchObject({ _id: groupId, name: 'Lakeview Flat', isArchived: true });
+    expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);
+  });
+
+  it('lists the Expenses as before without adding this month’s Rent', async () => {
+    const { groupId, templateId } = await archivedHouseholdWithRentDue();
+
+    const { status, body } = await read(readExpenses, groupId, '/expenses');
+
+    expect(status).toBe(200);
+    expect(body.data.expenses.map((expense: { period: string }) => expense.period)).toEqual([
+      PREVIOUS_PERIOD,
+    ]);
+    expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);
+  });
+
+  it('computes Balances from the stored Expenses without adding this month’s Rent', async () => {
+    const { groupId, templateId } = await archivedHouseholdWithRentDue();
+
+    const { status, body } = await read(readBalances, groupId, '/balances');
+
+    expect(status).toBe(200);
+    expect(balanceOf(body.data, bob)).toBe(-10000);
+    expect(debtOf(body.data, bob, alice)).toBe(10000);
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);
   });
 });
