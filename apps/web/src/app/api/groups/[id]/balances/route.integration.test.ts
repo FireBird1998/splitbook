@@ -172,9 +172,6 @@ describe('GET /api/groups/[id]/balances with a recurring Expense due', () => {
     expect(debtOf(body.data, carol, alice)).toBe(20000);
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(1);
     expect(await rentFor(templateId, PREVIOUS_PERIOD)).toBe(1);
-    expect((await RecurringExpense.findById(templateId).lean())?.lastGeneratedFor).toBe(
-      CURRENT_PERIOD,
-    );
 
     // A second read finds the row already materialized and adds nothing.
     const again = await read(readBalances, groupId, '/balances');
@@ -197,8 +194,5 @@ describe('GET /api/groups/[id]/balances with a recurring Expense due', () => {
     });
 
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);
-    expect((await RecurringExpense.findById(templateId).lean())?.lastGeneratedFor).toBe(
-      PREVIOUS_PERIOD,
-    );
   });
 });

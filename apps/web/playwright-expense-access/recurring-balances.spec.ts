@@ -2,13 +2,11 @@ import { MongoClient, ObjectId } from 'mongodb';
 import type { Page, Response } from '@playwright/test';
 import { test, expect, dataOf, type Ledger } from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
+import { toPeriod } from '@splitbook/shared/recurring-due-periods';
 
 // #240: the Group page starts its Group, Expense count and Balances reads together. The first
 // two materialize due recurring Expenses; Balances must too, or the page shows last month's
 // figures beside this month's Rent until a poll.
-
-const utcPeriod = (date: Date) =>
-  `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}`;
 
 /**
  * Priya's ₹30,000 Rent, split equally with Sam, created through the API and then rewound one
@@ -47,15 +45,15 @@ async function rentDueThisMonth(ledger: Ledger) {
     const rewound = await db
       .collection('expenses')
       .updateOne(
-        { recurringExpense: new ObjectId(template._id), period: utcPeriod(thisMonth) },
-        { $set: { period: utcPeriod(lastMonth), date: lastMonth } },
+        { recurringExpense: new ObjectId(template._id), period: toPeriod(thisMonth) },
+        { $set: { period: toPeriod(lastMonth), date: lastMonth } },
       );
     expect(rewound.modifiedCount).toBe(1);
     await db
       .collection('recurringexpenses')
       .updateOne(
         { _id: new ObjectId(template._id) },
-        { $set: { startsOn: lastMonth, lastGeneratedFor: utcPeriod(lastMonth) } },
+        { $set: { startsOn: lastMonth, lastGeneratedFor: toPeriod(lastMonth) } },
       );
   } finally {
     await client.close();
@@ -70,8 +68,17 @@ async function rentRows(ledger: Ledger, templateId: string) {
   );
 }
 
-/** Enter as Sam once the Group page's own reads have answered, counting its Balances reads. */
-async function openAsSam(page: Page, ledger: Ledger, query = '') {
+/**
+ * Enter as Sam once the Group page's own reads have answered, counting its Balances reads.
+ * `balancesFirst` holds the reads that materialize (Group and Expenses) until the Balances read
+ * has answered, so Balances is computed before anything else can materialize the Rent. Without
+ * the hold, a slow first route compile can let the Group read win and hide a stale Balances read.
+ */
+async function openAsSam(
+  page: Page,
+  ledger: Ledger,
+  { query = '', balancesFirst = false }: { query?: string; balancesFirst?: boolean } = {},
+) {
   const baseURL = process.env.EXPENSE_ACCESS_BASE_URL;
   if (!baseURL || !/^http:\/\/127\.0\.0\.1:\d+$/.test(baseURL))
     throw new Error('Isolated app required');
@@ -81,6 +88,24 @@ async function openAsSam(page: Page, ledger: Ledger, query = '') {
     if (request.method() === 'GET' && new URL(request.url()).pathname === `${groupPath}/balances`)
       balanceReads.push(request.url());
   });
+  if (balancesFirst) {
+    let releaseReads!: () => void;
+    const balancesAnswered = new Promise<void>((resolve) => (releaseReads = resolve));
+    page.on('response', (response) => {
+      if (
+        response.request().method() === 'GET' &&
+        new URL(response.url()).pathname === `${groupPath}/balances`
+      )
+        releaseReads();
+    });
+    await page.route(
+      (url) => url.pathname === groupPath || url.pathname === `${groupPath}/expenses`,
+      async (route) => {
+        if (route.request().method() === 'GET') await balancesAnswered;
+        await route.fallback();
+      },
+    );
+  }
   const answered = (matches: (url: URL) => boolean) =>
     page.waitForResponse(
       (response: Response) =>
@@ -109,7 +134,7 @@ test('opening a Household shows Balances with the recurring Rent the same visit 
 }) => {
   const templateId = await rentDueThisMonth(ledger);
 
-  const balanceReads = await openAsSam(page, ledger);
+  const balanceReads = await openAsSam(page, ledger, { balancesFirst: true });
 
   const header = page.getByRole('region', { name: /^Synthetic access household, Household/ });
   await expect(header).toHaveAccessibleName(/You owe ₹30,000\.00\.$/);
@@ -123,7 +148,7 @@ test('the Balances tab debt and Record settlement prefill include this month’s
 }) => {
   const templateId = await rentDueThisMonth(ledger);
 
-  await openAsSam(page, ledger, '?tab=balances');
+  await openAsSam(page, ledger, { query: '?tab=balances' });
 
   const debts = page.getByText('Who pays whom', { exact: true }).locator('..').locator('..');
   await expect(debts.getByText('₹30,000.00', { exact: true })).toBeVisible();
