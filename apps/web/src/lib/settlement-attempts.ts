@@ -16,7 +16,8 @@ import { z } from 'zod/v4';
  *
  * A successful sign-out forgets every stored attempt; an account change
  * forgets the other accounts' attempts on its first page load (see
- * `forgetSettlementAttempts`).
+ * `forgetSettlementAttempts`); a refused read of a Group forgets this
+ * account's attempts there (see `forgetGroupSettlementAttempts`, #201).
  *
  * Pure over an injected `Storage` and lock, so it runs in node tests; the
  * browser helpers at the end wire it to `window.localStorage` and Web Locks.
@@ -195,6 +196,31 @@ export const runUnlocked: PairLock = async (_name, task) => task();
 /** The lock name for a pair is its storage entry, so either direction takes the same lock. */
 const pairLockName = (accountId: string, groupId: string, a: string, b: string) =>
   storageKey(accountId, groupId, a, b);
+
+/**
+ * Forget this account's stored attempts for one Group, once a refused read
+ * shows it can no longer read the Group (#201). Each pair's entry is removed
+ * under that pair's lock, whatever payment it holds.
+ */
+export async function forgetGroupSettlementAttempts(
+  storage: AttemptStorage,
+  accountId: string,
+  groupId: string,
+  lock: PairLock = runUnlocked,
+) {
+  let forgotten = false;
+  await Promise.all(
+    // Each entry's key is its pair's lock name (see `pairLockName`).
+    storageKeys(storage, groupPrefix(accountId, groupId)).map((entryKey) =>
+      lock(entryKey, () => {
+        if (storage.getItem(entryKey) === null) return;
+        storage.removeItem(entryKey);
+        forgotten = true;
+      }),
+    ),
+  );
+  if (forgotten) notify();
+}
 
 /** `removeSettlementAttempt` under the pair's lock. */
 export function discardSettlementAttempt(
@@ -391,6 +417,17 @@ export function browserPairLock(): PairLock {
   const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
   if (!locks?.request) return runUnlocked;
   return (name, task) => locks.request(name, () => task());
+}
+
+/** A Group this account lost (#201): its stored attempts there go, under each pair's lock. */
+export async function forgetBrowserGroupSettlementAttempts(accountId: string, groupId: string) {
+  const storage = browserAttemptStorage();
+  if (!storage) return;
+  try {
+    await forgetGroupSettlementAttempts(storage, accountId, groupId, browserPairLock());
+  } catch {
+    // Storage that cannot be read holds nothing this page stored.
+  }
 }
 
 /** Sign-out, or an account change when `except` is the account signed in now. */

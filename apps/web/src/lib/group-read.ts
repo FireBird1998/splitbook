@@ -5,21 +5,7 @@ import {
   type GroupRead,
 } from '@splitbook/shared/group-read';
 
-export const groupReadKey = (actorId: string, path: string) =>
-  ['group-read', actorId, path] as const;
-export type GroupReadKey = ReturnType<typeof groupReadKey>;
-
-/** Also used by mutation callers when invalidating account-scoped reads. */
-export function isGroupReadKey(key: unknown, pathPrefix = '/api/groups'): key is GroupReadKey {
-  return (
-    Array.isArray(key) &&
-    key.length === 3 &&
-    key[0] === 'group-read' &&
-    typeof key[1] === 'string' &&
-    typeof key[2] === 'string' &&
-    key[2].startsWith(pathPrefix)
-  );
-}
+export { groupReadKey, isGroupReadKey, type GroupReadKey } from '@/lib/group-read-key';
 
 function belongsToActor(group: GroupRead, actorId: string) {
   return Boolean(actorId) && group.members.some((member) => member.user._id === actorId);
@@ -51,7 +37,11 @@ export function readWebGroupResponse(
 
 export type GroupReadResult<T> = { data: T; denied?: never } | { denied: true; data?: never };
 
-/** Denials replace cached success; later transient failures cannot revive revoked data. */
+/**
+ * Denials replace cached success; later transient failures cannot revive
+ * revoked data. A 403 or 404 also deletes the Group's other cached entries
+ * (see `group-access.ts`).
+ */
 export async function fetchGroupRead<T>(
   path: string,
   decode: (payload: unknown) => T,

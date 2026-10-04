@@ -1,11 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   findSettlementAttempt,
+  forgetGroupSettlementAttempts,
   forgetSettlementAttempts,
   listSettlementAttempts,
   recordSettlement,
   removeSettlementAttempt,
   settlementBody,
+  subscribeSettlementAttempts,
   type AttemptStorage,
   type SettlementAttempt,
 } from './settlement-attempts';
@@ -402,5 +404,51 @@ describe('stored attempts', () => {
 
     forgetSettlementAttempts(storage);
     expect(storage.keys()).toEqual(['splitbook-theme']);
+  });
+
+  it('of a Group the account can no longer read are forgotten, each pair under its lock (#201)', async () => {
+    const storage = new MemoryStorage();
+    storage.setItem('splitbook-theme', 'dark');
+    const lost = fakeServer(() => 'lost').post;
+    const record = (accountId: string, groupId: string, payment: typeof samPaysPriya) =>
+      recordSettlement({ storage, accountId, groupId, newKey, post: lost, payment });
+    const samPaysAlex = { ...samPaysPriya, paidTo: ALEX, paidToName: 'Alex Rivera' };
+    await record(SAM, GROUP, samPaysPriya);
+    await record(SAM, GROUP, samPaysAlex);
+    await record(SAM, OTHER_GROUP, samPaysPriya);
+    await record(ALEX, GROUP, { ...samPaysAlex, paidBy: PRIYA, paidByName: 'Priya Shah' });
+    const forgotten = stored(storage).map((attempt) =>
+      storage.keys().find((key) => storage.getItem(key)?.includes(attempt.key)),
+    );
+    const names: string[] = [];
+    const lock = async <T>(name: string, task: () => T) => {
+      names.push(name);
+      storage.locked = true;
+      try {
+        return task();
+      } finally {
+        storage.locked = false;
+      }
+    };
+    const changed = vi.fn();
+    const unsubscribe = subscribeSettlementAttempts(changed);
+    storage.writes = [];
+
+    await forgetGroupSettlementAttempts(storage, SAM, GROUP, lock);
+    unsubscribe();
+
+    expect(stored(storage)).toEqual([]);
+    expect(stored(storage, SAM, OTHER_GROUP)).toHaveLength(1);
+    expect(stored(storage, ALEX, GROUP)).toHaveLength(1);
+    expect(storage.getItem('splitbook-theme')).toBe('dark');
+    expect(storage.writes).toEqual([
+      { op: 'remove', locked: true },
+      { op: 'remove', locked: true },
+    ]);
+    expect(names.sort()).toEqual(forgotten.sort());
+    expect(changed).toHaveBeenCalledTimes(1);
+
+    await forgetGroupSettlementAttempts(storage, SAM, GROUP, lock);
+    expect(changed).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -35,6 +35,7 @@ import { formatDate } from '@splitbook/shared/date';
 import { buildTripChecklist, shouldShowTripChecklist } from '@splitbook/shared/trip-setup';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { ExpenseMemberBreakdownRow } from '@splitbook/shared/types';
+import type { GroupRead } from '@splitbook/shared/group-read';
 
 interface GroupDetailViewProps {
   groupId: string;
@@ -42,31 +43,35 @@ interface GroupDetailViewProps {
 }
 
 export default function GroupDetailView(props: GroupDetailViewProps) {
-  return <GroupDetailContent key={`${props.userId}:${props.groupId}`} {...props} />;
+  return <GroupDetailPage key={`${props.userId}:${props.groupId}`} {...props} />;
 }
 
-function GroupDetailContent({ groupId, userId }: GroupDetailViewProps) {
-  const searchParams = useSearchParams();
-  const [tab, setTab] = useState(0);
-  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-  // Month-view summary surfaced from ExpenseListView while a month is active.
-  const [monthSummary, setMonthSummary] = useState<{
-    totalAmount: number;
-    count: number;
-    byMember?: ExpenseMemberBreakdownRow[];
-    userFronted: number;
-  } | null>(null);
+/** The header's reads, made beside the Group read rather than after it. */
+interface HeaderReads {
+  /** `expenses?page=1&limit=1`: the Expense count and the trip total. */
+  expensesData?: {
+    data?: {
+      pagination?: { total?: number };
+      expenses?: unknown[];
+      summary?: { totalAmount?: number };
+    };
+  };
+  balancesData?: {
+    data?: {
+      balances?: Array<{ user: { _id: string }; balance: number }>;
+      debts?: Array<{ from: { _id: string }; to: { _id: string }; amount: number }>;
+    };
+  };
+}
 
-  useEffect(() => {
-    // Defer so deep-link params apply after mount without sync setState-in-effect.
-    const timeout = window.setTimeout(() => {
-      if (searchParams.get('tab') === 'balances') setTab(1);
-      if (searchParams.get('action') === 'add-expense') setExpenseDialogOpen(true);
-    }, 0);
-    return () => window.clearTimeout(timeout);
-  }, [searchParams]);
-
+/**
+ * Reads the Group and renders its content only while the Group can be shown.
+ * When it cannot (a refused read, #201, or a deleted Group), the content
+ * unmounts, so the month figures it surfaced and any dialog it had open go
+ * with it; when access returns, the content mounts afresh, on the tab the
+ * member was on.
+ */
+function GroupDetailPage({ groupId, userId }: GroupDetailViewProps) {
   const { data: group, isLoading, error, mutate } = useGroup(userId, groupId);
 
   const { data: expensesData } = useSWR(`/api/groups/${groupId}/expenses?page=1&limit=1`, fetcher, {
@@ -77,32 +82,16 @@ function GroupDetailContent({ groupId, userId }: GroupDetailViewProps) {
     refreshInterval: 30_000,
   });
 
-  const checklist = useMemo(() => {
-    const memberCount = group?.members.length ?? 1;
-    const expenseCount =
-      (expensesData?.data?.pagination?.total as number | undefined) ??
-      (expensesData?.data?.expenses as unknown[] | undefined)?.length ??
-      0;
-    const outstandingDebtCount = (balancesData?.data?.debts as unknown[] | undefined)?.length ?? 0;
-    return buildTripChecklist({ memberCount, expenseCount, outstandingDebtCount });
-  }, [group?.members, expensesData, balancesData]);
-
-  const handleMonthSummaryChange = useCallback(
-    (summary: Record<string, unknown> | undefined) => {
-      if (!summary) {
-        setMonthSummary(null);
-        return;
-      }
-      const byMember = summary.byMember as ExpenseMemberBreakdownRow[] | undefined;
-      setMonthSummary({
-        totalAmount: (summary.totalAmount as number) ?? 0,
-        count: (summary.count as number) ?? 0,
-        byMember,
-        userFronted: byMember?.find((row) => row.user._id === userId)?.paid ?? 0,
-      });
-    },
-    [userId],
-  );
+  // The deep link (`?tab=balances`, `?action=add-expense`) last applied on this
+  // page, so content mounted again after the Group was unavailable does not
+  // reopen a dialog by itself.
+  const appliedDeepLink = useRef<string | null>(null);
+  const [tab, setTab] = useState(0);
+  const takeDeepLink = useCallback((link: string) => {
+    if (appliedDeepLink.current === link) return false;
+    appliedDeepLink.current = link;
+    return true;
+  }, []);
 
   if (isLoading && !group) {
     return (
@@ -136,6 +125,95 @@ function GroupDetailContent({ groupId, userId }: GroupDetailViewProps) {
       </Container>
     );
   }
+
+  return (
+    <GroupDetailContent
+      groupId={groupId}
+      userId={userId}
+      group={group}
+      refreshFailed={Boolean(error)}
+      onRetry={() => void mutate()}
+      expensesData={expensesData}
+      balancesData={balancesData}
+      takeDeepLink={takeDeepLink}
+      tab={tab}
+      onTabChange={setTab}
+    />
+  );
+}
+
+interface GroupDetailContentProps extends GroupDetailViewProps, HeaderReads {
+  group: GroupRead;
+  /** A refresh failed; the Group shown is the one loaded before. */
+  refreshFailed: boolean;
+  onRetry: () => void;
+  /** Whether this deep link has yet to be applied on the page. */
+  takeDeepLink: (link: string) => boolean;
+  /** Navigation, not Group content: kept while the Group is unavailable. */
+  tab: number;
+  onTabChange: (tab: number) => void;
+}
+
+function GroupDetailContent({
+  groupId,
+  userId,
+  group,
+  refreshFailed,
+  onRetry,
+  expensesData,
+  balancesData,
+  takeDeepLink,
+  tab,
+  onTabChange: setTab,
+}: GroupDetailContentProps) {
+  const searchParams = useSearchParams();
+  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  // Month-view summary surfaced from ExpenseListView while a month is active.
+  const [monthSummary, setMonthSummary] = useState<{
+    totalAmount: number;
+    count: number;
+    byMember?: ExpenseMemberBreakdownRow[];
+    userFronted: number;
+  } | null>(null);
+
+  useEffect(() => {
+    // Defer so deep-link params apply after mount without sync setState-in-effect.
+    const link = searchParams.toString();
+    const timeout = window.setTimeout(() => {
+      if (!takeDeepLink(link)) return;
+      if (searchParams.get('tab') === 'balances') setTab(1);
+      if (searchParams.get('action') === 'add-expense') setExpenseDialogOpen(true);
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [searchParams, takeDeepLink, setTab]);
+
+  const checklist = useMemo(() => {
+    const memberCount = group.members.length;
+    const expenseCount =
+      (expensesData?.data?.pagination?.total as number | undefined) ??
+      (expensesData?.data?.expenses as unknown[] | undefined)?.length ??
+      0;
+    const outstandingDebtCount = (balancesData?.data?.debts as unknown[] | undefined)?.length ?? 0;
+    return buildTripChecklist({ memberCount, expenseCount, outstandingDebtCount });
+  }, [group.members, expensesData, balancesData]);
+
+  const handleMonthSummaryChange = useCallback(
+    (summary: Record<string, unknown> | undefined) => {
+      if (!summary) {
+        setMonthSummary(null);
+        return;
+      }
+      const byMember = summary.byMember as ExpenseMemberBreakdownRow[] | undefined;
+      setMonthSummary({
+        totalAmount: (summary.totalAmount as number) ?? 0,
+        count: (summary.count as number) ?? 0,
+        byMember,
+        userFronted: byMember?.find((row) => row.user._id === userId)?.paid ?? 0,
+      });
+    },
+    [userId],
+  );
 
   const members = group.members;
   const theme = getGroupTheme(group.category);
@@ -199,10 +277,10 @@ function GroupDetailContent({ groupId, userId }: GroupDetailViewProps) {
         pb: { xs: 'calc(88px + env(safe-area-inset-bottom, 0px))', sm: 0 },
       }}
     >
-      {error && (
+      {refreshFailed && (
         <ErrorState
           message="Group could not be refreshed. Showing previously loaded group."
-          onRetry={() => void mutate()}
+          onRetry={onRetry}
         />
       )}
       <Stack
