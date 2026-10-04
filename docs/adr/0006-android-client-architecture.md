@@ -29,7 +29,7 @@ The Android controller (`createMobileController`) has become a hand-written quer
 - A restored copy keeps its original verification time, is marked as restored, and is never fresh. It reaches queries through an envelope whose stale time is 0, so a fallback to a saved copy is never treated as fresh for the normal 30 seconds.
 - Drafts, stored save attempts and their clean-up are written through a strict queue, in order, and nothing on it is ever dropped; that is what keeps a retry key. Saved copies use a separate queue, where the latest write per query wins. Sign-out and account change wait for the first queue, cancel the second, then purge everything account-local, including the query cache.
 - Saved copies are capped at 20 MB per account and removed least recently used first, never the open Group or Home. There is no age limit, because the verification time is always shown.
-- Losing access to a Group removes its cached queries and saved copies. Its draft stays blocked, with Discard, while the member is on it. Once a Group list arrives without that Group, the draft and any unconfirmed save are deleted. This amends ADR 0004 in one case: an unconfirmed save's retry identity does not outlive access to its Group. If access returns, the app asks the member to check the Group's Expenses before saving again.
+- Losing access to a Group removes its cached queries and saved copies. Its draft stays blocked, with Discard, while the member is on it. Once a read of that Group is refused (403 or 404), the draft and any unconfirmed save are deleted. A Group missing from the Group list is not enough, because the list also leaves out archived Groups. This amends ADR 0004 in one case: an unconfirmed save's retry identity does not outlive access to its Group. If access returns, the app asks the member to check the Group's Expenses before saving again.
 - A 401 is not a sign-out. It clears memory, credentials and the query cache, and cancels the saved-copy queue. Account-local data on disk stays until the same account returns or another account purges it.
 
 **Errors**
@@ -72,7 +72,7 @@ Next, a pilot of about one agent-week covers steps 3 to 5. It lands on an integr
 - the checks for restarting offline (with original verification times), account switch, losing access, delayed responses and delayed writes of saved copies pass;
 - losing access resets the queries on screen, because removing a query does not notify the observers that show it;
 - no render or request-count ceiling rises (the render ceilings come from the refreshed #183, and request-count ceilings are added before the pilot);
-- the controller shrinks;
+- `mobile-controller.ts` gets shorter, and the production code under `apps/mobile/src` doesn't grow overall;
 - no mutation is ever persisted;
 - the app bundle grows by no more than 10 KB gzip.
 
@@ -126,7 +126,7 @@ Every pull request runs a ratchet: no render or request count may rise unless th
 - Issues change as follows:
   - #145 becomes the server-state specification;
   - #181 is superseded by the Activity slice;
-  - #182 closes when this ADR is accepted.
+  - #182 stays open; its questions about the next deep modules are answered by the specifications #208, #212, #230 and #215.
 - Earlier ADRs are affected:
   - ADR 0002 is widened: shared code also holds query key factories, path builders and response decoders, still with no framework imports;
   - ADR 0003 cited Better Auth's built-in Expo client, which the app does not use; it keeps its own exchange;
