@@ -9,17 +9,6 @@ import { GroupExpensesView } from './group-expenses';
 import { HomeBalances } from './home';
 import { refreshFeedback, refreshedLabel } from './refresh-feedback';
 
-// Host stand-ins keep the props and text Android receives.
-vi.mock('react-native', () => ({
-  ActivityIndicator: 'ActivityIndicator',
-  Pressable: 'Pressable',
-  StyleSheet: { create: <T,>(styles: T) => styles },
-  Text: 'Text',
-  View: 'View',
-  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: 1 }),
-}));
-vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
-vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const user = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 's@x.test', image: null };

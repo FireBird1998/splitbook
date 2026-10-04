@@ -3,54 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController, type MobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
+import { setFileWindow } from './test-utils/native';
 
 // #127: the App's loading, refreshing, offline and cold-start states, rendered through the real
 // App tree and controller. Only native modules are replaced.
-const native = vi.hoisted(() => ({
+// What the mocked `./runtime` serves: the controller under test and the appearance.
+const runtime = vi.hoisted(() => ({
   controller: undefined as unknown,
   appearance: { mode: 'light', status: 'ready', message: null },
 }));
-vi.mock('react-native', () => ({
-  AccessibilityInfo: {
-    sendAccessibilityEvent: vi.fn(),
-    getRecommendedTimeoutMillis: async (timeout: number) => timeout,
-  },
-  ActivityIndicator: 'ActivityIndicator',
-  Alert: { alert: vi.fn() },
-  Animated: {
-    View: 'AnimatedView',
-    Value: class {
-      setValue() {}
-    },
-    spring: () => ({ start: () => undefined }),
-  },
-  AppState: { addEventListener: () => ({ remove: () => undefined }) },
-  Appearance: { setColorScheme: vi.fn() },
-  BackHandler: { addEventListener: () => ({ remove: () => undefined }) },
-  KeyboardAvoidingView: 'KeyboardAvoidingView',
-  Linking: {
-    addEventListener: () => ({ remove: () => undefined }),
-    getInitialURL: async () => null,
-    openURL: vi.fn(),
-  },
-  Modal: 'Modal',
-  PanResponder: { create: (config: object) => ({ panHandlers: config }) },
-  Platform: { OS: 'android' },
-  Pressable: 'Pressable',
-  RefreshControl: 'RefreshControl',
-  ScrollView: 'ScrollView',
-  Share: { share: vi.fn() },
-  StyleSheet: { create: <T,>(styles: T) => styles },
-  Text: 'Text',
-  TextInput: 'TextInput',
-  View: 'View',
-  useColorScheme: () => 'light',
-  useWindowDimensions: () => ({ width: 360, height: 640, scale: 2, fontScale: 1 }),
-}));
-vi.mock('react-native-safe-area-context', () => ({
-  SafeAreaProvider: 'SafeAreaProvider',
-  SafeAreaView: 'SafeAreaView',
-}));
+setFileWindow({ width: 360, height: 640 });
 vi.mock('react-native-nitro-google-signin', () => ({ GoogleSignInButton: 'GoogleSignInButton' }));
 vi.mock('expo-status-bar', () => ({ StatusBar: 'StatusBar' }));
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
@@ -60,16 +22,13 @@ vi.mock('@expo-google-fonts/outfit/500Medium', () => ({ Outfit_500Medium: 1 }));
 vi.mock('@expo-google-fonts/outfit/600SemiBold', () => ({ Outfit_600SemiBold: 1 }));
 vi.mock('@expo-google-fonts/outfit/700Bold', () => ({ Outfit_700Bold: 1 }));
 vi.mock('@expo-google-fonts/ibm-plex-mono/500Medium', () => ({ IBMPlexMono_500Medium: 1 }));
-vi.mock('@expo/vector-icons/Ionicons', () => ({
-  default: Object.assign(() => null, { font: {} }),
-}));
 vi.mock('./runtime', () => ({
   get controller() {
-    return native.controller;
+    return runtime.controller;
   },
   appearance: {
     subscribe: () => () => undefined,
-    getSnapshot: () => native.appearance,
+    getSnapshot: () => runtime.appearance,
     restore: async () => undefined,
     select: async () => undefined,
   },
@@ -319,7 +278,7 @@ async function usedBefore(phone: ReturnType<typeof device>) {
 
 /** Starts the App on this phone, which restores the session as on a cold start. */
 async function start(phone: ReturnType<typeof device>) {
-  native.controller = phone.controller();
+  runtime.controller = phone.controller();
   await act(async () => {
     screen = create(<App />, { createNodeMock: () => ({ scrollTo: () => undefined }) });
   });
@@ -497,7 +456,7 @@ describe('first load and refresh', () => {
 
     phone.clock.now += 31_000;
     const read = phone.hold('/api/groups');
-    void (native.controller as MobileController).refresh('foreground');
+    void (runtime.controller as MobileController).refresh('foreground');
     await read.reached;
     await settle();
     expect(app.progress()).toHaveLength(0);
@@ -520,7 +479,7 @@ describe('first load and refresh', () => {
 
     phone.clock.now += 31_000;
     const read = phone.hold(`/api/groups/${maple}/activity?`);
-    void (native.controller as MobileController).refresh('foreground');
+    void (runtime.controller as MobileController).refresh('foreground');
     await read.reached;
     await settle();
     expect(app.progress()).toHaveLength(0);

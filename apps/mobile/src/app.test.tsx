@@ -5,66 +5,16 @@ import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
+import { emitAppState, pressBack } from './test-utils/native';
 
-// The real App tree renders through these host names; only native modules are replaced.
-const native = vi.hoisted(() => ({
-  appState: [] as ((state: string) => void)[],
-  back: [] as (() => boolean)[],
+// The real App tree renders through the shared host stand-ins; only native modules are replaced.
+// What the mocked `./runtime` serves: the controller under test and the appearance.
+const runtime = vi.hoisted(() => ({
   controller: undefined as unknown,
   appearance: { mode: 'light', status: 'ready', message: null },
-  scrollTo: vi.fn(),
 }));
-vi.mock('react-native', () => ({
-  AccessibilityInfo: {
-    sendAccessibilityEvent: vi.fn(),
-    getRecommendedTimeoutMillis: async (timeout: number) => timeout,
-  },
-  ActivityIndicator: 'ActivityIndicator',
-  Alert: { alert: vi.fn() },
-  Animated: {
-    View: 'AnimatedView',
-    Value: class {
-      setValue() {}
-    },
-    spring: () => ({ start: () => undefined }),
-  },
-  AppState: {
-    addEventListener: (_: string, listener: (state: string) => void) => {
-      native.appState.push(listener);
-      return { remove: () => native.appState.splice(native.appState.indexOf(listener), 1) };
-    },
-  },
-  Appearance: { setColorScheme: vi.fn() },
-  BackHandler: {
-    addEventListener: (_: string, listener: () => boolean) => {
-      native.back.push(listener);
-      return { remove: () => native.back.splice(native.back.indexOf(listener), 1) };
-    },
-  },
-  KeyboardAvoidingView: 'KeyboardAvoidingView',
-  Linking: {
-    addEventListener: () => ({ remove: () => undefined }),
-    getInitialURL: async () => null,
-    openURL: vi.fn(),
-  },
-  Modal: 'Modal',
-  PanResponder: { create: (config: object) => ({ panHandlers: config }) },
-  Platform: { OS: 'android' },
-  Pressable: 'Pressable',
-  RefreshControl: 'RefreshControl',
-  ScrollView: 'ScrollView',
-  Share: { share: vi.fn() },
-  StyleSheet: { create: <T,>(styles: T) => styles },
-  Text: 'Text',
-  TextInput: 'TextInput',
-  View: 'View',
-  useColorScheme: () => 'light',
-  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: 1 }),
-}));
-vi.mock('react-native-safe-area-context', () => ({
-  SafeAreaProvider: 'SafeAreaProvider',
-  SafeAreaView: 'SafeAreaView',
-}));
+// The native ScrollView method the stand-ins lack; `renderApp` records scroll requests with it.
+const native = { scrollTo: vi.fn() };
 vi.mock('react-native-nitro-google-signin', () => ({ GoogleSignInButton: 'GoogleSignInButton' }));
 vi.mock('expo-status-bar', () => ({ StatusBar: 'StatusBar' }));
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
@@ -74,16 +24,13 @@ vi.mock('@expo-google-fonts/outfit/500Medium', () => ({ Outfit_500Medium: 1 }));
 vi.mock('@expo-google-fonts/outfit/600SemiBold', () => ({ Outfit_600SemiBold: 1 }));
 vi.mock('@expo-google-fonts/outfit/700Bold', () => ({ Outfit_700Bold: 1 }));
 vi.mock('@expo-google-fonts/ibm-plex-mono/500Medium', () => ({ IBMPlexMono_500Medium: 1 }));
-vi.mock('@expo/vector-icons/Ionicons', () => ({
-  default: Object.assign(() => null, { font: {} }),
-}));
 vi.mock('./runtime', () => ({
   get controller() {
-    return native.controller;
+    return runtime.controller;
   },
   appearance: {
     subscribe: () => () => undefined,
-    getSnapshot: () => native.appearance,
+    getSnapshot: () => runtime.appearance,
     restore: async () => undefined,
     select: async () => undefined,
   },
@@ -309,8 +256,6 @@ beforeEach(() => {
 afterEach(() => {
   act(() => screen?.unmount());
   screen = null;
-  native.appState.length = 0;
-  native.back.length = 0;
   native.scrollTo.mockClear();
   vi.restoreAllMocks();
 });
@@ -323,7 +268,7 @@ const settle = (pending?: Promise<unknown>) =>
 async function renderApp() {
   const harness = backend();
   await harness.controller.signIn('sam');
-  native.controller = harness.controller;
+  runtime.controller = harness.controller;
   await act(async () => {
     // Host stand-ins have no native methods; the Group view's scroll requests are recorded.
     screen = create(<App />, {
@@ -381,13 +326,13 @@ async function renderApp() {
       let handled = false;
       await settle(
         Promise.resolve().then(() => {
-          handled = native.back.some((listener) => listener());
+          handled = pressBack();
         }),
       );
       return handled;
     },
     /** Android reports the app returning to the foreground. */
-    foreground: () => native.appState.forEach((listener) => listener('active')),
+    foreground: () => emitAppState('active'),
   };
 }
 
