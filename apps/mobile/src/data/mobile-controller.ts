@@ -384,6 +384,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let groupsRequest = 0;
   /** The latest Groups list read ended without an answer to show, so Home reads it again. */
   let groupsUnanswered = false;
+  /**
+   * The Groups the latest verified Groups list holds (null until one is read this session), and
+   * those it left out. Saved copies are kept only for listed Groups and ones added since.
+   */
+  let listedGroups: Set<string> | null = null;
+  let unlistedGroups = new Set<string>();
   let cacheEpoch = 0;
   // Set by returnToGroup: the next read of that Group and Month reads this many pages.
   let returnPages: { groupId: string; month: string | null; pages: number } | null = null;
@@ -476,6 +482,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     running = { pull: [], automatic: [] };
     viewRequest += 1;
     groupsUnanswered = false;
+    listedGroups = null;
+    unlistedGroups = new Set();
     requests.forEach((request) => request.abort());
     requests.clear();
     cookie = null;
@@ -863,6 +871,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const versionOf = (path: string) => versions.get(readScope(path)) ?? 0;
 
   /**
+   * Saved copies are kept only for Groups the latest Groups list holds, or that Home has gained
+   * since (a Group just created). One the list leaves out, such as an archived Group the member
+   * can still open, is shown but never saved.
+   */
+  const savable = (path: string) => {
+    const id = /^\/api\/groups\/([a-f\d]{24})/i.exec(path)?.[1];
+    return (
+      !id ||
+      !listedGroups ||
+      listedGroups.has(id) ||
+      (!unlistedGroups.has(id) && snapshot.groups.data.some((group) => group.id === id))
+    );
+  };
+
+  /**
    * Responses in these scopes are obsolete: they are no longer reused, shown from the
    * saved copy this session, joined, or saved again. Their next display reads again.
    */
@@ -1019,7 +1042,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (lease && dependencies.readCache) {
         try {
           await lease.write(async () => {
-            if (epoch !== cacheEpoch || version !== versionOf(path)) throw new Superseded();
+            if (epoch !== cacheEpoch || version !== versionOf(path) || !savable(path))
+              throw new Superseded();
             await dependencies.readCache!.save(lease.accountId, path, {
               version: 1,
               accountId: lease.accountId,
@@ -1067,6 +1091,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const lease = accountStorage(),
       view = viewRequest,
       epoch = cacheEpoch,
+      startVersion = versionOf(path),
       shown = wanted ?? (() => view === viewRequest),
       // Home's Groups list keeps its provenance while another view is open (startReadView),
       // so its read records where its answer came from on whatever screen it lands.
@@ -1095,17 +1120,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         !dependencies.readCache
       )
         throw error;
-      // A newer cache epoch may have dropped the saved copy read here: read again under it,
-      // while the caller still shows this read.
+      // A newer cache epoch, or a change, denial or Groups list that made this path obsolete,
+      // may have dropped the saved copy read here: read again, while the caller still shows it.
+      const overtaken = () => epoch !== cacheEpoch || startVersion !== versionOf(path);
       const again = () => {
         if (!current(owner) || !shown()) throw new Superseded();
         return readCached(path, owner, parse, wanted);
       };
-      if (epoch !== cacheEpoch) return again();
+      if (overtaken()) return again();
       const stored = await lease.write(() => dependencies.readCache!.load(lease.accountId, path));
       const cached = cachedRead(stored, lease.accountId, path, now());
       if (!current(owner)) throw new Superseded();
-      if (epoch !== cacheEpoch) return again();
+      if (overtaken()) return again();
       if (view === viewRequest) offlineSession = true;
       if (recorded()) {
         staleReads.set(path, cached?.refreshedAt ?? null);
@@ -1297,6 +1323,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           const id = /^\/api\/groups\/([a-f\d]{24})/i.exec(key)?.[1];
           if (id && !listed.has(id)) lost.add(id);
         }
+        listedGroups = listed;
+        unlistedGroups = lost;
         // They lose everything read for them, and Home with them. A read of one still running
         // is obsolete, so it is never kept or saved, and a view still showing it reads again.
         for (const id of lost)
@@ -1772,6 +1800,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         group.id !== id ||
         !group.members.some((member) => member.user.id === snapshot.auth.user?.id)
       ) {
+        // As for a refusal from the server: what was read and saved for it goes too.
+        await forgetGroup(id, 403, owner);
         throw new RequestError('You no longer have access to this group.', 403);
       }
       publish({
