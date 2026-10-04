@@ -1889,6 +1889,7 @@ describe('a retried save the server rejects', () => {
     const posts: { key: string | null; body: string }[] = [];
     let loseReply = false;
     let tightened = false;
+    let answer: { status: number; body: unknown } | null = null;
     return {
       expenses,
       posts,
@@ -1898,11 +1899,16 @@ describe('a retried save the server rejects', () => {
       tighten: () => {
         tightened = true;
       },
+      /** Every later create gets this answer, before any replay check. */
+      answerWith: (status: number, body: unknown = { status }) => {
+        answer = { status, body };
+      },
       intercept: (path: string, init: RequestInit) => {
         if (!path.endsWith('/expenses') || init.method !== 'POST') return;
         const key = new Headers(init.headers).get('Idempotency-Key')!;
         const body = String(init.body);
         posts.push({ key, body });
+        if (answer) return Promise.resolve(json(answer.body, answer.status));
         const { description } = JSON.parse(body) as { description: string };
         // The tightened rule: a description of at least five characters.
         if (tightened && description.trim().length < 5)
@@ -1993,6 +1999,149 @@ describe('a retried save the server rejects', () => {
     expect(server.posts[4].key).not.toBe(first.key);
     expect(JSON.parse(server.posts[4].body)).toMatchObject({ description: 'Masala tea' });
     expect(restarted.getSnapshot().expense.status).toBe('saved');
+  });
+
+  /** Alex's first save is recorded but its reply is lost; the retry then gets `status`. */
+  const retryAnswered = async (status: number, body?: unknown) => {
+    const server = ledger();
+    const harness = setup(server.intercept, { newSubmissionKey: keyed() });
+    const { controller } = harness;
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Tea', amount: '10.00', tagId });
+    server.loseNextReply();
+    await controller.saveExpense();
+    server.answerWith(status, body);
+    await controller.saveExpense();
+    return { ...harness, server };
+  };
+
+  it.each([
+    [409, { error: 'Conflict', code: 'IDEMPOTENCY_CONFLICT', status: 409 }],
+    [422, { error: 'Something new', code: 'NEW_RULE', status: 422 }],
+    [422, { error: 'Validation error', status: 422 }],
+    [400, { error: 'Bad request', status: 400 }],
+  ])('offers Discard when the server refuses a retry with %s %j', async (status, body) => {
+    const { controller, server, records } = await retryAnswered(status, body);
+    const [first] = server.posts;
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'uncertain',
+      attempt: first,
+      attemptRejected: true,
+      draft: { description: 'Tea' },
+    });
+    expect(controller.getSnapshot().expense.message).toContain('Check this Group’s Expenses first');
+    expect([...records.values()]).toEqual([expect.objectContaining({ attempt: first })]);
+
+    await controller.discardUnconfirmedExpense();
+    expect(server.posts).toHaveLength(2);
+    expect(controller.getSnapshot().expense).toMatchObject({ status: 'editing', attempt: null });
+  });
+
+  it.each([429, 408])('offers no Discard when a retry meets a passing %s', async (status) => {
+    const { controller, server, records } = await retryAnswered(status);
+    const [first] = server.posts;
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'uncertain',
+      attempt: first,
+      attemptRejected: false,
+    });
+    const stored = structuredClone([...records]);
+    await controller.discardUnconfirmedExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({ status: 'uncertain', attempt: first });
+    expect([...records]).toEqual(stored);
+    expect(server.posts).toHaveLength(2);
+  });
+
+  it('still offers Discard after the member leaves to check the Group and comes back, and after a restart', async () => {
+    const { controller, create, server, records } = await retryAnswered(422, {
+      error: 'Validation error',
+      code: 'VALIDATION_ERROR',
+      status: 422,
+    });
+    // Keep for later, to check the Group's Expenses, then back to the form.
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('group');
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'resume',
+      attemptRejected: true,
+    });
+    controller.resumeExpenseDraft();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'uncertain',
+      attemptRejected: true,
+    });
+    expect(controller.getSnapshot().expense.message).toContain('Check this Group’s Expenses first');
+
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openExpense(groupId);
+    expect(restarted.getSnapshot().expense).toMatchObject({
+      status: 'resume',
+      attemptRejected: true,
+    });
+    await restarted.discardUnconfirmedExpense();
+    expect(restarted.getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      attempt: null,
+      attemptRejected: false,
+      draft: { description: 'Tea' },
+    });
+    expect([...records.values()][0]).not.toHaveProperty('attempt');
+    expect(server.posts).toHaveLength(2);
+  });
+
+  it('keeps the save, and says so, when the discard can’t be written', async () => {
+    const { controller, drafts, server, records } = await retryAnswered(422, {
+      error: 'Validation error',
+      code: 'VALIDATION_ERROR',
+      status: 422,
+    });
+    const stored = structuredClone([...records]);
+    drafts.save = async () => {
+      throw new Error('SQLITE_FULL: database or disk is full');
+    };
+    await controller.discardUnconfirmedExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'uncertain',
+      attempt: server.posts[0],
+      attemptRejected: true,
+      message: 'Could not discard this unconfirmed save. Please retry.',
+    });
+    expect([...records]).toEqual(stored);
+    expect(server.posts).toHaveLength(2);
+  });
+
+  it('discards only this Group’s save, and only while the device still holds it', async () => {
+    const otherGroup = 'a00000000000000000000011';
+    const { controller, server, records } = await retryAnswered(422, {
+      error: 'Validation error',
+      code: 'VALIDATION_ERROR',
+      status: 422,
+    });
+    const [[slot, value]] = [...records] as [string, Record<string, unknown>][];
+    const otherSlot = slot.replace(groupId, otherGroup);
+    records.set(otherSlot, { ...structuredClone(value), groupId: otherGroup });
+    // Another recovery replaced this Group's stored save after the form showed it.
+    const replaced = {
+      ...structuredClone(value),
+      attempt: { ...(value.attempt as object), key: 'native-expense-key-9999' },
+    };
+    records.set(slot, replaced);
+
+    await controller.discardUnconfirmedExpense();
+    expect(records.get(slot)).toEqual(replaced);
+    expect(records.get(otherSlot)).toMatchObject({ groupId: otherGroup, attempt: value.attempt });
+    expect(server.posts).toHaveLength(2);
+
+    // With the stored save back as the form showed it, Discard removes it from this Group only.
+    records.set(slot, value);
+    await controller.openExpense(groupId);
+    await controller.discardUnconfirmedExpense();
+    expect(records.get(slot)).not.toHaveProperty('attempt');
+    expect(records.get(otherSlot)).toMatchObject({ attempt: value.attempt });
+    expect(server.posts).toHaveLength(2);
   });
 
   it('offers no discard for a save whose reply was only lost', async () => {

@@ -57,6 +57,9 @@ export interface ExpenseContext {
   group: MobileGroup;
   tags: { id: string; name: string; isArchived: boolean; isDeleted: boolean }[];
 }
+/** What a member checks before discarding a save whose retry the server refused. */
+export const refusedRetryNotice =
+  'This Expense may already be recorded from an earlier try. Check this Group’s Expenses first. If it’s there, discard this save and don’t save the draft again. If it isn’t, discard this save, then correct the draft and save it.';
 export interface ExpenseAttempt {
   key: string;
   body: string;
@@ -88,6 +91,7 @@ export interface ExpenseEditor {
   /**
    * The server refused a retry of `attempt`. An earlier try may still be recorded, so the save
    * keeps its submission until the member checks the Group's Expenses and discards it on purpose.
+   * Stored with the attempt, so it is still offered after reopening the form or a restart.
    */
   attemptRejected: boolean;
   mutation: ExpenseMutation | null;
@@ -187,6 +191,8 @@ export function parseStoredExpenseDraft(value: unknown, accountId: string, group
         .nullable()
         .optional()
         .default(null),
+      // The server refused a retry of `attempt`; only a discard on purpose ends it.
+      attemptRejected: z.boolean().optional().default(false),
     })
     .parse(value);
   if (record.draft.original && record.draft.original.group !== groupId)

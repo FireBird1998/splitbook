@@ -12,6 +12,7 @@ import {
   expenseFieldLabels,
   expenseFields,
   expenseMoney,
+  refusedRetryNotice,
   resolveDraftReview,
   type ExpenseDraft,
   type ExpenseEditor as Editor,
@@ -347,7 +348,9 @@ export function ExpenseEditor({
               message={
                 state.message ??
                 (state.attempt
-                  ? `This Expense may already be in ${context?.group.name ?? 'the Group'}. Checking reuses the same submission, so it can’t be recorded twice.`
+                  ? state.attemptRejected
+                    ? `SplitBook refused a retry of this save. ${refusedRetryNotice}`
+                    : `This Expense may already be in ${context?.group.name ?? 'the Group'}. Checking reuses the same submission, so it can’t be recorded twice.`
                   : `${state.mutation?.kind === 'delete' ? 'This Expense may already be deleted.' : 'This change may already be saved.'} Checking reads the saved Expense first, so nothing is sent twice.`)
               }
             >

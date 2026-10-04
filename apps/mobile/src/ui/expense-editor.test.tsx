@@ -694,6 +694,28 @@ describe('rendered save not confirmed', () => {
     expect(calls.discardUnconfirmed).toHaveBeenCalledOnce();
     expect(ui.submissions).toHaveLength(2);
   });
+
+  it('still offers that discard, calmly, when the form is reopened after checking the Group', async () => {
+    const ui = await render(
+      async (controller) => {
+        await lostSave(controller);
+        await controller.saveExpense();
+        await controller.openExpense(groupId);
+      },
+      { loseCreate: 1, refuseRetries: true },
+    );
+    expect(banner(ui.root(), 'alert')).toEqual([]);
+    const [notice] = banner(ui.root(), 'summary');
+    expect(text(notice)).toContain('SplitBook refused a retry of this save.');
+    expect(text(notice)).toContain(
+      'If it’s there, discard this save and don’t save the draft again.',
+    );
+    expect(ui.input('Amount, required').props.editable).toBe(false);
+
+    await ui.press('Discard unconfirmed save');
+    expect(calls.discardUnconfirmed).toHaveBeenCalledOnce();
+    expect(ui.submissions).toHaveLength(2);
+  });
 });
 
 describe('rendered edit conflict', () => {
