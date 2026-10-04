@@ -83,6 +83,39 @@ jobs:
             apps/web/output/playwright/auth-recovery/
           retention-days: 7
 
+  # Unit tests give the same result in every time zone (#227). verify runs them
+  # in UTC; this matrix repeats them on both sides of the date line. None of these
+  # zones observes daylight saving time, so each offset holds all year.
+  unit-time-zones:
+    name: Unit tests (${{ matrix.tz }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        tz:
+          - Pacific/Tongatapu # UTC+13
+          - Pacific/Kiritimati # UTC+14
+          - Pacific/Pago_Pago # UTC-11
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Unit tests in ${{ matrix.tz }} (workspace)
+        run: pnpm test:unit
+        env:
+          TZ: ${{ matrix.tz }}
+
   playwright:
     runs-on: ubuntu-latest
 

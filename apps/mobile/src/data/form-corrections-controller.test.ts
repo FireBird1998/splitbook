@@ -13,6 +13,8 @@ type Persona = keyof typeof people;
 const groupId = 'b00000000000000000000001';
 const createdId = 'b00000000000000000000002';
 const iso = '2026-09-28T12:00:00.000Z';
+/** The device clock: local noon is 28 September in every time zone, as the member's day is. */
+const localNoon = new Date(2026, 8, 28, 12).getTime();
 const member = (persona: Persona) => ({
   user: { _id: people[persona].id, name: people[persona].name, email: people[persona].email },
   role: persona === 'alex' ? 'admin' : 'member',
@@ -190,7 +192,7 @@ function device(
       },
       {
         fetch: backend.fetch,
-        now: () => Date.parse(iso),
+        now: () => localNoon,
         newSubmissionKey: () => `payment-attempt-${String(++keys).padStart(4, '0')}`,
         settlementAttempts: options.noAttemptStore ? undefined : store,
         credentials: {

@@ -12,6 +12,8 @@ const memberIds = [
 const groupId = 'a00000000000000000000010';
 const tagId = 'a00000000000000000000020';
 const iso = '2026-09-28T10:00:00.000Z';
+/** The device clock: local noon is 28 September in every time zone, as the member's day is. */
+const localNoon = new Date(2026, 8, 28, 12).getTime();
 const people = memberIds.map((id, i) => ({
   id,
   name: ['Alex', 'Sam', 'Priya'][i],
@@ -94,7 +96,7 @@ function setup(
     return json({ error: 'Unavailable', status: 404 }, 404);
   };
   /** `now` lets a restarted app open on a later day. */
-  const create = (now = Date.parse(iso)) =>
+  const create = (now = localNoon) =>
     createMobileController(
       {
         apiBaseUrl: 'http://localhost:4138',
@@ -1561,7 +1563,7 @@ describe('keeping only drafts that change something', () => {
   });
 
   describe('on a later day', () => {
-    const nextDay = Date.parse('2026-09-29T10:00:00.000Z');
+    const nextDay = new Date(2026, 8, 29, 12).getTime();
     const restart = async (create: (now?: number) => ReturnType<typeof createMobileController>) => {
       const restarted = create(nextDay);
       await restarted.restore();
