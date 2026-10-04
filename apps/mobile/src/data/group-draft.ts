@@ -1,4 +1,6 @@
+import { z } from 'zod';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
+import { createGroupSchema } from '@splitbook/shared/validators/group';
 import type { GroupDraft } from './types';
 import { calendarDateError, correctionSummary, type FormValidation } from './field-feedback';
 
@@ -38,3 +40,31 @@ export function validateGroupDraft(draft: GroupDraft, today: string): GroupField
 
 export const groupCorrectionSummary = (errors: GroupFieldErrors) =>
   correctionSummary(groupFields, groupFieldLabels, errors, 'creating the Group');
+
+/**
+ * A stored Group submission: the key and body sent, with the details as entered, for this
+ * account only. It holds no status; it always reopens as uncertain.
+ */
+export function parseGroupCreation(value: unknown, accountId: string) {
+  const stored = z
+    .object({
+      version: z.literal(1),
+      accountId: z.literal(accountId),
+      key: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/),
+      body: z.string(),
+      draft: z.object({
+        name: z.string(),
+        description: z.string(),
+        category: z.enum(['trip', 'home', 'couple', 'work', 'other']),
+        defaultCurrency: z.string(),
+        startDate: z.string(),
+        endDate: z.string(),
+      }),
+    })
+    .parse(value);
+  createGroupSchema.parse(JSON.parse(stored.body));
+  return {
+    draft: stored.draft satisfies GroupDraft,
+    attempt: { key: stored.key, body: stored.body },
+  };
+}

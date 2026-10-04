@@ -183,6 +183,17 @@ function device(
     },
     clear: async () => attempts.clear(),
   };
+  const creations = new Map<string, unknown>();
+  const groupCreations = {
+    load: async (account: string) => structuredClone(creations.get(account) ?? null),
+    save: async (account: string, value: unknown) => {
+      creations.set(account, structuredClone(value));
+    },
+    remove: async (account: string) => {
+      creations.delete(account);
+    },
+    clear: async () => creations.clear(),
+  };
   const create = () =>
     createMobileController(
       {
@@ -195,6 +206,7 @@ function device(
         now: () => localNoon,
         newSubmissionKey: () => `payment-attempt-${String(++keys).padStart(4, '0')}`,
         settlementAttempts: options.noAttemptStore ? undefined : store,
+        groupCreations,
         credentials: {
           load: async () => cookie,
           save: async (value) => {
@@ -215,7 +227,7 @@ function device(
             },
           },
           cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-          stores: [store],
+          stores: [store, groupCreations],
         },
       },
     );

@@ -30,6 +30,7 @@ async function verify() {
   const householdName = `Mobile 52 household ${runId}`;
   const uncertainName = `Mobile 52 response loss ${runId}`;
   const resendName = `Mobile 52 transport resend ${runId}`;
+  const restartName = `Mobile 203 restart while uncertain ${runId}`;
   const ownNames = new Set<string>();
   const checks: string[] = [];
   let archivedCount = 0;
@@ -37,6 +38,10 @@ async function verify() {
   const makeActor = () => {
     let cookie: string | null = null;
     let pendingCode: string | null = null;
+    // This device's account storage, kept across a restart like the app's own storage.
+    let accountOwner: string | null = null;
+    let cleanupPending = false;
+    const groupCreations = new Map<string, unknown>();
     let requests = 0;
     let createPosts = 0;
     let joinPosts = 0;
@@ -96,6 +101,39 @@ async function verify() {
         clear: async () => {
           pendingCode = null;
         },
+      },
+      groupCreations: {
+        load: async (accountId: string) => structuredClone(groupCreations.get(accountId) ?? null),
+        save: async (accountId: string, value: unknown) => {
+          groupCreations.set(accountId, structuredClone(value));
+        },
+        remove: async (accountId: string) => {
+          groupCreations.delete(accountId);
+        },
+        clear: async () => {
+          groupCreations.clear();
+        },
+      },
+      accountLocal: {
+        owner: {
+          load: async () => accountOwner,
+          save: async (value: string) => {
+            accountOwner = value;
+          },
+          clear: async () => {
+            accountOwner = null;
+          },
+        },
+        cleanupMarker: {
+          load: async () => cleanupPending,
+          mark: async () => {
+            cleanupPending = true;
+          },
+          clear: async () => {
+            cleanupPending = false;
+          },
+        },
+        stores: [{ clear: async () => groupCreations.clear() }],
       },
     };
     const build = () =>
@@ -400,6 +438,47 @@ async function verify() {
       'A transport-level resend of Group creation saved a second Group.',
     );
     checks.push('Transport-level resend of a committed create saves one Group');
+
+    // The app restarts while a create is uncertain: it reopens uncertain, and resubmitting
+    // the same details reuses the stored key.
+    ownNames.add(restartName);
+    alex.controller.startCreate();
+    alex.controller.updateCreation({
+      name: restartName,
+      description: 'Response lost after a real server commit, then the app restarted.',
+      category: 'home',
+      defaultCurrency: 'INR',
+      startDate: '',
+      endDate: '',
+    });
+    const beforeRestart = alex.createPosts;
+    alex.loseNextCreateResponse();
+    await alex.controller.createGroup();
+    alex.restart();
+    await alex.controller.restore();
+    const reopened = alex.controller.getSnapshot().creation;
+    assert.ok(
+      reopened.status === 'uncertain' && reopened.draft.name === restartName,
+      'A restart lost the Group being created.',
+    );
+    assert.ok(alex.createPosts === beforeRestart + 1, 'Restoring sent the Group create again.');
+    alex.controller.resumeCreationAfterCheck();
+    await alex.controller.createGroup();
+    const restartedGroups = (await discoverOwnGroups()).filter(
+      (group) => group.name === restartName,
+    );
+    assert.ok(
+      alex.createPosts === beforeRestart + 2 &&
+        alex.createKeys.at(-1) !== null &&
+        alex.createKeys.at(-1) === alex.createKeys.at(-2),
+      'The resubmit after a restart did not reuse the stored Idempotency-Key.',
+    );
+    assert.ok(
+      restartedGroups.length === 1 &&
+        alex.controller.getSnapshot().detail.data?.id === restartedGroups[0]._id,
+      'A resubmit after a restart saved a second Group.',
+    );
+    checks.push('A Group being created survives a restart, and its resubmit saves one Group');
 
     await alex.controller.openGroup(reconciled[0]._id);
     const beforeLostInvite = alex.invitePosts;

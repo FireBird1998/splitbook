@@ -2,6 +2,7 @@ import { createFinancialReadStore } from './data/read-cache-storage';
 import { createSettlementAttemptStore } from './data/settlement-storage';
 import { randomUUID, getRandomBytes } from 'expo-crypto';
 import { createExpenseDraftStore } from './data/expense-storage';
+import { createGroupCreationStore } from './data/group-creation-storage';
 import { fetch } from 'expo/fetch';
 import * as SecureStore from 'expo-secure-store';
 import { createMobileController } from './data';
@@ -47,6 +48,7 @@ export const appearance = createAppearanceController({
 });
 const expenseDrafts = createExpenseDraftStore(controllerConfig.apiBaseUrl);
 const settlementAttempts = createSettlementAttemptStore(controllerConfig.apiBaseUrl);
+const groupCreations = createGroupCreationStore(controllerConfig.apiBaseUrl);
 const readCache = createFinancialReadStore(controllerConfig.apiBaseUrl);
 const offlineIdentityKey = storageKey.replace('splitbook.session.', 'splitbook.offline-identity.');
 const offlineIdentity = {
@@ -70,6 +72,7 @@ export const controller = createMobileController(controllerConfig, {
   offlineIdentity,
   expenseDrafts,
   settlementAttempts,
+  groupCreations,
   newSubmissionKey: randomUUID,
   credentials: {
     load: () => SecureStore.getItemAsync(storageKey),
@@ -95,6 +98,7 @@ export const controller = createMobileController(controllerConfig, {
     stores: [
       expenseDrafts,
       settlementAttempts,
+      groupCreations,
       readCache,
       offlineIdentity,
       ...(googleSignInEnabled

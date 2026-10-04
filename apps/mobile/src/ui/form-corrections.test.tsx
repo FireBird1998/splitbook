@@ -134,6 +134,17 @@ function backend() {
     },
     clear: async () => attempts.clear(),
   };
+  const creations = new Map<string, unknown>();
+  const groupCreations = {
+    load: async (account: string) => structuredClone(creations.get(account) ?? null),
+    save: async (account: string, value: unknown) => {
+      creations.set(account, structuredClone(value));
+    },
+    remove: async (account: string) => {
+      creations.delete(account);
+    },
+    clear: async () => creations.clear(),
+  };
   const controller = createMobileController(
     {
       apiBaseUrl: 'http://localhost:4138',
@@ -145,6 +156,7 @@ function backend() {
       now: () => Date.parse(iso),
       newSubmissionKey: () => 'payment-attempt-0001',
       settlementAttempts: store,
+      groupCreations,
       credentials: {
         load: async () => cookie,
         save: async (value) => {
@@ -165,7 +177,7 @@ function backend() {
           },
         },
         cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: [store],
+        stores: [store, groupCreations],
       },
     },
   );
