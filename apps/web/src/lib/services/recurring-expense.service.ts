@@ -241,23 +241,41 @@ export class RecurringExpenseService {
    * A template whose configuration no longer validates against group state
    * (tag archived, member removed, currency drift) is skipped without
    * advancing its marker — the settings list surfaces that problem state.
-   * This method never throws into the read path.
+   * This method never throws into the read path, and reads ignore whether the
+   * run finished: a period that failed is retried on the next read.
    */
   async generateDueExpenses(
     groupId: string,
     now: Date = new Date(),
   ): Promise<{ generated: number }> {
+    const { generated } = await this.materializeDueExpenses(groupId, now);
+    return { generated };
+  }
+
+  /**
+   * The generation run behind `generateDueExpenses`, also reporting whether it
+   * finished. `complete` is false when a due period could not be added or a
+   * marker could not advance, so a due Expense may be missing from Balances; a
+   * template skipped in its problem state counts as finished, as it does for
+   * reads. A write that checks Balances, such as leaving a Group, refuses when
+   * `complete` is false. Never throws.
+   */
+  async materializeDueExpenses(
+    groupId: string,
+    now: Date = new Date(),
+  ): Promise<{ generated: number; complete: boolean }> {
     let generated = 0;
+    let complete = true;
     try {
       await connectDB();
       await ensureLedgerWriteIndexes();
 
       const templates = await RecurringExpense.find({ group: groupId });
-      if (templates.length === 0) return { generated: 0 };
+      if (templates.length === 0) return { generated: 0, complete };
 
       const group = await Group.findById(groupId);
       if (!group || !getGroupTheme(group.category).recurringExpenses) {
-        return { generated: 0 };
+        return { generated: 0, complete };
       }
 
       const currentPeriod = toPeriod(now);
@@ -343,6 +361,7 @@ export class RecurringExpenseService {
               }
             }
             console.error(`Recurring generation failed for template ${template._id}:`, err);
+            complete = false;
             break;
           }
         }
@@ -359,9 +378,10 @@ export class RecurringExpenseService {
       // Lazy generation must not turn a successfully committed template or a
       // normal ledger read into a failed request. Unmaterialized periods retry.
       console.error(`Recurring generation could not complete for group ${groupId}:`, err);
+      complete = false;
     }
 
-    return { generated };
+    return { generated, complete };
   }
 }
 

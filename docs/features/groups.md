@@ -125,7 +125,9 @@ See [api.md](../api.md#groups) for full endpoint documentation.
 Enforced today:
 
 - Leaving a Group (`POST /api/groups/[id]/leave`, web Group settings and Android
-  Members and Group details): the member must be settled up in every currency;
+  Members and Group details): the member must be settled up in every currency,
+  counting the recurring Expenses already due, which are added before the check
+  (if adding them doesn't finish, the leave is refused with `LEAVE_CONFLICT`);
   the last admin must make someone else an admin first; the last member's leaving
   archives the Group
 - Cannot demote or remove the last admin (**409** with the reason)
