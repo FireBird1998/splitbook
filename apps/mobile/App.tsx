@@ -467,7 +467,11 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
               onDiscard={() =>
                 Alert.alert('Discard this Group form?', 'Your unsaved entries will be cleared.', [
                   { text: 'Keep editing', style: 'cancel' },
-                  { text: 'Discard', style: 'destructive', onPress: controller.discardCreation },
+                  {
+                    text: 'Discard',
+                    style: 'destructive',
+                    onPress: () => void controller.discardCreation(),
+                  },
                 ])
               }
             />
@@ -563,7 +567,20 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
             groupsReady={state.groups.status === 'ready'}
             onCheck={() => void controller.checkCreatedGroups()}
             onResume={controller.resumeCreationAfterCheck}
-            onDiscard={controller.discardCreation}
+            onDiscard={() =>
+              Alert.alert(
+                'Discard this Group form?',
+                'This Group may already be created. Check your Groups first. Discarding removes this form and its saved submission from this device, and sends nothing.',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  {
+                    text: 'Discard',
+                    style: 'destructive',
+                    onPress: () => void controller.discardCreation(),
+                  },
+                ],
+              )
+            }
           />
         )}
         {/* Direct entry: the form returns to that Group's Expenses. */}

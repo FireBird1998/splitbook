@@ -365,6 +365,9 @@ const unconfirmedGroup =
 /** Group creation sends nothing it couldn't store first. */
 const groupNotStored =
   'This device couldn’t keep a recovery copy of the Group, so nothing was sent. Your details are kept. Try again.';
+/** A stored Group submission this version can't read: it can't be resent, only discarded. */
+const groupUnreadable =
+  'A saved Group submission on this device can’t be read, so nothing was sent. Discard this form to continue.';
 /** Another suggestion was chosen while a payment is unconfirmed: one payment at a time. */
 const earlierPayment = 'This earlier payment isn’t confirmed yet, so it comes first.';
 /** Only suggested payments are recorded, so one that's gone from the latest balances isn't. */
@@ -5158,10 +5161,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       creation: { ...snapshot.creation, attempt, status: 'saving', message: null },
     });
     let missed: ReturnType<typeof parseGroupCreation> | null;
+    let unreadable = false;
     try {
       missed = await lease.write(async () => {
         const stored = await storage.load(lease.accountId);
-        const kept = stored === null ? null : parseGroupCreation(stored, lease.accountId);
+        let kept: ReturnType<typeof parseGroupCreation> | null = null;
+        try {
+          kept = stored === null ? null : parseGroupCreation(stored, lease.accountId);
+        } catch (error) {
+          unreadable = true;
+          throw error;
+        }
         // A stored submission this form never showed comes first; nothing is sent over it.
         if (kept && kept.attempt.key !== previous?.key) return kept;
         await storage.save(lease.accountId, {
@@ -5181,7 +5191,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ...snapshot.creation,
           attempt: previous,
           status: 'editing',
-          message: groupNotStored,
+          message: unreadable ? groupUnreadable : groupNotStored,
         },
       });
       return;
@@ -5218,11 +5228,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       )
         throw new RequestError('The server returned invalid creator membership.');
       // Confirmed, so this device no longer keeps the submission (unless a newer one replaced it).
-      await lease.write(async () => {
-        const stored = await storage.load(lease.accountId);
-        if ((stored as { key?: unknown } | null)?.key === key)
-          await storage.remove(lease.accountId);
-      });
+      // If that removal fails, the Group is still confirmed: the stale copy reopens as uncertain
+      // after a restart, and resubmitting it returns this same Group.
+      try {
+        await lease.write(async () => {
+          const stored = await storage.load(lease.accountId);
+          if ((stored as { key?: unknown } | null)?.key === key)
+            await storage.remove(lease.accountId);
+        });
+      } catch (error) {
+        if (error instanceof Superseded) throw error;
+      }
       assertCurrent(owner);
       publish({
         ...snapshot,

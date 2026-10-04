@@ -93,7 +93,7 @@ function memoryAccountOwner(initial: string | null = null): AccountLocalStorage[
  */
 function memoryDevice({ store = true } = {}) {
   let marked = false;
-  let failing: 'load' | 'save' | null = null;
+  let failing: 'load' | 'save' | 'remove' | null = null;
   const records = new Map<string, unknown>();
   const groupCreations = {
     load: async (accountId: string) => {
@@ -105,6 +105,7 @@ function memoryDevice({ store = true } = {}) {
       records.set(accountId, structuredClone(value));
     },
     remove: async (accountId: string) => {
+      if (failing === 'remove') throw new Error('SQLITE_BUSY: database is locked');
       records.delete(accountId);
     },
     clear: async () => {
@@ -128,7 +129,7 @@ function memoryDevice({ store = true } = {}) {
     accountLocal,
     groupCreations: store ? groupCreations : undefined,
     records,
-    fail: (operation: 'load' | 'save' | null) => {
+    fail: (operation: 'load' | 'save' | 'remove' | null) => {
       failing = operation;
     },
   };
@@ -1145,6 +1146,68 @@ describe('native session and Group boundary', () => {
       expect(signingOut.device.records.size).toBe(0);
       expect(discarding.server.posts).toHaveLength(1);
       expect(signingOut.server.posts).toHaveLength(1);
+    });
+
+    it('opens a confirmed Group even when this device can’t remove its stored submission', async () => {
+      const run = restartable();
+      const first = run.app();
+      await first.signIn('alex');
+      first.startCreate();
+      first.updateCreation({ name: 'Cabin Weekend' });
+      run.device.fail('remove');
+      await first.createGroup();
+      expect(first.getSnapshot()).toMatchObject({
+        screen: 'group',
+        detail: { status: 'ready', data: { name: 'Cabin Weekend' } },
+        creation: { status: 'editing', attempt: null, draft: { name: '' } },
+      });
+      expect(run.server.posts).toHaveLength(1);
+      // The stale copy stays on the device until a later remove succeeds.
+      expect(run.device.records.size).toBe(1);
+
+      // A restart shows it as uncertain; resubmitting it returns the same Group and clears it.
+      run.device.fail(null);
+      first.dispose();
+      const restarted = run.app();
+      await restarted.restore();
+      expect(restarted.getSnapshot().creation).toMatchObject({
+        status: 'uncertain',
+        draft: { name: 'Cabin Weekend' },
+      });
+      restarted.resumeCreationAfterCheck();
+      await restarted.createGroup();
+      expect(run.server.posts.map((post) => post.key)).toEqual([
+        'native-group-key-1',
+        'native-group-key-1',
+      ]);
+      expect(run.server.created.size).toBe(1);
+      expect(run.device.records.size).toBe(0);
+    });
+
+    it('says a stored submission it can’t read must be discarded, and sends nothing until then', async () => {
+      const run = restartable();
+      const controller = run.app();
+      await controller.signIn('alex');
+      // A record this version can't read, such as one cut short on disk.
+      run.device.records.set(alex.id, { version: 1, accountId: alex.id, key: 'not a key' });
+      controller.startCreate();
+      controller.updateCreation({ name: 'Cabin Weekend' });
+      await controller.createGroup();
+      expect(run.server.posts).toHaveLength(0);
+      expect(controller.getSnapshot().creation).toMatchObject({
+        status: 'editing',
+        draft: { name: 'Cabin Weekend' },
+        message:
+          'A saved Group submission on this device can’t be read, so nothing was sent. Discard this form to continue.',
+      });
+
+      await controller.discardCreation();
+      expect(run.device.records.size).toBe(0);
+      controller.startCreate();
+      controller.updateCreation({ name: 'Cabin Weekend' });
+      await controller.createGroup();
+      expect(run.server.posts).toHaveLength(1);
+      expect(run.server.created.size).toBe(1);
     });
 
     it('shows a stored submission the form missed instead of sending over it', async () => {
