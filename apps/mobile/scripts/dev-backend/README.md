@@ -26,6 +26,8 @@ For an Android emulator, reverse the origin port with ADB (`adb reverse tcp:4138
 
 ## One backend per worktree
 
+**Agent worktrees: run `pnpm swarm up` from the repository root.** It picks a free loopback port and a fresh database for the worktree, seeds and starts this backend, and prints the `MOBILE_VERIFY_URL` to use. `pnpm swarm down` stops it and drops only that worktree's databases, and `pnpm swarm gate` runs every check a ticket needs, including every verifier against it. See [tools/swarm/README.md](../../../../tools/swarm/README.md). The steps below are what it does, by hand.
+
 Each worktree can run its own backend, so several worktrees can run the verifiers at once. Three variables choose the backend. Seed, start and the controls below read the same ones:
 
 | Variable                       | Default               | Accepted values                                                                                                          |
