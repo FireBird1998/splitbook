@@ -218,7 +218,6 @@ let screen: ReactTestRenderer | null = null;
 afterEach(() => {
   act(() => screen?.unmount());
   screen = null;
-  vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mockClear();
   calls.close.mockClear();
   calls.discard.mockClear();
 });

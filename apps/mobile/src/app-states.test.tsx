@@ -7,7 +7,8 @@ import { setFileWindow } from './test-utils/native';
 
 // #127: the App's loading, refreshing, offline and cold-start states, rendered through the real
 // App tree and controller. Only native modules are replaced.
-const native = vi.hoisted(() => ({
+// What the mocked `./runtime` serves: the controller under test and the appearance.
+const runtime = vi.hoisted(() => ({
   controller: undefined as unknown,
   appearance: { mode: 'light', status: 'ready', message: null },
 }));
@@ -23,11 +24,11 @@ vi.mock('@expo-google-fonts/outfit/700Bold', () => ({ Outfit_700Bold: 1 }));
 vi.mock('@expo-google-fonts/ibm-plex-mono/500Medium', () => ({ IBMPlexMono_500Medium: 1 }));
 vi.mock('./runtime', () => ({
   get controller() {
-    return native.controller;
+    return runtime.controller;
   },
   appearance: {
     subscribe: () => () => undefined,
-    getSnapshot: () => native.appearance,
+    getSnapshot: () => runtime.appearance,
     restore: async () => undefined,
     select: async () => undefined,
   },
@@ -277,7 +278,7 @@ async function usedBefore(phone: ReturnType<typeof device>) {
 
 /** Starts the App on this phone, which restores the session as on a cold start. */
 async function start(phone: ReturnType<typeof device>) {
-  native.controller = phone.controller();
+  runtime.controller = phone.controller();
   await act(async () => {
     screen = create(<App />, { createNodeMock: () => ({ scrollTo: () => undefined }) });
   });
@@ -455,7 +456,7 @@ describe('first load and refresh', () => {
 
     phone.clock.now += 31_000;
     const read = phone.hold('/api/groups');
-    void (native.controller as MobileController).refresh('foreground');
+    void (runtime.controller as MobileController).refresh('foreground');
     await read.reached;
     await settle();
     expect(app.progress()).toHaveLength(0);
@@ -478,7 +479,7 @@ describe('first load and refresh', () => {
 
     phone.clock.now += 31_000;
     const read = phone.hold(`/api/groups/${maple}/activity?`);
-    void (native.controller as MobileController).refresh('foreground');
+    void (runtime.controller as MobileController).refresh('foreground');
     await read.reached;
     await settle();
     expect(app.progress()).toHaveLength(0);

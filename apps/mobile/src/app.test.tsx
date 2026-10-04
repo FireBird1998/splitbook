@@ -8,11 +8,13 @@ import { refreshedLabel } from './ui/refresh-feedback';
 import { emitAppState, pressBack } from './test-utils/native';
 
 // The real App tree renders through the shared host stand-ins; only native modules are replaced.
-const native = vi.hoisted(() => ({
+// What the mocked `./runtime` serves: the controller under test and the appearance.
+const runtime = vi.hoisted(() => ({
   controller: undefined as unknown,
   appearance: { mode: 'light', status: 'ready', message: null },
-  scrollTo: vi.fn(),
 }));
+// The native ScrollView method the stand-ins lack; `renderApp` records scroll requests with it.
+const native = { scrollTo: vi.fn() };
 vi.mock('react-native-nitro-google-signin', () => ({ GoogleSignInButton: 'GoogleSignInButton' }));
 vi.mock('expo-status-bar', () => ({ StatusBar: 'StatusBar' }));
 vi.mock('expo-linear-gradient', () => ({ LinearGradient: 'LinearGradient' }));
@@ -24,11 +26,11 @@ vi.mock('@expo-google-fonts/outfit/700Bold', () => ({ Outfit_700Bold: 1 }));
 vi.mock('@expo-google-fonts/ibm-plex-mono/500Medium', () => ({ IBMPlexMono_500Medium: 1 }));
 vi.mock('./runtime', () => ({
   get controller() {
-    return native.controller;
+    return runtime.controller;
   },
   appearance: {
     subscribe: () => () => undefined,
-    getSnapshot: () => native.appearance,
+    getSnapshot: () => runtime.appearance,
     restore: async () => undefined,
     select: async () => undefined,
   },
@@ -266,7 +268,7 @@ const settle = (pending?: Promise<unknown>) =>
 async function renderApp() {
   const harness = backend();
   await harness.controller.signIn('sam');
-  native.controller = harness.controller;
+  runtime.controller = harness.controller;
   await act(async () => {
     // Host stand-ins have no native methods; the Group view's scroll requests are recorded.
     screen = create(<App />, {

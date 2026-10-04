@@ -39,6 +39,11 @@ export function pressBack() {
   return backListeners.some((listener) => listener());
 }
 
+/** How many Back listeners are registered, e.g. to check the App is listening at all. */
+export function backListenerCount() {
+  return backListeners.length;
+}
+
 /** `Animated.spring`, recorded so a test can check how a sheet settles. */
 export const spring = vi.fn(() => ({ start: vi.fn() }));
 
