@@ -20,6 +20,18 @@ _Avoid_: label, expense group
 In a Household group, a read-only lens over expenses for one calendar month in the viewer's own timezone — never a ledger boundary. Answers "what did August cost us", never "what is owed".
 _Avoid_: cycle, period, billing month
 
+**Saved copy**:
+Server data stored on a member's device so a Group can be shown offline. It always shows when it was last verified and is never treated as current.
+_Avoid_: cache (in product copy), offline data, local data
+
+**Draft**:
+What a member has entered in an Expense, Settlement or Group form but not yet sent. A draft never changes the ledger.
+_Avoid_: pending Expense, unsaved Expense, local Expense
+
+**Unconfirmed save**:
+A save whose reply never arrived, so it may or may not be recorded. Only the member retries it, and a retry can never record it twice.
+_Avoid_: pending write, queued save, offline save
+
 **Connected assistant**:
 An external AI assistant a member has authorized to act as them in Splitbook, limited to the access that member granted and revocable at any time. Acts only as that one member.
 _Avoid_: bot, agent, integration
