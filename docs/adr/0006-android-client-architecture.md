@@ -5,7 +5,7 @@ date: 2026-10-04
 
 # TanStack Query owns Android display reads inside the controller; financial writes stay outside it
 
-The Android controller (`createMobileController`) has become a hand-written query cache. It coalesces, reuses and saves reads, and ten request counters, one of them a global view token, decide whether a response is still current. That cache is where the client's hardest bugs live: three of the four controller bugs in the beta fixes (#189, #190 and #192) share one cause, the global view token plus reads started by hand, and the file grew from 448 to 4,961 lines in under a week (measured at `7afd15e`). We move ownership of display reads to TanStack Query v5, run headless inside the controller, and keep every financial write out of it. The controller's public commands and its snapshot (`getSnapshot` and `subscribe`) stay the interface screens use and the seam every test drives, so each step is checked against the existing behaviour suite.
+The Android controller (`createMobileController`) has become a hand-written query cache. It coalesces, reuses and saves reads, and its request counters (ten at `7afd15e`), one of them a global view token, decide whether a response is still current. That cache is where the client's hardest bugs live: three of the four controller bugs in the beta fixes (#189, #190 and #192) share one cause, the global view token plus reads started by hand, and the file grew from 448 to 4,961 lines in under a week (measured at `7afd15e`). We move ownership of display reads to TanStack Query v5, run headless inside the controller, and keep every financial write out of it. The controller's public commands and its snapshot (`getSnapshot` and `subscribe`) stay the interface screens use and the seam every test drives, so each step is checked against the existing behaviour suite.
 
 ## Decision
 
@@ -19,7 +19,7 @@ The Android controller (`createMobileController`) has become a hand-written quer
 
 **Financial writes**
 
-- No TanStack mutations in `apps/mobile`, enforced by a lint rule. Writes stay explicit and online in the controller. Each save's payload, idempotency key and revision are stored before it is sent. A retry reuses the same idempotency key and revision. Nothing is queued, resumed or replayed.
+- No TanStack mutations in `apps/mobile`, enforced by a lint rule. Writes stay explicit and online in the controller. Each save's payload, with its idempotency key (creates) or revision (edits and deletes), is stored before it is sent, and a retry reuses them unchanged. Nothing is queued, resumed or replayed.
 - After a write that may have reached the server, confirmed or unconfirmed, the queries on screen re-fetch. That Group's other cached queries and Home's totals are removed, together with their saved copies. If removing a saved copy fails, the copy is no longer trusted; the member is never signed out for it.
 - When the reply to an edit is lost, the edit counts as confirmed only if the saved revision is exactly one higher and its fields equal what was sent. When the reply to a delete is lost, the delete counts as confirmed once the Expense is gone.
 
@@ -30,7 +30,7 @@ The Android controller (`createMobileController`) has become a hand-written quer
 - Drafts, stored save attempts and their clean-up are written through a strict queue, in order, and nothing on it is ever dropped; that is what keeps a retry key. Saved copies use a separate queue, where the latest write per query wins. Sign-out and account change wait for the first queue, cancel the second, then purge everything account-local, including the query cache.
 - Saved copies are capped at 20 MB per account and removed least recently used first, never the open Group or Home. There is no age limit, because the verification time is always shown.
 - Losing access to a Group removes its cached queries and saved copies. Its draft stays blocked, with Discard, while the member is on it. Once a read of that Group is refused (403 or 404), the draft and any unconfirmed save are deleted. A Group missing from the Group list is not enough, because the list also leaves out archived Groups. This amends ADR 0004 in one case: an unconfirmed save's retry identity does not outlive access to its Group. If access returns, the app asks the member to check the Group's Expenses before saving again.
-- A 401 is not a sign-out. It clears memory, credentials and the query cache, and cancels the saved-copy queue. Account-local data on disk stays until the same account returns or another account purges it.
+- A 401 shows the signed-out screen but does not purge. It clears memory, credentials and the query cache, and cancels the saved-copy queue. Account-local data on disk stays until the same account returns or another account purges it.
 
 **Errors**
 
@@ -85,7 +85,7 @@ Every pull request runs a ratchet: no render or request count may rise unless th
 ## Considered options
 
 - **Deepen the controller's own cache (#145).** This is the fallback if the pilot fails. It's not preferred, because the cache, its freshness rules and its token checks would stay hand-written and keep growing.
-- **Query hooks in screens.** Rejected for now: it breaks the seam that nearly 400 tests drive, and it mixes two migrations. It is a separate, later decision.
+- **Query hooks in screens.** Rejected for now: it breaks the seam that more than 400 tests drive, and it mixes two migrations. It is a separate, later decision.
 - **TanStack for Activity only (#108, PR #173).** Rejected: the pilot added a second cache with its own freshness, invalidation and persistence, and a 31-line change to the controller alone matched or beat it.
 - **TanStack mutations, or the stock persister.** Rejected, because each breaks ADR 0004:
   - paused mutations resume automatically on focus or reconnect, and no setting stops it;
@@ -133,3 +133,42 @@ Every pull request runs a ratchet: no render or request count may rise unless th
   - ADR 0004 is amended in one case, losing access to a Group (see Saved copies).
 - `CONTEXT.md` gains **saved copy**, **draft** and **unconfirmed save**.
 - Decision issue: #195. Map: #176.
+
+## Evidence
+
+All lines are on `origin/main` at `9805550` (2026-10-04), unless a line names another commit. `mobile-controller.ts` means `apps/mobile/src/data/mobile-controller.ts`; any other bare file name is in `apps/mobile/src/data/`.
+
+### Code claims
+
+- The controller is `createMobileController` (`mobile-controller.ts:357`). Screens read it through `getSnapshot` and `subscribe` (`:5232-5233`), used at `apps/mobile/App.tsx:104`.
+- The file had 448 lines at `4e43baa` (2026-09-28), 4,961 at `7afd15e` (2026-10-03) and 5,247 at `9805550`.
+- Ten request counters decide whether a response is still current (`:373-382`); `viewRequest` (`:373`) is the global view token. #213 added an eleventh, `leaveRequest` (`:4305`).
+- The read cache is `reads`, `inflight`, `versions` and `invalidatedAt` (`:393-398`), with `sharedRead` (`:1000-1047`) and `readCached` (`:1054-1105`). The 30-second window is `DISPLAY_FRESHNESS_MS` (`:108`).
+- #189, #190 and #192 share one cause:
+  - #190: the Groups list read takes the global token (`:1222`) and drops its answer once the token moves (`:1248`, `:1284`);
+  - #189: a created Group's screen is published by hand, and no Expense or Balances read starts (`:4922-4935`);
+  - #192: Retry on an Expense re-reads only the session and the Group (`:5050`, `:5058`).
+- Saved copies have their own expo-sqlite file, separate from drafts and payment attempts (`account-record-storage.ts:16-20`, wired at `apps/mobile/src/runtime.ts:48-50`). Each account's saved copies are one JSON document today (`read-cache-storage.ts:14`, `:26`).
+- The account lease is `accountStorage` (`:507-533`); each write checks the signed-in account at write time (`:522-527`). Drafts, attempts and saved copies share one queue today (`:501-505`).
+- Sign-out (`:5126`) and account change (`:1315-1316`) run `clearAccount` (`:535-579`), which clears every store registered at `runtime.ts:95-99`.
+- A 401 runs `failSession` (`:707-714`), not `clearAccount`: memory and credentials are cleared (`:613`, `:617`) and data on disk stays.
+- A 403, or a 404 on the Group, calls `forgetGroup` (`:716-723`, `:1833-1853`). A Groups list that leaves out a Group drops its reads and saved copies (`:1253-1276`); a failed removal signs the member out today (`:1849`, `:1274`).
+- The Groups list leaves out archived Groups (`apps/web/src/app/api/groups/route.ts:40`, `apps/web/src/lib/services/group.service.ts:97-99`); a member can still read an archived Group (`apps/web/src/app/api/groups/[id]/route.ts:22`, `:29`).
+- The Group GET and the Expense list GET materialize due recurring Expenses (`apps/web/src/app/api/groups/[id]/route.ts:31-33`, `apps/web/src/app/api/groups/[id]/expenses/route.ts:66-68`).
+- Balances follow Expense reads by hand: `beginExpenseRead` (`:2080-2087`) and `trackExpenseRead` (`:919-930`) mark Balances and Home stale, but only Expense page reads are tracked (`:2188`), not the Group read (`:1710`) or the checks before a save (`:3410`, `:3619`, `:3771`).
+- Writes: `Idempotency-Key` and `If-Match` are set at `:689-690`; `ledgerWrite` invalidates the Group's reads in `finally` (`:3082-3086`); creates store their key and body before sending (`:3628-3645`, `:4031-4035`); edits and deletes store their revision and body (`:3419-3432`); Group creation keeps its key in memory only (`:4877-4890`, #203).
+- Content on screen keeps its verification time (`:1348-1349`); `peek` refuses a saved copy older than an invalidation (`:985`), but the offline fallback does not check that yet (`:1080-1103`, #191).
+- `predictiveBackGestureEnabled: true` is at `apps/mobile/app.config.ts:23` (PR #248 turns it off). The web uses SWR (`apps/web/package.json:44`). No package depends on TanStack Query or Effect, and the Google exchange is hand-written (`mobile-controller.ts:1560-1563`).
+
+### Tests that keep the money-safety rules
+
+These pass on `9805550` (CI's `pnpm test`, `.github/workflows/ci.yml:48`). Gaps name the ticket that closes them.
+
+- **Writes are online and explicitly started; nothing is queued, resumed or replayed:** `expense-controller.test.ts:1183`, `read-cache-controller.test.ts:717`, `offline-controller.test.ts:313`, `loading-states-controller.test.ts:698`. Gap: an Expense delete and Group creation are not blocked offline (#200).
+- **A retry reuses the same key or revision:** `expense-controller.test.ts:1250`, `:436`, `:271`; `settlement-controller.test.ts:353`; `mobile-controller.test.ts:842`. Gaps: a rejected Expense retry drops its key (#196); a Group's key does not survive a restart (#203); the web Settlement sheet (#198).
+- **No cross-account data:** `mobile-controller.test.ts:257`, `:1225`; `read-cache-controller.test.ts:847`; `offline-controller.test.ts:472`. Gaps: a crash during an account switch (#200); a stale web tab (#199).
+- **Sign-out and account change purge account-local data:** `mobile-controller.test.ts:400`, `:214` (also pins the 401 rule); `offline-controller.test.ts:408`, `:422`; `settlement-controller.test.ts:274`.
+- **Losing access removes cached and saved content:** `read-cache-controller.test.ts:822`; `offline-controller.test.ts:343`, `:391`. Gap: no test deletes the draft or unconfirmed save; today's tests keep them (#233). The web side is #201.
+- **Cached content keeps its verification time and is never fresh:** `read-cache-controller.test.ts:744`; `offline-controller.test.ts:237`; `financial-controller.test.ts:710`. Gaps: a saved copy older than a confirmed write (#191); restored copies in the query cache are a pilot gate (#212, #217).
+- **Balances follow Expense reads:** `read-cache-controller.test.ts:519`, `:549`; `financial-controller.test.ts:296`. Gaps: the Group read and save checks (#219); the web side (#240).
+- **`@splitbook/shared` stays framework-free:** no test on `main`; the guards are `packages/shared/tsconfig.json:4` (`"lib": ["ES2022"]`, no DOM) and `:12`, and only `date-fns` and `zod` as dependencies (`packages/shared/package.json:16-19`). PR #249 (#207) adds the lint rule and its tests.
