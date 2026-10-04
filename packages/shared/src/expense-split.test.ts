@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeExpenseMoney, parseDecimalUnits } from './exact-money';
+import { normalizeExpenseMoney, parseDecimalUnits, toMajorAmount } from './exact-money';
 import { decideExpenseMoneyEdit, type StoredExpenseMoney } from './expense-money-edit';
 import {
   splitBreakdown,
@@ -164,6 +164,15 @@ describe('split entry problems', () => {
     expect(splitEntryProblem('amounts', '-5', 'INR')).toBe('negative');
   });
 
+  it('refuses an Amounts entry above the largest Expense amount, in each currency’s precision', () => {
+    // #187: a safe integer that exact money can't display once the entries are summed.
+    expect(splitEntryProblem('amounts', '88888888888888.01', 'INR')).toBe('too-large');
+    expect(splitEntryProblem('amounts', '10000000.01', 'INR')).toBe('too-large');
+    expect(splitEntryProblem('amounts', '10000000.00', 'INR')).toBeUndefined();
+    expect(splitEntryProblem('amounts', '10000001', 'JPY')).toBe('too-large');
+    expect(splitEntryProblem('amounts', '10000000', 'JPY')).toBeUndefined();
+  });
+
   it('accepts 0, 100% and blank entries, and never checks Equal', () => {
     expect(splitEntryProblem('amounts', '0', 'INR')).toBeUndefined();
     expect(splitEntryProblem('percentage', '100', 'INR')).toBeUndefined();
@@ -235,6 +244,30 @@ describe('split preview', () => {
     );
     expect(percentage.problems).toEqual({ [you]: 'too-large' });
     expect(percentage.status).toEqual({ kind: 'problem', reason: 'marked-entry' });
+  });
+
+  it('never gives a share above the largest Expense amount, so every sum stays displayable', () => {
+    const huge = breakdown(
+      entries({ splitMethod: 'unequal', splitValues: { [you]: '88888888888888.01', [sam]: '5' } }),
+    );
+    expect(huge.problems).toEqual({ [you]: 'too-large' });
+    expect(huge.shares).toEqual({ [sam]: 500, [priya]: 0 });
+    expect(huge.status).toEqual({ kind: 'problem', reason: 'marked-entry' });
+    // Entries at the bound still add up to a sum exact money can show.
+    const most = breakdown(
+      entries({
+        splitMethod: 'unequal',
+        splitValues: { [you]: '10000000', [sam]: '10000000', [priya]: '10000000' },
+      }),
+    );
+    expect(most.problems).toEqual({});
+    expect(most.status).toEqual({
+      kind: 'remaining',
+      unit: 'amount',
+      entered: 3_000_000_000,
+      target: 124950,
+    });
+    expect(toMajorAmount(3_000_000_000, 'INR')).toBe(30_000_000);
   });
 
   it('marks an entry of only spaces to correct instead of reading it', () => {

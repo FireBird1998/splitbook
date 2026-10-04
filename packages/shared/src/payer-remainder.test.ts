@@ -63,15 +63,31 @@ describe('payer remainder', () => {
       problems: {},
     });
     expect(payerRemainder(entries('100', [])).remainingMinor).toBe(10000);
-    expect(
-      enteredPayers(
-        entries('100', [
-          [alex, ''],
-          [sam, '0'],
-          [priya, ' '],
-        ]).payers,
-      ),
-    ).toEqual([{ user: sam, amount: '0' }]);
+  });
+
+  it('counts an entry of 0 as blank: that person is not a payer', () => {
+    // #187: in either precision, 0 written any way leaves only the people who paid something.
+    for (const [currency, zeros] of [
+      ['INR', ['0', '0.00', '-0', '.0']],
+      ['JPY', ['0', '00']],
+    ] as const)
+      for (const zero of zeros) {
+        const draft = entries(
+          '100',
+          [
+            [alex, zero],
+            [sam, '100'],
+            [priya, ''],
+          ],
+          currency,
+        );
+        expect(enteredPayers(draft.payers)).toEqual([{ user: sam, amount: '100' }]);
+        expect(payerRemainder(draft)).toMatchObject({ remainingMinor: 0, problems: {} });
+      }
+    // Text that can't be read is still an entry, explained beside it.
+    expect(enteredPayers(entries('100', [[alex, '0.001']]).payers)).toEqual([
+      { user: alex, amount: '0.001' },
+    ]);
   });
 
   it('has no remainder while the Expense amount is not valid', () => {
@@ -97,6 +113,14 @@ describe('payer remainder', () => {
     expect(payerEntryProblem('10000000', 'INR')).toBeUndefined();
     expect(payerEntryProblem('0', 'INR')).toBeUndefined();
     expect(payerEntryProblem('  ', 'INR')).toBeUndefined();
+  });
+
+  it('bounds an entry by the largest Expense amount in 0- and 2-decimal currencies', () => {
+    expect(payerEntryProblem('88888888888888.01', 'INR')).toBe('too-large');
+    expect(payerEntryProblem('10000000.01', 'INR')).toBe('too-large');
+    expect(payerEntryProblem('10000000.00', 'INR')).toBeUndefined();
+    expect(payerEntryProblem('10000001', 'JPY')).toBe('too-large');
+    expect(payerEntryProblem('10000000', 'JPY')).toBeUndefined();
   });
 
   it('follows the currency’s precision', () => {
@@ -139,17 +163,17 @@ describe('give the rest', () => {
     expect(payerRemainder(filled).remainingMinor).toBe(0);
   });
 
-  it('follows the Group’s order and skips anyone who entered something, even 0', () => {
+  it('follows the Group’s order, and counts someone who entered 0 as having entered nothing', () => {
     const draft = entries('100', [
       [priya, '60'],
       [alex, '0'],
       [sam, ''],
     ]);
-    expect(restRecipient(draft, members)).toBe(sam);
+    expect(restRecipient(draft, members)).toBe(alex);
     expect(giveRest(draft, members)?.payers).toEqual([
       { user: priya, amount: '60' },
-      { user: alex, amount: '0' },
-      { user: sam, amount: '40.00' },
+      { user: alex, amount: '40.00' },
+      { user: sam, amount: '' },
     ]);
     expect(restRecipient(entries('100', []), members)).toBe(alex);
   });

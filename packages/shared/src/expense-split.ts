@@ -1,7 +1,9 @@
 import { getCurrencyPrecision } from './currency';
 import {
+  MAX_EXPENSE_AMOUNT,
   MoneyValidationError,
   moneyParticipantId,
+  parseAmountMinor,
   parseDecimalUnits,
   parseExpenseAmountMinor,
 } from './exact-money';
@@ -87,8 +89,9 @@ export function splitLeftover(
 
 /**
  * Why one person's entry can't be used: Shares that aren't a whole number, more decimal places
- * than the currency (or 2 for a percentage) allows, a value beyond the exact range or a
- * percentage over 100, text that isn't a decimal number, or a value below 0.
+ * than the currency (or 2 for a percentage) allows, a value beyond the exact range, a percentage
+ * over 100 or an amount above the largest Expense amount, text that isn't a decimal number, or a
+ * value below 0.
  */
 export type SplitEntryProblem = 'not-whole' | 'too-precise' | 'too-large' | 'invalid' | 'negative';
 
@@ -119,6 +122,10 @@ export function splitEntryProblem(
   }
   if (units < 0) return 'negative';
   if (choice === 'percentage' && units > 10000) return 'too-large';
+  // No one owes more than an Expense can be, so no sum of entries outgrows what exact money
+  // can show (#187).
+  if (choice === 'amounts' && units > parseAmountMinor(MAX_EXPENSE_AMOUNT, currency))
+    return 'too-large';
   return undefined;
 }
 

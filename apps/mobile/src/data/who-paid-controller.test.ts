@@ -198,6 +198,31 @@ describe('Who paid, several people', () => {
     expect((posts[0] as { paidBy: unknown }).paidBy).toEqual([{ user: memberIds[2], amount: 10 }]);
   });
 
+  it('counts an entry of 0 as blank, so that person is never sent as a payer', async () => {
+    // #187: 0 is not a payment, even from someone who has left the Group.
+    const { controller, posts, expense } = await setup();
+    await controller.updateExpenseDraft({
+      amount: '10',
+      multiPayer: true,
+      payers: [{ user: memberIds[1], amount: '0' }],
+    });
+    await controller.saveExpense();
+    expect(posts).toEqual([]);
+    expect(expense().validation.errors).toEqual({ payers: 'Choose who paid.' });
+
+    await controller.updateExpenseDraft({
+      payers: [
+        { user: memberIds[1], amount: '0.00' },
+        { user: formerId, amount: '0' },
+        { user: memberIds[2], amount: '10' },
+      ],
+    });
+    expect(expense().validation.errors).toEqual({});
+    await controller.saveExpense();
+    expect(posts).toHaveLength(1);
+    expect((posts[0] as { paidBy: unknown }).paidBy).toEqual([{ user: memberIds[2], amount: 10 }]);
+  });
+
   it('explains an unavailable payer on Paid by and saves once that payer is removed', async () => {
     const { controller, posts, expense } = await setup();
     await controller.updateExpenseDraft({

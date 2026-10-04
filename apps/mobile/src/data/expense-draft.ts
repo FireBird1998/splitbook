@@ -1,5 +1,9 @@
 import { expenseRecordSchema, storedExpenseMoney, type ExpenseRecord } from './expense-record';
-import { decideExpenseMoneyEdit, readExpenseMoney } from '@splitbook/shared/expense-money-edit';
+import {
+  decideExpenseMoneyEdit,
+  readExpenseMoney,
+  type StoredExpenseMoney,
+} from '@splitbook/shared/expense-money-edit';
 import { toDateParam } from '@splitbook/shared/date';
 import { createExpenseSchema, updateExpenseSchema } from '@splitbook/shared/validators/expense';
 import {
@@ -201,9 +205,42 @@ export function parseStoredExpenseDraft(value: unknown, accountId: string, group
 /** Adapt text entry to the same exact-money command used by the web ledger. */
 export function expenseMoney(draft: ExpenseDraft) {
   const input = expenseMoneyInput(draft);
-  return draft.original
-    ? decideExpenseMoneyEdit(storedExpenseMoney(draft.original), input).money
-    : normalizeExpenseMoney(input);
+  if (!draft.original) return normalizeExpenseMoney(input);
+  const stored = storedExpenseMoney(draft.original);
+  return decideExpenseMoneyEdit(stored, savedPayersKept(draft, stored, input) ?? input).money;
+}
+/**
+ * An entry of 0 isn't a payer (#187), yet a saved Expense may list someone who paid 0. An edit
+ * that changes no money, with the entries still paying what it records, keeps its payers as
+ * saved, so leaving them alone is never a money change. A money edit sends only the payers
+ * entered: a 0 row, perhaps of someone who has left the Group, is dropped rather than carried
+ * or blocking the save. Null when the entered payers apply.
+ */
+function savedPayersKept(
+  draft: ExpenseDraft,
+  stored: StoredExpenseMoney,
+  input: ReturnType<typeof expenseMoneyInput>,
+) {
+  if (!draft.multiPayer || draft.currency !== stored.currency) return null;
+  try {
+    const saved = readExpenseMoney(stored).paidBy;
+    const paid = new Map(
+      saved.filter((row) => row.amountMinor).map((row) => [row.user, row.amountMinor]),
+    );
+    const entries = new Map(
+      input.paidBy.map((row) => [row.user, parseAmountMinor(row.amount, draft.currency)]),
+    );
+    const samePayers =
+      entries.size === input.paidBy.length &&
+      entries.size === paid.size &&
+      [...entries].every(([user, minor]) => paid.get(user) === minor);
+    if (!samePayers) return null;
+    const kept = { ...input, paidBy: saved.map(({ user, amount }) => ({ user, amount })) };
+    return decideExpenseMoneyEdit(stored, kept).financialEdit ? null : kept;
+  } catch {
+    // An entry that can't be read is explained beside it; the money rules refuse it as entered.
+    return null;
+  }
 }
 function expenseMoneyInput(draft: ExpenseDraft) {
   return {
