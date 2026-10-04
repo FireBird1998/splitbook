@@ -1,35 +1,8 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { spring } from '../../test-utils/native';
 
-// Host stand-ins; PanResponder hands its config straight through so tests can drive a drag.
-const spring = vi.hoisted(() => vi.fn(() => ({ start: vi.fn() })));
-vi.mock('react-native', () => ({
-  ActivityIndicator: 'ActivityIndicator',
-  Animated: {
-    View: 'AnimatedView',
-    Value: class {
-      value: number;
-      constructor(value: number) {
-        this.value = value;
-      }
-      setValue(value: number) {
-        this.value = value;
-      }
-    },
-    spring,
-  },
-  KeyboardAvoidingView: 'KeyboardAvoidingView',
-  Modal: 'Modal',
-  PanResponder: { create: (config: object) => ({ panHandlers: config }) },
-  Pressable: 'Pressable',
-  ScrollView: 'ScrollView',
-  StyleSheet: { create: <T,>(styles: T) => styles },
-  Text: 'Text',
-  View: 'View',
-  useWindowDimensions: () => ({ width: 412, height: 915, scale: 2, fontScale: 1 }),
-}));
-vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
-vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
+// The PanResponder stand-in hands its config straight through, so tests can drive a drag.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const { BottomSheet, CompactText, FieldMarker } = await import('./index');
@@ -40,7 +13,6 @@ afterEach(() => {
     renderer?.unmount();
   });
   renderer = undefined;
-  spring.mockClear();
 });
 
 function sheet(onDone = vi.fn(), visible = true, dismissible = true) {

@@ -3,22 +3,8 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { expenseMoney, type ExpenseDraft } from '../data/expense-draft';
 import { ThemeContext } from './theme';
+import { setWindow } from '../test-utils/native';
 
-// The window the table lays out for; tests change the text size and width.
-const window = vi.hoisted(() => ({ width: 412, height: 915, scale: 2, fontScale: 1 }));
-vi.mock('react-native', () => ({
-  ActivityIndicator: 'ActivityIndicator',
-  Modal: 'Modal',
-  Pressable: 'Pressable',
-  ScrollView: 'ScrollView',
-  StyleSheet: { create: <T,>(styles: T) => styles },
-  Text: 'Text',
-  TextInput: 'TextInput',
-  View: 'View',
-  useWindowDimensions: () => ({ ...window }),
-}));
-vi.mock('react-native-safe-area-context', () => ({ SafeAreaView: 'SafeAreaView' }));
-vi.mock('@expo/vector-icons/Ionicons', () => ({ default: 'Ionicons' }));
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const { AmountDescriptionCard, WhoOwesWhat, expenseDateLabel } = await import('./expense-form');
@@ -47,7 +33,6 @@ afterEach(() => {
     renderer?.unmount();
   });
   renderer = undefined;
-  Object.assign(window, { width: 412, fontScale: 1 });
 });
 const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
 const rows = (root: ReactTestInstance) =>
@@ -125,7 +110,7 @@ describe('Who owes what', () => {
     ['at 130% text', { fontScale: 1.3 }],
     ['on a narrow screen', { width: 340 }],
   ])('puts Paid and Share under each name %s', (_case, size) => {
-    Object.assign(window, size);
+    setWindow(size);
     const root = table(draft('100.00', ids.slice(0, 3)));
     const rows = root.findAll((node) => isHost(node, 'View') && node.props.accessible === true);
     expect(rows.map(text)).toEqual([

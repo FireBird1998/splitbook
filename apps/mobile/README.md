@@ -62,6 +62,18 @@ node apps/mobile/scripts/dev-backend/control.mjs expire-sessions sam
 
 These act on the default backend's `splitbook_mobile_50`. For a per-worktree backend, give them its `SPLITBOOK_NATIVE_DATABASE`, as in the [backend helper](scripts/dev-backend/README.md#fixtures-and-controls). Always restore fictional membership after testing. Confirm denied/expired access removes protected content, errors can be retried, and light/dark headers preserve the Trip-only ornament. These device checks are distinct from Node HTTP tests and do not verify Google OAuth.
 
+### Shared React Native mock
+
+The rendered tests (`src/**/*.test.tsx`) never load React Native itself. `src/test-utils/setup.ts`, registered as `setupFiles` in `vitest.config.ts`, mocks `react-native`, `react-native-safe-area-context` and `@expo/vector-icons/Ionicons` for every test file from `src/test-utils/native.ts`. Components render as host names (`View`, `Pressable`, `Ionicons`, …), so a test reads the props Android receives. Don't mock these three modules in a test file; add a missing stand-in to `native.ts` instead.
+
+Tests change the stand-ins only through the helpers in `native.ts`:
+
+- `setFileWindow(size)`, called at the top of a file, sets the window every test there starts from. The default is 412×915 at 1× text. `setWindow(size)` changes the width or font scale for one test.
+- `emitAppState(state)`, `pressBack()` and `backListenerCount()` drive the AppState and BackHandler listeners the App registers.
+- `spring` is the `Animated.spring` spy, and `Animated.Value` records its value.
+
+After every test the stand-ins return to the file's defaults and their recorded calls are cleared, so tests pass in any order. This state is per file because Vitest's default `isolate: true` gives each test file its own modules. With isolation turned off, one file's window and listeners would carry into the next.
+
 ## Android invitation links
 
 Shared invitations remain canonical web URLs so they can open in a browser when the app is absent. Set `EXPO_PUBLIC_INVITE_ORIGIN` to the backend's `NEXT_PUBLIC_APP_URL` origin; it defaults to `EXPO_PUBLIC_AUTH_ORIGIN`. The app accepts only that origin's `/join/<eight-hex-character-code>` links. Changing a native intent filter requires rebuilding the binary. Local HTTP links are development-only; they do not establish verified Android App Links.
