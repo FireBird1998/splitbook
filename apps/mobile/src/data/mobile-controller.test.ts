@@ -1251,6 +1251,44 @@ describe('native session and Group boundary', () => {
     expect(store.read()).toBe(samCookie);
   });
 
+  it('never applies a previous account’s Groups list that lands while a Group is open (#190)', async () => {
+    const response = deferred<FetchResponse>();
+    const entered = deferred<void>();
+    let delay = false;
+    const { controller, store } = setup({
+      intercept: (path, init) => {
+        if (
+          delay &&
+          path === '/api/groups' &&
+          new Headers(init.headers).get('Cookie') === alexCookie
+        ) {
+          entered.resolve();
+          return response.promise;
+        }
+        return undefined;
+      },
+    });
+    await controller.signIn('alex');
+    delay = true;
+    const pulling = controller.refresh('pull');
+    await entered.promise;
+    await controller.openGroup(groupId);
+    expect(controller.getSnapshot().screen).toBe('group');
+    await controller.signIn('sam');
+    const published: string[][] = [];
+    controller.subscribe(() =>
+      published.push(controller.getSnapshot().groups.data.map((item) => item.name)),
+    );
+    response.resolve(json({ data: [group()], status: 200 }));
+    await pulling;
+    expect(controller.getSnapshot()).toMatchObject({
+      auth: { user: { id: sam.id } },
+      groups: { status: 'ready', data: [{ name: 'Shared Home' }] },
+    });
+    expect(published.flat()).not.toContain('Weekend Away');
+    expect(store.read()).toBe(samCookie);
+  });
+
   it('serializes a credential save already in flight before logout clears storage', async () => {
     const store = memoryCredentials();
     const originalSave = store.credentials.save;
