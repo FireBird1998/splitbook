@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { test, expect, dataOf, type Ledger } from './fixtures';
+import { test, expect, dataOf, joinGroup, type Ledger } from './fixtures';
+import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
 function appURL(path: string) {
   const origin = process.env.EXPENSE_ACCESS_BASE_URL;
@@ -276,6 +277,151 @@ for (const surface of ['detail', 'settings']) {
     await error.getByRole('button', { name: 'Retry', exact: true }).click();
     await expect(error).toHaveCount(0);
     await expect(content).toBeVisible();
+  });
+}
+
+/*
+ * #201: losing access to a Group deletes what the tab holds for it on the
+ * first refused read, not when the Group's own 30 s poll next runs.
+ */
+const SAM = DEMO_PERSONA_IDS.sam;
+const PRIYA = DEMO_PERSONA_IDS.priya;
+
+/**
+ * A Trip Priya runs and shares with Sam, so Sam's header shows his balance and
+ * the trip total, Balances a payment and Activity both. Odd paise keep each
+ * figure distinct from everything else on the page.
+ */
+async function sharedTrip(ledger: Ledger, name: string) {
+  const trip = await dataOf(
+    await ledger.priya.post('/api/groups', {
+      data: { name, category: 'trip', defaultCurrency: 'INR' },
+    }),
+    201,
+  );
+  await joinGroup(ledger.priya, ledger.sam, trip._id);
+  await dataOf(
+    await ledger.priya.post(`/api/groups/${trip._id}/expenses`, {
+      data: {
+        description: 'Synthetic lantern dinner',
+        amount: 1357.9,
+        currency: 'INR',
+        category: 'food',
+        tag: 'Food',
+        date: new Date().toISOString(),
+        paidBy: [{ user: PRIYA, amount: 1357.9 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: PRIYA }, { user: SAM }],
+      },
+    }),
+    201,
+  );
+  await dataOf(
+    await ledger.sam.post(`/api/groups/${trip._id}/settlements`, {
+      data: { paidTo: PRIYA, amount: 123.45, currency: 'INR', note: 'Synthetic lantern refund' },
+    }),
+    201,
+  );
+  return trip._id as string;
+}
+
+// Sam owes half of 1,357.90 less the 123.45 he paid back.
+const balance = '555.50';
+const tripTotal = '1,357.90';
+const lostContent = [
+  'Synthetic lantern dinner',
+  balance,
+  tripTotal,
+  '123.45',
+  'Synthetic lantern refund',
+  'Forbidden',
+];
+
+for (const { tab, poll, read, shows, empty } of [
+  {
+    tab: 'Expenses',
+    poll: 10_000,
+    read: 'expenses',
+    shows: ['Synthetic lantern dinner'],
+    // The list already shows "No expenses yet" under any failed first read.
+    empty: undefined,
+  },
+  {
+    tab: 'Balances',
+    poll: 15_000,
+    read: 'balances',
+    shows: ['Synthetic lantern refund', balance],
+    empty: 'All settled up',
+  },
+  {
+    tab: 'Activity',
+    poll: 10_000,
+    read: 'activity',
+    shows: ['“Synthetic lantern dinner”'],
+    empty: 'No activity yet',
+  },
+]) {
+  test(`${tab} tab: the first refused read after Sam is removed deletes the Group's content, and Retry after he is back shows none of it`, async ({
+    page,
+    ledger,
+  }) => {
+    const name = `Synthetic lantern trip from ${tab}`;
+    const groupId = await sharedTrip(ledger, name);
+    const groupPath = `/api/groups/${groupId}`;
+    const readPath = `${groupPath}/${read}`;
+    const main = page.getByRole('main');
+    const header = main.getByRole('region', { name: new RegExp(`^${name} trip,`) });
+
+    await page.clock.install();
+    await enter(page, ledger, `/groups/${groupId}`);
+    // The local suite runs `next dev`, which may still be compiling these routes.
+    await expect(header).toContainText(balance, { timeout: 30_000 });
+    await expect(header).toContainText(tripTotal);
+    if (tab !== 'Expenses') await main.getByRole('tab', { name: tab, exact: true }).click();
+    for (const text of shows) await expect(main.getByText(text).first()).toBeVisible();
+    // Hold every timer: only the tab's own poll may run, never the Group's 30 s poll.
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
+    const groupReads: number[] = [];
+    page.on('response', (response) => {
+      if (response.request().method() === 'GET' && new URL(response.url()).pathname === groupPath)
+        groupReads.push(response.status());
+    });
+
+    await dataOf(await ledger.priya.delete(`${groupPath}/members/${SAM}`));
+    const refused = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === readPath && response.status() === 403,
+    );
+    await page.clock.runFor(poll);
+    await refused;
+
+    const denied = main.getByRole('alert').filter({ hasText: 'Group could not be loaded.' });
+    await expect(denied).toBeVisible();
+    await expect(main).toHaveText(/^\s*Group could not be loaded\.\s*Retry\s*$/);
+    for (const text of [name, ...lostContent]) await expect(main).not.toContainText(text);
+    expect(groupReads).toEqual([]);
+
+    // Deleted, not hidden: back in the Group, with every read below it failing,
+    // nothing from before the denial can come back.
+    await joinGroup(ledger.priya, ledger.sam, groupId);
+    await page.route(
+      (url) => url.pathname.startsWith(`${groupPath}/`),
+      (route) => route.fulfill({ status: 503, json: { error: 'Synthetic outage' } }),
+    );
+    const reread = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === groupPath && response.status() === 200,
+    );
+    const outage = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === readPath && response.status() === 503,
+    );
+    await denied.getByRole('button', { name: 'Retry', exact: true }).click();
+    await reread;
+    await expect(header).toBeVisible();
+    await outage;
+    await expect(header).toContainText('Balance unavailable');
+    await expect(header).not.toContainText('Trip total');
+    // Unread is not empty: the tab must not claim there is nothing to show.
+    for (const text of empty ? [...lostContent, empty] : lostContent)
+      await expect(main).not.toContainText(text);
   });
 }
 

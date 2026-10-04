@@ -1,4 +1,5 @@
 import { ACCOUNT_CHANGED_STATUS, EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
+import { noteGroupAccess } from '@/lib/group-access';
 
 /**
  * The one request helper for every `/api/` call a signed-in page makes: SWR
@@ -7,6 +8,10 @@ import { ACCOUNT_CHANGED_STATUS, EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-
  * nothing on: no data reaches SWR, and a write dialog shows neither success
  * nor an error, so nothing from the newer session is shown or recorded under
  * the page's account. Better Auth's own `/api/auth/*` calls never come here.
+ *
+ * A read refused because the account lost a Group deletes everything cached
+ * for that Group before the caller sees the response, and the first good read
+ * of that Group afterwards starts its content over (see `group-access.ts`).
  */
 
 /** Browser-only: the server never pins, since its module state is shared by every request. */
@@ -51,5 +56,6 @@ export async function apiFetch(input: string, init: RequestInit = {}): Promise<R
     reloadForAccountChange();
     return new Promise<never>(() => {});
   }
+  noteGroupAccess(init.method ?? 'GET', input, response.status);
   return response;
 }
