@@ -349,7 +349,7 @@ export default function RecurringExpensesSection({
         method: editing ? 'PATCH' : 'POST',
         headers: {
           'Content-Type': 'application/json',
-          ...(editing ? { 'If-Match': String(editing.revision ?? 0) } : {}),
+          ...(editing ? { 'X-Splitbook-Revision': String(editing.revision ?? 0) } : {}),
         },
         body: JSON.stringify(buildPayload()),
       });
@@ -378,7 +378,10 @@ export default function RecurringExpensesSection({
     try {
       const res = await apiFetch(`/api/groups/${groupId}/recurring/${selected._id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'If-Match': String(selected.revision ?? 0) },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Splitbook-Revision': String(selected.revision ?? 0),
+        },
         body: JSON.stringify({ isPaused: !selected.isPaused }),
       });
       if (res.ok) {
@@ -405,7 +408,7 @@ export default function RecurringExpensesSection({
     try {
       const res = await apiFetch(`/api/groups/${groupId}/recurring/${selected._id}`, {
         method: 'DELETE',
-        headers: { 'If-Match': String(selected.revision ?? 0) },
+        headers: { 'X-Splitbook-Revision': String(selected.revision ?? 0) },
       });
       if (res.ok) {
         mutate();

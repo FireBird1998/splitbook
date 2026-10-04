@@ -1,6 +1,9 @@
 import connectDB from '@/lib/db';
 import Invitation from '@/lib/models/Invitation';
 import Group from '@/lib/models/Group';
+// Registers the model `populate('invitedBy')` needs. A fresh server instance loads only the
+// modules of the route it serves, so invitations must not rely on another route (#186).
+import '@/lib/models/User';
 import { activityService } from './activity.service';
 import { invitationEmailMatches } from '@splitbook/shared/invitation-ownership';
 import crypto from 'crypto';

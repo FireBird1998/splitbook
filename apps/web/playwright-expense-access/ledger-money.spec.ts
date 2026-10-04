@@ -12,7 +12,7 @@ import {
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
 const { alex, sam, priya } = DEMO_PERSONA_IDS;
-const revisionHeaders = (revision: number) => ({ 'If-Match': String(revision) });
+const revisionHeaders = (revision: number) => ({ 'X-Splitbook-Revision': String(revision) });
 const newExpense = (overrides: Record<string, unknown> = {}) => ({
   description: `Exact ledger ${randomUUID()}`,
   amount: 100,
@@ -446,8 +446,14 @@ test('recurring changes reject stale revisions without losing a newer template',
 test('Expense mutations require the revision actually shown to the client', async ({ ledger }) => {
   const endpoint = expensePath(ledger.groupB, ledger.expenseB);
   const before = await observeLedger(ledger, ledger.expenseB);
-  for (const header of [undefined, 'NaN', '-1', '1.5', '9007199254740992']) {
-    const headers = header ? { 'If-Match': header } : undefined;
+  const shown = String(before.expense.revision ?? 0);
+  const malformed = ['NaN', '-1', '1.5', '9007199254740992'];
+  for (const headers of [
+    undefined,
+    // A malformed revision is refused, never replaced by a valid If-Match beside it.
+    ...malformed.map((value) => ({ 'X-Splitbook-Revision': value, 'If-Match': shown })),
+    ...malformed.map((value) => ({ 'If-Match': value })),
+  ]) {
     const edit = await ledger.sam.patch(endpoint, {
       data: { description: 'Unversioned edit' },
       headers,
@@ -457,6 +463,36 @@ test('Expense mutations require the revision actually shown to the client', asyn
     expect(remove.status(), await remove.text()).toBe(428);
   }
   expect(await observeLedger(ledger, ledger.expenseB)).toEqual(before);
+});
+
+test('an older client’s If-Match still edits and deletes, and X-Splitbook-Revision wins when both are sent', async ({
+  ledger,
+}) => {
+  // Apps released before #186 send the displayed revision in If-Match; the server still reads it.
+  const endpoint = expensePath(ledger.groupB, ledger.expenseB);
+  const shown = (await dataOf(await ledger.sam.get(endpoint))).revision ?? 0;
+  const edited = await dataOf(
+    await ledger.sam.patch(endpoint, {
+      data: { description: 'Edited by an older app' },
+      headers: { 'If-Match': String(shown) },
+    }),
+  );
+  expect(edited.revision).toBe(shown + 1);
+  const both = await ledger.sam.patch(endpoint, {
+    data: { description: 'Stale in the new header' },
+    headers: { 'X-Splitbook-Revision': String(shown), 'If-Match': String(shown + 1) },
+  });
+  expect(both.status(), await both.text()).toBe(409);
+  expect((await both.json()).code).toBe('STALE_REVISION');
+  const deleted = await dataOf(
+    await ledger.sam.delete(endpoint, { headers: { 'If-Match': String(shown + 1) } }),
+  );
+  expect(deleted.revision).toBe(shown + 2);
+  expect(await dataOf(await ledger.priya.get(endpoint))).toMatchObject({
+    description: 'Edited by an older app',
+    isDeleted: true,
+    revision: shown + 2,
+  });
 });
 
 test('recurring mutations require a revision and preserve the template when omitted', async ({

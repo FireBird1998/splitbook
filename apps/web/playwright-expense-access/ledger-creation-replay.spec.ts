@@ -199,7 +199,7 @@ test('legacy Tag aliases replay after rename, retirement and reassignment with c
   await dataOf(
     await ledger.priya.patch(endpoint, {
       data: { description: 'Edited after creation', tagId: replacement._id },
-      headers: { 'If-Match': String(original.revision ?? 0) },
+      headers: { 'X-Splitbook-Revision': String(original.revision ?? 0) },
     }),
   );
   await dataOf(await ledger.priya.delete(tagPath));

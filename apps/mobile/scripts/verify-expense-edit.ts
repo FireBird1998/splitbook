@@ -74,6 +74,67 @@ async function run() {
     const expenseId = created.data._id,
       path = `${groupPath}/expenses/${expenseId}`;
     const read = async () => parseExpenseRecord(await alex.request(path), groupId!, expenseId);
+
+    // #186: the revision travels in X-Splitbook-Revision, because a host may answer If-Match
+    // itself. An older app's If-Match is still read; stale and missing revisions keep their codes.
+    const other = object.parse(
+      await alex.request(
+        `${groupPath}/expenses`,
+        'POST',
+        {
+          description: 'Revision header check',
+          amount: 10,
+          currency: 'INR',
+          date: '2026-08-31T23:45:00.000Z',
+          category: 'food',
+          tagId,
+          paidBy: [{ user: alexId, amount: 10 }],
+          splitMethod: 'equal',
+          splitBetween: [{ user: alexId }, { user: samId }],
+        },
+        201,
+      ),
+    ).data._id;
+    const otherPath = `${groupPath}/expenses/${other}`;
+    const readOther = async () => parseExpenseRecord(await sam.request(otherPath), groupId!, other);
+    const code = async (response: Promise<unknown>) =>
+      z.object({ code: z.string() }).parse(await response).code;
+    const shown = (await readOther()).revision;
+    await sam.request(otherPath, 'PATCH', { notes: 'New header' }, 200, shown);
+    await sam.request(otherPath, 'PATCH', { notes: 'Older app' }, 200, undefined, {
+      'If-Match': String(shown + 1),
+    });
+    assert.equal(
+      await code(
+        sam.request(otherPath, 'PATCH', { notes: 'Stale in the new header' }, 409, shown + 1, {
+          'If-Match': String(shown + 2),
+        }),
+      ),
+      'STALE_REVISION',
+    );
+    assert.equal(
+      await code(sam.request(otherPath, 'PATCH', { notes: 'No revision' }, 428)),
+      'REVISION_REQUIRED',
+    );
+    assert.equal(
+      await code(
+        sam.request(otherPath, 'DELETE', undefined, 428, undefined, {
+          'X-Splitbook-Revision': 'abc',
+          'If-Match': String(shown + 2),
+        }),
+      ),
+      'REVISION_REQUIRED',
+    );
+    await sam.request(otherPath, 'DELETE', undefined, 200, undefined, {
+      'If-Match': String(shown + 2),
+    });
+    const after = await readOther();
+    assert.equal(after.notes, 'Older app');
+    assert.equal(after.isDeleted, true);
+    assert.equal(after.revision, shown + 3);
+    console.log(
+      'PASS: X-Splitbook-Revision is honoured and preferred, an older app’s If-Match still edits and deletes, stale stays 409 and missing or malformed 428.',
+    );
     let cookie: string | null = null,
       account: string | null = null,
       cleanup = false;
@@ -107,14 +168,13 @@ async function run() {
       const mutation = init.method === 'PATCH' || init.method === 'DELETE';
       if (mutation) {
         const persisted = await drafts.load();
-        assert.equal(
-          persisted.mutation.revision,
-          Number(new Headers(init.headers).get('If-Match')),
-        );
+        const headers = new Headers(init.headers);
+        assert.equal(persisted.mutation.revision, Number(headers.get('X-Splitbook-Revision')));
+        assert.equal(headers.get('If-Match'), null);
         assert.equal(persisted.mutation.body, String(init.body ?? ''));
         writes.push({
           method: init.method!,
-          revision: new Headers(init.headers).get('If-Match'),
+          revision: headers.get('X-Splitbook-Revision'),
           body: String(init.body ?? ''),
         });
       }

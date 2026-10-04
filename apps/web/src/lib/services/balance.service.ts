@@ -2,6 +2,10 @@ import connectDB from '@/lib/db';
 import Expense from '@/lib/models/Expense';
 import Settlement from '@/lib/models/Settlement';
 import Group from '@/lib/models/Group';
+// Registers the model `populate('members.user')` needs, whether or not `User` is used below.
+// A fresh server instance loads only the modules of the route it serves, so Balances must not
+// rely on another route (#186).
+import '@/lib/models/User';
 import User from '@/lib/models/User';
 import {
   calculateNetBalances,

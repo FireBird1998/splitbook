@@ -178,7 +178,10 @@ export default function ExpenseListView({
     try {
       const response = await apiFetch(`/api/groups/${groupId}/expenses/${snackbar.expenseId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'If-Match': String(snackbar.revision) },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Splitbook-Revision': String(snackbar.revision),
+        },
         body: JSON.stringify({ isDeleted: false }),
       });
       if (!response.ok) {

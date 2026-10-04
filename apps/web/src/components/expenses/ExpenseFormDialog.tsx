@@ -297,7 +297,7 @@ function ExpenseDraftDialog({
         headers: {
           'Content-Type': 'application/json',
           ...(submission.expenseId
-            ? { 'If-Match': String(submission.revision) }
+            ? { 'X-Splitbook-Revision': String(submission.revision) }
             : { 'Idempotency-Key': submission.key }),
         },
         body: submission.body,

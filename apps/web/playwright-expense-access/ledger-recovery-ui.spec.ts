@@ -115,7 +115,7 @@ test('recurring stale edits retain the draft until Reload latest and then save t
   await description.fill('Retain this recurring draft');
   await dataOf(
     await ledger.priya.patch(`${path}/${template._id}`, {
-      headers: { 'If-Match': String(template.revision ?? 0) },
+      headers: { 'X-Splitbook-Revision': String(template.revision ?? 0) },
       data: { description: 'Saved in the other recurring editor' },
     }),
   );

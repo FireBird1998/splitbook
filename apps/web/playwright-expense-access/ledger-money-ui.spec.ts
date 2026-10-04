@@ -103,7 +103,7 @@ test('desktop: conflict feedback retains the draft until Reload latest is select
   await dataOf(
     await ledger.priya.patch(path, {
       data: { description: 'Someone else saved first' },
-      headers: { 'If-Match': String(original.revision ?? 0) },
+      headers: { 'X-Splitbook-Revision': String(original.revision ?? 0) },
     }),
   );
   await dialog.getByRole('button', { name: 'Save changes', exact: true }).click();
