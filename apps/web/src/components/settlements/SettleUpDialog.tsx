@@ -14,6 +14,7 @@ import MenuItem from '@mui/material/MenuItem';
 import CircularProgress from '@mui/material/CircularProgress';
 import { getCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
+import { apiFetch } from '@/lib/utils/api-fetch';
 
 interface SettleUpDialogProps {
   open: boolean;
@@ -76,7 +77,7 @@ export default function SettleUpDialog({
       });
       if (submission.current?.payload !== payload)
         submission.current = { payload, key: crypto.randomUUID() };
-      const res = await fetch(`/api/groups/${groupId}/settlements`, {
+      const res = await apiFetch(`/api/groups/${groupId}/settlements`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Idempotency-Key': submission.current.key },
         body: payload,

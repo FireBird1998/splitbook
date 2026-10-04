@@ -15,6 +15,7 @@ import { authClient, signInWithGoogle } from '@/lib/auth-client';
 import DemoPersonaPicker from '@/components/demo/DemoPersonaPicker';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupCategory } from '@splitbook/shared/types';
+import { apiFetch } from '@/lib/utils/api-fetch';
 
 interface JoinGroupClientProps {
   code: string;
@@ -35,7 +36,7 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
   useEffect(() => {
     async function loadGroup() {
       try {
-        const res = await fetch(`/api/join/${code}`);
+        const res = await apiFetch(`/api/join/${code}`);
         if (res.ok) {
           const data = await res.json();
           setGroup(data.data);
@@ -54,7 +55,7 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
   const handleJoin = async () => {
     setJoining(true);
     try {
-      const res = await fetch(`/api/join/${code}`, { method: 'POST' });
+      const res = await apiFetch(`/api/join/${code}`, { method: 'POST' });
       const data = await res.json();
 
       if (res.ok) {

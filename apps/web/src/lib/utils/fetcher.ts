@@ -1,3 +1,5 @@
+import { apiFetch } from '@/lib/utils/api-fetch';
+
 export class HttpResponseError extends Error {
   constructor(
     message: string,
@@ -9,7 +11,8 @@ export class HttpResponseError extends Error {
 }
 
 export async function fetcher(url: string) {
-  const res = await fetch(url);
+  // A 419 (the session moved to another account) never settles: the page reloads instead.
+  const res = await apiFetch(url);
   const json = await res.json().catch(() => ({}));
   if (res.status === 401 && typeof window !== 'undefined') {
     // The session is gone (expired, or signed out in another tab). Resume at

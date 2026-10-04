@@ -30,6 +30,7 @@ import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import { fetcher } from '@/lib/utils/fetcher';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupRead } from '@splitbook/shared/group-read';
+import { apiFetch } from '@/lib/utils/api-fetch';
 
 const QUICK_FILTERS = [
   { id: 'all', label: 'All' },
@@ -175,7 +176,7 @@ export default function ExpenseListView({
   const handleUndo = async () => {
     if (!snackbar.expenseId) return;
     try {
-      const response = await fetch(`/api/groups/${groupId}/expenses/${snackbar.expenseId}`, {
+      const response = await apiFetch(`/api/groups/${groupId}/expenses/${snackbar.expenseId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'If-Match': String(snackbar.revision) },
         body: JSON.stringify({ isDeleted: false }),
