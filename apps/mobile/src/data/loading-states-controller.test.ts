@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { refreshFeedback } from '../ui/refresh-feedback';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse, MobileSnapshot } from './types';
@@ -35,7 +35,21 @@ function fixture() {
     noGroups: false,
     /** Activity has no events. */
     noActivity: false,
+    /** A Group the member was removed from: the list leaves it out and its reads are refused. */
+    removed: null as string | null,
+    /** A Group archived on the web: the list leaves it out, but its members can still read it. */
+    archived: null as string | null,
+    /** A Group deleted on the web: the list leaves it out and every read of it is not found. */
+    deleted: null as string | null,
+    /** Groups created through this fixture's server, listed after the seed Groups. */
+    created: [] as ReturnType<typeof group>[],
   };
+  /** The Groups the server holds, and those it lists for the member. */
+  const known = () => [...groups, ...state.created];
+  const listed = () =>
+    state.noGroups
+      ? []
+      : known().filter(({ _id }) => ![state.removed, state.archived, state.deleted].includes(_id));
   let cookie: string | null = null,
     owner: string | null = null,
     identity: unknown = null;
@@ -45,22 +59,29 @@ function fixture() {
   const holds: {
     prefix: string;
     arrive: () => void;
-    response: Promise<FetchResponse | null>;
+    response: Promise<FetchResponse | Error | null>;
   }[] = [];
-  /** The next request whose path starts with `prefix` waits until released. */
+  /**
+   * The next request whose path starts with `prefix` waits until released: with a response,
+   * with an Error (the connection dropped before an answer), or with the usual answer.
+   */
   const hold = (prefix: string) => {
     let arrive!: () => void;
-    let release!: (response?: FetchResponse) => void;
+    let release!: (response?: FetchResponse | Error) => void;
     const reached = new Promise<void>((resolve) => {
       arrive = resolve;
     });
-    const response = new Promise<FetchResponse | null>((resolve) => {
+    const response = new Promise<FetchResponse | Error | null>((resolve) => {
       release = (value) => resolve(value ?? null);
     });
     holds.push({ prefix, arrive, response });
     return { reached, release };
   };
   let clearing: Promise<void> | null = null;
+  let retaining: { arrive: () => void; released: Promise<void> } | null = null;
+  /** The Groups this device last kept saved copies for. */
+  let retained: string[] = [];
+  let saving: { path: string; arrive: () => void; released: Promise<void> } | null = null;
   // Reads from this device, which can be slow on a phone: while `slow`, each waits for a round.
   const storage = { slow: false, waiting: [] as (() => void)[] };
   const read = <T>(value: () => T) =>
@@ -84,7 +105,17 @@ function fixture() {
         },
       });
     }
-    if (path === '/api/groups') return json({ status: 200, data: state.noGroups ? [] : groups });
+    if (path === '/api/groups' && init.method === 'POST') {
+      const { name, category } = JSON.parse(String(init.body)) as Record<string, string>;
+      const made = group(
+        `b${String(100 + state.created.length).padStart(23, '0')}`,
+        name,
+        category,
+      );
+      state.created.push(made);
+      return json({ status: 201, data: made }, 201);
+    }
+    if (path === '/api/groups') return json({ status: 200, data: listed() });
     if (path === '/api/user/balances')
       return json({
         status: 200,
@@ -93,7 +124,13 @@ function fixture() {
         },
       });
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
-    const found = groups.find((item) => item._id === id);
+    if (path === `/api/groups/${id}/leave` && init.method === 'POST') {
+      state.removed = id ?? null;
+      return json({ data: { message: 'Left group', archived: false }, status: 200 });
+    }
+    if (id && id === state.removed) return json({}, 403);
+    if (id && id === state.deleted) return json({}, 404);
+    const found = known().find((item) => item._id === id);
     if (!found) return json({}, 404);
     if (path === `/api/groups/${id}`) return json({ status: 200, data: found });
     if (path.endsWith('/balances'))
@@ -171,14 +208,43 @@ function fixture() {
           },
         },
         readCache: {
-          retainGroups: async () => undefined,
-          invalidateGroup: async () => undefined,
+          retainGroups: async (account, groupIds) => {
+            const held = retaining;
+            retaining = null;
+            held?.arrive();
+            await held?.released;
+            // As on a phone: what was saved for a Group no longer listed goes, with Home's figures.
+            if (retained.some((id) => !groupIds.includes(id)))
+              cache.delete(`${account}/api/user/balances`);
+            retained = [...groupIds];
+            for (const key of [...cache.keys()]) {
+              const id = /^\/api\/groups\/([a-f\d]{24})/.exec(key.slice(account.length))?.[1];
+              if (key.startsWith(account) && id && !groupIds.includes(id)) cache.delete(key);
+            }
+          },
+          // As on a phone: the Group's saved copies go, with the saved list and Home's figures.
+          invalidateGroup: async (account, id) => {
+            for (const key of [...cache.keys()])
+              if (
+                key.startsWith(`${account}/api/groups/${id}`) ||
+                key === `${account}/api/groups` ||
+                key === `${account}/api/user/balances`
+              )
+                cache.delete(key);
+          },
           load: (account, key) => read(() => structuredClone(cache.get(account + key) ?? null)),
           save: async (account, key, value) => {
+            const held = saving?.path === key ? saving : null;
+            if (held) {
+              saving = null;
+              held.arrive();
+              await held.released;
+            }
             cache.set(account + key, structuredClone(value));
           },
           clear: async () => {
             cache.clear();
+            retained = [];
           },
         },
         expenseDrafts: {
@@ -232,6 +298,7 @@ function fixture() {
               clear: async () => {
                 await clearing;
                 cache.clear();
+                retained = [];
                 drafts.clear();
                 identity = null;
               },
@@ -247,6 +314,7 @@ function fixture() {
             const [item] = holds.splice(index, 1);
             item.arrive();
             const response = await item.response;
+            if (response instanceof Error) throw response;
             if (response) return response;
           }
           return respond(path, init);
@@ -259,6 +327,28 @@ function fixture() {
     requests,
     hold,
     create,
+    /** What this device has saved for the signed-in account's read of `path`, if anything. */
+    saved: (path: string) => cache.get(accountId + path) ?? null,
+    /** Removes what this device saved for `path`, as a cleanup after a denial does. */
+    unsave: (path: string) => cache.delete(accountId + path),
+    /** Every path this device has saved a read of for the signed-in account. */
+    savedPaths: () =>
+      [...cache.keys()]
+        .filter((key) => key.startsWith(accountId))
+        .map((key) => key.slice(accountId.length)),
+    /** The next save of `path` to this device waits until released. */
+    holdSave: (path: string) => {
+      let arrive!: () => void;
+      let release!: () => void;
+      const reached = new Promise<void>((resolve) => {
+        arrive = resolve;
+      });
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      saving = { path, arrive, released };
+      return { reached, release };
+    },
     /** From now on, each read from this device waits for `answerReads`. */
     slowStorage: () => {
       storage.slow = true;
@@ -285,6 +375,19 @@ function fixture() {
         release();
         clearing = null;
       };
+    },
+    /** The next trim of this device's saved copies to the listed Groups waits until released. */
+    holdRetain: () => {
+      let arrive!: () => void;
+      let release!: () => void;
+      const reached = new Promise<void>((resolve) => {
+        arrive = resolve;
+      });
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      retaining = { arrive, released };
+      return { reached, release };
     },
   };
 }
@@ -762,5 +865,723 @@ describe('offline states (#127)', () => {
       status: 'ready',
       data: { name: 'Lisbon Offsite' },
     });
+  });
+});
+
+describe('Home after navigating while the Groups list loads (#190)', () => {
+  /** Home's figures are read, and nothing says Home is refreshing, pulling or first loading. */
+  const settled = (state: MobileSnapshot) => {
+    expect(state.home.status).toBe('ready');
+    expect(refreshFeedback(state)).toMatchObject({ pull: false, quiet: false, progress: null });
+  };
+  /** What the figures saved on this device say Alex owes, if any are saved. */
+  const savedOwe = (f: ReturnType<typeof fixture>) =>
+    (f.saved('/api/user/balances') as { value: { data: { buckets: { youOwe: number }[] } } } | null)
+      ?.value.data.buckets[0]?.youOwe ?? null;
+  /** Figures worked out by the server before a Group left the list. */
+  const olderFigures = () =>
+    json({ status: 200, data: { buckets: [{ currency: 'INR', youOwe: 99, youAreOwed: 0 }] } });
+  /** Home lists this Group. */
+  const lists = (state: MobileSnapshot, id: string) =>
+    state.groups.data.some((item) => item.id === id);
+
+  it('publishes a list that lands after the member opened a Group, so Home is settled on return', async () => {
+    // The #109 reproduction: pull Home, open a Group while the list loads, then go back.
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    const group = f.hold(`/api/groups/${maple}`);
+    const opening = controller.openGroup(maple);
+    await group.reached;
+    // The list lands while the Group is still being read; both finish.
+    list.release();
+    await vi.waitFor(() => expect(controller.getSnapshot().groups.status).toBe('ready'));
+    group.release();
+    await Promise.all([opening, pulling]);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { status: 'ready', id: maple },
+      financial: { expenses: { status: 'ready' } },
+      groups: { status: 'ready', data: [{ name: 'Maple House' }, { name: 'Lisbon Offsite' }] },
+    });
+    // The list kept every Group, so the Group's read is saved for offline use as usual.
+    expect(f.saved(`/api/groups/${maple}`)).not.toBeNull();
+
+    f.requests.length = 0;
+    await controller.back();
+    const home = controller.getSnapshot();
+    expect(home).toMatchObject({ screen: 'groups', groups: { status: 'ready' } });
+    settled(home);
+    // The list already answered, so nothing reads it again.
+    expect(f.requests).not.toContain('/api/groups');
+  });
+
+  it('settles Home when the list lands after the member came back from a Group', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    // Home's figures are no longer recent, so going back reads them too.
+    f.clock.now += 31_000;
+    f.requests.length = 0;
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    await controller.openGroup(maple);
+    const figures = f.hold('/api/user/balances');
+    const back = controller.back();
+    await figures.reached;
+    // Still in flight: Home shows the pull it started with.
+    expect(controller.getSnapshot().groups.status).toBe('loading');
+    expect(refreshFeedback(controller.getSnapshot()).pull).toBe(true);
+    // The list lands while Home's figures are still being read; both finish.
+    list.release();
+    await vi.waitFor(() => expect(controller.getSnapshot().groups.status).toBe('ready'));
+    figures.release();
+    await Promise.all([back, pulling]);
+    const home = controller.getSnapshot();
+    expect(home).toMatchObject({
+      screen: 'groups',
+      groups: { status: 'ready', data: [{ name: 'Maple House' }, { name: 'Lisbon Offsite' }] },
+      home: { status: 'ready', stale: false },
+    });
+    settled(home);
+    expect(f.requests.filter((path) => path === '/api/groups')).toHaveLength(1);
+  });
+
+  it('ends a first sign-in with the Groups shown after the member opened New Group during the load', async () => {
+    const f = fixture();
+    const controller = f.create();
+    const list = f.hold('/api/groups');
+    const signingIn = controller.signIn('alex');
+    await list.reached;
+    expect(refreshFeedback(controller.getSnapshot())).toMatchObject({ progress: 'Loading Home' });
+    controller.startCreate();
+    expect(controller.getSnapshot().screen).toBe('create');
+    list.release();
+    await signingIn;
+
+    await controller.back();
+    const home = controller.getSnapshot();
+    expect(home).toMatchObject({
+      screen: 'groups',
+      groups: {
+        status: 'ready',
+        loaded: true,
+        data: [{ name: 'Maple House' }, { name: 'Lisbon Offsite' }],
+      },
+    });
+    settled(home);
+  });
+
+  it('keeps loading a Group opened while the list leaves out another one', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    // Lisbon Offsite is archived on the web while Alex opens Maple House.
+    f.state.archived = lisbon;
+    const group = f.hold(`/api/groups/${maple}`);
+    const opening = controller.openGroup(maple);
+    await group.reached;
+    list.release();
+    await vi.waitFor(() => expect(controller.getSnapshot().groups.status).toBe('ready'));
+    group.release();
+    await Promise.all([opening, pulling]);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { status: 'ready', id: maple },
+      financial: { expenses: { status: 'ready' } },
+      groups: { status: 'ready', data: [{ name: 'Maple House' }] },
+    });
+  });
+
+  it('keeps loading a Group opened while another Group refuses the member', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    // Alex opens Lisbon Offsite and goes back before it answers, then opens Maple House.
+    const refused = f.hold(`/api/groups/${lisbon}`);
+    const lisbonOpening = controller.openGroup(lisbon);
+    await refused.reached;
+    await controller.back();
+    const group = f.hold(`/api/groups/${maple}`);
+    const opening = controller.openGroup(maple);
+    await group.reached;
+    // Lisbon Offsite refuses Alex while Maple House is still being read.
+    f.state.removed = lisbon;
+    refused.release(json({}, 403));
+    await lisbonOpening;
+    group.release();
+    await opening;
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { status: 'ready', id: maple },
+      financial: { expenses: { status: 'ready' } },
+    });
+  });
+
+  it.each([
+    ['one Home listed', false],
+    ['one opened from elsewhere that Home never listed', true],
+  ])(
+    'settles a Group the list leaves out while it is read (%s), showing only what was read after',
+    async (_, unlisted) => {
+      const f = fixture();
+      // Lisbon Offsite is archived on the web: the list leaves it out, though Alex can still read it.
+      if (unlisted) f.state.archived = lisbon;
+      const controller = f.create();
+      await controller.signIn('alex');
+      const list = f.hold('/api/groups');
+      const pulling = controller.refresh('pull');
+      await list.reached;
+      f.state.archived = lisbon;
+      const group = f.hold(`/api/groups/${lisbon}`);
+      const opening = controller.openGroup(lisbon);
+      await group.reached;
+      list.release();
+      await vi.waitFor(() => expect(controller.getSnapshot().groups.status).toBe('ready'));
+      const published = record(controller);
+      // Its answer was read before the list left it out, under an earlier name.
+      group.release(json({ status: 200, data: { ...groups[1], name: 'Lisbon Offsite 2025' } }));
+      await Promise.all([opening, pulling]);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        detail: { status: 'ready', id: lisbon, data: { name: 'Lisbon Offsite' } },
+        financial: { expenses: { status: 'ready' } },
+        groups: { data: [{ name: 'Maple House' }] },
+      });
+      expect(published.some((state) => state.detail.data?.name === 'Lisbon Offsite 2025')).toBe(
+        false,
+      );
+      // It shows, as the server still serves it, but nothing is saved while the list leaves it out.
+      expect(f.savedPaths().filter((path) => path.includes(lisbon))).toEqual([]);
+    },
+  );
+
+  it('shows an archived Group opened from elsewhere without saving it', async () => {
+    const f = fixture();
+    // Lisbon Offsite is archived on the web, so Home never lists it; Alex can still open it.
+    f.state.archived = lisbon;
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(lisbon);
+    expect(controller.getSnapshot()).toMatchObject({
+      detail: { status: 'ready', data: { name: 'Lisbon Offsite' } },
+      financial: { expenses: { status: 'ready' } },
+    });
+    expect(f.savedPaths().filter((path) => path.includes(lisbon))).toEqual([]);
+    // Maple House, which the list holds, is saved as usual.
+    await controller.openGroup(maple);
+    expect(f.saved(`/api/groups/${maple}`)).not.toBeNull();
+  });
+
+  it('forgets a Group whose answer no longer lists the member, with what was saved for it', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(lisbon);
+    await controller.back();
+    expect(f.saved(`/api/groups/${lisbon}`)).not.toBeNull();
+    f.clock.now += 31_000;
+    const group = f.hold(`/api/groups/${lisbon}`);
+    const opening = controller.openGroup(lisbon);
+    await group.reached;
+    // The server answers with Lisbon Offsite as it is now: Sam is its only member.
+    const sam = {
+      _id: 'a00000000000000000000002',
+      name: 'Sam',
+      email: 'sam@example.test',
+      image: null,
+    };
+    group.release(
+      json({
+        status: 200,
+        data: { ...groups[1], members: [{ user: sam, role: 'admin', joinedAt: iso }] },
+      }),
+    );
+    await opening;
+    expect(controller.getSnapshot()).toMatchObject({
+      detail: { status: 'denied', id: lisbon, data: null },
+      groups: { data: [{ name: 'Maple House' }] },
+    });
+    expect(f.savedPaths().filter((path) => path.includes(lisbon))).toEqual([]);
+  });
+
+  it('never shows a Group’s saved copy once the list has left it out, even one being read then', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    // Lisbon Offsite was opened here, so it has a saved copy.
+    await controller.openGroup(lisbon);
+    await controller.back();
+    f.clock.now += 31_000;
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    const group = f.hold(`/api/groups/${lisbon}`);
+    const opening = controller.openGroup(lisbon);
+    await group.reached;
+    const published = record(controller);
+    // Alex is removed from Lisbon Offsite. The list answers without it and is being saved...
+    f.state.removed = lisbon;
+    const saving = f.holdSave('/api/groups');
+    list.release();
+    await saving.reached;
+    // ...when the connection drops for Lisbon Offsite, whose saved copy is then read slowly.
+    f.slowStorage();
+    group.release(new Error('Network request failed'));
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    saving.release();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    for (let round = 0; round < 5; round += 1) await f.answerReads();
+    f.fastStorage();
+    await Promise.all([opening, pulling]);
+    // Its saved copy is never shown after the list left it out; reading it again is refused.
+    expect(
+      published.some(
+        (state) =>
+          state.groups.status === 'ready' &&
+          !lists(state, lisbon) &&
+          state.detail.id === lisbon &&
+          state.detail.status === 'ready',
+      ),
+    ).toBe(false);
+    expect(controller.getSnapshot().detail).toMatchObject({ status: 'denied', id: lisbon });
+  });
+
+  it('settles Home’s figures when the list leaves out a Group only Home was showing', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    f.clock.now += 31_000;
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    await controller.openGroup(maple);
+    // Lisbon Offsite, never opened here, is archived on the web while Home's figures are read.
+    f.state.archived = lisbon;
+    const figures = f.hold('/api/user/balances');
+    const back = controller.back();
+    await figures.reached;
+    list.release();
+    await vi.waitFor(() => expect(controller.getSnapshot().groups.status).toBe('ready'));
+    figures.release(olderFigures());
+    await Promise.all([back, pulling]);
+    const home = controller.getSnapshot();
+    expect(home).toMatchObject({
+      groups: { status: 'ready', data: [{ name: 'Maple House' }] },
+      home: { status: 'ready', stale: false, data: [{ youOwe: 30 }] },
+    });
+    settled(home);
+    expect(savedOwe(f)).toBe(30);
+  });
+
+  it('reads Home’s figures again when a session’s first list leaves out a Group this device kept', async () => {
+    const f = fixture();
+    // An earlier session kept both Groups here; the saved list itself has since been removed.
+    const earlier = f.create();
+    await earlier.signIn('alex');
+    earlier.dispose();
+    f.unsave('/api/groups');
+    // Lisbon Offsite is archived on the web before Alex signs in again.
+    f.state.archived = lisbon;
+    const controller = f.create();
+    const list = f.hold('/api/groups');
+    const signingIn = controller.signIn('alex');
+    await list.reached;
+    controller.startCreate();
+    const figures = f.hold('/api/user/balances');
+    const back = controller.back();
+    await figures.reached;
+    list.release();
+    await vi.waitFor(() => expect(controller.getSnapshot().groups.status).toBe('ready'));
+    figures.release(olderFigures());
+    await Promise.all([back, signingIn]);
+    expect(controller.getSnapshot().home).toMatchObject({ data: [{ youOwe: 30 }] });
+    settled(controller.getSnapshot());
+    expect(savedOwe(f)).toBe(30);
+  });
+
+  it('reads the list again when its answer predates losing a Group, so that Group never returns', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    // Alex is removed from Lisbon Offsite after the server answered the list.
+    f.state.removed = lisbon;
+    await controller.openGroup(lisbon);
+    expect(controller.getSnapshot().detail).toMatchObject({ status: 'denied', id: lisbon });
+    const published = record(controller);
+    f.requests.length = 0;
+    list.release(json({ status: 200, data: groups }));
+    await pulling;
+    expect(f.requests).toContain('/api/groups');
+    expect(controller.getSnapshot().groups).toMatchObject({
+      status: 'ready',
+      data: [{ name: 'Maple House' }],
+    });
+    expect(published.some((state) => lists(state, lisbon))).toBe(false);
+
+    await controller.back();
+    expect(controller.getSnapshot().groups).toMatchObject({
+      status: 'ready',
+      data: [{ name: 'Maple House' }],
+    });
+    settled(controller.getSnapshot());
+  });
+
+  it('never shows a list answered before losing a Group, even one that answered first', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    // The list answers, then waits while this device trims its saved copies to the listed Groups.
+    const trim = f.holdRetain();
+    const pulling = controller.refresh('pull');
+    await trim.reached;
+    // Meanwhile Alex opens Lisbon Offsite and is refused: Alex was removed from it.
+    f.state.removed = lisbon;
+    const opening = controller.openGroup(lisbon);
+    await vi.waitFor(() =>
+      expect(controller.getSnapshot().groups.data.map(({ id }) => id)).toEqual([maple]),
+    );
+    const published = record(controller);
+    f.requests.length = 0;
+    trim.release();
+    await Promise.all([opening, pulling]);
+    expect(controller.getSnapshot().detail).toMatchObject({ status: 'denied', id: lisbon });
+    expect(published.some((state) => lists(state, lisbon))).toBe(false);
+
+    // That answer was dropped on the Group, so going back reads the list.
+    await controller.back();
+    expect(f.requests).toContain('/api/groups');
+    expect(controller.getSnapshot().groups).toMatchObject({
+      status: 'ready',
+      data: [{ name: 'Maple House' }],
+    });
+    settled(controller.getSnapshot());
+  });
+
+  it('never brings back a Group found deleted while a list answered before that was on its way', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    await controller.openGroup(lisbon);
+    expect(controller.getSnapshot().detail.status).toBe('ready');
+    // Lisbon Offsite is deleted on the web; reading its Balances again finds it gone.
+    f.state.deleted = lisbon;
+    await controller.refreshBalances();
+    expect(controller.getSnapshot().groups.data.map(({ name }) => name)).toEqual(['Maple House']);
+    const published = record(controller);
+    // The list answered before the deletion.
+    list.release(json({ status: 200, data: groups }));
+    await pulling;
+    await controller.back();
+    expect(published.some((state) => lists(state, lisbon))).toBe(false);
+    expect(controller.getSnapshot().groups).toMatchObject({
+      status: 'ready',
+      data: [{ name: 'Maple House' }],
+    });
+    expect(f.saved(`/api/groups/${lisbon}`)).toBeNull();
+    settled(controller.getSnapshot());
+  });
+
+  it('reads the list again when a refused Group overtakes the saved copy standing in for it', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    // Lisbon Offsite refuses Alex, which drops what was saved for it. Then the list's connection
+    // drops, so its saved copy, which may predate the refusal, can't stand in for an answer.
+    f.state.removed = lisbon;
+    await controller.openGroup(lisbon);
+    f.requests.length = 0;
+    list.release(new Error('Network request failed'));
+    await pulling;
+    // So it is read again at once, on the Group.
+    expect(f.requests).toContain('/api/groups');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      groups: { status: 'ready', data: [{ name: 'Maple House' }] },
+    });
+
+    f.requests.length = 0;
+    await controller.back();
+    expect(f.requests).not.toContain('/api/groups');
+    settled(controller.getSnapshot());
+  });
+
+  it('reads the list again at once when its answer is overtaken while Home shows', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    // Alex opens Lisbon Offsite and goes back before it answers.
+    const opened = f.hold(`/api/groups/${lisbon}`);
+    const opening = controller.openGroup(lisbon);
+    await opened.reached;
+    await controller.back();
+    // The list answers, then waits while this device trims its saved copies.
+    const trim = f.holdRetain();
+    const pulling = controller.refresh('pull');
+    await trim.reached;
+    // Meanwhile Lisbon Offsite refuses Alex, so the list's answer is out of date.
+    f.state.removed = lisbon;
+    opened.release(json({}, 403));
+    await vi.waitFor(() =>
+      expect(controller.getSnapshot().groups.data.map(({ id }) => id)).toEqual([maple]),
+    );
+    f.requests.length = 0;
+    trim.release();
+    await Promise.all([opening, pulling]);
+    expect(f.requests).toContain('/api/groups');
+    const home = controller.getSnapshot();
+    expect(home).toMatchObject({
+      screen: 'groups',
+      groups: { status: 'ready', data: [{ name: 'Maple House' }] },
+    });
+    settled(home);
+  });
+
+  it('reads the list again when New Group is discarded after the list ended without an answer', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const opened = f.hold(`/api/groups/${lisbon}`);
+    const opening = controller.openGroup(lisbon);
+    await opened.reached;
+    await controller.back();
+    const trim = f.holdRetain();
+    const pulling = controller.refresh('pull');
+    await trim.reached;
+    // Alex opens New Group; meanwhile Lisbon Offsite refuses Alex, so the list's answer is dropped.
+    controller.startCreate();
+    f.state.removed = lisbon;
+    opened.release(json({}, 403));
+    await vi.waitFor(() =>
+      expect(controller.getSnapshot().groups.data.map(({ id }) => id)).toEqual([maple]),
+    );
+    trim.release();
+    await Promise.all([opening, pulling]);
+    expect(controller.getSnapshot().screen).toBe('create');
+
+    f.requests.length = 0;
+    await controller.discardCreation();
+    expect(f.requests).toContain('/api/groups');
+    const home = controller.getSnapshot();
+    expect(home).toMatchObject({
+      screen: 'groups',
+      groups: { status: 'ready', data: [{ name: 'Maple House' }] },
+    });
+    settled(home);
+  });
+
+  it('shows a list that fell back to its saved copy while a Group was open with its saved time', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const savedAt = f.clock.now;
+    f.clock.now += 60 * 60_000;
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    await controller.openGroup(maple);
+    // The connection drops before the list answers.
+    list.release(new Error('Network request failed'));
+    await pulling;
+
+    await controller.back();
+    const home = controller.getSnapshot();
+    expect(home).toMatchObject({
+      screen: 'groups',
+      groups: { status: 'ready', data: [{ name: 'Maple House' }, { name: 'Lisbon Offsite' }] },
+      // Never shown as fresher than the saved copy it came from.
+      offline: { active: true, refreshedAt: savedAt },
+    });
+    settled(home);
+  });
+
+  it.each([
+    ['discarding New Group', 'create'],
+    ['closing an invitation', 'invite'],
+  ] as const)(
+    'shows a list that fell back to its saved copy with its saved time after %s',
+    async (_, screen) => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      const savedAt = f.clock.now;
+      f.clock.now += 60 * 60_000;
+      const list = f.hold('/api/groups');
+      const pulling = controller.refresh('pull');
+      await list.reached;
+      if (screen === 'create') controller.startCreate();
+      else await controller.openInvitation('https://wrong-origin.test/invalid');
+      expect(controller.getSnapshot().screen).toBe(screen);
+      list.release(new Error('Network request failed'));
+      await pulling;
+
+      if (screen === 'create') await controller.discardCreation();
+      else await controller.cancelInvitation();
+      const home = controller.getSnapshot();
+      expect(home).toMatchObject({
+        screen: 'groups',
+        groups: { status: 'ready', data: [{ name: 'Maple House' }, { name: 'Lisbon Offsite' }] },
+        offline: { active: true, refreshedAt: savedAt },
+      });
+      settled(home);
+    },
+  );
+
+  it('shows a list neither read nor saved here as a failure, and does not read it again', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    // Nothing is saved for the list on this device any more.
+    f.unsave('/api/groups');
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    await controller.openGroup(maple);
+    list.release(new Error('Network request failed'));
+    await pulling;
+    expect(controller.getSnapshot().groups).toMatchObject({
+      status: 'error',
+      message: 'This view was not saved on this device. Connect to load it.',
+    });
+
+    f.requests.length = 0;
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'groups',
+      groups: { status: 'error', data: [{ name: 'Maple House' }, { name: 'Lisbon Offsite' }] },
+    });
+    settled(controller.getSnapshot());
+    expect(f.requests).not.toContain('/api/groups');
+  });
+
+  it('shows a server failure for a list that lands while a Group is open, and does not read it again', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    await controller.openGroup(maple);
+    list.release(json({ error: 'Internal error', status: 500 }, 500));
+    await pulling;
+    expect(controller.getSnapshot().groups).toMatchObject({
+      status: 'error',
+      message: 'The server could not complete this request. Please try again.',
+    });
+
+    f.requests.length = 0;
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'groups',
+      groups: { status: 'error', data: [{ name: 'Maple House' }, { name: 'Lisbon Offsite' }] },
+    });
+    settled(controller.getSnapshot());
+    expect(f.requests).not.toContain('/api/groups');
+  });
+
+  it('drops a list that lands after signing out from a Group', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    await controller.openGroup(maple);
+    await controller.signOut();
+    const published = record(controller);
+    list.release();
+    await pulling;
+    expect(controller.getSnapshot()).toMatchObject({
+      auth: { status: 'signed-out', user: null },
+      groups: { data: [] },
+    });
+    expect(published.some((state) => state.groups.data.length > 0)).toBe(false);
+    expect(f.saved('/api/groups')).toBeNull();
+  });
+
+  it('keeps a Group created while the list loads, whichever answers first', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    controller.startCreate();
+    controller.updateCreation({ name: 'Cabin Weekend' });
+    await controller.createGroup();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { data: { name: 'Cabin Weekend' } },
+    });
+    const published = record(controller);
+    // The list answered before the Group was created.
+    list.release(json({ status: 200, data: groups }));
+    await pulling;
+    expect(
+      published.every((state) => state.groups.data.some(({ name }) => name === 'Cabin Weekend')),
+    ).toBe(true);
+
+    await controller.back();
+    expect(controller.getSnapshot().groups).toMatchObject({
+      status: 'ready',
+      data: [{ name: 'Maple House' }, { name: 'Lisbon Offsite' }, { name: 'Cabin Weekend' }],
+    });
+    settled(controller.getSnapshot());
+  });
+
+  it('saves a Group created since the latest list, like any listed Group', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'Cabin Weekend' });
+    await controller.createGroup();
+    const created = controller.getSnapshot().detail.id;
+    // Reading the new Group again, before any list read lists it, saves it for offline use.
+    await controller.refresh();
+    expect(controller.getSnapshot().detail).toMatchObject({ status: 'ready', id: created });
+    expect(f.saved(`/api/groups/${created}`)).not.toBeNull();
+  });
+
+  it('keeps a Group left while the list loads off Home, whichever answers first', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const list = f.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    await controller.openGroup(lisbon);
+    controller.openMembers();
+    await controller.reviewLeaveGroup();
+    expect(controller.getSnapshot().leave.status).toBe('confirm');
+    await controller.leaveGroup();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'groups',
+      homeSnackbar: { message: 'You left Lisbon Offsite.' },
+    });
+    const published = record(controller);
+    // The list answered before Alex left.
+    list.release(json({ status: 200, data: groups }));
+    await pulling;
+    expect(published.some((state) => lists(state, lisbon))).toBe(false);
+    const home = controller.getSnapshot();
+    expect(home).toMatchObject({ groups: { status: 'ready', data: [{ name: 'Maple House' }] } });
+    settled(home);
   });
 });

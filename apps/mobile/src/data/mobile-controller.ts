@@ -395,6 +395,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let activityRequest = 0;
   let activityDetailRequest = 0;
   let historyRequest = 0;
+  /** The Groups list's own read token: only a newer list read supersedes a list read. */
+  let groupsRequest = 0;
+  /** The latest Groups list read ended without an answer to show, so Home reads it again. */
+  let groupsUnanswered = false;
+  /**
+   * The Groups the latest verified Groups list holds (null until one is read this session), and
+   * those it left out. Saved copies are kept only for listed Groups and ones added since.
+   */
+  let listedGroups: Set<string> | null = null;
+  let unlistedGroups = new Set<string>();
   let cacheEpoch = 0;
   // Set by returnToGroup: the next read of that Group and Month reads this many pages.
   let returnPages: { groupId: string; month: string | null; pages: number } | null = null;
@@ -486,6 +496,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     materializing = new Map();
     running = { pull: [], automatic: [] };
     viewRequest += 1;
+    groupsUnanswered = false;
+    listedGroups = null;
+    unlistedGroups = new Set();
     requests.forEach((request) => request.abort());
     requests.clear();
     cookie = null;
@@ -877,6 +890,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const versionOf = (path: string) => versions.get(readScope(path)) ?? 0;
 
   /**
+   * Saved copies are kept only for Groups the latest Groups list holds, or that Home has gained
+   * since (a Group just created). One the list leaves out, such as an archived Group the member
+   * can still open, is shown but never saved.
+   */
+  const savable = (path: string) => {
+    const id = /^\/api\/groups\/([a-f\d]{24})/i.exec(path)?.[1];
+    return (
+      !id ||
+      !listedGroups ||
+      listedGroups.has(id) ||
+      (!unlistedGroups.has(id) && snapshot.groups.data.some((group) => group.id === id))
+    );
+  };
+
+  /**
    * Responses in these scopes are obsolete: they are no longer reused, shown from the
    * saved copy this session, joined, or saved again. Their next display reads again.
    */
@@ -1033,7 +1061,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (lease && dependencies.readCache) {
         try {
           await lease.write(async () => {
-            if (epoch !== cacheEpoch || version !== versionOf(path)) throw new Superseded();
+            if (epoch !== cacheEpoch || version !== versionOf(path) || !savable(path))
+              throw new Superseded();
             await dependencies.readCache!.save(lease.accountId, path, {
               version: 1,
               accountId: lease.accountId,
@@ -1043,8 +1072,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             });
           });
         } catch (error) {
-          if (!current(owner) || epoch !== cacheEpoch) throw new Superseded();
-          if (!(error instanceof Superseded))
+          if (!current(owner)) throw new Superseded();
+          // A newer cache epoch only means this response isn't saved; it still answers its
+          // callers. A response for a Group since lost is obsolete by version and read again.
+          if (!(error instanceof Superseded) && epoch === cacheEpoch)
             publish({
               ...snapshot,
               offline: {
@@ -1079,7 +1110,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const lease = accountStorage(),
       view = viewRequest,
       epoch = cacheEpoch,
-      shown = wanted ?? (() => view === viewRequest);
+      startVersion = versionOf(path),
+      shown = wanted ?? (() => view === viewRequest),
+      // Home's Groups list keeps its provenance while another view is open (startReadView),
+      // so its read records where its answer came from on whatever screen it lands.
+      recorded = path === '/api/groups' ? shown : () => view === viewRequest;
     try {
       let result = await sharedRead(path, owner, parse);
       // A confirmed change during the read made its response obsolete: read once more,
@@ -1091,7 +1126,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       )
         result = await sharedRead(path, owner, parse);
       const parsed = parse(result.value);
-      if (view === viewRequest && current(owner)) {
+      if (recorded() && current(owner)) {
         staleReads.delete(path);
         publishReadFreshness();
       }
@@ -1104,12 +1139,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         !dependencies.readCache
       )
         throw error;
-      if (epoch !== cacheEpoch) throw new Superseded();
+      // A newer cache epoch, or a change, denial or Groups list that made this path obsolete,
+      // may have dropped the saved copy read here: read again, while the caller still shows it.
+      const overtaken = () => epoch !== cacheEpoch || startVersion !== versionOf(path);
+      const again = () => {
+        if (!current(owner) || !shown()) throw new Superseded();
+        return readCached(path, owner, parse, wanted);
+      };
+      if (overtaken()) return again();
       const stored = await lease.write(() => dependencies.readCache!.load(lease.accountId, path));
       const cached = cachedRead(stored, lease.accountId, path, now());
-      if (!current(owner) || epoch !== cacheEpoch) throw new Superseded();
-      if (view === viewRequest) {
-        offlineSession = true;
+      if (!current(owner)) throw new Superseded();
+      if (overtaken()) return again();
+      if (view === viewRequest) offlineSession = true;
+      if (recorded()) {
         staleReads.set(path, cached?.refreshedAt ?? null);
         publishReadFreshness();
       }
@@ -1236,9 +1279,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** `reuse` accepts a list verified within the display freshness window. */
   const loadGroups = (owner: number, reuse = false) =>
     reuse ? listGroups(owner, true) : explicitly(['groups'], () => listGroups(owner, false));
-  const listGroups = async (owner: number, reuse: boolean) => {
+  /** Home's Groups list is read again when its latest read ended without an answer. */
+  const rereadGroups = (owner: number) =>
+    groupsUnanswered && current(owner) ? loadGroups(owner, true) : Promise.resolve();
+  /**
+   * Shows Home and reads the Groups list. The read has its own token, so it publishes its
+   * answer (the list or a failure) whatever screen the member has moved to; only a newer list
+   * read supersedes it. A read that ends with no answer leaves Home to read the list again.
+   */
+  const listGroups = async (owner: number, reuse: boolean): Promise<void> => {
     assertCurrent(owner);
-    const view = ++viewRequest;
+    viewRequest += 1;
+    const listRead = ++groupsRequest;
+    groupsUnanswered = false;
     const path = '/api/groups';
     startReadView();
     publish({
@@ -1249,38 +1302,60 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     try {
       const fresh = reuse ? freshRead(path) : null;
-      const reading = fresh ? null : readCached(path, owner, parseGroups);
+      const reading = fresh
+        ? null
+        : readCached(path, owner, parseGroups, () => listRead === groupsRequest);
       reading?.catch(() => undefined);
+      // The version current just after the answer settles. readCached already reads again for a
+      // change during the read; the checks below catch one between the answer and its use.
+      const answered = reading?.then(() => versionOf(path));
+      answered?.catch(() => undefined);
       if (reading && !snapshot.groups.data.length) {
         const saved = await peek(path, owner, parseGroups);
         if (
           saved &&
           current(owner) &&
-          view === viewRequest &&
+          listRead === groupsRequest &&
           !snapshot.groups.data.length &&
           memberOfAll(saved.value)
         )
           publish({ ...snapshot, groups: { ...snapshot.groups, data: saved.value, loaded: true } });
       }
       const groups = fresh ? parseGroups(fresh.value) : await reading!;
+      const version = answered ? await answered : versionOf(path);
       assertCurrent(owner);
-      if (view !== viewRequest) return;
+      if (listRead !== groupsRequest) return;
+      if (version !== versionOf(path)) throw new Superseded();
       // Do not display a malformed server response as somebody else's groups.
       if (!memberOfAll(groups)) {
         throw new RequestError('The server returned invalid group membership. Please refresh.');
       }
+      // Groups this session shows, has read or is reading that the list leaves out.
+      const lost = new Set<string>();
       if (reading && !staleReads.has(path)) {
-        // Groups no longer listed lose everything read for them, and Home with them.
         const listed = new Set(groups.map((group) => group.id));
-        for (const read of [...reads.keys()]) {
-          const id = /^\/api\/groups\/([a-f\d]{24})/i.exec(read)?.[1];
-          if (id && !listed.has(id))
-            invalidateReads(`group:${id}`, `ledger:${id}`, `balances:${id}`, 'home');
+        for (const key of [
+          ...snapshot.groups.data.map(({ id }) => `/api/groups/${id}`),
+          ...reads.keys(),
+          ...inflight.keys(),
+        ]) {
+          const id = /^\/api\/groups\/([a-f\d]{24})/i.exec(key)?.[1];
+          if (id && !listed.has(id)) lost.add(id);
         }
+        listedGroups = listed;
+        unlistedGroups = lost;
+        // They lose everything read for them, and Home with them. A read of one still running
+        // is obsolete, so it is never kept or saved, and a view still showing it reads again.
+        for (const id of lost)
+          invalidateReads(`group:${id}`, `ledger:${id}`, `balances:${id}`, 'home');
+        // With no list known yet, this device may hold Groups the trim drops, and Home's saved
+        // figures with them: figures still being read are read again after it.
+        if (!snapshot.groups.loaded && inflight.has('/api/user/balances')) invalidateReads('home');
       }
       const lease = accountStorage();
       if (reading && lease && dependencies.readCache && !staleReads.has(path)) {
-        cacheEpoch += 1;
+        // The lost Groups' reads are already obsolete by version, so the trim moves no cache epoch:
+        // reads running for another view or for Home go on and are saved.
         try {
           await lease.write(() =>
             dependencies.readCache!.retainGroups(
@@ -1293,14 +1368,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           await signOut();
           throw new Superseded();
         }
-        if (!current(owner) || view !== viewRequest) return;
+        if (!current(owner) || listRead !== groupsRequest) return;
+        if (version !== versionOf(path)) throw new Superseded();
       }
       publish({
         ...snapshot,
         groups: { status: 'ready', data: groups, message: null, loaded: true },
       });
     } catch (error) {
-      if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
+      if (!current(owner) || listRead !== groupsRequest) return;
+      if (error instanceof Superseded) {
+        // No answer to show: Home reads the list again, at once if it's showing.
+        groupsUnanswered = true;
+        if (snapshot.screen === 'groups') await rereadGroups(owner);
+        return;
+      }
       publish({
         ...snapshot,
         groups: {
@@ -1737,6 +1819,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         group.id !== id ||
         !group.members.some((member) => member.user.id === snapshot.auth.user?.id)
       ) {
+        // As for a refusal from the server: what was read and saved for it goes too.
+        await forgetGroup(id, 403, owner);
         throw new RequestError('You no longer have access to this group.', 403);
       }
       publish({
@@ -1875,6 +1959,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (!(error instanceof RequestError) || ![403, 404].includes(error.status)) return false;
     viewRequest += 1;
     homeRequest += 1;
+    // A Groups list or Home figures read before this, still running or not, never bring it back.
+    invalidateReads('groups', 'home');
     publish({
       ...snapshot,
       groups: { ...snapshot.groups, data: snapshot.groups.data.filter((group) => group.id !== id) },
@@ -3254,7 +3340,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
       financial: emptyFinancial(),
     });
-    return loadHome(true);
+    return settleHome();
+  };
+  /**
+   * Every way back to Home ends here. Home's content shows where it came from, including a list
+   * read that landed elsewhere; a Groups list read that ended without an answer is read again,
+   * then the figures.
+   */
+  const settleHome = () => {
+    publishReadFreshness();
+    if (!groupsUnanswered) return loadHome(true);
+    const owner = generation;
+    return rereadGroups(owner).then(() => (current(owner) ? loadHome(true) : undefined));
   };
 
   /** Android Back and close keep the draft on this device and return where the task began. */
@@ -4884,7 +4981,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     try {
       await savePending(null);
-      if (current(owner) && view === viewRequest) await loadHome(true);
+      if (current(owner) && view === viewRequest) await settleHome();
     } catch {
       if (!current(owner) || view !== viewRequest) return;
       publish({
@@ -5088,7 +5185,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const discardCreation = () => {
     if (snapshot.creation.status === 'saving') return;
+    const returning = snapshot.screen !== 'groups';
     publish({ ...snapshot, screen: 'groups', creation: cleanSnapshot(snapshot.auth).creation });
+    if (returning) return settleHome();
   };
 
   const back = () => {
