@@ -15,6 +15,8 @@ export default {
   slug: 'splitbook',
   version: '0.1.0',
   orientation: 'portrait',
+  // Brand kit exports (tools/brand); colors are assets/brand/brand.json's ink and paper.
+  icon: './assets/brand/app-icon.png',
   userInterfaceStyle: 'automatic',
   scheme: development ? 'splitbook-dev' : staging ? 'splitbook-staging' : 'splitbook',
   ios: { bundleIdentifier: appIdentifier },
@@ -26,6 +28,11 @@ export default {
       inviteOrigin: process.env.EXPO_PUBLIC_INVITE_ORIGIN,
       authOrigin: process.env.EXPO_PUBLIC_AUTH_ORIGIN,
     }),
+    adaptiveIcon: {
+      foregroundImage: './assets/brand/android-foreground.png',
+      monochromeImage: './assets/brand/android-monochrome.png',
+      backgroundColor: '#172033',
+    },
   },
   // Android Google identity uses an explicit web client ID and native autolinking.
   // The Google Expo plugin configures Firebase/iOS, neither needed for this Android beta.
@@ -33,5 +40,15 @@ export default {
     'expo-secure-store',
     'expo-font',
     ['expo-build-properties', { android: { usesCleartextTraffic: development } }],
+    // Each image is the whole 288 dp splash icon canvas, padded for Android's circular mask.
+    [
+      'expo-splash-screen',
+      {
+        image: './assets/brand/splash-light.png',
+        imageWidth: 288,
+        backgroundColor: '#F8F9FC',
+        dark: { image: './assets/brand/splash-dark.png', backgroundColor: '#172033' },
+      },
+    ],
   ],
 } satisfies ExpoConfig;
