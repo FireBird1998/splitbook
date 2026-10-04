@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { DISPLAY_FRESHNESS_MS, createMobileController } from './mobile-controller';
-import type { FetchResponse } from './types';
+import type { FetchResponse, PendingInvitationStore } from './types';
 import { refreshFeedback } from '../ui/refresh-feedback';
 
 // #103: reuse cached views and coalesce foreground reads.
@@ -62,7 +62,7 @@ function gate() {
  * A fictional backend whose ledger version rises with every accepted write, plus
  * persistent device stores that survive a controller restart.
  */
-function fixture(options: { freshness?: number } = {}) {
+function fixture(options: { freshness?: number; pendingInvitation?: PendingInvitationStore } = {}) {
   const clock = { now: Date.parse(iso) };
   const state = {
     ledger: 0,
@@ -225,6 +225,7 @@ function fixture(options: { freshness?: number } = {}) {
       {
         now: () => clock.now,
         displayFreshnessMs: options.freshness,
+        pendingInvitation: options.pendingInvitation,
         newSubmissionKey: () => `attempt-${String(++keys).padStart(4, '0')}`,
         credentials: {
           load: async () => cookie,
@@ -923,10 +924,18 @@ describe('Members and Group details reads its Group again (#238)', () => {
     email: 'priya@example.test',
     image: null,
   };
+  /** Maple House after Priya joined it. */
+  const joined = {
+    ...group,
+    members: [
+      ...group.members,
+      { user: { ...person(priya), email: priya.email }, role: 'member', joinedAt: iso },
+    ],
+  };
   type Fixture = ReturnType<typeof fixture>;
   /** Sam on Maple House's Members and details, opened from the Group view. */
-  async function onMembers() {
-    const f = fixture();
+  async function onMembers(options: Parameters<typeof fixture>[0] = {}) {
+    const f = fixture(options);
     const controller = f.create();
     await controller.signIn('sam');
     await controller.openGroup(groupId);
@@ -936,19 +945,29 @@ describe('Members and Group details reads its Group again (#238)', () => {
   type Controller = Awaited<ReturnType<typeof onMembers>>['controller'];
   const refresh = (controller: Controller, origin: 'foreground' | 'retry') =>
     origin === 'retry' ? controller.refresh() : controller.refresh('foreground');
+  const sessionRead = { method: 'GET', path: '/api/auth/get-session' };
+  const groupRead = { method: 'GET', path: groupPath };
   /** Whether this device still keeps a saved copy of the Group. */
   const savedGroup = (f: Fixture) => [...f.disk.keys()].some((key) => key.endsWith(groupPath));
+  /** How many saved copies of the Group, its Expenses and its Balances this device keeps. */
+  const savedOfGroup = (f: Fixture) =>
+    [...f.disk.keys()].filter((key) => key.includes(groupPath)).length;
   const listed = (controller: Controller) =>
     controller.getSnapshot().groups.data.map((entry) => entry.id);
-  /** Runs a refresh whose Group read gets this answer; false when no Group read was sent. */
-  async function answering(f: Fixture, run: () => Promise<void>, data: unknown) {
-    f.hold((path) => path === groupPath);
+  /** Runs a refresh whose request for `path` gets this response; false when none was sent. */
+  async function answering(
+    f: Fixture,
+    path: string,
+    run: () => Promise<void>,
+    response: FetchResponse,
+  ) {
+    f.hold((sent) => sent === path);
     const running = run();
-    const read = await Promise.race([f.held.next(groupPath), running.then(() => null)]);
+    const held = await Promise.race([f.held.next(path), running.then(() => null)]);
     f.hold(() => false);
-    read?.release(json({ status: 200, data }));
+    held?.release(response);
     await running;
-    return read !== null;
+    return held !== null;
   }
 
   it.each(['foreground', 'retry'] as const)(
@@ -961,7 +980,7 @@ describe('Members and Group details reads its Group again (#238)', () => {
       f.clock.now += 60_000;
       const before = f.calls.length;
       await refresh(controller, origin);
-      expect(f.calls.slice(before)).toContainEqual({ method: 'GET', path: groupPath });
+      expect(f.calls.slice(before)).toEqual([sessionRead, groupRead]);
       expect(controller.getSnapshot()).toMatchObject({
         screen: 'members',
         detail: { id: groupId, status: 'denied', data: null },
@@ -991,19 +1010,26 @@ describe('Members and Group details reads its Group again (#238)', () => {
     expect(savedGroup(f)).toBe(false);
   });
 
-  it('stops showing a Group that no longer lists the member', async () => {
+  it('stops showing a Group that no longer lists the member, and removes its saved copies', async () => {
     const { f, controller } = await onMembers();
+    // The Group, its Month's Expenses and its Balances.
+    expect(savedOfGroup(f)).toBe(3);
     f.clock.now += 60_000;
     const without = {
       ...group,
       members: group.members.filter((member) => member.user._id !== sam.id),
     };
-    expect(await answering(f, () => controller.refresh('foreground'), without)).toBe(true);
+    const refreshing = () => controller.refresh('foreground');
+    expect(await answering(f, groupPath, refreshing, json({ status: 200, data: without }))).toBe(
+      true,
+    );
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'members',
       detail: { id: groupId, status: 'denied', data: null },
     });
     expect(listed(controller)).not.toContain(groupId);
+    expect(savedOfGroup(f)).toBe(0);
+    expect([...f.disk.keys()].some((key) => key.endsWith('/api/groups'))).toBe(false);
   });
 
   it.each(['foreground', 'retry'] as const)(
@@ -1011,14 +1037,10 @@ describe('Members and Group details reads its Group again (#238)', () => {
     async (origin) => {
       const { f, controller } = await onMembers();
       f.clock.now += 60_000;
-      const joined = {
-        ...group,
-        members: [
-          ...group.members,
-          { user: { ...person(priya), email: priya.email }, role: 'member', joinedAt: iso },
-        ],
-      };
-      expect(await answering(f, () => refresh(controller, origin), joined)).toBe(true);
+      const refreshing = () => refresh(controller, origin);
+      expect(await answering(f, groupPath, refreshing, json({ status: 200, data: joined }))).toBe(
+        true,
+      );
       expect(controller.getSnapshot()).toMatchObject({
         screen: 'members',
         detail: { id: groupId, status: 'ready', refreshedAt: f.clock.now },
@@ -1078,5 +1100,158 @@ describe('Members and Group details reads its Group again (#238)', () => {
     });
     expect(listed(controller)).not.toContain(groupId);
     expect(savedGroup(f)).toBe(false);
+  });
+
+  it.each([403, 404])(
+    'keeps the Group when the session check answers %i: only the Group’s own read can refuse it',
+    async (status) => {
+      const { f, controller } = await onMembers();
+      f.clock.now += 60_000;
+      const before = f.calls.length;
+      const refreshing = () => controller.refresh();
+      expect(await answering(f, sessionRead.path, refreshing, json({}, status))).toBe(true);
+      expect(f.calls.slice(before)).toEqual([sessionRead]);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'members',
+        detail: { id: groupId, status: 'ready', data: { name: 'Maple House' } },
+      });
+      expect(listed(controller)).toContain(groupId);
+      expect(savedOfGroup(f)).toBe(3);
+    },
+  );
+
+  it.each([500, 502, 503])(
+    'keeps the Group and its saved copies when its read fails with %i, online or after an offline fallback',
+    async (status) => {
+      const { f, controller } = await onMembers();
+      const savedAt = f.clock.now;
+      f.state.failGroup = status;
+      f.clock.now += 60_000;
+      const before = f.calls.length;
+      await controller.refresh('foreground');
+      await controller.refresh();
+      expect(f.calls.slice(before)).toEqual([sessionRead, groupRead, sessionRead, groupRead]);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'members',
+        offline: { active: false },
+        detail: { id: groupId, data: { name: 'Maple House' }, refreshedAt: savedAt },
+      });
+      expect(listed(controller)).toContain(groupId);
+      expect(savedOfGroup(f)).toBe(3);
+
+      // Offline, the saved copy shows with its time; back online, the failure keeps both.
+      f.state.offline = true;
+      await controller.refresh();
+      f.state.offline = false;
+      await controller.refresh();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'members',
+        offline: { active: true, refreshedAt: savedAt },
+        detail: { id: groupId, data: { name: 'Maple House' }, refreshedAt: savedAt },
+      });
+      expect(listed(controller)).toContain(groupId);
+      expect(savedOfGroup(f)).toBe(3);
+    },
+  );
+
+  it('keeps showing an archived Group, which its members can still read', async () => {
+    const { f, controller } = await onMembers();
+    f.clock.now += 60_000;
+    const refreshing = () => controller.refresh('foreground');
+    const archived = json({ status: 200, data: { ...group, isArchived: true } });
+    expect(await answering(f, groupPath, refreshing, archived)).toBe(true);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'members',
+      detail: {
+        id: groupId,
+        status: 'ready',
+        data: { name: 'Maple House' },
+        refreshedAt: f.clock.now,
+      },
+    });
+    expect(listed(controller)).toContain(groupId);
+    expect(savedGroup(f)).toBe(true);
+  });
+
+  it.each([
+    ['Back to Home', 200],
+    ['Back to Home', 403],
+    ['sign-out', 200],
+    ['sign-out', 403],
+    ['an account change', 200],
+    ['an account change', 403],
+  ] as const)(
+    'publishes nothing from a Group read that lands after %s (%i)',
+    async (move, status) => {
+      const { f, controller } = await onMembers();
+      f.clock.now += 60_000;
+      f.hold((path) => path === groupPath);
+      const refreshing = controller.refresh('foreground');
+      const read = await f.held.next(groupPath);
+      f.hold(() => false);
+      let returning: ReturnType<Controller['back']> | undefined;
+      if (move === 'Back to Home') {
+        // To the Group view, which waits on the same read, then Home.
+        returning = controller.back();
+        expect(controller.getSnapshot().screen).toBe('group');
+        await controller.back();
+      } else if (move === 'sign-out') await controller.signOut();
+      else await controller.signIn('alex');
+      read.release(status === 200 ? json({ status: 200, data: joined }) : json({}, status));
+      await Promise.all([refreshing, returning]);
+
+      const state = controller.getSnapshot();
+      expect(state).toMatchObject({
+        screen: 'groups',
+        detail: { status: 'idle', id: null, data: null },
+      });
+      if (move === 'sign-out') {
+        expect(state.auth.status).toBe('signed-out');
+        expect(state.groups.data).toEqual([]);
+        expect(f.disk.size).toBe(0);
+      } else if (move === 'an account change') {
+        // Alex is still a member: Sam's late refusal leaves Alex's Group and saved list alone.
+        expect(state.auth.user?.id).toBe(alex.id);
+        expect(listed(controller)).toContain(groupId);
+        expect([...f.disk.keys()].some((key) => key.startsWith(sam.id))).toBe(false);
+        expect(f.disk.has(`${alex.id}/api/groups`)).toBe(true);
+      } else if (status === 200) expect(listed(controller)).toContain(groupId);
+      // On a 403, the request itself still removes the refused Group from Home, as any refused
+      // request does; the page's denied state never reaches Home.
+    },
+  );
+
+  it('publishes nothing from a Group read that lands after an invitation opened over the page', async () => {
+    const { f, controller } = await onMembers({
+      pendingInvitation: {
+        load: async () => null,
+        save: async () => {
+          throw new Error('The device storage is full');
+        },
+        clear: async () => undefined,
+      },
+    });
+    f.clock.now += 60_000;
+    f.hold((path) => path === groupPath);
+    const refreshing = controller.refresh('foreground');
+    const read = await f.held.next(groupPath);
+    f.hold(() => false);
+    await controller.openInvitation('http://localhost:4138/join/abcdef12');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      invitation: { status: 'error' },
+    });
+    read.release(json({ status: 200, data: joined }));
+    await refreshing;
+    // The refresh neither shows its Group nor retries the invitation the member didn't ask to.
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      invitation: { status: 'error' },
+    });
+    expect(f.calls.filter((call) => call.path.startsWith('/api/join/'))).toEqual([]);
+    expect(controller.getSnapshot().detail.data?.members.map(({ user }) => user.name)).toEqual([
+      'Alex',
+      'Sam',
+    ]);
   });
 });
