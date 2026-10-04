@@ -241,7 +241,7 @@ export class RecurringExpenseService {
    * A template whose configuration no longer validates against group state
    * (tag archived, member removed, currency drift) is skipped without
    * advancing its marker — the settings list surfaces that problem state.
-   * An archived Group generates nothing and its markers don't move.
+   * An archived Group generates nothing, and generation moves none of its markers.
    * This method never throws into the read path, and reads ignore whether the
    * run finished: a period that failed is retried on the next read.
    */
