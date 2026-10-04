@@ -9,6 +9,7 @@ import Typography from '@mui/material/Typography';
 import Skeleton from '@mui/material/Skeleton';
 import Button from '@mui/material/Button';
 import Alert from '@mui/material/Alert';
+import AlertTitle from '@mui/material/AlertTitle';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import MoneyText from '@/components/common/MoneyText';
@@ -17,8 +18,11 @@ import ErrorState from '@/components/common/ErrorState';
 import EmptyState from '@/components/common/EmptyState';
 import { RADIUS } from '@/lib/theme/tokens';
 import { formatDate } from '@splitbook/shared/date';
+import { formatCurrency } from '@splitbook/shared/currency';
 import SettleUpDialog from '@/components/settlements/SettleUpDialog';
 import { fetcher } from '@/lib/utils/fetcher';
+import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
+import type { SettlementAttempt } from '@/lib/settlement-attempts';
 import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupCategory } from '@splitbook/shared/types';
@@ -41,6 +45,16 @@ interface Settlement {
   note?: string;
   createdAt: string;
   createdBy?: { _id: string; name: string };
+}
+
+/** "Your payment of ₹250.25 to Priya Shah may already be recorded…", or the other way round. */
+function unconfirmedPaymentMessage(attempt: SettlementAttempt, userId: string) {
+  const amount = formatCurrency(attempt.amount, attempt.currency);
+  const payment =
+    attempt.paidBy === userId
+      ? `Your payment of ${amount} to ${attempt.paidToName}`
+      : `${attempt.paidByName}’s payment of ${amount} to ${attempt.paidTo === userId ? 'you' : attempt.paidToName}`;
+  return `${payment} may already be recorded. Check it before recording another.`;
 }
 
 function PersonChip({ name }: { name: string }) {
@@ -66,9 +80,12 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     fromUser?: { _id: string; name: string };
     toUser?: { _id: string; name: string };
     amount?: number;
+    purpose?: 'record' | 'check';
   }>({
     open: false,
   });
+  // Payments whose reply was lost, offered whatever the suggestions say (#198).
+  const attempts = useSettlementAttempts(userId, groupId);
 
   const { data, isLoading, error, mutate } = useSWR(`/api/groups/${groupId}/balances`, fetcher, {
     refreshInterval: 15_000,
@@ -103,18 +120,83 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     (b: { user: { _id: string }; balance: number }) => b.user._id === userId,
   );
 
+  const refresh = () => {
+    mutate();
+    mutateSettlements();
+  };
+  // The dialog keeps its place whichever state Balances is in, so a refresh never closes it.
+  const settleUpDialog = (
+    <SettleUpDialog
+      open={settleDialog.open}
+      onClose={() => setSettleDialog({ open: false })}
+      groupId={groupId}
+      group={group}
+      accountId={userId}
+      fromUser={settleDialog.fromUser}
+      toUser={settleDialog.toUser}
+      defaultAmount={settleDialog.amount}
+      purpose={settleDialog.purpose}
+      onSettled={refresh}
+      onDiscarded={refresh}
+    />
+  );
+  const withDialog = (content: React.ReactNode) => (
+    <>
+      {content}
+      {settleUpDialog}
+    </>
+  );
+
+  const unconfirmedPayments =
+    attempts.length > 0 ? (
+      <Stack spacing={1.5}>
+        {attempts.map((attempt) => (
+          <Alert
+            key={attempt.key}
+            severity="warning"
+            role="status"
+            action={
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() =>
+                  setSettleDialog({
+                    open: true,
+                    purpose: 'check',
+                    fromUser: { _id: attempt.paidBy, name: attempt.paidByName },
+                    toUser: { _id: attempt.paidTo, name: attempt.paidToName },
+                    amount: attempt.amount,
+                  })
+                }
+              >
+                Check payment
+              </Button>
+            }
+          >
+            <AlertTitle>Payment not confirmed</AlertTitle>
+            {unconfirmedPaymentMessage(attempt, userId)}
+          </Alert>
+        ))}
+      </Stack>
+    ) : null;
+
   if (isLoading) {
-    return (
+    return withDialog(
       <Stack spacing={1.5} role="status" aria-label="Loading balances" aria-busy="true">
         {[1, 2, 3].map((i) => (
           <Skeleton key={i} variant="rounded" height={64} />
         ))}
-      </Stack>
+      </Stack>,
     );
   }
 
   if (error) {
-    return <ErrorState message="Balances could not be loaded." onRetry={() => void mutate()} />;
+    return withDialog(
+      <Stack spacing={3}>
+        {unconfirmedPayments}
+        <ErrorState message="Balances could not be loaded." onRetry={() => void mutate()} />
+      </Stack>,
+    );
   }
 
   const displayName = (user: { _id: string; name: string }) =>
@@ -220,20 +302,22 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
   ) : null;
 
   if (balances.length === 0 && debts.length === 0) {
-    return (
+    return withDialog(
       <Stack spacing={3}>
+        {unconfirmedPayments}
         {currencySelector}
         <EmptyState
           title="All settled up"
           description={`No one owes anyone in this ${getGroupTheme(group.category as GroupCategory).nouns.singular} right now.`}
         />
         {settlementHistory}
-      </Stack>
+      </Stack>,
     );
   }
 
-  return (
+  return withDialog(
     <Stack spacing={3}>
+      {unconfirmedPayments}
       {currencySelector}
 
       {userBalance && (
@@ -338,6 +422,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                           onClick={() =>
                             setSettleDialog({
                               open: true,
+                              purpose: 'record',
                               fromUser: d.from,
                               toUser: d.to,
                               amount: d.amount,
@@ -394,20 +479,6 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
       </Box>
 
       {settlementHistory}
-
-      <SettleUpDialog
-        open={settleDialog.open}
-        onClose={() => setSettleDialog({ open: false })}
-        groupId={groupId}
-        group={group}
-        fromUser={settleDialog.fromUser}
-        toUser={settleDialog.toUser}
-        defaultAmount={settleDialog.amount}
-        onSettled={() => {
-          mutate();
-          mutateSettlements();
-        }}
-      />
-    </Stack>
+    </Stack>,
   );
 }

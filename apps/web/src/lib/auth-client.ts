@@ -6,6 +6,7 @@
 import { createAuthClient } from 'better-auth/react';
 import { demoPersonaClient } from '@/lib/auth/demo-persona-client';
 import { leaveExpectedAccount } from '@/lib/utils/api-fetch';
+import { forgetBrowserSettlementAttempts } from '@/lib/settlement-attempts';
 
 export const authClient = createAuthClient({
   plugins: [demoPersonaClient()],
@@ -40,6 +41,8 @@ export async function signInWithGoogle(callbackURL: string) {
 export async function signOutToHome() {
   // This tab navigates on its own; its session guard must not reload it first.
   leaveExpectedAccount();
+  // Unconfirmed payments are account-local data: none outlives the session (#198).
+  forgetBrowserSettlementAttempts();
   await authClient.signOut();
   window.location.assign('/');
 }
