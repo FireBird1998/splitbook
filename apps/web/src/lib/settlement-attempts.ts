@@ -10,13 +10,16 @@ import { z } from 'zod/v4';
  * 422 refuses its first send, or the member discards it on purpose, it is the
  * only payment that pair can record from this browser, and saving it resends
  * the same key and body. Closing the dialog, reloading, switching tabs or
- * opening a second tab never sends anything by itself.
+ * opening a second tab never sends anything by itself. Finding and storing
+ * the attempt for a pair happen under a lock shared by the browser's tabs.
+ * A page sending as another account than it was rendered for stores nothing.
  *
- * Sign-out forgets every stored attempt; an account change forgets the other
- * accounts' attempts on its first page load (see `forgetSettlementAttempts`).
+ * A successful sign-out forgets every stored attempt; an account change
+ * forgets the other accounts' attempts on its first page load (see
+ * `forgetSettlementAttempts`).
  *
- * Pure over an injected `Storage`, so it runs in node tests; the browser
- * helpers at the end wire it to `window.localStorage`.
+ * Pure over an injected `Storage` and lock, so it runs in node tests; the
+ * browser helpers at the end wire it to `window.localStorage` and Web Locks.
  */
 
 const PREFIX = 'splitbook:settlement-attempt:v1:';
@@ -178,6 +181,33 @@ export function forgetSettlementAttempts(storage: AttemptStorage, options?: { ex
 
 export const NETWORK_FAILURE = 'The connection failed before this payment was confirmed.';
 
+/**
+ * Runs `task` while holding the lock `name` across every tab of this browser.
+ * It guards finding and storing (or removing) the attempt for one pair, so
+ * two tabs saving at the same moment cannot each store and send a different
+ * key for it.
+ */
+export type PairLock = <T>(name: string, task: () => T) => Promise<T>;
+
+/** No lock: for storage that only this tab can see. */
+export const runUnlocked: PairLock = async (_name, task) => task();
+
+/** The lock name for a pair is its storage entry, so either direction takes the same lock. */
+const pairLockName = (accountId: string, groupId: string, a: string, b: string) =>
+  storageKey(accountId, groupId, a, b);
+
+/** `removeSettlementAttempt` under the pair's lock. */
+export function discardSettlementAttempt(
+  storage: AttemptStorage,
+  attempt: SettlementAttempt,
+  lock: PairLock = runUnlocked,
+) {
+  return lock(
+    pairLockName(attempt.accountId, attempt.groupId, attempt.paidBy, attempt.paidTo),
+    () => removeSettlementAttempt(storage, attempt),
+  );
+}
+
 export type SettlementSave =
   /** Confirmed by a 2xx; the attempt is removed. */
   | { status: 'recorded' }
@@ -187,6 +217,8 @@ export type SettlementSave =
   | { status: 'gone' }
   /** Nothing sent: this browser could not keep the attempt. */
   | { status: 'not-stored' }
+  /** Nothing stored or sent: the page was rendered for another account than it sends as. */
+  | { status: 'stale' }
   /** The first send was refused with a 422: the attempt is removed, the entries are the member's to fix. */
   | { status: 'rejected'; message: string }
   /** Possibly recorded: the attempt is kept for an explicit resend or discard. */
@@ -198,6 +230,8 @@ async function failureMessage(response: Response) {
     ? body.error
     : `The server answered ${response.status}.`;
 }
+
+type Ready = { attempt: SettlementAttempt; firstSend: boolean };
 
 /**
  * Save a Settlement: either resend the stored attempt the member was shown,
@@ -213,6 +247,8 @@ export async function recordSettlement({
   payment,
   newKey,
   post,
+  lock = runUnlocked,
+  pinnedToAccount = () => true,
 }: {
   storage: AttemptStorage | null;
   accountId: string;
@@ -223,40 +259,62 @@ export async function recordSettlement({
   payment?: NamedSettlementPayment;
   newKey: () => string;
   post: (key: string, body: string) => Promise<Response>;
+  lock?: PairLock;
+  /**
+   * Whether this page's requests go out as `accountId` (#199 pins the account
+   * a document was first rendered for). When they don't, the server refuses
+   * the write with a 419 before reading it, so a stored copy would be a
+   * payment that was never sent, shown as one that may already be recorded.
+   */
+  pinnedToAccount?: () => boolean;
 }): Promise<SettlementSave> {
   if (!storage) return { status: 'not-stored' };
-  let attempt: SettlementAttempt;
-  let firstSend: boolean;
-  if (resend) {
-    const current = findSettlementAttempt(
-      storage,
-      accountId,
-      groupId,
-      resend.paidBy,
-      resend.paidTo,
+  if (!pinnedToAccount()) return { status: 'stale' };
+  const pair = resend ?? payment;
+  if (!pair) throw new Error('recordSettlement needs a payment or an attempt to resend.');
+
+  let ready: Ready | SettlementSave;
+  try {
+    ready = await lock(
+      pairLockName(accountId, groupId, pair.paidBy, pair.paidTo),
+      (): Ready | SettlementSave => {
+        const current = findSettlementAttempt(
+          storage,
+          accountId,
+          groupId,
+          pair.paidBy,
+          pair.paidTo,
+        );
+        if (resend) {
+          if (!current) return { status: 'gone' };
+          if (!sameAttempt(current, resend)) return { status: 'earlier', attempt: current };
+          return { attempt: current, firstSend: false };
+        }
+        if (current) return { status: 'earlier', attempt: current };
+        const attempt = { ...pair, accountId, groupId, key: newKey(), body: settlementBody(pair) };
+        try {
+          storeSettlementAttempt(storage, attempt);
+        } catch {
+          return { status: 'not-stored' };
+        }
+        return { attempt, firstSend: true };
+      },
     );
-    if (!current) return { status: 'gone' };
-    if (!sameAttempt(current, resend)) return { status: 'earlier', attempt: current };
-    attempt = current;
-    firstSend = false;
-  } else {
-    if (!payment) throw new Error('recordSettlement needs a payment or an attempt to resend.');
-    const earlier = findSettlementAttempt(
-      storage,
-      accountId,
-      groupId,
-      payment.paidBy,
-      payment.paidTo,
-    );
-    if (earlier) return { status: 'earlier', attempt: earlier };
-    attempt = { ...payment, accountId, groupId, key: newKey(), body: settlementBody(payment) };
-    try {
-      storeSettlementAttempt(storage, attempt);
-    } catch {
-      return { status: 'not-stored' };
-    }
-    firstSend = true;
+  } catch {
+    // The lock was never granted, so nothing was stored or sent.
+    return { status: 'not-stored' };
   }
+  if ('status' in ready) return ready;
+  const { attempt, firstSend } = ready;
+
+  // Removing the copy is housekeeping: if it fails, the copy stays to resend, which the key makes safe.
+  const forget = async () => {
+    try {
+      await discardSettlementAttempt(storage, attempt, lock);
+    } catch {
+      /* kept */
+    }
+  };
 
   let response: Response;
   try {
@@ -265,12 +323,12 @@ export async function recordSettlement({
     return { status: 'unconfirmed', message: NETWORK_FAILURE, attempt };
   }
   if (response.ok) {
-    removeSettlementAttempt(storage, attempt);
+    await forget();
     return { status: 'recorded' };
   }
   const message = await failureMessage(response);
   if (firstSend && response.status === 422) {
-    removeSettlementAttempt(storage, attempt);
+    await forget();
     return { status: 'rejected', message };
   }
   return { status: 'unconfirmed', message, attempt };
@@ -322,6 +380,17 @@ export function settlementAttemptsSnapshot(accountId: string, groupId: string): 
 
 export function parseSettlementAttemptsSnapshot(snapshot: string): SettlementAttempt[] {
   return (parseJson(snapshot) as SettlementAttempt[] | undefined) ?? [];
+}
+
+/**
+ * Web Locks across this browser's tabs where the browser has them, otherwise
+ * no lock. A lock orders the tabs; it narrows, but cannot close, the window
+ * in which another tab's localStorage write has not reached this one yet.
+ */
+export function browserPairLock(): PairLock {
+  const locks = typeof navigator === 'undefined' ? undefined : navigator.locks;
+  if (!locks?.request) return runUnlocked;
+  return (name, task) => locks.request(name, () => task());
 }
 
 /** Sign-out, or an account change when `except` is the account signed in now. */

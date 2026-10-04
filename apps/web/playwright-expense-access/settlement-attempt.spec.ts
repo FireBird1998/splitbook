@@ -252,6 +252,52 @@ test('(c) a second tab of the same browser offers the payment and saves it under
   expect(await storedAttempts(second)).toEqual([]);
 });
 
+for (const opened of ['record', 'check'] as const) {
+  test(`once another tab confirms the payment, this tab's open dialog sends nothing (${opened})`, async ({
+    page,
+    ledger,
+  }) => {
+    await owes(ledger, 'priya', SAM, 1000);
+    const posts = await settlementPosts(page.context(), ledger, ['lose']);
+    await openBalancesAsSam(page, ledger);
+    await loseFirstReply(page, '250.25');
+    const here = settleDialog(page);
+    if (opened === 'check') {
+      // Opened again from the stored payment rather than kept open from the first Save.
+      await here.cancel.click();
+      await expect(here.dialog).toBeHidden();
+      await checkPayment(page).click();
+    }
+    await expect(here.amount).not.toBeEditable();
+
+    const other = await page.context().newPage();
+    await other.goto(balancesURL(ledger));
+    await checkPayment(other).click();
+    const there = settleDialog(other);
+    await there.save.click();
+    await expect(there.dialog).toBeHidden();
+    expect(posts).toHaveLength(2);
+
+    // This tab hears the payment is gone. Its dialog must not turn into a new payment.
+    await expect(here.dialog).toContainText('confirmed or discarded in another tab');
+    if (await here.save.isEnabled()) {
+      await here.save.click();
+      await expect(here.dialog).toBeHidden();
+    }
+    expect(posts).toHaveLength(2);
+    await expect(here.save).toBeDisabled();
+    await expect(here.amount).toHaveValue('250.25');
+    await expect(here.amount).not.toBeEditable();
+
+    await here.cancel.click();
+    await expect(here.dialog).toBeHidden();
+    // Balances read again at once: the stored payment is gone and the debt fell once.
+    await expect(checkPayment(page)).toHaveCount(0);
+    await expect(page.getByText('₹749.75', { exact: true })).toBeVisible({ timeout: 5_000 });
+    await expectRecordedOnce(ledger, posts, { amountMinor: 25025, debts: samOwesPriya(749.75) });
+  });
+}
+
 test('the payment survives Cancel, a Group tab switch, a reload and a closed window, and only Save sends it', async ({
   page,
   ledger,

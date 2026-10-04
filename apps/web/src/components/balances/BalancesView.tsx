@@ -137,7 +137,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
       defaultAmount={settleDialog.amount}
       purpose={settleDialog.purpose}
       onSettled={refresh}
-      onDiscarded={refresh}
+      onRefresh={refresh}
     />
   );
   const withDialog = (content: React.ReactNode) => (

@@ -41,8 +41,9 @@ export async function signInWithGoogle(callbackURL: string) {
 export async function signOutToHome() {
   // This tab navigates on its own; its session guard must not reload it first.
   leaveExpectedAccount();
+  const result = await authClient.signOut();
   // Unconfirmed payments are account-local data: none outlives the session (#198).
-  forgetBrowserSettlementAttempts();
-  await authClient.signOut();
+  // A sign-out that failed (offline, say) leaves the member signed in, so they stay.
+  if (!result?.error) forgetBrowserSettlementAttempts();
   window.location.assign('/');
 }

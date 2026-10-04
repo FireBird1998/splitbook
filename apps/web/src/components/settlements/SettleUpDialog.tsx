@@ -16,21 +16,26 @@ import MenuItem from '@mui/material/MenuItem';
 import CircularProgress from '@mui/material/CircularProgress';
 import { formatCurrency, getCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
-import { apiFetch } from '@/lib/utils/api-fetch';
+import { apiFetch, pinExpectedAccount, reloadForAccountChange } from '@/lib/utils/api-fetch';
 import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
 import {
   browserAttemptStorage,
+  browserPairLock,
+  discardSettlementAttempt,
   recordSettlement,
-  removeSettlementAttempt,
   type NamedSettlementPayment,
+  type SettlementAttempt,
 } from '@/lib/settlement-attempts';
 
 const UNCONFIRMED =
   'This payment may already be recorded. Saving sends the same record again, so it can’t be counted twice.';
 const GONE =
-  'That payment was confirmed or discarded in another tab. Check Settlement history before recording another.';
+  'That payment was confirmed or discarded in another tab, so this can’t send anything. Close this and check Settlement history before recording another payment.';
 const NOT_STORED =
   'Nothing was sent: this browser couldn’t keep a copy of the payment to retry it safely. Allow this site to store data, then save again.';
+const STALE =
+  'Nothing was sent: this page was opened for a different account than the one signed in now. It reloads for the current account.';
+const NOT_DISCARDED = 'This browser couldn’t discard the payment. Try again.';
 
 interface SettleUpDialogProps {
   open: boolean;
@@ -46,12 +51,16 @@ interface SettleUpDialogProps {
   defaultAmount?: number;
   /**
    * `record` opens a suggested payment; `check` opens a stored one that may
-   * already be recorded. Either shows the stored payment for the pair, if any.
+   * already be recorded, and never becomes a new payment. Either shows the
+   * stored payment for the pair, if any.
    */
   purpose?: 'record' | 'check';
   onSettled: () => void;
-  /** A stored payment was discarded on purpose. */
-  onDiscarded?: () => void;
+  /**
+   * Balances should read again: a stored payment was discarded here, or
+   * confirmed or discarded in another tab.
+   */
+  onRefresh?: () => void;
 }
 
 /**
@@ -59,7 +68,8 @@ interface SettleUpDialogProps {
  * send (see `@/lib/settlement-attempts`), so a lost reply never leads to a
  * second record: while it is stored, this dialog shows it read-only for its
  * pair of members, Save resends it unchanged, and Discard waits until the
- * member has been told to check the Group's payments.
+ * member has been told to check the Group's payments. Once a payment it
+ * showed is confirmed or discarded in another tab, the dialog sends nothing.
  */
 export default function SettleUpDialog({
   open,
@@ -72,7 +82,7 @@ export default function SettleUpDialog({
   defaultAmount,
   purpose = 'record',
   onSettled,
-  onDiscarded,
+  onRefresh,
 }: SettleUpDialogProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -84,9 +94,12 @@ export default function SettleUpDialog({
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   /** The key of the payment this opening of the dialog stored, which is no "earlier" payment. */
   const [createdKey, setCreatedKey] = useState<string | null>(null);
+  /** A payment this dialog showed that was confirmed or discarded elsewhere: it may be recorded. */
+  const [gone, setGone] = useState<SettlementAttempt | null>(null);
+  const [wasOpen, setWasOpen] = useState(open);
   /** This dialog is saving or discarding, so a stored payment it removes is not news. */
   const acting = useRef(false);
-  const shownKey = useRef<string | null>(null);
+  const shownAttempt = useRef<SettlementAttempt | null>(null);
 
   const defaultCurrency = group.defaultCurrency as string;
   const defaultCurrencyDetails = getCurrency(defaultCurrency);
@@ -100,7 +113,9 @@ export default function SettleUpDialog({
         ) ?? null)
       : null;
 
-  useEffect(() => {
+  // Each opening starts afresh; nothing else (such as a Balances refresh) resets it.
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) {
       setAmount(defaultAmount?.toString() || '');
       setNote('');
@@ -109,30 +124,41 @@ export default function SettleUpDialog({
       setEarlierFirst(false);
       setConfirmDiscard(false);
       setCreatedKey(null);
+      setGone(null);
     }
-  }, [open, defaultAmount]);
+  }
 
   // A stored payment that disappears while it is shown was settled in another tab.
   useEffect(() => {
     if (!open) {
-      shownKey.current = null;
+      shownAttempt.current = null;
       return;
     }
     if (stored) {
-      shownKey.current = stored.key;
-    } else if (shownKey.current) {
-      shownKey.current = null;
-      if (!acting.current) {
-        setNotice(GONE);
-        setError('');
-        setConfirmDiscard(false);
-      }
+      shownAttempt.current = stored;
+      return;
     }
-  }, [open, stored]);
+    const lost = shownAttempt.current;
+    shownAttempt.current = null;
+    if (lost && !acting.current) {
+      setGone(lost);
+      setNotice(GONE);
+      setError('');
+      setConfirmDiscard(false);
+      onRefresh?.();
+    }
+  }, [open, stored, onRefresh]);
+
+  // The payment shown is gone, or was only ever to be checked: this is no new payment.
+  const blocked = !stored && (gone !== null || purpose === 'check');
 
   const handleSubmit = async () => {
     if (!fromUser?._id || !toUser?._id) {
       setError('Missing settlement parties.');
+      return;
+    }
+    if (blocked) {
+      setNotice(GONE);
       return;
     }
     setLoading(true);
@@ -172,9 +198,12 @@ export default function SettleUpDialog({
             headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key },
             body,
           }),
+        lock: browserPairLock(),
+        // The same check the signed-in layout makes: is this page's account the one it sends as?
+        pinnedToAccount: () => pinExpectedAccount(accountId),
       });
       // Removed by this save: not a payment settled elsewhere.
-      if (result.status === 'recorded' || result.status === 'rejected') shownKey.current = null;
+      if (result.status === 'recorded' || result.status === 'rejected') shownAttempt.current = null;
 
       switch (result.status) {
         case 'recorded':
@@ -187,10 +216,17 @@ export default function SettleUpDialog({
           setEarlierFirst(true);
           return;
         case 'gone':
+          shownAttempt.current = null;
+          setGone(stored);
           setNotice(GONE);
+          onRefresh?.();
           return;
         case 'not-stored':
           setError(NOT_STORED);
+          return;
+        case 'stale':
+          setError(STALE);
+          reloadForAccountChange();
           return;
         default:
           setError(result.message);
@@ -203,18 +239,29 @@ export default function SettleUpDialog({
     }
   };
 
-  const handleDiscard = () => {
+  const handleDiscard = async () => {
     const storage = browserAttemptStorage();
     if (!stored || !storage) return;
     acting.current = true;
-    shownKey.current = null;
+    shownAttempt.current = null;
+    let removed: boolean;
     try {
-      removeSettlementAttempt(storage, stored);
+      removed = await discardSettlementAttempt(storage, stored, browserPairLock());
+    } catch {
+      setError(NOT_DISCARDED);
+      return;
     } finally {
       acting.current = false;
     }
-    onDiscarded?.();
-    onClose();
+    onRefresh?.();
+    if (removed) {
+      onClose();
+      return;
+    }
+    // Already confirmed or discarded elsewhere.
+    setGone(stored);
+    setNotice(GONE);
+    setConfirmDiscard(false);
   };
 
   // A first send in flight is not in doubt yet; once it fails, the warning shows.
@@ -222,9 +269,13 @@ export default function SettleUpDialog({
   // Another payment for this pair was stored before: it has to be settled first.
   const earlier =
     stored !== null && stored.key !== createdKey && (purpose === 'record' || earlierFirst);
-  const payer = stored?.paidByName ?? fromUser?.name ?? 'Someone';
-  const payee = stored?.paidToName ?? toUser?.name ?? 'someone';
-  const currency = stored?.currency ?? defaultCurrency;
+  /** What the fields show, read-only: the stored payment, or the one that went. */
+  const shown = stored ?? (blocked ? gone : null);
+  const readOnly = stored !== null || blocked;
+  const payer = shown?.paidByName ?? fromUser?.name ?? 'Someone';
+  const payee = shown?.paidToName ?? toUser?.name ?? 'someone';
+  const currency = shown?.currency ?? defaultCurrency;
+  const noticeText = notice || (blocked ? GONE : '');
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
@@ -261,9 +312,9 @@ export default function SettleUpDialog({
             </Alert>
           )}
 
-          {!stored && notice && (
+          {!stored && noticeText && (
             <Alert severity="info" role="status">
-              {notice}
+              {noticeText}
             </Alert>
           )}
 
@@ -280,7 +331,7 @@ export default function SettleUpDialog({
           <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
             <TextField
               label="Amount"
-              value={stored ? String(stored.amount) : amount}
+              value={shown ? String(shown.amount) : amount}
               onChange={(e) => setAmount(e.target.value)}
               type="number"
               size="small"
@@ -288,7 +339,7 @@ export default function SettleUpDialog({
               autoFocus
               slotProps={{
                 htmlInput: {
-                  readOnly: stored !== null,
+                  readOnly,
                   min: 10 ** -getCurrencyPrecision(currency),
                   step: 10 ** -getCurrencyPrecision(currency),
                 },
@@ -310,12 +361,12 @@ export default function SettleUpDialog({
 
           <TextField
             label="Note (optional)"
-            value={stored ? stored.note : note}
+            value={shown ? shown.note : note}
             onChange={(e) => setNote(e.target.value)}
             fullWidth
             size="small"
             placeholder="e.g. Paid via UPI"
-            slotProps={{ htmlInput: { readOnly: stored !== null } }}
+            slotProps={{ htmlInput: { readOnly } }}
           />
 
           {inDoubt && confirmDiscard && (
@@ -342,7 +393,7 @@ export default function SettleUpDialog({
             <Button onClick={() => setConfirmDiscard(false)} color="inherit">
               Keep payment
             </Button>
-            <Button onClick={handleDiscard} variant="contained" color="error">
+            <Button onClick={() => void handleDiscard()} variant="contained" color="error">
               Discard payment
             </Button>
           </>
@@ -361,7 +412,7 @@ export default function SettleUpDialog({
             <Button onClick={onClose} color="inherit">
               Cancel
             </Button>
-            <Button onClick={handleSubmit} variant="contained" disabled={loading}>
+            <Button onClick={handleSubmit} variant="contained" disabled={loading || blocked}>
               {loading ? <CircularProgress size={20} /> : 'Save settlement'}
             </Button>
           </>

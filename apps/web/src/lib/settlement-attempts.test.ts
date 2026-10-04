@@ -20,6 +20,10 @@ const OTHER_GROUP = 'b00000000000000000000002';
 class MemoryStorage implements AttemptStorage {
   private items = new Map<string, string>();
   failWrites = false;
+  failRemoves = false;
+  /** Set while a test's lock is held, to check what runs under it. */
+  writes: Array<{ op: 'set' | 'remove'; locked: boolean }> = [];
+  locked = false;
   get length() {
     return this.items.size;
   }
@@ -31,9 +35,12 @@ class MemoryStorage implements AttemptStorage {
   }
   setItem(key: string, value: string) {
     if (this.failWrites) throw new DOMException('Quota exceeded', 'QuotaExceededError');
+    this.writes.push({ op: 'set', locked: this.locked });
     this.items.set(key, value);
   }
   removeItem(key: string) {
+    if (this.failRemoves) throw new DOMException('Storage unavailable', 'SecurityError');
+    this.writes.push({ op: 'remove', locked: this.locked });
     this.items.delete(key);
   }
   keys() {
@@ -257,6 +264,89 @@ describe('recordSettlement', () => {
       attempt: replacement,
     });
     expect(server.sent).toEqual([]);
+  });
+
+  it('a storage failure after a 2xx still reports the payment recorded', async () => {
+    const storage = new MemoryStorage();
+    const server = fakeServer();
+    storage.failRemoves = true;
+    expect(await save(storage, server.post)).toEqual({ status: 'recorded' });
+    // The copy stays, and resending it later is safe: the server replays the same key.
+    expect(stored(storage)).toEqual([expect.objectContaining({ key: server.sent[0].key })]);
+  });
+
+  it('a page rendered for another account than it sends as stores and sends nothing', async () => {
+    const storage = new MemoryStorage();
+    await save(storage, fakeServer(() => 'lost').post);
+    const [kept] = stored(storage);
+    const server = fakeServer();
+    const stale = (options: { resend?: SettlementAttempt | null }) =>
+      recordSettlement({
+        storage,
+        accountId: SAM,
+        groupId: GROUP,
+        newKey,
+        post: server.post,
+        payment: options.resend ? undefined : { ...samPaysPriya, paidBy: ALEX },
+        resend: options.resend ?? null,
+        pinnedToAccount: () => false,
+      });
+    expect(await stale({})).toEqual({ status: 'stale' });
+    expect(await stale({ resend: kept })).toEqual({ status: 'stale' });
+    expect(server.sent).toEqual([]);
+    expect(stored(storage)).toEqual([kept]);
+  });
+
+  it('finds, stores and removes under one lock per pair, whichever way round', async () => {
+    const storage = new MemoryStorage();
+    const names: string[] = [];
+    const lock = async <T>(name: string, task: () => T) => {
+      names.push(name);
+      storage.locked = true;
+      try {
+        return task();
+      } finally {
+        storage.locked = false;
+      }
+    };
+    const server = fakeServer((send, commit) => {
+      if (send === 1) {
+        commit();
+        return 'lost';
+      }
+    });
+    const options = { storage, accountId: SAM, groupId: GROUP, newKey, post: server.post, lock };
+    await recordSettlement({ ...options, payment: samPaysPriya });
+    const reverse = { ...samPaysPriya, paidBy: PRIYA, paidTo: SAM };
+    expect(await recordSettlement({ ...options, payment: reverse })).toMatchObject({
+      status: 'earlier',
+    });
+    expect(await recordSettlement({ ...options, resend: stored(storage)[0] })).toEqual({
+      status: 'recorded',
+    });
+    expect(storage.writes).toEqual([
+      { op: 'set', locked: true },
+      { op: 'remove', locked: true },
+    ]);
+    expect(names).toHaveLength(4);
+    expect(new Set(names).size).toBe(1);
+  });
+
+  it('sends nothing when the lock is never granted', async () => {
+    const storage = new MemoryStorage();
+    const server = fakeServer();
+    const result = await recordSettlement({
+      storage,
+      accountId: SAM,
+      groupId: GROUP,
+      newKey,
+      post: server.post,
+      payment: samPaysPriya,
+      lock: () => Promise.reject(new DOMException('Aborted', 'AbortError')),
+    });
+    expect(result).toEqual({ status: 'not-stored' });
+    expect(server.sent).toEqual([]);
+    expect(stored(storage)).toEqual([]);
   });
 
   it('sends nothing when the attempt cannot be stored first', async () => {
