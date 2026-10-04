@@ -5044,7 +5044,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ? snapshot.expense.groupId
           : screen === 'settlement'
             ? snapshot.settlement.groupId
-            : null;
+            : screen === 'members'
+              ? snapshot.detail.id
+              : null;
       try {
         try {
           await revalidateSession(owner);
@@ -5054,7 +5056,28 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           offlineSession = true;
         }
         if (!current(owner) || view !== viewRequest) return;
-        if (dependencies.readCache && groupId) {
+        if (screen === 'members' && groupId) {
+          // Read as on the Group view: a foreground refresh reuses a recently verified read.
+          const path = `/api/groups/${groupId}`;
+          const fresh = reuse ? freshRead(path) : null;
+          const group = fresh ? parseGroup(fresh.value) : await readCached(path, owner, parseGroup);
+          if (!current(owner) || view !== viewRequest) return;
+          if (
+            group.id !== groupId ||
+            !group.members.some((member) => member.user.id === snapshot.auth.user?.id)
+          )
+            throw new RequestError('You no longer have access to this group.', 403);
+          publish({
+            ...snapshot,
+            detail: {
+              status: 'ready',
+              id: groupId,
+              data: group,
+              message: null,
+              refreshedAt: readAt(path),
+            },
+          });
+        } else if (dependencies.readCache && groupId) {
           const context = await readCached(`/api/groups/${groupId}`, owner, parseExpenseContext);
           if (!current(owner) || view !== viewRequest) return;
           if (
@@ -5082,7 +5105,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                 message: error.message,
               },
             });
-          else
+          else if (screen === 'settlement')
             publish({
               ...snapshot,
               settlement: {
@@ -5093,6 +5116,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                 message: error.message,
               },
             });
+          else {
+            // Members now shows none of the Group: its saved copies no longer keep the offline banner.
+            for (const path of staleReads.keys())
+              if (path.startsWith(`/api/groups/${groupId}`)) staleReads.delete(path);
+            publishReadFreshness();
+          }
         } else if (snapshot.screen === 'create')
           publish({
             ...snapshot,

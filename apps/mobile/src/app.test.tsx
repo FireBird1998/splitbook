@@ -722,6 +722,31 @@ describe('App Members and Group details', () => {
     });
     expect(app.text()).toContain('Members and details');
   });
+
+  it('stops showing the Group and its members once a foreground read is refused', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await openMembers(app);
+    expect(app.text()).toContain('Sam Chen · YouMember');
+    // An admin removed Sam on the web while SplitBook was in the background.
+    app.use((path) =>
+      path === `/api/groups/${groupId}`
+        ? json({}, 403)
+        : path === '/api/groups'
+          ? json({ data: [], status: 200 })
+          : undefined,
+    );
+    // Past the display freshness window, so the foreground refresh reads again.
+    app.clock.now += 31_000;
+    app.foreground();
+    await settle();
+    const shown = app.text();
+    expect(shown).toContain('Members and details');
+    expect(shown).toContain('You no longer have access to this group.');
+    expect(shown).not.toContain('Sam Chen');
+    expect(shown).not.toContain('Maple House');
+    expect(shown).not.toContain('Expenses shown by');
+  });
 });
 
 describe('App return from an Expense', () => {

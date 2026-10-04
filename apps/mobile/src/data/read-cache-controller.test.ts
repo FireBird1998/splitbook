@@ -915,3 +915,168 @@ describe('cached views and coalesced reads (#103)', () => {
     });
   });
 });
+
+describe('Members and Group details reads its Group again (#238)', () => {
+  const priya = {
+    id: 'a00000000000000000000003',
+    name: 'Priya',
+    email: 'priya@example.test',
+    image: null,
+  };
+  type Fixture = ReturnType<typeof fixture>;
+  /** Sam on Maple House's Members and details, opened from the Group view. */
+  async function onMembers() {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('sam');
+    await controller.openGroup(groupId);
+    controller.openMembers();
+    return { f, controller };
+  }
+  type Controller = Awaited<ReturnType<typeof onMembers>>['controller'];
+  const refresh = (controller: Controller, origin: 'foreground' | 'retry') =>
+    origin === 'retry' ? controller.refresh() : controller.refresh('foreground');
+  /** Whether this device still keeps a saved copy of the Group. */
+  const savedGroup = (f: Fixture) => [...f.disk.keys()].some((key) => key.endsWith(groupPath));
+  const listed = (controller: Controller) =>
+    controller.getSnapshot().groups.data.map((entry) => entry.id);
+  /** Runs a refresh whose Group read gets this answer; false when no Group read was sent. */
+  async function answering(f: Fixture, run: () => Promise<void>, data: unknown) {
+    f.hold((path) => path === groupPath);
+    const running = run();
+    const read = await Promise.race([f.held.next(groupPath), running.then(() => null)]);
+    f.hold(() => false);
+    read?.release(json({ status: 200, data }));
+    await running;
+    return read !== null;
+  }
+
+  it.each(['foreground', 'retry'] as const)(
+    'stops showing a Group whose read is refused on a %s refresh, and Back then goes Home',
+    async (origin) => {
+      const { f, controller } = await onMembers();
+      expect(savedGroup(f)).toBe(true);
+      f.state.revoked = true;
+      // Past the display freshness window.
+      f.clock.now += 60_000;
+      const before = f.calls.length;
+      await refresh(controller, origin);
+      expect(f.calls.slice(before)).toContainEqual({ method: 'GET', path: groupPath });
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'members',
+        detail: { id: groupId, status: 'denied', data: null },
+      });
+      expect(listed(controller)).not.toContain(groupId);
+      expect(savedGroup(f)).toBe(false);
+      await controller.back();
+      expect(controller.getSnapshot().screen).toBe('groups');
+    },
+  );
+
+  it('says a Group that is gone is no longer available, as the Group view does', async () => {
+    const { f, controller } = await onMembers();
+    f.state.failGroup = 404;
+    f.clock.now += 60_000;
+    await controller.refresh('foreground');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'members',
+      detail: {
+        id: groupId,
+        status: 'error',
+        data: null,
+        message: 'This group is no longer available.',
+      },
+    });
+    expect(listed(controller)).not.toContain(groupId);
+    expect(savedGroup(f)).toBe(false);
+  });
+
+  it('stops showing a Group that no longer lists the member', async () => {
+    const { f, controller } = await onMembers();
+    f.clock.now += 60_000;
+    const without = {
+      ...group,
+      members: group.members.filter((member) => member.user._id !== sam.id),
+    };
+    expect(await answering(f, () => controller.refresh('foreground'), without)).toBe(true);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'members',
+      detail: { id: groupId, status: 'denied', data: null },
+    });
+    expect(listed(controller)).not.toContain(groupId);
+  });
+
+  it.each(['foreground', 'retry'] as const)(
+    'shows the Group as read on a %s refresh: a member who joined meanwhile appears',
+    async (origin) => {
+      const { f, controller } = await onMembers();
+      f.clock.now += 60_000;
+      const joined = {
+        ...group,
+        members: [
+          ...group.members,
+          { user: { ...person(priya), email: priya.email }, role: 'member', joinedAt: iso },
+        ],
+      };
+      expect(await answering(f, () => refresh(controller, origin), joined)).toBe(true);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'members',
+        detail: { id: groupId, status: 'ready', refreshedAt: f.clock.now },
+      });
+      expect(controller.getSnapshot().detail.data?.members.map(({ user }) => user.name)).toEqual([
+        'Alex',
+        'Sam',
+        'Priya',
+      ]);
+    },
+  );
+
+  it('reuses a Group read verified within the display freshness window on a foreground refresh; Try again always reads', async () => {
+    const { f, controller } = await onMembers();
+    const verifiedAt = f.clock.now;
+    f.clock.now += 10_000;
+    await controller.refresh('foreground');
+    expect(f.reads(groupPath)).toBe(1);
+    expect(controller.getSnapshot().detail).toMatchObject({
+      status: 'ready',
+      refreshedAt: verifiedAt,
+    });
+    await controller.refresh();
+    expect(f.reads(groupPath)).toBe(2);
+    expect(controller.getSnapshot().detail).toMatchObject({
+      status: 'ready',
+      refreshedAt: f.clock.now,
+    });
+    f.clock.now += DISPLAY_FRESHNESS_MS + 1;
+    await controller.refresh('foreground');
+    expect(f.reads(groupPath)).toBe(3);
+  });
+
+  it('keeps the saved copy, its time and the offline banner offline, dropping nothing until a read is refused', async () => {
+    const { f, controller } = await onMembers();
+    const savedAt = f.clock.now;
+    f.state.offline = true;
+    f.state.revoked = true;
+    f.clock.now += 60_000;
+    await controller.refresh('foreground');
+    await controller.refresh();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'members',
+      offline: { active: true, refreshedAt: savedAt },
+      detail: { id: groupId, data: { name: 'Maple House' }, refreshedAt: savedAt },
+    });
+    expect(listed(controller)).toContain(groupId);
+    expect(savedGroup(f)).toBe(true);
+
+    // Back online, the refusal is lost access, not offline: the offline banner goes too.
+    f.state.offline = false;
+    await controller.refresh();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'members',
+      offline: { active: false },
+      detail: { id: groupId, status: 'denied', data: null },
+    });
+    expect(listed(controller)).not.toContain(groupId);
+    expect(savedGroup(f)).toBe(false);
+  });
+});
