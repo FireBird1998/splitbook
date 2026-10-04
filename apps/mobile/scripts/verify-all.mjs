@@ -7,17 +7,20 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const mobile = resolve(import.meta.dirname, '..');
-const { scripts } = JSON.parse(readFileSync(resolve(mobile, 'package.json'), 'utf8'));
+const mobileDirectory = resolve(import.meta.dirname, '..');
+const { scripts } = JSON.parse(readFileSync(resolve(mobileDirectory, 'package.json'), 'utf8'));
 const verifiers = Object.keys(scripts).filter(
   (name) => name.startsWith('verify:') && name !== 'verify:all',
 );
 
 const results = [];
 for (const name of verifiers) {
-  console.log(`\n> ${name}`);
   const started = Date.now();
-  const { status } = spawnSync(scripts[name], { cwd: mobile, shell: true, stdio: 'inherit' });
+  const { status, error } = spawnSync('pnpm', ['run', name], {
+    cwd: mobileDirectory,
+    stdio: 'inherit',
+  });
+  if (error) console.error(`${name} could not start: ${error.message}`);
   results.push({ name, passed: status === 0, seconds: Math.round((Date.now() - started) / 1000) });
 }
 

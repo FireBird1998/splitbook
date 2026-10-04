@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { backendTarget, targetVariables } from './environment.mjs';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { backendTarget } from './environment.mjs';
+
+// isolatedEnv() refuses root and web .env files. A developer checkout may have them,
+// and these tests are not about them.
+vi.mock('node:fs', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('node:fs')>()),
+  readdirSync: () => [],
+}));
 
 describe('fictional backend target', () => {
   it("defaults to today's single backend", () => {
@@ -82,15 +89,43 @@ describe('fictional backend target', () => {
       /^SPLITBOOK_NATIVE_MONGO_PORT must be/,
     );
   });
+});
 
-  it('hands child processes the variables that resolve the same backend', () => {
-    // The seed runs in a child process; it must seed the database the parent checked.
-    const target = backendTarget({
-      SPLITBOOK_NATIVE_ORIGIN_PORT: '4187',
-      SPLITBOOK_NATIVE_DATABASE: 'splitbook_mobile_187',
-      SPLITBOOK_NATIVE_MONGO_PORT: '27017',
+describe('the environment the backend scripts give their child processes', () => {
+  const chosen = {
+    SPLITBOOK_NATIVE_ORIGIN_PORT: '4187',
+    SPLITBOOK_NATIVE_DATABASE: 'splitbook_mobile_187',
+    SPLITBOOK_NATIVE_MONGO_PORT: '27017',
+  };
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  /** isolatedEnv() as seed.mjs and start.mjs call it, in a process started with these variables. */
+  async function childEnvironment(variables: Record<string, string>) {
+    for (const [name, value] of Object.entries(variables)) vi.stubEnv(name, value);
+    vi.resetModules();
+    const { isolatedEnv } = await import('./environment.mjs');
+    return isolatedEnv();
+  }
+
+  it('points Next and the seed at the chosen backend, ignoring an inherited MONGODB_URI', async () => {
+    const child = await childEnvironment({
+      ...chosen,
+      MONGODB_URI: 'mongodb://db.example.com:27017/splitbook',
     });
-    expect(backendTarget(targetVariables(target))).toEqual(target);
-    expect(backendTarget(targetVariables(backendTarget({})))).toEqual(backendTarget({}));
+    expect(child.NEXT_PUBLIC_APP_URL).toBe('http://127.0.0.1:4187');
+    expect(child.MONGODB_URI).toBe(
+      'mongodb://127.0.0.1:27017/splitbook_mobile_187?directConnection=true',
+    );
+  });
+
+  it("lets the seed's child process resolve the backend the parent checked", async () => {
+    // seed.mjs runs the fixtures in a child whose whole environment is isolatedEnv().
+    // The child resolves its target from that environment, and must not fall back to
+    // the default database.
+    expect(backendTarget(await childEnvironment(chosen))).toEqual(backendTarget(chosen));
   });
 });

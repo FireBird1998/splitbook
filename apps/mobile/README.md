@@ -60,7 +60,7 @@ node apps/mobile/scripts/dev-backend/control.mjs restore-member sam household
 node apps/mobile/scripts/dev-backend/control.mjs expire-sessions sam
 ```
 
-Always restore fictional membership after testing. Confirm denied/expired access removes protected content, errors can be retried, and light/dark headers preserve the Trip-only ornament. These device checks are distinct from Node HTTP tests and do not verify Google OAuth.
+These act on the default backend's `splitbook_mobile_50`. For a per-worktree backend, give them its `SPLITBOOK_NATIVE_DATABASE`, as in the [backend helper](scripts/dev-backend/README.md#fixtures-and-controls). Always restore fictional membership after testing. Confirm denied/expired access removes protected content, errors can be retried, and light/dark headers preserve the Trip-only ornament. These device checks are distinct from Node HTTP tests and do not verify Google OAuth.
 
 ## Android invitation links
 

@@ -53,7 +53,7 @@ export function backendTarget(env) {
 }
 
 /** The variables that make a child process, such as the seed, resolve the same backend. */
-export function targetVariables(target) {
+function targetVariables(target) {
   return {
     SPLITBOOK_NATIVE_ORIGIN_PORT: String(target.originPort),
     SPLITBOOK_NATIVE_DATABASE: target.databaseName,

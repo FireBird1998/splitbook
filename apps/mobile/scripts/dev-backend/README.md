@@ -37,16 +37,15 @@ Each worktree can run its own backend, so several worktrees can run the verifier
 An invalid value is refused before anything connects. Without the variables, the backend is the default one above.
 
 1. Pick a port and a database name that no other worktree uses. The ticket number makes a good pair: port `4186` and database `splitbook_mobile_186` for #186.
-2. Seed, then start, with both variables set:
+2. Seed, then start, with both variables on each command:
 
    ```sh
-   export SPLITBOOK_NATIVE_ORIGIN_PORT=4186 SPLITBOOK_NATIVE_DATABASE=splitbook_mobile_186
-   node apps/mobile/scripts/dev-backend/seed.mjs --check
-   node apps/mobile/scripts/dev-backend/seed.mjs
-   node apps/mobile/scripts/dev-backend/start.mjs
+   SPLITBOOK_NATIVE_ORIGIN_PORT=4186 SPLITBOOK_NATIVE_DATABASE=splitbook_mobile_186 node apps/mobile/scripts/dev-backend/seed.mjs --check
+   SPLITBOOK_NATIVE_ORIGIN_PORT=4186 SPLITBOOK_NATIVE_DATABASE=splitbook_mobile_186 node apps/mobile/scripts/dev-backend/seed.mjs
+   SPLITBOOK_NATIVE_ORIGIN_PORT=4186 SPLITBOOK_NATIVE_DATABASE=splitbook_mobile_186 node apps/mobile/scripts/dev-backend/start.mjs
    ```
 
-   A new database name gives a freshly seeded fictional database. Seeding an existing one again is idempotent.
+   A new database name gives a freshly seeded fictional database. Seeding an existing one again is idempotent. Start refuses a database that has not been seeded. Every seed, start and control command needs the same variables, so a terminal without them acts on the default backend.
 
 3. In another terminal, run the verifiers with a matching `MOBILE_VERIFY_URL`:
 
@@ -54,7 +53,7 @@ An invalid value is refused before anything connects. Without the variables, the
    MOBILE_VERIFY_URL=http://127.0.0.1:4186 TZ=Asia/Kolkata pnpm mobile verify:all
    ```
 
-   The verifiers take the backend only from `MOBILE_VERIFY_URL`. Without it they use the default backend on 4138, which may belong to another worktree.
+   The verifiers read no `SPLITBOOK_NATIVE_*` variable. They take the backend only from `MOBILE_VERIFY_URL`, and without it they use the default backend on 4138, which may belong to another worktree.
 
 Next allows one `next dev` per app directory, so a worktree runs at most one backend at a time. For an emulator, reverse the chosen port instead (`adb reverse tcp:4186 tcp:4186`) and point the app's API URL and auth origin at it.
 
@@ -65,10 +64,10 @@ Fictional personas Alex, Sam, and Priya share **Goa Friends Trip** and **Maple H
 For native session/access recovery checks:
 
 ```sh
-node apps/mobile/scripts/dev-backend/control.mjs describe
-node apps/mobile/scripts/dev-backend/control.mjs revoke-member sam household
-node apps/mobile/scripts/dev-backend/control.mjs restore-member sam household
-node apps/mobile/scripts/dev-backend/control.mjs expire-sessions sam
+SPLITBOOK_NATIVE_DATABASE=splitbook_mobile_186 node apps/mobile/scripts/dev-backend/control.mjs describe
+SPLITBOOK_NATIVE_DATABASE=splitbook_mobile_186 node apps/mobile/scripts/dev-backend/control.mjs revoke-member sam household
+SPLITBOOK_NATIVE_DATABASE=splitbook_mobile_186 node apps/mobile/scripts/dev-backend/control.mjs restore-member sam household
+SPLITBOOK_NATIVE_DATABASE=splitbook_mobile_186 node apps/mobile/scripts/dev-backend/control.mjs expire-sessions sam
 ```
 
-Run controls with the same `SPLITBOOK_NATIVE_*` variables as seed and start, so they act on that backend's database. Controls allow only the fixed fictional personas and shared Groups, refuse removal of the fixture admin, and require the database ownership marker. Restore membership after revocation checks. Session expiry is immediate for the native app's token-only cookie handling; clients retaining Better Auth's signed session-data cookie may still have its five-minute cache. Signing in again creates a fresh fictional session.
+These examples act on the database of the #186 example above. Give controls the same `SPLITBOOK_NATIVE_DATABASE` (and `SPLITBOOK_NATIVE_MONGO_PORT`, if set) as that backend's seed and start. Without them, controls act on the default `splitbook_mobile_50`. Controls allow only the fixed fictional personas and shared Groups, refuse removal of the fixture admin, and require the database ownership marker. Restore membership after revocation checks. Session expiry is immediate for the native app's token-only cookie handling; clients retaining Better Auth's signed session-data cookie may still have its five-minute cache. Signing in again creates a fresh fictional session.
