@@ -123,6 +123,17 @@ function backend() {
   let cookie: string | null = null;
   let account: string | null = null;
   const drafts = new Map<string, unknown>();
+  const creations = new Map<string, unknown>();
+  const groupCreations = {
+    load: async (accountId: string) => structuredClone(creations.get(accountId) ?? null),
+    save: async (accountId: string, value: unknown) => {
+      creations.set(accountId, structuredClone(value));
+    },
+    remove: async (accountId: string) => {
+      creations.delete(accountId);
+    },
+    clear: async () => creations.clear(),
+  };
   const clock = { now: new Date(2026, 8, 27, 12).getTime() };
   let handler: Handler = () => undefined;
   const controller = createMobileController(
@@ -158,8 +169,9 @@ function backend() {
           },
         },
         cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: [],
+        stores: [groupCreations],
       },
+      groupCreations,
       newSubmissionKey: () => 'native-app-test-0001',
       credentials: {
         load: async () => cookie,
@@ -217,6 +229,7 @@ function backend() {
   return {
     controller,
     clock,
+    creations,
     use(next: Handler) {
       handler = next;
     },
@@ -493,6 +506,31 @@ describe('App Settings sign-out', () => {
     // Any interrupted save, not only a Group creation.
     expect(panel).toContain(advice);
     expect(advice).toContain('If a save was interrupted');
+  });
+});
+
+describe('App Group being created', () => {
+  it('discards an uncertain Group from Home only after confirming', async () => {
+    const app = await renderApp();
+    app.use((path, init) =>
+      path === '/api/groups' && init.method === 'POST'
+        ? Promise.reject(new Error('Response lost after commit'))
+        : undefined,
+    );
+    app.controller.startCreate();
+    app.controller.updateCreation({ name: 'Cabin Weekend' });
+    await settle(app.controller.createGroup());
+    expect(app.text()).toContain('The Group may have been created.');
+    expect(app.creations.size).toBe(1);
+
+    await app.press('Discard this form');
+    const [title, , choices] = vi.mocked(Alert.alert).mock.lastCall!;
+    expect(title).toBe('Discard this Group form?');
+    expect(app.text()).toContain('The Group may have been created.');
+    expect(app.creations.size).toBe(1);
+    await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
+    expect(app.text()).not.toContain('The Group may have been created.');
+    expect(app.creations.size).toBe(0);
   });
 });
 

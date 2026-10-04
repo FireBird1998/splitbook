@@ -234,7 +234,10 @@ export interface GroupCreation {
   status: 'editing' | 'saving' | 'error' | 'uncertain';
   message: string | null;
   validation: GroupValidation;
-  /** The immutable identity of the last submission. Sending the same details again reuses it. */
+  /**
+   * The immutable identity of the last submission, stored on this device before it is sent.
+   * Sending the same details again reuses it, also after a restart.
+   */
   attempt: { key: string; body: string } | null;
 }
 
@@ -369,6 +372,17 @@ export interface AccountLocalStorage {
   stores: readonly { clear(): Promise<void> }[];
 }
 
+/**
+ * A Group submission whose reply may never have arrived, one per account: its key, body and
+ * draft, stored before it is sent and kept until it is confirmed or discarded.
+ */
+export interface GroupCreationStore {
+  load(accountId: string): Promise<unknown | null>;
+  save(accountId: string, value: unknown): Promise<void>;
+  remove(accountId: string): Promise<void>;
+  clear(): Promise<void>;
+}
+
 /** Capture before asynchronous work. Retired sessions cannot write account data. */
 export interface AccountStorageLease {
   accountId: string;
@@ -412,5 +426,7 @@ export interface MobileDependencies {
   displayFreshnessMs?: number;
   expenseDrafts?: ExpenseDraftStore;
   settlementAttempts?: AccountGroupRecordStore;
+  /** Register it in `accountLocal.stores` too, so sign-out and account change remove it. */
+  groupCreations?: GroupCreationStore;
   newSubmissionKey?: () => string;
 }

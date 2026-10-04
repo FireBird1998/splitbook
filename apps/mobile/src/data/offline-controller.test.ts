@@ -29,7 +29,8 @@ function fixture() {
   const errors = new Map<string, number>();
   const failedPaths = new Set<string>();
   const cache = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>();
+    drafts = new Map<string, unknown>(),
+    creations = new Map<string, unknown>();
   const create = () =>
     createMobileController(
       {
@@ -98,6 +99,19 @@ function fixture() {
             drafts.clear();
           },
         },
+        newSubmissionKey: () => 'native-group-key-0001',
+        groupCreations: {
+          load: async (account) => structuredClone(creations.get(account) ?? null),
+          save: async (account, value) => {
+            creations.set(account, structuredClone(value));
+          },
+          remove: async (account) => {
+            creations.delete(account);
+          },
+          clear: async () => {
+            creations.clear();
+          },
+        },
         accountLocal: {
           owner: {
             load: async () => owner,
@@ -123,6 +137,7 @@ function fixture() {
                 cache.clear();
                 identity = null;
                 drafts.clear();
+                creations.clear();
               },
             },
           ],
@@ -338,6 +353,27 @@ describe('account-scoped offline financial views', () => {
     await restarted.refresh();
     expect(restarted.getSnapshot().offline.active).toBe(false);
     expect(restarted.getSnapshot().expense.draft?.notes).toBe('Still preparing');
+    expect(f.writes()).toBe(0);
+  });
+  it('reopens a Group being created as uncertain after an offline restart, and never sends it', async () => {
+    const f = fixture(),
+      first = f.create();
+    await first.signIn('alex');
+    first.startCreate();
+    first.updateCreation({ name: 'Cabin Weekend' });
+    f.goOffline();
+    await first.createGroup();
+    expect(first.getSnapshot().creation.status).toBe('uncertain');
+    first.dispose();
+    const restarted = f.create();
+    await restarted.restore();
+    expect(restarted.getSnapshot()).toMatchObject({
+      offline: { active: true },
+      creation: { status: 'uncertain', draft: { name: 'Cabin Weekend' } },
+    });
+    f.goOnline();
+    await restarted.refresh();
+    expect(restarted.getSnapshot().creation).toMatchObject({ status: 'uncertain' });
     expect(f.writes()).toBe(0);
   });
   it('removes denied cached Group data so it cannot return on a later offline restart', async () => {

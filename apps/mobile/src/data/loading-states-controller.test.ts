@@ -54,7 +54,9 @@ function fixture() {
     owner: string | null = null,
     identity: unknown = null;
   const cache = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>();
+    drafts = new Map<string, unknown>(),
+    // A Group submission is sent only once this device holds it (#203).
+    creations = new Map<string, unknown>();
   const requests: string[] = [];
   const holds: {
     prefix: string;
@@ -269,6 +271,18 @@ function fixture() {
                 })),
             ),
         },
+        groupCreations: {
+          load: (account) => read(() => structuredClone(creations.get(account) ?? null)),
+          save: async (account, value) => {
+            creations.set(account, structuredClone(value));
+          },
+          remove: async (account) => {
+            creations.delete(account);
+          },
+          clear: async () => {
+            creations.clear();
+          },
+        },
         pendingInvitation: {
           load: () => read(() => null),
           save: async () => undefined,
@@ -300,6 +314,7 @@ function fixture() {
                 cache.clear();
                 retained = [];
                 drafts.clear();
+                creations.clear();
                 identity = null;
               },
             },

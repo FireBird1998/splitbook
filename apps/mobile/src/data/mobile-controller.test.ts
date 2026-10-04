@@ -87,6 +87,54 @@ function memoryAccountOwner(initial: string | null = null): AccountLocalStorage[
   };
 }
 
+/**
+ * One device's account-local storage: the account owner, the cleanup marker, and the store for
+ * a Group being created. `store: false` is a device without that store.
+ */
+function memoryDevice({ store = true } = {}) {
+  let marked = false;
+  let failing: 'load' | 'save' | 'remove' | null = null;
+  const records = new Map<string, unknown>();
+  const groupCreations = {
+    load: async (accountId: string) => {
+      if (failing === 'load') throw new Error('SQLITE_IOERR: disk I/O error');
+      return structuredClone(records.get(accountId) ?? null);
+    },
+    save: async (accountId: string, value: unknown) => {
+      if (failing === 'save') throw new Error('SQLITE_FULL: database or disk is full');
+      records.set(accountId, structuredClone(value));
+    },
+    remove: async (accountId: string) => {
+      if (failing === 'remove') throw new Error('SQLITE_BUSY: database is locked');
+      records.delete(accountId);
+    },
+    clear: async () => {
+      records.clear();
+    },
+  };
+  const accountLocal: AccountLocalStorage = {
+    owner: memoryAccountOwner(),
+    cleanupMarker: {
+      load: async () => marked,
+      mark: async () => {
+        marked = true;
+      },
+      clear: async () => {
+        marked = false;
+      },
+    },
+    stores: store ? [groupCreations] : [],
+  };
+  return {
+    accountLocal,
+    groupCreations: store ? groupCreations : undefined,
+    records,
+    fail: (operation: 'load' | 'save' | 'remove' | null) => {
+      failing = operation;
+    },
+  };
+}
+
 function setup(
   options: {
     saved?: string;
@@ -94,6 +142,8 @@ function setup(
     enabled?: boolean;
     store?: ReturnType<typeof memoryCredentials>;
     accountLocal?: AccountLocalStorage;
+    /** Defaults to a fresh device, unless `accountLocal` is given. */
+    device?: ReturnType<typeof memoryDevice>;
     intercept?: (
       path: string,
       init: RequestInit,
@@ -103,6 +153,7 @@ function setup(
 ) {
   let keys = 0;
   const store = options.store ?? memoryCredentials(options.saved);
+  const device = options.device ?? (options.accountLocal ? undefined : memoryDevice());
   const fetch = vi.fn<MobileFetch>(async (url, init) => {
     const path = new URL(url).pathname;
     const intercepted = options.intercept?.(path, init);
@@ -149,7 +200,8 @@ function setup(
       fetch,
       credentials: store.credentials,
       pendingInvitation: options.pending,
-      accountLocal: options.accountLocal,
+      accountLocal: options.accountLocal ?? device?.accountLocal,
+      groupCreations: device?.groupCreations,
       newSubmissionKey:
         options.newSubmissionKey === null
           ? undefined
@@ -812,12 +864,17 @@ describe('native session and Group boundary', () => {
     const created = new Map<string, ReturnType<typeof group>>();
     const posts: { key: string | null; body: string }[] = [];
     let loseNext = false;
+    let hangNext = false;
     let refusing = false;
     return {
       created,
       posts,
       loseNextResponse: () => {
         loseNext = true;
+      },
+      /** The app is killed while saving: the server commits and the reply never arrives. */
+      neverAnswerNext: () => {
+        hangNext = true;
       },
       /** A deploy tightens validation, which runs before the replay check, as on the server. */
       refuseEverything: () => {
@@ -837,6 +894,10 @@ describe('native session and Group boundary', () => {
           name: JSON.parse(body).name,
         };
         created.set(key, stored);
+        if (hangNext) {
+          hangNext = false;
+          return new Promise<FetchResponse>(() => undefined);
+        }
         if (loseNext) {
           loseNext = false;
           throw new Error('Response lost after commit');
@@ -927,6 +988,277 @@ describe('native session and Group boundary', () => {
     ]);
     expect(JSON.parse(server.posts[1].body)).toMatchObject({ name: 'Lake Weekend' });
   });
+
+  describe('a Group being created, across an app restart', () => {
+    /** Two controllers over one device and one keyed server: the second is the restarted app. */
+    function restartable() {
+      const server = keyedGroupServer();
+      const device = memoryDevice();
+      const credentials = memoryCredentials();
+      let keys = 0;
+      // At each POST: what this device holds for Alex's Group submission.
+      const storedAtPost: unknown[] = [];
+      const options = {
+        store: credentials,
+        device,
+        newSubmissionKey: () => `native-group-key-${++keys}`,
+        intercept: (path: string, init: RequestInit) => {
+          if (path === '/api/groups' && init.method === 'POST')
+            storedAtPost.push(structuredClone(device.records.get(alex.id) ?? null));
+          return server.intercept(path, init);
+        },
+      };
+      return { server, device, storedAtPost, app: () => setup(options).controller };
+    }
+    const startCabinWeekend = async (
+      { server, app }: ReturnType<typeof restartable>,
+      reply: 'never answered' | 'failed',
+    ) => {
+      const first = app();
+      await first.signIn('alex');
+      first.startCreate();
+      first.updateCreation({ name: 'Cabin Weekend', description: 'Fictional cabin trip' });
+      if (reply === 'never answered') {
+        server.neverAnswerNext();
+        void first.createGroup();
+        await vi.waitFor(() => expect(server.posts).toHaveLength(1));
+      } else {
+        server.loseNextResponse();
+        await first.createGroup();
+        expect(first.getSnapshot().creation.status).toBe('uncertain');
+      }
+      first.dispose();
+    };
+
+    it.each(['never answered', 'failed'] as const)(
+      'reopens a submission whose reply was %s as uncertain, and a resubmit reuses its key',
+      async (reply) => {
+        const run = restartable();
+        await startCabinWeekend(run, reply);
+
+        const restarted = run.app();
+        await restarted.restore();
+        expect(restarted.getSnapshot().creation).toMatchObject({
+          status: 'uncertain',
+          draft: { name: 'Cabin Weekend', description: 'Fictional cabin trip' },
+        });
+        // Restoring sends nothing, and neither do edits or Create until Alex checks his Groups.
+        restarted.updateCreation({ name: 'Lake Weekend' });
+        await restarted.createGroup();
+        await restarted.refresh();
+        expect(run.server.posts).toHaveLength(1);
+
+        restarted.resumeCreationAfterCheck();
+        await restarted.createGroup();
+        expect(run.server.posts.map((post) => post.key)).toEqual([
+          'native-group-key-1',
+          'native-group-key-1',
+        ]);
+        expect(run.server.posts[1].body).toBe(run.server.posts[0].body);
+        expect(run.server.created.size).toBe(1);
+        expect(restarted.getSnapshot()).toMatchObject({
+          screen: 'group',
+          detail: { data: { name: 'Cabin Weekend' } },
+          creation: { status: 'editing', draft: { name: '' } },
+        });
+        // A confirmed create removes it from the device.
+        expect(run.device.records.size).toBe(0);
+      },
+    );
+
+    it('stores the submission before its POST, and replaces it before a POST of changed details', async () => {
+      const run = restartable();
+      await startCabinWeekend(run, 'failed');
+      expect(run.storedAtPost).toEqual([
+        {
+          version: 1,
+          accountId: alex.id,
+          key: 'native-group-key-1',
+          body: run.server.posts[0].body,
+          draft: expect.objectContaining({ name: 'Cabin Weekend' }),
+        },
+      ]);
+
+      const restarted = run.app();
+      await restarted.restore();
+      restarted.resumeCreationAfterCheck();
+      restarted.updateCreation({ name: 'Lake Weekend' });
+      await restarted.createGroup();
+      expect(run.server.posts.map((post) => post.key)).toEqual([
+        'native-group-key-1',
+        'native-group-key-2',
+      ]);
+      expect(run.storedAtPost[1]).toMatchObject({
+        key: 'native-group-key-2',
+        body: run.server.posts[1].body,
+        draft: { name: 'Lake Weekend' },
+      });
+      expect(run.device.records.size).toBe(0);
+    });
+
+    it('keeps it for the same account only: Sam signing in on the device removes it', async () => {
+      const run = restartable();
+      await startCabinWeekend(run, 'failed');
+      const restarted = run.app();
+      await restarted.restore();
+      expect(restarted.getSnapshot().creation).toMatchObject({ status: 'uncertain' });
+
+      await restarted.signIn('sam');
+      expect(restarted.getSnapshot().creation).toMatchObject({
+        status: 'editing',
+        attempt: null,
+        draft: { name: '' },
+      });
+      expect(run.device.records.size).toBe(0);
+      await restarted.signIn('alex');
+      expect(restarted.getSnapshot().creation).toMatchObject({
+        status: 'editing',
+        draft: { name: '' },
+      });
+      expect(run.server.posts).toHaveLength(1);
+    });
+
+    it('removes it on Discard and on sign-out', async () => {
+      const discarding = restartable();
+      await startCabinWeekend(discarding, 'failed');
+      const restarted = discarding.app();
+      await restarted.restore();
+      expect(discarding.device.records.size).toBe(1);
+      await restarted.discardCreation();
+      expect(discarding.device.records.size).toBe(0);
+      expect(restarted.getSnapshot().creation).toMatchObject({
+        status: 'editing',
+        draft: { name: '' },
+      });
+      const reopened = discarding.app();
+      await reopened.restore();
+      expect(reopened.getSnapshot().creation).toMatchObject({
+        status: 'editing',
+        draft: { name: '' },
+      });
+
+      const signingOut = restartable();
+      await startCabinWeekend(signingOut, 'failed');
+      const signedIn = signingOut.app();
+      await signedIn.restore();
+      expect(signingOut.device.records.size).toBe(1);
+      await signedIn.signOut();
+      expect(signingOut.device.records.size).toBe(0);
+      expect(discarding.server.posts).toHaveLength(1);
+      expect(signingOut.server.posts).toHaveLength(1);
+    });
+
+    it('opens a confirmed Group even when this device can’t remove its stored submission', async () => {
+      const run = restartable();
+      const first = run.app();
+      await first.signIn('alex');
+      first.startCreate();
+      first.updateCreation({ name: 'Cabin Weekend' });
+      run.device.fail('remove');
+      await first.createGroup();
+      expect(first.getSnapshot()).toMatchObject({
+        screen: 'group',
+        detail: { status: 'ready', data: { name: 'Cabin Weekend' } },
+        creation: { status: 'editing', attempt: null, draft: { name: '' } },
+      });
+      expect(run.server.posts).toHaveLength(1);
+      // The stale copy stays on the device until a later remove succeeds.
+      expect(run.device.records.size).toBe(1);
+
+      // A restart shows it as uncertain; resubmitting it returns the same Group and clears it.
+      run.device.fail(null);
+      first.dispose();
+      const restarted = run.app();
+      await restarted.restore();
+      expect(restarted.getSnapshot().creation).toMatchObject({
+        status: 'uncertain',
+        draft: { name: 'Cabin Weekend' },
+      });
+      restarted.resumeCreationAfterCheck();
+      await restarted.createGroup();
+      expect(run.server.posts.map((post) => post.key)).toEqual([
+        'native-group-key-1',
+        'native-group-key-1',
+      ]);
+      expect(run.server.created.size).toBe(1);
+      expect(run.device.records.size).toBe(0);
+    });
+
+    it('says a stored submission it can’t read must be discarded, and sends nothing until then', async () => {
+      const run = restartable();
+      const controller = run.app();
+      await controller.signIn('alex');
+      // A record this version can't read, such as one cut short on disk.
+      run.device.records.set(alex.id, { version: 1, accountId: alex.id, key: 'not a key' });
+      controller.startCreate();
+      controller.updateCreation({ name: 'Cabin Weekend' });
+      await controller.createGroup();
+      expect(run.server.posts).toHaveLength(0);
+      expect(controller.getSnapshot().creation).toMatchObject({
+        status: 'editing',
+        draft: { name: 'Cabin Weekend' },
+        message:
+          'A saved Group submission on this device can’t be read, so nothing was sent. Discard this form to continue.',
+      });
+
+      await controller.discardCreation();
+      expect(run.device.records.size).toBe(0);
+      controller.startCreate();
+      controller.updateCreation({ name: 'Cabin Weekend' });
+      await controller.createGroup();
+      expect(run.server.posts).toHaveLength(1);
+      expect(run.server.created.size).toBe(1);
+    });
+
+    it('shows a stored submission the form missed instead of sending over it', async () => {
+      const run = restartable();
+      await startCabinWeekend(run, 'failed');
+      // The restarted app can't read the device at first, so its form starts empty.
+      run.device.fail('load');
+      const restarted = run.app();
+      await restarted.restore();
+      run.device.fail(null);
+      restarted.startCreate();
+      restarted.updateCreation({ name: 'Cabin Weekend', description: 'Fictional cabin trip' });
+      await restarted.createGroup();
+      expect(run.server.posts).toHaveLength(1);
+      expect(restarted.getSnapshot().creation).toMatchObject({
+        status: 'uncertain',
+        draft: { name: 'Cabin Weekend' },
+      });
+      restarted.resumeCreationAfterCheck();
+      await restarted.createGroup();
+      expect(run.server.posts.map((post) => post.key)).toEqual([
+        'native-group-key-1',
+        'native-group-key-1',
+      ]);
+      expect(run.server.created.size).toBe(1);
+    });
+  });
+
+  it.each(['no device store', 'a device store whose write fails'] as const)(
+    'sends nothing when the submission can’t be stored first (%s)',
+    async (failure) => {
+      const server = keyedGroupServer();
+      const device = memoryDevice({ store: failure === 'no device store' });
+      const { controller } = setup({ intercept: server.intercept, device });
+      await controller.signIn('alex');
+      controller.startCreate();
+      controller.updateCreation({ name: 'Cabin Weekend', description: 'Fictional cabin trip' });
+      device.fail('save');
+      await controller.createGroup();
+      await controller.createGroup();
+
+      expect(server.posts).toHaveLength(0);
+      expect(controller.getSnapshot().creation).toMatchObject({
+        status: 'editing',
+        draft: { name: 'Cabin Weekend', description: 'Fictional cabin trip' },
+      });
+      expect(controller.getSnapshot().creation.message).toContain('nothing was sent');
+      controller.updateCreation({ name: 'Cabin Weekend 2' });
+      expect(controller.getSnapshot().creation.draft.name).toBe('Cabin Weekend 2');
+    },
+  );
 
   it('sends nothing when a Group submission key cannot be created', async () => {
     const server = keyedGroupServer();

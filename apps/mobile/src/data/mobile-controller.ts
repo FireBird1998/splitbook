@@ -60,6 +60,7 @@ import { emptyFormValidation, rejectFields, touchField } from './field-feedback'
 import {
   groupCorrectionSummary,
   groupFields,
+  parseGroupCreation,
   validateGroupDraft,
   type GroupField,
 } from './group-draft';
@@ -358,6 +359,15 @@ function origin(value: string): string {
 /** A payment whose response was lost: it may be recorded, and only an explicit retry sends it. */
 const unconfirmedPayment =
   'This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.';
+/** A Group submission whose reply never arrived: it may exist, and only an explicit retry sends it. */
+const unconfirmedGroup =
+  'The Group may have been created. Check your Groups before creating another.';
+/** Group creation sends nothing it couldn't store first. */
+const groupNotStored =
+  'This device couldn’t keep a recovery copy of the Group, so nothing was sent. Your details are kept. Try again.';
+/** A stored Group submission this version can't read: it can't be resent, only discarded. */
+const groupUnreadable =
+  'A saved Group submission on this device can’t be read, so nothing was sent. Discard this form to continue.';
 /** Another suggestion was chosen while a payment is unconfirmed: one payment at a time. */
 const earlierPayment = 'This earlier payment isn’t confirmed yet, so it comes first.';
 /** Only suggested payments are recorded, so one that's gone from the latest balances isn't. */
@@ -1242,6 +1252,36 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
   };
 
+  /**
+   * This account's stored Group submission, reopened as uncertain. Nothing is sent here. An
+   * unreadable record is left as it is; Create looks for it again before sending anything.
+   */
+  const storedCreation = async (
+    owner: number,
+    accountId: string,
+  ): Promise<{ creation?: GroupCreation }> => {
+    const storage = dependencies.groupCreations;
+    if (!storage || !dependencies.accountLocal) return {};
+    try {
+      const stored = await queueAccount(() => storage.load(accountId));
+      assertCurrent(owner);
+      if (stored === null) return {};
+      const { draft, attempt } = parseGroupCreation(stored, accountId);
+      return {
+        creation: {
+          draft,
+          attempt,
+          status: 'uncertain',
+          message: unconfirmedGroup,
+          validation: emptyFormValidation(),
+        },
+      };
+    } catch (error) {
+      if (error instanceof Superseded) throw error;
+      return {};
+    }
+  };
+
   const restoreOffline = async (owner: number) => {
     if (
       !cookie ||
@@ -1256,10 +1296,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       assertCurrent(owner);
       if (!session || session.user.id !== accountId || session.expiresAt.getTime() <= now())
         return false;
+      const recovered = await storedCreation(owner, session.user.id);
       offlineSession = true;
       publish({
         ...cleanSnapshot({ status: 'authenticated', user: session.user, message: null }),
         ...savedHome(session.user.id),
+        ...recovered,
         offline: { active: true, refreshedAt: null, message: null },
       });
       await loadGroups(owner);
@@ -1426,9 +1468,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         throw new AccountCleanupError();
       }
     }
+    // A Group submission stored on this device reopens before anything else can be created.
+    const recovered = await storedCreation(owner, session.user.id);
     publish({
       ...cleanSnapshot({ status: 'authenticated', user: session.user, message: null }),
       ...savedHome(session.user.id),
+      ...recovered,
     });
     await saveVerifiedIdentity(session, owner);
     await loadGroups(owner);
@@ -5101,10 +5146,70 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return;
     }
     const attempt = { key, body };
+    const lease = accountStorage();
+    const storage = dependencies.groupCreations;
+    // A Group is only sent once its retry identity is stored on this device.
+    if (!lease || !storage) {
+      publish({
+        ...snapshot,
+        creation: { ...snapshot.creation, status: 'editing', message: groupNotStored },
+      });
+      return;
+    }
     publish({
       ...snapshot,
       creation: { ...snapshot.creation, attempt, status: 'saving', message: null },
     });
+    let missed: ReturnType<typeof parseGroupCreation> | null;
+    let unreadable = false;
+    try {
+      missed = await lease.write(async () => {
+        const stored = await storage.load(lease.accountId);
+        let kept: ReturnType<typeof parseGroupCreation> | null = null;
+        try {
+          kept = stored === null ? null : parseGroupCreation(stored, lease.accountId);
+        } catch (error) {
+          unreadable = true;
+          throw error;
+        }
+        // A stored submission this form never showed comes first; nothing is sent over it.
+        if (kept && kept.attempt.key !== previous?.key) return kept;
+        await storage.save(lease.accountId, {
+          version: 1,
+          accountId: lease.accountId,
+          key,
+          body,
+          draft,
+        });
+        return null;
+      });
+    } catch (error) {
+      if (!current(owner) || error instanceof Superseded) return;
+      publish({
+        ...snapshot,
+        creation: {
+          ...snapshot.creation,
+          attempt: previous,
+          status: 'editing',
+          message: unreadable ? groupUnreadable : groupNotStored,
+        },
+      });
+      return;
+    }
+    if (!current(owner)) return;
+    if (missed) {
+      publish({
+        ...snapshot,
+        creation: {
+          ...snapshot.creation,
+          ...missed,
+          status: 'uncertain',
+          message: unconfirmedGroup,
+        },
+      });
+      if (view === viewRequest) await loadGroups(owner);
+      return;
+    }
     try {
       const group = parseCreatedGroup(
         await request('/api/groups', owner, {
@@ -5122,6 +5227,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         )
       )
         throw new RequestError('The server returned invalid creator membership.');
+      // Confirmed, so this device no longer keeps the submission (unless a newer one replaced it).
+      // If that removal fails, the Group is still confirmed: the stale copy reopens as uncertain
+      // after a restart, and resubmitting it returns this same Group.
+      try {
+        await lease.write(async () => {
+          const stored = await storage.load(lease.accountId);
+          if ((stored as { key?: unknown } | null)?.key === key)
+            await storage.remove(lease.accountId);
+        });
+      } catch (error) {
+        if (error instanceof Superseded) throw error;
+      }
+      assertCurrent(owner);
       publish({
         ...snapshot,
         creation: cleanSnapshot(snapshot.auth).creation,
@@ -5183,8 +5301,29 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
   };
 
-  const discardCreation = () => {
+  /** Discard removes the Group form, and any submission of it stored on this device. */
+  const discardCreation = async () => {
     if (snapshot.creation.status === 'saving') return;
+    const lease = accountStorage();
+    const storage = dependencies.groupCreations;
+    if (lease && storage) {
+      const owner = generation;
+      try {
+        await lease.write(() => storage.remove(lease.accountId));
+      } catch (error) {
+        if (current(owner) && !(error instanceof Superseded))
+          publish({
+            ...snapshot,
+            creation: {
+              ...snapshot.creation,
+              message: 'Could not discard this Group form. Please retry.',
+            },
+          });
+        return;
+      }
+      if (!current(owner) || latest().creation.status === 'saving') return;
+    }
+    // Leaving New Group (not Home's own Discard) settles Home the way Back does.
     const returning = snapshot.screen !== 'groups';
     publish({ ...snapshot, screen: 'groups', creation: cleanSnapshot(snapshot.auth).creation });
     if (returning) return settleHome();
