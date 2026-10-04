@@ -273,7 +273,10 @@ check _role_. Expense mutation stops at membership.
 > month's figures next to this month's Expense (#240). The cross-group
 > `GET /api/user/balances` does not materialize. Leaving a Group
 > (`POST /api/groups/[id]/leave`) materializes too, before its settle-up check,
-> and is refused with `LEAVE_CONFLICT` when that run didn't finish (#253).
+> and is refused with `LEAVE_CONFLICT` when that run didn't finish (#253). An
+> archived Group generates nothing on any of these reads or a leave, and its
+> templates' markers don't move, so a member who still has an archived Household
+> open never adds a month's Expenses to it.
 
 ### Real-time Sync Flow
 

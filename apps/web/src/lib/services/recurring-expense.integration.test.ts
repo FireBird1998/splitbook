@@ -12,6 +12,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import Activity from '@/lib/models/Activity';
 import Expense from '@/lib/models/Expense';
+import Group from '@/lib/models/Group';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
@@ -260,6 +261,74 @@ describe('recurring expense generation', () => {
     expect(await expensesFor(templateId)).toHaveLength(2);
     stored = await RecurringExpense.findById(templateId).lean();
     expect(stored?.lastGeneratedFor).toBe(toPeriod(periodOffset(1)));
+  });
+
+  it('generates nothing while the Household is archived, and catches up if it is un-archived', async () => {
+    const groupId = await createHousehold();
+    const template = await recurringExpenseService.create(groupId, rentTemplate(), alice);
+    const templateId = template!._id.toString();
+    await groupService.archive(groupId, alice);
+
+    // Next month arrives in an archived Household: no Rent, no Activity, and the
+    // marker stays on this month.
+    const whileArchived = await recurringExpenseService.generateDueExpenses(
+      groupId,
+      periodOffset(1),
+    );
+    expect(whileArchived.generated).toBe(0);
+    expect(await expensesFor(templateId)).toHaveLength(1);
+    expect(await Activity.countDocuments({ group: groupId, type: 'expense_added' })).toBe(1);
+    let stored = await RecurringExpense.findById(templateId).lean();
+    expect(stored?.lastGeneratedFor).toBe(CURRENT_PERIOD);
+
+    // Un-archiving (only in the database today): the missed month materializes once.
+    await Group.updateOne({ _id: groupId }, { $set: { isArchived: false } });
+    const afterRestore = await recurringExpenseService.generateDueExpenses(
+      groupId,
+      periodOffset(1),
+    );
+    expect(afterRestore.generated).toBe(1);
+    const periods = (await expensesFor(templateId)).map((expense) => expense.period);
+    expect(periods.sort()).toEqual([CURRENT_PERIOD, toPeriod(periodOffset(1))]);
+    stored = await RecurringExpense.findById(templateId).lean();
+    expect(stored?.lastGeneratedFor).toBe(toPeriod(periodOffset(1)));
+  });
+
+  it('generates nothing when a template is created in an archived Household', async () => {
+    const groupId = await createHousehold();
+    await groupService.archive(groupId, alice);
+
+    const template = await recurringExpenseService.create(groupId, rentTemplate(), alice);
+
+    expect(await expensesFor(template!._id.toString())).toHaveLength(0);
+    expect(await Activity.countDocuments({ group: groupId, type: 'expense_added' })).toBe(0);
+    const stored = await RecurringExpense.findById(template!._id).lean();
+    expect(stored?.lastGeneratedFor).toBeNull();
+  });
+
+  it('generates nothing when a template is updated in an archived Household', async () => {
+    const groupId = await createHousehold();
+    const template = await recurringExpenseService.create(
+      groupId,
+      rentTemplate({ startsOn: firstOfMonthOffset(-1) }),
+      alice,
+    );
+    const templateId = template!._id.toString();
+    // Undo this month's materialization, so this month's Rent is due again.
+    await Expense.deleteOne({ recurringExpense: templateId, period: CURRENT_PERIOD });
+    await RecurringExpense.updateOne(
+      { _id: templateId },
+      { $set: { lastGeneratedFor: previousPeriod(CURRENT_PERIOD) } },
+    );
+    await groupService.archive(groupId, alice);
+
+    await recurringExpenseService.update(groupId, templateId, { description: 'Flat rent' }, alice);
+
+    expect((await expensesFor(templateId)).map((expense) => expense.period)).toEqual([
+      previousPeriod(CURRENT_PERIOD),
+    ]);
+    const stored = await RecurringExpense.findById(templateId).lean();
+    expect(stored?.lastGeneratedFor).toBe(previousPeriod(CURRENT_PERIOD));
   });
 
   it('never generates for a day-of-month that precedes startsOn in its first month', async () => {

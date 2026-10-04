@@ -436,4 +436,14 @@ describe('leaving a Household with a recurring Expense due', () => {
     expect(await memberIds(groupId)).toEqual([alice, carol].sort());
     expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);
   });
+
+  it('adds nothing first when the Household is archived', async () => {
+    const { groupId, templateId } = await householdWithRentDue();
+    await groupService.archive(groupId, alice);
+
+    await expect(groupService.leave(groupId, bob)).resolves.toEqual({ archived: false });
+
+    expect(await memberIds(groupId)).toEqual([alice, carol].sort());
+    expect(await rentFor(templateId, CURRENT_PERIOD)).toBe(0);
+  });
 });

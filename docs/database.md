@@ -243,6 +243,12 @@ finished; the leave is refused when it didn't. Safety rests on four things:
 4. templates that no longer validate against group state being **skipped
    silently** without advancing their marker.
 
+An **archived Group generates nothing**: every caller (the three reads, leaving,
+and creating or updating a template) gets `generated: 0`, and no template's
+`lastGeneratedFor` moves. Nothing is lost while it is archived; if it were ever
+un-archived, the next read would catch up the missed periods, as a template
+whose Tag was archived and then restored does.
+
 Deleting a template never touches the expenses it already generated; those are
 ordinary expenses. Edits apply to future periods only.
 

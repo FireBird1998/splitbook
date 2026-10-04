@@ -161,3 +161,5 @@ function useGroupEvents(groupId: string) {
 > materialize due recurring expenses before responding. An open Household group
 > page therefore issues a write-capable request every 10–30 seconds. Generation
 > is idempotent, so this is safe, but it means these polls are not read-only.
+> An archived Group generates nothing, and its templates' markers don't move, so
+> a tab left open on an archived Household polls without adding Expenses.
