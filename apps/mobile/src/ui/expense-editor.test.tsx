@@ -17,6 +17,8 @@ const groupId = 'a00000000000000000000010';
 const tagId = 'a00000000000000000000020';
 const expenseId = 'a00000000000000000000030';
 const iso = '2026-09-28T10:00:00.000Z';
+/** The device clock: local noon is 28 September in every time zone, as the member's day is. */
+const localNoon = new Date(2026, 8, 28, 12).getTime();
 const alex = { id: memberId, name: 'Alex', email: 'alex@example.test', image: null };
 const group = {
   _id: groupId,
@@ -164,7 +166,7 @@ function backend({
         cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
         stores: [drafts],
       },
-      now: () => Date.parse(iso),
+      now: () => localNoon,
       newSubmissionKey: () => 'native-expense-test-0001',
     },
   );

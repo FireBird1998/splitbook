@@ -12,6 +12,22 @@ Four layers of tests, all wired into CI (`.github/workflows/ci.yml`).
 `pnpm test` runs unit + integration together and requires MongoDB running
 locally (the `split-mongo` Docker container works).
 
+Unit and integration tests are pinned to UTC, the zone CI uses. When `TZ` is
+unset, the Vitest configs in `apps/web`, `apps/mobile` and `packages/shared` run
+every test in UTC, whatever the machine's zone. Set `TZ` to run another zone,
+for example `TZ=Pacific/Kiritimati pnpm test:unit`. Each package's
+`src/test-time-zone.test.ts` names the zone the run resolved to.
+
+CI runs the unit tests in four zones. **verify** runs them in UTC, with the
+integration tests. A time-zone matrix (`unit-time-zones`) runs `pnpm test:unit`
+again, one job per zone, in three zones that observe no daylight saving time:
+
+- **Unit tests (Pacific/Tongatapu)**: UTC+13
+- **Unit tests (Pacific/Kiritimati)**: UTC+14
+- **Unit tests (Pacific/Pago_Pago)**: UTC−11
+
+A failing job names its zone.
+
 ---
 
 ## Unit tests
@@ -164,13 +180,18 @@ helpers live in [`playwright/`](../apps/web/playwright/).
 
 ## CI
 
-Two jobs, each with a `mongo:7` service container:
+Three jobs. **verify** and **playwright** each have a `mongo:7` service
+container:
 
 - **verify** — install, lint, `pnpm test` (unit + integration against the
   service MongoDB), typecheck, build.
 - **playwright** — install, Chromium, build, `pnpm web test:e2e` (webServer runs
   `next start` on 3100), then `pnpm web test:e2e:google`, and uploads the report and
   review screenshots.
+- **unit-time-zones** — a matrix that installs and runs `pnpm test:unit` with
+  `TZ` set, as **Unit tests (Pacific/Tongatapu)**,
+  **Unit tests (Pacific/Kiritimati)** and **Unit tests (Pacific/Pago_Pago)**.
+  No database.
 
 Because the Playwright webServer runs a **production** build, its env must set
 `ALLOW_DEMO_AUTH=true` (demo auth fails closed in production),
