@@ -60,6 +60,7 @@ export function ExpenseEditor({
   onSave,
   onResume,
   onDiscard,
+  onDiscardUnconfirmed,
   onRetry,
   onEdit,
   onReviewDelete,
@@ -90,6 +91,8 @@ export function ExpenseEditor({
   onSave: () => void;
   onResume: () => void;
   onDiscard: () => void;
+  /** Offered once the server refused a retry of an unconfirmed save; the app confirms it. */
+  onDiscardUnconfirmed?: () => void;
   onRetry: () => void;
   onEdit: () => void;
   onReviewDelete: () => void;
@@ -347,7 +350,16 @@ export function ExpenseEditor({
                   ? `This Expense may already be in ${context?.group.name ?? 'the Group'}. Checking reuses the same submission, so it can’t be recorded twice.`
                   : `${state.mutation?.kind === 'delete' ? 'This Expense may already be deleted.' : 'This change may already be saved.'} Checking reads the saved Expense first, so nothing is sent twice.`)
               }
-            />
+            >
+              {state.attemptRejected && onDiscardUnconfirmed && (
+                <CompactButton
+                  label="Discard unconfirmed save"
+                  variant="text"
+                  dense
+                  onPress={onDiscardUnconfirmed}
+                />
+              )}
+            </Banner>
           ) : state.status === 'resume' ? (
             <Banner
               tone="info"

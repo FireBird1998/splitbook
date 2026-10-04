@@ -343,6 +343,9 @@ function origin(value: string): string {
 /** A payment whose response was lost: it may be recorded, and only an explicit retry sends it. */
 const unconfirmedPayment =
   'This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.';
+/** The server refused a retry of an unconfirmed save: what the member checks before discarding it. */
+const retryRejectedNotice =
+  'This Expense may already be recorded from an earlier try, so it isn’t sent with new details. Check this Group’s Expenses first: if it isn’t there, discard this unconfirmed save to correct your draft.';
 /** Another suggestion was chosen while a payment is unconfirmed: one payment at a time. */
 const earlierPayment = 'This earlier payment isn’t confirmed yet, so it comes first.';
 /** Only suggested payments are recorded, so one that's gone from the latest balances isn't. */
@@ -2767,6 +2770,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           preview: previewExpense(draft),
           status: record === null || held ? (original ? 'detail' : 'editing') : 'resume',
           attempt: record?.attempt ?? null,
+          attemptRejected: false,
           mutation: record?.mutation ?? null,
           latest: null,
           requestedExpenseId: expenseId ?? null,
@@ -3025,6 +3029,61 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         publish({
           ...snapshot,
           expense: { ...editor, message: 'Could not discard this draft. Please retry.' },
+        });
+    }
+  };
+
+  /**
+   * Discard, after the server refused a retry of an unconfirmed save and the member was told to
+   * check the Group's Expenses first. Removes the save's submission from this device and keeps
+   * the draft for correction; nothing is sent, and the next Save is a new submission.
+   */
+  const discardUnconfirmedExpense = async () => {
+    const editor = snapshot.expense;
+    const lease = accountStorage();
+    const storage = dependencies.expenseDrafts;
+    if (
+      snapshot.screen !== 'expense' ||
+      editor.status !== 'uncertain' ||
+      !editor.attempt ||
+      !editor.attemptRejected ||
+      !editor.draft ||
+      !editor.groupId ||
+      !lease ||
+      !storage
+    )
+      return;
+    const { groupId, draft } = editor;
+    const owner = generation;
+    const view = viewRequest;
+    publish({ ...snapshot, expense: { ...editor, status: 'loading' } });
+    try {
+      await lease.write(() =>
+        storage.save(lease.accountId, groupId, {
+          version: 1,
+          accountId: lease.accountId,
+          groupId,
+          draft,
+          blank: editor.blank,
+        }),
+      );
+      if (!current(owner) || view !== viewRequest) return;
+      publish({
+        ...snapshot,
+        expense: {
+          ...editor,
+          attempt: null,
+          attemptRejected: false,
+          status: 'editing',
+          persistence: 'saved',
+          message: 'The unconfirmed save is discarded. Correct your draft, then save it again.',
+        },
+      });
+    } catch {
+      if (current(owner) && view === viewRequest)
+        publish({
+          ...snapshot,
+          expense: { ...editor, message: 'Could not discard this unconfirmed save. Please retry.' },
         });
     }
   };
@@ -3603,7 +3662,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const owner = generation;
     const view = viewRequest;
     closeRequest += 1;
-    publish({ ...snapshot, expense: { ...editor, status: 'saving', message: null } });
+    publish({
+      ...snapshot,
+      expense: { ...editor, status: 'saving', message: null, attemptRejected: false },
+    });
     let attempt = editor.attempt;
     let storing = false;
     let resolvedReceipt: string | null = null;
@@ -3688,7 +3750,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
       const rejection = expenseRejectionMessage(error);
-      if (attempt && rejection) {
+      // Only a first send's rejection frees the draft. A retry's first try may be recorded.
+      if (attempt && !editor.attempt && rejection) {
         try {
           await lease.write(() =>
             storage.save(lease.accountId, groupId, {
@@ -3716,21 +3779,25 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         }
       }
       if (!current(owner) || view !== viewRequest) return;
+      const retryRejected = !!editor.attempt && !!rejection;
       publish({
         ...snapshot,
         expense: {
           ...snapshot.expense,
           attempt,
+          attemptRejected: retryRejected,
           persistence: storing ? 'error' : snapshot.expense.persistence,
           status: attempt ? 'uncertain' : 'editing',
           message: storing
             ? 'Could not save the submission on this device. No Expense was sent. Retry local storage before saving.'
-            : attempt
-              ? `${error instanceof RequestError ? `${error.message} ` : ''}This Expense may already be saved. Checking reuses the same submission, so it can’t be recorded twice.`
-              : expenseFailureMessage(
-                  error,
-                  'Could not prepare this Expense. Your draft is still here.',
-                ),
+            : retryRejected
+              ? `SplitBook refused this retry. ${rejection} ${retryRejectedNotice}`
+              : attempt
+                ? `${error instanceof RequestError ? `${error.message} ` : ''}This Expense may already be saved. Checking reuses the same submission, so it can’t be recorded twice.`
+                : expenseFailureMessage(
+                    error,
+                    'Could not prepare this Expense. Your draft is still here.',
+                  ),
         },
       });
     } finally {
@@ -5176,6 +5243,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     acceptCurrentExpense,
     editExpense,
     discardExpenseDraft,
+    discardUnconfirmedExpense,
     resumeKeptDraft,
     discardKeptDraft,
     saveExpense,

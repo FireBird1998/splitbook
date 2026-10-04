@@ -89,6 +89,7 @@ function backend({
   loseCreate = false,
   conflict,
   losePatch = false,
+  refuseRetries = false,
 }: {
   record?: Record<string, unknown>;
   /** Loses every create response, or only this many. */
@@ -97,6 +98,8 @@ function backend({
   conflict?: Record<string, unknown>;
   /** Edits never reach the server. */
   losePatch?: boolean;
+  /** Validation tightened after the lost creates: every later create is refused. */
+  refuseRetries?: boolean;
 } = {}) {
   const writes: string[] = [];
   const submissions: { key: string | null; body: string }[] = [];
@@ -141,6 +144,8 @@ function backend({
       });
       if (loseCreate === true || submissions.length <= Number(loseCreate))
         throw new Error('The response was lost after the server committed it');
+      if (refuseRetries)
+        return json({ error: 'Validation error', code: 'VALIDATION_ERROR', status: 422 }, 422);
       return json({ status: 201, data: { _id: expenseId, group: groupId } }, 201);
     }
     if (path.endsWith('/expenses'))
@@ -202,7 +207,7 @@ interface NodeMock {
   focus: ReturnType<typeof vi.fn>;
 }
 const noop = () => undefined;
-const calls = { close: vi.fn(), discard: vi.fn() };
+const calls = { close: vi.fn(), discard: vi.fn(), discardUnconfirmed: vi.fn() };
 
 function EditorScreen({
   controller,
@@ -224,6 +229,7 @@ function EditorScreen({
       onEdit={() => void controller.editExpense()}
       onResume={controller.resumeExpenseDraft}
       onDiscard={calls.discard}
+      onDiscardUnconfirmed={calls.discardUnconfirmed}
       onRetry={noop}
       onReviewDelete={noop}
       onDelete={noop}
@@ -247,6 +253,7 @@ afterEach(() => {
   vi.mocked(AccessibilityInfo.sendAccessibilityEvent).mockClear();
   calls.close.mockClear();
   calls.discard.mockClear();
+  calls.discardUnconfirmed.mockClear();
 });
 
 async function render(
@@ -667,6 +674,25 @@ describe('rendered save not confirmed', () => {
     await ui.press('Check and finish saving');
     expect(ui.submissions).toHaveLength(2);
     expect(ui.submissions[1]).toEqual(ui.submissions[0]);
+  });
+
+  it('offers to discard a save only once the server refuses its retry, and the app confirms it', async () => {
+    const ui = await render(lostSave, { loseCreate: 1, refuseRetries: true });
+    expect(() => ui.pressable('Discard unconfirmed save')).toThrow();
+
+    await ui.press('Check and finish saving');
+    expect(ui.submissions).toHaveLength(2);
+    expect(ui.submissions[1]).toEqual(ui.submissions[0]);
+    const [warning] = banner(ui.root(), 'alert');
+    expect(text(warning)).toContain('We couldn’t confirm this save');
+    expect(text(warning)).toContain('Check the amount, description, date, and participants');
+    expect(text(warning)).toContain('Check this Group’s Expenses first');
+    expect(words(ui.root())).toContain('Not confirmed');
+    expect(ui.input('Amount, required').props.editable).toBe(false);
+
+    await ui.press('Discard unconfirmed save');
+    expect(calls.discardUnconfirmed).toHaveBeenCalledOnce();
+    expect(ui.submissions).toHaveLength(2);
   });
 });
 

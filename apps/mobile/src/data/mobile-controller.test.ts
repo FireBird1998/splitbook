@@ -812,11 +812,16 @@ describe('native session and Group boundary', () => {
     const created = new Map<string, ReturnType<typeof group>>();
     const posts: { key: string | null; body: string }[] = [];
     let loseNext = false;
+    let refusing = false;
     return {
       created,
       posts,
       loseNextResponse: () => {
         loseNext = true;
+      },
+      /** A deploy tightens validation, which runs before the replay check, as on the server. */
+      refuseEverything: () => {
+        refusing = true;
       },
       intercept: (path: string, init: RequestInit) => {
         if (path !== '/api/groups') return;
@@ -824,6 +829,8 @@ describe('native session and Group boundary', () => {
         const key = new Headers(init.headers).get('Idempotency-Key');
         const body = String(init.body);
         posts.push({ key, body });
+        if (refusing)
+          return json({ error: 'Validation error', code: 'VALIDATION_ERROR', status: 422 }, 422);
         if (!key) return json({ error: 'Key required' }, 422);
         const stored = created.get(key) ?? {
           ...group(alex, `a0000000000000000000002${created.size}`),
@@ -871,6 +878,35 @@ describe('native session and Group boundary', () => {
     await controller.back();
     expect(controller.getSnapshot().screen).toBe('groups');
     expect(listed()).toEqual([createdId]);
+  });
+
+  it('keeps the key when the server refuses a retry, and sends nothing new before the Groups are checked', async () => {
+    const server = keyedGroupServer();
+    const { controller } = setup({ intercept: server.intercept });
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'Cabin Weekend' });
+    server.loseNextResponse();
+    await controller.createGroup();
+    // Until the member checks their Groups, neither a resubmit nor an edit goes out.
+    await controller.createGroup();
+    controller.updateCreation({ name: 'Lake Weekend' });
+    await controller.createGroup();
+    expect(server.posts).toHaveLength(1);
+
+    controller.resumeCreationAfterCheck();
+    server.refuseEverything();
+    await controller.createGroup();
+    expect(controller.getSnapshot().creation).toMatchObject({
+      status: 'error',
+      draft: { name: 'Cabin Weekend' },
+    });
+    // The refused retry keeps its key: unchanged details send the same submission again.
+    await controller.createGroup();
+    expect(server.posts).toHaveLength(3);
+    expect(server.posts.every((post) => post.key === 'native-group-key-1')).toBe(true);
+    expect(new Set(server.posts.map((post) => post.body)).size).toBe(1);
+    expect(server.created.size).toBe(1);
   });
 
   it('gives changed Group details a new key after an uncertain create', async () => {

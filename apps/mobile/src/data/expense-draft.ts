@@ -85,6 +85,11 @@ export interface ExpenseEditor {
     | 'uncertain'
     | 'saved';
   attempt: ExpenseAttempt | null;
+  /**
+   * The server refused a retry of `attempt`. An earlier try may still be recorded, so the save
+   * keeps its submission until the member checks the Group's Expenses and discards it on purpose.
+   */
+  attemptRejected: boolean;
   mutation: ExpenseMutation | null;
   latest: ExpenseRecord | null;
   requestedExpenseId: string | null;
@@ -141,6 +146,7 @@ export function emptyExpenseEditor(): ExpenseEditor {
     preview: null,
     status: 'idle',
     attempt: null,
+    attemptRejected: false,
     mutation: null,
     latest: null,
     requestedExpenseId: null,
