@@ -5259,7 +5259,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ? snapshot.expense.groupId
           : screen === 'settlement'
             ? snapshot.settlement.groupId
-            : null;
+            : screen === 'members'
+              ? snapshot.detail.id
+              : null;
+      // Only the Group's own read can say access was lost, never the session check before it.
+      let readingGroup = false;
       try {
         try {
           await revalidateSession(owner);
@@ -5269,7 +5273,32 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           offlineSession = true;
         }
         if (!current(owner) || view !== viewRequest) return;
-        if (dependencies.readCache && groupId) {
+        readingGroup = true;
+        if (screen === 'members' && groupId) {
+          // Read as on the Group view: a foreground refresh reuses a recently verified read.
+          const path = `/api/groups/${groupId}`;
+          const fresh = reuse ? freshRead(path) : null;
+          const group = fresh ? parseGroup(fresh.value) : await readCached(path, owner, parseGroup);
+          if (!current(owner) || view !== viewRequest || snapshot.screen !== 'members') return;
+          if (
+            group.id !== groupId ||
+            !group.members.some((member) => member.user.id === snapshot.auth.user?.id)
+          ) {
+            // As for a refusal: its saved copies and its place in the Group list go too.
+            await forgetGroup(groupId, 403, owner);
+            throw new RequestError('You no longer have access to this group.', 403);
+          }
+          publish({
+            ...snapshot,
+            detail: {
+              status: 'ready',
+              id: groupId,
+              data: group,
+              message: null,
+              refreshedAt: readAt(path),
+            },
+          });
+        } else if (dependencies.readCache && groupId) {
           const context = await readCached(`/api/groups/${groupId}`, owner, parseExpenseContext);
           if (!current(owner) || view !== viewRequest) return;
           if (
@@ -5282,11 +5311,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           else
             publish({ ...snapshot, settlement: { ...snapshot.settlement, group: context.group } });
         }
+        readingGroup = false;
         publishReadFreshness();
         if (snapshot.screen === 'invite') await retryInvitation();
       } catch (error) {
         if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
-        if (groupId && error instanceof RequestError && [403, 404].includes(error.status)) {
+        if (
+          readingGroup &&
+          groupId &&
+          error instanceof RequestError &&
+          [403, 404].includes(error.status)
+        ) {
           dropDeniedGroup(groupId, error);
           if (screen === 'expense')
             publish({
@@ -5297,7 +5332,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                 message: error.message,
               },
             });
-          else
+          else if (screen === 'settlement')
             publish({
               ...snapshot,
               settlement: {
@@ -5308,6 +5343,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                 message: error.message,
               },
             });
+          else {
+            // Members now shows none of the Group: its saved copies no longer keep the offline banner.
+            for (const path of staleReads.keys())
+              if (path.startsWith(`/api/groups/${groupId}`)) staleReads.delete(path);
+            publishReadFreshness();
+          }
         } else if (snapshot.screen === 'create')
           publish({
             ...snapshot,
