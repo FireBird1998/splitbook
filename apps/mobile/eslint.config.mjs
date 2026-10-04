@@ -3,8 +3,9 @@ import tseslint from 'typescript-eslint';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
 // ADR 0006: TanStack Query owns display reads only. Its mutations resume paused
-// work on their own when the app returns to the foreground or reconnects, and
-// the stock persisters' default dehydration saves paused mutations.
+// work on their own when the app returns to the foreground or reconnects, the
+// stock persisters' default dehydration saves paused mutations, and the stock
+// persister can write a signed-out account's data back.
 const noMutations =
   "TanStack mutations are banned in apps/mobile: financial writes stay in the controller's " +
   'ledgerWrite and its stored attempts, online and explicitly started, and a retry reuses the ' +
@@ -12,7 +13,12 @@ const noMutations =
   'Use TanStack for display reads and invalidation only.';
 const noStockPersister =
   "TanStack's stock persisters are banned in apps/mobile: their default dehydration saves " +
-  'paused mutations. Saved copies use the custom persister (ADR 0006).';
+  "paused mutations, and the stock persister can write a signed-out account's data back " +
+  'after sign-out. Saved copies use the custom persister (ADR 0006).';
+const noDynamicTanstack =
+  'Import TanStack statically in apps/mobile, so the bans on its mutations and stock ' +
+  "persisters see every import: financial writes stay in the controller's ledgerWrite, and " +
+  'nothing is queued, resumed or replayed (ADR 0006).';
 
 export default defineConfig([
   globalIgnores(['node_modules/**', '.expo/**', 'android/**', 'ios/**', 'dist/**']),
@@ -52,6 +58,12 @@ export default defineConfig([
         { property: 'getMutationCache', message: noMutations },
         { property: 'setMutationDefaults', message: noMutations },
         { property: 'resumePausedMutations', message: noMutations },
+      ],
+      // no-restricted-imports does not see import(). Nothing legitimate needs a
+      // dynamic TanStack import, so any of them is banned.
+      'no-restricted-syntax': [
+        'error',
+        { selector: 'ImportExpression[source.value=/^@tanstack\\//]', message: noDynamicTanstack },
       ],
     },
   },

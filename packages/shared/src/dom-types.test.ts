@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 // still fails here even though it gets past the lint rule. Each sample is checked
 // on its own against the compiler options in packages/shared/tsconfig.json, where
 // Vitest runs from. The samples stay in strings so lint never reads them as code.
-function typecheck(source: string): string[] {
+function typecheck(source: string): { code: number; text: string }[] {
   const configPath = ts.findConfigFile(ts.sys.getCurrentDirectory(), ts.sys.fileExists);
   expect(configPath).toMatch(/packages[\\/]shared[\\/]tsconfig\.json$/);
   const configFile = ts.readConfigFile(configPath!, ts.sys.readFile);
@@ -23,12 +23,10 @@ function typecheck(source: string): string[] {
       : readSourceFile.call(host, fileName, languageVersion, ...rest);
 
   const program = ts.createProgram([sampleFile], options, host);
-  return ts
-    .getPreEmitDiagnostics(program)
-    .map(
-      (diagnostic) =>
-        `TS${diagnostic.code}: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, ' ')}`,
-    );
+  return ts.getPreEmitDiagnostics(program).map((diagnostic) => ({
+    code: diagnostic.code,
+    text: ts.flattenDiagnosticMessageText(diagnostic.messageText, ' '),
+  }));
 }
 
 describe('packages/shared/tsconfig.json has no DOM types', () => {
@@ -38,19 +36,18 @@ describe('packages/shared/tsconfig.json has no DOM types', () => {
 
   it('rejects window', () => {
     expect(typecheck(`export const width = window.innerWidth;\n`)).toEqual([
-      "TS2304: Cannot find name 'window'.",
+      { code: 2304, text: "Cannot find name 'window'." },
     ]);
   });
 
   it('rejects URLSearchParams', () => {
     expect(typecheck(`export const query = new URLSearchParams('page=2');\n`)).toEqual([
-      "TS2304: Cannot find name 'URLSearchParams'.",
+      { code: 2304, text: "Cannot find name 'URLSearchParams'." },
     ]);
   });
 
   it('rejects a DOM name reached through globalThis', () => {
-    expect(typecheck(`export const store = globalThis.localStorage;\n`)).toEqual([
-      "TS7017: Element implicitly has an 'any' type because type 'typeof globalThis' has no index signature.",
-    ]);
+    const diagnostics = typecheck(`export const store = globalThis.localStorage;\n`);
+    expect(diagnostics.map((diagnostic) => diagnostic.code)).toEqual([7017]);
   });
 });

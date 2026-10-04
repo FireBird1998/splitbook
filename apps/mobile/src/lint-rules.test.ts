@@ -50,7 +50,7 @@ const READ_APIS = [
   'notifyManager',
 ];
 
-const client = `import { QueryClient } from '@tanstack/query-core';
+const queryClientSource = `import { QueryClient } from '@tanstack/query-core';
 const client = new QueryClient();
 `;
 
@@ -111,12 +111,39 @@ export const surface = tanstack;
       expectMutationBan(messages, 'no-restricted-imports');
     },
   );
+
+  it.each([
+    [
+      'a destructured dynamic import',
+      `export const load = async () => {
+  const { MutationObserver } = await import('@tanstack/query-core');
+  return MutationObserver;
+};
+`,
+    ],
+    [
+      'a dynamic import read in a then callback',
+      `export const load = () => import('@tanstack/react-query').then((m) => m.useMutation);\n`,
+    ],
+    [
+      'a dynamic import of a read API, since TanStack is imported statically',
+      `export const load = () => import('@tanstack/query-core').then((m) => m.QueryClient);\n`,
+    ],
+    [
+      'a dynamic import of a persister',
+      `export const load = () => import('@tanstack/query-persist-client-core');\n`,
+    ],
+  ])('rejects %s', async (_form, code) => {
+    expectMutationBan(await lint(code), 'no-restricted-syntax');
+  });
 });
 
 describe('no stock TanStack persisters in apps/mobile', () => {
   it.each(PERSISTERS)('rejects importing %s', async (source) => {
     const messages = await lint(`import '${source}';\n`);
     expect(ruleIds(messages)).toEqual(['no-restricted-imports']);
+    expect(messages[0].message).toContain('saves paused mutations');
+    expect(messages[0].message).toContain("signed-out account's data back");
     expect(messages[0].message).toContain('custom persister');
     expect(messages[0].message).toContain('ADR 0006');
   });
@@ -137,11 +164,20 @@ export const persist = persistQueryClient;
 
 describe('no QueryClient mutation methods in apps/mobile', () => {
   it.each([
-    ['getMutationCache', `${client}export const cache = client.getMutationCache();\n`],
-    ['setMutationDefaults', `${client}client.setMutationDefaults(['ledger'], {});\n`],
-    ['resumePausedMutations', `${client}export const resumed = client.resumePausedMutations();\n`],
-    ['a destructured method', `${client}export const { resumePausedMutations } = client;\n`],
-    ['a computed optional call', `${client}export const cache = client?.['getMutationCache']();\n`],
+    ['getMutationCache', `${queryClientSource}export const cache = client.getMutationCache();\n`],
+    ['setMutationDefaults', `${queryClientSource}client.setMutationDefaults(['ledger'], {});\n`],
+    [
+      'resumePausedMutations',
+      `${queryClientSource}export const resumed = client.resumePausedMutations();\n`,
+    ],
+    [
+      'a destructured method',
+      `${queryClientSource}export const { resumePausedMutations } = client;\n`,
+    ],
+    [
+      'a computed optional call',
+      `${queryClientSource}export const cache = client?.['getMutationCache']();\n`,
+    ],
   ])('rejects %s', async (_surface, code) => {
     expectMutationBan(await lint(code), 'no-restricted-properties');
   });
@@ -163,7 +199,7 @@ export const surface = ${name};
 
   it('allows display reads and invalidation after a write', async () => {
     const messages =
-      await lint(`${client}export const refresh = () => client.invalidateQueries({ queryKey: ['groups'] });
+      await lint(`${queryClientSource}export const refresh = () => client.invalidateQueries({ queryKey: ['groups'] });
 export const cached = client.getQueryData(['groups']);
 export const queries = client.getQueryCache();
 `);

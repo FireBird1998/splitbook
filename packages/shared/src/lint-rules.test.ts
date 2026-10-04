@@ -27,14 +27,23 @@ const FRAMEWORK_IMPORTS = [
   'next',
   'next/navigation',
   'next/server',
+  '@next/env',
+  'server-only',
+  'next-auth',
+  'next-auth/react',
+  '@auth/core',
+  '@auth/mongodb-adapter',
   'swr',
   'swr/immutable',
   '@tanstack/react-query',
   '@tanstack/query-core',
   '@mui/material',
   '@mui/material/Box',
+  '@emotion/react',
+  '@emotion/styled',
   'mongoose',
   'mongodb',
+  'bson',
   'better-auth',
   'better-auth/react',
   '@better-auth/expo',
@@ -45,6 +54,7 @@ const FRAMEWORK_IMPORTS = [
   'expo/fetch',
   'expo-sqlite',
   'expo-secure-store',
+  'expokit',
   '@expo/vector-icons',
 ];
 
@@ -85,6 +95,20 @@ describe('no framework imports in @splitbook/shared', () => {
       'no-restricted-imports',
     );
   });
+
+  it.each(FRAMEWORK_IMPORTS)('rejects a dynamic import of %s', async (source) => {
+    expectBoundary(
+      await lint(`export const load = () => import('${source}');\n`),
+      'no-restricted-syntax',
+    );
+  });
+
+  it('rejects an awaited dynamic import read for one export', async () => {
+    expectBoundary(
+      await lint(`export const load = async () => (await import('next/navigation')).useRouter;\n`),
+      'no-restricted-syntax',
+    );
+  });
 });
 
 describe('no DOM globals in @splitbook/shared', () => {
@@ -112,7 +136,12 @@ describe('the domain package keeps its own imports', () => {
       'relative imports',
       `import { formatMoney } from './money';\nimport type { Expense } from './types';\nexport const format = formatMoney;\nexport type Row = Expense;\n`,
     ],
-    ['a package that only shares the expo prefix', `import 'exponential-backoff';\n`],
+    ['exponential-backoff, which only shares the expo prefix', `import 'exponential-backoff';\n`],
+    ['a subpath of exponential-backoff', `import 'exponential-backoff/dist/backoff';\n`],
+    [
+      'dynamic imports of zod and of local modules',
+      `export const loadZod = () => import('zod');\nexport const loadMoney = () => import('./money');\nexport const loadBackoff = () => import('exponential-backoff');\n`,
+    ],
     [
       'a local binding named like a DOM global',
       `export const describeStop = (location: string) => location.trim();\n`,
