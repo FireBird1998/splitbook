@@ -1,12 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { lostGroupId } from './group-access';
 
-// Pass-through, so the real default cache changes and the calls can be read back.
-vi.mock('swr', async (importOriginal) => {
-  const swr = await importOriginal<typeof import('swr')>();
-  return { ...swr, mutate: vi.fn(swr.mutate) };
-});
-
 const ACTOR = 'a00000000000000000000002';
 const LOST = 'b00000000000000000000001';
 const KEPT = 'c00000000000000000000001';
@@ -60,25 +54,66 @@ describe('lostGroupId: which refused read means the account lost a Group', () =>
   });
 });
 
-/** Each test gets a fresh document: the SWR cache and the lost Groups are per page load. */
+/** localStorage as a page sees it. */
+class MemoryStorage implements Storage {
+  private items = new Map<string, string>();
+  get length() {
+    return this.items.size;
+  }
+  clear() {
+    this.items.clear();
+  }
+  key(index: number) {
+    return [...this.items.keys()][index] ?? null;
+  }
+  getItem(key: string) {
+    return this.items.get(key) ?? null;
+  }
+  setItem(key: string, value: string) {
+    this.items.set(key, value);
+  }
+  removeItem(key: string) {
+    this.items.delete(key);
+  }
+}
+
+/**
+ * Each test gets a fresh document, signed in as ACTOR: the lost Groups and
+ * the pinned account are per page load. `swr` itself loads once for the file
+ * (vi.resetModules does not reload node_modules), so its cache is emptied.
+ */
 async function freshDocument() {
   vi.resetModules();
+  const storage = new MemoryStorage();
   vi.stubGlobal('window', {
-    location: { pathname: `/groups/${LOST}`, search: '', reload: vi.fn(), assign: vi.fn() },
+    location: {
+      pathname: `/groups/${LOST}`,
+      search: '',
+      reload: vi.fn(),
+      assign: vi.fn(),
+    },
+    localStorage: storage,
   });
   const swr = await import('swr');
   const { fetchGroupRead, groupReadKey, readWebGroupResponse } = await import('./group-read');
-  const { apiFetch } = await import('./utils/api-fetch');
+  const { apiFetch, pinExpectedAccount } = await import('./utils/api-fetch');
   const { fetcher, HttpResponseError } = await import('./utils/fetcher');
+  const { listSettlementAttempts, recordSettlement } = await import('./settlement-attempts');
+  pinExpectedAccount(ACTOR);
+  const cache = swr.SWRConfig.defaultValue.cache;
+  for (const key of [...cache.keys()]) cache.delete(key);
   return {
     ...swr,
-    cache: swr.SWRConfig.defaultValue.cache,
+    cache,
+    storage,
     fetchGroupRead,
     groupReadKey,
     readWebGroupResponse,
     apiFetch,
     fetcher,
     HttpResponseError,
+    listSettlementAttempts,
+    recordSettlement,
   };
 }
 
@@ -102,8 +137,11 @@ const groupPayload = (id: string) => ({
   status: 200,
 });
 
-function answer(status: number, body: unknown = { error: 'Forbidden', status }) {
-  const fetchMock = vi.fn(async () => new Response(JSON.stringify(body), { status }));
+const reply = (status: number, body: unknown = { error: 'Forbidden', status }) =>
+  new Response(JSON.stringify(body), { status });
+
+function answer(status: number, body?: unknown) {
+  const fetchMock = vi.fn(async () => reply(status, body));
   vi.stubGlobal('fetch', fetchMock);
   return fetchMock;
 }
@@ -122,7 +160,6 @@ describe('losing a Group deletes what this tab holds for it', () => {
   const keptContent = [
     `/api/groups/${KEPT}/expenses?page=1&limit=1`,
     `/api/groups/${KEPT}/balances`,
-    '/api/user/balances',
     '/api/invitations',
   ];
   const keys = () => ({
@@ -130,11 +167,13 @@ describe('losing a Group deletes what this tab holds for it', () => {
     lostGroup: doc.groupReadKey(ACTOR, `/api/groups/${LOST}`),
     keptGroup: doc.groupReadKey(ACTOR, `/api/groups/${KEPT}`),
   });
+  /** Account-wide reads that list every Group, the lost one included. */
+  const accountReads = () => [keys().groupList, '/api/user/balances'];
 
   /**
    * Leave an entry the way a mounted `useSWR` hook leaves it: SWR records the
    * hook's own key beside the state (`_k`), and key filters only see entries
-   * that carry one.
+   * that carry one. `group-access.hooks.test.ts` mounts real hooks.
    */
   function remember(key: string | readonly unknown[], state: { data?: unknown; error?: unknown }) {
     doc.cache.set(doc.unstable_serialize(key), { ...state, _k: key } as never);
@@ -148,9 +187,9 @@ describe('losing a Group deletes what this tab holds for it', () => {
     return state;
   };
   const allEntries = () => {
-    const { groupList, lostGroup, keptGroup } = keys();
+    const { lostGroup, keptGroup } = keys();
     return Object.fromEntries(
-      [groupList, lostGroup, keptGroup, ...lostContent, ...keptContent].map((key) => [
+      [...accountReads(), lostGroup, keptGroup, ...lostContent, ...keptContent].map((key) => [
         doc.unstable_serialize(key),
         stateOf(key),
       ]),
@@ -161,12 +200,21 @@ describe('losing a Group deletes what this tab holds for it', () => {
     doc = await freshDocument();
     const { groupList, lostGroup, keptGroup } = keys();
     remember(groupList, { data: { data: [{ _id: LOST }, { _id: KEPT }] } });
-    remember(lostGroup, { data: { data: { _id: LOST, name: 'Synthetic lantern trip' } } });
-    remember(keptGroup, { data: { data: { _id: KEPT, name: 'Synthetic kept trip' } } });
+    remember('/api/user/balances', {
+      data: { data: { groups: [{ groupId: LOST }] } },
+    });
+    remember(lostGroup, {
+      data: { data: { _id: LOST, name: 'Synthetic lantern trip' } },
+    });
+    remember(keptGroup, {
+      data: { data: { _id: KEPT, name: 'Synthetic kept trip' } },
+    });
     for (const key of lostContent) remember(key, { data: { data: { verified: key } } });
     // A refresh that already failed once still holds the verified rows beside its error.
     remember(lostContent[0], {
-      data: { data: { expenses: [{ description: 'Synthetic lantern dinner' }] } },
+      data: {
+        data: { expenses: [{ description: 'Synthetic lantern dinner' }] },
+      },
       error: new Error('Expenses could not be refreshed'),
     });
     for (const key of keptContent) remember(key, { data: { data: { verified: key } } });
@@ -177,17 +225,17 @@ describe('losing a Group deletes what this tab holds for it', () => {
   });
 
   function expectLost() {
-    expect(stateOf(keys().lostGroup)).toEqual({ data: { denied: true }, error: undefined });
-    for (const key of lostContent)
+    expect(stateOf(keys().lostGroup)).toEqual({
+      data: { denied: true },
+      error: undefined,
+    });
+    for (const key of [...lostContent, ...accountReads()])
       expect(stateOf(key)).toEqual({ data: undefined, error: undefined });
   }
 
   function expectKept(before: ReturnType<typeof allEntries>) {
     const after = allEntries();
-    const { groupList, keptGroup } = keys();
-    for (const key of [groupList, keptGroup, ...keptContent].map((key) =>
-      doc.unstable_serialize(key),
-    ))
+    for (const key of [keys().keptGroup, ...keptContent].map((key) => doc.unstable_serialize(key)))
       expect(after[key]).toEqual(before[key]);
   }
 
@@ -229,20 +277,45 @@ describe('losing a Group deletes what this tab holds for it', () => {
     },
   );
 
-  it('asks the Group list to refetch, without clearing it', async () => {
+  it('clears the cached Group list and the account’s balances, so no page shows the lost Group from them', async () => {
     answer(403);
-    await expect(doc.fetcher(`/api/groups/${LOST}/balances`)).rejects.toThrow();
-    const revalidations = vi
-      .mocked(doc.mutate)
-      .mock.calls.filter((call) => call.length === 1)
-      .map(([filter]) => filter);
-    expect(
-      revalidations.some(
-        (filter) =>
-          typeof filter === 'function' && (filter as (key: unknown) => boolean)(keys().groupList),
-      ),
-    ).toBe(true);
-    expect(stateOf(keys().groupList)).toEqual({ data: { data: [{ _id: LOST }, { _id: KEPT }] } });
+    await expect(doc.fetcher(lostContent[3])).rejects.toThrow();
+    for (const key of accountReads())
+      expect(stateOf(key)).toEqual({ data: undefined, error: undefined });
+    expect(stateOf('/api/invitations')).toEqual({
+      data: { data: { verified: '/api/invitations' } },
+    });
+  });
+
+  it('forgets the signed-in account’s unconfirmed payments in that Group only (#198)', async () => {
+    const payment = {
+      paidBy: ACTOR,
+      paidTo: KEPT.replace('c', 'a'),
+      amount: 123.45,
+      currency: 'INR',
+      note: '',
+      paidByName: 'Sam',
+      paidToName: 'Priya',
+    };
+    const lostReply = async (): Promise<Response> => {
+      throw new TypeError('Failed to fetch');
+    };
+    for (const groupId of [LOST, KEPT])
+      await doc.recordSettlement({
+        storage: doc.storage,
+        accountId: ACTOR,
+        groupId,
+        newKey: () => `synthetic-key-${groupId}`,
+        post: lostReply,
+        payment,
+      });
+    const attempts = (groupId: string) => doc.listSettlementAttempts(doc.storage, ACTOR, groupId);
+    expect(attempts(LOST)).toHaveLength(1);
+
+    answer(403);
+    await expect(doc.fetcher(lostContent[3])).rejects.toThrow();
+    await vi.waitFor(() => expect(attempts(LOST)).toEqual([]));
+    expect(attempts(KEPT)).toHaveLength(1);
   });
 
   it.each([
@@ -262,35 +335,37 @@ describe('losing a Group deletes what this tab holds for it', () => {
 
   describe('when the account can read the Group again', () => {
     const refused = lostContent[3];
+    /** What SWR records once the refused read rejects, after the Group was forgotten. */
+    const refusal = () => ({
+      error: new doc.HttpResponseError('Forbidden', 403),
+    });
 
     beforeEach(async () => {
       answer(403);
       await expect(doc.fetcher(refused)).rejects.toThrow();
-      // What SWR records once the refused read rejects, after the Group was forgotten.
-      remember(refused, { error: new doc.HttpResponseError('Forbidden', 403) });
-      vi.mocked(doc.mutate).mockClear();
+      remember(refused, refusal());
     });
 
-    it('the first good read of the Group itself clears what the refused read left and reads its content again', async () => {
+    it('the first good read of the Group itself clears what the refused read left', async () => {
       answer(200, groupPayload(LOST));
-      await expect(readLostGroup()).resolves.toMatchObject({ data: { _id: LOST } });
+      await expect(readLostGroup()).resolves.toMatchObject({
+        data: { _id: LOST },
+      });
       for (const key of lostContent)
         expect(stateOf(key)).toEqual({ data: undefined, error: undefined });
-      // Called with data and no options: mounted reads of the Group's content start over.
-      const rereads = vi
-        .mocked(doc.mutate)
-        .mock.calls.filter((call) => call.length === 2)
-        .map(([filter]) => filter as (key: unknown) => boolean);
-      expect(lostContent.every((key) => rereads.some((filter) => filter(key)))).toBe(true);
     });
 
     it('only the first good read does, so later polls keep what was read since', async () => {
       answer(200, groupPayload(LOST));
       await readLostGroup();
-      remember(refused, { data: { data: { verified: 'after access returned' } } });
+      remember(refused, {
+        data: { data: { verified: 'after access returned' } },
+      });
       answer(200, groupPayload(LOST));
       await readLostGroup();
-      expect(stateOf(refused)).toEqual({ data: { data: { verified: 'after access returned' } } });
+      expect(stateOf(refused)).toEqual({
+        data: { data: { verified: 'after access returned' } },
+      });
     });
 
     it('a good read of another Group, or of something under the lost one, reopens nothing', async () => {
@@ -300,14 +375,48 @@ describe('losing a Group deletes what this tab holds for it', () => {
       );
       answer(200, { data: {} });
       await doc.fetcher(`/api/groups/${LOST}/settlements`);
-      expect(stateOf(refused)).toEqual({ error: expect.objectContaining({ status: 403 }) });
+      expect(stateOf(refused)).toEqual({
+        error: expect.objectContaining({ status: 403 }),
+      });
+    });
+  });
+
+  it('a 2xx for the Group that was sent before the loss reopens nothing', async () => {
+    let answerLateRead!: () => void;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string) => {
+        if (input !== `/api/groups/${LOST}`) return reply(403);
+        await new Promise<void>((resolve) => (answerLateRead = resolve));
+        return reply(200, groupPayload(LOST));
+      }),
+    );
+    const lateRead = readLostGroup();
+    await expect(doc.fetcher(lostContent[3])).rejects.toThrow();
+    remember(lostContent[3], {
+      error: new doc.HttpResponseError('Forbidden', 403),
+    });
+    answerLateRead();
+    await expect(lateRead).resolves.toMatchObject({ data: { _id: LOST } });
+    // It says nothing about access now: what the refused read left stays…
+    expect(stateOf(lostContent[3])).toEqual({
+      error: expect.objectContaining({ status: 403 }),
+    });
+    // …until a read sent after the loss succeeds.
+    answer(200, groupPayload(LOST));
+    await readLostGroup();
+    expect(stateOf(lostContent[3])).toEqual({
+      data: undefined,
+      error: undefined,
     });
   });
 
   it('a good read of a Group never lost keeps its content', async () => {
     const before = allEntries();
     answer(200, groupPayload(LOST));
-    await expect(readLostGroup()).resolves.toMatchObject({ data: { _id: LOST } });
+    await expect(readLostGroup()).resolves.toMatchObject({
+      data: { _id: LOST },
+    });
     expect(allEntries()).toEqual(before);
   });
 
@@ -315,7 +424,9 @@ describe('losing a Group deletes what this tab holds for it', () => {
     vi.stubGlobal('window', undefined);
     const before = allEntries();
     answer(403);
-    await expect(doc.fetcher(lostContent[0])).rejects.toMatchObject({ status: 403 });
+    await expect(doc.fetcher(lostContent[0])).rejects.toMatchObject({
+      status: 403,
+    });
     expect(allEntries()).toEqual(before);
   });
 });

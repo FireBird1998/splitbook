@@ -425,6 +425,156 @@ for (const { tab, poll, read, shows, empty } of [
   });
 }
 
+const subReads = (groupPath: string) => (url: URL) => url.pathname.startsWith(`${groupPath}/`);
+const outage = { status: 503, json: { error: 'Synthetic outage' } };
+
+test('a Household reopened after Sam is back shows no month figures or dialog from before the loss', async ({
+  page,
+  ledger,
+}) => {
+  const household = await dataOf(
+    await ledger.priya.post('/api/groups', {
+      data: { name: 'Synthetic lantern household', category: 'home', defaultCurrency: 'INR' },
+    }),
+    201,
+  );
+  const groupPath = `/api/groups/${household._id}`;
+  await joinGroup(ledger.priya, ledger.sam, household._id);
+  await dataOf(
+    await ledger.sam.post(`${groupPath}/expenses`, {
+      data: {
+        description: 'Synthetic lantern groceries',
+        amount: 864.26,
+        currency: 'INR',
+        category: 'food',
+        tag: 'Groceries',
+        date: new Date().toISOString(),
+        paidBy: [{ user: SAM, amount: 864.26 }],
+        splitMethod: 'equal',
+        splitBetween: [{ user: PRIYA }, { user: SAM }],
+      },
+    }),
+    201,
+  );
+  const now = new Date();
+  const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const main = page.getByRole('main');
+  const monthFigures = main.getByText(/you fronted/);
+
+  await page.clock.install();
+  // Opened the way a Dashboard card's "Add expense" opens it.
+  await enter(page, ledger, `/groups/${household._id}?month=${month}&action=add-expense`);
+  await expect(page.getByRole('dialog')).toBeVisible({ timeout: 30_000 });
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(monthFigures).toContainText('864.26');
+  // The month's figures stay in the bar while another tab is open.
+  await main.getByRole('tab', { name: 'Balances', exact: true }).click();
+  await expect(main.getByText('432.13').first()).toBeVisible();
+  await expect(monthFigures).toContainText('864.26');
+  await main.getByRole('button', { name: 'Invite friends' }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
+  await dataOf(await ledger.priya.delete(`${groupPath}/members/${SAM}`));
+  const refused = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === `${groupPath}/balances` && response.status() === 403,
+  );
+  await page.clock.runFor(15_000);
+  await refused;
+  const denied = main.getByRole('alert').filter({ hasText: 'Group could not be loaded.' });
+  await expect(denied).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  // Time runs again, so anything the reopened page would defer gets to run.
+  await page.clock.resume();
+
+  await joinGroup(ledger.priya, ledger.sam, household._id);
+  await page.route(subReads(groupPath), (route) => route.fulfill(outage));
+  const reread = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === groupPath && response.status() === 200,
+  );
+  const unavailable = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname.startsWith(`${groupPath}/`) && response.status() === 503,
+  );
+  await denied.getByRole('button', { name: 'Retry', exact: true }).click();
+  await reread;
+  // Neither the dialog left open before the loss nor the deep link's opens again by itself.
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(main.getByText('Synthetic lantern household', { exact: true })).toBeVisible();
+  await expect(main.getByRole('tab', { name: 'Balances', exact: true })).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+  await unavailable;
+  await expect(monthFigures).toHaveCount(0);
+  for (const text of ['864.26', '432.13']) await expect(main).not.toContainText(text);
+});
+
+test('the Dashboard after a loss shows none of the lost Group, even when its refetch fails', async ({
+  page,
+  ledger,
+}) => {
+  const name = 'Synthetic lantern trip on the Dashboard';
+  const groupId = await sharedTrip(ledger, name);
+  const groupPath = `/api/groups/${groupId}`;
+  // Sam's totals across every Group the isolated app holds, so read rather than assumed.
+  const rupees = (await dataOf(await ledger.sam.get('/api/user/balances'))).buckets.find(
+    (bucket: { currency: string }) => bucket.currency === 'INR',
+  );
+  const owed = rupees.youOwe.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  const main = page.getByRole('main');
+  const card = main.locator(`a[href="/groups/${groupId}"]`);
+  const totals = main.locator('section[aria-labelledby="current-balance-heading"]');
+
+  await page.clock.install();
+  await enter(page, ledger, '/dashboard');
+  await expect(card.first()).toBeVisible({ timeout: 30_000 });
+  await expect(totals).toContainText(owed);
+  await card.first().click();
+  await expect(main.getByRole('region', { name: new RegExp(`^${name} trip,`) })).toContainText(
+    balance,
+    { timeout: 30_000 },
+  );
+
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
+  await dataOf(await ledger.priya.delete(`${groupPath}/members/${SAM}`));
+  const refused = page.waitForResponse(
+    (response) =>
+      new URL(response.url()).pathname === `${groupPath}/expenses` && response.status() === 403,
+  );
+  await page.clock.runFor(10_000);
+  await refused;
+  await expect(
+    main.getByRole('alert').filter({ hasText: 'Group could not be loaded.' }),
+  ).toBeVisible();
+
+  // Every refetch the Dashboard makes now fails.
+  for (const path of ['/api/groups', '/api/user/balances'])
+    await page.route(
+      (url) => url.pathname === path,
+      (route) => route.fulfill(outage),
+    );
+  await page.clock.resume();
+  const refetched = ['/api/groups', '/api/user/balances'].map((path) =>
+    page.waitForResponse(
+      (response) => new URL(response.url()).pathname === path && response.status() === 503,
+    ),
+  );
+  await page
+    .getByRole('navigation', { name: 'Primary', exact: true })
+    .getByRole('link', { name: 'Dashboard', exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await Promise.all(refetched);
+  await expect(card).toHaveCount(0);
+  for (const text of [name, balance, owed]) await expect(main).not.toContainText(text);
+});
+
 test('saving Group settings preserves fields and updates the list, dashboard Theme and trip dates through client navigation', async ({
   page,
   ledger,

@@ -1,5 +1,5 @@
 import { ACCOUNT_CHANGED_STATUS, EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
-import { noteGroupAccess } from '@/lib/group-access';
+import { groupRequestTicket, noteGroupAccess } from '@/lib/group-access';
 
 /**
  * The one request helper for every `/api/` call a signed-in page makes: SWR
@@ -51,11 +51,18 @@ function isAppApi(input: string) {
 export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   if (expectedAccountId && isAppApi(input)) headers.set(EXPECTED_ACCOUNT_HEADER, expectedAccountId);
+  const ticket = groupRequestTicket();
   const response = await fetch(input, { ...init, headers });
   if (response.status === ACCOUNT_CHANGED_STATUS) {
     reloadForAccountChange();
     return new Promise<never>(() => {});
   }
-  noteGroupAccess(init.method ?? 'GET', input, response.status);
+  noteGroupAccess({
+    method: init.method ?? 'GET',
+    path: input,
+    status: response.status,
+    accountId: expectedAccountId,
+    ticket,
+  });
   return response;
 }

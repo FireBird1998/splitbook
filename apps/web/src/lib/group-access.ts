@@ -1,5 +1,6 @@
 import { mutate } from 'swr';
 import { isGroupReadKey } from '@/lib/group-read-key';
+import { forgetBrowserGroupSettlementAttempts } from '@/lib/settlement-attempts';
 
 /**
  * Losing access to a Group (removed, or the Group deleted) removes what the
@@ -27,9 +28,19 @@ export function lostGroupId(method: string, path: string, status: number): strin
   return null;
 }
 
-/** Browser-only: Groups this document has lost and not yet read again. */
-const lostGroups = new Set<string>();
+// Browser-only: on the server, module state and the default SWR cache would
+// be shared by every request.
+
+/** Counts requests and losses, so an answer can tell whether it was sent before a loss. */
+let sequence = 0;
+/** Groups this document has lost and not yet read again, with when they were lost. */
+const lostGroups = new Map<string, number>();
 const denied = { denied: true } as const;
+
+/** Taken by `apiFetch` as it sends each request, and handed back with the response. */
+export function groupRequestTicket(): number {
+  return ++sequence;
+}
 
 /** The Group's own entries under it: bare paths, and any Group read below the Group itself. */
 function isGroupContentKey(key: unknown, groupPath: string) {
@@ -37,24 +48,36 @@ function isGroupContentKey(key: unknown, groupPath: string) {
   return path !== null && (path.startsWith(`${groupPath}/`) || path.startsWith(`${groupPath}?`));
 }
 
+/** Account-wide reads that list every Group the account is in. */
+const isAccountGroupsKey = (key: unknown) =>
+  key === '/api/user/balances' || (isGroupReadKey(key) && key[2] === '/api/groups');
+
 /**
- * Delete everything this tab caches for a Group the account has lost.
+ * Delete everything this tab holds for a Group the account has lost.
  *
- * The denial is written to the Group read first, so the Group page shows only
- * the refused-Group state ("Group could not be loaded."): with its other
- * entries emptied, the Expense list alone would read "No expenses yet". Those
- * entries are deleted, data and error alike, so nothing from before can
- * reappear if access returns, and a request already in flight for them is
- * discarded by SWR. The Group list refetches, so it drops the Group.
+ * - The denial is written to the Group read first, so the Group page shows
+ *   only the refused-Group state ("Group could not be loaded."): with its
+ *   other entries emptied, the Expense list alone would read "No expenses yet".
+ * - The Group's other entries are deleted, data and error alike, so nothing
+ *   from before can reappear if access returns; a request already in flight
+ *   for them is discarded by SWR.
+ * - The Groups list and the account's balances list the Group too, so they
+ *   are cleared and refetched rather than only refetched: a page that mounts
+ *   them later, or whose refetch fails, never shows the Group from them.
+ * - The account's unconfirmed payments in the Group are forgotten (#198):
+ *   they can no longer be resent there.
  */
-function forgetGroup(groupId: string) {
+function forgetGroup(groupId: string, accountId: string | null) {
   const groupPath = `/api/groups/${groupId}`;
-  lostGroups.add(groupId);
+  lostGroups.set(groupId, ++sequence);
   void mutate((key) => isGroupReadKey(key, groupPath) && key[2] === groupPath, denied, {
     revalidate: false,
   });
-  void mutate((key) => isGroupContentKey(key, groupPath), undefined, { revalidate: false });
-  void mutate((key) => isGroupReadKey(key) && key[2] === '/api/groups');
+  void mutate((key) => isGroupContentKey(key, groupPath), undefined, {
+    revalidate: false,
+  });
+  void mutate(isAccountGroupsKey, undefined);
+  if (accountId) void forgetBrowserGroupSettlementAttempts(accountId, groupId);
 }
 
 /**
@@ -72,18 +95,28 @@ function reopenGroup(groupId: string) {
   void mutate((key) => isGroupContentKey(key, groupPath), undefined);
 }
 
-/**
- * Called by `apiFetch` with every app API response. Never on the server,
- * whose module state (and default SWR cache) every request shares.
- */
-export function noteGroupAccess(method: string, path: string, status: number): void {
+export interface GroupAccessResponse {
+  method: string;
+  path: string;
+  status: number;
+  /** The account the page sends as, if it has pinned one. */
+  accountId: string | null;
+  /** From `groupRequestTicket`, taken when the request was sent. */
+  ticket: number;
+}
+
+/** Called by `apiFetch` with every app API response. */
+export function noteGroupAccess({ method, path, status, accountId, ticket }: GroupAccessResponse) {
   if (typeof window === 'undefined') return;
   const lost = lostGroupId(method, path, status);
-  if (lost) return forgetGroup(lost);
+  if (lost) return forgetGroup(lost, accountId);
   const groupId = GROUP_PATH.exec(path)?.[1];
+  const lostAt = groupId ? lostGroups.get(groupId) : undefined;
   if (
     groupId &&
-    lostGroups.has(groupId) &&
+    lostAt !== undefined &&
+    // An answer sent before the loss says nothing about access now.
+    ticket > lostAt &&
     method.toUpperCase() === 'GET' &&
     path === `/api/groups/${groupId}` &&
     status >= 200 &&
