@@ -233,9 +233,9 @@ export class RecurringExpenseService {
 
   /**
    * Lazy-on-read generation: materialize every due period for the group's
-   * templates. Called from the group-detail and expense-list read paths after
-   * the membership check. Idempotent under concurrency via the unique
-   * (recurringExpense, period) index; `lastGeneratedFor` advances
+   * templates. Called from the group-detail, expense-list and group-balances
+   * read paths after the membership check. Idempotent under concurrency via
+   * the unique (recurringExpense, period) index; `lastGeneratedFor` advances
    * monotonically via $max.
    *
    * A template whose configuration no longer validates against group state

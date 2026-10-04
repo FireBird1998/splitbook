@@ -263,11 +263,15 @@ Guards are layered, and the layers are not equivalent: `getAuthUser` establishes
 _who_, `isMember` establishes _access to this group_, and only some services then
 check _role_. Expense mutation stops at membership.
 
-> **Two GET routes write.** `GET /api/groups/[id]` and
-> `GET /api/groups/[id]/expenses` call `recurringExpenseService.generateDueExpenses`
-> after the membership check, materializing any due recurring expenses. This is a
-> deliberate design choice (see [`v4/README.md`](v4/README.md) Phase 3), but it
-> means those reads are not side-effect free.
+> **Three GET routes write.** `GET /api/groups/[id]`,
+> `GET /api/groups/[id]/expenses` and `GET /api/groups/[id]/balances` call
+> `recurringExpenseService.generateDueExpenses` after the membership check,
+> materializing any due recurring expenses. This is a deliberate design choice
+> (see [`v4/README.md`](v4/README.md) Phase 3), but it means those reads are not
+> side-effect free. Balances materialize too because clients start the Balances
+> read beside the Group and Expense reads; computing first would show last
+> month's figures next to this month's Expense (#240). The cross-group
+> `GET /api/user/balances` does not materialize.
 
 ### Real-time Sync Flow
 

@@ -231,8 +231,9 @@ Templates that materialize monthly expenses. **Household groups only**
 **Indexes**: `{ group: 1 }`
 
 **Generation model** — lazy on read. `generateDueExpenses` runs from
-`GET /api/groups/[id]` and `GET /api/groups/[id]/expenses`, after the membership
-check. Safety rests on four things:
+`GET /api/groups/[id]`, `GET /api/groups/[id]/expenses` and
+`GET /api/groups/[id]/balances`, after the membership check. Safety rests on
+four things:
 
 1. the unique partial index on `Expense.{recurringExpense, period}`,
 2. duplicate-key errors being absorbed as "a concurrent reader already did this",

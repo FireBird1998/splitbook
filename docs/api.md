@@ -507,7 +507,7 @@ soft-deleted expense. Each edit appends a diff to the expense's `editHistory`.
 ## Recurring expenses
 
 Household-themed groups only (`category: "home"`). Templates materialize
-expenses lazily when the group or its expense list is read.
+expenses lazily when the group, its expense list or its balances are read.
 
 | Method | Path                                       | Description     |
 | ------ | ------------------------------------------ | --------------- |
@@ -608,6 +608,10 @@ There is no `/balances/simplified` route — the single endpoint returns both th
 per-member balances and the minimum-transaction debt list.
 
 ### GET /api/groups/[id]/balances
+
+**Side effect:** calls `generateDueExpenses` after the membership check and
+before computing, so due recurring templates are materialized on read and the
+balances include them. A non-member gets `403` and nothing is materialized.
 
 **Response:**
 
