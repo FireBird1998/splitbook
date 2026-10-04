@@ -24,8 +24,14 @@ export async function withIsolatedDatabase(action, { initialize = false } = {}) 
     const ownership = await database.collection('native_verification').findOne({ _id: marker });
     if (!ownership) {
       const existingCollections = await database.listCollections({}, { nameOnly: true }).toArray();
-      if (!initialize || existingCollections.length) {
+      if (existingCollections.length) {
         throw new Error('Refusing unmarked or pre-existing nonempty database');
+      }
+      if (!initialize) {
+        // Only seeding claims a database. Starting or a control on a new name gets here.
+        throw new Error(
+          `Database ${databaseName} has not been seeded. Run seed.mjs first, with the same SPLITBOOK_NATIVE_* variables.`,
+        );
       }
       await database.collection('native_verification').insertOne({
         _id: marker,

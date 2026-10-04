@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
-import { webApp, isolatedEnv, databaseName, mongoPort } from './environment.mjs';
+import { webApp, isolatedEnv, origin, databaseName, mongoPort } from './environment.mjs';
 
 const environment = isolatedEnv();
 const require = createRequire(resolve(webApp, 'package.json'));
@@ -10,7 +10,7 @@ require.resolve('mongodb');
 
 if (process.argv.includes('--check')) {
   console.log(
-    `Seed preflight passed: loopback Mongo port ${mongoPort}, fictional database ${databaseName}`,
+    `Seed preflight passed: origin ${origin}, loopback Mongo port ${mongoPort}, fictional database ${databaseName}`,
   );
 } else {
   const child = spawn(

@@ -55,6 +55,7 @@
     "verify:settlements": "node --import tsx scripts/verify-settlements.ts",
     "verify:activity": "node --import tsx scripts/verify-activity.ts",
     "verify:offline": "node --import tsx scripts/verify-offline.ts",
+    "verify:all": "node scripts/verify-all.mjs",
     "build:staging": "node scripts/build-staging-apk.mjs"
   },
   "private": true
