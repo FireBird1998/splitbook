@@ -283,4 +283,47 @@ describe('the live services', () => {
     }
     await until(() => processesWith(marker).length === 0, 10_000);
   }, 30_000);
+
+  it("reads a process's working directory and the port it listens on, as down needs for a lone next-server", async () => {
+    const cwd = fixtureWorktree();
+    const child = spawn(
+      process.execPath,
+      [
+        '-e',
+        "require('node:net').createServer().listen(0, '127.0.0.1', function () { console.log(this.address().port) })",
+      ],
+      { cwd, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    try {
+      const port = Number(
+        await new Promise<string>((resolve) =>
+          child.stdout.once('data', (chunk) => resolve(String(chunk).trim())),
+        ),
+      );
+      const details = await Effect.runPromise(
+        Effect.gen(function* () {
+          const processes = yield* Processes;
+          return {
+            running: yield* processes.details(child.pid ?? -1),
+            gone: yield* processes.details(2 ** 22),
+          };
+        }).pipe(Effect.provide(ProcessesLive)),
+      );
+      expect(details.running.cwd).toBe(cwd);
+      // The ports come from lsof; without it (some Linux machines) only the directory is known.
+      expect(details.running.listening).toEqual(hasLsof() ? [port] : []);
+      expect(details.gone).toEqual({ cwd: undefined, listening: [] });
+    } finally {
+      child.kill('SIGKILL');
+    }
+  }, 30_000);
 });
+
+function hasLsof(): boolean {
+  try {
+    execFileSync('sh', ['-c', 'command -v lsof'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}

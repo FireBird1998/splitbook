@@ -18,6 +18,7 @@ import {
   type Finished,
   type GroupMember,
   type Launch,
+  type ProcessDetails,
 } from './platform.ts';
 
 export interface FakeWorld {
@@ -38,6 +39,8 @@ export interface FakeWorld {
   readonly startTimes: Map<number, string>;
   /** pgid -> processes left in a group besides its leader, such as next-server. */
   readonly members: Map<number, GroupMember[]>;
+  /** pid -> working directory and listening ports. Default: unknown. */
+  readonly details: Map<number, ProcessDetails>;
   readonly stopped: number[];
   nextPid: number;
   /** Exit code of a run process, by the script or command it runs. Default 0. */
@@ -66,6 +69,7 @@ export function fakeWorld(): FakeWorld {
     running: new Map(),
     startTimes: new Map(),
     members: new Map(),
+    details: new Map(),
     stopped: [],
     nextPid: 4100,
     exitCodes: () => 0,
@@ -162,6 +166,8 @@ export function fakeLayer(world: FakeWorld) {
             : []),
           ...(world.members.get(pgid) ?? []),
         ]),
+      details: (pid) =>
+        Effect.sync(() => world.details.get(pid) ?? { cwd: undefined, listening: [] }),
       stopGroup: (pid) =>
         Effect.sync(() => {
           world.running.delete(pid);

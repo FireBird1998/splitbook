@@ -90,7 +90,9 @@ Every drop the tool makes, from `down` or from a failed `up`, goes through one c
 It stops a process group (SIGTERM, then SIGKILL after 10 s), so no `next dev` is left behind, only when:
 
 - its leader is this worktree's own `start.mjs`, by absolute path, with the start time recorded when it started. The shared backend, started from the main checkout, has the same command line there, and a reused pid has a later start time, so neither is ever stopped;
-- or that leader is gone (killed, or out of memory) and every process left in its group traces back, through its parents in the group, to a process running from this worktree's `apps/`, such as `next-server` under `next dev`. Otherwise the group is left alone with a warning naming its pids.
+- or that leader is gone (killed, or out of memory) and every process left in its group either traces back, through its parents in the group, to a process running from this worktree's `apps/`, such as `next-server` under `next dev`, or is a `next-server` that listens on the recorded port or runs in this worktree's `apps/web`. `next start` retitles its only process `next-server (v…)`, so a production server whose `start.mjs` died names no path; `lsof` (or `/proc` on Linux) gives its port and directory. Otherwise the group is left alone with a warning naming its pids.
+
+When it leaves processes alone and the recorded port is still taken, one of them may be the backend, still using its database. Then `down` drops nothing and keeps the record, and says which processes to look at; once they are gone, run it again. `up` refuses to start a new backend until then.
 
 As it exits, Next starts its own telemetry flush (`next/dist/telemetry/detached-flush.js`) outside that group; it ends by itself within a couple of seconds.
 

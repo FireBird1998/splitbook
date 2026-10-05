@@ -14,7 +14,10 @@
  *   starting or not answering is never torn down by another command;
  * - a process group is signalled only when its leader is this worktree's own start.mjs with
  *   the recorded start time, or, once that leader is gone, when every process left in it
- *   traces back to this worktree;
+ *   traces back to this worktree, or is a next-server on the recorded port or in this
+ *   worktree's apps/web;
+ * - while a process the tool can't account for is left in that group and the recorded
+ *   port is taken, `down` drops nothing and keeps the record;
  * - every drop goes through one check (names.ts): this worktree's prefix and the fictional
  *   ownership marker.
  *
@@ -317,14 +320,33 @@ function tracesToWorktree(member: GroupMember, members: readonly GroupMember[], 
 }
 
 /**
+ * Whether a process is this worktree's Next server. `next start` retitles its process
+ * `next-server (v…)`, so its command line names no path, and neither does `next dev`'s
+ * next-server once its parents are gone. It counts only when it listens on the recorded
+ * port or runs in this worktree's apps/web.
+ */
+const isOwnNextServer = (member: GroupMember, root: string, port: number | undefined) =>
+  Effect.gen(function* () {
+    if (!/^next-server \(v[^)]*\)\s*$/.test(member.command)) return false;
+    const { cwd, listening } = yield* (yield* Processes).details(member.pid);
+    return (port !== undefined && listening.includes(port)) || cwd === join(root, 'apps/web');
+  });
+
+/**
  * What is left of a recorded backend's process group:
  * - `ours`: its leader is this worktree's start.mjs, started when the record says;
  * - `orphaned`: the leader is gone (killed or out of memory), and every process left in
- *   the group traces back to this worktree, such as next-server under `next dev`;
+ *   the group traces back to this worktree, such as next-server under `next dev`, or is
+ *   this worktree's Next server, such as `next start`'s next-server on the recorded port;
  * - `foreign`: anything else, never signalled;
  * - `none`: no process is left.
  */
-const groupState = (root: string, pid: number | undefined, processStart: string | undefined) =>
+const groupState = (
+  root: string,
+  pid: number | undefined,
+  processStart: string | undefined,
+  port: number | undefined,
+) =>
   Effect.gen(function* () {
     if (pid === undefined) return { kind: 'none' as const, members: [] };
     const processes = yield* Processes;
@@ -338,26 +360,38 @@ const groupState = (root: string, pid: number | undefined, processStart: string 
         (yield* processes.startTime(pid)) === processStart;
       return { kind: ours ? ('ours' as const) : ('foreign' as const), members };
     }
-    const traced = members.every((member) => tracesToWorktree(member, members, root));
-    return { kind: traced ? ('orphaned' as const) : ('foreign' as const), members };
+    for (const member of members) {
+      if (tracesToWorktree(member, members, root)) continue;
+      if (yield* isOwnNextServer(member, root, port)) continue;
+      return { kind: 'foreign' as const, members };
+    }
+    return { kind: 'orphaned' as const, members };
   });
 
-/** Stops a recorded backend's process group when it is this worktree's; never otherwise. */
-const stopOwnGroup = (root: string, pid: number | undefined, processStart: string | undefined) =>
+/**
+ * Stops a recorded backend's process group when it is this worktree's; never otherwise.
+ * Says which group it stopped, or which processes it left alone.
+ */
+const stopOwnGroup = (
+  root: string,
+  pid: number | undefined,
+  processStart: string | undefined,
+  port: number | undefined,
+) =>
   Effect.gen(function* () {
-    const state = yield* groupState(root, pid, processStart);
+    const state = yield* groupState(root, pid, processStart, port);
     if (pid !== undefined && (state.kind === 'ours' || state.kind === 'orphaned')) {
       yield* (yield* Processes).stopGroup(pid);
-      return pid;
+      return { stopped: pid, leftAlone: [] };
     }
     if (state.kind === 'foreign') {
+      const leftAlone = state.members.map((member) => member.pid);
       yield* (yield* Output).line(
-        `Left process group ${pid} alone: its processes (${state.members
-          .map((member) => member.pid)
-          .join(', ')}) are not this worktree's backend.`,
+        `Left process group ${pid} alone: its processes (${leftAlone.join(', ')}) are not this worktree's backend.`,
       );
+      return { stopped: undefined, leftAlone };
     }
-    return undefined;
+    return { stopped: undefined, leftAlone: [] };
   });
 
 const pickPort = (mongoPort: number) =>
@@ -381,7 +415,7 @@ const waitForAnswer = (backend: Backend, root: string, timeout: Duration.Input) 
     const network = yield* Network;
     for (;;) {
       if (yield* network.answers(`${backend.origin}${readinessPath}`)) return 'answered' as const;
-      const state = yield* groupState(root, backend.pid, backend.processStart);
+      const state = yield* groupState(root, backend.pid, backend.processStart, backend.port);
       if (state.kind !== 'ours') return 'exited' as const;
       yield* Effect.sleep('250 millis');
     }
@@ -556,7 +590,8 @@ const launch = (options: UpOptions, target: Plan) =>
             Exit.isSuccess(exit)
               ? Effect.void
               : Effect.gen(function* () {
-                  if ((yield* stopOwnGroup(root, pid, processStart)) !== undefined) {
+                  const { stopped } = yield* stopOwnGroup(root, pid, processStart, port);
+                  if (stopped !== undefined) {
                     yield* output.line(`Stopped the backend at ${origin}.`);
                   }
                 }),
@@ -624,7 +659,7 @@ const reuseOrClean = (options: UpOptions) =>
         `${refusal} The record is ${statePath(root)}; nothing was stopped or dropped.`,
       );
     }
-    const state = yield* groupState(root, record.pid, record.processStart);
+    const state = yield* groupState(root, record.pid, record.processStart, record.port);
     if (state.kind === 'ours') {
       if (yield* (yield* Network).answers(`${record.origin}${readinessPath}`)) return record;
       const timeout = options.readyTimeout ?? defaultReadyTimeout;
@@ -717,7 +752,7 @@ export const backendForScope = (
 
 const downUnlocked = (
   options: DownOptions,
-): Effect.Effect<DownResult, SwarmError, Processes | Databases | Output> =>
+): Effect.Effect<DownResult, SwarmError, Processes | Databases | Network | Output> =>
   Effect.gen(function* () {
     const { root } = options;
     const databases = yield* Databases;
@@ -737,9 +772,18 @@ const downUnlocked = (
     if (mongoRefusal) return yield* refuse(mongoRefusal);
 
     // Stopping comes first, so a live backend can't write to a database being dropped.
-    const stopped = record ? yield* stopOwnGroup(root, record.pid, record.processStart) : undefined;
+    const { stopped, leftAlone } = record
+      ? yield* stopOwnGroup(root, record.pid, record.processStart, record.port)
+      : { stopped: undefined, leftAlone: [] };
     if (record && stopped !== undefined)
       yield* output.line(`Stopped the backend at ${record.origin}.`);
+    // A process the tool can't account for, with the backend's port still taken, may be
+    // the backend, still using its database.
+    if (record && leftAlone.length > 0 && !(yield* (yield* Network).isPortFree(record.port))) {
+      return yield* refuse(
+        `Dropped nothing: process group ${record.pid} still has processes (${leftAlone.join(', ')}) that are not known to be this worktree's backend, and port ${record.port} is taken, so ${record.database} may still be in use. Stop those processes if they are this worktree's, then run pnpm swarm down again. The record ${statePath(root)} is kept.`,
+      );
+    }
 
     const prefix = worktreePrefix(root);
     const own = (yield* databases.list(mongoPort)).filter((name) => name.startsWith(prefix));
@@ -779,5 +823,5 @@ const downUnlocked = (
  */
 export const down = (
   options: DownOptions,
-): Effect.Effect<DownResult, SwarmError, Processes | Databases | Output> =>
+): Effect.Effect<DownResult, SwarmError, Processes | Databases | Network | Output> =>
   withWorktreeLock(options.root, 'down', downUnlocked(options));

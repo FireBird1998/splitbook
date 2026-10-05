@@ -39,6 +39,14 @@ export interface GroupMember {
   readonly command: string;
 }
 
+/** What identifies a process besides its command line, as far as the machine can tell. */
+export interface ProcessDetails {
+  /** Its working directory, or undefined when unknown. */
+  readonly cwd: string | undefined;
+  /** The TCP ports it listens on; empty when none or unknown. */
+  readonly listening: readonly number[];
+}
+
 export class Processes extends Context.Service<
   Processes,
   {
@@ -66,6 +74,8 @@ export class Processes extends Context.Service<
     readonly startTime: (pid: number) => Effect.Effect<string | undefined>;
     /** Every process in a process group, whether or not its leader is still running. */
     readonly group: (pgid: number) => Effect.Effect<readonly GroupMember[]>;
+    /** A running process's working directory and listening ports, where the machine says. */
+    readonly details: (pid: number) => Effect.Effect<ProcessDetails>;
     /** Stops a process group: SIGTERM, then SIGKILL if it is still there after a grace period. */
     readonly stopGroup: (pid: number) => Effect.Effect<void>;
   }

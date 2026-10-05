@@ -644,13 +644,72 @@ describe('down', () => {
     const root = fixtureWorktree();
     const world = fakeWorld();
     recordBackend(root, {});
+    // A next-server, but not this worktree's: another port, another directory.
     world.members.set(4321, [{ pid: 4323, ppid: 1, command: 'next-server (v16.1.6)' }]);
+    world.details.set(4323, { cwd: '/elsewhere/apps/web', listening: [53999] });
 
     const result = await downIn(world, { root });
 
     expect(result.stopped).toBeUndefined();
     expect(world.stopped).toEqual([]);
     expect(world.lines.some((line) => line.startsWith('Left process group 4321 alone'))).toBe(true);
+  });
+
+  it.each([
+    ['listens on the recorded port', { cwd: undefined, listening: [53001] }],
+    ['runs in this worktree’s apps/web', { cwd: 'apps/web', listening: [] }],
+  ])(
+    'stops a production server whose start.mjs died, when its next-server %s',
+    async (_case, details) => {
+      const root = fixtureWorktree();
+      const world = fakeWorld();
+      const database = `${worktreePrefix(root)}recorded`;
+      world.databases.set(database, true);
+      recordBackend(root, { database, server: 'production' });
+      // next start retitles its only process, so its command line names no path.
+      world.members.set(4321, [{ pid: 4323, ppid: 1, command: 'next-server (v16.1.6)      ' }]);
+      world.details.set(4323, {
+        cwd: details.cwd === undefined ? undefined : join(root, details.cwd),
+        listening: details.listening,
+      });
+      world.portsInUse.add(53001);
+
+      const result = await downIn(world, { root });
+
+      expect(result.stopped).toBe(4321);
+      expect(world.stopped).toEqual([4321]);
+      expect(result.dropped).toEqual([database]);
+      expect(readBackend(root)).toBeUndefined();
+    },
+  );
+
+  it('drops nothing and keeps the record while a process it can’t account for holds the recorded port', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+    const database = `${worktreePrefix(root)}recorded`;
+    world.databases.set(database, true);
+    recordBackend(root, { database, server: 'production' });
+    // A next-server the tool can't place (no working directory or ports), with the
+    // recorded port taken.
+    world.members.set(4321, [{ pid: 4323, ppid: 1, command: 'next-server (v16.1.6)' }]);
+    world.portsInUse.add(53001);
+
+    const error = await downFailure(world, { root });
+
+    expect(error._tag).toBe('Refused');
+    expect(error.message).toMatch(/^Dropped nothing: process group 4321 .*\(4323\).*port 53001/);
+    expect(world.stopped).toEqual([]);
+    expect(world.dropped).toEqual([]);
+    expect(readBackend(root)?.database).toBe(database);
+    // up refuses too, rather than replace the record.
+    expect((await upFailure(world, { root })).message).toMatch(/^Dropped nothing/);
+
+    // Once that process is gone and the port is free, down finishes.
+    world.members.delete(4321);
+    world.portsInUse.delete(53001);
+    const result = await downIn(world, { root });
+    expect(result.dropped).toEqual([database]);
+    expect(readBackend(root)).toBeUndefined();
   });
 
   it('never stops a process with the same command line that started later, such as a reused pid', async () => {
