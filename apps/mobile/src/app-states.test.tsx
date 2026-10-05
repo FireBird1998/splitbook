@@ -183,6 +183,7 @@ function device() {
         readCache: {
           retainGroups: async () => undefined,
           invalidateGroup: async () => undefined,
+          invalidateLedger: async () => undefined,
           load: async (account, key) => structuredClone(cache.get(account + key) ?? null),
           save: async (account, key, value) => {
             cache.set(account + key, structuredClone(value));

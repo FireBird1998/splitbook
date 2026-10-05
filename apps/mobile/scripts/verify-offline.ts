@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { createMobileController } from '../src/data';
-import { FixtureActor, samId } from './financial-view-fixtures';
+import { FixtureActor, alexId, samId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
 
 async function run() {
@@ -69,6 +69,17 @@ async function run() {
               if (
                 key.startsWith(account + '/api/groups/' + group) ||
                 key === account + '/api/groups' ||
+                key === account + '/api/user/balances'
+              )
+                delete saved[key];
+            await cache.save(saved);
+          },
+          invalidateLedger: async (account, group) => {
+            const saved = await entries();
+            for (const key of Object.keys(saved))
+              if (
+                key.startsWith(account + '/api/groups/' + group + '/') ||
+                key.startsWith(account + '/api/groups/' + group + '?') ||
                 key === account + '/api/user/balances'
               )
                 delete saved[key];
@@ -191,8 +202,70 @@ async function run() {
     await controller.restore();
     assert.equal(controller.getSnapshot().auth.user, null);
     assert.equal(await cache.load(), null);
+
+    // #191: after a confirmed edit, offline the record and its Month show the edited Expense or
+    // say they weren't saved on this device, never the version before, also after a restart.
+    const tagId = z
+      .object({ data: z.object({ tags: z.array(z.object({ _id: z.string() })).min(1) }) })
+      .parse(await alex.request(path)).data.tags[0]._id;
+    const expenseId = z.object({ data: z.object({ _id: z.string() }) }).parse(
+      await alex.request(
+        `${path}/expenses`,
+        'POST',
+        {
+          description: 'Lakeside dinner',
+          amount: 12,
+          currency: 'INR',
+          date: '2026-08-20T12:00:00.000Z',
+          category: 'food',
+          tagId,
+          paidBy: [{ user: alexId, amount: 12 }],
+          splitMethod: 'equal',
+          splitBetween: [{ user: alexId }],
+        },
+        201,
+      ),
+    ).data._id;
+    const descriptions = () =>
+      controller.getSnapshot().financial.expenses.data.map((expense) => expense.description);
+    offline = false;
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    await controller.selectMonth('2026-08');
+    assert.ok(descriptions().includes('Lakeside dinner'));
+    await controller.openExpense(groupId, expenseId);
+    assert.equal(controller.getSnapshot().expense.draft?.description, 'Lakeside dinner');
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Lakeside dinner, edited' });
+    await controller.saveExpense();
+    assert.equal(controller.getSnapshot().expense.status, 'saved');
+    const notSaved = 'This view was not saved on this device. Connect to load it.';
+    const readOffline = async () => {
+      await controller.openExpense(groupId!, expenseId);
+      const { expense } = controller.getSnapshot();
+      if (expense.status === 'detail')
+        assert.equal(expense.draft?.description, 'Lakeside dinner, edited');
+      else assert.equal(expense.message, notSaved);
+      await controller.back();
+      await controller.openGroup(groupId!);
+      await controller.selectMonth('2026-08');
+      const { expenses } = controller.getSnapshot().financial;
+      if (expenses.status === 'error') assert.equal(expenses.message, notSaved);
+      else {
+        assert.equal(expenses.status, 'ready');
+        assert.ok(descriptions().includes('Lakeside dinner, edited'));
+        assert.ok(!descriptions().includes('Lakeside dinner'));
+      }
+    };
+    offline = true;
+    await readOffline();
+    controller.dispose();
+    controller = create();
+    await controller.restore();
+    assert.equal(controller.getSnapshot().auth.status, 'authenticated');
+    await readOffline();
     console.log(
-      'PASS: real HTTP cached Home, Group, Month, balances and Activity; disk restart; missing Month; retained draft; reconnect without writes; revocation; sign-out purge.',
+      'PASS: real HTTP cached Home, Group, Month, balances and Activity; disk restart; missing Month; retained draft; reconnect without writes; revocation; sign-out purge; no saved copy older than a confirmed edit.',
     );
   } finally {
     offline = false;

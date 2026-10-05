@@ -125,6 +125,15 @@ function fixture() {
             )
               cache.delete(key);
         },
+        invalidateLedger: async (account, id) => {
+          for (const key of cache.keys())
+            if (
+              key.startsWith(`${account}/api/groups/${id}/`) ||
+              key.startsWith(`${account}/api/groups/${id}?`) ||
+              key === `${account}/api/user/balances`
+            )
+              cache.delete(key);
+        },
         load: async (account, key) => structuredClone(cache.get(account + key) ?? null),
         save: async (account, key, value) => {
           cache.set(account + key, structuredClone(value));

@@ -247,6 +247,15 @@ function fixture(options: { freshness?: number; pendingInvitation?: PendingInvit
               )
                 disk.delete(key);
           },
+          invalidateLedger: async (account, id) => {
+            for (const key of disk.keys())
+              if (
+                key.startsWith(`${account}/api/groups/${id}/`) ||
+                key.startsWith(`${account}/api/groups/${id}?`) ||
+                key === `${account}/api/user/balances`
+              )
+                disk.delete(key);
+          },
           retainGroups: async (account, ids) => {
             for (const key of disk.keys()) {
               const id = /^\/api\/groups\/([a-f\d]{24})/.exec(key.slice(account.length))?.[1];

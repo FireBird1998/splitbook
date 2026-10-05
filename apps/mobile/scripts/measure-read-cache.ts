@@ -108,6 +108,15 @@ async function run() {
               )
                 cache.records.delete(key);
           },
+          invalidateLedger: async (account, group) => {
+            for (const key of [...cache.records.keys()])
+              if (
+                key.startsWith(`${account}:/api/groups/${group}/`) ||
+                key.startsWith(`${account}:/api/groups/${group}?`) ||
+                key === `${account}:/api/user/balances`
+              )
+                cache.records.delete(key);
+          },
           retainGroups: async () => undefined,
         },
         offlineIdentity: {
