@@ -1,3 +1,4 @@
+import { QueryClient } from '@tanstack/query-core';
 import { cachedRead } from './offline-cache';
 import {
   activityExpenseId,
@@ -422,6 +423,29 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let offlineSession = false;
   const staleReads = new Map<string, number | null>();
   const freshness = dependencies.displayFreshnessMs ?? DISPLAY_FRESHNESS_MS;
+  /**
+   * A display read as the query cache holds it (ADR 0006, AMEND-2): the server's JSON as
+   * received, parsed only when used, and when it was verified. A saved copy is never fresh.
+   */
+  type Envelope = { source: 'network' | 'saved'; refreshedAt: number; value: unknown };
+  /**
+   * The one owner of this controller's display reads (ADR 0006, M1-1). No automatic retries, so
+   * a failed read falls back to the saved copy at once; structural sharing on; fresh for the
+   * display freshness window on TanStack's own clock, `Date.now`; never paused (M1-4, M1-6). A
+   * read stays until a change, a denial or the session's end removes it, as before.
+   */
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        structuralSharing: true,
+        staleTime: (query) =>
+          (query.state.data as Envelope | undefined)?.source === 'saved' ? 0 : freshness,
+        networkMode: 'always',
+        gcTime: Infinity,
+      },
+    },
+  });
   type Verified = { value: unknown; refreshedAt: number; version: number };
   /** This session's verified responses by path, with when each was received. */
   const reads = new Map<string, Omit<Verified, 'version'>>();
@@ -525,6 +549,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     groupsUnanswered = false;
     listedGroups = null;
     unlistedGroups = new Set();
+    // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
+    queryClient.clear();
     transport.abortAll();
     cookie = null;
     cookieAccount = null;
