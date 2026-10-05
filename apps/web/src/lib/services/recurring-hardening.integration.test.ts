@@ -15,6 +15,9 @@ import { decideExpenseMoneyEdit } from '@splitbook/shared/expense-money-edit';
 import { groupService } from './group.service';
 import { recurringExpenseService } from './recurring-expense.service';
 
+// Recurring Expenses are off unless switched on (#289); this file covers them switched on.
+vi.stubEnv('RECURRING_EXPENSES_ENABLED', 'true');
+
 const db = integrationTestDb('recurring-hardening');
 const { alice, bob, carol } = TEST_USER_IDS;
 const nextMonth = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1));

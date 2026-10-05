@@ -101,6 +101,8 @@ export async function startIsolatedApp(
         : {}),
       MONGODB_URI: uri,
       NEXT_PUBLIC_APP_URL: baseURL,
+      // Recurring Expenses are off by default (#289); the expense-access journeys cover them.
+      RECURRING_EXPENSES_ENABLED: 'true',
     };
     if (production) {
       // Build only the temporary snapshot. The user's .next and environment

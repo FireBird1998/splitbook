@@ -9,7 +9,7 @@
  * the monthly per-member breakdown like any manual expense.
  */
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Activity from '@/lib/models/Activity';
 import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
@@ -21,6 +21,9 @@ import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { createTestUsers, TEST_USER_IDS } from '@/lib/test-utils/fixtures';
 import { previousPeriod, toPeriod } from '@splitbook/shared/recurring-due-periods';
 import type { CreateRecurringExpenseInput } from '@splitbook/shared/validators/recurring-expense';
+
+// Recurring Expenses are off unless switched on (#289); this file covers them switched on.
+vi.stubEnv('RECURRING_EXPENSES_ENABLED', 'true');
 
 const db = integrationTestDb('recurring');
 const { alice, bob, carol } = TEST_USER_IDS;

@@ -40,6 +40,9 @@ vi.mock('@/lib/auth', () => ({
   },
 }));
 
+// Recurring Expenses are off unless switched on (#289); this file covers them switched on.
+vi.stubEnv('RECURRING_EXPENSES_ENABLED', 'true');
+
 const db = integrationTestDb('group-leave');
 const { alice, bob, carol, dave } = TEST_USER_IDS;
 
