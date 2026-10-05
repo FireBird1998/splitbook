@@ -214,6 +214,7 @@ function emptyHome(): HomeFinancialState {
 const expiredMessage = 'Your session has expired. Sign in again to continue.';
 const storageMessage = 'Could not safely save your session. Please try signing in again.';
 const unrestorableMessage = 'Your saved session could not be restored. Please sign in again.';
+const keptUntilConfirmedMessage = 'Your saved data is kept. Connect once to confirm your session.';
 const disabledMessage = 'Development persona sign-in is disabled in this build.';
 
 class Superseded extends Error {}
@@ -1721,14 +1722,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (!current(owner) || error instanceof Superseded) return;
       if (error instanceof RequestError && error.networkFailure && (await restoreOffline(owner)))
         return;
+      const message =
+        error instanceof RequestError || error instanceof AccountCleanupError
+          ? error.message
+          : 'Could not restore your session. Please try again.';
+      // An unverified cookie never restores offline, and nothing was purged: say so beside Sign
+      // out, which would remove that data, so the member connects once instead.
+      const unverifiedOffline =
+        error instanceof RequestError && error.networkFailure && cookie !== null && !cookieAccount;
       publish(
         cleanSnapshot({
           status: 'error',
           user: null,
-          message:
-            error instanceof RequestError || error instanceof AccountCleanupError
-              ? error.message
-              : 'Could not restore your session. Please try again.',
+          message: unverifiedOffline ? `${message} ${keptUntilConfirmedMessage}` : message,
         }),
       );
     }

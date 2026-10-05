@@ -1,5 +1,6 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { decodeStoredSession } from './data/cookies';
 import { createMobileController, type MobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
@@ -272,6 +273,10 @@ function device() {
       holds.push({ prefix, arrive, response });
       return { reached, release };
     },
+    /** The saved session as an earlier version saved it: the cookie alone, unverified (#200). */
+    unverifySession() {
+      cookie = cookie && (decodeStoredSession(cookie, false)?.cookie ?? cookie);
+    },
   };
 }
 
@@ -539,6 +544,40 @@ describe('first load and refresh', () => {
 });
 
 describe('offline', () => {
+  const kept = 'Your saved data is kept. Connect once to confirm your session.';
+
+  it('says saved data is kept when an unconfirmed session can’t be checked offline (#200)', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    // As after updating from a version that saved the cookie alone.
+    phone.unverifySession();
+    phone.network.online = false;
+    const app = await start(phone);
+    await settle();
+    expect(app.text()).toContain('Couldn’t check your session');
+    expect(app.text()).toContain('Could not reach SplitBook.');
+    expect(app.text()).toContain(kept);
+    expect(app.button('Try again')).not.toBeNull();
+    expect(app.button('Sign out on this device')).not.toBeNull();
+
+    // Connected, Try again confirms the session, and the saved data is still there.
+    phone.network.online = true;
+    await app.press('Try again');
+    expect(app.text()).not.toContain('Couldn’t check your session');
+    expect(app.text()).toContain('Maple House');
+  });
+
+  it('keeps every other session error’s own copy (#200)', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    phone.network.session = 500;
+    const app = await start(phone);
+    await settle();
+    expect(app.text()).toContain('Couldn’t check your session');
+    expect(app.text()).toContain('The server could not complete this request. Please try again.');
+    expect(app.text()).not.toContain(kept);
+  });
+
   it('shows one offline banner, each view’s saved time, and why each write waits', async () => {
     const phone = device();
     const savedAt = await usedBefore(phone);
