@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { createMobileController, type MobileFetch } from '../src/data';
+import { createMobileController, currentMonthKey, type MobileFetch } from '../src/data';
 import { localOrigin } from './verification-origin';
 
 const alexId = 'a00000000000000000000001';
@@ -43,6 +43,8 @@ async function verify() {
     let cleanupPending = false;
     const groupCreations = new Map<string, unknown>();
     let requests = 0;
+    // Every request the controller sends, as its method and path, in order.
+    const sent: string[] = [];
     let createPosts = 0;
     let joinPosts = 0;
     let invitePosts = 0;
@@ -54,6 +56,7 @@ async function verify() {
       requests += 1;
       const target = new URL(url);
       assert.ok(target.origin === apiBaseUrl, 'A request attempted to leave the local backend.');
+      sent.push(`${init.method ?? 'GET'} ${target.pathname}`);
       const creating = init.method === 'POST' && target.pathname === '/api/groups';
       const joining = init.method === 'POST' && target.pathname.startsWith('/api/join/');
       const generating = init.method === 'POST' && target.pathname.endsWith('/invite-link');
@@ -154,6 +157,9 @@ async function verify() {
       get requests() {
         return requests;
       },
+      get sent() {
+        return sent;
+      },
       get createPosts() {
         return createPosts;
       },
@@ -224,6 +230,7 @@ async function verify() {
       startDate: '',
       endDate: '',
     });
+    const beforeCreate = alex.sent.length;
     await alex.controller.createGroup();
     const ownGroups = await discoverOwnGroups();
     const household = ownGroups.find((group) => group.name === householdName);
@@ -232,10 +239,11 @@ async function verify() {
       ownGroups.filter((group) => group.name === householdName).length === 1,
       'Creation saved more than one Household.',
     );
-    await alex.controller.openGroup(household._id);
-    const created = alex.controller.getSnapshot().detail;
+    // Nothing opens it again: a confirmed create opens the Group the way Home does (#189).
+    const opened = alex.controller.getSnapshot();
+    const created = opened.detail;
     assert.ok(
-      created.status === 'ready' && created.data?.id === household._id,
+      opened.screen === 'group' && created.status === 'ready' && created.data?.id === household._id,
       'Created Group detail did not open.',
     );
     assert.ok(
@@ -253,6 +261,30 @@ async function verify() {
       'The creator was not the sole initial admin.',
     );
     checks.push('Household creation and authorized persisted read-back');
+    const householdPath = `/api/groups/${household._id}`;
+    assert.deepEqual(
+      alex.sent.slice(beforeCreate),
+      [
+        'POST /api/groups',
+        `GET ${householdPath}`,
+        `GET ${householdPath}/expenses`,
+        `GET ${householdPath}/balances`,
+      ],
+      'The created Household was not read, then its Expenses, then its Balances.',
+    );
+    const { financial } = opened;
+    assert.ok(
+      financial.groupId === household._id &&
+        financial.month === currentMonthKey() &&
+        financial.expenses.month === financial.month &&
+        financial.expenses.status === 'ready' &&
+        financial.expenses.data.length === 0 &&
+        financial.balances.status === 'ready',
+      'The created Household did not open on the current Month with its Expenses and Balances.',
+    );
+    checks.push(
+      'A created Household opens on the current Month with its Expenses and Balances read, with no openGroup',
+    );
 
     const invitationUrl = await alex.controller.loadInviteLink();
     assert.ok(invitationUrl, 'No invitation link was returned.');

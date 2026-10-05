@@ -532,6 +532,36 @@ describe('App Group being created', () => {
     expect(app.text()).not.toContain('The Group may have been created.');
     expect(app.creations.size).toBe(0);
   });
+
+  it('opens a new Group on “No expenses yet”, without a pull (#189)', async () => {
+    const app = await renderApp();
+    const createdId = 'a00000000000000000000020';
+    const created = {
+      ...group,
+      _id: createdId,
+      name: 'Cabin Weekend',
+      category: 'trip',
+      members: [{ user: { ...person, email: user.email }, role: 'admin', joinedAt: iso }],
+    };
+    app.use((path, init) => {
+      if (path === '/api/groups' && init.method === 'POST')
+        return json({ data: created, status: 201 }, 201);
+      if (path === `/api/groups/${createdId}`) return json({ data: created, status: 200 });
+      if (path.startsWith(`/api/groups/${createdId}/expenses?`)) return json(page([]));
+      if (path === `/api/groups/${createdId}/balances`)
+        return json({
+          data: { currency: 'INR', balances: [], debts: [], byCurrency: [] },
+          status: 200,
+        });
+      return undefined;
+    });
+    app.controller.startCreate();
+    app.controller.updateCreation({ name: 'Cabin Weekend' });
+    await settle(app.controller.createGroup());
+    expect(app.text()).toContain('Cabin Weekend');
+    expect(app.text()).toContain('No expenses yet');
+    expect(app.refreshControl().refreshing).toBe(false);
+  });
 });
 
 describe('App Group Activity refresh', () => {
