@@ -165,7 +165,7 @@ function SplitBook() {
   // check has settled.
   if (
     configurationReady &&
-    !['restoring', 'error'].includes(state.auth.status) &&
+    !['restoring', 'error', 'sign-out-unconfirmed'].includes(state.auth.status) &&
     (state.screen === 'invite' || (authenticated && ['settings', 'create'].includes(state.screen)))
   )
     return (
@@ -289,6 +289,16 @@ function SplitBook() {
               secondary
               onPress={() => void controller.signOut()}
             />
+          </View>
+        ) : state.auth.status === 'sign-out-unconfirmed' ? (
+          <View style={{ paddingHorizontal: 24 }}>
+            {/* Try again re-sends the revoke as the restore does; Continue sends nothing more. */}
+            <Notice
+              title="Couldn’t sign out of the server"
+              message={state.auth.message ?? 'Try again, or continue signed out.'}
+              retry={() => void controller.restore()}
+            />
+            <Button label="Continue" secondary onPress={() => controller.continueSignedOut()} />
           </View>
         ) : !authenticated ? (
           <SignIn

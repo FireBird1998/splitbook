@@ -611,8 +611,13 @@ describe('the account recorded beside the session cookie (#200)', () => {
       const restarted = p.create();
       const published = record(restarted);
       await restarted.restore();
+      // That ends the recorded account's session too (#202). Offline, the revoke can't be
+      // confirmed: its cookie stays, only for the next attempt to revoke it.
       expect(restarted.getSnapshot()).toMatchObject({
-        auth: { status: 'signed-out', user: null },
+        auth: {
+          status: network === 'online' ? 'signed-out' : 'sign-out-unconfirmed',
+          user: null,
+        },
         screen: 'groups',
       });
       expect(
@@ -624,8 +629,20 @@ describe('the account recorded beside the session cookie (#200)', () => {
             shown.drafts.length > 0,
         ),
       ).toEqual([]);
-      expect(p.requests.slice(sent).filter((request) => request.cookie === alexCookie)).toEqual([]);
-      expect(p.stored).toMatchObject({ cookie: null, owner: null, identity: null, cleanup: false });
+      expect(
+        p.requests
+          .slice(sent)
+          .filter((request) => request.cookie === alexCookie)
+          .map(({ method, path }) => `${method} ${path}`),
+      ).toEqual(['POST /api/auth/sign-out']);
+      if (network === 'online') {
+        expect(p.server.sessions.has(alexCookie)).toBe(false);
+        expect(p.stored).toMatchObject({ cookie: null, cleanup: false });
+      } else {
+        expect(p.session()?.cookie).toBe(alexCookie);
+        expect(p.stored.cleanup).toBe(true);
+      }
+      expect(p.stored).toMatchObject({ owner: null, identity: null });
       expect([
         ...p.stored.cache.keys(),
         ...p.stored.drafts.keys(),

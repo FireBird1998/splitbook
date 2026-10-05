@@ -94,6 +94,7 @@ function setup(
         status: 200,
       });
     if (path.endsWith('/user/balances')) return json({ data: { buckets: [] }, status: 200 });
+    if (path.endsWith('/sign-out')) return json({ success: true });
     return json({ error: 'Unavailable', status: 404 }, 404);
   };
   /** `now` lets a restarted app open on a later day. */

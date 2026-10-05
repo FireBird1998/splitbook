@@ -3,6 +3,7 @@ import { createSettlementAttemptStore } from './data/settlement-storage';
 import { randomUUID, getRandomBytes } from 'expo-crypto';
 import { createExpenseDraftStore } from './data/expense-storage';
 import { createGroupCreationStore } from './data/group-creation-storage';
+import { createSignOutRecord } from './data/account-record-storage';
 import { fetch } from 'expo/fetch';
 import * as SecureStore from 'expo-secure-store';
 import { createMobileController } from './data';
@@ -90,6 +91,7 @@ export const controller = createMobileController(controllerConfig, {
       mark: () => SecureStore.setItemAsync(cleanupKey, 'pending'),
       clear: () => SecureStore.deleteItemAsync(cleanupKey),
     },
+    signOutRecord: createSignOutRecord(controllerConfig.apiBaseUrl),
     owner: {
       load: () => SecureStore.getItemAsync(ownerKey),
       save: (accountId) => SecureStore.setItemAsync(ownerKey, accountId),
