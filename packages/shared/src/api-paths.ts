@@ -7,16 +7,24 @@
  */
 import type { ExpenseFilters } from './types';
 
-/** One path segment. An empty or dot-only id would change the route even when encoded. */
+/**
+ * One path segment. An empty or dot-only id would change the route even when encoded, and an
+ * id with a broken character (a lone surrogate) can't be encoded without aliasing another id.
+ */
 function segment(id: string) {
   if (id === '' || id === '.' || id === '..') throw new RangeError('Invalid path segment');
-  return encodeURIComponent(id);
+  try {
+    return encodeURIComponent(id);
+  } catch {
+    throw new RangeError('Invalid path segment');
+  }
 }
 
-// encodeURIComponent throws on a lone surrogate; URLSearchParams sends U+FFFD instead.
+// encodeURIComponent throws on a lone surrogate. A query value is sent with U+FFFD in its
+// place instead, as URLSearchParams does, so a search with a broken character still runs.
 const surrogates = /[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uD800-\uDFFF]/g;
 const queryValue = (value: string) =>
-  encodeURIComponent(value.replace(surrogates, (unit) => (unit.length === 2 ? unit : '�')));
+  encodeURIComponent(value.replace(surrogates, (unit) => (unit.length === 2 ? unit : '\uFFFD')));
 
 /** `?name=value&…` in the order given, without the values that aren't set. */
 function query(entries: [name: string, value: string | number | undefined][]) {

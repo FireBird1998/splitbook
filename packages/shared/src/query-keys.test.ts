@@ -5,6 +5,9 @@ import {
   expenseRecordPath,
   groupBalancesPath,
   groupPath,
+  groupsPath,
+  homeBalancesPath,
+  invitationsPath,
   recurringExpensesPath,
   settlementsPath,
 } from './api-paths';
@@ -106,6 +109,20 @@ describe('key factories', () => {
   });
 });
 
+describe('keys need an environment and an account', () => {
+  // As a caller might pass them before an account is known.
+  it.each([
+    ['an empty environment', { environment: '', accountId: alex.accountId }],
+    ['no environment', { accountId: alex.accountId }],
+    ['an empty account', { environment, accountId: '' }],
+    ['no account id', { environment }],
+    ['no account at all', undefined],
+  ] as [string, QueryAccount][])('refuses %s', (_label, account) => {
+    for (const read of reads) expect(() => read(account, maple)).toThrow(RangeError);
+    expect(() => matchAccount(account)).toThrow(RangeError);
+  });
+});
+
 describe('keys differ', () => {
   it('by account', () => {
     expect(groupsKey(alex)).not.toEqual(groupsKey(sam));
@@ -140,21 +157,22 @@ describe('keys differ', () => {
   });
 });
 
+/** Every read's factory. */
+const reads: ((account: QueryAccount, groupId: string) => QueryKey)[] = [
+  (account) => groupsKey(account),
+  (account) => homeBalancesKey(account),
+  (account) => invitationsKey(account),
+  (account, groupId) => groupKey(account, groupId),
+  (account, groupId) => groupBalancesKey(account, groupId),
+  (account, groupId) => expensePageKey(account, groupId, monthPage),
+  (account, groupId) => expenseRecordKey(account, groupId, expenseId),
+  (account, groupId) => activityPageKey(account, groupId, { page: 1, limit: 20 }),
+  (account, groupId) => settlementsKey(account, groupId),
+  (account, groupId) => recurringExpensesKey(account, groupId),
+];
 /** Every read, for each account, environment and Group below. */
-function everyKey(account: QueryAccount, groupId: string): QueryKey[] {
-  return [
-    groupsKey(account),
-    homeBalancesKey(account),
-    invitationsKey(account),
-    groupKey(account, groupId),
-    groupBalancesKey(account, groupId),
-    expensePageKey(account, groupId, monthPage),
-    expenseRecordKey(account, groupId, expenseId),
-    activityPageKey(account, groupId, { page: 1, limit: 20 }),
-    settlementsKey(account, groupId),
-    recurringExpensesKey(account, groupId),
-  ];
-}
+const everyKey = (account: QueryAccount, groupId: string) =>
+  reads.map((read) => read(account, groupId));
 const keys = [alex, sam, alexOnStaging].flatMap((account) =>
   [maple, goa].flatMap((groupId) => everyKey(account, groupId)),
 );
@@ -178,6 +196,19 @@ describe('matchers', () => {
     for (const key of [groupsKey(twin), homeBalancesKey(twin), invitationsKey(twin)])
       expect(matchGroup(maple)(key)).toBe(false);
   });
+
+  it('never select a Group whose id only starts or ends like this one', () => {
+    expect(everyKey(alex, `${maple}0`).filter(matchGroup(maple))).toEqual([]);
+    expect(keys.filter(matchGroup(maple.slice(0, -1)))).toEqual([]);
+    expect(keys.filter(matchGroup(maple.slice(1)))).toEqual([]);
+  });
+
+  it.each([groupsPath(), homeBalancesPath(), invitationsPath()])(
+    'never select an account read for a Group id equal to its path, %s',
+    (path) => {
+      expect(keys.filter(matchGroup(path))).toEqual([]);
+    },
+  );
 
   it("select only this account's keys in this environment", () => {
     const selected = keys.filter(matchAccount(alex));

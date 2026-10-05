@@ -216,13 +216,13 @@ describe('encoding', () => {
     ]);
   });
 
-  it('sends a broken character as U+FFFD instead of failing', () => {
+  it('sends a broken character in a query value as U+FFFD instead of failing', () => {
     expect(queryOf(expensePagePath(groupId, { search: 'tea\uD800' }))).toEqual([
-      ['search', 'tea�'],
+      ['search', 'tea\uFFFD'],
     ]);
   });
 
-  it.each(['a/b', 'a?b', 'x/y?z#w', 'a b', '%2F'])(
+  it.each(['a/b', 'a?b', 'x/y?z#w', 'a b', '%2F', 'chai-\u2615', 'pizza-\uD83C\uDF55'])(
     'keeps the id %j inside its own segment',
     (id) => {
       const segments = (path: string) => {
@@ -257,4 +257,14 @@ describe('encoding', () => {
     expect(() => groupPath(id)).toThrow(RangeError);
     expect(() => expenseRecordPath(groupId, id)).toThrow(RangeError);
   });
+
+  // U+FFFD in its place would make two different ids one path.
+  it.each(['a\uD800', '\uDC00b', 'a\uDBFF\uDBFFb'])(
+    'refuses the id %j, which has a broken character',
+    (id) => {
+      expect(() => groupPath(id)).toThrow(RangeError);
+      expect(() => groupBalancesPath(id)).toThrow(RangeError);
+      expect(() => expenseRecordPath(groupId, id)).toThrow(RangeError);
+    },
+  );
 });

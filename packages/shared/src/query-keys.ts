@@ -60,18 +60,33 @@ export type GroupQueryKey = readonly [
 ];
 export type QueryKey = AccountQueryKey | GroupQueryKey;
 
-const accountKey = (
-  scope: AccountScope,
-  { environment, accountId }: QueryAccount,
-  path: string,
-): AccountQueryKey => [scope, environment, accountId, path];
+/**
+ * The environment and account, both required. A key built without one is selected by no
+ * account's matcher, so signing out would leave it behind.
+ */
+function owner(account: QueryAccount) {
+  // Checked at run time too: the types can't stop an account that isn't there yet.
+  const environment: unknown = account?.environment;
+  const accountId: unknown = account?.accountId;
+  if (typeof environment !== 'string' || environment === '')
+    throw new RangeError('A query key needs an environment');
+  if (typeof accountId !== 'string' || accountId === '')
+    throw new RangeError('A query key needs an account');
+  return [environment, accountId] as const;
+}
+
+const accountKey = (scope: AccountScope, account: QueryAccount, path: string): AccountQueryKey => [
+  scope,
+  ...owner(account),
+  path,
+];
 
 const groupScopedKey = (
   scope: GroupScope,
-  { environment, accountId }: QueryAccount,
+  account: QueryAccount,
   groupId: string,
   path: string,
-): GroupQueryKey => [scope, environment, accountId, groupId, path];
+): GroupQueryKey => [scope, ...owner(account), groupId, path];
 
 export const groupsKey = (account: QueryAccount) => accountKey('groups', account, groupsPath());
 
@@ -112,11 +127,15 @@ export function isQueryKey(value: unknown): value is QueryKey {
   return groupScopes.includes(value[0]) && value.length === 5;
 }
 
-/** This account's reads in this environment: what sign-out, an account change or a 401 clears. */
-export const matchAccount =
-  ({ environment, accountId }: QueryAccount) =>
-  (key: unknown): key is QueryKey =>
+/**
+ * This account's reads in this environment: what sign-out, an account change or a 401 clears.
+ * Like the factories, it refuses a missing environment or account rather than match nothing.
+ */
+export function matchAccount(account: QueryAccount) {
+  const [environment, accountId] = owner(account);
+  return (key: unknown): key is QueryKey =>
     isQueryKey(key) && key[1] === environment && key[2] === accountId;
+}
 
 /**
  * One Group's reads: its details, Balances and ledger. Never the Groups list, Home or
