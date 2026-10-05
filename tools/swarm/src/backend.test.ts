@@ -124,7 +124,11 @@ describe('up', () => {
     expect(world.lines).toContain(
       'Building the web app for production, then starting the backend at http://127.0.0.1:53001',
     );
-    expect(world.lines.some((line) => /production build included\.$/.test(line))).toBe(true);
+    expect(world.lines).toContainEqual(
+      expect.stringMatching(
+        /^The backend is ready at http:\/\/127\.0\.0\.1:53001 after [\d.]+ s \(build included\), serving a production build\.$/,
+      ),
+    );
     // The variables the verifiers and controls get are the same as for next dev.
     expect(world.lines).toContain('SPLITBOOK_NATIVE_MONGO_PORT=27017');
     expect(world.lines.some((line) => line.startsWith('SPLITBOOK_NATIVE_SERVER='))).toBe(false);
@@ -153,6 +157,30 @@ describe('up', () => {
     expect(world.running.has(first.backend.pid ?? -1)).toBe(true);
     // Asking for the mode it already runs in reuses it.
     expect((await upIn(world, { root, server: 'dev' })).reused).toBe(true);
+  });
+
+  it('refuses to switch a running production backend to next dev', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+    await upIn(world, { root, server: 'production' });
+
+    const error = await upFailure(world, { root, server: 'dev' });
+
+    expect(error.message).toMatch(/already up .*\(production\)\. Run pnpm swarm down first/);
+    expect(world.stopped).toEqual([]);
+  });
+
+  it('reuses a production backend when no server is named, and says what it serves', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+    const first = await upIn(world, { root, server: 'production' });
+
+    const again = await upIn(world, { root });
+
+    expect(again).toEqual({ backend: first.backend, reused: true });
+    expect(world.lines).toContain(
+      "This worktree's backend is already up at http://127.0.0.1:53001, serving a production build.",
+    );
   });
 
   it('reads a record from before production builds as a dev backend', async () => {

@@ -38,7 +38,7 @@ Drop `--offline` if a package is missing from the store. A stale install looks l
 
 `up` records the backend in `tools/swarm/out/backend.json` before it seeds, so `down` can always find the database and its Mongo port, and adds the backend's pid and start time once it starts.
 
-When this worktree's backend is already up and answering, `up` prints it again instead of starting another. When it is running but not answering (still compiling, or busy), `up` waits for it up to the ready timeout, then refuses; it never tears a running backend down. A record whose backend is gone (after a crash or a reboot) is cleaned up first, as `down` would.
+When this worktree's backend is already up and answering, `up` prints it again, with what it serves (`next dev` or a production build), instead of starting another. When it is running but not answering (still compiling, or busy), `up` waits for it up to the ready timeout, then refuses; it never tears a running backend down. A record whose backend is gone (after a crash or a reboot) is cleaned up first, as `down` would.
 
 | Flag (or variable)                                     | Default                  | Accepted                                                                             |
 | ------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------ |
@@ -59,7 +59,7 @@ A backend that never answers fails `up` after the timeout with a clear error; th
 
 The backend's own scripts keep their rules: they refuse root and `apps/web` `.env` files, accept only loopback Mongo and `splitbook_mobile_*` names, and claim a database with the fictional ownership marker. The tool passes them only `PATH` and the three variables above, plus `SPLITBOOK_NATIVE_SERVER` to `start.mjs`; it never reads `.env` files, `MONGODB_URI` or any credential.
 
-**`--server production`** makes `start.mjs` build the web app for the backend's origin, then serve it with `next start` and `ALLOW_DEMO_AUTH=true`, as CI does. Next bakes the origin into the build, so each production `up` builds again, in `apps/web/.next`. The build counts toward the ready timeout and takes about 30 s on this machine when it is quiet (below), so raise `--ready-timeout` on a slow or busy machine. The default, `dev`, runs `next dev`. `up` refuses to switch a running backend to the other server; run `pnpm swarm down` first.
+**`--server production`** makes `start.mjs` build the web app for the backend's origin, then serve it with `next start` and `ALLOW_DEMO_AUTH=true`, as CI does. Next bakes the origin into the build, so each production `up` builds again, in `apps/web/.next`. A `pnpm web build` in the same worktree overwrites that `.next` while the backend serves it, so run one only after `pnpm swarm down`. The build counts toward the ready timeout and takes about 30 s on this machine when it is quiet (below), so raise `--ready-timeout` on a slow or busy machine. The default, `dev`, runs `next dev`. `up` refuses to switch a running backend to the other server; run `pnpm swarm down` first.
 
 ## In CI
 
@@ -166,7 +166,7 @@ Measured on 2026-10-05 on the same machine for #228: `up`, then `TZ=Asia/Kolkata
 
 The quiet production run predates `--server`: it ran the same steps by hand (the seed, `next build --webpack`, then `next start` with the same environment), with the backend in UTC, as on a CI runner, and every verifier passed.
 
-On a quiet machine the production build is faster, because `next dev` compiles every route the verifiers reach while they wait (the verifiers took 24 s against a warm `next dev`, 11 s against a production build); on a busy one the parallel build suffers most. A CI runner is a quiet machine with 4 cores, where the web app's build takes 40 to 60 s. A production backend also uses less memory: about 0.27 GB once the verifiers have run, against 1.1 to 1.7 GB for `next dev`.
+On a quiet machine the production build is faster, because `next dev` compiles every route the verifiers reach while they wait (the verifiers took 24 s against a warm `next dev`, 11 s against a production build); on a busy one the parallel build suffers most. A CI runner is a quiet machine with 4 cores, where the web app's build takes 40 to 60 s. That holds while the repository is public: GitHub's runners for private repositories have 2 cores, so measure the job again if it goes private. A production backend also uses less memory: about 0.27 GB once the verifiers have run, against 1.1 to 1.7 GB for `next dev`.
 
 ## Files
 

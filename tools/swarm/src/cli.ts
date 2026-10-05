@@ -67,6 +67,22 @@ const secondsInput = (name: string, value: string | undefined) =>
     seconds === undefined ? undefined : (`${seconds} seconds` as const),
   );
 
+/**
+ * What `up` is asked for: each flag, else its #185 variable (SPLITBOOK_NATIVE_*). These
+ * are requests, checked by `up`, never trusted.
+ */
+export function upRequest(
+  values: { readonly origin?: string; readonly database?: string; readonly server?: string },
+  env: Readonly<Record<string, string | undefined>>,
+) {
+  const originPort = env.SPLITBOOK_NATIVE_ORIGIN_PORT;
+  return {
+    origin: values.origin ?? (originPort ? `http://127.0.0.1:${originPort}` : undefined),
+    database: values.database ?? env.SPLITBOOK_NATIVE_DATABASE,
+    server: values.server ?? env.SPLITBOOK_NATIVE_SERVER,
+  };
+}
+
 const program = (
   command: string,
   args: readonly string[],
@@ -101,16 +117,7 @@ const program = (
     if (command === 'up') {
       const install = checkInstall(root);
       if (!install.ok) return yield* Effect.fail(new Refused({ message: install.message }));
-      // #185's variables, when set, are requests like the flags: checked, never trusted.
-      const originPort = env.SPLITBOOK_NATIVE_ORIGIN_PORT;
-      yield* up({
-        root,
-        origin: values.origin ?? (originPort ? `http://127.0.0.1:${originPort}` : undefined),
-        database: values.database ?? env.SPLITBOOK_NATIVE_DATABASE,
-        mongoPort,
-        readyTimeout,
-        server: values.server ?? env.SPLITBOOK_NATIVE_SERVER,
-      });
+      yield* up({ root, ...upRequest(values, env), mongoPort, readyTimeout });
       return 0;
     }
     if (command === 'down') {

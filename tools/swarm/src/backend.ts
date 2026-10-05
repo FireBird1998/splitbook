@@ -83,7 +83,8 @@ const defaultReadyTimeout: Duration.Input = '3 minutes';
  * the ready timeout.
  */
 export type ServerMode = 'dev' | 'production';
-const serverModes: readonly string[] = ['dev', 'production'] satisfies ServerMode[];
+const isServerMode = (value: string): value is ServerMode =>
+  value === 'dev' || value === 'production';
 const defaultSeedTimeout: Duration.Input = '2 minutes';
 
 export interface Backend {
@@ -433,7 +434,7 @@ interface Plan {
 /** Checks the requested target before anything connects, starts or stops. */
 function plan(options: UpOptions): Plan | string {
   const server = options.server ?? 'dev';
-  if (!serverModes.includes(server)) {
+  if (!isServerMode(server)) {
     return `Refusing server ${server}: the backend runs as dev (next dev) or production (a production build).`;
   }
   const mongoPort = options.mongoPort ?? defaultMongoPort;
@@ -443,7 +444,7 @@ function plan(options: UpOptions): Plan | string {
     options.database ?? `${worktreePrefix(options.root)}${randomBytes(4).toString('hex')}`;
   const nameRefusal = databaseRefusal(database, options.root);
   if (nameRefusal) return nameRefusal;
-  const target = { mongoPort, database, server: server as ServerMode };
+  const target = { mongoPort, database, server };
   if (options.origin === undefined) return { ...target, port: undefined };
   const port = requestedPort(options.origin, mongoPort);
   return typeof port === 'string' ? port : { ...target, port };
@@ -629,10 +630,12 @@ const launch = (options: UpOptions, target: Plan) =>
 const announce = (backend: Backend, reused: boolean) =>
   Effect.gen(function* () {
     const output = yield* Output;
+    const production = backend.server === 'production';
+    const serving = production ? 'a production build' : 'next dev';
     yield* output.line(
       reused
-        ? `This worktree's backend is already up at ${backend.origin}.`
-        : `The backend is ready at ${backend.origin} after ${backend.readySeconds} s${backend.server === 'production' ? ', production build included' : ''}.`,
+        ? `This worktree's backend is already up at ${backend.origin}, serving ${serving}.`
+        : `The backend is ready at ${backend.origin} after ${backend.readySeconds} s${production ? ' (build included)' : ''}, serving ${serving}.`,
     );
     yield* output.line(`Log ${backend.log}`);
     yield* output.line(
