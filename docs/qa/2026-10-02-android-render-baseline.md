@@ -8,27 +8,31 @@ The device-independent render baseline for [#177](https://github.com/FireBird199
 
 - **Publishes:** controller state changes. On a phone each publish in its own task can commit separately, so this is the **upper bound for device commits**.
 - **Commits:** React commits seen by a `<Profiler>` around `App`. The test renderer merges publishes made in one task into one commit, so this is the **lower bound**. Every fake response arrives in a later task, as a network reply would.
-- **Component renders:** every render of an exported component, in all 29 modules under `src/ui` that export components. This includes the compact primitives (`CompactText`, `Icon`, `ListRow` and so on) and the `ErrorBoundary` class. This is the main measure of how much of the tree re-renders. Components a module does not export are counted only through the exported components they render.
+- **Component renders:** each render of an exported component that another module makes through the export, in all 29 modules under `src/ui` that export components. This includes the compact primitives (`CompactText`, `Icon`, `ListRow` and so on) and the `ErrorBoundary` class. It is the main measure of how much of the tree re-renders, and a **lower bound**: the harness wraps each module's exports, so renders from inside a component's own module, and components a module doesn't export, are not counted (see [Not verified](#not-verified)).
 - **Render time:** the Profiler's `actualDuration`, measured in Node. The harness prints it for comparison only. It is not recorded here: it says nothing reliable about a phone, and on a shared machine it varied by about 1.5× between identical runs.
 
 **Determinism and enforcement:**
 
 - The counts are deterministic. Three runs at `7e69be8` gave identical numbers, and so did runs with `TZ` set to `Pacific/Kiritimati` (UTC+14) and `Pacific/Pago_Pago` (UTC−11).
-- The test asserts each count as a ceiling, so a change that renders more fails CI. A ceiling one render too low fails with `Type 20 characters into Description: component renders: expected 3241 to be less than or equal to 3240`.
+- The test asserts each count as a ceiling, so a change that renders more fails CI. A ceiling one render too low fails with `Foreground on Home within 30 s: renders: expected 146 to be less than or equal to 145`. Every journey in a test still runs and reports its counts before the test fails.
+- **The ceilings have no headroom.** They equal the recorded counts, which depend on the order in which the fake responses arrive. Each response waits one `setTimeout(0)`, so the order is fixed and the counts are stable, but a Node or React scheduler upgrade could move a commit by one. If that happens, re-record and say why in this file.
+- **Each journey checks the screen it ends on** before its counts are compared: the Group rows on Home, the Month and the Expense rows, the Balances, the Activity rows, or the typed Description with "Draft saved". A journey that breaks fails there instead of passing by rendering less. Checked by hand: with the fake Expenses endpoint answering 500, all three journey tests fail.
+- **Any console error fails the test**, except the two this file causes on purpose: React's warning that the environment doesn't support `act(...)` (the harness renders outside `act()` so publishes commit as they would on a device) and the `react-test-renderer` deprecation notice.
+- When a count comes in under its ceiling, the test prints a warning naming the journey, the count and the ceiling, so the ceiling can come down. It prints nothing otherwise.
 - **A guard test** fails when a module under `src/ui` exports a component the harness doesn't count, and names the module and component. `vi.mock` is hoisted and takes static paths, so the instrumented list is kept by hand at the top of the test file. The guard also fails when a `vi.mock` names a module that no longer exists.
 
 ## Re-recording the ceilings
 
-Inside `apps/mobile`:
+From the repository root:
 
 ```sh
-RENDER_PROFILE=1 npx vitest run src/render-profile.test.tsx --reporter=default        # print the table and check the ceilings
-RENDER_PROFILE=record npx vitest run src/render-profile.test.tsx --reporter=default   # print the table without checking
+RENDER_PROFILE=1 pnpm mobile exec vitest run src/render-profile.test.tsx --reporter=default        # print the table and check the ceilings
+RENDER_PROFILE=record pnpm mobile exec vitest run src/render-profile.test.tsx --reporter=default   # print the table without checking
 ```
 
-`--reporter=default` keeps the printed table: some automated environments select a quieter Vitest reporter that hides output from passing tests.
+`--reporter=default` keeps the printed table: some automated environments select a quieter Vitest reporter that hides output from passing tests. `RENDER_PROFILE=record` skips every ceiling, so the test refuses to run with it when `CI` is set.
 
-1. Run with `RENDER_PROFILE=record` on the commit you are measuring.
+1. Run with `RENDER_PROFILE=record` on the commit you are measuring. The end-screen checks still run.
 2. Copy the counts into `ceilings` in `render-profile.test.tsx`.
 3. Update the baseline table below with the commit.
 4. Lowering a ceiling needs no reason. Raising one needs the reason in the pull request and in this file (#206 adds the owner's re-record label to enforce this).
@@ -113,7 +117,9 @@ The owner confirms or changes this budget in [#194](https://github.com/FireBird1
 
 - **No device numbers.** Frame times, jank, memory and real commit counts belong to #194. They decide whether #178 and #179 meet the budget.
 - Render times come from Node and are not comparable with a phone.
-- Components that a module does not export, such as `ExpenseRow`, `ActivityRow` and Home's `GroupRow`, are counted only through the exported components they render.
+- **The component renders are a lower bound.** The harness counts a component only when another module renders it through its export:
+  - Renders from inside the component's own module are not counted. Examples: `Skeleton` and `Card` inside `compact/layout.tsx`, `Field` and `FieldError` inside `group-workflows.tsx`, and `Icon`, `Copy` and `Button` inside `primitives.tsx`. A change that adds such renders doesn't move the ceilings.
+  - Components that a module does not export, such as `ExpenseRow`, `ActivityRow` and Home's `GroupRow`, are counted only through the exported components they render from other modules.
 
 ## Next
 

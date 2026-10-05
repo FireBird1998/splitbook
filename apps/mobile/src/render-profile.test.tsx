@@ -8,12 +8,16 @@ import { createMobileController } from './data/mobile-controller';
 import { emitAppState } from './test-utils/native';
 
 /**
- * #177: how much of the tree each journey renders. Every exported component of the UI
- * modules is counted each time it renders, and a Profiler counts App's commits. The
- * counts are deterministic, so they are asserted as ceilings: a change that renders more
- * fails. Render times are reported for comparison only (`RENDER_PROFILE=1`); they come
- * from Node, not a phone. Components a module does not export are not counted.
- * `RENDER_PROFILE=record` prints the table without checking ceilings, to set new ones.
+ * #177: how much of the tree each journey renders. The UI modules' exports are wrapped so
+ * that a component is counted each time another module renders it through its export, and
+ * a Profiler counts App's commits. Renders from inside a component's own module (`Card`
+ * and `Skeleton` inside compact/layout, `Icon` and `Copy` inside primitives) and
+ * components a module does not export are not counted, so the renders are a lower bound.
+ * The counts are deterministic, so they are asserted as ceilings: a change that renders
+ * more fails. Each journey also checks the screen it ends on, so a journey that breaks
+ * can't pass by rendering less. Render times are reported for comparison only
+ * (`RENDER_PROFILE=1`); they come from Node, not a phone. `RENDER_PROFILE=record` prints
+ * the table without checking ceilings, to set new ones; it refuses to run in CI.
  * The last test fails when a module under `src/ui` exports a component this file doesn't count.
  */
 // What the mocked `./runtime` serves: the controller under test and the appearance.
@@ -173,6 +177,10 @@ const ceilings: Record<string, { publishes: number; commits: number; renders: nu
   'Foreground within 30 s after 5 Activity pages': { publishes: 5, commits: 2, renders: 572 },
   'Type 20 characters into Description': { publishes: 40, commits: 21, renders: 3241 },
 };
+const recording = process.env.RENDER_PROFILE === 'record';
+// Recording skips every ceiling, so a leaked variable must not turn CI green.
+if (recording && process.env.CI)
+  throw new Error('RENDER_PROFILE=record skips every ceiling; it never runs in CI.');
 
 // Fictional ledger: 20 Groups, and a Household Group with 5 pages each of Expenses and Activity.
 const user = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 's@x.test', image: null };
@@ -348,14 +356,26 @@ let publishes = 0,
   commits = 0,
   renderMs = 0;
 
+// The two console errors this file causes on purpose: it renders outside act() so that
+// publishes commit as they would on a device, and it uses react-test-renderer. Any other
+// console error fails the test.
+const expectedErrors = [
+  /The current testing environment is not configured to support act\(/,
+  /react-test-renderer is deprecated/,
+];
+let consoleErrors: string[] = [];
 beforeEach(() => {
-  // Controller snapshots published between act scopes are part of what is measured.
-  vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  consoleErrors = [];
+  vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+    const message = args.map(String).join(' ');
+    if (!expectedErrors.some((expected) => expected.test(message))) consoleErrors.push(message);
+  });
 });
 afterEach(() => {
   screen?.unmount();
   screen = null;
   vi.restoreAllMocks();
+  expect(consoleErrors, 'Unexpected console errors').toEqual([]);
 });
 afterAll(() => {
   if (!process.env.RENDER_PROFILE) return;
@@ -404,11 +424,9 @@ async function renderApp() {
   await settle();
   const root = () => screen!.root;
   const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
-  const pressable = (label: string) =>
-    root().find(
-      (node) =>
-        isHost(node, 'Pressable') && String(node.props.accessibilityLabel ?? '').startsWith(label),
-    );
+  const labelled = (label: string) => (node: ReactTestInstance) =>
+    isHost(node, 'Pressable') && String(node.props.accessibilityLabel ?? '').startsWith(label);
+  const pressable = (label: string) => root().find(labelled(label));
   return {
     ...harness,
     press: (label: string) => settle(Promise.resolve(pressable(label).props.onPress())),
@@ -428,13 +446,26 @@ async function renderApp() {
           emitAppState('active');
         }),
       ),
-    /** Host Text nodes on screen: a proxy for how much is mounted. */
-    mounted: () => root().findAll((node) => isHost(node, 'Text')).length,
+    /** How many buttons on screen have a label starting with `label`, such as list rows. */
+    count: (label: string) => root().findAll(labelled(label)).length,
+    /** Whether some text on screen contains `text`. */
+    shows: (text: string) =>
+      root()
+        .findAll((node) => isHost(node, 'Text'))
+        .some((node) => node.children.some((child) => String(child).includes(text))),
+    /** The value of the text field with this label. */
+    value: (label: string) =>
+      root().find((node) => isHost(node, 'TextInput') && node.props.accessibilityLabel === label)
+        .props.value,
   };
 }
 
-/** Measures one journey and checks it against its ceiling. */
-async function journey(name: string, run: () => Promise<unknown>) {
+/**
+ * Measures one journey, checks the screen it ends on, then checks its counts against the
+ * ceilings. A journey that breaks fails on its end screen, not by rendering less. Every
+ * journey of a test reports its counts before the test fails on a ceiling.
+ */
+async function journey(name: string, run: () => Promise<unknown>, reached: () => void) {
   counting.renders.clear();
   publishes = 0;
   commits = 0;
@@ -456,55 +487,111 @@ async function journey(name: string, run: () => Promise<unknown>) {
     top,
   };
   samples.push(sample);
-  if (process.env.RENDER_PROFILE === 'record') return sample;
+  reached();
+  if (recording) return sample;
   const ceiling = ceilings[name];
-  expect(ceiling, `No ceiling recorded for "${name}"`).toBeDefined();
-  expect(sample.publishes, `${name}: publishes`).toBeLessThanOrEqual(ceiling!.publishes);
-  expect(sample.commits, `${name}: commits`).toBeLessThanOrEqual(ceiling!.commits);
-  expect(sample.renders, `${name}: component renders`).toBeLessThanOrEqual(ceiling!.renders);
+  expect.soft(ceiling, `No ceiling recorded for "${name}"`).toBeDefined();
+  if (!ceiling) return sample;
+  for (const measure of ['publishes', 'commits', 'renders'] as const) {
+    expect.soft(sample[measure], `${name}: ${measure}`).toBeLessThanOrEqual(ceiling[measure]);
+    // Quiet unless a ceiling can come down.
+    if (sample[measure] < ceiling[measure])
+      console.warn(
+        `${name}: ${measure} ${sample[measure]} is under its ceiling of ${ceiling[measure]}; lower the ceiling.`,
+      );
+  }
   return sample;
 }
 
 describe('render profile (#177)', () => {
   it('Home and Group navigation', async () => {
     let app!: Awaited<ReturnType<typeof renderApp>>;
-    await journey('Sign in and show Home (20 Groups)', async () => {
-      app = await renderApp();
-    });
-    await journey('Foreground on Home within 30 s', () => app.foreground());
-    await journey('Open a Group on Expenses', () => app.press('Open Maple House'));
-    await journey('Change Month', () => app.press('Previous month'));
-    await journey('Switch to Balances', () => app.press('Balances'));
-    await journey('Switch to Activity', () => app.press('Activity'));
+    const home = () => expect(app.count('Open '), 'Group rows on Home').toBe(groups.length);
+    const expenses = (month: string) => () => {
+      expect(app.shows(month), `${month} on screen`).toBe(true);
+      expect(app.count('Fictional expense'), 'Expense rows').toBe(20);
+    };
+    await journey(
+      'Sign in and show Home (20 Groups)',
+      async () => {
+        app = await renderApp();
+      },
+      home,
+    );
+    await journey('Foreground on Home within 30 s', () => app.foreground(), home);
+    await journey(
+      'Open a Group on Expenses',
+      () => app.press('Open Maple House'),
+      expenses('September 2026'),
+    );
+    await journey('Change Month', () => app.press('Previous month'), expenses('August 2026'));
+    await journey(
+      'Switch to Balances',
+      () => app.press('Balances'),
+      () => {
+        expect(app.shows('All-time balance'), 'Balances on screen').toBe(true);
+        expect(app.shows('−₹30.00'), "Sam's balance").toBe(true);
+      },
+    );
+    await journey(
+      'Switch to Activity',
+      () => app.press('Activity'),
+      () => expect(app.count('You added'), 'Activity rows').toBe(20),
+    );
   });
 
   it('long lists', async () => {
     const app = await renderApp();
+    const expenseRows = (rows: number) => () =>
+      expect(app.count('Fictional expense'), 'Expense rows').toBe(rows);
+    const activityRows = (rows: number) => () =>
+      expect(app.count('You added'), 'Activity rows').toBe(rows);
     await app.press('Open Maple House');
     for (let page = 2; page < pages; page += 1) await app.press('Load more expenses');
-    await journey('Load the 5th Expense page (80 → 100 rows)', () =>
-      app.press('Load more expenses'),
+    await journey(
+      'Load the 5th Expense page (80 → 100 rows)',
+      () => app.press('Load more expenses'),
+      expenseRows(100),
     );
     // An automatic refresh starts again from the first page (#104), so the list shrinks.
     // ADR 0006 keeps up to 5 loaded pages instead (#219), which will re-record this journey.
-    await journey('Foreground within 30 s after 5 Expense pages', () => app.foreground());
+    await journey(
+      'Foreground within 30 s after 5 Expense pages',
+      () => app.foreground(),
+      expenseRows(20),
+    );
     await app.press('Activity');
     for (let page = 2; page < pages; page += 1) await app.press('Load older activity');
-    await journey('Load the 5th Activity page (80 → 100 events)', () =>
-      app.press('Load older activity'),
+    await journey(
+      'Load the 5th Activity page (80 → 100 events)',
+      () => app.press('Load older activity'),
+      activityRows(100),
     );
-    await journey('Foreground within 30 s after 5 Activity pages', () => app.foreground());
+    await journey(
+      'Foreground within 30 s after 5 Activity pages',
+      () => app.foreground(),
+      activityRows(20),
+    );
   });
 
   it('typing in the Expense form', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');
+    // The form is measured as a member reaches it: from a Group whose Expenses loaded.
+    expect(app.count('Fictional expense'), 'Expense rows').toBe(20);
     await app.press('Add expense');
     const text = 'Fictional groceries!';
-    await journey(`Type ${text.length} characters into Description`, async () => {
-      for (let length = 1; length <= text.length; length += 1)
-        await app.type('Description, required', text.slice(0, length));
-    });
+    await journey(
+      `Type ${text.length} characters into Description`,
+      async () => {
+        for (let length = 1; length <= text.length; length += 1)
+          await app.type('Description, required', text.slice(0, length));
+      },
+      () => {
+        expect(app.value('Description, required'), 'Description').toBe(text);
+        expect(app.shows('Draft saved'), 'Draft saved on screen').toBe(true);
+      },
+    );
   });
 
   // vi.mock takes static paths, so the list at the top is kept by hand and checked here.
