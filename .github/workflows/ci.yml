@@ -116,6 +116,72 @@ jobs:
         env:
           TZ: ${{ matrix.tz }}
 
+  # The mobile verify:* scripts drive the real mobile controller over HTTP against a
+  # fictional backend of this run's own (#228). tools/swarm starts it on the job's Mongo
+  # service, with a fresh splitbook_mobile_swarm_* database and the fictional seed, and
+  # serves a production build, so no route compiles while a verifier waits. verify:all
+  # runs every verifier one after another, never two at once: several assume they are
+  # the only ones using Sam on their backend. Their order doesn't matter.
+  mobile-verifiers:
+    name: Mobile HTTP verifiers
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # up prints MOBILE_VERIFY_URL and the backend's SPLITBOOK_NATIVE_* variables as
+      # NAME=value lines; the later steps get them through GITHUB_ENV.
+      - name: Start this run's backend (tools/swarm, production build)
+        shell: bash
+        timeout-minutes: 15
+        run: |
+          pnpm swarm up --mongo-port 27017 --server production --ready-timeout 600 | tee "$RUNNER_TEMP/swarm-up.log"
+          grep -E '^(MOBILE_VERIFY_URL|SPLITBOOK_NATIVE_[A-Z_]+)=' "$RUNNER_TEMP/swarm-up.log" >> "$GITHUB_ENV"
+
+      # verify:all runs each verifier even after one fails, then prints a PASS or FAIL
+      # line for each; every FAIL also becomes an annotation that names the verifier.
+      - name: Run every verifier, one after another
+        shell: bash
+        timeout-minutes: 20
+        env:
+          TZ: Asia/Kolkata
+        run: |
+          set +e
+          pnpm mobile verify:all 2>&1 | tee "$RUNNER_TEMP/verifiers.log"
+          status=$?
+          set -e
+          awk '/^FAIL verify:/ { print "::error title=Mobile verifier failed::" $2 " failed. Its output is in the log of this step; the backend log is the mobile-verifier-backend-log artifact." }' "$RUNNER_TEMP/verifiers.log"
+          exit "$status"
+
+      - name: Upload the backend log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-verifier-backend-log
+          path: tools/swarm/out/backend.log
+          retention-days: 7
+
+      - name: Stop the backend and drop its database
+        if: always()
+        run: pnpm swarm down --mongo-port 27017
+
   playwright:
     runs-on: ubuntu-latest
 

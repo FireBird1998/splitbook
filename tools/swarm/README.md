@@ -61,6 +61,20 @@ The backend's own scripts keep their rules: they refuse root and `apps/web` `.en
 
 **`--server production`** makes `start.mjs` build the web app for the backend's origin, then serve it with `next start` and `ALLOW_DEMO_AUTH=true`, as CI does. Next bakes the origin into the build, so each production `up` builds again, in `apps/web/.next`. The build counts toward the ready timeout and takes about 30 s on this machine when it is quiet (below), so raise `--ready-timeout` on a slow or busy machine. The default, `dev`, runs `next dev`. `up` refuses to switch a running backend to the other server; run `pnpm swarm down` first.
 
+## In CI
+
+The **Mobile HTTP verifiers** job (`mobile-verifiers` in `.github/workflows/ci.yml`, #228) runs every verifier on each pull request and push to `main`, against a backend of the run's own:
+
+```sh
+pnpm swarm up --mongo-port 27017 --server production --ready-timeout 600
+TZ=Asia/Kolkata pnpm mobile verify:all   # with MOBILE_VERIFY_URL from up
+pnpm swarm down --mongo-port 27017
+```
+
+The job's `mongo:7` service listens on 27017, so `up` and `down` name that port; locally the default, 27018, applies. The job adds `up`'s `NAME=value` lines to `GITHUB_ENV`, turns each `FAIL verify:*` line of `verify:all` into an annotation, uploads `tools/swarm/out/backend.log` when anything fails, and always runs `down`. One job runs one swarm command at a time, so the worktree lock never refuses one there.
+
+It serves a production build, as the Playwright jobs do, so no route compiles while a verifier waits; see the timings below. Changing `--server production` to `--server dev` in the job is all it takes to use `next dev` instead.
+
 ## `pnpm swarm down`
 
 Stops this worktree's backend and drops **every database whose name starts with this worktree's prefix**, and nothing else:
@@ -139,6 +153,18 @@ Measured on 2026-10-04 on an Apple M3 Pro (11 cores, 36 GB of memory), Node 22.2
 - **Time to ready:** 4.8 s for one backend in a fresh worktree, from start to the first answer of `/api/auth/ok`; 4.2 s for another started at the same time in a second fresh worktree; 1.9 s once the worktree's `.next` cache is warm. The seed adds about 2 s before that, so `up` takes about 7 s.
 - **Memory:** about 0.9 to 1.1 GB resident for one backend's process group once ready, almost all of it the `next-server` process (0.7 GB with a warm cache), rising to 1.3 to 1.7 GB after a gate has run every verifier against it, since `next dev` keeps every route it compiled. Budget about 1.7 GB per running backend.
 - **Two gates at once,** each in its own worktree with its own backend from `up`: both passed, in 82 s and 92 s, with the default cap of 2 vitest workers.
+
+Measured on 2026-10-05 on the same machine for #228: `up`, then `TZ=Asia/Kolkata pnpm mobile verify:all`, from a fresh worktree with no `apps/web/.next`. Seven other agents shared the machine, so the load varied from run to run:
+
+| Load average | `next dev`: `up` + verifiers | Production build: `up` (build included) + verifiers |
+| ------------ | ---------------------------- | --------------------------------------------------- |
+| low          | 7 s + 53 s = 60 s            | 31 s + 11 s = 42 s, by hand                         |
+| about 20     | 9 s + 66 s = 75 s            | 63 s + 22 s = 85 s                                  |
+| 24 to 90     | 7 s + 84 s = 91 s            | 92 s + 28 s = 120 s                                 |
+
+The quiet production run predates `--server`: it ran the same steps by hand (the seed, `next build --webpack`, then `next start` with the same environment), with the backend in UTC, as on a CI runner, and every verifier passed.
+
+On a quiet machine the production build is faster, because `next dev` compiles every route the verifiers reach while they wait (the verifiers took 24 s against a warm `next dev`, 11 s against a production build); on a busy one the parallel build suffers most. A CI runner is a quiet machine with 4 cores, where the web app's build takes 40 to 60 s. A production backend also uses less memory: about 0.27 GB once the verifiers have run, against 1.1 to 1.7 GB for `next dev`.
 
 ## Files
 
