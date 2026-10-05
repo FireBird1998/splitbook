@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { decodeStoredSession } from './cookies';
 import { createMobileController } from './mobile-controller';
 import type { GoogleIdentityResult, MobileDependencies, MobileFetch } from './types';
 
@@ -109,8 +110,13 @@ describe('Google login within the native session boundary', () => {
     });
     expect(new Headers(request.headers).get('Origin')).toBe(base);
     expect(request).toMatchObject({ credentials: 'omit', redirect: 'error' });
-    expect(test.saved()).toBe(cookie);
-    expect(test.credentials.save).toHaveBeenCalledTimes(1);
+    // The signed cookie alone, then recorded for the account get-session confirmed (#200).
+    expect(
+      test.credentials.save.mock.calls.map(([value]) => decodeStoredSession(value, true)),
+    ).toEqual([
+      { cookie, accountId: null },
+      { cookie, accountId: user.id },
+    ]);
     expect(test.fetch.mock.calls[2][0]).toBe(`${base}/api/auth/get-session`);
     await test.controller.signIn('alex');
     expect(test.fetch.mock.calls.some(([url]) => url.includes('demo-persona'))).toBe(false);

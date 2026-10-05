@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { readSessionCookie, validSessionCookie } from './cookies';
+import {
+  decodeStoredSession,
+  encodeStoredSession,
+  readSessionCookie,
+  validSessionCookie,
+} from './cookies';
 
 const now = Date.parse('2026-09-27T10:00:00.000Z');
 
@@ -60,5 +65,37 @@ describe('signed session cookie boundary', () => {
     ]) {
       expect(validSessionCookie(candidate, false)).toBe(false);
     }
+  });
+});
+
+describe('the saved session and the account it was verified for (#200)', () => {
+  const cookie = 'better-auth.session_token=signed.signature';
+  const accountId = 'a00000000000000000000001';
+
+  it('reads an unverified cookie, as every earlier version saved it, and a verified one', () => {
+    expect(encodeStoredSession(cookie, null)).toBe(cookie);
+    expect(decodeStoredSession(cookie, false)).toEqual({ cookie, accountId: null });
+    expect(decodeStoredSession(encodeStoredSession(cookie, accountId), false)).toEqual({
+      cookie,
+      accountId,
+    });
+  });
+
+  it('refuses anything that is not a usable saved session', () => {
+    for (const candidate of [
+      'raw-token',
+      '{',
+      JSON.stringify({ cookie }),
+      JSON.stringify({ cookie, accountId: '' }),
+      JSON.stringify({ cookie, accountId: null }),
+      JSON.stringify({ cookie, accountId, extra: true }),
+      JSON.stringify({ cookie: 'better-auth.session_token=valid; Path=/', accountId }),
+      JSON.stringify({ cookie: `__Secure-${cookie}`, accountId }),
+    ]) {
+      expect(decodeStoredSession(candidate, false)).toBeNull();
+    }
+    expect(decodeStoredSession(encodeStoredSession(`__Secure-${cookie}`, accountId), true)).toEqual(
+      { cookie: `__Secure-${cookie}`, accountId },
+    );
   });
 });

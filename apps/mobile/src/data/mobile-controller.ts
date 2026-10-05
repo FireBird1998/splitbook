@@ -55,7 +55,7 @@ import {
   type ExpenseField,
   type ExpenseValidation,
 } from './expense-draft';
-import { readSessionCookie, validSessionCookie } from './cookies';
+import { decodeStoredSession, encodeStoredSession, readSessionCookie } from './cookies';
 import { emptyFormValidation, rejectFields, touchField } from './field-feedback';
 import {
   groupCorrectionSummary,
@@ -213,6 +213,7 @@ function emptyHome(): HomeFinancialState {
 
 const expiredMessage = 'Your session has expired. Sign in again to continue.';
 const storageMessage = 'Could not safely save your session. Please try signing in again.';
+const unrestorableMessage = 'Your saved session could not be restored. Please sign in again.';
 const disabledMessage = 'Development persona sign-in is disabled in this build.';
 
 class Superseded extends Error {}
@@ -394,6 +395,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const requests = new Set<AbortController>();
   let snapshot = cleanSnapshot({ status: 'restoring', user: null, message: null });
   let cookie: string | null = null;
+  /**
+   * The account `get-session` confirmed `cookie` for, stored beside it. Null while unverified: a
+   * cookie from a sign-in reply, or one saved before accounts were recorded.
+   */
+  let cookieAccount: string | null = null;
   let generation = 0;
   let viewRequest = 0;
   let homeRequest = 0;
@@ -518,6 +524,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     requests.forEach((request) => request.abort());
     requests.clear();
     cookie = null;
+    cookieAccount = null;
     return generation;
   };
 
@@ -688,9 +695,31 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     if (next === cookie) return;
     try {
-      await store(owner, () => dependencies.credentials.save(next));
+      // A server refresh of a verified cookie keeps its account; any other cookie is unverified.
+      await store(owner, () =>
+        dependencies.credentials.save(encodeStoredSession(next, cookieAccount)),
+      );
       assertCurrent(owner);
       cookie = next;
+    } catch (error) {
+      if (!(error instanceof Superseded)) await failSession(owner, storageMessage, 'error');
+      throw new Superseded();
+    }
+  };
+
+  /**
+   * Records the cookie, on disk, for the account `get-session` just confirmed. Only a recorded
+   * cookie can show that account's saved content on a restart or restore it offline, so on an
+   * account change this runs once the purge has finished and the new owner is saved.
+   */
+  const recordCookieAccount = async (owner: number, accountId: string) => {
+    if (cookieAccount === accountId) return;
+    try {
+      await store(owner, () => {
+        if (!cookie) throw new Superseded();
+        return dependencies.credentials.save(encodeStoredSession(cookie, accountId));
+      });
+      cookieAccount = accountId;
     } catch (error) {
       if (!(error instanceof Superseded)) await failSession(owner, storageMessage, 'error');
       throw new Superseded();
@@ -1210,18 +1239,33 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       : {};
 
   /**
+   * Cold start: whose data this device holds (its owner) and the identity last verified for it,
+   * read at once beside the session cookie. Null when either can't be read.
+   */
+  const readDeviceAccount = async () => {
+    const local = dependencies.accountLocal;
+    if (!local) return null;
+    try {
+      const [accountId, stored] = await Promise.all([
+        local.owner.load(),
+        dependencies.offlineIdentity?.load() ?? null,
+      ]);
+      return { accountId, identity: parseSession(stored ?? null) };
+    } catch {
+      return null;
+    }
+  };
+
+  /**
    * Cold start: the saved Home of the account that last signed in on this device. Read straight
    * from this device, every part at once and outside the account queue, so nothing waits on the
    * network or on another account write. Null without a readable saved Groups list.
    */
-  const readSavedHome = async () => {
-    const local = dependencies.accountLocal,
-      identity = dependencies.offlineIdentity,
-      cache = dependencies.readCache;
-    if (!local || !identity || !cache) return null;
+  const readSavedHome = async (device: ReturnType<typeof readDeviceAccount>) => {
+    const cache = dependencies.readCache;
+    if (!dependencies.offlineIdentity || !cache) return null;
     try {
-      const [accountId, stored] = await Promise.all([local.owner.load(), identity.load()]);
-      const session = parseSession(stored);
+      const { accountId = null, identity: session = null } = (await device) ?? {};
       if (
         !accountId ||
         !session ||
@@ -1257,11 +1301,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /**
-   * Shown while the session is checked, never once a sign-out cleanup has started. `auth.status`
-   * stays 'restoring', so nothing is sent and every action waits for the check.
+   * Shown while the session is checked, and only when the cookie is recorded for the account it
+   * belongs to; never once a sign-out cleanup has started. `auth.status` stays 'restoring', so
+   * nothing is sent and every action waits for the check.
    */
   const showSavedHome = (owner: number, saved: Awaited<ReturnType<typeof readSavedHome>>) => {
-    if (!saved || !current(owner) || accountCleanupRequired) return;
+    if (!saved || !current(owner) || accountCleanupRequired || saved.user.id !== cookieAccount)
+      return;
     publish({
       ...snapshot,
       auth: { status: 'restoring', user: saved.user, message: null },
@@ -1309,9 +1355,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
+  /** Only a cookie recorded for this device's owner, and that owner's identity, restore offline. */
   const restoreOffline = async (owner: number) => {
     if (
       !cookie ||
+      !cookieAccount ||
       !dependencies.accountLocal ||
       !dependencies.offlineIdentity ||
       !dependencies.readCache
@@ -1321,7 +1369,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const accountId = await dependencies.accountLocal.owner.load();
       const session = parseSession(await dependencies.offlineIdentity.load());
       assertCurrent(owner);
-      if (!session || session.user.id !== accountId || session.expiresAt.getTime() <= now())
+      if (
+        !session ||
+        session.user.id !== accountId ||
+        accountId !== cookieAccount ||
+        session.expiresAt.getTime() <= now()
+      )
         return false;
       const recovered = await storedCreation(owner, session.user.id);
       offlineSession = true;
@@ -1495,6 +1548,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         throw new AccountCleanupError();
       }
     }
+    await recordCookieAccount(owner, session.user.id);
     // A Group submission stored on this device reopens before anything else can be created.
     const recovered = await storedCreation(owner, session.user.id);
     publish({
@@ -1630,7 +1684,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (cleanupRequired) await clearSaved(owner);
       // Any pending sign-out cleanup has finished, so this device's saved Home can be read,
       // alongside the session cookie and before anything is sent.
-      const deviceHome = readSavedHome();
+      const device = readDeviceAccount();
+      const deviceHome = readSavedHome(device);
       await loadPending();
       assertCurrent(owner);
       const saved = await store(owner, () => dependencies.credentials.load());
@@ -1639,11 +1694,27 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         if (pendingCode) await previewInvitation(pendingCode);
         return;
       }
-      if (!validSessionCookie(saved, secureTransport)) {
-        await failSession(owner, 'Your saved session could not be restored. Please sign in again.');
+      const session = decodeStoredSession(saved, secureTransport);
+      if (!session) {
+        await failSession(owner, unrestorableMessage);
         return;
       }
-      cookie = saved;
+      // The cookie was recorded for another account than the one this device holds data for:
+      // that data goes as on sign-out, before anything is shown or sent with the cookie.
+      const held = await device;
+      assertCurrent(owner);
+      if (
+        session.accountId &&
+        held &&
+        (held.accountId !== session.accountId ||
+          (held.identity && held.identity.user.id !== session.accountId))
+      ) {
+        await clearAccount(owner, 'sign-out');
+        publish(cleanSnapshot({ status: 'signed-out', user: null, message: unrestorableMessage }));
+        return;
+      }
+      cookie = session.cookie;
+      cookieAccount = session.accountId;
       showSavedHome(owner, await deviceHome);
       await verifyAndLoad(owner);
     } catch (error) {

@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { createMobileController, currentMonthKey, type MobileFetch } from '../src/data';
+import { decodeStoredSession } from '../src/data/cookies';
 import { localOrigin } from './verification-origin';
 
 const alexId = 'a00000000000000000000001';
@@ -189,11 +190,13 @@ async function verify() {
         controller = build();
       },
       async authorized(path: string, method = 'GET') {
-        assert.ok(cookie, 'The authorized read or cleanup has no session.');
+        // The saved session is the cookie and, once verified, its account (#200).
+        const session = cookie && decodeStoredSession(cookie, apiBaseUrl.startsWith('https:'));
+        assert.ok(session, 'The authorized read or cleanup has no session.');
         assert.ok(path.startsWith('/api/'), 'Only local API requests are permitted.');
         return fetch(`${apiBaseUrl}${path}`, {
           method,
-          headers: { Cookie: cookie, Origin: apiBaseUrl, Accept: 'application/json' },
+          headers: { Cookie: session.cookie, Origin: apiBaseUrl, Accept: 'application/json' },
           credentials: 'omit',
           redirect: 'error',
           signal: AbortSignal.timeout(20_000),
