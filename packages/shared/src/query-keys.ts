@@ -1,0 +1,133 @@
+/**
+ * A cache key for every API read, one factory per read (#210, ADR 0006 M1-6). A key is a
+ * read-only tuple of strings: scope, environment, account id, the Group id for a Group's
+ * reads, then the request path from `api-paths`, so a fetcher reads its path from the end of
+ * its key. Strings only, so SWR and TanStack Query hash a key the same way.
+ */
+import {
+  activityPagePath,
+  expensePagePath,
+  expenseRecordPath,
+  groupBalancesPath,
+  groupPath,
+  groupsPath,
+  homeBalancesPath,
+  invitationsPath,
+  recurringExpensesPath,
+  settlementsPath,
+  type ActivityPageQuery,
+} from './api-paths';
+import type { ExpenseFilters } from './types';
+
+/**
+ * Which follow-ups must reach a read: the Groups list, Home's totals, one Group's details,
+ * its running Balances, or the rest of its ledger (Expense pages and records, Activity,
+ * Settlements and recurring Expenses). Invitations belong to no Group.
+ */
+export type QueryScope = AccountScope | GroupScope;
+export type AccountScope = 'groups' | 'home' | 'invitations';
+export type GroupScope = 'group' | 'balances' | 'ledger';
+
+const accountScopes: readonly unknown[] = [
+  'groups',
+  'home',
+  'invitations',
+] satisfies AccountScope[];
+const groupScopes: readonly unknown[] = ['group', 'balances', 'ledger'] satisfies GroupScope[];
+
+/**
+ * Whom a read is for. On Android, the API the app reads from and the signed-in account; on
+ * the web, which reads only its own origin for the account a tab was rendered for, one fixed
+ * value for each.
+ */
+export interface QueryAccount {
+  environment: string;
+  accountId: string;
+}
+
+export type AccountQueryKey = readonly [
+  scope: AccountScope,
+  environment: string,
+  accountId: string,
+  path: string,
+];
+export type GroupQueryKey = readonly [
+  scope: GroupScope,
+  environment: string,
+  accountId: string,
+  groupId: string,
+  path: string,
+];
+export type QueryKey = AccountQueryKey | GroupQueryKey;
+
+const accountKey = (
+  scope: AccountScope,
+  { environment, accountId }: QueryAccount,
+  path: string,
+): AccountQueryKey => [scope, environment, accountId, path];
+
+const groupScopedKey = (
+  scope: GroupScope,
+  { environment, accountId }: QueryAccount,
+  groupId: string,
+  path: string,
+): GroupQueryKey => [scope, environment, accountId, groupId, path];
+
+export const groupsKey = (account: QueryAccount) => accountKey('groups', account, groupsPath());
+
+export const homeBalancesKey = (account: QueryAccount) =>
+  accountKey('home', account, homeBalancesPath());
+
+export const invitationsKey = (account: QueryAccount) =>
+  accountKey('invitations', account, invitationsPath());
+
+export const groupKey = (account: QueryAccount, groupId: string) =>
+  groupScopedKey('group', account, groupId, groupPath(groupId));
+
+export const groupBalancesKey = (account: QueryAccount, groupId: string) =>
+  groupScopedKey('balances', account, groupId, groupBalancesPath(groupId));
+
+export const expensePageKey = (account: QueryAccount, groupId: string, filters?: ExpenseFilters) =>
+  groupScopedKey('ledger', account, groupId, expensePagePath(groupId, filters));
+
+export const expenseRecordKey = (account: QueryAccount, groupId: string, expenseId: string) =>
+  groupScopedKey('ledger', account, groupId, expenseRecordPath(groupId, expenseId));
+
+export const activityPageKey = (account: QueryAccount, groupId: string, page: ActivityPageQuery) =>
+  groupScopedKey('ledger', account, groupId, activityPagePath(groupId, page));
+
+export const settlementsKey = (account: QueryAccount, groupId: string) =>
+  groupScopedKey('ledger', account, groupId, settlementsPath(groupId));
+
+export const recurringExpensesKey = (account: QueryAccount, groupId: string) =>
+  groupScopedKey('ledger', account, groupId, recurringExpensesPath(groupId));
+
+/** The request path a key was built for. */
+export const queryKeyPath = (key: QueryKey): string => key[key.length - 1];
+
+/** True only for a key these factories build, so a matcher passes over any other cache key. */
+export function isQueryKey(value: unknown): value is QueryKey {
+  if (!Array.isArray(value) || !value.every((part) => typeof part === 'string')) return false;
+  if (accountScopes.includes(value[0])) return value.length === 4;
+  return groupScopes.includes(value[0]) && value.length === 5;
+}
+
+/** This account's reads in this environment: what sign-out, an account change or a 401 clears. */
+export const matchAccount =
+  ({ environment, accountId }: QueryAccount) =>
+  (key: unknown): key is QueryKey =>
+    isQueryKey(key) && key[1] === environment && key[2] === accountId;
+
+/**
+ * One Group's reads: its details, Balances and ledger. Never the Groups list, Home or
+ * invitations; a rule that needs those names them.
+ */
+export const matchGroup =
+  (groupId: string) =>
+  (key: unknown): key is GroupQueryKey =>
+    isQueryKey(key) && key.length === 5 && key[3] === groupId;
+
+export const matchScope =
+  (scope: QueryScope) =>
+  (key: unknown): key is QueryKey =>
+    isQueryKey(key) && key[0] === scope;
