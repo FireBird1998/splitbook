@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { hangUntilAborted, manualTimer } from '../test-utils/transport-faults';
+import { hangUntilAborted, manualTimer, within } from '../test-utils/transport-faults';
 import { createTransport, RequestError, Superseded } from './transport';
 import type { FetchResponse } from './types';
 
@@ -14,6 +14,8 @@ function setup(reply: (init: RequestInit) => Promise<FetchResponse>) {
   const sent: string[] = [];
   const hooks: string[] = [];
   const timers = manualTimer();
+  /** Each timer started, and how many times it was ended. */
+  const started: { ms: number; ended: number }[] = [];
   const transport = createTransport({
     apiBase: 'http://localhost:4145',
     authOrigin: 'http://localhost:4145',
@@ -24,7 +26,15 @@ function setup(reply: (init: RequestInit) => Promise<FetchResponse>) {
       return reply(init);
     },
     now: () => Date.parse('2026-10-05T12:00:00.000Z'),
-    timer: timers.timer,
+    timer: (run, ms) => {
+      const entry = { ms, ended: 0 };
+      started.push(entry);
+      const end = timers.timer(run, ms);
+      return () => {
+        entry.ended += 1;
+        end();
+      };
+    },
     session: {
       current: (owner) => owner === generation,
       cookie: () => 'better-auth.session_token=alex.signature',
@@ -43,6 +53,7 @@ function setup(reply: (init: RequestInit) => Promise<FetchResponse>) {
     request: transport.request,
     sent,
     hooks,
+    started,
     elapse: timers.elapse,
     /** What `invalidate()` does: a new generation, then every request in flight aborted. */
     changeSession: () => {
@@ -51,6 +62,8 @@ function setup(reply: (init: RequestInit) => Promise<FetchResponse>) {
     },
   };
 }
+
+type Setup = ReturnType<typeof setup>;
 
 /** What the request's caller catches. */
 const caught = (request: Promise<unknown>) =>
@@ -80,13 +93,17 @@ describe('a caller’s own cancel', () => {
     },
   );
 
-  it('ends a request whose signal was already aborted as cancelled', async () => {
+  it('sends nothing for a signal already aborted, and ends as cancelled', async () => {
     const t = setup((init) => hangUntilAborted(init, 'headers'));
     const caller = new AbortController();
     caller.abort();
-    expect(
-      await caught(t.request(`/api/groups/${groupId}`, 1, { signal: caller.signal })),
-    ).toMatchObject({ kind: 'cancelled', networkFailure: false });
+    const error = await within(
+      caught(t.request(`/api/groups/${groupId}`, 1, { signal: caller.signal })),
+    );
+    expect(error).toBeInstanceOf(RequestError);
+    expect(error).toMatchObject({ kind: 'cancelled', networkFailure: false, status: 0 });
+    expect(t.sent).toEqual([]);
+    expect(t.started).toEqual([]);
   });
 
   it.each([
@@ -112,15 +129,24 @@ describe('a caller’s own cancel', () => {
     },
   );
 
-  it('ends in Superseded when the session changes, whatever the caller does after', async () => {
-    const t = setup((init) => hangUntilAborted(init, 'headers'));
-    const caller = new AbortController();
-    const error = caught(t.request(`/api/groups/${groupId}`, 1, { signal: caller.signal }));
-    await vi.waitFor(() => expect(t.sent).toHaveLength(1));
-    t.changeSession();
-    caller.abort();
-    expect(await error).toBeInstanceOf(Superseded);
-  });
+  it.each([
+    ['with', true],
+    ['without', false],
+  ])(
+    'ends a request %s a caller signal in Superseded when the session changes',
+    async (_, withSignal) => {
+      const t = setup((init) => hangUntilAborted(init, 'headers'));
+      const caller = new AbortController();
+      const error = caught(
+        t.request(`/api/groups/${groupId}`, 1, withSignal ? { signal: caller.signal } : {}),
+      );
+      await vi.waitFor(() => expect(t.sent).toHaveLength(1));
+      t.changeSession();
+      // The session's own abort ends it: nothing else does.
+      expect(await within(error)).toBeInstanceOf(Superseded);
+      caller.abort();
+    },
+  );
 
   it('answers as before when the caller never cancels', async () => {
     const t = setup(async () => Response.json({ status: 200, data: { _id: groupId } }));
@@ -213,5 +239,56 @@ describe('the hooks', () => {
     const t = setup(async () => Response.json({}, { status }));
     expect(await caught(t.request(path, 1))).toMatchObject({ kind: 'access-denied', status });
     expect(t.hooks).toEqual(denied ? [`denied: ${groupId} ${status}`] : []);
+  });
+});
+
+describe('cleaning up after each request', () => {
+  type Ending = [
+    name: string,
+    reply: (init: RequestInit) => Promise<FetchResponse>,
+    end?: (t: Setup, caller: AbortController) => void,
+  ];
+  const endings: Ending[] = [
+    ['an answer', async () => Response.json({ status: 200, data: [] })],
+    ['an HTTP error', async () => Response.json({}, { status: 500 })],
+    ['a lost connection', () => Promise.reject(new TypeError('Network request failed'))],
+    ['a timeout', (init) => hangUntilAborted(init, 'headers'), (t) => t.elapse(20_000)],
+    ['a session change', (init) => hangUntilAborted(init, 'body'), (t) => t.changeSession()],
+  ];
+  const cancel: Ending = [
+    'the caller’s cancel',
+    (init) => hangUntilAborted(init, 'body'),
+    (_t, caller) => caller.abort(),
+  ];
+  /** Runs one request to its end, however it ends. */
+  async function settle(t: Setup, [, , end]: Ending, caller: AbortController, signal: boolean) {
+    const settled = t.request('/api/groups', 1, signal ? { signal: caller.signal } : {}).then(
+      () => undefined,
+      () => undefined,
+    );
+    if (end) {
+      await vi.waitFor(() => expect(t.sent).toHaveLength(1));
+      end(t, caller);
+    }
+    await within(settled);
+  }
+
+  it.each(endings)('ends the timeout exactly once after %s', async (...ending) => {
+    const t = setup(ending[1]);
+    await settle(t, ending, new AbortController(), false);
+    expect(t.started).toEqual([{ ms: 20_000, ended: 1 }]);
+  });
+
+  it.each([...endings, cancel])('lets go of the caller’s signal after %s', async (...ending) => {
+    const t = setup(ending[1]);
+    const caller = new AbortController();
+    const add = vi.spyOn(caller.signal, 'addEventListener');
+    const remove = vi.spyOn(caller.signal, 'removeEventListener');
+    await settle(t, ending, caller, true);
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove.mock.calls[0][0]).toBe('abort');
+    expect(remove.mock.calls[0][1]).toBe(add.mock.calls[0][1]);
+    expect(t.started).toEqual([{ ms: 20_000, ended: 1 }]);
   });
 });

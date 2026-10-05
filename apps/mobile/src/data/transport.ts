@@ -72,6 +72,10 @@ export class RequestError extends Error {
   }
 }
 
+/** The caller's own signal ended the request. */
+const cancelled = () =>
+  new RequestError('This request was cancelled.', 0, null, false, null, 'cancelled');
+
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   /** Sent as `X-Splitbook-Revision`: the revision an edit or delete was made against. */
@@ -205,6 +209,8 @@ export function createTransport({
     // must verify staging before it can send or adopt a session cookie.
     if (path !== '/.well-known/splitbook-mobile.json') await verifyGoogleBackend(owner);
     assertCurrent(owner);
+    // A request its caller has already cancelled is never sent.
+    if (options.signal?.aborted) throw cancelled();
     const abort = new AbortController();
     // expo/fetch throws the same error for an abort before the headers as for a lost connection,
     // and React Native's AbortSignal carries no reason, so the first source is recorded here.
@@ -217,8 +223,7 @@ export function createTransport({
     const endTimeout = timer(() => stop('timeout'), REQUEST_TIMEOUT_MS);
     // Linked with a listener of its own, not AbortSignal.any, so a cancel is told apart.
     const cancel = () => stop('caller');
-    if (options.signal?.aborted) cancel();
-    else options.signal?.addEventListener('abort', cancel);
+    options.signal?.addEventListener('abort', cancel);
     let received = false;
     try {
       const outgoingCookie =
@@ -263,6 +268,8 @@ export function createTransport({
         throw new Superseded();
       }
       if (!response.ok) {
+        // The path decides the denial purge, never the failure's kind: a 404 under a Group's
+        // Expenses is access-denied too, but purges nothing.
         const deniedGroup = /^\/api\/groups\/([a-f\d]{24})(?:\/|\?|$)/i.exec(path)?.[1];
         if (
           (response.status === 403 ||
@@ -301,8 +308,7 @@ export function createTransport({
     } catch (error) {
       if (!session.current(owner) || aborted === 'session') throw new Superseded();
       if (error instanceof RequestError || error instanceof Superseded) throw error;
-      if (aborted === 'caller')
-        throw new RequestError('This request was cancelled.', 0, null, false, null, 'cancelled');
+      if (aborted === 'caller') throw cancelled();
       throw new RequestError(
         'Could not reach SplitBook. Check your connection and try again.',
         0,

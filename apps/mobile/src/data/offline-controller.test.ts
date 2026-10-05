@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { hangUntilAborted, manualTimer } from '../test-utils/transport-faults';
+import { hangUntilAborted, manualTimer, within } from '../test-utils/transport-faults';
 import { createMobileController } from './mobile-controller';
 import type { MobileTimer } from './types';
 const accountId = 'a00000000000000000000001',
@@ -635,7 +635,7 @@ describe('account-scoped offline financial views', () => {
     expect(controller.getSnapshot().detail.status).toBe('error');
     expect(controller.getSnapshot().offline.active).toBe(false);
   });
-  describe('a read that times out (#209)', () => {
+  describe('a read waiting on its reply (#209)', () => {
     const path = `/api/groups/${groupId}`;
     /** The saved Group was verified an hour before this read. */
     const verifiedAt = now - 3_600_000;
@@ -672,6 +672,23 @@ describe('account-scoped offline financial views', () => {
         message: 'Could not reach SplitBook. Check your connection and try again.',
       });
       expect(controller.getSnapshot().offline.active).toBe(false);
+    });
+    it('ends at once when the member signs out while it waits for its reply', async () => {
+      const f = fixture({ timer: manualTimer().timer }),
+        controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      f.hang(path, 'headers');
+      const before = f.requests().length;
+      const refreshing = controller.refresh();
+      await vi.waitFor(() => expect(f.requests().slice(before)).toContain(`GET ${path}`));
+      await controller.signOut();
+      // Only the sign-out's abort can end it: no timer runs and the reply never comes.
+      await within(refreshing);
+      expect(controller.getSnapshot()).toMatchObject({
+        auth: { status: 'signed-out', user: null },
+        detail: { data: null },
+      });
     });
   });
   it.each(['owner', 'future', 'corrupt'])('refuses a %s cache envelope', async (kind) => {

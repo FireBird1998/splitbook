@@ -39,3 +39,21 @@ export function manualTimer() {
     },
   };
 }
+
+/**
+ * `promise`, or a failure once `ms` of real time pass without it settling, so a request that
+ * is never aborted fails its test instead of hanging it.
+ */
+export async function within<T>(promise: Promise<T>, ms = 1_000): Promise<T> {
+  let late: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        late = setTimeout(() => reject(new Error(`Still waiting after ${ms} ms`)), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(late);
+  }
+}
