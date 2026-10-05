@@ -80,12 +80,16 @@ async function run() {
     cleanup = false,
     skew = 0,
     log: string[] = [];
+  // Display freshness runs on TanStack Query's clock, Date.now (#214), so skipping ahead moves
+  // Date.now itself, and the controller's clock with it.
+  const platformNow = Date.now.bind(Date);
+  Date.now = () => platformNow() + skew;
   let controller: MobileController | null = null;
   const create = () =>
     createMobileController(
       { apiBaseUrl: origin, authOrigin: origin, developmentPersonaEnabled: true },
       {
-        now: () => Date.now() + skew,
+        now: () => Date.now(),
         credentials: {
           load: async () => cookie,
           save: async (value) => {
