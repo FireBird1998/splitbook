@@ -4,21 +4,26 @@ import { fileURLToPath } from 'node:url';
 import { Profiler } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ceilingsFile, harnessCeilings, measures } from '../scripts/ceilings';
 import { createMobileController } from './data/mobile-controller';
 import { emitAppState } from './test-utils/native';
 
 /**
- * #177: how much of the tree each journey renders. The UI modules' exports are wrapped so
- * that a component is counted each time another module renders it through its export, and
- * a Profiler counts App's commits. Renders from inside a component's own module (`Card`
- * and `Skeleton` inside compact/layout, `Icon` and `Copy` inside primitives) and
- * components a module does not export are not counted, so the renders are a lower bound.
- * The counts are deterministic, so they are asserted as ceilings: a change that renders
- * more fails. Each journey also checks the screen it ends on, so a journey that breaks
- * can't pass by rendering less. Render times are reported for comparison only
- * (`RENDER_PROFILE=1`); they come from Node, not a phone. `RENDER_PROFILE=record` prints
- * the table without checking ceilings, to set new ones; it refuses to run in CI.
- * The last test fails when a module under `src/ui` exports a component this file doesn't count.
+ * #177: how much of the tree each journey renders, and #206: how many requests it sends. The
+ * UI modules' exports are wrapped so that a component is counted each time another module
+ * renders it through its export, a Profiler counts App's commits, and the fake `fetch` records
+ * each request by method and path. Renders from inside a component's own module (`Card` and
+ * `Skeleton` inside compact/layout, `Icon` and `Copy` inside primitives) and components a
+ * module does not export are not counted, so the renders are a lower bound.
+ * The counts are deterministic, so they are asserted as ceilings, kept in
+ * `render-profile.ceilings.json`: a change that renders more or sends more fails. CI's ratchet
+ * (`pnpm mobile ceilings:compare`) reads the same file. Each journey also checks the screen it
+ * ends on, so a journey that breaks can't pass by rendering less, and a journey that only
+ * reads fails if it sends anything but a GET. Render times are reported for comparison only
+ * (`RENDER_PROFILE=1`); they come from Node, not a phone. `RENDER_PROFILE=record` prints the
+ * table and the data file without checking ceilings, to set new ones; it refuses to run in CI.
+ * The guard test fails when a module under `src/ui` exports a component this file doesn't
+ * count, and the last test when the data file has a ceiling for a journey that didn't run.
  */
 // What the mocked `./runtime` serves: the controller under test and the appearance.
 const runtime = vi.hoisted(() => ({
@@ -160,23 +165,13 @@ const { default: App } = await import('../App');
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 
 /**
- * The most each journey may render: the counts recorded on `main` at 7e69be8. Lower a
- * ceiling when a change renders less; raise one only with the reason recorded in
- * docs/qa/2026-10-02-android-render-baseline.md (see #177).
+ * The most each journey may render and send, from the one data file the ratchet also reads.
+ * Lower a ceiling when a change renders or sends less. Raising one, or removing or renaming a
+ * journey, needs the reason in the pull request and the owner's `re-record-ceilings` label
+ * (docs/qa/2026-10-02-android-render-baseline.md).
  */
-const ceilings: Record<string, { publishes: number; commits: number; renders: number }> = {
-  'Sign in and show Home (20 Groups)': { publishes: 9, commits: 5, renders: 461 },
-  'Foreground on Home within 30 s': { publishes: 6, commits: 1, renders: 146 },
-  'Open a Group on Expenses': { publishes: 11, commits: 4, renders: 512 },
-  'Change Month': { publishes: 8, commits: 3, renders: 468 },
-  'Switch to Balances': { publishes: 1, commits: 1, renders: 57 },
-  'Switch to Activity': { publishes: 4, commits: 3, renders: 173 },
-  'Load the 5th Expense page (80 → 100 rows)': { publishes: 7, commits: 3, renders: 2147 },
-  'Foreground within 30 s after 5 Expense pages': { publishes: 7, commits: 1, renders: 204 },
-  'Load the 5th Activity page (80 → 100 events)': { publishes: 3, commits: 2, renders: 811 },
-  'Foreground within 30 s after 5 Activity pages': { publishes: 5, commits: 2, renders: 572 },
-  'Type 20 characters into Description': { publishes: 40, commits: 21, renders: 3241 },
-};
+const ceilingsPath = resolve(dirname(fileURLToPath(import.meta.url)), '..', ceilingsFile);
+const ceilings = harnessCeilings(readFileSync(ceilingsPath, 'utf8'), ceilingsFile);
 const recording = process.env.RENDER_PROFILE === 'record';
 // Recording skips every ceiling, so a leaked variable must not turn CI green.
 if (recording && process.env.CI)
@@ -300,8 +295,10 @@ function backend() {
           cookie = null;
         },
       },
-      fetch: async (url) => {
+      fetch: async (url, init) => {
         const path = new URL(url).pathname + new URL(url).search;
+        // Every request the controller sends, as it leaves; the journey counts them.
+        sent.push(`${init.method ?? 'GET'} ${path}`);
         // Like a network reply, each response arrives in a later task.
         await new Promise((resolve) => setTimeout(resolve, 0));
         if (path.endsWith('/sign-in'))
@@ -343,18 +340,23 @@ function backend() {
 
 interface Sample {
   journey: string;
+  requests: number;
   publishes: number;
   commits: number;
   renders: number;
   components: number;
   ms: number;
   top: string;
+  /** Each request the journey sent, as `METHOD /path?query`. */
+  sent: string[];
 }
 const samples: Sample[] = [];
 let screen: ReactTestRenderer | null = null;
 let publishes = 0,
   commits = 0,
   renderMs = 0;
+/** The requests the fake `fetch` received since the journey started. */
+const sent: string[] = [];
 
 // The two console errors this file causes on purpose: it renders outside act() so that
 // publishes commit as they would on a device, and it uses react-test-renderer. Any other
@@ -380,21 +382,37 @@ afterEach(() => {
 afterAll(() => {
   if (!process.env.RENDER_PROFILE) return;
   console.log(
-    '| Journey | Publishes | Commits | Component renders | Components | Render time (Node, ms) | Most rendered |',
+    '| Journey | Requests | Publishes | Commits | Component renders | Components | Render time (Node, ms) | Most rendered |',
   );
-  console.log('| --- | ---: | ---: | ---: | ---: | ---: | --- |');
+  console.log('| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |');
   for (const sample of samples)
     console.log(
-      `| ${sample.journey} | ${sample.publishes} | ${sample.commits} | ${sample.renders} | ${sample.components} | ${sample.ms.toFixed(1)} | ${sample.top} |`,
+      `| ${sample.journey} | ${sample.requests} | ${sample.publishes} | ${sample.commits} | ${sample.renders} | ${sample.components} | ${sample.ms.toFixed(1)} | ${sample.top} |`,
     );
+  console.log('\n| Journey | Requests sent, in order |');
+  console.log('| --- | --- |');
+  for (const sample of samples)
+    console.log(
+      `| ${sample.journey} | ${sample.sent.map((request) => `\`${request.replaceAll(groupId, ':groupId')}\``).join(', ') || 'none'} |`,
+    );
+  if (!recording) return;
+  // The data file as these counts would make it: run the whole file before copying it.
+  const journeys = Object.fromEntries(
+    samples.map((sample) => [
+      sample.journey,
+      Object.fromEntries(measures.map((measure) => [measure, sample[measure]])),
+    ]),
+  );
+  const about = (JSON.parse(readFileSync(ceilingsPath, 'utf8')) as { about?: string }).about;
+  console.log(`\n${ceilingsFile}:\n${JSON.stringify({ about, journeys }, null, 2)}`);
 });
 
-/** Waits until nothing has been published or committed for 5 consecutive tasks. */
+/** Waits until nothing has been published, committed or sent for 5 consecutive tasks. */
 const settle = async (pending?: Promise<unknown>) => {
   await pending;
   for (let quiet = 0, tick = 0, last = -1; quiet < 5 && tick < 500; tick += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
-    const seen = publishes * 100_000 + commits;
+    const seen = (publishes * 100_000 + commits) * 1_000 + sent.length;
     quiet = seen === last ? quiet + 1 : 0;
     last = seen;
   }
@@ -438,6 +456,15 @@ async function renderApp() {
             .props.onChangeText(value),
         ),
       ),
+    /** Pull to refresh: the RefreshControl of the screen's ScrollView reports a pull. */
+    pull: () =>
+      settle(
+        Promise.resolve(
+          root()
+            .find((node) => isHost(node, 'ScrollView') && node.props.refreshControl)
+            .props.refreshControl.props.onRefresh(),
+        ),
+      ),
     /** Android reports the app leaving and returning to the foreground. */
     foreground: () =>
       settle(
@@ -464,12 +491,22 @@ async function renderApp() {
  * Measures one journey, checks the screen it ends on, then checks its counts against the
  * ceilings. A journey that breaks fails on its end screen, not by rendering less. Every
  * journey of a test reports its counts before the test fails on a ceiling.
+ *
+ * A journey only reads unless it says it `writes`: opening, going back, refreshing, returning
+ * to the foreground and loading a page send nothing but GETs. A read never resumes or replays
+ * a financial write (ADR 0004), so any other request fails the journey.
  */
-async function journey(name: string, run: () => Promise<unknown>, reached: () => void) {
+async function journey(
+  name: string,
+  run: () => Promise<unknown>,
+  reached: () => void,
+  options: { writes?: true } = {},
+) {
   counting.renders.clear();
   publishes = 0;
   commits = 0;
   renderMs = 0;
+  sent.length = 0;
   await run();
   const renders = [...counting.renders.values()].reduce((sum, count) => sum + count, 0);
   const top = [...counting.renders]
@@ -479,20 +516,30 @@ async function journey(name: string, run: () => Promise<unknown>, reached: () =>
     .join(', ');
   const sample = {
     journey: name,
+    requests: sent.length,
     publishes,
     commits,
     renders,
     components: counting.renders.size,
     ms: renderMs,
     top,
+    sent: [...sent],
   };
   samples.push(sample);
+  // Before the end screen: a write is reported even when the journey also broke.
+  if (!options.writes)
+    expect
+      .soft(
+        sample.sent.filter((request) => !request.startsWith('GET ')),
+        `${name} only reads, so it may send nothing but GETs`,
+      )
+      .toEqual([]);
   reached();
   if (recording) return sample;
   const ceiling = ceilings[name];
-  expect.soft(ceiling, `No ceiling recorded for "${name}"`).toBeDefined();
+  expect.soft(ceiling, `No ceiling recorded for "${name}" in ${ceilingsFile}`).toBeDefined();
   if (!ceiling) return sample;
-  for (const measure of ['publishes', 'commits', 'renders'] as const) {
+  for (const measure of measures) {
     expect.soft(sample[measure], `${name}: ${measure}`).toBeLessThanOrEqual(ceiling[measure]);
     // Quiet unless a ceiling can come down.
     if (sample[measure] < ceiling[measure])
@@ -503,7 +550,7 @@ async function journey(name: string, run: () => Promise<unknown>, reached: () =>
   return sample;
 }
 
-describe('render profile (#177)', () => {
+describe('render and request profile (#177, #206)', () => {
   it('Home and Group navigation', async () => {
     let app!: Awaited<ReturnType<typeof renderApp>>;
     const home = () => expect(app.count('Open '), 'Group rows on Home').toBe(groups.length);
@@ -517,6 +564,8 @@ describe('render profile (#177)', () => {
         app = await renderApp();
       },
       home,
+      // Signing in posts the persona sign-in.
+      { writes: true },
     );
     await journey('Foreground on Home within 30 s', () => app.foreground(), home);
     await journey(
@@ -574,6 +623,59 @@ describe('render profile (#177)', () => {
     );
   });
 
+  it('back to Home, and the Group again', async () => {
+    const app = await renderApp();
+    const expenseRows = () => expect(app.count('Fictional expense'), 'Expense rows').toBe(20);
+    await app.press('Open Maple House');
+    expenseRows();
+    await journey(
+      'Back to Home from a Group',
+      () => app.press('Back to Home'),
+      () => expect(app.count('Open '), 'Group rows on Home').toBe(groups.length),
+    );
+    // Within the 30-second freshness window: the clock hasn't moved since the Group was read.
+    await journey('Reopen the Group within 30 s', () => app.press('Open Maple House'), expenseRows);
+  });
+
+  // The journeys a refresh of loaded pages (ADR 0006, #215) changes. Today a refresh starts
+  // again from the first page (#104), so the list shrinks to 20 rows; #219 (Expenses) and #222
+  // (Activity) re-read the loaded pages instead, and re-record these journeys.
+  it('refreshing 5 loaded pages', async () => {
+    const app = await renderApp();
+    const expenseRows = (rows: number) => () =>
+      expect(app.count('Fictional expense'), 'Expense rows').toBe(rows);
+    const activityRows = (rows: number) => () =>
+      expect(app.count('You added'), 'Activity rows').toBe(rows);
+    const load = async (more: string, rows: () => void) => {
+      for (let page = 2; page <= pages; page += 1) await app.press(more);
+      rows();
+    };
+    // Moves the harness clock past the 30-second freshness window, then returns to the
+    // foreground. Once freshness follows Date.now, #214 moves time with fake timers instead.
+    const foregroundAfter30s = () => {
+      app.clock.now += 31_000;
+      return app.foreground();
+    };
+    await app.press('Open Maple House');
+    await load('Load more expenses', expenseRows(100));
+    await journey('Pull to refresh with 5 Expense pages', () => app.pull(), expenseRows(20));
+    await load('Load more expenses', expenseRows(100));
+    await journey(
+      'Foreground after 30 s with 5 Expense pages',
+      foregroundAfter30s,
+      expenseRows(20),
+    );
+    await app.press('Activity');
+    await load('Load older activity', activityRows(100));
+    await journey('Pull to refresh with 5 Activity pages', () => app.pull(), activityRows(20));
+    await load('Load older activity', activityRows(100));
+    await journey(
+      'Foreground after 30 s with 5 Activity pages',
+      foregroundAfter30s,
+      activityRows(20),
+    );
+  });
+
   it('typing in the Expense form', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');
@@ -619,6 +721,15 @@ describe('render profile (#177)', () => {
     expect(
       instrumented.filter((module) => !modules.includes(module)),
       'Remove the vi.mock for each module that no longer exists',
+    ).toEqual([]);
+  });
+
+  // Runs last, once every journey above has run (vitest runs a file's tests in order).
+  it(`has a ceiling in ${ceilingsFile} only for journeys that ran`, () => {
+    const ran = new Set(samples.map((sample) => sample.journey));
+    expect(
+      Object.keys(ceilings).filter((name) => !ran.has(name)),
+      `Ceilings in ${ceilingsFile} for journeys that didn't run: remove or rename them (a re-record)`,
     ).toEqual([]);
   });
 });
