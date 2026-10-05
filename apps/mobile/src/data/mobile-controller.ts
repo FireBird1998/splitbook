@@ -5210,6 +5210,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (view === viewRequest) await loadGroups(owner);
       return;
     }
+    let created: string | null = null;
     try {
       const group = parseCreatedGroup(
         await request('/api/groups', owner, {
@@ -5250,21 +5251,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           message: null,
           loaded: true,
         },
-        ...(view === viewRequest
-          ? ({
-              screen: 'group',
-              destination: 'expenses',
-              activity: { ...emptyActivity(), groupId: group.id },
-              detail: {
-                status: 'ready',
-                id: group.id,
-                data: group,
-                message: null,
-                refreshedAt: now(),
-              },
-            } as const)
-          : {}),
       });
+      created = group.id;
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;
       const definite = error instanceof RequestError && error.status >= 400 && error.status < 500;
@@ -5282,6 +5270,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       if (!definite && view === viewRequest) await loadGroups(owner);
     }
+    // A confirmed Group opens the way Home opens one, so its Expenses, Balances and Month are
+    // read like any other Group's. A member who moved on before the confirmation stays there.
+    if (created && view === viewRequest) await openGroup(created);
   };
 
   const checkCreatedGroups = () =>

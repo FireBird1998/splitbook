@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { currentMonthKey, getLocalMonthIsoRange, shiftMonthKey } from '@splitbook/shared/date';
 import { refreshFeedback } from '../ui/refresh-feedback';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse, MobileSnapshot } from './types';
@@ -58,6 +59,8 @@ function fixture() {
     // A Group submission is sent only once this device holds it (#203).
     creations = new Map<string, unknown>();
   const requests: string[] = [];
+  /** Every request as its method and path, with any query, in the order sent. */
+  const calls: string[] = [];
   const holds: {
     prefix: string;
     arrive: () => void;
@@ -323,6 +326,7 @@ function fixture() {
         fetch: async (url, init) => {
           const path = new URL(url).pathname;
           requests.push(path);
+          calls.push(`${init.method ?? 'GET'} ${path}${new URL(url).search}`);
           if (state.offline) throw new Error('Offline');
           const index = holds.findIndex((item) => path.startsWith(item.prefix));
           if (index >= 0) {
@@ -340,6 +344,7 @@ function fixture() {
     clock,
     state,
     requests,
+    calls,
     hold,
     create,
     /** What this device has saved for the signed-in account's read of `path`, if anything. */
@@ -1598,5 +1603,108 @@ describe('Home after navigating while the Groups list loads (#190)', () => {
     const home = controller.getSnapshot();
     expect(home).toMatchObject({ groups: { status: 'ready', data: [{ name: 'Maple House' }] } });
     settled(home);
+  });
+});
+
+describe('a new Group opens ready (#189)', () => {
+  /** The requests sent from now on, as method and path, without their query. */
+  const sentFrom = (f: ReturnType<typeof fixture>) => {
+    const start = f.calls.length;
+    return () => f.calls.slice(start).map((call) => call.split('?')[0]);
+  };
+
+  it('reads a new Group, then its Expenses, then its Balances, as for a Group opened from Home', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'Cabin Weekend' });
+    const sent = sentFrom(f);
+    await controller.createGroup();
+    const [{ _id: created }] = f.state.created;
+    expect(sent()).toEqual([
+      'POST /api/groups',
+      `GET /api/groups/${created}`,
+      `GET /api/groups/${created}/expenses`,
+      `GET /api/groups/${created}/balances`,
+    ]);
+    // Empty Expenses and Balances, not placeholders.
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'expenses',
+      creation: { status: 'editing', attempt: null, draft: { name: '' } },
+      detail: { status: 'ready', id: created, data: { name: 'Cabin Weekend' } },
+      financial: {
+        groupId: created,
+        month: null,
+        expenses: { status: 'ready', data: [], summary: { count: 0 } },
+        balances: { status: 'ready', stale: false },
+      },
+    });
+    expect(controller.getSnapshot().groups.data.map(({ name }) => name)).toContain('Cabin Weekend');
+    // Saved for offline use, like any Group read from Home.
+    expect(f.saved(`/api/groups/${created}`)).not.toBeNull();
+    expect(f.saved(`/api/groups/${created}/balances`)).not.toBeNull();
+    expect(f.savedPaths().some((path) => path.startsWith(`/api/groups/${created}/expenses?`))).toBe(
+      true,
+    );
+  });
+
+  it('opens a new Household on the current Month, whatever Month another Household was left on', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const month = currentMonthKey(new Date(f.clock.now));
+    // Maple House, a Household, is left on the Month before.
+    await controller.openGroup(maple);
+    await controller.selectMonth(shiftMonthKey(month, -1));
+    await controller.back();
+    controller.startCreate();
+    controller.updateCreation({ name: 'Flat 4B', category: 'home' });
+    const start = f.calls.length;
+    await controller.createGroup();
+    const [{ _id: created }] = f.state.created;
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { status: 'ready', id: created, data: { name: 'Flat 4B', category: 'home' } },
+      financial: {
+        groupId: created,
+        month,
+        expenses: { month, status: 'ready', data: [] },
+        balances: { status: 'ready', stale: false },
+      },
+    });
+    // Its Expenses were read for the current Month.
+    const reads = f.calls
+      .slice(start)
+      .filter((call) => call.startsWith(`GET /api/groups/${created}/expenses?`));
+    expect(reads).toHaveLength(1);
+    const query = new URL(reads[0].slice('GET '.length), 'http://localhost').searchParams;
+    const { dateFrom, dateTo } = getLocalMonthIsoRange(month);
+    expect([query.get('dateFrom'), query.get('dateTo')]).toEqual([dateFrom, dateTo]);
+  });
+
+  it('stays where the member went when they left New Group before the Group was confirmed', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'Cabin Weekend' });
+    const reply = f.hold('/api/groups');
+    const creating = controller.createGroup();
+    await reply.reached;
+    controller.openSettings();
+    const sent = sentFrom(f);
+    reply.release();
+    await creating;
+    const [{ _id: created }] = f.state.created;
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settings',
+      detail: { id: null },
+      creation: { status: 'editing', attempt: null, draft: { name: '' } },
+    });
+    // Home lists it, and nothing of it is read until the member opens it.
+    expect(controller.getSnapshot().groups.data.some(({ id }) => id === created)).toBe(true);
+    expect(sent()).toEqual([]);
   });
 });

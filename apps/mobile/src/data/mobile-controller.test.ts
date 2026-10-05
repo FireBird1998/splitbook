@@ -881,6 +881,9 @@ describe('native session and Group boundary', () => {
         refusing = true;
       },
       intercept: (path: string, init: RequestInit) => {
+        // A Group it created reads back like any other.
+        const read = [...created.values()].find(({ _id }) => path === `/api/groups/${_id}`);
+        if (read) return json({ data: read, status: 200 });
         if (path !== '/api/groups') return;
         if (init.method !== 'POST') return json({ data: [...created.values()], status: 200 });
         const key = new Headers(init.headers).get('Idempotency-Key');
@@ -1316,6 +1319,7 @@ describe('native session and Group boundary', () => {
           submitted = JSON.parse(String(init.body));
           return json({ data: created, status: 201 }, 201);
         }
+        if (path === `/api/groups/${otherGroupId}`) return json({ data: created, status: 200 });
       },
     });
     await controller.signIn('alex');
