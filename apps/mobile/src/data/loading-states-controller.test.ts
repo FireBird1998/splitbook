@@ -237,6 +237,16 @@ function fixture() {
               )
                 cache.delete(key);
           },
+          // As on a phone: a change's Group keeps its own saved copy and the saved list.
+          invalidateLedger: async (account, id) => {
+            for (const key of [...cache.keys()])
+              if (
+                key.startsWith(`${account}/api/groups/${id}/`) ||
+                key.startsWith(`${account}/api/groups/${id}?`) ||
+                key === `${account}/api/user/balances`
+              )
+                cache.delete(key);
+          },
           load: (account, key) => read(() => structuredClone(cache.get(account + key) ?? null)),
           save: async (account, key, value) => {
             const held = saving?.path === key ? saving : null;

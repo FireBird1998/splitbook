@@ -226,6 +226,15 @@ function fixture() {
               )
                 cache.delete(key);
           },
+          invalidateLedger: async (account, id) => {
+            for (const key of cache.keys())
+              if (
+                key.startsWith(`${account}/api/groups/${id}/`) ||
+                key.startsWith(`${account}/api/groups/${id}?`) ||
+                key === `${account}/api/user/balances`
+              )
+                cache.delete(key);
+          },
           retainGroups: async (account, ids) => {
             for (const key of cache.keys()) {
               const id = /^\/api\/groups\/([a-f\d]{24})/.exec(key.slice(account.length))?.[1];

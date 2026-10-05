@@ -5,6 +5,12 @@ export interface FinancialReadStore extends Pick<
   'load' | 'save' | 'clear'
 > {
   invalidateGroup(accountId: string, groupId: string): Promise<void>;
+  /**
+   * Removes the saved copies an Expense or Settlement change in this Group makes obsolete: its
+   * Expense pages for every Month, each Expense record and its history, Activity and Balances,
+   * and Home's figures. The Group itself and the Groups list stay.
+   */
+  invalidateLedger(accountId: string, groupId: string): Promise<void>;
   retainGroups(accountId: string, groupIds: string[]): Promise<void>;
 }
 export interface OfflineIdentityStore {

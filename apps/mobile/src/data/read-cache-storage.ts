@@ -41,6 +41,23 @@ export function createFinancialReadStore(environment: string): FinancialReadStor
       }
       await storage.save(accountId, 'reads', document);
     },
+    async invalidateLedger(accountId, groupId) {
+      const document = await load(accountId),
+        entries = document.entries,
+        prefix = `/api/groups/${groupId}`;
+      let removed = false;
+      for (const path of Object.keys(entries)) {
+        if (
+          path.startsWith(`${prefix}/`) ||
+          path.startsWith(`${prefix}?`) ||
+          path === '/api/user/balances'
+        ) {
+          delete entries[path];
+          removed = true;
+        }
+      }
+      if (removed) await storage.save(accountId, 'reads', document);
+    },
     async retainGroups(accountId, groupIds) {
       const document = await load(accountId),
         entries = document.entries,

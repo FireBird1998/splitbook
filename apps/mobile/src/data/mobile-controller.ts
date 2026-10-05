@@ -432,6 +432,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const versions = new Map<string, number>();
   const invalidatedAt = new Map<string, number>();
   /**
+   * Scopes whose saved copies a ledger change made obsolete but this device could not remove,
+   * with when: a saved copy from before then is never shown again this session.
+   */
+  const untrusted = new Map<string, number>();
+  /**
    * Views ('groups', 'home', 'group:<id>') with an explicit refresh still running: a pull,
    * Retry or confirmed change. Overlapping calls for those views never accept freshness.
    */
@@ -502,6 +507,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     inflight.clear();
     versions.clear();
     invalidatedAt.clear();
+    untrusted.clear();
     explicit = new Map();
     materializing = new Map();
     running = { pull: [], automatic: [] };
@@ -929,6 +935,24 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** A confirmed Expense or Settlement change affects every page, Month, Balance, Home and Activity view. */
   const ledgerChanged = (groupId: string) =>
     invalidateReads(`ledger:${groupId}`, `balances:${groupId}`, 'home');
+  /**
+   * Their saved copies on this device go too, including each record and its history. The removal
+   * is queued ahead of every later save or load of a saved copy, so none of them sees an older
+   * one. A copy that can't be removed is no longer trusted this session; the member is never
+   * signed out for it.
+   */
+  const removeLedgerCopies = async (groupId: string, owner: number) => {
+    const lease = accountStorage(),
+      time = now();
+    if (!lease || !dependencies.readCache) return;
+    try {
+      await lease.write(() => dependencies.readCache!.invalidateLedger(lease.accountId, groupId));
+    } catch (error) {
+      if (current(owner) && !(error instanceof Superseded))
+        for (const scope of [`ledger:${groupId}`, `balances:${groupId}`, 'home'])
+          untrusted.set(scope, time);
+    }
+  };
 
   /** The view a display read belongs to, for explicit refresh intent. */
   const viewOf = (path: string) =>
@@ -1158,7 +1182,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       };
       if (overtaken()) return again();
       const stored = await lease.write(() => dependencies.readCache!.load(lease.accountId, path));
-      const cached = cachedRead(stored, lease.accountId, path, now());
+      const copy = cachedRead(stored, lease.accountId, path, now());
+      // As in peek, a saved copy older than a change it couldn't be removed for is never shown.
+      const cached =
+        copy && copy.refreshedAt > (untrusted.get(readScope(path)) ?? -Infinity) ? copy : null;
       if (!current(owner)) throw new Superseded();
       if (overtaken()) return again();
       if (view === viewRequest) offlineSession = true;
@@ -3342,7 +3369,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   /**
    * A ledger write that may have reached the server, whatever its outcome, makes the
-   * Group's earlier reads obsolete: they are not reused, joined or saved afterwards.
+   * Group's earlier reads obsolete: they are not reused, joined or saved afterwards. Their
+   * saved copies are gone before it returns, unless the server definitely refused this
+   * request (400 or 422) and so changed nothing.
    */
   const ledgerWrite = async (
     groupId: string,
@@ -3350,10 +3379,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     owner: number,
     options: Parameters<typeof request>[2],
   ) => {
+    let refused = false;
     try {
       return await request(path, owner, options);
+    } catch (error) {
+      refused = error instanceof RequestError && [400, 422].includes(error.status);
+      throw error;
     } finally {
-      if (current(owner)) ledgerChanged(groupId);
+      if (current(owner)) {
+        ledgerChanged(groupId);
+        if (!refused) await removeLedgerCopies(groupId, owner);
+      }
     }
   };
 
