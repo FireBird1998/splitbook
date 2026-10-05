@@ -37,8 +37,10 @@ import {
 
 export { defaultVitestWorkers, verdictPath, type StepResult, type Verdict } from './verdict.ts';
 
-/** The script #206 adds to apps/mobile/package.json; the gate calls it, never a copy. */
+/** #206's ratchet in apps/mobile/package.json; the gate calls it, never a copy. */
 export const ceilingScript = 'ceilings:compare';
+/** The label that approves a re-record; in CI only the repository owner's counts. */
+const reRecordLabel = 're-record-ceilings';
 /** verify:financial's fixtures need this zone; the README runs every verifier in it. */
 const verifierTimeZone = 'Asia/Kolkata';
 
@@ -301,7 +303,7 @@ const gateUnlocked = (
           name: 'ceilings',
           status: 'skip',
           seconds: 0,
-          detail: 'No ceilings are recorded yet (#206), so there is nothing to compare.',
+          detail: `No ceilings are recorded on this branch: apps/mobile/package.json has no ${ceilingScript} script (#206).`,
         });
       } else if (base.commit === undefined) {
         yield* record({
@@ -311,14 +313,18 @@ const gateUnlocked = (
           detail: `No base commit: ${base.ref} has no merge-base with HEAD.`,
         });
       } else {
-        const baseCommit = base.commit;
-        // #206's script exits non-zero when a ceiling rose or a journey was removed.
+        const since = base.commit.slice(0, 7);
+        // Without a pull request the script can't see a label, so it reports what would need
+        // one: exit code 1 when a ceiling rose or a journey was removed or renamed, and 2
+        // when it could not compare.
         yield* runCommand({
           name: 'ceilings',
-          args: ['--dir', 'apps/mobile', 'run', ceilingScript, '--base', baseCommit],
+          args: ['--dir', 'apps/mobile', 'run', ceilingScript, '--base', base.commit],
           timeout: timeouts.ceilings,
           explain: (detail) =>
-            `a render or request ceiling is higher than at ${baseCommit.slice(0, 7)}, so the pull request needs the re-record label (${detail})`,
+            detail === 'exit code 1'
+              ? `a ceiling rose, or a journey was removed or renamed, since ${since}, so the pull request needs the owner's ${reRecordLabel} label (${detail}); the log lists each change`
+              : `the ceilings could not be compared with ${since} (${detail}); the log says why`,
         });
       }
 
