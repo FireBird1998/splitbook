@@ -63,28 +63,29 @@ The backend's own scripts keep their rules: they refuse root and `apps/web` `.en
 
 ## In CI
 
-**`pnpm swarm gate` is the local CI: run it, and see it pass, before every push.** GitHub Actions then runs a fast check on each pull request and keeps the full suite for `main` (#277), so a month of work fits the Actions minutes of a private repository. Everything is in `.github/workflows/ci.yml`:
+**`pnpm swarm gate` is the local CI: run it, and see it pass, before every push.** GitHub Actions then runs one fast check on each pull request and each push to `main`, and the full suite nightly (#277), to stay within the Actions minutes of a private repository. Everything is in `.github/workflows/ci.yml`:
 
-| When                                                                                               | What runs                        |
-| -------------------------------------------------------------------------------------------------- | -------------------------------- |
-| Each push to a pull request                                                                        | **PR checks**                    |
-| Each push to `main`, nightly at 04:17 UTC, a manual run, and a pull request labelled **`full-ci`** | **PR checks** and the full suite |
+| When                                                                          | What runs                        |
+| ----------------------------------------------------------------------------- | -------------------------------- |
+| Each push to a pull request, and each push to `main`                          | **PR checks**                    |
+| Nightly at 04:17 UTC, a manual run, and a pull request labelled **`full-ci`** | **PR checks** and the full suite |
 
 - **PR checks** (`pr-checks`) is one job that installs once, then runs the format check, lint, typecheck, the design-system style policy (`pnpm web check:design-system`), the workspace unit tests in UTC, and every mobile HTTP verifier (below). That is the gate without its install check and ceilings, plus the style policy. It is the one check branch protection requires, so its name, `PR checks`, must not change.
 - **The full suite** adds `verify` (the unit and integration tests, the authenticated Playwright suites and the build), `playwright` (the browser journeys, the Google sign-in journeys and the visual comparisons) and the unit tests in three more time zones.
 - **A docs-only pull request,** one that changes only Markdown, `docs/` or `.claude/` files, passes PR checks after the format check alone. Prettier formats Markdown and the `docs/` mockups, so that check still runs.
-- **A new push to a pull request cancels** the run of the push before it. Runs on `main`, nightly runs and manual runs are never cancelled.
-- **The nightly run is skipped** when `main`'s commit has already passed the full suite, on its push, in an earlier nightly run or in a manual run. So it runs only when that commit's full run failed or never finished.
+- **A push to `main` runs PR checks only,** on the merged result, since branches needn't be up to date with `main` to merge. The full suite never runs on a push: a merge reaches it in that night's run.
+- **A new push cancels** the run of the push before it, on a pull request and on `main`. On `main` that run is PR checks only, and the newer commit, which contains it, is checked anyway. Nightly runs and manual runs are never cancelled.
+- **The nightly run is skipped** when `main`'s commit has already passed the full suite, in an earlier nightly run or in a manual run. A push run doesn't count, since it doesn't run the full suite. So a night runs the suite when `main` moved since the last full run, or when that run failed.
 
 **To run the full suite on a pull request,** for a risky change such as auth, money, the lockfile or CI itself, do one of these:
 
 - Add the `full-ci` label. The full suite runs when the label is added, then again on each push while the label stays. Adding any other label only reruns PR checks.
 - Run the workflow by hand: `gh workflow run ci.yml --ref <branch>`, or **Run workflow** on the CI workflow's Actions page. A manual run tests the branch's own commit, not its merge into `main`.
 
-**When a run on `main` fails, or a nightly run fails,** GitHub notifies one person; the workflow adds no notifier of its own:
+**When a run on `main` fails, or a nightly run fails,** GitHub notifies one person; the workflow adds no notifier of its own. A failing nightly run is the first place a merge that breaks the full suite shows up:
 
 - a failed push run goes to whoever pushed; for a merged pull request, that is whoever merged it;
-- a failed nightly run goes to whoever last changed the workflow's `cron` line, or whoever last re-enabled the workflow;
+- a failed nightly run goes to whoever last changed the workflow's `cron` line, or whoever last re-enabled the workflow. So the owner merges any pull request that changes that line, #277's included;
 - a failed manual run goes to whoever started it.
 
 For that to reach an inbox, the account's notification settings must send Actions notifications by e-mail: in GitHub's Settings, under Notifications, then System, choose e-mail for Actions and tick "Only notify for failed workflows". A failed run also shows as a red cross on its commit on `main` and on the Actions page.

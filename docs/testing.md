@@ -19,9 +19,10 @@ for example `TZ=Pacific/Kiritimati pnpm test:unit`. Each package's
 `src/test-time-zone.test.ts` names the zone the run resolved to.
 
 CI runs the unit tests in four zones. **PR checks** runs them in UTC on every
-pull request, and **verify** runs them in UTC with the integration tests. In the
-full suite, a time-zone matrix (`unit-time-zones`) runs `pnpm test:unit` again,
-one job per zone, in three zones that observe no daylight saving time:
+pull request and push to `main`, and **verify** runs them in UTC with the
+integration tests. In the full suite, a time-zone matrix (`unit-time-zones`)
+runs `pnpm test:unit` again, one job per zone, in three zones that observe no
+daylight saving time:
 
 - **Unit tests (Pacific/Tongatapu)**: UTC+13
 - **Unit tests (Pacific/Kiritimati)**: UTC+14
@@ -182,20 +183,22 @@ helpers live in [`playwright/`](../apps/web/playwright/).
 ## CI
 
 Run `pnpm swarm gate` before every push: it is the local CI. GitHub Actions
-then runs one fast job on each pull request and the full suite on `main`
-(#277). [tools/swarm](../tools/swarm/README.md#in-ci) says what runs where, how
-to ask for the full suite on a pull request, and who hears about a failure.
+then runs one fast job on each pull request and each push to `main`, and the
+full suite nightly (#277). [tools/swarm](../tools/swarm/README.md#in-ci) says
+what runs where, how to ask for the full suite on a pull request, and who hears
+about a failure.
 
-- **PR checks** (`pr-checks`) — every pull request, and with the full suite.
+- **PR checks** (`pr-checks`) — every pull request, every push to `main`, and
+  with the full suite.
   The one check branch protection requires. Install, format check, lint,
   typecheck, design-system style policy, `pnpm test:unit` in UTC, then every
   mobile HTTP verifier against a production backend that `pnpm swarm up` starts
   on the job's `mongo:7` service. A docs-only pull request runs the format check
   alone.
 
-The full suite runs on each push to `main`, nightly, on a manual run, and on a
-pull request labelled `full-ci`. **verify** and **playwright** each have a
-`mongo:7` service container:
+The full suite runs nightly, on a manual run, and on a pull request labelled
+`full-ci`; never on a push to `main`, so a merge reaches it that night.
+**verify** and **playwright** each have a `mongo:7` service container:
 
 - **verify** — install, lint, `pnpm test` (unit + integration against the
   service MongoDB), typecheck, the authenticated expense-access and Google

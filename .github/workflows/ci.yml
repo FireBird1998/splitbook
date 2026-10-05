@@ -9,14 +9,17 @@ name: CI
 #   verifier, in one job that installs once. It is the one check branch protection requires,
 #   so its name, "PR checks", must not change. A pull request that changes only Markdown,
 #   docs/ or .claude/ files runs just the format check, and the check still passes.
-# - The full suite (verify, playwright and the unit-test time-zone matrix) runs on each push
-#   to main, nightly, on a manual run (workflow_dispatch), and on a pull request labelled
-#   full-ci. A nightly run is skipped when main's commit has already passed the suite.
-# - A new push to a pull request cancels that pull request's run in progress. Runs on main,
-#   nightly runs and manual runs are never cancelled.
+# - Each push to main runs PR checks only, on the merged result.
+# - The full suite (verify, playwright and the unit-test time-zone matrix) runs nightly, on a
+#   manual run (workflow_dispatch), and on a pull request labelled full-ci, never on a push.
+#   A nightly run is skipped when main's commit already passed the full suite in an earlier
+#   nightly or manual run.
+# - A new push to a pull request, or to main, cancels the run of the push before it. Nightly
+#   and manual runs are never cancelled.
 #
 # GitHub e-mails a failed push run to whoever pushed it, and a failed nightly run to whoever
-# last changed the cron line below; tools/swarm/README.md says how to make sure that is you.
+# last changed the cron line below, so the owner merges changes to that line;
+# tools/swarm/README.md says more.
 on:
   pull_request:
     # labeled starts the full suite when full-ci is added; any other label only reruns PR checks.
@@ -32,12 +35,17 @@ on:
 permissions:
   contents: read
 
-# One group per pull request, so a new push cancels the run it supersedes. Adding a label
-# other than full-ci gets a group of its own: it must not cancel a full-ci run in progress.
-# Every other event gets a group of its own, so it is never cancelled.
+# One group per pull request, and one for pushes to main, so a new push cancels the run it
+# supersedes: on main that run is PR checks only, and the newer commit is tested anyway.
+# Adding a label other than full-ci gets a group of its own: it must not cancel a full-ci run
+# in progress. Nightly and manual runs each get a group of their own, so none is cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name == 'full-ci') && format('pr-{0}', github.event.pull_request.number) || format('run-{0}', github.run_id) }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: >-
+    ${{ github.workflow }}-${{
+    github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name == 'full-ci') && format('pr-{0}', github.event.pull_request.number) ||
+    github.event_name == 'push' && format('push-{0}', github.ref) ||
+    format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 # The Next.js app lives in apps/web, so app steps run there; the workspace-wide
 # scripts (lint, typecheck, test) run at the root so packages/* are covered too.
@@ -57,8 +65,9 @@ jobs:
       run: ${{ steps.check.outputs.run }}
 
     steps:
-      # A successful run from a push to main, an earlier nightly run or a manual run means
-      # every job passed on this commit. If GitHub can't be asked, the nightly run goes ahead.
+      # A successful earlier nightly or manual run means every job, the full suite included,
+      # passed on this commit. A push run doesn't count: it runs PR checks only. If GitHub
+      # can't be asked, the nightly run goes ahead.
       - name: Skip when main's commit already passed the full suite
         id: check
         env:
@@ -67,7 +76,7 @@ jobs:
           workflow="${GITHUB_WORKFLOW_REF%@*}"
           workflow="${workflow##*/}"
           query="repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$GITHUB_SHA&status=success&per_page=100"
-          filter='[.workflow_runs[] | select(.event == "push" or .event == "schedule" or .event == "workflow_dispatch")] | length'
+          filter='[.workflow_runs[] | select(.event == "schedule" or .event == "workflow_dispatch")] | length'
           if passed=$(gh api "$query" --jq "$filter"); then
             if [ "${passed:-0}" -gt 0 ]; then
               echo "run=false" >> "$GITHUB_OUTPUT"
@@ -82,14 +91,13 @@ jobs:
           fi
 
   # verify, unit-time-zones and playwright are the full suite. Each repeats one condition:
-  # a push to main; a nightly run the gate let through; a manual run; or a pull request
-  # labelled full-ci, when the label is added and on each push after that (adding another
-  # label doesn't rerun them).
+  # a nightly run the gate let through; a manual run; or a pull request labelled full-ci,
+  # when the label is added and on each push after that (adding another label doesn't rerun
+  # them). A push to main never runs them.
   verify:
     needs: nightly-gate
     if: >-
       !cancelled() && (
-        github.event_name == 'push' ||
         github.event_name == 'workflow_dispatch' ||
         (github.event_name == 'schedule' && needs.nightly-gate.outputs.run == 'true') ||
         (github.event_name == 'pull_request' &&
@@ -177,7 +185,6 @@ jobs:
     needs: nightly-gate
     if: >-
       !cancelled() && (
-        github.event_name == 'push' ||
         github.event_name == 'workflow_dispatch' ||
         (github.event_name == 'schedule' && needs.nightly-gate.outputs.run == 'true') ||
         (github.event_name == 'pull_request' &&
@@ -214,7 +221,8 @@ jobs:
           TZ: ${{ matrix.tz }}
 
   # PR checks is the one check branch protection requires: keep its name. It runs on every
-  # event, so main and the nightly run get it too (nothing else formats or runs the verifiers).
+  # event, so each push to main is checked merged, and the nightly run gets it too (nothing
+  # else formats or runs the verifiers).
   #
   # The mobile verify:* scripts drive the real mobile controller over HTTP against a
   # fictional backend of this run's own (#228). tools/swarm starts it on the job's Mongo
@@ -339,7 +347,6 @@ jobs:
     needs: nightly-gate
     if: >-
       !cancelled() && (
-        github.event_name == 'push' ||
         github.event_name == 'workflow_dispatch' ||
         (github.event_name == 'schedule' && needs.nightly-gate.outputs.run == 'true') ||
         (github.event_name == 'pull_request' &&
