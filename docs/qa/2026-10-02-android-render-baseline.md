@@ -1,6 +1,6 @@
-# Android render baseline (#177)
+# Android render and request baseline (#177, #206)
 
-The device-independent render baseline for [#177](https://github.com/FireBird1998/splitbook/issues/177), part of the performance and maintainability map [#176](https://github.com/FireBird1998/splitbook/issues/176). It was first recorded on `main` at `9856a1d` (2 October 2026) and **re-recorded on `main` at `7e69be8` (5 October 2026)**, with every component-exporting module under `apps/mobile/src/ui` counted. The device gates (frames, jank, memory, scrolling) are measured in [#194](https://github.com/FireBird1998/splitbook/issues/194), not here.
+The device-independent render baseline for [#177](https://github.com/FireBird1998/splitbook/issues/177), part of the performance and maintainability map [#176](https://github.com/FireBird1998/splitbook/issues/176). It was first recorded on `main` at `9856a1d` (2 October 2026) and **re-recorded on `main` at `7e69be8` (5 October 2026)**, with every component-exporting module under `apps/mobile/src/ui` counted. [#206](https://github.com/FireBird1998/splitbook/issues/206) added a request count to every journey, six journeys for the reads ADR 0006 changes, one data file for every ceiling, and the ratchet that keeps a ceiling from rising without an approver's label; it **recorded on `main` at `d506f6e` (5 October 2026)**. The device gates (frames, jank, memory, scrolling) are measured in [#194](https://github.com/FireBird1998/splitbook/issues/194), not here.
 
 ## How it is measured
 
@@ -8,52 +8,95 @@ The device-independent render baseline for [#177](https://github.com/FireBird199
 
 - **Publishes:** controller state changes. On a phone each publish in its own task can commit separately, so this is the **upper bound for device commits**.
 - **Commits:** React commits seen by a `<Profiler>` around `App`. The test renderer merges publishes made in one task into one commit, so this is the **lower bound**. Every fake response arrives in a later task, as a network reply would.
+- **Requests:** each request the fake `fetch` receives during the journey, by method and path (with its query). Counts come only from the fake `fetch` and `controller.subscribe`, never from the controller's internals.
 - **Component renders:** each render of an exported component that another module makes through the export, in all 29 modules under `src/ui` that export components. This includes the compact primitives (`CompactText`, `Icon`, `ListRow` and so on) and the `ErrorBoundary` class. It is the main measure of how much of the tree re-renders, and a **lower bound**: the harness wraps each module's exports, so renders from inside a component's own module, and components a module doesn't export, are not counted (see [Not verified](#not-verified)).
 - **Render time:** the Profiler's `actualDuration`, measured in Node. The harness prints it for comparison only. It is not recorded here: it says nothing reliable about a phone, and on a shared machine it varied by about 1.5× between identical runs.
 
 **Determinism and enforcement:**
 
-- The counts are deterministic. Three runs at `7e69be8` gave identical numbers, and so did runs with `TZ` set to `Pacific/Kiritimati` (UTC+14) and `Pacific/Pago_Pago` (UTC−11).
-- The test asserts each count as a ceiling, so a change that renders more fails CI. A ceiling one render too low fails with `Foreground on Home within 30 s: renders: expected 146 to be less than or equal to 145`. Every journey in a test still runs and reports its counts before the test fails.
+- The counts are deterministic. Three runs at `d506f6e` gave identical numbers, and so did runs with `TZ` set to `Pacific/Kiritimati` (UTC+14) and `Pacific/Pago_Pago` (UTC−11). Only the Expense reads' `dateFrom` and `dateTo` change with the zone, because a Month is a calendar month in the viewer's zone; the counts don't.
+- **Every ceiling is in one data file**, `apps/mobile/src/render-profile.ceilings.json`: the request, publish, commit and render ceilings of each journey. The test reads it, and so does the ratchet (below), so nothing parses test code. A journey without a ceiling fails, and the last test fails when the file has a ceiling for a journey that didn't run.
+- The test asserts each count as a ceiling, so a change that renders more or sends more fails CI. A ceiling one render too low fails with `Foreground on Home within 30 s: renders: expected 146 to be less than or equal to 145`. One more request fails the same way: checked by hand with a Balances refresh added to a journey (not committed), which failed with `Switch to Balances: requests: expected 1 to be less than or equal to 0`. Every journey in a test still runs and reports its counts before the test fails.
+- **A journey that only reads sends nothing but GETs.** Opening, going back, refreshing, returning to the foreground, switching destination and loading a page never resume or replay a write (ADR 0004), so any other request fails the journey and names it. Checked by hand with a sign-out added to a read journey (not committed): `Back to Home from a Group only reads, so it may send nothing but GETs: expected [ 'POST /api/auth/sign-out' ] to deeply equal []`. The sign-in journey may send exactly one other request, `POST /api/auth/demo-persona/sign-in`, matched on method and path; any other non-GET fails it too. Checked by hand (not committed) by recording Home's totals read as a `PUT`: `Sign in and show Home (20 Groups) may send nothing but GETs and POST /api/auth/demo-persona/sign-in: expected [ 'PUT /api/user/balances', …(1) ] to deeply equal []`. Typing into the Expense form sends nothing at all.
 - **The ceilings have no headroom.** They equal the recorded counts, which depend on the order in which the fake responses arrive. Each response waits one `setTimeout(0)`, so the order is fixed and the counts are stable, but a Node or React scheduler upgrade could move a commit by one. If that happens, re-record and say why in this file.
-- **Each journey checks the screen it ends on** before its counts are compared: the Group rows on Home, the Month and the Expense rows, the Balances, the Activity rows, or the typed Description with "Draft saved". A journey that breaks fails there instead of passing by rendering less. Checked by hand: with the fake Expenses endpoint answering 500, all three journey tests fail.
+- **Each journey checks the screen it ends on** before its counts are compared: the Group rows on Home, the Month and the Expense rows, the Balances, the Activity rows, or the typed Description with "Draft saved". A journey that breaks fails there instead of passing by rendering less. Checked by hand at `d506f6e`: with the fake Expenses endpoint answering 500, all five journey tests fail.
 - **Any console error fails the test**, except the two this file causes on purpose: React's warning that the environment doesn't support `act(...)` (the harness renders outside `act()` so publishes commit as they would on a device) and the `react-test-renderer` deprecation notice.
-- When a count comes in under its ceiling, the test prints a warning naming the journey, the count and the ceiling, so the ceiling can come down. It prints nothing otherwise.
+- When a count comes in under its ceiling, the test prints a warning naming the journey, the measure, the count and the ceiling, so the ceiling can come down: `Change Month: requests 2 is under its ceiling of 3; lower the ceiling.` It prints nothing otherwise.
 - **A guard test** fails when a module under `src/ui` exports a component the harness doesn't count, and names the module and component. `vi.mock` is hoisted and takes static paths, so the instrumented list is kept by hand at the top of the test file. The guard also fails when a `vi.mock` names a module that no longer exists.
+- **The ratchet.** No pull request may raise a ceiling, or remove or rename a journey, unless an approver allows it with the `re-record-ceilings` label. PR checks ends with `pnpm mobile ceilings:compare` against the base's copy of the data file, and accepts the label only when the pull request has it and the latest `labeled` event for it on the pull request's timeline was made by an account in the repository variable `CEILINGS_APPROVERS` (default: the repository owner). Lowering a ceiling or adding a journey always passes. `pnpm swarm gate` runs the same script against the merge-base, so an agent sees a raised ceiling before CI does (`tools/swarm/README.md`).
 
 ## Re-recording the ceilings
 
 From the repository root:
 
 ```sh
-RENDER_PROFILE=1 pnpm mobile exec vitest run src/render-profile.test.tsx --reporter=default        # print the table and check the ceilings
-RENDER_PROFILE=record pnpm mobile exec vitest run src/render-profile.test.tsx --reporter=default   # print the table without checking
+RENDER_PROFILE=1 pnpm mobile exec vitest run src/render-profile.test.tsx --reporter=default        # print the tables and check the ceilings
+RENDER_PROFILE=record pnpm mobile exec vitest run src/render-profile.test.tsx --reporter=default   # print the tables and the data file, without checking
+pnpm mobile ceilings:compare --base "$(git merge-base HEAD origin/main)"                          # what the ratchet will say
 ```
 
-`--reporter=default` keeps the printed table: some automated environments select a quieter Vitest reporter that hides output from passing tests. `RENDER_PROFILE=record` skips every ceiling, so the test refuses to run with it when `CI` is set.
+`--reporter=default` keeps the printed tables: some automated environments select a quieter Vitest reporter that hides output from passing tests. `RENDER_PROFILE=record` skips every ceiling, so the test refuses to run with it when `CI` is set.
 
-1. Run with `RENDER_PROFILE=record` on the commit you are measuring. The end-screen checks still run.
-2. Copy the counts into `ceilings` in `render-profile.test.tsx`.
-3. Update the baseline table below with the commit.
-4. Lowering a ceiling needs no reason. Raising one needs the reason in the pull request and in this file (#206 adds the owner's re-record label to enforce this).
+1. Run with `RENDER_PROFILE=record` on the commit you are measuring, the whole file at once. The end-screen and GET-only checks still run. It prints the counts table, the requests each journey sent, and `src/render-profile.ceilings.json` as these counts would make it.
+2. Update the data file, `apps/mobile/src/render-profile.ceilings.json`, from the printed file. A new journey needs its own entry, or the test fails.
+3. Update the tables below with the commit, and run `ceilings:compare` to see what changed.
+4. Lowering a ceiling or adding a journey needs no reason and no label.
+5. Raising a ceiling, or removing or renaming a journey, is a re-record:
+   - explain why in the pull request, and in this file, for each ceiling that rose;
+   - ask an approver for the `re-record-ceilings` label. It must be on the pull request and applied by an account in the repository variable `CEILINGS_APPROVERS` (default: the repository owner). If anyone else applies it, the check stays red and names who applied it, and an approver removes the label and applies it again. Adding the label reruns PR checks, which then pass;
+   - an approver approves each re-record on its own pull request, so a later pull request needs the label again.
+
+Re-records already planned: a refresh re-reads the loaded pages, up to 5 (ADR 0006), so the refresh journeys will send more requests in #219 (Expenses), #220 (an Expense's history) and #222 (Activity).
 
 ## Baseline
 
-**Build:** `main` at `7e69be8` (`docs(adr): mark ADR 0006 accepted (#269)`), with this harness. Node 22.22.2, React 19.2.3, `react-test-renderer` 19.2.3, Vitest 4.1.10. Counted modules: 29.
+**Build:** `main` at `d506f6e` (`CI: one fast PR check; the full suite nightly and on demand (#277) (#279)`), with #206's harness. Node 22.22.2, React 19.2.3, `react-test-renderer` 19.2.3, Vitest 4.1.10. Counted modules: 29. The 11 journeys recorded at `7e69be8` count the same at `d506f6e`, so their render ceilings didn't change; the 6 journeys #206 added, and every request count, were first recorded at `d506f6e`. No journey moved the harness clock before #206; the two "after 30 s" journeys move it 31 s, and #214 moves that to fake timers once freshness follows `Date.now`.
 
-| Journey                                       | Publishes | Commits | Component renders | Distinct components | Most rendered                               |
-| --------------------------------------------- | --------: | ------: | ----------------: | ------------------: | ------------------------------------------- |
-| Sign in and show Home (20 Groups)             |         9 |       5 |               461 |                  25 | CompactText 148, Icon 68, ListRow 60        |
-| Foreground on Home within 30 s                |         6 |       1 |               146 |                  19 | CompactText 49, Icon 22, ListRow 20         |
-| Open a Group on Expenses                      |        11 |       4 |               512 |                  24 | CompactText 155, Icon 82, ListRow 48        |
-| Change Month                                  |         8 |       3 |               468 |                  24 | CompactText 141, Icon 73, ListRow 46        |
-| Switch to Balances                            |         1 |       1 |                57 |                  21 | CompactText 21, Icon 8, IconButton 3        |
-| Switch to Activity                            |         4 |       3 |               173 |                  19 | CompactText 92, CompactAvatar 20, Icon 16   |
-| Load the 5th Expense page (80 → 100 rows)     |         7 |       3 |             2,147 |                  21 | CompactText 624, Icon 313, ListRow 286      |
-| Foreground within 30 s after 5 Expense pages  |         7 |       1 |               204 |                  21 | CompactText 62, Icon 31, ListRow 22         |
-| Load the 5th Activity page (80 → 100 events)  |         3 |       2 |               811 |                  17 | CompactText 573, CompactAvatar 180, Icon 16 |
-| Foreground within 30 s after 5 Activity pages |         5 |       2 |               572 |                  17 | CompactText 393, CompactAvatar 120, Icon 16 |
-| Type 20 characters into Description           |        40 |      21 |             3,241 |                  29 | CompactText 1,700, Icon 300, FieldError 180 |
+| Journey                                       | Requests | Publishes | Commits | Component renders | Distinct components | Most rendered                               |
+| --------------------------------------------- | -------: | --------: | ------: | ----------------: | ------------------: | ------------------------------------------- |
+| Sign in and show Home (20 Groups)             |        7 |         9 |       5 |               461 |                  25 | CompactText 148, Icon 68, ListRow 60        |
+| Foreground on Home within 30 s                |        0 |         6 |       1 |               146 |                  19 | CompactText 49, Icon 22, ListRow 20         |
+| Open a Group on Expenses                      |        3 |        11 |       4 |               512 |                  24 | CompactText 155, Icon 82, ListRow 48        |
+| Change Month                                  |        2 |         8 |       3 |               468 |                  24 | CompactText 141, Icon 73, ListRow 46        |
+| Switch to Balances                            |        0 |         1 |       1 |                57 |                  21 | CompactText 21, Icon 8, IconButton 3        |
+| Switch to Activity                            |        1 |         4 |       3 |               173 |                  19 | CompactText 92, CompactAvatar 20, Icon 16   |
+| Load the 5th Expense page (80 → 100 rows)     |        2 |         7 |       3 |             2,147 |                  21 | CompactText 624, Icon 313, ListRow 286      |
+| Foreground within 30 s after 5 Expense pages  |        0 |         7 |       1 |               204 |                  21 | CompactText 62, Icon 31, ListRow 22         |
+| Load the 5th Activity page (80 → 100 events)  |        1 |         3 |       2 |               811 |                  17 | CompactText 573, CompactAvatar 180, Icon 16 |
+| Foreground within 30 s after 5 Activity pages |        1 |         5 |       2 |               572 |                  17 | CompactText 393, CompactAvatar 120, Icon 16 |
+| Back to Home from a Group                     |        1 |         5 |       2 |               294 |                  20 | CompactText 98, Icon 45, ListRow 40         |
+| Reopen the Group within 30 s                  |        0 |         6 |       1 |               204 |                  21 | CompactText 62, Icon 31, ListRow 22         |
+| Pull to refresh with 5 Expense pages          |        3 |        13 |       4 |             1,932 |                  21 | CompactText 566, Icon 284, ListRow 248      |
+| Foreground after 30 s with 5 Expense pages    |        3 |        13 |       4 |             1,932 |                  21 | CompactText 566, Icon 284, ListRow 248      |
+| Pull to refresh with 5 Activity pages         |        1 |         5 |       2 |               572 |                  17 | CompactText 393, CompactAvatar 120, Icon 16 |
+| Foreground after 30 s with 5 Activity pages   |        1 |         5 |       2 |               572 |                  17 | CompactText 393, CompactAvatar 120, Icon 16 |
+| Type 20 characters into Description           |        0 |        40 |      21 |             3,241 |                  29 | CompactText 1,700, Icon 300, FieldError 180 |
+
+### Requests per journey
+
+What each journey sends, in order, at `d506f6e`. `:id` is the Household Group's id. **Group** is `GET /api/groups/:id`; **Balances** is `GET /api/groups/:id/balances`; **Expenses page N** is `GET /api/groups/:id/expenses?page=N&limit=20&includeMemberBreakdown=1` with the Month on screen as `dateFrom` and `dateTo`; **Activity page N** is `GET /api/groups/:id/activity?page=N&limit=20`. Every request but the persona sign-in is a GET.
+
+| Journey                                       | Requests | Sent, in order                                                                                                                                                                                                     |
+| --------------------------------------------- | -------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Sign in and show Home (20 Groups)             |        7 | `POST /api/auth/demo-persona/sign-in`, `GET /api/auth/get-session`, `GET /api/groups`, `GET /api/user/balances`; then the App's restore on mount sends `get-session`, `/api/groups` and `/api/user/balances` again |
+| Foreground on Home within 30 s                |        0 | none                                                                                                                                                                                                               |
+| Open a Group on Expenses                      |        3 | Group, Expenses page 1 (September), Balances                                                                                                                                                                       |
+| Change Month                                  |        2 | Expenses page 1 (August), Balances                                                                                                                                                                                 |
+| Switch to Balances                            |        0 | none                                                                                                                                                                                                               |
+| Switch to Activity                            |        1 | Activity page 1                                                                                                                                                                                                    |
+| Load the 5th Expense page (80 → 100 rows)     |        2 | Expenses page 5, Balances                                                                                                                                                                                          |
+| Foreground within 30 s after 5 Expense pages  |        0 | none                                                                                                                                                                                                               |
+| Load the 5th Activity page (80 → 100 events)  |        1 | Activity page 5                                                                                                                                                                                                    |
+| Foreground within 30 s after 5 Activity pages |        1 | Activity page 1                                                                                                                                                                                                    |
+| Back to Home from a Group                     |        1 | `GET /api/user/balances`                                                                                                                                                                                           |
+| Reopen the Group within 30 s                  |        0 | none                                                                                                                                                                                                               |
+| Pull to refresh with 5 Expense pages          |        3 | Group, Expenses page 1, Balances                                                                                                                                                                                   |
+| Foreground after 30 s with 5 Expense pages    |        3 | Group, Expenses page 1, Balances                                                                                                                                                                                   |
+| Pull to refresh with 5 Activity pages         |        1 | Activity page 1                                                                                                                                                                                                    |
+| Foreground after 30 s with 5 Activity pages   |        1 | Activity page 1                                                                                                                                                                                                    |
+| Type 20 characters into Description           |        0 | none                                                                                                                                                                                                               |
+
+The sign-in journey's 7 include the harness's order of events: it signs in through the controller before it mounts the App, so the App's own restore (`apps/mobile/App.tsx:107`) reads the session, the Groups and Home's totals a second time. On a phone the restore runs when the App opens, before anyone signs in.
 
 ### Changes since the first record
 
@@ -94,6 +137,10 @@ Line numbers are at `7e69be8`.
 3. **A refresh that changes nothing still redraws Home.** A foreground event on Home within the freshness window publishes 6 times (2 of them #127's automatic-refresh cue) and renders 146 components, all 20 Group rows included, although nothing changed (#178).
 4. **An automatic refresh shrinks a long list back to its first page.** After 5 pages, a foreground event within 30 s shows only the first 20 Expenses again (22 `ListRow`s). This follows #104's rule that a refresh starts from the first page. ADR 0006 (#195) decided it: a refresh re-reads the pages already loaded, up to 5 (#215). It lands per list, in #219 for Expenses and #222 for Activity, and those tickets re-record the two foreground-after-pages journeys.
 5. **Switching destination is cheap.** Balances costs 57 renders, and Activity costs 173 with its first page.
+6. **Every Expense read also re-reads Balances.** Opening a Group, changing Month and loading the 5th page each end with `GET /api/groups/:id/balances`, because Balances follow Expense reads (ADR 0006). The page load costs 2 requests, not 1.
+7. **Activity re-reads its first page on a foreground within 30 s; Expenses don't.** After 5 pages, a foreground within the window sends nothing on Expenses but `GET …/activity?page=1` on Activity, the same request as a pull or a foreground after 30 s. Expenses within 30 s still shrink back to their first page, from memory, without a request (finding 4).
+8. **Going back to Home re-reads Home's totals.** Back from a Group sends `GET /api/user/balances` (the Group's Expense reads marked them stale) and redraws Home: 294 renders. Reopening the Group within 30 s sends nothing.
+9. **A refresh of 5 loaded pages reads only the first page.** A pull and a foreground after 30 s each send 3 requests on Expenses (Group, Expenses page 1, Balances) and 1 on Activity, and both shrink the list to 20 rows: 1,932 renders on Expenses, 572 on Activity. When a refresh re-reads the loaded pages (#215), these journeys send more; #219 and #222 re-record them.
 
 ## Proposed budget
 
@@ -124,5 +171,5 @@ The owner confirms or changes this budget in [#194](https://github.com/FireBird1
 ## Next
 
 - Each #178 pull request lowers the ceilings to its new numbers and updates the baseline table.
-- #206 adds request counts per journey, moves the ceilings into one data file and enforces the re-record label.
-- #219 and #222 re-record the foreground-after-pages journeys when a refresh keeps the loaded pages.
+- #206 added request counts per journey, the six journeys above, the data file and the ratchet. #214 moves the "after 30 s" journeys to fake timers once freshness follows `Date.now`.
+- #219, #220 and #222 re-record the refresh journeys, with an approver's `re-record-ceilings` label, when a refresh re-reads the loaded pages.

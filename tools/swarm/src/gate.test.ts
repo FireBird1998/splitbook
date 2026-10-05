@@ -255,7 +255,7 @@ describe('gate', () => {
   });
 
   describe('ceilings', () => {
-    it('reports that no ceilings are recorded until #206 adds its comparison script', async () => {
+    it("skips the step on a branch without #206's comparison script", async () => {
       const verdict = await runGate(world(), { root: worktree() });
       expect(step(verdict, 'ceilings')).toMatchObject({
         status: 'skip',
@@ -274,7 +274,7 @@ describe('gate', () => {
       expect(step(verdict, 'ceilings')?.status).toBe('pass');
     });
 
-    it('fails a raised ceiling and says the re-record label is needed', async () => {
+    it("fails a raised ceiling and says an approver's re-record label is needed", async () => {
       const fake = world();
       fake.exitCodes = (launch) => (launch.args.includes('ceilings:compare') ? 1 : 0);
       const verdict = await runGate(fake, {
@@ -283,8 +283,24 @@ describe('gate', () => {
       expect(verdict.verdict).toBe('fail');
       expect(step(verdict, 'ceilings')).toMatchObject({
         status: 'fail',
-        detail: expect.stringMatching(/needs the re-record label/),
+        detail: expect.stringMatching(
+          /a ceiling rose, or a journey was removed or renamed, since bbbbbbb, so the pull request needs the re-record-ceilings label from an approver/,
+        ),
       });
+    });
+
+    it("fails without blaming a ceiling when the comparison couldn't run", async () => {
+      const fake = world();
+      fake.exitCodes = (launch) => (launch.args.includes('ceilings:compare') ? 2 : 0);
+      const verdict = await runGate(fake, {
+        root: worktree({ ...mobileScripts, 'ceilings:compare': 'node scripts/compare.ts' }),
+      });
+      expect(verdict.verdict).toBe('fail');
+      expect(step(verdict, 'ceilings')).toMatchObject({
+        status: 'fail',
+        detail: expect.stringMatching(/could not be compared with bbbbbbb \(exit code 2\)/),
+      });
+      expect(step(verdict, 'ceilings')?.detail).not.toMatch(/re-record/);
     });
   });
 

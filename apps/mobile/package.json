@@ -45,6 +45,7 @@
     "test": "vitest run",
     "test:unit": "vitest run",
     "lint": "eslint .",
+    "ceilings:compare": "node --import tsx scripts/compare-ceilings.ts",
     "verify:api": "node --import tsx scripts/verify-api.ts",
     "backend:seed": "node scripts/dev-backend/seed.mjs",
     "backend:start": "node scripts/dev-backend/start.mjs",

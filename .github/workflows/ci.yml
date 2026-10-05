@@ -9,6 +9,15 @@ name: CI
 #   verifier, in one job that installs once. It is the one check branch protection requires,
 #   so its name, "PR checks", must not change. A pull request that changes only Markdown,
 #   docs/ or .claude/ files runs just the format check, and the check still passes.
+# - On a pull request, PR checks ends with the ceilings ratchet (#206): no render or request
+#   ceiling may rise, and no journey may be removed or renamed, unless the pull request has
+#   the re-record-ceilings label and an approver applied it last. Approvers are the logins in
+#   the repository variable CEILINGS_APPROVERS, which only an admin can set, or the
+#   repository owner without it. Adding or removing any label reruns PR checks, so an
+#   approver's label turns a failing check green; lowering a ceiling never needs it.
+# - Every label event reruns all of PR checks, even for labels nothing reads. Keep it that
+#   way: a skipped required check counts as passing, so skipping PR checks on other label
+#   events could turn a red commit green.
 # - Each push to main runs PR checks only, on the merged result.
 # - The full suite (verify, playwright and the unit-test time-zone matrix) runs nightly, on a
 #   manual run (workflow_dispatch), and on a pull request labelled full-ci, never on a push.
@@ -22,8 +31,10 @@ name: CI
 # tools/swarm/README.md says more.
 on:
   pull_request:
-    # labeled starts the full suite when full-ci is added; any other label only reruns PR checks.
-    types: [opened, synchronize, reopened, labeled]
+    # labeled starts the full suite when full-ci is added; any other label, and removing any
+    # label (unlabeled), only reruns PR checks, whose ceilings ratchet reads the
+    # re-record-ceilings label.
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [main]
   schedule:
@@ -37,12 +48,13 @@ permissions:
 
 # One group per pull request, and one for pushes to main, so a new push cancels the run it
 # supersedes: on main that run is PR checks only, and the newer commit is tested anyway.
-# Adding a label other than full-ci gets a group of its own: it must not cancel a full-ci run
-# in progress. Nightly and manual runs each get a group of their own, so none is cancelled.
+# Adding a label other than full-ci, or removing any label, gets a group of its own: it must
+# not cancel a full-ci run in progress. Nightly and manual runs each get a group of their own,
+# so none is cancelled.
 concurrency:
   group: >-
     ${{ github.workflow }}-${{
-    github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name == 'full-ci') && format('pr-{0}', github.event.pull_request.number) ||
+    github.event_name == 'pull_request' && (github.event.action != 'labeled' && github.event.action != 'unlabeled' || github.event.action == 'labeled' && github.event.label.name == 'full-ci') && format('pr-{0}', github.event.pull_request.number) ||
     github.event_name == 'push' && format('push-{0}', github.ref) ||
     format('run-{0}', github.run_id) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
@@ -92,8 +104,8 @@ jobs:
 
   # verify, unit-time-zones and playwright are the full suite. Each repeats one condition:
   # a nightly run the gate let through; a manual run; or a pull request labelled full-ci,
-  # when the label is added and on each push after that (adding another label doesn't rerun
-  # them). A push to main never runs them.
+  # when the label is added and on each push after that (adding another label, or removing
+  # any label, doesn't rerun them). A push to main never runs them.
   verify:
     needs: nightly-gate
     if: >-
@@ -102,7 +114,8 @@ jobs:
         (github.event_name == 'schedule' && needs.nightly-gate.outputs.run == 'true') ||
         (github.event_name == 'pull_request' &&
           contains(github.event.pull_request.labels.*.name, 'full-ci') &&
-          (github.event.action != 'labeled' || github.event.label.name == 'full-ci'))
+          (github.event.action != 'labeled' && github.event.action != 'unlabeled' ||
+            github.event.action == 'labeled' && github.event.label.name == 'full-ci'))
       )
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -189,7 +202,8 @@ jobs:
         (github.event_name == 'schedule' && needs.nightly-gate.outputs.run == 'true') ||
         (github.event_name == 'pull_request' &&
           contains(github.event.pull_request.labels.*.name, 'full-ci') &&
-          (github.event.action != 'labeled' || github.event.label.name == 'full-ci'))
+          (github.event.action != 'labeled' && github.event.action != 'unlabeled' ||
+            github.event.action == 'labeled' && github.event.label.name == 'full-ci'))
       )
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -236,6 +250,12 @@ jobs:
     if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.nightly-gate.outputs.run == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    # A job's permissions replace the workflow's, so contents: read is repeated. The ceilings
+    # step, the last, reads the pull request's timeline, which needs pull-requests: read;
+    # nothing writes.
+    permissions:
+      contents: read
+      pull-requests: read
 
     services:
       mongo:
@@ -343,6 +363,36 @@ jobs:
         if: always() && steps.backend.outcome != 'skipped'
         run: pnpm swarm down --mongo-port 27017
 
+      # #206's ratchet, last, so a pull request that raises a ceiling still shows every other
+      # result before an approver labels it. It compares apps/mobile's
+      # src/render-profile.ceilings.json with the base's copy (the merge commit's first parent,
+      # which depth 2 already fetched). A higher ceiling, or a journey removed or renamed, fails
+      # unless the pull request has the re-record-ceilings label now and the latest labeled
+      # event for it on the timeline was made by an approver: the logins in the repository
+      # variable CEILINGS_APPROVERS, which only an admin can set, or the repository owner alone
+      # without it. The script reads the approvers and the labels, and asks GitHub, only when
+      # something rose; then an empty or malformed list is refused. A docs-only pull request
+      # can't change the data file, so it skips this step.
+      - name: Ceilings don't rise without an approver's re-record label
+        if: github.event_name == 'pull_request' && steps.changes.outputs.docs_only != 'true'
+        shell: bash
+        # Each request to GitHub gives up after 30 s; this bounds the whole step.
+        timeout-minutes: 5
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          APPROVERS: ${{ vars.CEILINGS_APPROVERS || github.repository_owner }}
+          # The pull request's labels as a JSON array, passed as data, never as shell text.
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          if ! git rev-parse --verify --quiet 'HEAD^2' > /dev/null; then
+            echo "::error title=Ceilings not compared::PR checks expected the pull request's merge commit, so it can't find the base."
+            exit 1
+          fi
+          base=$(git rev-parse 'HEAD^1')
+          pnpm mobile ceilings:compare --base "$base" --pull-request "$PULL_REQUEST" \
+            --repository "$GITHUB_REPOSITORY" --approvers "$APPROVERS" --labels-json "$LABELS"
+
   playwright:
     needs: nightly-gate
     if: >-
@@ -351,7 +401,8 @@ jobs:
         (github.event_name == 'schedule' && needs.nightly-gate.outputs.run == 'true') ||
         (github.event_name == 'pull_request' &&
           contains(github.event.pull_request.labels.*.name, 'full-ci') &&
-          (github.event.action != 'labeled' || github.event.label.name == 'full-ci'))
+          (github.event.action != 'labeled' && github.event.action != 'unlabeled' ||
+            github.event.action == 'labeled' && github.event.label.name == 'full-ci'))
       )
     runs-on: ubuntu-latest
     timeout-minutes: 40

@@ -70,7 +70,7 @@ The backend's own scripts keep their rules: they refuse root and `apps/web` `.en
 | Each push to a pull request, and each push to `main`                          | **PR checks**                    |
 | Nightly at 04:17 UTC, a manual run, and a pull request labelled **`full-ci`** | **PR checks** and the full suite |
 
-- **PR checks** (`pr-checks`) is one job that installs once, then runs the format check, lint, typecheck, the design-system style policy (`pnpm web check:design-system`), the workspace unit tests in UTC, and every mobile HTTP verifier (below). That is the gate without its install check and ceilings, plus the style policy. It is the one check branch protection requires, so its name, `PR checks`, must not change.
+- **PR checks** (`pr-checks`) is one job that installs once, then runs the format check, lint, typecheck, the design-system style policy (`pnpm web check:design-system`), the workspace unit tests in UTC, every mobile HTTP verifier (below) and, last, on a pull request, the ceilings ratchet (below). That is the gate without its install check, plus the style policy. It is the one check branch protection requires, so its name, `PR checks`, must not change.
 - **The full suite** adds `verify` (the unit and integration tests, the authenticated Playwright suites and the build), `playwright` (the browser journeys, the Google sign-in journeys and the visual comparisons) and the unit tests in three more time zones.
 - **A docs-only pull request,** one that changes only Markdown, `docs/` or `.claude/` files, passes PR checks after the format check alone. Prettier formats Markdown and the `docs/` mockups, so that check still runs.
 - **A push to `main` runs PR checks only,** on the merged result, since branches needn't be up to date with `main` to merge. The full suite never runs on a push: a merge reaches it in that night's run.
@@ -79,7 +79,7 @@ The backend's own scripts keep their rules: they refuse root and `apps/web` `.en
 
 **To run the full suite on a pull request,** for a risky change such as auth, money, the lockfile or CI itself, do one of these:
 
-- Add the `full-ci` label. The full suite runs when the label is added, then again on each push while the label stays. Adding any other label only reruns PR checks.
+- Add the `full-ci` label. The full suite runs when the label is added, then again on each push while the label stays. Adding any other label, or removing any label, only reruns PR checks.
 - Run the workflow by hand: `gh workflow run ci.yml --ref <branch>`, or **Run workflow** on the CI workflow's Actions page. A manual run tests the branch's own commit, not its merge into `main`.
 
 **When a run on `main` fails, or a nightly run fails,** GitHub notifies one person; the workflow adds no notifier of its own. A failing nightly run is the first place a merge that breaks the full suite shows up:
@@ -89,6 +89,29 @@ The backend's own scripts keep their rules: they refuse root and `apps/web` `.en
 - a failed manual run goes to whoever started it.
 
 For that to reach an inbox, the account's notification settings must send Actions notifications by e-mail: in GitHub's Settings, under Notifications, then System, choose e-mail for Actions and tick "Only notify for failed workflows". A failed run also shows as a red cross on its commit on `main` and on the Actions page.
+
+### The ceilings ratchet in PR checks
+
+On a pull request that isn't docs-only, PR checks ends with #206's ratchet, the same script the gate's ceilings step runs:
+
+```sh
+pnpm mobile ceilings:compare --base <the merge commit's first parent> \
+  --pull-request <number> --repository <owner/name> \
+  --approvers <vars.CEILINGS_APPROVERS, or github.repository_owner without it> \
+  --labels-json <toJSON(github.event.pull_request.labels.*.name)>
+```
+
+It runs last, so a pull request that raises a ceiling still shows its lint, typecheck, test and verifier results before an approver labels it. Like the steps before it, it doesn't run once an earlier step has failed. The step times out after 5 minutes, and each request to GitHub after 30 s, which fails the comparison (exit 2).
+
+- **What it compares.** The render and request ceilings in `apps/mobile/src/render-profile.ceilings.json`, the one data file the render-profile harness reads, with the base's copy. A pull request is checked out merged into its base, and the checkout's depth of 2 already holds the base, so nothing more is fetched.
+- **What fails.** Any ceiling that rose, a ceiling that was removed, or a journey removed or renamed. Lowering a ceiling and adding a journey always pass. The output lists each change with both counts, and the failure becomes an annotation on the pull request.
+- **An approver's label.** The `re-record-ceilings` label approves a re-record, one pull request at a time. It counts only when both hold: the pull request has the label now (its labels come from the event, passed to the script as JSON through the step's environment, never as shell text), and the latest `labeled` event for it on the pull request's timeline, read page by page, was made by an approver. So a stale `labeled` event can't approve a label that was deleted without an `unlabeled` event, and an old run's event can't approve a label removed since.
+- **Approvers.** The logins in the repository variable `CEILINGS_APPROVERS` (Settings, then Secrets and variables, then Actions, then Variables), separated by commas or spaces, with or without `@`, and compared without case. Only a repository admin can set a variable, so a pull request can't widen the list. Without the variable the repository owner (`github.repository_owner`) is the only approver. The list is read only when a re-record needs it, so a malformed value never fails a pull request whose ceilings didn't rise; when one does need it, an empty list or an entry that isn't a login is refused (exit 2), never read as "anyone". A label applied by anyone else leaves the check failing, and the message names who applied it and lists the approvers; an approver removes it and applies it again.
+- **GitHub access.** The script asks GitHub only when something rose and the label is on the pull request, with the job's token, so `pr-checks` has `pull-requests: read` (with `contents: read`, which a job's own permissions must repeat).
+- **Rerunning.** Adding or removing any label reruns PR checks (`labeled` and `unlabeled`), so an approver's label turns the check green without a push, and removing it fails the check again. Like any label other than `full-ci`, such a run has a concurrency group of its own and never starts or cancels the full suite. Every label event reruns all of PR checks, even for labels nothing reads, and that stays: a skipped required check counts as passing, so skipping PR checks on other labels could turn a red commit green.
+- **Docs-only pull requests** skip it: they can't change the data file. A pull request that changes only the data file is not docs-only, so it runs every check.
+
+The label must exist before it can be applied: the owner creates `re-record-ceilings` once, in the repository's labels, and sets `CEILINGS_APPROVERS` when more than the owner's account approves. The re-record steps are in `docs/qa/2026-10-02-android-render-baseline.md`.
 
 ### The verifiers in PR checks
 
@@ -134,7 +157,7 @@ Runs these steps in the worktree, in order, and prints one verdict:
 | install check                 | as `pnpm swarm check`; on failure every other step is skipped | none          |
 | lint, typecheck, format check | `pnpm lint`, `pnpm typecheck`, `pnpm format:check`            | 15, 15, 5 min |
 | unit tests                    | `pnpm --recursive --workspace-concurrency=1 test:unit`        | 20 min        |
-| ceilings                      | #206's comparison script, against the base commit             | 5 min         |
+| ceilings                      | `pnpm --dir apps/mobile run ceilings:compare --base <base>`   | 5 min         |
 | backend                       | this worktree's backend: the one `up` started, or a new one   | 3 min         |
 | `verify:*`, one after another | `pnpm --dir apps/mobile run verify:<name>`                    | 10 min each   |
 
@@ -142,7 +165,7 @@ Runs these steps in the worktree, in order, and prints one verdict:
 - **vitest workers are capped**, so gates running at once don't fight over the CPU (each vitest run otherwise uses all cores but one). The cap defaults to **2** workers and applies to the whole step: the packages run one after another, each with `VITEST_MAX_WORKERS` set to the cap. Change it per run with `--vitest-workers <n>` or `SWARM_VITEST_WORKERS=<n>`.
 - **Verifiers** run one after another, because several assume exclusive use of the Sam persona on their backend (#228), each with `MOBILE_VERIFY_URL` and the three `SPLITBOOK_NATIVE_*` variables set to this worktree's backend, and `TZ=Asia/Kolkata`, which `verify:financial`'s fixtures need. The list is every `verify:*` script in `apps/mobile/package.json` except `verify:all`.
 - **No step inherits credentials or another backend.** Steps get the gate's environment without database and auth settings (`MONGO*`, `TEST_MONGO*`, `DATABASE_URL`, `AUTH_*`, `BETTER_AUTH*`, `NEXTAUTH*`, `GOOGLE_*`, `ALLOW_*`, `NEXT_PUBLIC_*`), without anything that looks like a credential (names containing `SECRET`, `TOKEN`, `PASSWORD`, `CREDENTIAL`, `API_KEY`, `PRIVATE_KEY` or `ACCESS_KEY`), and without any `SPLITBOOK_*` or `MOBILE_VERIFY_URL` of another backend.
-- **Ceilings.** A raised render or request ceiling fails with "needs the re-record label". #206 builds the comparison as a plain script CI runs; the gate calls that script, never a copy: `ceilings:compare` in `apps/mobile/package.json`, run as `pnpm --dir apps/mobile run ceilings:compare --base <base commit>`, which exits non-zero when a ceiling rose or a journey was removed. Until #206 adds it, the step reports that no ceilings are recorded and is skipped.
+- **Ceilings.** #206's ratchet, the same script PR checks runs (see [the ceilings ratchet](#the-ceilings-ratchet-in-pr-checks)); the gate calls it, never a copy: `ceilings:compare` in `apps/mobile/package.json`, with the base commit and no pull request. It compares `apps/mobile/src/render-profile.ceilings.json` with the base commit's copy and lists each change. A ceiling that rose, or a journey removed or renamed, exits 1, and the step fails with "needs the re-record-ceilings label from an approver": the gate can't see a label, and needs no approvers, so it reports what CI will refuse until an approver applies it. Any other failure (exit 2: no base commit, a data file that isn't valid) fails the step as "could not be compared". On a branch without the script, the step reports that no ceilings are recorded and is skipped.
 - **The backend.** When `up` has started this worktree's backend, the gate uses it and leaves it running. Otherwise it starts one for the verifiers, and stops it and drops its database when it ends.
 
 The gate holds the worktree lock while it runs; when another swarm command holds it, the gate is refused and writes no verdict. A failing step doesn't stop the others (except the install check), and the last lines of its log are printed. Each step's output is in `tools/swarm/out/gate/<step>.log`. A step that passes its timeout is stopped with everything it started and fails. Ctrl-C (or SIGTERM) stops the running step's process group and the backend the gate started, drops its database, and records the verdict as interrupted.
