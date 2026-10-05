@@ -211,7 +211,7 @@ export function SettingsScreen({
         <Card padded>
           <View style={{ gap: 10 }}>
             <CompactText variant="small" tone="secondary">
-              Manage Group members, Tags, and recurring settings in the connected web app.
+              Manage Group members and Tags in the connected web app.
             </CompactText>
             <CompactButton
               label="Open SplitBook web"
