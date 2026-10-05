@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { hangUntilAborted, manualTimer } from '../test-utils/transport-faults';
 import { createMobileController } from './mobile-controller';
+import type { MobileTimer } from './types';
 const accountId = 'a00000000000000000000001',
   groupId = 'b00000000000000000000001';
 const iso = '2026-09-28T12:00:00.000Z',
@@ -41,7 +43,7 @@ const expense = {
   isDeleted: false,
   editHistory: [],
 };
-function fixture() {
+function fixture(options: { timer?: MobileTimer } = {}) {
   let offline = false,
     revoked = false,
     deleted = false,
@@ -55,6 +57,8 @@ function fixture() {
   let activeUser = user;
   const errors = new Map<string, number>();
   const failedPaths = new Set<string>();
+  /** Replies that hang until their request is aborted, before or after the headers. */
+  const hung = new Map<string, 'headers' | 'body'>();
   const requests: string[] = [];
   const cache = new Map<string, unknown>(),
     drafts = new Map<string, unknown>(),
@@ -68,6 +72,7 @@ function fixture() {
       },
       {
         now: () => now,
+        timer: options.timer,
         credentials: {
           load: async () => cookie,
           save: async (value) => {
@@ -183,6 +188,7 @@ function fixture() {
           requests.push(`${init.method ?? 'GET'} ${new URL(url).pathname}`);
           if (offline) throw new Error('Offline');
           const path = new URL(url).pathname;
+          if (hung.has(path)) return hangUntilAborted(init, hung.get(path)!);
           if (errors.has(path)) return Response.json({}, { status: errors.get(path)! });
           if (failedPaths.has(path)) throw new Error('Partial network failure');
           if (init.method !== 'GET' && !path.startsWith('/api/auth/')) writes += 1;
@@ -288,6 +294,9 @@ function fixture() {
     drafts,
     failPath: (path: string) => {
       failedPaths.add(path);
+    },
+    hang: (path: string, stage: 'headers' | 'body') => {
+      hung.set(path, stage);
     },
     writes: () => writes,
     /** Every request sent so far, as `METHOD /path`. */
@@ -625,6 +634,45 @@ describe('account-scoped offline financial views', () => {
     await controller.refresh();
     expect(controller.getSnapshot().detail.status).toBe('error');
     expect(controller.getSnapshot().offline.active).toBe(false);
+  });
+  describe('a read that times out (#209)', () => {
+    const path = `/api/groups/${groupId}`;
+    /** The saved Group was verified an hour before this read. */
+    const verifiedAt = now - 3_600_000;
+    async function timedOut(stage: 'headers' | 'body') {
+      const timers = manualTimer();
+      const f = fixture({ timer: timers.timer }),
+        controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      f.cache.set(accountId + path, {
+        ...(f.cache.get(accountId + path) as object),
+        refreshedAt: verifiedAt,
+      });
+      f.hang(path, stage);
+      const before = f.requests().length;
+      const refreshing = controller.refresh();
+      await vi.waitFor(() => expect(f.requests().slice(before)).toContain(`GET ${path}`));
+      timers.elapse(20_000);
+      await refreshing;
+      return controller;
+    }
+
+    it('shows the saved copy, with its own verification time, when it times out before the headers', async () => {
+      const controller = await timedOut('headers');
+      expect(controller.getSnapshot()).toMatchObject({
+        detail: { status: 'ready', data: { id: groupId }, refreshedAt: verifiedAt },
+        offline: { active: true, refreshedAt: verifiedAt },
+      });
+    });
+    it('shows the error and no offline notice when it times out after the headers, as today (#231 changes this)', async () => {
+      const controller = await timedOut('body');
+      expect(controller.getSnapshot().detail).toMatchObject({
+        status: 'error',
+        message: 'Could not reach SplitBook. Check your connection and try again.',
+      });
+      expect(controller.getSnapshot().offline.active).toBe(false);
+    });
   });
   it.each(['owner', 'future', 'corrupt'])('refuses a %s cache envelope', async (kind) => {
     const f = fixture(),

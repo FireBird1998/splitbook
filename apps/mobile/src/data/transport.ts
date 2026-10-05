@@ -1,8 +1,17 @@
 import { readSessionCookie } from './cookies';
-import type { FetchResponse, MobileFetch } from './types';
+import type { FetchResponse, MobileFetch, MobileTimer } from './types';
 
 export const expiredMessage = 'Your session has expired. Sign in again to continue.';
 export const storageMessage = 'Could not safely save your session. Please try signing in again.';
+
+/** How long a request may take, from sending it until its whole body is read. */
+const REQUEST_TIMEOUT_MS = 20_000;
+
+/** The platform's own timer: the default for `MobileDependencies.timer`. */
+const platformTimer: MobileTimer = (run, ms) => {
+  const handle = setTimeout(run, ms);
+  return () => clearTimeout(handle);
+};
 
 /**
  * The work belongs to a session that has ended or changed, or something newer replaced it: what
@@ -11,7 +20,43 @@ export const storageMessage = 'Could not safely save your session. Please try si
  */
 export class Superseded extends Error {}
 
+/**
+ * What a failed request means, for callers to branch on instead of messages or codes (ADR 0006):
+ * - `network`: no reply arrived;
+ * - `timeout`: the 20-second limit passed, before or after the headers;
+ * - `cancelled`: the caller's own signal ended it. It is never a reason to show a saved copy;
+ * - `signed-out`: a 401 that doesn't end the session here (sign-out, the staging check, Google
+ *   sign-in);
+ * - `access-denied`: a 403, or a 404: the member can't see it, or it's gone;
+ * - `stale-revision`: a 409 `STALE_REVISION`: someone saved a newer revision first;
+ * - `rejected`: any other definite 4xx, so any 4xx but 401, 403, 404, 408 and 429: the server
+ *   refused this request as sent;
+ * - `malformed`: a 2xx whose body can't be read;
+ * - `server-error`: a 5xx, 408 or 429, or an answer the app can't use.
+ */
+export type FailureKind =
+  | 'network'
+  | 'timeout'
+  | 'cancelled'
+  | 'signed-out'
+  | 'access-denied'
+  | 'stale-revision'
+  | 'rejected'
+  | 'malformed'
+  | 'server-error';
+
+/** The kind a reply's status and code stand for, or a failure before any reply. */
+function failureKind(status: number, code: string | null, networkFailure: boolean): FailureKind {
+  if (networkFailure) return 'network';
+  if (status === 401) return 'signed-out';
+  if (status === 403 || status === 404) return 'access-denied';
+  if (status === 409 && code === 'STALE_REVISION') return 'stale-revision';
+  if (status >= 400 && status < 500 && status !== 408 && status !== 429) return 'rejected';
+  return 'server-error';
+}
+
 export class RequestError extends Error {
+  readonly kind: FailureKind;
   constructor(
     message: string,
     readonly status = 0,
@@ -19,8 +64,11 @@ export class RequestError extends Error {
     readonly networkFailure = false,
     /** The server's own `error` text, shown only where it is known to be member-facing copy. */
     readonly serverMessage: string | null = null,
+    /** Given only where the status, code and `networkFailure` don't already say it. */
+    kind?: FailureKind,
   ) {
     super(message);
+    this.kind = kind ?? failureKind(status, code, networkFailure);
   }
 }
 
@@ -38,6 +86,11 @@ export interface RequestOptions {
   /** The body exactly as it was stored before sending. */
   serializedBody?: string;
   idempotencyKey?: string;
+  /**
+   * The caller's own cancel. Aborting it ends the request with the `cancelled` kind, never as a
+   * network failure. Only reads take one: writes stay explicit and are never cancelled.
+   */
+  signal?: AbortSignal;
 }
 
 export interface TransportDependencies {
@@ -52,6 +105,8 @@ export interface TransportDependencies {
   googleWebClientId?: string;
   fetch: MobileFetch;
   now: () => number;
+  /** Runs the 20-second timeout. Defaults to the platform's own. */
+  timer?: MobileTimer;
   /**
    * The session, which the controller owns. The transport only reads it, and keeps the cookie
    * each reply sets.
@@ -85,12 +140,15 @@ export interface TransportDependencies {
   onGroupDenied(groupId: string, status: number, owner: number): Promise<void>;
 }
 
+/** What aborted a request first: a session change, the timeout, or the caller. */
+type AbortSource = 'session' | 'timeout' | 'caller';
+
 /**
  * The Android network layer: it sends each request with its headers, keeps the session cookie
  * each reply sets, checks the staging backend on Google builds, runs the 20-second timeout, and
- * turns every failure into a `RequestError`. It holds no session state and never retries or
- * queues: the controller keeps the session and its reads, and hears of an ended session or a
- * lost Group through `onExpired` and `onGroupDenied`.
+ * turns every failure into a `RequestError` with a kind. It holds no session state and never
+ * retries or queues: the controller keeps the session and its reads, and hears of an ended
+ * session or a lost Group through `onExpired` and `onGroupDenied`.
  */
 export function createTransport({
   apiBase,
@@ -100,12 +158,13 @@ export function createTransport({
   googleWebClientId,
   fetch,
   now,
+  timer = platformTimer,
   session,
   onExpired,
   onGroupDenied,
 }: TransportDependencies) {
-  /** Requests in flight. */
-  const requests = new Set<AbortController>();
+  /** Requests in flight, each by what aborts it. */
+  const requests = new Set<(source: AbortSource) => void>();
   let verifiedGoogleBackend = -1;
 
   const assertCurrent = (owner: number) => {
@@ -147,8 +206,19 @@ export function createTransport({
     if (path !== '/.well-known/splitbook-mobile.json') await verifyGoogleBackend(owner);
     assertCurrent(owner);
     const abort = new AbortController();
-    requests.add(abort);
-    const timeout = setTimeout(() => abort.abort(), 20_000);
+    // expo/fetch throws the same error for an abort before the headers as for a lost connection,
+    // and React Native's AbortSignal carries no reason, so the first source is recorded here.
+    let aborted: AbortSource | null = null;
+    const stop = (source: AbortSource) => {
+      aborted ??= source;
+      abort.abort();
+    };
+    requests.add(stop);
+    const endTimeout = timer(() => stop('timeout'), REQUEST_TIMEOUT_MS);
+    // Linked with a listener of its own, not AbortSignal.any, so a cancel is told apart.
+    const cancel = () => stop('caller');
+    if (options.signal?.aborted) cancel();
+    else options.signal?.addEventListener('abort', cancel);
     let received = false;
     try {
       const outgoingCookie =
@@ -229,17 +299,22 @@ export function createTransport({
       assertCurrent(owner);
       return body;
     } catch (error) {
-      if (!session.current(owner)) throw new Superseded();
+      if (!session.current(owner) || aborted === 'session') throw new Superseded();
       if (error instanceof RequestError || error instanceof Superseded) throw error;
+      if (aborted === 'caller')
+        throw new RequestError('This request was cancelled.', 0, null, false, null, 'cancelled');
       throw new RequestError(
         'Could not reach SplitBook. Check your connection and try again.',
         0,
         null,
         !received,
+        null,
+        aborted === 'timeout' ? 'timeout' : received ? 'malformed' : 'network',
       );
     } finally {
-      clearTimeout(timeout);
-      requests.delete(abort);
+      endTimeout();
+      requests.delete(stop);
+      options.signal?.removeEventListener('abort', cancel);
     }
   };
 
@@ -277,7 +352,7 @@ export function createTransport({
 
   /** A session change: every request in flight ends, and its caller gets `Superseded`. */
   const abortAll = () => {
-    requests.forEach((request) => request.abort());
+    requests.forEach((stop) => stop('session'));
     requests.clear();
   };
 

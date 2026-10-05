@@ -88,6 +88,7 @@ import {
   RequestError,
   storageMessage,
   Superseded,
+  type RequestOptions,
 } from './transport';
 import type {
   AccountStorageLease,
@@ -831,6 +832,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     googleWebClientId: config.googleWebClientId,
     fetch: dependencies.fetch,
     now,
+    timer: dependencies.timer,
     session: {
       current,
       cookie: () => cookie,
@@ -1217,11 +1219,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         staleReads.set(path, cached?.refreshedAt ?? null);
         publishReadFreshness();
       }
+      // The server couldn't be reached, and this read already fell back: nothing more to try.
       if (!cached)
         throw new RequestError(
           'This view was not saved on this device. Connect to load it.',
           0,
           'OFFLINE_UNAVAILABLE',
+          false,
+          null,
+          'network',
         );
       return parse(cached.value);
     }
@@ -3467,7 +3473,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     groupId: string,
     path: string,
     owner: number,
-    options: Parameters<typeof request>[2],
+    options: Omit<RequestOptions, 'signal'>,
   ) => {
     let refused = false;
     try {

@@ -428,6 +428,9 @@ export interface FetchResponse {
 
 export type MobileFetch = (url: string, init: RequestInit) => Promise<FetchResponse>;
 
+/** Runs `run` once after `ms` milliseconds, unless the function it returns is called first. */
+export type MobileTimer = (run: () => void, ms: number) => () => void;
+
 export type GoogleIdentityResult =
   | { status: 'success'; idToken: string; nonce: string }
   | { status: 'cancelled' }
@@ -443,6 +446,8 @@ export interface MobileDependencies {
   pendingInvitation?: PendingInvitationStore;
   accountLocal?: AccountLocalStorage;
   now?: () => number;
+  /** Runs each request's 20-second timeout. Defaults to the platform's own `setTimeout`. */
+  timer?: MobileTimer;
   /**
    * How long a verified read is shown again without another request when navigating
    * or returning to the foreground. Defaults to `DISPLAY_FRESHNESS_MS`. Pull-to-refresh,
