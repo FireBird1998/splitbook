@@ -20,7 +20,9 @@ V4 turns `category` into a **theme** chosen at creation, and adds the long-runni
 | 3   | Theme picker at group creation                       | this doc, §4                           | 1     | Done   |
 | 4   | Terminology pass ("trips" → "groups" where generic)  | this doc, §4                           | 1     | Done   |
 | 5   | Household month switcher + monthly summary           | [monthly-views.md](./monthly-views.md) | 2     | Done   |
-| 6   | Recurring expense templates for Household            | this doc, §4                           | 3     | Done   |
+| 6   | Recurring expense templates for Household            | this doc, §4                           | 3     | Hidden |
+
+Recurring expense templates are built but hidden by default since #289; see the note at the end of Phase 3 for how to turn them on.
 
 ## Key Principles
 
@@ -214,6 +216,10 @@ Reuses the existing expense filter API. One additive, opt-in response field. Ful
 - [x] **Management UI.** A "Recurring" section in Household group settings: list, add, edit, pause, delete. Deleting a template never touches expenses it already generated.
 - [x] **Surface generated expenses honestly.** A "Recurring" marker on the expense card, editable and deletable like any other expense (soft delete applies).
 - [x] **Verify.** Unit tests for due-period calculation across month lengths and pauses; an integration test proving two concurrent generations produce exactly one expense.
+
+> **Hidden by default (#289, 2026-10-06).** Recurring Expenses sit behind one server-side product switch, `RECURRING_EXPENSES_ENABLED`, while the owner decides whether members need them. It is **off** unless set to exactly `true`. Off, no Group's settings show the Recurring section, the recurring API refuses every change with **409** `RECURRING_EXPENSES_OFF` and lists no templates, and no Group, Expense-list or Balances read and no leave adds a recurring Expense. Nothing is deleted: templates stay as they are, and Expenses generated earlier stay ordinary Expenses on web and Android. The Household theme still declares `recurringExpenses: true`; the theme says what a Group type supports, the switch says whether the product offers it.
+>
+> **To turn it on:** set `RECURRING_EXPENSES_ENABLED=true` in `apps/web/.env.local` and restart the server. On Vercel, add the variable under the project's Settings → Environment Variables for the environment you want (Production, Preview), then redeploy, since a changed variable reaches new deployments only. **Turning it back on adds nothing for the months it was off:** the first read after it comes back on records that moment, and every template that existed then resumes from that month, as resuming a paused template does. A template created after that catches up from its own start, as before. Unset it (or set anything else) and redeploy to hide the feature again.
 
 ---
 

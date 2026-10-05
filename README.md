@@ -49,6 +49,9 @@ Scripts follow one rule:
    | `AUTH_MODE`           | `google` (default) or `demo` for private-beta personas                                    |
    | `ALLOW_DEMO_AUTH`     | Must be `true` to allow demo auth when `NODE_ENV=production`                              |
 
+   Recurring Expenses are hidden unless `RECURRING_EXPENSES_ENABLED=true`; see
+   [`docs/v4/README.md`](docs/v4/README.md#phase-3--recurring-expense-templates-household).
+
 3. Start MongoDB locally (if needed):
 
    ```bash

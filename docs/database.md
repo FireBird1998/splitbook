@@ -254,9 +254,39 @@ archived and then restored does.
 Deleting a template never touches the expenses it already generated; those are
 ordinary expenses. Edits apply to future periods only.
 
+**While recurring Expenses are switched off** (`RECURRING_EXPENSES_ENABLED` is
+not `true`, the default since #289), generation adds nothing in any Group and
+changes no template; it only records the switch as off in
+[`ProductSwitch`](#productswitch). The first run that finds the switch on again
+records when; templates created before then generate no period before that
+month, so the months it was off are never back-filled.
+
 > The index is created by Mongoose `autoIndex`, which is asynchronous and not
 > awaited. The integration suite forces `Expense.createIndexes()` first;
 > production does not.
+
+---
+
+## ProductSwitch
+
+What the server last saw of a product switch, kept so it survives deployments.
+The switch itself is an environment variable; this collection only remembers
+that it was off for a while. One document per switch (#289).
+
+```typescript
+{
+  _id: "recurringExpenses",           // The switch's name
+  enabled: boolean,                   // As the server last saw it
+  since: Date                         // When that was first seen
+}
+```
+
+**Indexes**: none beyond `_id`.
+
+The recurring generation run writes it: `enabled: false` the first time it finds
+`RECURRING_EXPENSES_ENABLED` off, then `enabled: true` and `since` the first time
+it finds it on again. Generation reads `since` as the month existing templates
+resume from. A database that has never seen the switch off has no document.
 
 ---
 
@@ -369,7 +399,7 @@ mismatch returns 404 rather than 403.
 
 ## Model registration
 
-Two patterns coexist. `Settlement`, `Activity`, `Invitation` and `User` use the
+Two patterns coexist. `Settlement`, `Activity`, `Invitation`, `ProductSwitch` and `User` use the
 conventional `mongoose.models.X || mongoose.model(...)` guard. `Group`,
 `Expense` and `RecurringExpense` instead `deleteModel` and re-register so schema
 edits are picked up across hot reloads — **note the accompanying comment says
@@ -388,6 +418,7 @@ edits are picked up across hot reloads — **note the accompanying comment says
 | One expense per (template, period)                         | unique partial index                   |
 | One group per invite code                                  | unique partial index                   |
 | Recurring writes are admin-only, Household-only            | service (403 / 422)                    |
+| No recurring writes or generation while switched off       | route and service (409)                |
 | Expense edit/delete restricted to creator or admin         | **nothing** — any member may           |
 | Expense scoped to the group in the URL                     | **nothing** — resolved by `_id` alone  |
 | `sum(paidBy.amount) == amount`                             | **nothing** — client dialogs only      |

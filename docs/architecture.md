@@ -414,6 +414,7 @@ MONGODB_URI=                   # MongoDB connection string
 
 # App
 NEXT_PUBLIC_APP_URL=           # Public app URL (invite links, Better Auth baseURL + trusted origin)
+RECURRING_EXPENSES_ENABLED=    # "true" offers recurring Expenses; hidden otherwise (the default)
 
 # Testing (optional)
 TEST_MONGODB_URI=              # Base URI for integration tests; each file derives
