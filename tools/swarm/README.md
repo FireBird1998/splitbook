@@ -63,7 +63,36 @@ The backend's own scripts keep their rules: they refuse root and `apps/web` `.en
 
 ## In CI
 
-The **Mobile HTTP verifiers** job (`mobile-verifiers` in `.github/workflows/ci.yml`, #228) runs every verifier on each pull request and push to `main`, against a backend of the run's own:
+**`pnpm swarm gate` is the local CI: run it, and see it pass, before every push.** GitHub Actions then runs one fast check on each pull request and each push to `main`, and the full suite nightly (#277), to stay within the Actions minutes of a private repository. Everything is in `.github/workflows/ci.yml`:
+
+| When                                                                          | What runs                        |
+| ----------------------------------------------------------------------------- | -------------------------------- |
+| Each push to a pull request, and each push to `main`                          | **PR checks**                    |
+| Nightly at 04:17 UTC, a manual run, and a pull request labelled **`full-ci`** | **PR checks** and the full suite |
+
+- **PR checks** (`pr-checks`) is one job that installs once, then runs the format check, lint, typecheck, the design-system style policy (`pnpm web check:design-system`), the workspace unit tests in UTC, and every mobile HTTP verifier (below). That is the gate without its install check and ceilings, plus the style policy. It is the one check branch protection requires, so its name, `PR checks`, must not change.
+- **The full suite** adds `verify` (the unit and integration tests, the authenticated Playwright suites and the build), `playwright` (the browser journeys, the Google sign-in journeys and the visual comparisons) and the unit tests in three more time zones.
+- **A docs-only pull request,** one that changes only Markdown, `docs/` or `.claude/` files, passes PR checks after the format check alone. Prettier formats Markdown and the `docs/` mockups, so that check still runs.
+- **A push to `main` runs PR checks only,** on the merged result, since branches needn't be up to date with `main` to merge. The full suite never runs on a push: a merge reaches it in that night's run.
+- **A new push cancels** the run of the push before it, on a pull request and on `main`. On `main` that run is PR checks only, and the newer commit, which contains it, is checked anyway. Nightly runs and manual runs are never cancelled.
+- **The nightly run is skipped** when `main`'s commit has already passed the full suite, in an earlier nightly run or in a manual run. A push run doesn't count, since it doesn't run the full suite. So a night runs the suite when `main` moved since the last full run, or when that run failed.
+
+**To run the full suite on a pull request,** for a risky change such as auth, money, the lockfile or CI itself, do one of these:
+
+- Add the `full-ci` label. The full suite runs when the label is added, then again on each push while the label stays. Adding any other label only reruns PR checks.
+- Run the workflow by hand: `gh workflow run ci.yml --ref <branch>`, or **Run workflow** on the CI workflow's Actions page. A manual run tests the branch's own commit, not its merge into `main`.
+
+**When a run on `main` fails, or a nightly run fails,** GitHub notifies one person; the workflow adds no notifier of its own. A failing nightly run is the first place a merge that breaks the full suite shows up:
+
+- a failed push run goes to whoever pushed; for a merged pull request, that is whoever merged it;
+- a failed nightly run goes to whoever last changed the workflow's `cron` line, or whoever last re-enabled the workflow. So the owner merges any pull request that changes that line, #277's included;
+- a failed manual run goes to whoever started it.
+
+For that to reach an inbox, the account's notification settings must send Actions notifications by e-mail: in GitHub's Settings, under Notifications, then System, choose e-mail for Actions and tick "Only notify for failed workflows". A failed run also shows as a red cross on its commit on `main` and on the Actions page.
+
+### The verifiers in PR checks
+
+PR checks runs every verifier (#228) against a backend of the run's own:
 
 ```sh
 pnpm swarm up --mongo-port 27017 --server production --ready-timeout 600
@@ -71,7 +100,7 @@ TZ=Asia/Kolkata pnpm mobile verify:all   # with MOBILE_VERIFY_URL from up
 pnpm swarm down --mongo-port 27017
 ```
 
-The job's `mongo:7` service listens on 27017, so `up` and `down` name that port; locally the default, 27018, applies. The job adds `up`'s `NAME=value` lines to `GITHUB_ENV`, turns each `FAIL verify:*` line of `verify:all` into an annotation, uploads `tools/swarm/out/backend.log` when anything fails, and always runs `down`. One job runs one swarm command at a time, so the worktree lock never refuses one there.
+The job's `mongo:7` service listens on 27017, so `up` and `down` name that port; locally the default, 27018, applies. The job adds `up`'s `NAME=value` lines to `GITHUB_ENV`, turns each `FAIL verify:*` line of `verify:all` into an annotation, uploads `tools/swarm/out/backend.log` as the `mobile-verifier-backend-log` artifact when anything fails after `up` started, and always runs `down` once `up` has started. One job runs one swarm command at a time, so the worktree lock never refuses one there.
 
 It serves a production build, as the Playwright jobs do, so no route compiles while a verifier waits; see the timings below. Changing `--server production` to `--server dev` in the job is all it takes to use `next dev` instead.
 
@@ -109,7 +138,7 @@ Runs these steps in the worktree, in order, and prints one verdict:
 | backend                       | this worktree's backend: the one `up` started, or a new one   | 3 min         |
 | `verify:*`, one after another | `pnpm --dir apps/mobile run verify:<name>`                    | 10 min each   |
 
-- **Unit tests, not integration tests.** The web integration tests name their databases per test file, so two worktrees running them at once on one Mongo would share databases. CI keeps running them; the gate never does.
+- **Unit tests, not integration tests.** The web integration tests name their databases per test file, so two worktrees running them at once on one Mongo would share databases. CI's full suite runs them (see [In CI](#in-ci)); the gate never does.
 - **vitest workers are capped**, so gates running at once don't fight over the CPU (each vitest run otherwise uses all cores but one). The cap defaults to **2** workers and applies to the whole step: the packages run one after another, each with `VITEST_MAX_WORKERS` set to the cap. Change it per run with `--vitest-workers <n>` or `SWARM_VITEST_WORKERS=<n>`.
 - **Verifiers** run one after another, because several assume exclusive use of the Sam persona on their backend (#228), each with `MOBILE_VERIFY_URL` and the three `SPLITBOOK_NATIVE_*` variables set to this worktree's backend, and `TZ=Asia/Kolkata`, which `verify:financial`'s fixtures need. The list is every `verify:*` script in `apps/mobile/package.json` except `verify:all`.
 - **No step inherits credentials or another backend.** Steps get the gate's environment without database and auth settings (`MONGO*`, `TEST_MONGO*`, `DATABASE_URL`, `AUTH_*`, `BETTER_AUTH*`, `NEXTAUTH*`, `GOOGLE_*`, `ALLOW_*`, `NEXT_PUBLIC_*`), without anything that looks like a credential (names containing `SECRET`, `TOKEN`, `PASSWORD`, `CREDENTIAL`, `API_KEY`, `PRIVATE_KEY` or `ACCESS_KEY`), and without any `SPLITBOOK_*` or `MOBILE_VERIFY_URL` of another backend.
@@ -167,6 +196,8 @@ Measured on 2026-10-05 on the same machine for #228: `up`, then `TZ=Asia/Kolkata
 The quiet production run predates `--server`: it ran the same steps by hand (the seed, `next build --webpack`, then `next start` with the same environment), with the backend in UTC, as on a CI runner, and every verifier passed.
 
 On a quiet machine the production build is faster, because `next dev` compiles every route the verifiers reach while they wait (the verifiers took 24 s against a warm `next dev`, 11 s against a production build); on a busy one the parallel build suffers most. A CI runner is a quiet machine with 4 cores, where the web app's build takes 40 to 60 s. That holds while the repository is public: GitHub's runners for private repositories have 2 cores, so measure the job again if it goes private. A production backend also uses less memory: about 0.27 GB once the verifiers have run, against 1.1 to 1.7 GB for `next dev`.
+
+Measured on 2026-10-05 on the same machine for #277, at a load average of 5 to 8: PR checks' commands, one after another, took 106 s. The install took 1 s, the format check 7 s, lint 9 s, typecheck 9 s, the style policy 2 s, the unit tests in UTC 35 s (with 3 vitest workers, as on a 4-core runner), `up --server production` 32 s with its build, `verify:all` 12 s and `down` 1 s. On a public 4-core runner the same steps add up to about 3.5 minutes, from the medians of the CI jobs they came from. Measure the job again once the repository is private and its runners have 2 cores.
 
 ## Files
 

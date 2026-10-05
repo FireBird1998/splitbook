@@ -1,17 +1,111 @@
 name: CI
 
+# What runs where (#277). Private-repository minutes are a monthly quota, and every branch
+# runs `pnpm swarm gate` before it is pushed, so pull-request CI is a fast safety net and the
+# slow, broad jobs run less often:
+#
+# - PR checks (pr-checks) runs on every event: lint, typecheck, format check, the
+#   design-system style policy, the workspace unit tests in UTC and every mobile HTTP
+#   verifier, in one job that installs once. It is the one check branch protection requires,
+#   so its name, "PR checks", must not change. A pull request that changes only Markdown,
+#   docs/ or .claude/ files runs just the format check, and the check still passes.
+# - Each push to main runs PR checks only, on the merged result.
+# - The full suite (verify, playwright and the unit-test time-zone matrix) runs nightly, on a
+#   manual run (workflow_dispatch), and on a pull request labelled full-ci, never on a push.
+#   A nightly run is skipped when main's commit already passed the full suite in an earlier
+#   nightly or manual run.
+# - A new push to a pull request, or to main, cancels the run of the push before it. Nightly
+#   and manual runs are never cancelled.
+#
+# GitHub e-mails a failed push run to whoever pushed it, and a failed nightly run to whoever
+# last changed the cron line below, so the owner merges changes to that line;
+# tools/swarm/README.md says more.
 on:
+  pull_request:
+    # labeled starts the full suite when full-ci is added; any other label only reruns PR checks.
+    types: [opened, synchronize, reopened, labeled]
   push:
     branches: [main]
-  pull_request:
+  schedule:
+    # 04:17 UTC (09:47 in India): the quietest hour of the repository's runs, after the evening
+    # merges, and off the top of the hour, when GitHub delays scheduled runs the most.
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One group per pull request, and one for pushes to main, so a new push cancels the run it
+# supersedes: on main that run is PR checks only, and the newer commit is tested anyway.
+# Adding a label other than full-ci gets a group of its own: it must not cancel a full-ci run
+# in progress. Nightly and manual runs each get a group of their own, so none is cancelled.
+concurrency:
+  group: >-
+    ${{ github.workflow }}-${{
+    github.event_name == 'pull_request' && (github.event.action != 'labeled' || github.event.label.name == 'full-ci') && format('pr-{0}', github.event.pull_request.number) ||
+    github.event_name == 'push' && format('push-{0}', github.ref) ||
+    format('run-{0}', github.run_id) }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.event_name == 'push' }}
 
 # The Next.js app lives in apps/web, so app steps run there; the workspace-wide
 # scripts (lint, typecheck, test) run at the root so packages/* are covered too.
 # pnpm's version comes from the packageManager field in the root package.json
 # and Node's from .nvmrc; `pnpm install` inside apps/web installs the workspace.
 jobs:
-  verify:
+  # A nightly run that would test a commit this workflow has already passed adds nothing.
+  # Every job below waits for this one; it runs only on the schedule.
+  nightly-gate:
+    name: Nightly gate
+    if: github.event_name == 'schedule'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+
+    steps:
+      # A successful earlier nightly or manual run means every job, the full suite included,
+      # passed on this commit. A push run doesn't count: it runs PR checks only. If GitHub
+      # can't be asked, the nightly run goes ahead.
+      - name: Skip when main's commit already passed the full suite
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          workflow="${GITHUB_WORKFLOW_REF%@*}"
+          workflow="${workflow##*/}"
+          query="repos/$GITHUB_REPOSITORY/actions/workflows/$workflow/runs?head_sha=$GITHUB_SHA&status=success&per_page=100"
+          filter='[.workflow_runs[] | select(.event == "schedule" or .event == "workflow_dispatch")] | length'
+          if passed=$(gh api "$query" --jq "$filter"); then
+            if [ "${passed:-0}" -gt 0 ]; then
+              echo "run=false" >> "$GITHUB_OUTPUT"
+              echo "::notice title=Nightly run skipped::$GITHUB_SHA already passed the full suite in $passed earlier run(s)."
+            else
+              echo "run=true" >> "$GITHUB_OUTPUT"
+              echo "$GITHUB_SHA has no successful full run yet, so this nightly run tests it."
+            fi
+          else
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Nightly gate::Could not list this workflow's runs, so this nightly run tests $GITHUB_SHA anyway."
+          fi
+
+  # verify, unit-time-zones and playwright are the full suite. Each repeats one condition:
+  # a nightly run the gate let through; a manual run; or a pull request labelled full-ci,
+  # when the label is added and on each push after that (adding another label doesn't rerun
+  # them). A push to main never runs them.
+  verify:
+    needs: nightly-gate
+    if: >-
+      !cancelled() && (
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'schedule' && needs.nightly-gate.outputs.run == 'true') ||
+        (github.event_name == 'pull_request' &&
+          contains(github.event.pull_request.labels.*.name, 'full-ci') &&
+          (github.event.action != 'labeled' || github.event.label.name == 'full-ci'))
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
 
     defaults:
       run:
@@ -83,12 +177,22 @@ jobs:
             apps/web/output/playwright/auth-recovery/
           retention-days: 7
 
-  # Unit tests give the same result in every time zone (#227). verify runs them
-  # in UTC; this matrix repeats them on both sides of the date line. None of these
+  # Unit tests give the same result in every time zone (#227). PR checks and verify run
+  # them in UTC; this matrix repeats them on both sides of the date line. None of these
   # zones observes daylight saving time, so each offset holds all year.
   unit-time-zones:
     name: Unit tests (${{ matrix.tz }})
+    needs: nightly-gate
+    if: >-
+      !cancelled() && (
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'schedule' && needs.nightly-gate.outputs.run == 'true') ||
+        (github.event_name == 'pull_request' &&
+          contains(github.event.pull_request.labels.*.name, 'full-ci') &&
+          (github.event.action != 'labeled' || github.event.label.name == 'full-ci'))
+      )
     runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     strategy:
       fail-fast: false
@@ -116,14 +220,20 @@ jobs:
         env:
           TZ: ${{ matrix.tz }}
 
+  # PR checks is the one check branch protection requires: keep its name. It runs on every
+  # event, so each push to main is checked merged, and the nightly run gets it too (nothing
+  # else formats or runs the verifiers).
+  #
   # The mobile verify:* scripts drive the real mobile controller over HTTP against a
   # fictional backend of this run's own (#228). tools/swarm starts it on the job's Mongo
   # service, with a fresh splitbook_mobile_swarm_* database and the fictional seed, and
   # serves a production build, so no route compiles while a verifier waits. verify:all
   # runs every verifier one after another, never two at once: several assume they are
   # the only ones using Sam on their backend. Their order doesn't matter.
-  mobile-verifiers:
-    name: Mobile HTTP verifiers
+  pr-checks:
+    name: PR checks
+    needs: nightly-gate
+    if: ${{ !cancelled() && (github.event_name != 'schedule' || needs.nightly-gate.outputs.run == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -135,6 +245,32 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # A pull request is checked out merged into its base; depth 2 brings the base too.
+          fetch-depth: 2
+
+      # The merge commit's first parent is the base, so this lists what merging would change.
+      # --no-renames lists a moved file under both names, so moving code into docs/ counts as
+      # a code change. Anything unexpected leaves docs_only false, and every check runs.
+      - name: Find what this pull request changes
+        id: changes
+        if: github.event_name == 'pull_request'
+        run: |
+          docs_only=false
+          if git rev-parse --verify --quiet 'HEAD^2' > /dev/null && changed=$(git diff --name-only --no-renames 'HEAD^1' HEAD); then
+            printf 'Changed files:\n%s\n' "$changed"
+            docs_only=true
+            while IFS= read -r path; do
+              case "$path" in
+                docs/* | .claude/* | *.md) ;;
+                *) docs_only=false ;;
+              esac
+            done <<< "$changed"
+          fi
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          if [ "$docs_only" = true ]; then
+            echo "::notice title=Docs-only pull request::Only Markdown, docs/ or .claude/ files changed, so PR checks runs the format check only."
+          fi
 
       - uses: pnpm/action-setup@v4
 
@@ -146,9 +282,33 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Prettier formats Markdown and the docs/ mockups too, so docs-only changes run it.
+      - name: Format check (workspace)
+        run: pnpm format:check
+
+      - name: Lint (workspace)
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm lint
+
+      - name: Typecheck (workspace)
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm typecheck
+
+      - name: Adopted design-system style policy
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm web check:design-system
+
+      - name: Unit tests in UTC (workspace)
+        if: steps.changes.outputs.docs_only != 'true'
+        run: pnpm test:unit
+        env:
+          TZ: UTC
+
       # up prints MOBILE_VERIFY_URL and the backend's SPLITBOOK_NATIVE_* variables as
       # NAME=value lines; the later steps get them through GITHUB_ENV.
       - name: Start this run's backend (tools/swarm, production build)
+        id: backend
+        if: steps.changes.outputs.docs_only != 'true'
         shell: bash
         timeout-minutes: 15
         run: |
@@ -157,7 +317,8 @@ jobs:
 
       # verify:all runs each verifier even after one fails, then prints a PASS or FAIL
       # line for each; every FAIL also becomes an annotation that names the verifier.
-      - name: Run every verifier, one after another
+      - name: Run every mobile HTTP verifier, one after another
+        if: steps.changes.outputs.docs_only != 'true'
         shell: bash
         timeout-minutes: 20
         env:
@@ -171,7 +332,7 @@ jobs:
           exit "$status"
 
       - name: Upload the backend log
-        if: failure()
+        if: failure() && steps.backend.outcome != 'skipped'
         uses: actions/upload-artifact@v4
         with:
           name: mobile-verifier-backend-log
@@ -179,11 +340,21 @@ jobs:
           retention-days: 7
 
       - name: Stop the backend and drop its database
-        if: always()
+        if: always() && steps.backend.outcome != 'skipped'
         run: pnpm swarm down --mongo-port 27017
 
   playwright:
+    needs: nightly-gate
+    if: >-
+      !cancelled() && (
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'schedule' && needs.nightly-gate.outputs.run == 'true') ||
+        (github.event_name == 'pull_request' &&
+          contains(github.event.pull_request.labels.*.name, 'full-ci') &&
+          (github.event.action != 'labeled' || github.event.label.name == 'full-ci'))
+      )
     runs-on: ubuntu-latest
+    timeout-minutes: 40
 
     defaults:
       run:
