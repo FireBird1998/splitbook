@@ -83,12 +83,14 @@ describe('up', () => {
     const [seed, start] = world.launches;
     expect(seed?.args).toEqual([join(root, 'apps/mobile/scripts/dev-backend/seed.mjs')]);
     expect(start?.args).toEqual([join(root, 'apps/mobile/scripts/dev-backend/start.mjs')]);
-    for (const launch of [seed, start]) {
-      expect(launch?.env).toMatchObject(variables);
-      expect(Object.keys(launch?.env ?? {}).sort()).toEqual(
-        ['PATH', ...Object.keys(variables)].sort(),
-      );
-    }
+    expect(seed?.env).toEqual({ PATH: process.env.PATH ?? '', ...variables });
+    // start.mjs also learns how to serve the web app: next dev unless asked otherwise.
+    expect(start?.env).toEqual({
+      PATH: process.env.PATH ?? '',
+      ...variables,
+      SPLITBOOK_NATIVE_SERVER: 'dev',
+    });
+    expect(backend.server).toBe('dev');
     expect(world.lines).toContain('MOBILE_VERIFY_URL=http://127.0.0.1:53001');
     expect(world.lines).toContain('SPLITBOOK_NATIVE_ORIGIN_PORT=53001');
     expect(world.lines).toContain(`SPLITBOOK_NATIVE_DATABASE=${backend.database}`);
@@ -100,6 +102,70 @@ describe('up', () => {
       processStart: `started ${backend.pid}`,
     });
     expect(existsSync(lockPath(root))).toBe(false);
+  });
+
+  it('starts a production build when asked, with the same safety rules', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+
+    const { backend } = await upIn(world, { root, server: 'production', mongoPort: 27017 });
+
+    const [seed, start] = world.launches;
+    expect(seed?.env).not.toHaveProperty('SPLITBOOK_NATIVE_SERVER');
+    expect(start?.env).toEqual({
+      PATH: process.env.PATH ?? '',
+      SPLITBOOK_NATIVE_ORIGIN_PORT: '53001',
+      SPLITBOOK_NATIVE_DATABASE: backend.database,
+      SPLITBOOK_NATIVE_MONGO_PORT: '27017',
+      SPLITBOOK_NATIVE_SERVER: 'production',
+    });
+    expect(backend.database.startsWith(worktreePrefix(root))).toBe(true);
+    expect(readBackend(root)).toMatchObject({ server: 'production', mongoPort: 27017 });
+    expect(world.lines).toContain(
+      'Building the web app for production, then starting the backend at http://127.0.0.1:53001',
+    );
+    expect(world.lines.some((line) => /production build included\.$/.test(line))).toBe(true);
+    // The variables the verifiers and controls get are the same as for next dev.
+    expect(world.lines).toContain('SPLITBOOK_NATIVE_MONGO_PORT=27017');
+    expect(world.lines.some((line) => line.startsWith('SPLITBOOK_NATIVE_SERVER='))).toBe(false);
+  });
+
+  it.each(['prod', 'Production', 'start', ''])(
+    'refuses the server %j and changes nothing',
+    async (server) => {
+      const world = fakeWorld();
+      const error = await upFailure(world, { root: fixtureWorktree(), server });
+      expect(error._tag).toBe('Refused');
+      expect(error.message).toMatch(/dev \(next dev\) or production/);
+      expect(world.launches).toEqual([]);
+    },
+  );
+
+  it('refuses to switch a running backend to another server, and leaves it running', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+    const first = await upIn(world, { root });
+
+    const error = await upFailure(world, { root, server: 'production' });
+
+    expect(error.message).toMatch(/already up .*\(dev\)\. Run pnpm swarm down first/);
+    expect(world.stopped).toEqual([]);
+    expect(world.running.has(first.backend.pid ?? -1)).toBe(true);
+    // Asking for the mode it already runs in reuses it.
+    expect((await upIn(world, { root, server: 'dev' })).reused).toBe(true);
+  });
+
+  it('reads a record from before production builds as a dev backend', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+    const first = await upIn(world, { root });
+    const older: Record<string, unknown> = { ...readBackend(root) };
+    delete older.server;
+    recordBackend(root, older);
+
+    const again = await upIn(world, { root, server: 'dev' });
+    expect(again).toMatchObject({ reused: true, backend: { origin: first.backend.origin } });
+    expect(again.backend.server).toBeUndefined();
   });
 
   it('gives two worktrees different ports and databases', async () => {

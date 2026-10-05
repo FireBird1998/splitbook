@@ -82,6 +82,7 @@ const program = (
             database: { type: 'string' },
             'mongo-port': { type: 'string' },
             'ready-timeout': { type: 'string' },
+            server: { type: 'string' },
             base: { type: 'string' },
             'vitest-workers': { type: 'string' },
             'step-timeout': { type: 'string' },
@@ -108,6 +109,7 @@ const program = (
         database: values.database ?? env.SPLITBOOK_NATIVE_DATABASE,
         mongoPort,
         readyTimeout,
+        server: values.server ?? env.SPLITBOOK_NATIVE_SERVER,
       });
       return 0;
     }

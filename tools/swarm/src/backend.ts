@@ -19,7 +19,7 @@
  *   ownership marker.
  *
  * The backend's own scripts keep refusing .env files and build the server's environment
- * themselves; this module passes them only PATH and the three SPLITBOOK_NATIVE_* variables.
+ * themselves; this module passes them only PATH and the SPLITBOOK_NATIVE_* variables.
  */
 import { randomBytes } from 'node:crypto';
 import {
@@ -73,6 +73,14 @@ export const fetchBlockedPorts: ReadonlySet<number> = new Set([
 /** Better Auth's health route: it answers once the server has compiled the auth route. */
 const readinessPath = '/api/auth/ok';
 const defaultReadyTimeout: Duration.Input = '3 minutes';
+
+/**
+ * How start.mjs serves the web app (its SPLITBOOK_NATIVE_SERVER): `next dev`, or a
+ * production build for the backend's origin, then `next start`. The build counts toward
+ * the ready timeout.
+ */
+export type ServerMode = 'dev' | 'production';
+const serverModes: readonly string[] = ['dev', 'production'] satisfies ServerMode[];
 const defaultSeedTimeout: Duration.Input = '2 minutes';
 
 export interface Backend {
@@ -89,6 +97,8 @@ export interface Backend {
   readonly processStart: string | undefined;
   /** Seconds from start to the first answer; undefined until it answers. */
   readonly readySeconds: number | undefined;
+  /** Missing in a record from before production builds, which means dev. */
+  readonly server?: ServerMode;
 }
 
 export interface UpOptions {
@@ -101,6 +111,8 @@ export interface UpOptions {
   readonly mongoPort?: number | undefined;
   readonly readyTimeout?: Duration.Input | undefined;
   readonly seedTimeout?: Duration.Input | undefined;
+  /** `dev` (the default) or `production`. */
+  readonly server?: string | undefined;
 }
 
 export interface DownOptions {
@@ -381,10 +393,15 @@ interface Plan {
   readonly mongoPort: number;
   readonly database: string;
   readonly port: number | undefined;
+  readonly server: ServerMode;
 }
 
 /** Checks the requested target before anything connects, starts or stops. */
 function plan(options: UpOptions): Plan | string {
+  const server = options.server ?? 'dev';
+  if (!serverModes.includes(server)) {
+    return `Refusing server ${server}: the backend runs as dev (next dev) or production (a production build).`;
+  }
   const mongoPort = options.mongoPort ?? defaultMongoPort;
   const mongoRefusal = mongoPortRefusal(mongoPort);
   if (mongoRefusal) return mongoRefusal;
@@ -392,9 +409,10 @@ function plan(options: UpOptions): Plan | string {
     options.database ?? `${worktreePrefix(options.root)}${randomBytes(4).toString('hex')}`;
   const nameRefusal = databaseRefusal(database, options.root);
   if (nameRefusal) return nameRefusal;
-  if (options.origin === undefined) return { mongoPort, database, port: undefined };
+  const target = { mongoPort, database, server: server as ServerMode };
+  if (options.origin === undefined) return { ...target, port: undefined };
   const port = requestedPort(options.origin, mongoPort);
-  return typeof port === 'string' ? port : { mongoPort, database, port };
+  return typeof port === 'string' ? port : { ...target, port };
 }
 
 /**
@@ -431,7 +449,7 @@ const launch = (options: UpOptions, target: Plan) =>
     const databases = yield* Databases;
     const network = yield* Network;
     const output = yield* Output;
-    const { mongoPort, database } = target;
+    const { mongoPort, database, server } = target;
 
     let port: number;
     if (target.port === undefined) {
@@ -468,7 +486,8 @@ const launch = (options: UpOptions, target: Plan) =>
       command: process.execPath,
       args: [backendScript(root, name)],
       cwd: root,
-      env,
+      // Only start.mjs serves the web app; the seed runs the same either way.
+      env: name === 'start.mjs' ? { ...env, SPLITBOOK_NATIVE_SERVER: server } : env,
       log,
     });
     const started = Date.now();
@@ -482,6 +501,7 @@ const launch = (options: UpOptions, target: Plan) =>
       pid: undefined,
       processStart: undefined,
       readySeconds: undefined,
+      server,
     };
     // Recorded before anything is created, so `down` knows the database and its Mongo port
     // even if this process dies.
@@ -518,7 +538,11 @@ const launch = (options: UpOptions, target: Plan) =>
           );
         }
 
-        yield* output.line(`Starting the backend at ${origin}`);
+        yield* output.line(
+          server === 'production'
+            ? `Building the web app for production, then starting the backend at ${origin}`
+            : `Starting the backend at ${origin}`,
+        );
         const startedBackend = Date.now();
         const child = yield* Effect.acquireRelease(
           processes
@@ -573,7 +597,7 @@ const announce = (backend: Backend, reused: boolean) =>
     yield* output.line(
       reused
         ? `This worktree's backend is already up at ${backend.origin}.`
-        : `The backend is ready at ${backend.origin} after ${backend.readySeconds} s.`,
+        : `The backend is ready at ${backend.origin} after ${backend.readySeconds} s${backend.server === 'production' ? ', production build included' : ''}.`,
     );
     yield* output.line(`Log ${backend.log}`);
     yield* output.line(
@@ -641,12 +665,14 @@ export const up = (
       Effect.gen(function* () {
         const existing = yield* reuseOrClean(options);
         if (existing) {
+          const existingServer = existing.server ?? 'dev';
           if (
             (options.origin !== undefined && options.origin !== existing.origin) ||
-            (options.database !== undefined && options.database !== existing.database)
+            (options.database !== undefined && options.database !== existing.database) ||
+            (options.server !== undefined && options.server !== existingServer)
           ) {
             return yield* refuse(
-              `This worktree's backend is already up at ${existing.origin} on ${existing.database}. Run pnpm swarm down first.`,
+              `This worktree's backend is already up at ${existing.origin} on ${existing.database} (${existingServer}). Run pnpm swarm down first.`,
             );
           }
           yield* announce(existing, true);

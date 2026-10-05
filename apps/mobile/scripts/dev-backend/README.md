@@ -38,6 +38,8 @@ Each worktree can run its own backend, so several worktrees can run the verifier
 
 An invalid value is refused before anything connects. Without the variables, the backend is the default one above.
 
+`SPLITBOOK_NATIVE_SERVER` chooses how `start.mjs` serves the web app: `dev` (the default) runs `next dev`; `production` first builds the web app for the backend's origin, then serves it with `next start`, with `ALLOW_DEMO_AUTH=true` so the fictional personas can sign in. Next bakes the origin into the build, so every production start builds again. CI runs the verifiers against a production backend. Only `start.mjs` reads this variable; seed and the controls don't.
+
 1. Pick a port and a database name that no other worktree uses. The ticket number makes a good pair: port `4186` and database `splitbook_mobile_186` for #186.
 2. Seed, then start, with both variables on each command:
 

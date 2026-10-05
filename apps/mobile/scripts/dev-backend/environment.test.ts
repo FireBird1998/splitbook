@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { backendTarget } from './environment.mjs';
+import { backendTarget, serverMode } from './environment.mjs';
 
 // isolatedEnv() refuses root and web .env files. A developer checkout may have them,
 // and these tests are not about them.
@@ -127,5 +127,52 @@ describe('the environment the backend scripts give their child processes', () =>
     // The child resolves its target from that environment, and must not fall back to
     // the default database.
     expect(backendTarget(await childEnvironment(chosen))).toEqual(backendTarget(chosen));
+  });
+});
+
+describe('how start.mjs serves the web app', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  async function serverEnvironment(mode: 'dev' | 'production') {
+    vi.stubEnv('SPLITBOOK_NATIVE_ORIGIN_PORT', '4188');
+    vi.stubEnv('SPLITBOOK_NATIVE_DATABASE', 'splitbook_mobile_188');
+    vi.stubEnv('SPLITBOOK_NATIVE_MONGO_PORT', '27017');
+    vi.resetModules();
+    const { isolatedEnv, serverEnv } = await import('./environment.mjs');
+    return { isolated: isolatedEnv(), server: serverEnv(mode) };
+  }
+
+  it('defaults to next dev and accepts a production build', () => {
+    expect(serverMode({})).toBe('dev');
+    expect(serverMode({ SPLITBOOK_NATIVE_SERVER: 'dev' })).toBe('dev');
+    expect(serverMode({ SPLITBOOK_NATIVE_SERVER: 'production' })).toBe('production');
+  });
+
+  it.each(['', 'prod', 'Production', 'start', 'production '])(
+    'refuses the server mode %j',
+    (value) => {
+      expect(() => serverMode({ SPLITBOOK_NATIVE_SERVER: value })).toThrow(
+        /^SPLITBOOK_NATIVE_SERVER must be dev or production/,
+      );
+    },
+  );
+
+  it('gives next dev the isolated development environment', async () => {
+    const { isolated, server } = await serverEnvironment('dev');
+    expect(server).toEqual(isolated);
+    expect(server.NODE_ENV).toBe('development');
+    expect(server).not.toHaveProperty('ALLOW_DEMO_AUTH');
+  });
+
+  it('gives a production server the same backend, with demo personas allowed in production', async () => {
+    const { isolated, server } = await serverEnvironment('production');
+    expect(server).toEqual({ ...isolated, NODE_ENV: 'production', ALLOW_DEMO_AUTH: 'true' });
+    expect(server.NEXT_PUBLIC_APP_URL).toBe('http://127.0.0.1:4188');
+    expect(server.MONGODB_URI).toBe(
+      'mongodb://127.0.0.1:27017/splitbook_mobile_188?directConnection=true',
+    );
   });
 });

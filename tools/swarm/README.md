@@ -46,6 +46,7 @@ When this worktree's backend is already up and answering, `up` prints it again i
 | `--database` (or `SPLITBOOK_NATIVE_DATABASE`)          | a fresh name             | this worktree's prefix, then `[a-z0-9_]`, 63 characters at most                      |
 | `--mongo-port` (or `SPLITBOOK_NATIVE_MONGO_PORT`)      | `27018`                  | the local Mongo server's port                                                        |
 | `--ready-timeout <seconds>`                            | 180                      |                                                                                      |
+| `--server` (or `SPLITBOOK_NATIVE_SERVER`)              | `dev`                    | `dev` (`next dev`) or `production` (a production build, then `next start`)           |
 
 #185's variables, when set, are requests like the flags: they are checked, never trusted. `up` refuses, before anything connects or starts:
 
@@ -56,7 +57,9 @@ When this worktree's backend is already up and answering, `up` prints it again i
 
 A backend that never answers fails `up` after the timeout with a clear error; the backend is stopped and its database dropped. Ctrl-C (or SIGTERM) while `up` runs does the same. If that drop fails, `up` says so and keeps the record, so `pnpm swarm down` can finish it.
 
-The backend's own scripts keep their rules: they refuse root and `apps/web` `.env` files, accept only loopback Mongo and `splitbook_mobile_*` names, and claim a database with the fictional ownership marker. The tool passes them only `PATH` and the three variables above; it never reads `.env` files, `MONGODB_URI` or any credential.
+The backend's own scripts keep their rules: they refuse root and `apps/web` `.env` files, accept only loopback Mongo and `splitbook_mobile_*` names, and claim a database with the fictional ownership marker. The tool passes them only `PATH` and the three variables above, plus `SPLITBOOK_NATIVE_SERVER` to `start.mjs`; it never reads `.env` files, `MONGODB_URI` or any credential.
+
+**`--server production`** makes `start.mjs` build the web app for the backend's origin, then serve it with `next start` and `ALLOW_DEMO_AUTH=true`, as CI does. Next bakes the origin into the build, so each production `up` builds again, in `apps/web/.next`. The build counts toward the ready timeout and takes about 30 s on this machine when it is quiet (below), so raise `--ready-timeout` on a slow or busy machine. The default, `dev`, runs `next dev`. `up` refuses to switch a running backend to the other server; run `pnpm swarm down` first.
 
 ## `pnpm swarm down`
 
