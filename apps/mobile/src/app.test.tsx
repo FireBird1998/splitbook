@@ -507,6 +507,48 @@ describe('App Settings sign-out', () => {
     expect(panel).toContain(advice);
     expect(advice).toContain('If a save was interrupted');
   });
+
+  it('offers Try again and Continue, and no account, when the server doesn’t confirm (#202)', async () => {
+    const app = await renderApp();
+    const revokes: (string | null)[] = [];
+    let answer = 503;
+    app.use((path, init) => {
+      if (path !== '/api/auth/sign-out') return undefined;
+      revokes.push(new Headers(init.headers).get('Cookie'));
+      return json({ success: answer === 200 }, answer);
+    });
+    await app.press('Account and settings');
+    await app.press('Sign out');
+    const [, , buttons] = vi.mocked(Alert.alert).mock.calls.at(-1)!;
+    await settle(
+      Promise.resolve(buttons!.find((button) => button.text === 'Sign out')!.onPress!()),
+    );
+    expect(app.text()).toContain('Couldn’t sign out of the server');
+    expect(app.text()).not.toContain('Sam Chen');
+    expect(app.text()).not.toContain('Maple House');
+    expect(revokes).toEqual(['better-auth.session_token=test.signature']);
+
+    await app.press('Try again');
+    expect(revokes).toHaveLength(2);
+    expect(app.text()).toContain('Couldn’t sign out of the server');
+
+    await app.press('Continue');
+    expect(revokes).toHaveLength(2);
+    expect(app.text()).not.toContain('Couldn’t sign out of the server');
+    expect(app.text()).toContain('Shared expenses.');
+    expect(app.text()).not.toContain('Maple House');
+
+    // The next restore revokes the kept cookie, and the sign-in screen stays.
+    answer = 200;
+    await settle(app.controller.restore());
+    expect(revokes).toEqual([
+      'better-auth.session_token=test.signature',
+      'better-auth.session_token=test.signature',
+      'better-auth.session_token=test.signature',
+    ]);
+    expect(app.text()).toContain('Shared expenses.');
+    expect(app.text()).not.toContain('Couldn’t sign out of the server');
+  });
 });
 
 describe('App Group being created', () => {

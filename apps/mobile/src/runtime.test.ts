@@ -36,4 +36,17 @@ describe('runtime storage wiring', () => {
       dependencies[name],
     );
   });
+
+  it('records a sign-out outside SecureStore, and never purges that record with the account (#202)', () => {
+    const accountLocal = wired.dependencies!.accountLocal as {
+      signOutRecord?: object;
+      stores: unknown[];
+    };
+    expect(accountLocal.signOutRecord).toMatchObject({
+      load: expect.any(Function),
+      mark: expect.any(Function),
+      clear: expect.any(Function),
+    });
+    expect(accountLocal.stores).not.toContain(accountLocal.signOutRecord);
+  });
 });

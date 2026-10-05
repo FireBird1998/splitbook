@@ -266,9 +266,19 @@ export interface MobileSnapshot {
   /**
    * `restoring` with a user is the cold-start check: the saved Home of the account that last
    * signed in on this device is shown, and nothing is sent until the session is confirmed.
+   *
+   * `sign-out-unconfirmed`: this device is signed out, but the server hasn't confirmed revoking
+   * the session. Nothing of the account shows; Try again re-sends the revoke (`restore`), and
+   * Continue (`continueSignedOut`) sends nothing more.
    */
   auth: {
-    status: 'restoring' | 'signed-out' | 'signing-in' | 'authenticated' | 'error';
+    status:
+      | 'restoring'
+      | 'signed-out'
+      | 'signing-in'
+      | 'authenticated'
+      | 'error'
+      | 'sign-out-unconfirmed';
     user: SessionUser | null;
     message: string | null;
   };
@@ -362,10 +372,25 @@ export interface AccountLocalStorage {
     save(accountId: string): Promise<void>;
     clear(): Promise<void>;
   };
-  /** Backend-scoped tombstone: a restart must finish cleanup before restoring a session. */
+  /**
+   * Backend-scoped tombstone: a restart must finish cleanup before restoring a session. While it
+   * is set, the saved session cookie is only ever sent to revoke it, and stays until the server
+   * confirms that.
+   */
   cleanupMarker: {
     load(): Promise<boolean>;
     mark(): Promise<void>;
+    clear(): Promise<void>;
+  };
+  /**
+   * The same tombstone for a sign-out, kept outside SecureStore (the account-record database), so
+   * a restart still finishes the sign-out when SecureStore failed to write the marker or to clear
+   * the cookie. Never one of `stores`: the purge must not remove it. `invitationCleared`: that
+   * sign-out has already cleared the saved invitation, so a retry keeps one opened since.
+   */
+  signOutRecord?: {
+    load(): Promise<{ invitationCleared: boolean } | null>;
+    mark(record: { invitationCleared: boolean }): Promise<void>;
     clear(): Promise<void>;
   };
   /** Register at startup. Each store clears all its account keys for this backend. */

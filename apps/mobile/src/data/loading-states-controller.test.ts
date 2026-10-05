@@ -121,6 +121,8 @@ function fixture() {
       return json({ status: 201, data: made }, 201);
     }
     if (path === '/api/groups') return json({ status: 200, data: listed() });
+    // As Better Auth does: 200, even for a session already gone (#202).
+    if (path === '/api/auth/sign-out' && init.method === 'POST') return json({ success: true });
     if (path === '/api/user/balances')
       return json({
         status: 200,

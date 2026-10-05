@@ -216,6 +216,9 @@ const storageMessage = 'Could not safely save your session. Please try signing i
 const unrestorableMessage = 'Your saved session could not be restored. Please sign in again.';
 const keptUntilConfirmedMessage = 'Your saved data is kept. Connect once to confirm your session.';
 const disabledMessage = 'Development persona sign-in is disabled in this build.';
+/** Shown with Try again and Continue while the server hasn't confirmed revoking a session. */
+const unconfirmedSignOut =
+  'This device is signed out, but the server didn’t confirm that the session ended. Try again, or continue signed out.';
 
 class Superseded extends Error {}
 class AccountCleanupError extends Error {
@@ -456,6 +459,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let accountQueue: Promise<unknown> = Promise.resolve();
   let cleanupMarkerQueue: Promise<unknown> = Promise.resolve();
   let cleanupSequence = 0;
+  /**
+   * A session cookie this device has given up but the server hasn't confirmed revoking. It is
+   * only ever sent to `/api/auth/sign-out`, survives a new generation, and goes once the server
+   * confirms, on Continue, or after sign-in has sent it once.
+   */
+  let revoking: string | null = null;
+  /**
+   * The pending sign-out has already cleared the saved invitation, so a retry keeps one opened
+   * since, for whoever signs in next. Kept in the sign-out record too, for a restart.
+   */
+  let invitationCleared = false;
   let pendingCode: string | null = null;
   let pendingLoaded = false;
   let creationRecovery: { ownerId: string; creation: GroupCreation } | null = null;
@@ -584,23 +598,96 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     };
   };
 
-  const clearAccount = (owner: number, mode: 'sign-out' | 'account-change') => {
+  /** The session cookie in the saved session, or null when there is none to send. */
+  const savedCookie = async (owner: number) => {
+    const saved = await store(owner, () => dependencies.credentials.load());
+    return saved ? (decodeStoredSession(saved, secureTransport)?.cookie ?? null) : null;
+  };
+
+  /**
+   * Revokes a session this device has given up, with its cookie: the one kept in `revoking`, or
+   * else the saved one. It goes only to `/api/auth/sign-out`, and `request` sends nothing to a
+   * backend that fails the Google check. Once the server confirms (2xx) the saved cookie is
+   * cleared; otherwise it stays for a retry, unless `once` (sign-in sends a pending revoke once,
+   * whatever the answer). Resolves whether anything is left to revoke.
+   */
+  const revokeSession = async (owner: number, once = false) => {
+    revoking ??= await savedCookie(owner);
+    const target = revoking;
+    if (!target) return true;
+    let confirmed = false;
+    try {
+      await request('/api/auth/sign-out', owner, {
+        method: 'POST',
+        body: {},
+        sessionCookie: target,
+        logout: true,
+      });
+      confirmed = true;
+    } catch (error) {
+      if (error instanceof Superseded) throw error;
+    }
+    if (!confirmed && !once) return false;
+    if (revoking === target) revoking = null;
+    await clearSaved(owner);
+    return true;
+  };
+
+  /**
+   * Purges account-local data. A sign-out also revokes its session alongside the purge, so a
+   * failed purge never skips the revoke and a slow revoke never delays the purge. The cleanup
+   * marker is cleared only once both are done. Rejects with AccountCleanupError when anything
+   * local fails; otherwise resolves whether the server confirmed the revoke (see `revokeSession`).
+   */
+  const clearAccount = (owner: number, mode: 'sign-out' | 'account-change', once = false) => {
     accountCleanupRequired = true;
     const cleanupId = ++cleanupSequence;
-    // Persist logout intent and remove credentials before waiting for an older
-    // financial write. A terminated process must not leave a restorable account.
+    // A retry keeps an invitation opened since the sign-out first cleared it.
+    const clearsInvitation = mode === 'sign-out' && !invitationCleared;
+    // Persist logout intent before waiting for an older financial write, and before the saved
+    // cookie can go. A terminated process must not leave a restorable account.
     const marking = cleanupMarkerQueue
       .catch(() => undefined)
       .then(async () => {
         assertCurrent(owner);
-        await dependencies.accountLocal?.cleanupMarker.mark();
+        const [marker] = await Promise.allSettled([
+          dependencies.accountLocal?.cleanupMarker.mark(),
+          ...(mode === 'sign-out'
+            ? [dependencies.accountLocal?.signOutRecord?.mark({ invitationCleared })]
+            : []),
+        ]);
+        if (marker.status === 'rejected') throw marker.reason;
       });
     cleanupMarkerQueue = marking;
+    // The marker keeps the saved cookie until the server confirms. Without it the cookie can't
+    // wait: it goes at once (the sign-out record still blocks a restore if that fails too), and
+    // the revoke is sent from memory.
+    const revoked =
+      mode === 'sign-out'
+        ? marking
+            .then(
+              () => Boolean(dependencies.accountLocal),
+              () => false,
+            )
+            .then(async (kept) => {
+              if (!kept) {
+                revoking ??= await savedCookie(owner);
+                await Promise.allSettled([clearSaved(owner)]);
+              }
+              return revokeSession(owner, once);
+            })
+        : Promise.resolve(true);
     const immediate = Promise.allSettled([
       marking,
-      ...(mode === 'sign-out' ? [clearSaved(owner), savePending(null)] : []),
+      ...(clearsInvitation
+        ? [
+            savePending(null).then(() => {
+              invitationCleared = true;
+            }),
+          ]
+        : []),
     ]);
-    return queueAccount(async () => {
+    const purged = queueAccount(async () => {
       assertCurrent(owner);
       const cleanup = await Promise.allSettled([
         Promise.resolve().then(() => dependencies.accountLocal?.owner.clear()),
@@ -609,9 +696,37 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ) ?? []),
       ]);
       if ([...(await immediate), ...cleanup].some((result) => result.status === 'rejected')) {
-        if (mode === 'account-change') await Promise.allSettled([clearSaved(owner)]);
+        if (mode === 'account-change') {
+          // The new account's session goes too: revoked first, then its saved cookie cleared.
+          if (cookie) revoking = cookie;
+          if (!(await revokeSession(owner).catch(() => false)))
+            await Promise.allSettled([clearSaved(owner)]);
+        }
         throw new AccountCleanupError();
       }
+    });
+    return Promise.allSettled([purged, revoked]).then(async (results) => {
+      const [purge, revoke] = results;
+      const done = purge.status === 'fulfilled' && revoke.status === 'fulfilled' && revoke.value;
+      // A sign-out left pending records that its invitation is cleared, so a restart keeps one
+      // opened since. Never after a newer cleanup, which may have finished the sign-out.
+      if (!done && clearsInvitation && invitationCleared) {
+        const recording = cleanupMarkerQueue
+          .catch(() => undefined)
+          .then(async () => {
+            assertCurrent(owner);
+            if (cleanupId !== cleanupSequence) throw new Superseded();
+            await dependencies.accountLocal?.signOutRecord?.mark({ invitationCleared: true });
+          });
+        cleanupMarkerQueue = recording;
+        await Promise.allSettled([recording]);
+      }
+      for (const result of results)
+        if (result.status === 'rejected') {
+          if (result.reason instanceof Superseded) throw result.reason;
+          throw new AccountCleanupError();
+        }
+      if (!done) return false;
       try {
         assertCurrent(owner);
         const clearing = cleanupMarkerQueue
@@ -619,32 +734,65 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           .then(async () => {
             assertCurrent(owner);
             if (cleanupId !== cleanupSequence) throw new Superseded();
-            await dependencies.accountLocal?.cleanupMarker.clear();
-            if (cleanupId === cleanupSequence) accountCleanupRequired = false;
+            await Promise.all([
+              dependencies.accountLocal?.cleanupMarker.clear(),
+              ...(mode === 'sign-out' ? [dependencies.accountLocal?.signOutRecord?.clear()] : []),
+            ]);
+            if (cleanupId === cleanupSequence) {
+              accountCleanupRequired = false;
+              invitationCleared = false;
+            }
           });
         cleanupMarkerQueue = clearing;
         await clearing;
       } catch {
         throw new AccountCleanupError();
       }
+      return true;
     });
   };
 
-  const finishAccountCleanup = async (owner: number) => {
+  /**
+   * Before a restore or sign-in, finishes a sign-out this device hasn't: one recorded on disk
+   * (the cleanup marker or the sign-out record) or still running here, purging and revoking as
+   * sign-out does; or else a revoke kept only in memory, with nothing to purge. Resolves false
+   * while the server hasn't confirmed the revoke. `once` (sign-in) sends it once regardless.
+   */
+  const finishSignOut = async (owner: number, once = false) => {
     try {
-      const pending = await dependencies.accountLocal?.cleanupMarker.load();
+      const [marked, recorded] = await Promise.all([
+        dependencies.accountLocal?.cleanupMarker.load(),
+        // A sign-out record this device can't read blocks nothing: the marker is the main record.
+        dependencies.accountLocal?.signOutRecord?.load().catch(() => null),
+      ]);
       assertCurrent(owner);
-      if (pending || accountCleanupRequired) await clearAccount(owner, 'sign-out');
+      if (recorded?.invitationCleared) invitationCleared = true;
+      if (marked || recorded || accountCleanupRequired)
+        return await clearAccount(owner, 'sign-out', once);
+      return revoking ? await revokeSession(owner, once) : true;
     } catch (error) {
       if (error instanceof Superseded) throw error;
       throw new AccountCleanupError();
     }
   };
 
+  /** The server hasn't confirmed revoking a session: nothing of an account, and Try again. */
+  const showUnconfirmedSignOut = (owner: number) => {
+    if (!current(owner)) return;
+    const cleared = cleanSnapshot({
+      status: 'sign-out-unconfirmed',
+      user: null,
+      message: unconfirmedSignOut,
+    });
+    publish({ ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
+  };
+
   const failSession = async (
     owner: number,
     message: string,
     status: 'signed-out' | 'error' = 'signed-out',
+    /** A session cookie this device couldn't keep: revoked from memory before the clear. */
+    unsaved: string | null = null,
   ) => {
     if (!current(owner)) return;
     if (snapshot.auth.user && (snapshot.creation.draft.name || snapshot.screen === 'create')) {
@@ -665,6 +813,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const next = invalidate();
     const cleared = cleanSnapshot({ status, user: null, message });
     publish({ ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
+    let confirmed = true;
+    if (unsaved) {
+      revoking = unsaved;
+      // Superseded: the restore or sign-in that replaced this sends it. A failed clear shows below.
+      confirmed = await revokeSession(next).catch(() => true);
+    }
     try {
       await clearSaved(next);
     } catch {
@@ -677,7 +831,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           }),
         );
       }
+      return;
     }
+    if (!confirmed) showUnconfirmedSignOut(next);
   };
 
   const adoptCookie = async (response: FetchResponse, owner: number) => {
@@ -686,7 +842,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     try {
       next = readSessionCookie(response.headers, secureTransport, now());
     } catch {
-      await failSession(owner, storageMessage, 'error');
+      // The session in use is still valid on the server: revoked before it's given up.
+      await failSession(owner, storageMessage, 'error', cookie);
       throw new Superseded();
     }
     if (next === undefined) return;
@@ -703,7 +860,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       assertCurrent(owner);
       cookie = next;
     } catch (error) {
-      if (!(error instanceof Superseded)) await failSession(owner, storageMessage, 'error');
+      if (!(error instanceof Superseded)) await failSession(owner, storageMessage, 'error', next);
       throw new Superseded();
     }
   };
@@ -722,7 +879,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       cookieAccount = accountId;
     } catch (error) {
-      if (!(error instanceof Superseded)) await failSession(owner, storageMessage, 'error');
+      if (!(error instanceof Superseded)) await failSession(owner, storageMessage, 'error', cookie);
       throw new Superseded();
     }
   };
@@ -1672,11 +1829,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** Refresh and Retry always read again. */
   const refreshHome = () => loadHome(false);
 
-  const restore = async () => {
+  /**
+   * `quiet`: a return to the foreground after Continue. It retries a pending revoke but stays on
+   * the sign-in screen, never the session check or the unconfirmed sign-out again.
+   */
+  const restore = async (quiet = false) => {
     const owner = invalidate();
-    publish(cleanSnapshot({ status: 'restoring', user: null, message: null }));
+    if (!quiet) publish(cleanSnapshot({ status: 'restoring', user: null, message: null }));
     try {
-      await finishAccountCleanup(owner);
+      // A pending sign-out is finished first. Its cookie is only ever sent to revoke it: never
+      // read with, restored offline or previewed with its saved Home.
+      if (!(await finishSignOut(owner))) {
+        await loadPending();
+        assertCurrent(owner);
+        if (!quiet) showUnconfirmedSignOut(owner);
+        return;
+      }
       if (!config.developmentPersonaEnabled && !googleEnabled) {
         await clearSaved(owner);
         publish(cleanSnapshot({ status: 'signed-out', user: null, message: disabledMessage }));
@@ -1710,7 +1878,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         (held.accountId !== session.accountId ||
           (held.identity && held.identity.user.id !== session.accountId))
       ) {
-        await clearAccount(owner, 'sign-out');
+        // This ends the recorded account's session too; offline, its cookie stays for a retry.
+        if (!(await clearAccount(owner, 'sign-out'))) {
+          showUnconfirmedSignOut(owner);
+          return;
+        }
         publish(cleanSnapshot({ status: 'signed-out', user: null, message: unrestorableMessage }));
         return;
       }
@@ -1744,7 +1916,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const owner = invalidate();
     publish(cleanSnapshot({ status: 'signing-in', user: null, message: null }));
     try {
-      await finishAccountCleanup(owner);
+      // A pending sign-out's revoke is sent once before its saved cookie goes.
+      await finishSignOut(owner, true);
       await clearSaved(owner);
       if (!config.developmentPersonaEnabled) {
         publish(cleanSnapshot({ status: 'signed-out', user: null, message: disabledMessage }));
@@ -1775,7 +1948,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             : error instanceof RequestError
               ? error.message
               : 'Could not sign in with this development persona. Please try again.';
-      await failSession(owner, message);
+      // A session the reply already gave, such as when the check after it fails, is revoked.
+      await failSession(owner, message, 'signed-out', cookie);
     }
   };
 
@@ -1786,7 +1960,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const owner = invalidate();
     publish(cleanSnapshot({ status: 'signing-in', user: null, message: null }));
     try {
-      await finishAccountCleanup(owner);
+      await finishSignOut(owner, true);
       await clearSaved(owner);
       if (!googleEnabled || !dependencies.googleSignIn) {
         await failSession(owner, 'Google sign-in is not configured for this build.');
@@ -1827,10 +2001,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               : error instanceof RequestError
                 ? error.message
                 : 'Could not sign in with Google. Please try again.';
+      // An account change that failed has already revoked its session; any other is revoked here.
       await failSession(
         owner,
         message,
         error instanceof AccountCleanupError ? 'error' : 'signed-out',
+        error instanceof AccountCleanupError ? null : cookie,
       );
     } finally {
       googlePending = false;
@@ -5539,7 +5715,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return;
     if (snapshot.screen === 'invite' && snapshot.auth.status !== 'authenticated')
       return retryInvitation();
-    if (snapshot.auth.status !== 'authenticated') return restore();
+    // After Continue, a pending revoke is retried without leaving the sign-in screen.
+    if (snapshot.auth.status !== 'authenticated')
+      return restore(snapshot.auth.status === 'signed-out' && accountCleanupRequired);
     // Pulling on Activity re-reads Activity only; a Group that failed to load is read again.
     if (showingActivity() && snapshot.detail.status === 'ready') return refreshActivity();
     if (
@@ -5673,13 +5851,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const signOut = async () => {
     creationRecovery = null;
-    const oldCookie = cookie;
+    // The session in use, which starts a new sign-out; without one, this retries a pending one,
+    // with the revoke it kept or else the saved cookie.
+    if (cookie) {
+      revoking = cookie;
+      invitationCleared = false;
+    }
     const owner = invalidate();
     publish(cleanSnapshot({ status: 'signed-out', user: null, message: null }));
     // Independent stores must both be purged. Wait for both attempts before
     // exposing recovery so a failed invitation clear cannot preserve a session.
+    let confirmed: boolean;
     try {
-      await clearAccount(owner, 'sign-out');
+      confirmed = await clearAccount(owner, 'sign-out');
     } catch {
       if (current(owner)) {
         publish(
@@ -5692,26 +5876,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       return;
     }
-    if (!oldCookie || !current(owner)) return;
-    try {
-      await verifyGoogleBackend(owner);
-      await request('/api/auth/sign-out', owner, {
-        method: 'POST',
-        body: {},
-        sessionCookie: oldCookie,
-        logout: true,
-      });
-    } catch {
-      if (current(owner)) {
-        publish(
-          cleanSnapshot({
-            status: 'signed-out',
-            user: null,
-            message: 'Signed out on this device. The server could not confirm session revocation.',
-          }),
-        );
-      }
-    }
+    if (!confirmed) showUnconfirmedSignOut(owner);
+  };
+
+  /**
+   * Continue, after the server didn't confirm a sign-out: sends nothing more and shows plain
+   * signed-out. A saved cookie stays for the next restore to revoke; one held only in memory goes.
+   */
+  const continueSignedOut = () => {
+    if (snapshot.auth.status !== 'sign-out-unconfirmed') return;
+    revoking = null;
+    invalidate();
+    const cleared = cleanSnapshot({ status: 'signed-out', user: null, message: null });
+    publish({ ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
   };
 
   return {
@@ -5786,6 +5963,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     selectMonth,
     loadMoreExpenses,
     signOut,
+    continueSignedOut,
     getSnapshot: () => snapshot,
     subscribe: (listener: () => void) => {
       listeners.add(listener);

@@ -1708,7 +1708,11 @@ describe('native session and Group boundary', () => {
     expect(controller.getSnapshot().auth.status).toBe('error');
     expect(controller.getSnapshot().auth.user).toBeNull();
     expect(store.read()).toBeNull();
-    expect(fetch).toHaveBeenCalledTimes(1);
+    // The session it couldn't keep is revoked from memory, never used for anything else (#202).
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const [url, init] = fetch.mock.calls[1];
+    expect(new URL(url).pathname).toBe('/api/auth/sign-out');
+    expect(new Headers(init.headers).get('Cookie')).toBe('better-auth.session_token=new-signature');
   });
 
   it('honors explicit cookie expiry even if its response contains a user', async () => {
@@ -1805,18 +1809,17 @@ describe('native session and Group boundary', () => {
     expect(controller.getSnapshot().detail.data).toBeNull();
   });
 
-  it('clears local credentials even when remote sign-out fails', async () => {
+  it('keeps the saved cookie for the next restore when the server does not confirm sign-out', async () => {
     const { controller, store } = setup({
       intercept: (path) => (path === '/api/auth/sign-out' ? json({}, 503) : undefined),
     });
     await controller.signIn('alex');
     await controller.signOut();
     expect(controller.getSnapshot().auth).toMatchObject({
-      status: 'signed-out',
+      status: 'sign-out-unconfirmed',
       user: null,
-      message: expect.stringContaining('could not confirm'),
     });
-    expect(store.read()).toBeNull();
+    expect(decodeStoredSession(store.read()!, false)?.cookie).toBe(alexCookie);
   });
 
   it('cannot restore a signed-out account when clearing its saved invitation fails', async () => {
@@ -1834,5 +1837,463 @@ describe('native session and Group boundary', () => {
     expect(controller.getSnapshot().auth).toMatchObject({ status: 'error', user: null });
     expect(controller.getSnapshot().groups.data).toEqual([]);
     expect(store.read()).toBeNull();
+  });
+});
+
+describe('sign-out revokes the session on the server (#202)', () => {
+  /**
+   * One phone, kept across restarts: its saved session, the cleanup marker in SecureStore, the
+   * same record outside SecureStore, the account owner, one account store and a saved invitation,
+   * and every request it sends with the session cookie that request carried. `fail` makes its
+   * storage reject.
+   */
+  function phone() {
+    const store = memoryCredentials();
+    const invitation = memoryCredentials();
+    const clearSaved = store.credentials.clear;
+    const state = {
+      marked: false,
+      recorded: null as { invitationCleared: boolean } | null,
+      data: null as string | null,
+    };
+    const fail = { mark: false, clear: false, storeClears: 0 };
+    store.credentials.clear = async () => {
+      if (fail.clear) throw new Error('SecureStore unavailable');
+      await clearSaved();
+    };
+    const accountLocal: AccountLocalStorage = {
+      owner: memoryAccountOwner(),
+      cleanupMarker: {
+        load: async () => state.marked,
+        mark: async () => {
+          if (fail.mark) throw new Error('SecureStore unavailable');
+          state.marked = true;
+        },
+        clear: async () => {
+          state.marked = false;
+        },
+      },
+      signOutRecord: {
+        load: async () => structuredClone(state.recorded),
+        mark: async (record) => {
+          state.recorded = structuredClone(record);
+        },
+        clear: async () => {
+          state.recorded = null;
+        },
+      },
+      stores: [
+        {
+          clear: async () => {
+            if (fail.storeClears > 0) {
+              fail.storeClears -= 1;
+              throw new Error('SQLITE_BUSY: database is locked');
+            }
+            state.data = null;
+          },
+        },
+      ],
+    };
+    const sent: { path: string; method: string; cookie: string | null }[] = [];
+    /** Starts the app on this phone; `respond` may answer a request before the fake server. */
+    const start = (
+      respond?: (path: string, init: RequestInit) => Promise<FetchResponse> | Response | undefined,
+    ) =>
+      setup({
+        store,
+        accountLocal,
+        pending: invitation.credentials,
+        intercept: (path, init) => {
+          sent.push({
+            path,
+            method: init.method ?? 'GET',
+            cookie: new Headers(init.headers).get('Cookie'),
+          });
+          return respond?.(path, init);
+        },
+      }).controller;
+    return {
+      store,
+      invitation,
+      state,
+      fail,
+      sent,
+      start,
+      /** The session cookie in the saved session (stored with its account once verified). */
+      saved: () => {
+        const value = store.read();
+        return value === null ? null : (decodeStoredSession(value, false)?.cookie ?? value);
+      },
+      /** The session cookie each sign-out request carried, in order. */
+      revokes: () =>
+        sent.filter((request) => request.path === '/api/auth/sign-out').map((r) => r.cookie),
+    };
+  }
+
+  type Controller = ReturnType<typeof createMobileController>;
+  /** Every snapshot the controller publishes from now on, the current one first. */
+  function published(controller: Controller) {
+    const seen = [controller.getSnapshot()];
+    controller.subscribe(() => seen.push(controller.getSnapshot()));
+    return seen;
+  }
+  /** Nothing of an account: no user, Groups, Group, Home figures or drafts. */
+  const showsNoAccount = (snapshot: ReturnType<Controller['getSnapshot']>) =>
+    snapshot.auth.user === null &&
+    snapshot.groups.data.length === 0 &&
+    snapshot.detail.data === null &&
+    snapshot.home.data === null &&
+    snapshot.drafts.length === 0;
+
+  it('revokes the session even when clearing the device fails, and only once', async () => {
+    const device = phone();
+    const controller = device.start();
+    await controller.signIn('alex');
+    device.state.data = 'Alex’s saved Groups';
+    device.fail.storeClears = 1;
+    await controller.signOut();
+    expect(device.revokes()).toEqual([alexCookie]);
+    expect(controller.getSnapshot().auth).toEqual({
+      status: 'error',
+      user: null,
+      message: 'Could not remove this account from the device. Try signing out again.',
+    });
+
+    await controller.signOut();
+    expect(device.revokes()).toEqual([alexCookie]);
+    expect(device.store.read()).toBeNull();
+    expect(device.state.data).toBeNull();
+    expect(controller.getSnapshot().auth).toMatchObject({ status: 'signed-out', user: null });
+  });
+
+  it('purges without waiting for a slow revoke, and keeps the saved cookie until it answers', async () => {
+    const device = phone();
+    const answer = deferred<FetchResponse>();
+    const controller = device.start((path) =>
+      path === '/api/auth/sign-out' ? answer.promise : undefined,
+    );
+    await controller.signIn('alex');
+    device.state.data = 'Alex’s saved Groups';
+    const signingOut = controller.signOut();
+    await vi.waitFor(() => expect(device.revokes()).toEqual([alexCookie]), { timeout: 500 });
+    await vi.waitFor(() => expect(device.state.data).toBeNull(), { timeout: 500 });
+    expect(controller.getSnapshot().auth).toMatchObject({ status: 'signed-out', user: null });
+    expect(device.saved()).toBe(alexCookie);
+    expect(device.state.marked).toBe(true);
+
+    answer.resolve(json({ success: true }));
+    await signingOut;
+    expect(device.store.read()).toBeNull();
+    expect(device.state).toMatchObject({ marked: false, recorded: null });
+    expect(controller.getSnapshot().auth).toEqual({
+      status: 'signed-out',
+      user: null,
+      message: null,
+    });
+  });
+
+  it('re-sends the revoke with the same cookie on Try again, then clears it', async () => {
+    const device = phone();
+    let failures = 1;
+    const controller = device.start((path) =>
+      path === '/api/auth/sign-out' && failures-- > 0
+        ? Promise.reject(new TypeError('Network request failed'))
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.signOut();
+    expect(controller.getSnapshot().auth).toMatchObject({
+      status: 'sign-out-unconfirmed',
+      user: null,
+    });
+    expect(showsNoAccount(controller.getSnapshot())).toBe(true);
+    expect(device.saved()).toBe(alexCookie);
+
+    // Try again.
+    await controller.restore();
+    expect(device.revokes()).toEqual([alexCookie, alexCookie]);
+    expect(device.store.read()).toBeNull();
+    expect(controller.getSnapshot().auth).toEqual({
+      status: 'signed-out',
+      user: null,
+      message: null,
+    });
+  });
+
+  it('sends nothing more on Continue, and revokes the kept cookie at the next restore', async () => {
+    const device = phone();
+    const first = device.start((path) =>
+      path === '/api/auth/sign-out' ? json({}, 503) : undefined,
+    );
+    await first.signIn('alex');
+    await first.signOut();
+    expect(first.getSnapshot().auth.status).toBe('sign-out-unconfirmed');
+    first.continueSignedOut();
+    expect(first.getSnapshot().auth).toEqual({ status: 'signed-out', user: null, message: null });
+    expect(device.revokes()).toEqual([alexCookie]);
+    expect(device.saved()).toBe(alexCookie);
+
+    first.dispose();
+    const before = device.sent.length;
+    const restarted = device.start();
+    const seen = published(restarted);
+    await restarted.restore();
+    expect(
+      device.sent
+        .slice(before)
+        .filter((request) => request.cookie === alexCookie)
+        .map(({ path, method }) => ({ path, method })),
+    ).toEqual([{ path: '/api/auth/sign-out', method: 'POST' }]);
+    expect(seen.every(showsNoAccount)).toBe(true);
+    expect(device.store.read()).toBeNull();
+    expect(restarted.getSnapshot().auth).toEqual({
+      status: 'signed-out',
+      user: null,
+      message: null,
+    });
+  });
+
+  it('shows a failed revoke at restore too, and sign-in sends it once before clearing it', async () => {
+    const device = phone();
+    const refuse = (path: string) => (path === '/api/auth/sign-out' ? json({}, 503) : undefined);
+    const first = device.start(refuse);
+    await first.signIn('alex');
+    await first.signOut();
+    // The app is killed before Try again or Continue.
+    first.dispose();
+
+    const before = device.sent.length;
+    const restarted = device.start(refuse);
+    const seen = published(restarted);
+    await restarted.restore();
+    expect(restarted.getSnapshot().auth).toMatchObject({
+      status: 'sign-out-unconfirmed',
+      user: null,
+    });
+    expect(showsNoAccount(restarted.getSnapshot())).toBe(true);
+    expect(device.revokes()).toEqual([alexCookie, alexCookie]);
+    expect(device.saved()).toBe(alexCookie);
+
+    await restarted.signIn('sam');
+    expect(device.revokes()).toEqual([alexCookie, alexCookie, alexCookie]);
+    expect(
+      device.sent
+        .slice(before)
+        .filter((request) => request.cookie === alexCookie)
+        .map(({ path }) => path),
+    ).toEqual(['/api/auth/sign-out', '/api/auth/sign-out']);
+    expect(seen.some((snapshot) => snapshot.auth.user?.id === alex.id)).toBe(false);
+    expect(restarted.getSnapshot().auth).toMatchObject({
+      status: 'authenticated',
+      user: { id: sam.id },
+    });
+    expect(device.saved()).toBe(samCookie);
+  });
+
+  it('revokes a session whose cookie from the sign-in reply could not be saved', async () => {
+    const device = phone();
+    device.store.credentials.save = async () => {
+      throw new Error('SecureStore unavailable');
+    };
+    const controller = device.start();
+    await controller.signIn('alex');
+    expect(device.revokes()).toEqual([alexCookie]);
+    expect(controller.getSnapshot().auth).toMatchObject({ status: 'error', user: null });
+  });
+
+  it('revokes with the session cookie itself, never the saved session it is recorded in', async () => {
+    const device = phone();
+    const refuse = (path: string) => (path === '/api/auth/sign-out' ? json({}, 503) : undefined);
+    const first = device.start(refuse);
+    await first.signIn('alex');
+    // Saved with the account get-session confirmed it for (#200).
+    expect(decodeStoredSession(device.store.read()!, false)).toEqual({
+      cookie: alexCookie,
+      accountId: alex.id,
+    });
+    await first.signOut();
+    first.dispose();
+
+    const restarted = device.start();
+    await restarted.restore();
+    expect(device.revokes()).toEqual([alexCookie, alexCookie]);
+    expect(device.sent.filter((request) => request.cookie?.startsWith('{'))).toEqual([]);
+    expect(device.store.read()).toBeNull();
+    expect(restarted.getSnapshot().auth).toEqual({
+      status: 'signed-out',
+      user: null,
+      message: null,
+    });
+  });
+
+  it('revokes the new session when recording its account fails', async () => {
+    const device = phone();
+    const save = device.store.credentials.save;
+    let saves = 0;
+    // The first save is the cookie from the sign-in reply; the second records its account.
+    device.store.credentials.save = async (value) => {
+      if (++saves === 2) throw new Error('SecureStore unavailable');
+      await save(value);
+    };
+    const controller = device.start();
+    await controller.signIn('alex');
+    expect(device.revokes()).toEqual([alexCookie]);
+    expect(device.store.read()).toBeNull();
+    expect(controller.getSnapshot().auth).toMatchObject({ status: 'error', user: null });
+  });
+
+  it.each([
+    ['can’t be reached', () => Promise.reject(new TypeError('Network request failed'))],
+    ['answers 503', () => json({}, 503)],
+  ] as const)(
+    'revokes the new session when the session check after sign-in %s',
+    async (_, answer) => {
+      const device = phone();
+      const controller = device.start((path) =>
+        path === '/api/auth/get-session' ? answer() : undefined,
+      );
+      await controller.signIn('alex');
+      expect(device.revokes()).toEqual([alexCookie]);
+      expect(device.store.read()).toBeNull();
+      expect(controller.getSnapshot().auth).toMatchObject({ status: 'signed-out', user: null });
+    },
+  );
+
+  it('revokes the session in use when a reply carries a session cookie it can’t read', async () => {
+    const device = phone();
+    let malformed = false;
+    const controller = device.start((path) =>
+      malformed && path === '/api/groups'
+        ? json({ data: [], status: 200 }, 200, 'better-auth.session_token=bad value; Path=/')
+        : undefined,
+    );
+    await controller.signIn('alex');
+    malformed = true;
+    await controller.refresh('pull');
+    expect(device.revokes()).toEqual([alexCookie]);
+    expect(device.store.read()).toBeNull();
+    expect(controller.getSnapshot().auth).toMatchObject({ status: 'error', user: null });
+  });
+
+  it('keeps an invitation opened after Continue, through a return to the app and a restart', async () => {
+    const device = phone();
+    const refuse = (path: string) =>
+      path === '/api/auth/sign-out'
+        ? json({}, 503)
+        : path === '/api/join/deadbeef'
+          ? json({
+              data: { _id: otherGroupId, name: 'Book Club', category: 'other', memberCount: 3 },
+              status: 200,
+            })
+          : undefined;
+    // An invitation opened before signing out goes with the account.
+    await device.invitation.credentials.save('cafebabe');
+    const first = device.start(refuse);
+    await first.signIn('alex');
+    await first.signOut();
+    expect(device.invitation.read()).toBeNull();
+    first.continueSignedOut();
+    // One opened after Continue is kept for whoever signs in next.
+    await first.openInvitation('http://localhost:4127/join/deadbeef');
+    first.invitationSignIn();
+    expect(first.getSnapshot()).toMatchObject({
+      auth: { status: 'signed-out' },
+      invitation: { code: 'deadbeef' },
+    });
+    await first.refresh('foreground');
+    expect(device.revokes()).toEqual([alexCookie, alexCookie]);
+    expect(device.invitation.read()).toBe('deadbeef');
+    expect(first.getSnapshot().invitation.code).toBe('deadbeef');
+    first.dispose();
+
+    const restarted = device.start(refuse);
+    await restarted.restore();
+    expect(device.revokes()).toEqual([alexCookie, alexCookie, alexCookie]);
+    expect(device.invitation.read()).toBe('deadbeef');
+    expect(restarted.getSnapshot()).toMatchObject({
+      auth: { status: 'sign-out-unconfirmed', user: null },
+      invitation: { code: 'deadbeef' },
+    });
+  });
+
+  it('retries the revoke quietly on a return to the app after Continue', async () => {
+    const device = phone();
+    const refuse = (path: string) => (path === '/api/auth/sign-out' ? json({}, 503) : undefined);
+    const controller = device.start(refuse);
+    await controller.signIn('alex');
+    await controller.signOut();
+    controller.continueSignedOut();
+    const seen = published(controller);
+    await controller.refresh('foreground');
+    expect(device.revokes()).toEqual([alexCookie, alexCookie]);
+    expect(seen.map((shown) => shown.auth.status)).not.toContain('sign-out-unconfirmed');
+    expect(seen.map((shown) => shown.auth.status)).not.toContain('restoring');
+    expect(controller.getSnapshot().auth).toEqual({
+      status: 'signed-out',
+      user: null,
+      message: null,
+    });
+    expect(device.saved()).toBe(alexCookie);
+
+    // A cold start still shows it, once.
+    controller.dispose();
+    const restarted = device.start(refuse);
+    await restarted.restore();
+    expect(restarted.getSnapshot().auth.status).toBe('sign-out-unconfirmed');
+    expect(device.revokes()).toHaveLength(3);
+  });
+
+  it('revokes the new account’s session before clearing it when the account change fails', async () => {
+    const device = phone();
+    let expired = false;
+    let savedWhenRevoked: string | null | undefined;
+    const controller = device.start((path) => {
+      if (path === '/api/auth/sign-out') savedWhenRevoked = device.saved();
+      return expired && path === `/api/groups/${groupId}` ? json({}, 401) : undefined;
+    });
+    await controller.signIn('alex');
+    expired = true;
+    await controller.openGroup(groupId);
+    expect(controller.getSnapshot().auth.status).toBe('signed-out');
+    // Alex's data stays on this device after a 401, so Sam's sign-in must purge it, and can't.
+    expired = false;
+    device.fail.storeClears = 1;
+    await controller.signIn('sam');
+    expect(device.revokes()).toEqual([samCookie]);
+    expect(savedWhenRevoked).toBe(samCookie);
+    expect(device.store.read()).toBeNull();
+    expect(controller.getSnapshot().auth).toMatchObject({ status: 'error', user: null });
+  });
+
+  it('never restores a signed-out account when the marker and the cookie clear both fail', async () => {
+    const device = phone();
+    const first = device.start((path) =>
+      path === '/api/auth/sign-out' ? new Promise<FetchResponse>(() => undefined) : undefined,
+    );
+    await first.signIn('alex');
+    device.fail.mark = true;
+    device.fail.clear = true;
+    void first.signOut();
+    await vi.waitFor(() => expect(device.revokes()).toEqual([alexCookie]), { timeout: 500 });
+    // The app is killed while the server still hasn't answered.
+    first.dispose();
+    device.fail.mark = false;
+    device.fail.clear = false;
+    expect(device.state.marked).toBe(false);
+    expect(device.saved()).toBe(alexCookie);
+
+    const before = device.sent.length;
+    const restarted = device.start();
+    const seen = published(restarted);
+    await restarted.restore();
+    expect(seen.every(showsNoAccount)).toBe(true);
+    expect(
+      device.sent
+        .slice(before)
+        .filter((request) => request.cookie === alexCookie)
+        .map(({ path }) => path),
+    ).toEqual(['/api/auth/sign-out']);
+    expect(device.store.read()).toBeNull();
+    expect(restarted.getSnapshot().auth).toMatchObject({ status: 'signed-out', user: null });
   });
 });
