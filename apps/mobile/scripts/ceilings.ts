@@ -8,14 +8,16 @@
  *
  * - lowering a ceiling, adding a journey or adding a measure always passes;
  * - a higher ceiling, a journey removed or renamed, or a measure that lost its ceiling needs
- *   a re-record, which only the owner approves, with the `re-record-ceilings` label.
+ *   a re-record, which only an approver allows, with the `re-record-ceilings` label.
  *
- * In CI (`--pull-request`, `--repository` and `--owner`, with `GITHUB_TOKEN`) it reads the
- * pull request's timeline, every page of it, and accepts the label only when its latest
- * `labeled` event was made by the owner. Without them, as `pnpm swarm gate` runs it, it
+ * In CI (`--pull-request`, `--repository` and `--approvers`, with `GITHUB_TOKEN`) it reads
+ * the pull request's timeline, every page of it, and accepts the label only when its latest
+ * `labeled` event was made by one of the approvers. CI passes the repository variable
+ * `CEILINGS_APPROVERS`, which only an admin can set, or the repository owner without it. An
+ * empty list approves nobody. Without a pull request, as `pnpm swarm gate` runs it, it
  * reports what would need a re-record and fails.
  *
- * Exit codes: 0 passes, 1 needs the owner's re-record label, 2 could not compare.
+ * Exit codes: 0 passes, 1 needs an approver's re-record label, 2 could not compare.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -25,7 +27,7 @@ import { z } from 'zod';
 
 /** The data file, relative to `apps/mobile`. */
 export const ceilingsFile = 'src/render-profile.ceilings.json';
-/** The label the owner applies to approve a re-record. The owner creates it. */
+/** The label an approver applies to allow a re-record. The owner creates it. */
 export const reRecordLabel = 're-record-ceilings';
 /** What the harness limits for each journey. */
 export const measures = ['requests', 'publishes', 'commits', 'renders'] as const;
@@ -121,7 +123,7 @@ export function compareCeilings(base: Ceilings, head: Ceilings): Change[] {
   return changes;
 }
 
-/** Whether a change needs the owner's re-record label. */
+/** Whether a change needs an approver's re-record label. */
 export const needsReRecord = (change: Change) =>
   change.kind === 'raised' || change.kind === 'removed' || change.kind === 'unbounded';
 
@@ -136,7 +138,7 @@ export interface TimelineEvent {
 export type Approval =
   | { readonly status: 'absent' }
   | {
-      readonly status: 'approved' | 'not-owner';
+      readonly status: 'approved' | 'not-approver';
       readonly actor: string | null;
       readonly at: string;
     };
@@ -146,14 +148,14 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const time = (event: TimelineEvent) => event.created_at ?? '';
 
 /**
- * Whether `label` is on the pull request, and whether `owner` applied it: the label is on it
- * when its latest label event is `labeled`, and approves only when that event's actor is the
- * owner. GitHub logins and label names ignore case.
+ * Whether `label` is on the pull request, and whether an approver applied it: the label is on
+ * it when its latest label event is `labeled`, and approves only when that event's actor is
+ * one of `approvers`. An empty list approves nobody. GitHub logins and label names ignore case.
  */
 export function labelApproval(
   events: readonly TimelineEvent[],
   label: string,
-  owner: string,
+  approvers: readonly string[],
 ): Approval {
   const latest = events
     .filter(
@@ -168,7 +170,10 @@ export function labelApproval(
   if (!latest || latest.event === 'unlabeled') return { status: 'absent' };
   const actor = latest.actor?.login ?? null;
   return {
-    status: actor !== null && same(actor, owner) ? 'approved' : 'not-owner',
+    status:
+      actor !== null && approvers.some((approver) => same(approver, actor))
+        ? 'approved'
+        : 'not-approver',
     actor,
     at: latest.created_at ?? 'an unknown time',
   };
@@ -247,7 +252,8 @@ export interface CompareContext {
 
 export const usage = [
   'Usage: pnpm mobile ceilings:compare --base <commit>',
-  '         [--pull-request <number> --repository <owner/name> --owner <login>] [--label <name>]',
+  '         [--pull-request <number> --repository <owner/name> --approvers <login,login>]',
+  '         [--label <name>]',
   'With --pull-request, GITHUB_TOKEN must be set (and GITHUB_API_URL, if not api.github.com).',
 ].join('\n');
 
@@ -301,7 +307,7 @@ async function compare(argv: readonly string[], context: CompareContext): Promis
         base: { type: 'string' },
         'pull-request': { type: 'string' },
         repository: { type: 'string' },
-        owner: { type: 'string' },
+        approvers: { type: 'string' },
         label: { type: 'string', default: reRecordLabel },
       },
       strict: true,
@@ -310,17 +316,27 @@ async function compare(argv: readonly string[], context: CompareContext): Promis
   } catch (error) {
     throw new Refused((error as Error).message);
   }
-  const { base, repository, owner } = values;
+  const { base, repository } = values;
   const label = values.label ?? reRecordLabel;
   if (!base || base.startsWith('-')) throw new Refused('--base <commit> is required.');
-  const onPullRequest = [values['pull-request'], repository, owner].some(Boolean);
+  const onPullRequest = [values['pull-request'], repository, values.approvers].some(
+    (value) => value !== undefined,
+  );
+  // Logins, comma-separated. An empty list is refused rather than read as "anyone".
+  const approvers = (values.approvers ?? '')
+    .split(',')
+    .map((login) => login.trim())
+    .filter(Boolean);
   if (onPullRequest) {
     if (!/^[1-9]\d*$/.test(values['pull-request'] ?? ''))
       throw new Refused('--pull-request needs the pull request number.');
     if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? ''))
       throw new Refused('--repository needs <owner>/<name>.');
-    if (!/^[a-z\d](?:[a-z\d-]*[a-z\d])?$/i.test(owner ?? ''))
-      throw new Refused("--owner needs the repository owner's login.");
+    if (approvers.length === 0)
+      throw new Refused('--approvers needs at least one login: an empty list approves nobody.');
+    const invalid = approvers.filter((login) => !/^[a-z\d](?:[a-z\d-]*[a-z\d])?$/i.test(login));
+    if (invalid.length)
+      throw new Refused(`--approvers has a value that isn't a login: ${invalid.join(', ')}`);
   }
 
   const git = (...args: string[]) =>
@@ -376,11 +392,11 @@ async function compare(argv: readonly string[], context: CompareContext): Promis
     .filter(Boolean)
     .join(' and ');
   const steps =
-    'Explain each change in the pull request, then ask the owner for the label. ' +
+    'Explain each change in the pull request, then ask an approver for the label. ' +
     'Lowering a ceiling or adding a journey never needs it.';
 
   if (!onPullRequest) {
-    print(`${summary}, so the pull request needs the owner's ${label} label. ${steps}`);
+    print(`${summary}, so the pull request needs the ${label} label from an approver. ${steps}`);
     return 1;
   }
   const pullRequest = Number(values['pull-request']);
@@ -396,7 +412,8 @@ async function compare(argv: readonly string[], context: CompareContext): Promis
     token,
     fetch: context.fetch,
   });
-  const approval = labelApproval(events, label, owner!);
+  const approval = labelApproval(events, label, approvers);
+  const listed = approvers.join(', ');
   if (approval.status === 'approved') {
     const message = `${summary}. ${approval.actor} applied ${label} at ${approval.at}, which approves this re-record.`;
     print(message);
@@ -406,7 +423,7 @@ async function compare(argv: readonly string[], context: CompareContext): Promis
   const message =
     approval.status === 'absent'
       ? `${summary}, and pull request #${pullRequest} doesn't have the ${label} label. ${steps} Adding it runs this check again.`
-      : `${summary}. The ${label} label on pull request #${pullRequest} was last applied by ${approval.actor ?? 'a deleted account'}, not the repository owner ${owner}, so it doesn't approve this re-record. Only the owner's label counts: ask ${owner} to remove it and apply it again.`;
+      : `${summary}. The ${label} label on pull request #${pullRequest} was last applied by ${approval.actor ?? 'a deleted account'}, who isn't an approver (${listed}), so it doesn't approve this re-record. Only an approver's label counts: ask one of them to remove it and apply it again.`;
   print(message);
   if (env.GITHUB_ACTIONS === 'true')
     print(annotation('error', 'Ceilings need a re-record', message));

@@ -19,8 +19,12 @@ import {
 /** A pull request's timeline, recorded from GitHub and made fictional (see the file's `about`). */
 const timeline = JSON.parse(
   readFileSync(join(import.meta.dirname, 'fixtures/re-record-timeline.json'), 'utf8'),
-) as { owner: string; events: TimelineEvent[] };
+) as { owner: string; approvers: string[]; events: TimelineEvent[] };
+/** The repository owner, the only approver when CEILINGS_APPROVERS isn't set. */
 const owner = timeline.owner;
+/** The owner and the owner's second account, as CEILINGS_APPROVERS would list them. */
+const approvers = timeline.approvers;
+const [, second] = approvers;
 /** The timeline as it stood once its first `count` events had happened. */
 const after = (count: number) => timeline.events.slice(0, count);
 
@@ -133,46 +137,64 @@ describe('the ceilings data file', () => {
 
 describe('labelApproval, from the recorded timeline', () => {
   it('finds no label while only another label is on the pull request', () => {
-    expect(labelApproval(after(3), reRecordLabel, owner)).toEqual({ status: 'absent' });
-    expect(labelApproval([], reRecordLabel, owner)).toEqual({ status: 'absent' });
+    expect(labelApproval(after(3), reRecordLabel, approvers)).toEqual({ status: 'absent' });
+    expect(labelApproval([], reRecordLabel, approvers)).toEqual({ status: 'absent' });
   });
 
   it('approves the label when the owner applied it', () => {
-    expect(labelApproval(after(4), reRecordLabel, owner)).toEqual({
+    expect(labelApproval(after(4), reRecordLabel, [owner])).toEqual({
       status: 'approved',
       actor: owner,
       at: '2026-10-05T08:00:00Z',
     });
     // A later push keeps the owner's label on the pull request.
-    expect(labelApproval(after(5), reRecordLabel, owner).status).toBe('approved');
+    expect(labelApproval(after(5), reRecordLabel, [owner]).status).toBe('approved');
   });
 
   it('finds no label once it was removed', () => {
-    expect(labelApproval(after(6), reRecordLabel, owner)).toEqual({ status: 'absent' });
-    expect(labelApproval(after(8), reRecordLabel, owner)).toEqual({ status: 'absent' });
+    expect(labelApproval(after(6), reRecordLabel, approvers)).toEqual({ status: 'absent' });
+    expect(labelApproval(after(8), reRecordLabel, approvers)).toEqual({ status: 'absent' });
+    expect(labelApproval(after(10), reRecordLabel, approvers)).toEqual({ status: 'absent' });
   });
 
-  it('refuses the label when someone other than the owner applied it last', () => {
-    expect(labelApproval(after(7), reRecordLabel, owner)).toEqual({
-      status: 'not-owner',
+  it('refuses the label when an account not on the list applied it last', () => {
+    expect(labelApproval(after(7), reRecordLabel, approvers)).toEqual({
+      status: 'not-approver',
       actor: 'helpful-collaborator',
       at: '2026-10-05T09:00:20Z',
     });
   });
 
-  it('approves the label again once the owner re-applies it after someone else', () => {
-    expect(labelApproval(after(9), reRecordLabel, owner)).toEqual({
+  it('approves the label again once the owner re-applies it after an account not on the list', () => {
+    expect(labelApproval(after(9), reRecordLabel, approvers)).toEqual({
       status: 'approved',
       actor: owner,
       at: '2026-10-05T10:15:30Z',
     });
   });
 
-  it('compares the owner and the label without case, and never approves a deleted account', () => {
-    expect(labelApproval(after(4), 'Re-Record-Ceilings', 'Maple-Owner').status).toBe('approved');
+  it("accepts a second listed approver, the owner's other account", () => {
+    expect(labelApproval(after(11), reRecordLabel, approvers)).toEqual({
+      status: 'approved',
+      actor: second,
+      at: '2026-10-05T11:00:10Z',
+    });
+    // With the owner alone on the list, as CI runs without CEILINGS_APPROVERS, it is refused.
+    expect(labelApproval(after(11), reRecordLabel, [owner])).toMatchObject({
+      status: 'not-approver',
+      actor: second,
+    });
+  });
+
+  it('approves nobody with an empty list', () => {
+    expect(labelApproval(after(4), reRecordLabel, [])).toMatchObject({ status: 'not-approver' });
+  });
+
+  it('compares logins and the label without case, and never approves a deleted account', () => {
+    expect(labelApproval(after(4), 'Re-Record-Ceilings', ['Maple-Owner']).status).toBe('approved');
     const ghost = { ...after(4)[3]!, actor: null };
-    expect(labelApproval([...after(3), ghost], reRecordLabel, owner)).toEqual({
-      status: 'not-owner',
+    expect(labelApproval([...after(3), ghost], reRecordLabel, approvers)).toEqual({
+      status: 'not-approver',
       actor: null,
       at: '2026-10-05T08:00:00Z',
     });
@@ -268,7 +290,13 @@ describe('ceilings:compare', () => {
   const pullRequest = ['--pull-request', '42', '--repository', 'maple-owner/fictional-ledger'];
 
   it('passes when nothing changed, without asking GitHub', async () => {
-    const { code, output } = await run(['--base', withFile, ...pullRequest, '--owner', owner]);
+    const { code, output } = await run([
+      '--base',
+      withFile,
+      ...pullRequest,
+      '--approvers',
+      approvers.join(','),
+    ]);
     expect(code).toBe(0);
     expect(output).toMatch(/No ceiling rose, and no journey was removed or renamed/);
   });
@@ -313,20 +341,24 @@ describe('ceilings:compare', () => {
 
   describe('on a pull request whose ceiling rose', () => {
     beforeEach(() => write(withCeiling('Open a Group on Expenses', 'requests', 5)));
-    const args = () => ['--base', withFile, ...pullRequest, '--owner', owner];
+    /** CI with CEILINGS_APPROVERS set to the owner and the owner's second account. */
+    const args = () => ['--base', withFile, ...pullRequest, '--approvers', approvers.join(',')];
+    /** CI without the variable: `github.repository_owner` alone. */
+    const ownerOnly = () => ['--base', withFile, ...pullRequest, '--approvers', owner];
+    const timelineAfter = (count: number, perPage?: number) => ({
+      token: 'fixture-token',
+      fetch: github(after(count), { perPage }).fetch,
+    });
 
     it('fails without the label', async () => {
-      const { code, output } = await run(args(), {
-        token: 'fixture-token',
-        fetch: github(after(3), {}).fetch,
-      });
+      const { code, output } = await run(args(), timelineAfter(3));
       expect(code).toBe(1);
       expect(output).toMatch(/doesn't have the re-record-ceilings label/);
     });
 
     it('passes once the owner applied the label, reading every page of the timeline', async () => {
       const gh = github(after(5), { perPage: 2 });
-      const { code, output } = await run(args(), { token: 'fixture-token', fetch: gh.fetch });
+      const { code, output } = await run(ownerOnly(), { token: 'fixture-token', fetch: gh.fetch });
       expect(code).toBe(0);
       expect(output).toMatch(/maple-owner applied re-record-ceilings at 2026-10-05T08:00:00Z/);
       expect(gh.requests.map((request) => request.url)).toEqual([
@@ -339,32 +371,51 @@ describe('ceilings:compare', () => {
       );
     });
 
-    it('fails when someone other than the owner applied the label, and says who', async () => {
-      const { code, output } = await run(args(), {
-        token: 'fixture-token',
-        fetch: github(after(7), {}).fetch,
-      });
+    it('passes when a second listed approver applied the label', async () => {
+      const { code, output } = await run(args(), timelineAfter(11));
+      expect(code).toBe(0);
+      expect(output).toMatch(/maple-second applied re-record-ceilings at 2026-10-05T11:00:10Z/);
+    });
+
+    it('fails when an account not on the list applied the label, and names it', async () => {
+      const { code, output } = await run(args(), timelineAfter(7));
       expect(code).toBe(1);
       expect(output).toMatch(
-        /last applied by helpful-collaborator, not the repository owner maple-owner/,
+        /last applied by helpful-collaborator, who isn't an approver \(maple-owner, maple-second\)/,
       );
     });
 
-    it('passes once the owner re-applies the label after someone else', async () => {
-      const { code } = await run(args(), {
-        token: 'fixture-token',
-        fetch: github(after(9), {}).fetch,
-      });
+    it('passes once the owner re-applies the label after an account not on the list', async () => {
+      const { code } = await run(args(), timelineAfter(9));
       expect(code).toBe(0);
     });
 
-    it('takes the owner from its input, never a fixed login', async () => {
+    it('accepts only the owner when the list is the owner alone, as without CEILINGS_APPROVERS', async () => {
+      expect((await run(ownerOnly(), timelineAfter(9))).code).toBe(0);
+      const second = await run(ownerOnly(), timelineAfter(11));
+      expect(second.code).toBe(1);
+      expect(second.output).toMatch(
+        /last applied by maple-second, who isn't an approver \(maple-owner\)/,
+      );
+    });
+
+    it('takes the approvers from its input, never a fixed login', async () => {
       const { code, output } = await run(
-        ['--base', withFile, ...pullRequest, '--owner', 'helpful-collaborator'],
-        { token: 'fixture-token', fetch: github(after(4), {}).fetch },
+        ['--base', withFile, ...pullRequest, '--approvers', 'helpful-collaborator'],
+        timelineAfter(4),
       );
       expect(code).toBe(1);
-      expect(output).toMatch(/not the repository owner helpful-collaborator/);
+      expect(output).toMatch(/last applied by maple-owner, who isn't an approver/);
+    });
+
+    it('fails closed on an empty or missing list of approvers, without asking GitHub', async () => {
+      for (const list of [[], ['--approvers', ''], ['--approvers', ' , ']]) {
+        const { code, output } = await run(['--base', withFile, ...pullRequest, ...list], {
+          token: 'fixture-token',
+        });
+        expect(code).toBe(2);
+        if (list.length) expect(output).toMatch(/an empty list approves nobody/);
+      }
     });
 
     it("can't compare when GitHub refuses the timeline, and says which permission it needs", async () => {
@@ -390,7 +441,7 @@ describe('ceilings:compare', () => {
       Response.json(after(3), {
         headers: { Link: '<https://example.test/steal?page=2>; rel="next"' },
       })) as typeof globalThis.fetch;
-    const { code, output } = await run(['--base', withFile, ...pullRequest, '--owner', owner], {
+    const { code, output } = await run(['--base', withFile, ...pullRequest, '--approvers', owner], {
       token: 'fixture-token',
       fetch,
     });
@@ -413,8 +464,10 @@ describe('ceilings:compare', () => {
     expect((await run([])).code).toBe(2);
     expect((await run(['--base', withFile, '--labl', 'x'])).code).toBe(2);
     expect((await run(['--base', withFile, '--pull-request', '42'])).code).toBe(2);
-    expect((await run(['--base', withFile, ...pullRequest, '--owner', 'not a login'])).code).toBe(
-      2,
-    );
+    expect((await run(['--base', withFile, '--owner', owner])).code).toBe(2);
+    expect(
+      (await run(['--base', withFile, ...pullRequest, '--approvers', 'maple-owner,not a login']))
+        .code,
+    ).toBe(2);
   });
 });

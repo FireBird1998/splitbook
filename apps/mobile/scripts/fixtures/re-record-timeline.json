@@ -1,6 +1,7 @@
 {
-  "about": "A pull request's timeline in the shape GET /repos/{owner}/{repo}/issues/{number}/timeline returned it on 2026-10-05, with each item cut to the fields that identify it. Every login, id and URL is fictional. scripts/ceilings.test.ts replays it one event at a time, so each prefix is the timeline as it stood after that event.",
+  "about": "A pull request's timeline in the shape GET /repos/{owner}/{repo}/issues/{number}/timeline returned it on 2026-10-05, with each item cut to the fields that identify it. Every login, id and URL is fictional: maple-owner owns the repository, maple-second is its owner's second account, and helpful-collaborator is not an approver. scripts/ceilings.test.ts replays it one event at a time, so each prefix is the timeline as it stood after that event.",
   "owner": "maple-owner",
+  "approvers": ["maple-owner", "maple-second"],
   "events": [
     {
       "event": "committed",
@@ -39,7 +40,10 @@
       "commit_id": null,
       "commit_url": null,
       "created_at": "2026-10-05T07:28:01Z",
-      "label": { "name": "full-ci", "color": "5319E7" },
+      "label": {
+        "name": "full-ci",
+        "color": "5319E7"
+      },
       "intent": null,
       "performed_via_github_app": null
     },
@@ -58,7 +62,10 @@
       "commit_id": null,
       "commit_url": null,
       "created_at": "2026-10-05T08:00:00Z",
-      "label": { "name": "re-record-ceilings", "color": "B60205" },
+      "label": {
+        "name": "re-record-ceilings",
+        "color": "B60205"
+      },
       "intent": null,
       "performed_via_github_app": null
     },
@@ -84,7 +91,10 @@
       "commit_id": null,
       "commit_url": null,
       "created_at": "2026-10-05T09:00:00Z",
-      "label": { "name": "re-record-ceilings", "color": "B60205" },
+      "label": {
+        "name": "re-record-ceilings",
+        "color": "B60205"
+      },
       "intent": null,
       "performed_via_github_app": null
     },
@@ -103,7 +113,10 @@
       "commit_id": null,
       "commit_url": null,
       "created_at": "2026-10-05T09:00:20Z",
-      "label": { "name": "re-record-ceilings", "color": "B60205" },
+      "label": {
+        "name": "re-record-ceilings",
+        "color": "B60205"
+      },
       "intent": null,
       "performed_via_github_app": null
     },
@@ -122,7 +135,10 @@
       "commit_id": null,
       "commit_url": null,
       "created_at": "2026-10-05T10:15:00Z",
-      "label": { "name": "re-record-ceilings", "color": "B60205" },
+      "label": {
+        "name": "re-record-ceilings",
+        "color": "B60205"
+      },
       "intent": null,
       "performed_via_github_app": null
     },
@@ -141,7 +157,54 @@
       "commit_id": null,
       "commit_url": null,
       "created_at": "2026-10-05T10:15:30Z",
-      "label": { "name": "re-record-ceilings", "color": "B60205" },
+      "label": {
+        "name": "re-record-ceilings",
+        "color": "B60205"
+      },
+      "intent": null,
+      "performed_via_github_app": null
+    },
+    {
+      "id": 9000000008,
+      "node_id": "UNLE_fixture_10",
+      "url": "https://api.github.com/repos/maple-owner/fictional-ledger/issues/events/9000000008",
+      "actor": {
+        "login": "maple-second",
+        "id": 900004,
+        "type": "User",
+        "html_url": "https://github.com/maple-second",
+        "site_admin": false
+      },
+      "event": "unlabeled",
+      "commit_id": null,
+      "commit_url": null,
+      "created_at": "2026-10-05T11:00:00Z",
+      "label": {
+        "name": "re-record-ceilings",
+        "color": "B60205"
+      },
+      "intent": null,
+      "performed_via_github_app": null
+    },
+    {
+      "id": 9000000009,
+      "node_id": "LE_fixture_11",
+      "url": "https://api.github.com/repos/maple-owner/fictional-ledger/issues/events/9000000009",
+      "actor": {
+        "login": "maple-second",
+        "id": 900004,
+        "type": "User",
+        "html_url": "https://github.com/maple-second",
+        "site_admin": false
+      },
+      "event": "labeled",
+      "commit_id": null,
+      "commit_url": null,
+      "created_at": "2026-10-05T11:00:10Z",
+      "label": {
+        "name": "re-record-ceilings",
+        "color": "B60205"
+      },
       "intent": null,
       "performed_via_github_app": null
     }

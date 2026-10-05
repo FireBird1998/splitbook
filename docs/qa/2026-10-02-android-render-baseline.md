@@ -1,6 +1,6 @@
 # Android render and request baseline (#177, #206)
 
-The device-independent render baseline for [#177](https://github.com/FireBird1998/splitbook/issues/177), part of the performance and maintainability map [#176](https://github.com/FireBird1998/splitbook/issues/176). It was first recorded on `main` at `9856a1d` (2 October 2026) and **re-recorded on `main` at `7e69be8` (5 October 2026)**, with every component-exporting module under `apps/mobile/src/ui` counted. [#206](https://github.com/FireBird1998/splitbook/issues/206) added a request count to every journey, six journeys for the reads ADR 0006 changes, one data file for every ceiling, and the ratchet that keeps a ceiling from rising without the owner's approval; it **recorded on `main` at `d506f6e` (5 October 2026)**. The device gates (frames, jank, memory, scrolling) are measured in [#194](https://github.com/FireBird1998/splitbook/issues/194), not here.
+The device-independent render baseline for [#177](https://github.com/FireBird1998/splitbook/issues/177), part of the performance and maintainability map [#176](https://github.com/FireBird1998/splitbook/issues/176). It was first recorded on `main` at `9856a1d` (2 October 2026) and **re-recorded on `main` at `7e69be8` (5 October 2026)**, with every component-exporting module under `apps/mobile/src/ui` counted. [#206](https://github.com/FireBird1998/splitbook/issues/206) added a request count to every journey, six journeys for the reads ADR 0006 changes, one data file for every ceiling, and the ratchet that keeps a ceiling from rising without an approver's label; it **recorded on `main` at `d506f6e` (5 October 2026)**. The device gates (frames, jank, memory, scrolling) are measured in [#194](https://github.com/FireBird1998/splitbook/issues/194), not here.
 
 ## How it is measured
 
@@ -23,7 +23,7 @@ The device-independent render baseline for [#177](https://github.com/FireBird199
 - **Any console error fails the test**, except the two this file causes on purpose: React's warning that the environment doesn't support `act(...)` (the harness renders outside `act()` so publishes commit as they would on a device) and the `react-test-renderer` deprecation notice.
 - When a count comes in under its ceiling, the test prints a warning naming the journey, the measure, the count and the ceiling, so the ceiling can come down: `Change Month: requests 2 is under its ceiling of 3; lower the ceiling.` It prints nothing otherwise.
 - **A guard test** fails when a module under `src/ui` exports a component the harness doesn't count, and names the module and component. `vi.mock` is hoisted and takes static paths, so the instrumented list is kept by hand at the top of the test file. The guard also fails when a `vi.mock` names a module that no longer exists.
-- **The ratchet.** No pull request may raise a ceiling, or remove or rename a journey, unless the repository owner approves it with the `re-record-ceilings` label. PR checks runs `pnpm mobile ceilings:compare` against the base's copy of the data file, and accepts the label only when the latest `labeled` event for it on the pull request's timeline was made by the owner. Lowering a ceiling or adding a journey always passes. `pnpm swarm gate` runs the same script against the merge-base, so an agent sees a raised ceiling before CI does (`tools/swarm/README.md`).
+- **The ratchet.** No pull request may raise a ceiling, or remove or rename a journey, unless an approver allows it with the `re-record-ceilings` label. PR checks ends with `pnpm mobile ceilings:compare` against the base's copy of the data file, and accepts the label only when the latest `labeled` event for it on the pull request's timeline was made by an account in the repository variable `CEILINGS_APPROVERS` (default: the repository owner). Lowering a ceiling or adding a journey always passes. `pnpm swarm gate` runs the same script against the merge-base, so an agent sees a raised ceiling before CI does (`tools/swarm/README.md`).
 
 ## Re-recording the ceilings
 
@@ -43,8 +43,8 @@ pnpm mobile ceilings:compare --base "$(git merge-base HEAD origin/main)"        
 4. Lowering a ceiling or adding a journey needs no reason and no label.
 5. Raising a ceiling, or removing or renaming a journey, is a re-record:
    - explain why in the pull request, and in this file, for each ceiling that rose;
-   - ask the owner for the `re-record-ceilings` label. Only the owner's label counts: if anyone else applies it, the check stays red and names who applied it, and the owner removes the label and applies it again. Adding the label reruns PR checks, which then pass;
-   - the owner approves each re-record on its own pull request, so a later pull request needs the label again.
+   - ask an approver for the `re-record-ceilings` label. It must be applied by an account in the repository variable `CEILINGS_APPROVERS` (default: the repository owner). If anyone else applies it, the check stays red and names who applied it, and an approver removes the label and applies it again. Adding the label reruns PR checks, which then pass;
+   - an approver approves each re-record on its own pull request, so a later pull request needs the label again.
 
 Re-records already planned: a refresh re-reads the loaded pages, up to 5 (ADR 0006), so the refresh journeys will send more requests in #219 (Expenses), #220 (an Expense's history) and #222 (Activity).
 
@@ -172,4 +172,4 @@ The owner confirms or changes this budget in [#194](https://github.com/FireBird1
 
 - Each #178 pull request lowers the ceilings to its new numbers and updates the baseline table.
 - #206 added request counts per journey, the six journeys above, the data file and the ratchet. #214 moves the "after 30 s" journeys to fake timers once freshness follows `Date.now`.
-- #219, #220 and #222 re-record the refresh journeys, with the owner's `re-record-ceilings` label, when a refresh re-reads the loaded pages.
+- #219, #220 and #222 re-record the refresh journeys, with an approver's `re-record-ceilings` label, when a refresh re-reads the loaded pages.

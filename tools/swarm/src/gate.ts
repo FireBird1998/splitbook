@@ -39,7 +39,7 @@ export { defaultVitestWorkers, verdictPath, type StepResult, type Verdict } from
 
 /** #206's ratchet in apps/mobile/package.json; the gate calls it, never a copy. */
 export const ceilingScript = 'ceilings:compare';
-/** The label that approves a re-record; in CI only the repository owner's counts. */
+/** The label that allows a re-record; in CI it counts only when an approver applied it. */
 const reRecordLabel = 're-record-ceilings';
 /** verify:financial's fixtures need this zone; the README runs every verifier in it. */
 const verifierTimeZone = 'Asia/Kolkata';
@@ -323,7 +323,7 @@ const gateUnlocked = (
           timeout: timeouts.ceilings,
           explain: (detail) =>
             detail === 'exit code 1'
-              ? `a ceiling rose, or a journey was removed or renamed, since ${since}, so the pull request needs the owner's ${reRecordLabel} label (${detail}); the log lists each change`
+              ? `a ceiling rose, or a journey was removed or renamed, since ${since}, so the pull request needs the ${reRecordLabel} label from an approver (${detail}); the log lists each change`
               : `the ceilings could not be compared with ${since} (${detail}); the log says why`,
         });
       }

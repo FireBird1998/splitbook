@@ -1,5 +1,5 @@
 {
-  "about": "Render and request ceilings for each journey of src/render-profile.test.tsx (#177, #206). The harness reads this file, and so does the ratchet, pnpm mobile ceilings:compare. Lower a ceiling freely. Raising one, or removing or renaming a journey, needs the reason in the pull request and the owner's re-record-ceilings label: see docs/qa/2026-10-02-android-render-baseline.md.",
+  "about": "Render and request ceilings for each journey of src/render-profile.test.tsx (#177, #206). The harness reads this file, and so does the ratchet, pnpm mobile ceilings:compare. Lower a ceiling freely. Raising one, or removing or renaming a journey, needs the reason in the pull request and the re-record-ceilings label from an approver: see docs/qa/2026-10-02-android-render-baseline.md.",
   "journeys": {
     "Sign in and show Home (20 Groups)": {
       "requests": 7,

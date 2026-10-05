@@ -9,10 +9,12 @@ name: CI
 #   verifier, in one job that installs once. It is the one check branch protection requires,
 #   so its name, "PR checks", must not change. A pull request that changes only Markdown,
 #   docs/ or .claude/ files runs just the format check, and the check still passes.
-# - On a pull request, PR checks also runs the ceilings ratchet (#206): no render or request
-#   ceiling may rise, and no journey may be removed or renamed, unless the repository owner
-#   applied the re-record-ceilings label. Adding or removing any label reruns PR checks, so
-#   the owner's label turns a failing check green; lowering a ceiling never needs it.
+# - On a pull request, PR checks ends with the ceilings ratchet (#206): no render or request
+#   ceiling may rise, and no journey may be removed or renamed, unless an approver applied the
+#   re-record-ceilings label. Approvers are the logins in the repository variable
+#   CEILINGS_APPROVERS, which only an admin can set, or the repository owner without it.
+#   Adding or removing any label reruns PR checks, so an approver's label turns a failing
+#   check green; lowering a ceiling never needs it.
 # - Each push to main runs PR checks only, on the merged result.
 # - The full suite (verify, playwright and the unit-test time-zone matrix) runs nightly, on a
 #   manual run (workflow_dispatch), and on a pull request labelled full-ci, never on a push.
@@ -246,7 +248,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     # A job's permissions replace the workflow's, so contents: read is repeated. The ceilings
-    # step reads the pull request's timeline, which needs pull-requests: read; nothing writes.
+    # step, the last, reads the pull request's timeline, which needs pull-requests: read;
+    # nothing writes.
     permissions:
       contents: read
       pull-requests: read
@@ -295,28 +298,6 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      # #206's ratchet, first because it takes seconds: it compares apps/mobile's
-      # src/render-profile.ceilings.json with the base's copy (the merge commit's first parent,
-      # which depth 2 already fetched). A higher ceiling, or a journey removed or renamed, fails
-      # unless the latest labeled event for re-record-ceilings on the pull request's timeline
-      # was made by the repository owner. The script asks GitHub only when something rose.
-      # A docs-only pull request can't change the data file, so it skips this step.
-      - name: Ceilings don't rise without the owner's re-record label
-        if: github.event_name == 'pull_request' && steps.changes.outputs.docs_only != 'true'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          PULL_REQUEST: ${{ github.event.pull_request.number }}
-          REPOSITORY_OWNER: ${{ github.repository_owner }}
-        run: |
-          if ! git rev-parse --verify --quiet 'HEAD^2' > /dev/null; then
-            echo "::error title=Ceilings not compared::PR checks expected the pull request's merge commit, so it can't find the base."
-            exit 1
-          fi
-          base=$(git rev-parse 'HEAD^1')
-          pnpm mobile ceilings:compare --base "$base" --pull-request "$PULL_REQUEST" \
-            --repository "$GITHUB_REPOSITORY" --owner "$REPOSITORY_OWNER"
 
       # Prettier formats Markdown and the docs/ mockups too, so docs-only changes run it.
       - name: Format check (workspace)
@@ -378,6 +359,31 @@ jobs:
       - name: Stop the backend and drop its database
         if: always() && steps.backend.outcome != 'skipped'
         run: pnpm swarm down --mongo-port 27017
+
+      # #206's ratchet, last, so a pull request that raises a ceiling still shows every other
+      # result before an approver labels it. It compares apps/mobile's
+      # src/render-profile.ceilings.json with the base's copy (the merge commit's first parent,
+      # which depth 2 already fetched). A higher ceiling, or a journey removed or renamed, fails
+      # unless the latest labeled event for re-record-ceilings on the pull request's timeline
+      # was made by an approver: the logins in the repository variable CEILINGS_APPROVERS,
+      # which only an admin can set, or the repository owner alone without it. The script asks
+      # GitHub only when something rose, and refuses an empty list. A docs-only pull request
+      # can't change the data file, so it skips this step.
+      - name: Ceilings don't rise without an approver's re-record label
+        if: github.event_name == 'pull_request' && steps.changes.outputs.docs_only != 'true'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          APPROVERS: ${{ vars.CEILINGS_APPROVERS || github.repository_owner }}
+        run: |
+          if ! git rev-parse --verify --quiet 'HEAD^2' > /dev/null; then
+            echo "::error title=Ceilings not compared::PR checks expected the pull request's merge commit, so it can't find the base."
+            exit 1
+          fi
+          base=$(git rev-parse 'HEAD^1')
+          pnpm mobile ceilings:compare --base "$base" --pull-request "$PULL_REQUEST" \
+            --repository "$GITHUB_REPOSITORY" --approvers "$APPROVERS"
 
   playwright:
     needs: nightly-gate

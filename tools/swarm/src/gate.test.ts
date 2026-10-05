@@ -274,7 +274,7 @@ describe('gate', () => {
       expect(step(verdict, 'ceilings')?.status).toBe('pass');
     });
 
-    it("fails a raised ceiling and says the owner's re-record label is needed", async () => {
+    it("fails a raised ceiling and says an approver's re-record label is needed", async () => {
       const fake = world();
       fake.exitCodes = (launch) => (launch.args.includes('ceilings:compare') ? 1 : 0);
       const verdict = await runGate(fake, {
@@ -284,7 +284,7 @@ describe('gate', () => {
       expect(step(verdict, 'ceilings')).toMatchObject({
         status: 'fail',
         detail: expect.stringMatching(
-          /a ceiling rose, or a journey was removed or renamed, since bbbbbbb, so the pull request needs the owner's re-record-ceilings label/,
+          /a ceiling rose, or a journey was removed or renamed, since bbbbbbb, so the pull request needs the re-record-ceilings label from an approver/,
         ),
       });
     });

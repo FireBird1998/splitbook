@@ -167,8 +167,8 @@ const { default: App } = await import('../App');
 /**
  * The most each journey may render and send, from the one data file the ratchet also reads.
  * Lower a ceiling when a change renders or sends less. Raising one, or removing or renaming a
- * journey, needs the reason in the pull request and the owner's `re-record-ceilings` label
- * (docs/qa/2026-10-02-android-render-baseline.md).
+ * journey, needs the reason in the pull request and the `re-record-ceilings` label from an
+ * approver (docs/qa/2026-10-02-android-render-baseline.md).
  */
 const ceilingsPath = resolve(dirname(fileURLToPath(import.meta.url)), '..', ceilingsFile);
 const ceilings = harnessCeilings(readFileSync(ceilingsPath, 'utf8'), ceilingsFile);
