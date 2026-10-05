@@ -3,7 +3,7 @@
  * groups, the MongoDB driver on loopback only, and loopback sockets.
  */
 import { execFile, spawn, type ChildProcess } from 'node:child_process';
-import { closeSync, openSync } from 'node:fs';
+import { closeSync, openSync, readlinkSync } from 'node:fs';
 import { createServer, type AddressInfo } from 'node:net';
 import { Effect, Layer } from 'effect';
 import { MongoClient } from 'mongodb';
@@ -17,6 +17,7 @@ import {
   ProcessFailed,
   type GroupMember,
   type Launch,
+  type ProcessDetails,
 } from './platform.ts';
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -70,6 +71,43 @@ function spawnInGroup(launch: Launch): ChildProcess {
   } finally {
     closeSync(fd);
   }
+}
+
+/** The names (`n` lines) lsof prints for its query, or none when it fails or isn't installed. */
+const lsofNames = (args: readonly string[]) =>
+  new Promise<string[]>((resolve) => {
+    execFile('lsof', ['-n', '-P', '-a', ...args, '-Fn'], { timeout: 10_000 }, (error, stdout) =>
+      resolve(
+        error
+          ? []
+          : stdout
+              .split('\n')
+              .filter((line) => line.startsWith('n'))
+              .map((line) => line.slice(1)),
+      ),
+    );
+  });
+
+async function processDetails(pid: number): Promise<ProcessDetails> {
+  if (!Number.isInteger(pid) || pid <= 1) return { cwd: undefined, listening: [] };
+  const [cwds, listeners] = await Promise.all([
+    lsofNames(['-p', String(pid), '-d', 'cwd']),
+    lsofNames(['-p', String(pid), '-iTCP', '-sTCP:LISTEN']),
+  ]);
+  let cwd = cwds[0];
+  if (cwd === undefined) {
+    try {
+      // Linux without lsof.
+      cwd = readlinkSync(`/proc/${pid}/cwd`);
+    } catch {
+      // Unknown.
+    }
+  }
+  const listening = listeners.flatMap((name) => {
+    const port = /:(\d+)$/.exec(name)?.[1];
+    return port ? [Number(port)] : [];
+  });
+  return { cwd, listening: [...new Set(listening)] };
 }
 
 const failedToStart = (launch: Launch, error: unknown) =>
@@ -151,6 +189,8 @@ export const ProcessesLive = Layer.succeed(Processes, {
         },
       );
     }),
+
+  details: (pid) => Effect.promise(() => processDetails(pid)),
 
   stopGroup: (pid) => Effect.promise(() => stopGroup(pid)),
 });

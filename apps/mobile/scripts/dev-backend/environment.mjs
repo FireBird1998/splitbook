@@ -102,3 +102,24 @@ export function isolatedEnv() {
     ...targetVariables(target),
   };
 }
+
+/**
+ * How start.mjs serves the web app: `dev` (`next dev`, the default) or `production`
+ * (a production build for this origin, then `next start`). Only start.mjs reads it.
+ */
+export function serverMode(env) {
+  const mode = env.SPLITBOOK_NATIVE_SERVER ?? 'dev';
+  if (mode !== 'dev' && mode !== 'production') {
+    throw new Error('SPLITBOOK_NATIVE_SERVER must be dev or production');
+  }
+  return mode;
+}
+
+/** The web server's environment in that mode. */
+export function serverEnv(mode) {
+  const environment = isolatedEnv();
+  if (mode !== 'production') return environment;
+  // Demo personas fail closed in production without ALLOW_DEMO_AUTH=true, which the
+  // Playwright CI jobs set for the same reason.
+  return { ...environment, NODE_ENV: 'production', ALLOW_DEMO_AUTH: 'true' };
+}

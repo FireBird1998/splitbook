@@ -14,12 +14,15 @@
  *   starting or not answering is never torn down by another command;
  * - a process group is signalled only when its leader is this worktree's own start.mjs with
  *   the recorded start time, or, once that leader is gone, when every process left in it
- *   traces back to this worktree;
+ *   traces back to this worktree, or is a next-server on the recorded port or in this
+ *   worktree's apps/web;
+ * - while a process the tool can't account for is left in that group and the recorded
+ *   port is taken, `down` drops nothing and keeps the record;
  * - every drop goes through one check (names.ts): this worktree's prefix and the fictional
  *   ownership marker.
  *
  * The backend's own scripts keep refusing .env files and build the server's environment
- * themselves; this module passes them only PATH and the three SPLITBOOK_NATIVE_* variables.
+ * themselves; this module passes them only PATH and the SPLITBOOK_NATIVE_* variables.
  */
 import { randomBytes } from 'node:crypto';
 import {
@@ -73,6 +76,15 @@ export const fetchBlockedPorts: ReadonlySet<number> = new Set([
 /** Better Auth's health route: it answers once the server has compiled the auth route. */
 const readinessPath = '/api/auth/ok';
 const defaultReadyTimeout: Duration.Input = '3 minutes';
+
+/**
+ * How start.mjs serves the web app (its SPLITBOOK_NATIVE_SERVER): `next dev`, or a
+ * production build for the backend's origin, then `next start`. The build counts toward
+ * the ready timeout.
+ */
+export type ServerMode = 'dev' | 'production';
+const isServerMode = (value: string): value is ServerMode =>
+  value === 'dev' || value === 'production';
 const defaultSeedTimeout: Duration.Input = '2 minutes';
 
 export interface Backend {
@@ -89,6 +101,8 @@ export interface Backend {
   readonly processStart: string | undefined;
   /** Seconds from start to the first answer; undefined until it answers. */
   readonly readySeconds: number | undefined;
+  /** Missing in a record from before production builds, which means dev. */
+  readonly server?: ServerMode;
 }
 
 export interface UpOptions {
@@ -101,6 +115,8 @@ export interface UpOptions {
   readonly mongoPort?: number | undefined;
   readonly readyTimeout?: Duration.Input | undefined;
   readonly seedTimeout?: Duration.Input | undefined;
+  /** `dev` (the default) or `production`. */
+  readonly server?: string | undefined;
 }
 
 export interface DownOptions {
@@ -305,14 +321,33 @@ function tracesToWorktree(member: GroupMember, members: readonly GroupMember[], 
 }
 
 /**
+ * Whether a process is this worktree's Next server. `next start` retitles its process
+ * `next-server (v…)`, so its command line names no path, and neither does `next dev`'s
+ * next-server once its parents are gone. It counts only when it listens on the recorded
+ * port or runs in this worktree's apps/web.
+ */
+const isOwnNextServer = (member: GroupMember, root: string, port: number | undefined) =>
+  Effect.gen(function* () {
+    if (!/^next-server \(v[^)]*\)\s*$/.test(member.command)) return false;
+    const { cwd, listening } = yield* (yield* Processes).details(member.pid);
+    return (port !== undefined && listening.includes(port)) || cwd === join(root, 'apps/web');
+  });
+
+/**
  * What is left of a recorded backend's process group:
  * - `ours`: its leader is this worktree's start.mjs, started when the record says;
  * - `orphaned`: the leader is gone (killed or out of memory), and every process left in
- *   the group traces back to this worktree, such as next-server under `next dev`;
+ *   the group traces back to this worktree, such as next-server under `next dev`, or is
+ *   this worktree's Next server, such as `next start`'s next-server on the recorded port;
  * - `foreign`: anything else, never signalled;
  * - `none`: no process is left.
  */
-const groupState = (root: string, pid: number | undefined, processStart: string | undefined) =>
+const groupState = (
+  root: string,
+  pid: number | undefined,
+  processStart: string | undefined,
+  port: number | undefined,
+) =>
   Effect.gen(function* () {
     if (pid === undefined) return { kind: 'none' as const, members: [] };
     const processes = yield* Processes;
@@ -326,26 +361,38 @@ const groupState = (root: string, pid: number | undefined, processStart: string 
         (yield* processes.startTime(pid)) === processStart;
       return { kind: ours ? ('ours' as const) : ('foreign' as const), members };
     }
-    const traced = members.every((member) => tracesToWorktree(member, members, root));
-    return { kind: traced ? ('orphaned' as const) : ('foreign' as const), members };
+    for (const member of members) {
+      if (tracesToWorktree(member, members, root)) continue;
+      if (yield* isOwnNextServer(member, root, port)) continue;
+      return { kind: 'foreign' as const, members };
+    }
+    return { kind: 'orphaned' as const, members };
   });
 
-/** Stops a recorded backend's process group when it is this worktree's; never otherwise. */
-const stopOwnGroup = (root: string, pid: number | undefined, processStart: string | undefined) =>
+/**
+ * Stops a recorded backend's process group when it is this worktree's; never otherwise.
+ * Says which group it stopped, or which processes it left alone.
+ */
+const stopOwnGroup = (
+  root: string,
+  pid: number | undefined,
+  processStart: string | undefined,
+  port: number | undefined,
+) =>
   Effect.gen(function* () {
-    const state = yield* groupState(root, pid, processStart);
+    const state = yield* groupState(root, pid, processStart, port);
     if (pid !== undefined && (state.kind === 'ours' || state.kind === 'orphaned')) {
       yield* (yield* Processes).stopGroup(pid);
-      return pid;
+      return { stopped: pid, leftAlone: [] };
     }
     if (state.kind === 'foreign') {
+      const leftAlone = state.members.map((member) => member.pid);
       yield* (yield* Output).line(
-        `Left process group ${pid} alone: its processes (${state.members
-          .map((member) => member.pid)
-          .join(', ')}) are not this worktree's backend.`,
+        `Left process group ${pid} alone: its processes (${leftAlone.join(', ')}) are not this worktree's backend.`,
       );
+      return { stopped: undefined, leftAlone };
     }
-    return undefined;
+    return { stopped: undefined, leftAlone: [] };
   });
 
 const pickPort = (mongoPort: number) =>
@@ -369,7 +416,7 @@ const waitForAnswer = (backend: Backend, root: string, timeout: Duration.Input) 
     const network = yield* Network;
     for (;;) {
       if (yield* network.answers(`${backend.origin}${readinessPath}`)) return 'answered' as const;
-      const state = yield* groupState(root, backend.pid, backend.processStart);
+      const state = yield* groupState(root, backend.pid, backend.processStart, backend.port);
       if (state.kind !== 'ours') return 'exited' as const;
       yield* Effect.sleep('250 millis');
     }
@@ -381,10 +428,15 @@ interface Plan {
   readonly mongoPort: number;
   readonly database: string;
   readonly port: number | undefined;
+  readonly server: ServerMode;
 }
 
 /** Checks the requested target before anything connects, starts or stops. */
 function plan(options: UpOptions): Plan | string {
+  const server = options.server ?? 'dev';
+  if (!isServerMode(server)) {
+    return `Refusing server ${server}: the backend runs as dev (next dev) or production (a production build).`;
+  }
   const mongoPort = options.mongoPort ?? defaultMongoPort;
   const mongoRefusal = mongoPortRefusal(mongoPort);
   if (mongoRefusal) return mongoRefusal;
@@ -392,9 +444,10 @@ function plan(options: UpOptions): Plan | string {
     options.database ?? `${worktreePrefix(options.root)}${randomBytes(4).toString('hex')}`;
   const nameRefusal = databaseRefusal(database, options.root);
   if (nameRefusal) return nameRefusal;
-  if (options.origin === undefined) return { mongoPort, database, port: undefined };
+  const target = { mongoPort, database, server };
+  if (options.origin === undefined) return { ...target, port: undefined };
   const port = requestedPort(options.origin, mongoPort);
-  return typeof port === 'string' ? port : { mongoPort, database, port };
+  return typeof port === 'string' ? port : { ...target, port };
 }
 
 /**
@@ -431,7 +484,7 @@ const launch = (options: UpOptions, target: Plan) =>
     const databases = yield* Databases;
     const network = yield* Network;
     const output = yield* Output;
-    const { mongoPort, database } = target;
+    const { mongoPort, database, server } = target;
 
     let port: number;
     if (target.port === undefined) {
@@ -468,7 +521,8 @@ const launch = (options: UpOptions, target: Plan) =>
       command: process.execPath,
       args: [backendScript(root, name)],
       cwd: root,
-      env,
+      // Only start.mjs serves the web app; the seed runs the same either way.
+      env: name === 'start.mjs' ? { ...env, SPLITBOOK_NATIVE_SERVER: server } : env,
       log,
     });
     const started = Date.now();
@@ -482,6 +536,7 @@ const launch = (options: UpOptions, target: Plan) =>
       pid: undefined,
       processStart: undefined,
       readySeconds: undefined,
+      server,
     };
     // Recorded before anything is created, so `down` knows the database and its Mongo port
     // even if this process dies.
@@ -518,7 +573,11 @@ const launch = (options: UpOptions, target: Plan) =>
           );
         }
 
-        yield* output.line(`Starting the backend at ${origin}`);
+        yield* output.line(
+          server === 'production'
+            ? `Building the web app for production, then starting the backend at ${origin}`
+            : `Starting the backend at ${origin}`,
+        );
         const startedBackend = Date.now();
         const child = yield* Effect.acquireRelease(
           processes
@@ -532,7 +591,8 @@ const launch = (options: UpOptions, target: Plan) =>
             Exit.isSuccess(exit)
               ? Effect.void
               : Effect.gen(function* () {
-                  if ((yield* stopOwnGroup(root, pid, processStart)) !== undefined) {
+                  const { stopped } = yield* stopOwnGroup(root, pid, processStart, port);
+                  if (stopped !== undefined) {
                     yield* output.line(`Stopped the backend at ${origin}.`);
                   }
                 }),
@@ -570,10 +630,12 @@ const launch = (options: UpOptions, target: Plan) =>
 const announce = (backend: Backend, reused: boolean) =>
   Effect.gen(function* () {
     const output = yield* Output;
+    const production = backend.server === 'production';
+    const serving = production ? 'a production build' : 'next dev';
     yield* output.line(
       reused
-        ? `This worktree's backend is already up at ${backend.origin}.`
-        : `The backend is ready at ${backend.origin} after ${backend.readySeconds} s.`,
+        ? `This worktree's backend is already up at ${backend.origin}, serving ${serving}.`
+        : `The backend is ready at ${backend.origin} after ${backend.readySeconds} s${production ? ' (build included)' : ''}, serving ${serving}.`,
     );
     yield* output.line(`Log ${backend.log}`);
     yield* output.line(
@@ -600,7 +662,7 @@ const reuseOrClean = (options: UpOptions) =>
         `${refusal} The record is ${statePath(root)}; nothing was stopped or dropped.`,
       );
     }
-    const state = yield* groupState(root, record.pid, record.processStart);
+    const state = yield* groupState(root, record.pid, record.processStart, record.port);
     if (state.kind === 'ours') {
       if (yield* (yield* Network).answers(`${record.origin}${readinessPath}`)) return record;
       const timeout = options.readyTimeout ?? defaultReadyTimeout;
@@ -641,12 +703,14 @@ export const up = (
       Effect.gen(function* () {
         const existing = yield* reuseOrClean(options);
         if (existing) {
+          const existingServer = existing.server ?? 'dev';
           if (
             (options.origin !== undefined && options.origin !== existing.origin) ||
-            (options.database !== undefined && options.database !== existing.database)
+            (options.database !== undefined && options.database !== existing.database) ||
+            (options.server !== undefined && options.server !== existingServer)
           ) {
             return yield* refuse(
-              `This worktree's backend is already up at ${existing.origin} on ${existing.database}. Run pnpm swarm down first.`,
+              `This worktree's backend is already up at ${existing.origin} on ${existing.database} (${existingServer}). Run pnpm swarm down first.`,
             );
           }
           yield* announce(existing, true);
@@ -691,7 +755,7 @@ export const backendForScope = (
 
 const downUnlocked = (
   options: DownOptions,
-): Effect.Effect<DownResult, SwarmError, Processes | Databases | Output> =>
+): Effect.Effect<DownResult, SwarmError, Processes | Databases | Network | Output> =>
   Effect.gen(function* () {
     const { root } = options;
     const databases = yield* Databases;
@@ -711,9 +775,18 @@ const downUnlocked = (
     if (mongoRefusal) return yield* refuse(mongoRefusal);
 
     // Stopping comes first, so a live backend can't write to a database being dropped.
-    const stopped = record ? yield* stopOwnGroup(root, record.pid, record.processStart) : undefined;
+    const { stopped, leftAlone } = record
+      ? yield* stopOwnGroup(root, record.pid, record.processStart, record.port)
+      : { stopped: undefined, leftAlone: [] };
     if (record && stopped !== undefined)
       yield* output.line(`Stopped the backend at ${record.origin}.`);
+    // A process the tool can't account for, with the backend's port still taken, may be
+    // the backend, still using its database.
+    if (record && leftAlone.length > 0 && !(yield* (yield* Network).isPortFree(record.port))) {
+      return yield* refuse(
+        `Dropped nothing: process group ${record.pid} still has processes (${leftAlone.join(', ')}) that are not known to be this worktree's backend, and port ${record.port} is taken, so ${record.database} may still be in use. Stop those processes if they are this worktree's, then run pnpm swarm down again. The record ${statePath(root)} is kept.`,
+      );
+    }
 
     const prefix = worktreePrefix(root);
     const own = (yield* databases.list(mongoPort)).filter((name) => name.startsWith(prefix));
@@ -753,5 +826,5 @@ const downUnlocked = (
  */
 export const down = (
   options: DownOptions,
-): Effect.Effect<DownResult, SwarmError, Processes | Databases | Output> =>
+): Effect.Effect<DownResult, SwarmError, Processes | Databases | Network | Output> =>
   withWorktreeLock(options.root, 'down', downUnlocked(options));

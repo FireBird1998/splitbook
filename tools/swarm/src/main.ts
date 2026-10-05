@@ -14,7 +14,7 @@ const usage = `Usage: pnpm swarm <command> [flags]
   check   Fail unless this worktree's install matches pnpm-lock.yaml.
   up      Start this worktree's own fictional backend and print its MOBILE_VERIFY_URL.
           --origin http://127.0.0.1:<port>  --database ${'<splitbook_mobile_swarm_…>'}
-          --mongo-port <port>  --ready-timeout <seconds>
+          --mongo-port <port>  --ready-timeout <seconds>  --server dev|production
   down    Stop this worktree's backend and drop this worktree's databases.
           --mongo-port <port>
   gate    Run every check a ticket needs and write tools/swarm/out/verdict.json.

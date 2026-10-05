@@ -38,7 +38,7 @@ Drop `--offline` if a package is missing from the store. A stale install looks l
 
 `up` records the backend in `tools/swarm/out/backend.json` before it seeds, so `down` can always find the database and its Mongo port, and adds the backend's pid and start time once it starts.
 
-When this worktree's backend is already up and answering, `up` prints it again instead of starting another. When it is running but not answering (still compiling, or busy), `up` waits for it up to the ready timeout, then refuses; it never tears a running backend down. A record whose backend is gone (after a crash or a reboot) is cleaned up first, as `down` would.
+When this worktree's backend is already up and answering, `up` prints it again, with what it serves (`next dev` or a production build), instead of starting another. When it is running but not answering (still compiling, or busy), `up` waits for it up to the ready timeout, then refuses; it never tears a running backend down. A record whose backend is gone (after a crash or a reboot) is cleaned up first, as `down` would.
 
 | Flag (or variable)                                     | Default                  | Accepted                                                                             |
 | ------------------------------------------------------ | ------------------------ | ------------------------------------------------------------------------------------ |
@@ -46,6 +46,7 @@ When this worktree's backend is already up and answering, `up` prints it again i
 | `--database` (or `SPLITBOOK_NATIVE_DATABASE`)          | a fresh name             | this worktree's prefix, then `[a-z0-9_]`, 63 characters at most                      |
 | `--mongo-port` (or `SPLITBOOK_NATIVE_MONGO_PORT`)      | `27018`                  | the local Mongo server's port                                                        |
 | `--ready-timeout <seconds>`                            | 180                      |                                                                                      |
+| `--server` (or `SPLITBOOK_NATIVE_SERVER`)              | `dev`                    | `dev` (`next dev`) or `production` (a production build, then `next start`)           |
 
 #185's variables, when set, are requests like the flags: they are checked, never trusted. `up` refuses, before anything connects or starts:
 
@@ -56,7 +57,23 @@ When this worktree's backend is already up and answering, `up` prints it again i
 
 A backend that never answers fails `up` after the timeout with a clear error; the backend is stopped and its database dropped. Ctrl-C (or SIGTERM) while `up` runs does the same. If that drop fails, `up` says so and keeps the record, so `pnpm swarm down` can finish it.
 
-The backend's own scripts keep their rules: they refuse root and `apps/web` `.env` files, accept only loopback Mongo and `splitbook_mobile_*` names, and claim a database with the fictional ownership marker. The tool passes them only `PATH` and the three variables above; it never reads `.env` files, `MONGODB_URI` or any credential.
+The backend's own scripts keep their rules: they refuse root and `apps/web` `.env` files, accept only loopback Mongo and `splitbook_mobile_*` names, and claim a database with the fictional ownership marker. The tool passes them only `PATH` and the three variables above, plus `SPLITBOOK_NATIVE_SERVER` to `start.mjs`; it never reads `.env` files, `MONGODB_URI` or any credential.
+
+**`--server production`** makes `start.mjs` build the web app for the backend's origin, then serve it with `next start` and `ALLOW_DEMO_AUTH=true`, as CI does. Next bakes the origin into the build, so each production `up` builds again, in `apps/web/.next`. A `pnpm web build` in the same worktree overwrites that `.next` while the backend serves it, so run one only after `pnpm swarm down`. The build counts toward the ready timeout and takes about 30 s on this machine when it is quiet (below), so raise `--ready-timeout` on a slow or busy machine. The default, `dev`, runs `next dev`. `up` refuses to switch a running backend to the other server; run `pnpm swarm down` first.
+
+## In CI
+
+The **Mobile HTTP verifiers** job (`mobile-verifiers` in `.github/workflows/ci.yml`, #228) runs every verifier on each pull request and push to `main`, against a backend of the run's own:
+
+```sh
+pnpm swarm up --mongo-port 27017 --server production --ready-timeout 600
+TZ=Asia/Kolkata pnpm mobile verify:all   # with MOBILE_VERIFY_URL from up
+pnpm swarm down --mongo-port 27017
+```
+
+The job's `mongo:7` service listens on 27017, so `up` and `down` name that port; locally the default, 27018, applies. The job adds `up`'s `NAME=value` lines to `GITHUB_ENV`, turns each `FAIL verify:*` line of `verify:all` into an annotation, uploads `tools/swarm/out/backend.log` when anything fails, and always runs `down`. One job runs one swarm command at a time, so the worktree lock never refuses one there.
+
+It serves a production build, as the Playwright jobs do, so no route compiles while a verifier waits; see the timings below. Changing `--server production` to `--server dev` in the job is all it takes to use `next dev` instead.
 
 ## `pnpm swarm down`
 
@@ -73,7 +90,9 @@ Every drop the tool makes, from `down` or from a failed `up`, goes through one c
 It stops a process group (SIGTERM, then SIGKILL after 10 s), so no `next dev` is left behind, only when:
 
 - its leader is this worktree's own `start.mjs`, by absolute path, with the start time recorded when it started. The shared backend, started from the main checkout, has the same command line there, and a reused pid has a later start time, so neither is ever stopped;
-- or that leader is gone (killed, or out of memory) and every process left in its group traces back, through its parents in the group, to a process running from this worktree's `apps/`, such as `next-server` under `next dev`. Otherwise the group is left alone with a warning naming its pids.
+- or that leader is gone (killed, or out of memory) and every process left in its group either traces back, through its parents in the group, to a process running from this worktree's `apps/`, such as `next-server` under `next dev`, or is a `next-server` that listens on the recorded port or runs in this worktree's `apps/web`. `next start` retitles its only process `next-server (v…)`, so a production server whose `start.mjs` died names no path; `lsof` (or `/proc` on Linux) gives its port and directory. Otherwise the group is left alone with a warning naming its pids.
+
+When it leaves processes alone and the recorded port is still taken, one of them may be the backend, still using its database. Then `down` drops nothing and keeps the record, and says which processes to look at; once they are gone, run it again. `up` refuses to start a new backend until then.
 
 As it exits, Next starts its own telemetry flush (`next/dist/telemetry/detached-flush.js`) outside that group; it ends by itself within a couple of seconds.
 
@@ -136,6 +155,18 @@ Measured on 2026-10-04 on an Apple M3 Pro (11 cores, 36 GB of memory), Node 22.2
 - **Time to ready:** 4.8 s for one backend in a fresh worktree, from start to the first answer of `/api/auth/ok`; 4.2 s for another started at the same time in a second fresh worktree; 1.9 s once the worktree's `.next` cache is warm. The seed adds about 2 s before that, so `up` takes about 7 s.
 - **Memory:** about 0.9 to 1.1 GB resident for one backend's process group once ready, almost all of it the `next-server` process (0.7 GB with a warm cache), rising to 1.3 to 1.7 GB after a gate has run every verifier against it, since `next dev` keeps every route it compiled. Budget about 1.7 GB per running backend.
 - **Two gates at once,** each in its own worktree with its own backend from `up`: both passed, in 82 s and 92 s, with the default cap of 2 vitest workers.
+
+Measured on 2026-10-05 on the same machine for #228: `up`, then `TZ=Asia/Kolkata pnpm mobile verify:all`, from a fresh worktree with no `apps/web/.next`. Seven other agents shared the machine, so the load varied from run to run:
+
+| Load average | `next dev`: `up` + verifiers | Production build: `up` (build included) + verifiers |
+| ------------ | ---------------------------- | --------------------------------------------------- |
+| low          | 7 s + 53 s = 60 s            | 31 s + 11 s = 42 s, by hand                         |
+| about 20     | 9 s + 66 s = 75 s            | 63 s + 22 s = 85 s                                  |
+| 24 to 90     | 7 s + 84 s = 91 s            | 92 s + 28 s = 120 s                                 |
+
+The quiet production run predates `--server`: it ran the same steps by hand (the seed, `next build --webpack`, then `next start` with the same environment), with the backend in UTC, as on a CI runner, and every verifier passed.
+
+On a quiet machine the production build is faster, because `next dev` compiles every route the verifiers reach while they wait (the verifiers took 24 s against a warm `next dev`, 11 s against a production build); on a busy one the parallel build suffers most. A CI runner is a quiet machine with 4 cores, where the web app's build takes 40 to 60 s. That holds while the repository is public: GitHub's runners for private repositories have 2 cores, so measure the job again if it goes private. A production backend also uses less memory: about 0.27 GB once the verifiers have run, against 1.1 to 1.7 GB for `next dev`.
 
 ## Files
 

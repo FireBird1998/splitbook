@@ -83,12 +83,14 @@ describe('up', () => {
     const [seed, start] = world.launches;
     expect(seed?.args).toEqual([join(root, 'apps/mobile/scripts/dev-backend/seed.mjs')]);
     expect(start?.args).toEqual([join(root, 'apps/mobile/scripts/dev-backend/start.mjs')]);
-    for (const launch of [seed, start]) {
-      expect(launch?.env).toMatchObject(variables);
-      expect(Object.keys(launch?.env ?? {}).sort()).toEqual(
-        ['PATH', ...Object.keys(variables)].sort(),
-      );
-    }
+    expect(seed?.env).toEqual({ PATH: process.env.PATH ?? '', ...variables });
+    // start.mjs also learns how to serve the web app: next dev unless asked otherwise.
+    expect(start?.env).toEqual({
+      PATH: process.env.PATH ?? '',
+      ...variables,
+      SPLITBOOK_NATIVE_SERVER: 'dev',
+    });
+    expect(backend.server).toBe('dev');
     expect(world.lines).toContain('MOBILE_VERIFY_URL=http://127.0.0.1:53001');
     expect(world.lines).toContain('SPLITBOOK_NATIVE_ORIGIN_PORT=53001');
     expect(world.lines).toContain(`SPLITBOOK_NATIVE_DATABASE=${backend.database}`);
@@ -100,6 +102,98 @@ describe('up', () => {
       processStart: `started ${backend.pid}`,
     });
     expect(existsSync(lockPath(root))).toBe(false);
+  });
+
+  it('starts a production build when asked, with the same safety rules', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+
+    const { backend } = await upIn(world, { root, server: 'production', mongoPort: 27017 });
+
+    const [seed, start] = world.launches;
+    expect(seed?.env).not.toHaveProperty('SPLITBOOK_NATIVE_SERVER');
+    expect(start?.env).toEqual({
+      PATH: process.env.PATH ?? '',
+      SPLITBOOK_NATIVE_ORIGIN_PORT: '53001',
+      SPLITBOOK_NATIVE_DATABASE: backend.database,
+      SPLITBOOK_NATIVE_MONGO_PORT: '27017',
+      SPLITBOOK_NATIVE_SERVER: 'production',
+    });
+    expect(backend.database.startsWith(worktreePrefix(root))).toBe(true);
+    expect(readBackend(root)).toMatchObject({ server: 'production', mongoPort: 27017 });
+    expect(world.lines).toContain(
+      'Building the web app for production, then starting the backend at http://127.0.0.1:53001',
+    );
+    expect(world.lines).toContainEqual(
+      expect.stringMatching(
+        /^The backend is ready at http:\/\/127\.0\.0\.1:53001 after [\d.]+ s \(build included\), serving a production build\.$/,
+      ),
+    );
+    // The variables the verifiers and controls get are the same as for next dev.
+    expect(world.lines).toContain('SPLITBOOK_NATIVE_MONGO_PORT=27017');
+    expect(world.lines.some((line) => line.startsWith('SPLITBOOK_NATIVE_SERVER='))).toBe(false);
+  });
+
+  it.each(['prod', 'Production', 'start', ''])(
+    'refuses the server %j and changes nothing',
+    async (server) => {
+      const world = fakeWorld();
+      const error = await upFailure(world, { root: fixtureWorktree(), server });
+      expect(error._tag).toBe('Refused');
+      expect(error.message).toMatch(/dev \(next dev\) or production/);
+      expect(world.launches).toEqual([]);
+    },
+  );
+
+  it('refuses to switch a running backend to another server, and leaves it running', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+    const first = await upIn(world, { root });
+
+    const error = await upFailure(world, { root, server: 'production' });
+
+    expect(error.message).toMatch(/already up .*\(dev\)\. Run pnpm swarm down first/);
+    expect(world.stopped).toEqual([]);
+    expect(world.running.has(first.backend.pid ?? -1)).toBe(true);
+    // Asking for the mode it already runs in reuses it.
+    expect((await upIn(world, { root, server: 'dev' })).reused).toBe(true);
+  });
+
+  it('refuses to switch a running production backend to next dev', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+    await upIn(world, { root, server: 'production' });
+
+    const error = await upFailure(world, { root, server: 'dev' });
+
+    expect(error.message).toMatch(/already up .*\(production\)\. Run pnpm swarm down first/);
+    expect(world.stopped).toEqual([]);
+  });
+
+  it('reuses a production backend when no server is named, and says what it serves', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+    const first = await upIn(world, { root, server: 'production' });
+
+    const again = await upIn(world, { root });
+
+    expect(again).toEqual({ backend: first.backend, reused: true });
+    expect(world.lines).toContain(
+      "This worktree's backend is already up at http://127.0.0.1:53001, serving a production build.",
+    );
+  });
+
+  it('reads a record from before production builds as a dev backend', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+    const first = await upIn(world, { root });
+    const older: Record<string, unknown> = { ...readBackend(root) };
+    delete older.server;
+    recordBackend(root, older);
+
+    const again = await upIn(world, { root, server: 'dev' });
+    expect(again).toMatchObject({ reused: true, backend: { origin: first.backend.origin } });
+    expect(again.backend.server).toBeUndefined();
   });
 
   it('gives two worktrees different ports and databases', async () => {
@@ -578,13 +672,72 @@ describe('down', () => {
     const root = fixtureWorktree();
     const world = fakeWorld();
     recordBackend(root, {});
+    // A next-server, but not this worktree's: another port, another directory.
     world.members.set(4321, [{ pid: 4323, ppid: 1, command: 'next-server (v16.1.6)' }]);
+    world.details.set(4323, { cwd: '/elsewhere/apps/web', listening: [53999] });
 
     const result = await downIn(world, { root });
 
     expect(result.stopped).toBeUndefined();
     expect(world.stopped).toEqual([]);
     expect(world.lines.some((line) => line.startsWith('Left process group 4321 alone'))).toBe(true);
+  });
+
+  it.each([
+    ['listens on the recorded port', { cwd: undefined, listening: [53001] }],
+    ['runs in this worktree’s apps/web', { cwd: 'apps/web', listening: [] }],
+  ])(
+    'stops a production server whose start.mjs died, when its next-server %s',
+    async (_case, details) => {
+      const root = fixtureWorktree();
+      const world = fakeWorld();
+      const database = `${worktreePrefix(root)}recorded`;
+      world.databases.set(database, true);
+      recordBackend(root, { database, server: 'production' });
+      // next start retitles its only process, so its command line names no path.
+      world.members.set(4321, [{ pid: 4323, ppid: 1, command: 'next-server (v16.1.6)      ' }]);
+      world.details.set(4323, {
+        cwd: details.cwd === undefined ? undefined : join(root, details.cwd),
+        listening: details.listening,
+      });
+      world.portsInUse.add(53001);
+
+      const result = await downIn(world, { root });
+
+      expect(result.stopped).toBe(4321);
+      expect(world.stopped).toEqual([4321]);
+      expect(result.dropped).toEqual([database]);
+      expect(readBackend(root)).toBeUndefined();
+    },
+  );
+
+  it('drops nothing and keeps the record while a process it can’t account for holds the recorded port', async () => {
+    const root = fixtureWorktree();
+    const world = fakeWorld();
+    const database = `${worktreePrefix(root)}recorded`;
+    world.databases.set(database, true);
+    recordBackend(root, { database, server: 'production' });
+    // A next-server the tool can't place (no working directory or ports), with the
+    // recorded port taken.
+    world.members.set(4321, [{ pid: 4323, ppid: 1, command: 'next-server (v16.1.6)' }]);
+    world.portsInUse.add(53001);
+
+    const error = await downFailure(world, { root });
+
+    expect(error._tag).toBe('Refused');
+    expect(error.message).toMatch(/^Dropped nothing: process group 4321 .*\(4323\).*port 53001/);
+    expect(world.stopped).toEqual([]);
+    expect(world.dropped).toEqual([]);
+    expect(readBackend(root)?.database).toBe(database);
+    // up refuses too, rather than replace the record.
+    expect((await upFailure(world, { root })).message).toMatch(/^Dropped nothing/);
+
+    // Once that process is gone and the port is free, down finishes.
+    world.members.delete(4321);
+    world.portsInUse.delete(53001);
+    const result = await downIn(world, { root });
+    expect(result.dropped).toEqual([database]);
+    expect(readBackend(root)).toBeUndefined();
   });
 
   it('never stops a process with the same command line that started later, such as a reused pid', async () => {
