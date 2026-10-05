@@ -320,7 +320,7 @@ async function compare(argv: readonly string[], context: CompareContext): Promis
     if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? ''))
       throw new Refused('--repository needs <owner>/<name>.');
     if (!/^[a-z\d](?:[a-z\d-]*[a-z\d])?$/i.test(owner ?? ''))
-      throw new Refused('--owner needs the repository owner’s login.');
+      throw new Refused("--owner needs the repository owner's login.");
   }
 
   const git = (...args: string[]) =>
@@ -339,15 +339,11 @@ async function compare(argv: readonly string[], context: CompareContext): Promis
     );
   }
   const short = commit.slice(0, 7);
-  // `<commit>:./path` is relative to cwd, which is apps/mobile.
-  const atBase = `${commit}:./${ceilingsFile}`;
-  let baseText: string | undefined;
-  try {
-    git('cat-file', '-e', atBase);
-    baseText = git('show', atBase);
-  } catch {
-    baseText = undefined;
-  }
+  // Paths are relative to cwd, which is apps/mobile. Only a base whose tree lacks the file
+  // has no ceilings; any other git failure stops the comparison rather than passing it.
+  const baseText = git('ls-tree', '--name-only', commit, '--', `./${ceilingsFile}`)
+    ? git('show', `${commit}:./${ceilingsFile}`)
+    : undefined;
   const before =
     baseText === undefined ? {} : parseCeilings(baseText, `${ceilingsFile} at ${short}`);
   let headText: string;
