@@ -1,5 +1,6 @@
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { decodeStoredSession } from './data/cookies';
 import { createMobileController, type MobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
@@ -65,6 +66,33 @@ const group = (id: string, name: string, category: string) => ({
   updatedAt: iso,
 });
 const groups = [group(maple, 'Maple House', 'home'), group(lisbon, 'Lisbon Offsite', 'work')];
+const expenseId = 'e00000000000000000000001';
+// A saved Expense in Maple House, opened by its record.
+const expense = {
+  _id: expenseId,
+  group: maple,
+  revision: 0,
+  description: 'Water bill',
+  amount: 30,
+  amountMinor: 3000,
+  moneyVersion: 1,
+  currency: 'INR',
+  paidBy: [{ user: { _id: alex.id, name: alex.name, image: null }, amount: 30, amountMinor: 3000 }],
+  splitBetween: [
+    { user: { _id: alex.id, name: alex.name, image: null }, amount: 15, amountMinor: 1500 },
+    { user: { _id: sam._id, name: sam.name, image: null }, amount: 15, amountMinor: 1500 },
+  ],
+  splitMethod: 'equal',
+  date: iso,
+  createdAt: iso,
+  updatedAt: iso,
+  category: 'housing',
+  tagId,
+  tag: 'Shared',
+  notes: '',
+  isDeleted: false,
+  editHistory: [],
+};
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 /** One phone: its stored session and saved views outlive each controller, as across restarts. */
@@ -98,6 +126,8 @@ function device() {
     const found = groups.find((item) => item._id === id);
     if (!found) return json({}, 404);
     if (path === `/api/groups/${id}`) return json({ data: found, status: 200 });
+    if (path === `/api/groups/${maple}/expenses/${expenseId}`)
+      return json({ data: expense, status: 200 });
     if (path.startsWith(`/api/groups/${id}/expenses?`))
       return json({
         status: 200,
@@ -242,6 +272,10 @@ function device() {
       });
       holds.push({ prefix, arrive, response });
       return { reached, release };
+    },
+    /** The saved session as an earlier version saved it: the cookie alone, unverified (#200). */
+    unverifySession() {
+      cookie = cookie && (decodeStoredSession(cookie, false)?.cookie ?? cookie);
     },
   };
 }
@@ -510,6 +544,40 @@ describe('first load and refresh', () => {
 });
 
 describe('offline', () => {
+  const kept = 'Your saved data is kept. Connect once to confirm your session.';
+
+  it('says saved data is kept when an unconfirmed session can’t be checked offline (#200)', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    // As after updating from a version that saved the cookie alone.
+    phone.unverifySession();
+    phone.network.online = false;
+    const app = await start(phone);
+    await settle();
+    expect(app.text()).toContain('Couldn’t check your session');
+    expect(app.text()).toContain('Could not reach SplitBook.');
+    expect(app.text()).toContain(kept);
+    expect(app.button('Try again')).not.toBeNull();
+    expect(app.button('Sign out on this device')).not.toBeNull();
+
+    // Connected, Try again confirms the session, and the saved data is still there.
+    phone.network.online = true;
+    await app.press('Try again');
+    expect(app.text()).not.toContain('Couldn’t check your session');
+    expect(app.text()).toContain('Maple House');
+  });
+
+  it('keeps every other session error’s own copy (#200)', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    phone.network.session = 500;
+    const app = await start(phone);
+    await settle();
+    expect(app.text()).toContain('Couldn’t check your session');
+    expect(app.text()).toContain('The server could not complete this request. Please try again.');
+    expect(app.text()).not.toContain(kept);
+  });
+
   it('shows one offline banner, each view’s saved time, and why each write waits', async () => {
     const phone = device();
     const savedAt = await usedBefore(phone);
@@ -546,6 +614,59 @@ describe('offline', () => {
     expect(save.props.accessibilityHint).toBe('Saving needs a connection.');
     expect(app.text()).toContain('Saving needs a connection.');
     expect(app.button('Try again')).not.toBeNull();
+  });
+
+  it('keeps Delete expense disabled offline, with the confirmation still open (#200)', async () => {
+    const phone = device();
+    const first = phone.controller();
+    await first.signIn('alex');
+    await first.openExpense(maple, expenseId);
+    first.dispose();
+    phone.network.online = false;
+    const app = await start(phone);
+    await settle();
+    await settle((runtime.controller as MobileController).openExpense(maple, expenseId));
+    /** The sheet showing now, and a button in it. */
+    const sheet = () => app.hosts((p) => p.transparent === true && p.visible === true)[0];
+    const inSheet = (label: string) =>
+      sheet().findAll(
+        (node) =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityRole === 'button' &&
+          node.props.accessibilityLabel === label,
+      )[0];
+    await app.press('Expense options');
+    await settle(Promise.resolve(inSheet('Delete expense').props.onPress()));
+    expect(app.text()).toContain('Delete this Expense?');
+    const remove = inSheet('Delete expense');
+    expect(remove.props.accessibilityState).toEqual({ disabled: true });
+    expect(remove.props.accessibilityHint).toBe('Saving needs a connection.');
+    const shown = sheet()
+      .findAll((node) => (node.type as unknown) === 'Text')
+      .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
+      .join('');
+    expect(shown).toContain('Saving needs a connection.');
+    expect((runtime.controller as MobileController).getSnapshot().expense.status).toBe(
+      'delete-review',
+    );
+  });
+
+  it('keeps Create disabled offline, with the Group form’s entries (#200)', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    phone.network.online = false;
+    const app = await start(phone);
+    await settle();
+    await app.press('New Group');
+    const name = app.hosts((p) => p.accessibilityLabel === 'Trip name, required')[0];
+    await settle(Promise.resolve(name.props.onChangeText('Cabin Weekend')));
+    const create = app.button('Create trip')!;
+    expect(create.props.accessibilityState).toEqual({ disabled: true });
+    expect(create.props.accessibilityHint).toBe('Saving needs a connection.');
+    expect(app.text()).toContain('Saving needs a connection.');
+    expect(app.hosts((p) => p.accessibilityLabel === 'Trip name, required')[0].props.value).toBe(
+      'Cabin Weekend',
+    );
   });
 
   it('says a Group never opened here isn’t available offline, keeping its navigation', async () => {

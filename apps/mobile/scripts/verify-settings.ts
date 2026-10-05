@@ -11,6 +11,7 @@ import {
   type MobileController,
   type MobileFetch,
 } from '../src/data';
+import { decodeStoredSession } from '../src/data/cookies';
 import type { AccountLocalStorage } from '../src/data/types';
 import { localOrigin } from './verification-origin';
 
@@ -50,6 +51,8 @@ async function verify() {
   let holdNextGroupRead = false;
   let active: MobileController | undefined;
   const ownedCookies = new Set<string>();
+  const sessionCookie = (value: string) =>
+    decodeStoredSession(value, apiBaseUrl.startsWith('https:'))?.cookie;
   const heldResponse = deferred<AbortSignal>();
   const releaseResponse = deferred<void>();
   const cache = new Map<string, string>();
@@ -58,9 +61,10 @@ async function verify() {
   const featureStores = [cache, draft, submission];
   const credentials: CredentialStore = {
     load: async () => savedCookie,
-    save: async (cookie) => {
-      savedCookie = cookie;
-      ownedCookies.add(cookie);
+    save: async (value) => {
+      savedCookie = value;
+      // The saved session is the cookie and, once verified, its account (#200).
+      ownedCookies.add(sessionCookie(value) ?? value);
     },
     clear: async () => {
       savedCookie = null;
@@ -184,7 +188,7 @@ async function verify() {
       }),
     ]);
     active.openSettings();
-    const revokedCookie = await credentials.load();
+    const revokedCookie = sessionCookie((await credentials.load()) ?? '');
     assert.ok(revokedCookie, 'Alex had no saved session before logout.');
     await active.signOut();
     assert.ok(signal.aborted, 'Sign-out did not cancel the in-flight Group request.');

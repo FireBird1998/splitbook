@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import { isAbsolute } from 'node:path';
 import { createMobileController, type MobileController, type MobileFetch } from '../src/data';
+import { decodeStoredSession } from '../src/data/cookies';
 import type { HomeCurrencyBalance } from '../src/data/types';
 import {
   alexId,
@@ -86,7 +87,8 @@ async function verifyController(
     load: async () => cookie,
     save: async (value: string) => {
       cookie = value;
-      ownedCookies.add(value);
+      // The saved session is the cookie and, once verified, its account (#200).
+      ownedCookies.add(decodeStoredSession(value, origin.startsWith('https:'))?.cookie ?? value);
     },
     clear: async () => {
       cookie = null;

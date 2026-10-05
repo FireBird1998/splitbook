@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { decodeStoredSession } from './cookies';
 import { createMobileController } from './mobile-controller';
 import type { AccountLocalStorage, CredentialStore, FetchResponse, MobileFetch } from './types';
 
@@ -1366,7 +1367,10 @@ describe('native session and Group boundary', () => {
       startDate: new Date(iso),
       createdAt: new Date(iso),
     });
-    expect(store.read()).toBe(alexCookie);
+    expect(decodeStoredSession(store.read()!, false)).toEqual({
+      cookie: alexCookie,
+      accountId: alex.id,
+    });
     expect(fetch.mock.calls.map(([url]) => new URL(url).pathname)).toEqual([
       '/api/auth/demo-persona/sign-in',
       '/api/auth/get-session',
@@ -1620,7 +1624,10 @@ describe('native session and Group boundary', () => {
     await oldRequest;
     expect(controller.getSnapshot().auth.user?.id).toBe(sam.id);
     expect(controller.getSnapshot().groups.data[0].name).toBe('Shared Home');
-    expect(store.read()).toBe(samCookie);
+    expect(decodeStoredSession(store.read()!, false)).toEqual({
+      cookie: samCookie,
+      accountId: sam.id,
+    });
   });
 
   it('never applies a previous account’s Groups list that lands while a Group is open (#190)', async () => {
@@ -1658,7 +1665,10 @@ describe('native session and Group boundary', () => {
       groups: { status: 'ready', data: [{ name: 'Shared Home' }] },
     });
     expect(published.flat()).not.toContain('Weekend Away');
-    expect(store.read()).toBe(samCookie);
+    expect(decodeStoredSession(store.read()!, false)).toEqual({
+      cookie: samCookie,
+      accountId: sam.id,
+    });
   });
 
   it('serializes a credential save already in flight before logout clears storage', async () => {

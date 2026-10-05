@@ -46,6 +46,7 @@ import {
 } from './expense-form';
 import { SplitSheet } from './split-sheet';
 import { ErrorBoundary } from './error-boundary';
+import { savingNeedsConnection } from './offline-notice';
 import { useTheme } from './theme';
 
 /** The form for a draft, rather than loading, a notice or a saved record. */
@@ -344,6 +345,7 @@ function ExpenseTask({
         state={state}
         currentUserId={currentUserId}
         notice={notice}
+        offline={offline}
         onClose={onClose}
         onEdit={onEdit}
         onReviewDelete={onReviewDelete}
@@ -388,7 +390,7 @@ function ExpenseTask({
     state.status === 'saving'
       ? 'Sending this Expense. Keep this screen open until SplitBook confirms it.'
       : offline
-        ? 'Saving needs a connection.'
+        ? savingNeedsConnection
         : state.persistence === 'error'
           ? 'Save is unavailable until this draft is stored on this device. Retry saving the draft first.'
           : draft.review?.length

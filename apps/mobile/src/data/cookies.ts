@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { CookieHeaders } from './types';
 
 const sessionName = /^(?:__Secure-|__Host-)?better-auth\.session_token$/;
@@ -13,6 +14,35 @@ export function validSessionCookie(value: string, secureTransport: boolean): boo
     cookieValue.test(value.slice(separator + 1)) &&
     (secureTransport || !name.startsWith('__'))
   );
+}
+
+/**
+ * The saved session: the signed cookie, and the account a session check confirmed it belongs to.
+ * A cookie from a sign-in reply, and every cookie saved before accounts were recorded, is
+ * unverified (`accountId` null) until `get-session` confirms its account.
+ */
+export interface StoredSession {
+  cookie: string;
+  accountId: string | null;
+}
+
+const verifiedSession = z.object({ cookie: z.string(), accountId: z.string().min(1) }).strict();
+
+/** An unverified cookie is stored as the cookie alone, as every earlier version stored it. */
+export function encodeStoredSession(cookie: string, accountId: string | null): string {
+  return accountId === null ? cookie : JSON.stringify({ cookie, accountId });
+}
+
+/** Null for anything that is not a usable saved session. */
+export function decodeStoredSession(value: string, secureTransport: boolean): StoredSession | null {
+  if (!value.startsWith('{'))
+    return validSessionCookie(value, secureTransport) ? { cookie: value, accountId: null } : null;
+  try {
+    const stored = verifiedSession.parse(JSON.parse(value));
+    return validSessionCookie(stored.cookie, secureTransport) ? stored : null;
+  } catch {
+    return null;
+  }
 }
 
 /**

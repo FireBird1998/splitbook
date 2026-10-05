@@ -5,6 +5,7 @@ import { betterAuth } from 'better-auth';
 import { memoryAdapter } from 'better-auth/adapters/memory';
 import { buildAuthOptions } from './create-auth';
 import { signTestIdToken } from './test-id-token';
+import { decodeStoredSession } from '../../../../mobile/src/data/cookies';
 import { createMobileController } from '../../../../mobile/src/data/mobile-controller';
 
 const origin = 'https://staging.splitbook.test';
@@ -83,7 +84,11 @@ describe('Android token exchange through Better Auth', () => {
       status: 'authenticated',
       user: { email: 'invited@example.com' },
     });
-    expect(test.saved()).toMatch(/^__Secure-better-auth.session_token=/);
+    // The signed cookie, recorded for the account get-session confirmed (#200).
+    expect(decodeStoredSession(test.saved()!, true)).toEqual({
+      cookie: expect.stringMatching(/^__Secure-better-auth.session_token=/),
+      accountId: test.controller.getSnapshot().auth.user?.id,
+    });
     expect(test.db.session).toHaveLength(1);
     await test.controller.restore();
     expect(test.controller.getSnapshot().auth.status).toBe('authenticated');

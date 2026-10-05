@@ -10,6 +10,7 @@ import {
   type MobileController,
   type MobileFetch,
 } from '../src/data';
+import { decodeStoredSession } from '../src/data/cookies';
 import { localOrigin } from './verification-origin';
 
 const samId = 'a00000000000000000000002';
@@ -118,8 +119,10 @@ async function verify() {
       'An unauthorized Group appeared in the list.',
     );
 
-    const revokedCookie = await credentials.load();
-    assert.ok(revokedCookie, 'The session disappeared before sign-out.');
+    const revokedSession = await credentials.load();
+    assert.ok(revokedSession, 'The session disappeared before sign-out.');
+    const revokedCookie = decodeStoredSession(revokedSession, apiBaseUrl.startsWith('https:'));
+    assert.ok(revokedCookie?.accountId === samId, 'The saved session was not recorded for Sam.');
     await active.signOut();
     const signedOut = active.getSnapshot();
     assert.ok(
@@ -138,7 +141,7 @@ async function verify() {
     });
     assert.ok(anonymous.status === 401, 'The real Group API did not reject an anonymous request.');
     const revoked = await localFetch(`${apiBaseUrl}/api/auth/get-session`, {
-      headers: { Cookie: revokedCookie },
+      headers: { Cookie: revokedCookie.cookie },
       credentials: 'omit',
       signal: AbortSignal.timeout(20_000),
     });
@@ -148,7 +151,7 @@ async function verify() {
     );
 
     active.dispose();
-    await credentials.save(revokedCookie);
+    await credentials.save(revokedSession);
     active = makeController(false);
     const beforeDisabled = requestCount;
     await active.restore();
