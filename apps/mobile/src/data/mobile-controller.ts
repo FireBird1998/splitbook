@@ -3369,8 +3369,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   /**
    * A ledger write that may have reached the server, whatever its outcome, makes the
-   * Group's earlier reads obsolete: they are not reused, joined or saved afterwards, and
-   * their saved copies are gone before it returns.
+   * Group's earlier reads obsolete: they are not reused, joined or saved afterwards. Their
+   * saved copies are gone before it returns, unless the server definitely refused this
+   * request (400 or 422) and so changed nothing.
    */
   const ledgerWrite = async (
     groupId: string,
@@ -3378,12 +3379,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     owner: number,
     options: Parameters<typeof request>[2],
   ) => {
+    let refused = false;
     try {
       return await request(path, owner, options);
+    } catch (error) {
+      refused = error instanceof RequestError && [400, 422].includes(error.status);
+      throw error;
     } finally {
       if (current(owner)) {
         ledgerChanged(groupId);
-        await removeLedgerCopies(groupId, owner);
+        if (!refused) await removeLedgerCopies(groupId, owner);
       }
     }
   };

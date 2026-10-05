@@ -91,6 +91,8 @@ function fixture() {
     loseWrites: false,
     /** This device can't remove saved copies. */
     failInvalidation: false,
+    /** The server refuses every change as invalid (422) and changes nothing. */
+    refuse: false,
     ledger: 0,
     dinner: { description: 'Dinner', revision: 3, isDeleted: false },
   };
@@ -246,6 +248,12 @@ function fixture() {
     if (path.startsWith(`/api/groups/${cabinId}/expenses?`))
       return page([row('d00000000000000000000009', cabinId, 'Cabin firewood')], 1, 1);
     if (path === dinnerPath && method === 'GET') return json({ status: 200, data: dinner() });
+    if (
+      server.refuse &&
+      method !== 'GET' &&
+      (path === dinnerPath || path === `${maplePath}/settlements`)
+    )
+      return json({ error: 'Validation error', code: 'VALIDATION_ERROR', status: 422 }, 422);
     if (path === dinnerPath && (method === 'PATCH' || method === 'DELETE')) {
       server.ledger += 1;
       server.dinner.revision += 1;
@@ -698,6 +706,72 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
     ]);
     f.server.offline = true;
     expect((await readOffline(controller)).activity).toBe(notSaved);
+  });
+
+  it.each(['a payment', 'an Expense edit'] as const)(
+    'keeps every saved copy as it was when the server refuses %s as invalid (422)',
+    async (change) => {
+      const f = fixture();
+      const controller = await visitEverything(f);
+      if (change === 'a payment') {
+        await controller.openGroup(mapleId, true, 'balances');
+        await controller.openRecordPayment(alex.id, sam.id, 'INR');
+      } else {
+        await controller.openExpense(mapleId, dinnerId);
+        await controller.editExpense();
+        await controller.updateExpenseDraft({ description: 'Lake dinner' });
+      }
+      const before = JSON.stringify(f.saved());
+      const sent = f.calls.length;
+      f.server.refuse = true;
+      if (change === 'a payment') await controller.recordSettlement();
+      else await controller.saveExpense();
+
+      // It was sent and refused, so nothing changed on the server, and nothing is read again.
+      expect(f.calls.slice(sent).map((call) => call.method)).toEqual(
+        change === 'a payment' ? ['GET', 'GET', 'POST'] : ['GET', 'PATCH'],
+      );
+      expect(f.server.ledger).toBe(0);
+      expect(
+        change === 'a payment'
+          ? controller.getSnapshot().settlement.status
+          : controller.getSnapshot().expense.status,
+      ).toBe('editing');
+      expect(JSON.stringify(f.saved())).toBe(before);
+    },
+  );
+
+  it('keeps what was read after an unconfirmed payment when its retry is refused, and nothing from before it', async () => {
+    const f = fixture();
+    const controller = await visitEverything(f);
+    await controller.openGroup(mapleId, true, 'balances');
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    f.server.loseWrites = true;
+    await controller.recordSettlement();
+    expect(controller.getSnapshot().settlement.status).toBe('uncertain');
+    expect(f.server.ledger).toBe(1);
+    f.server.loseWrites = false;
+    // Back on Balances, which are read again after the payment that may be recorded.
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'balances',
+      financial: { balances: { status: 'ready', data: [{ debts: [{ amount: 31 }] }] } },
+      pendingPayment: { groupId: mapleId },
+    });
+    expect(Object.keys(f.savedOf(mapleId)).sort()).toEqual(['Balances', 'Group']);
+    const before = JSON.stringify(f.saved());
+
+    await controller.openPendingPayment();
+    expect(controller.getSnapshot().settlement.status).toBe('uncertain');
+    f.server.refuse = true;
+    await controller.recordSettlement();
+    expect(
+      f.calls.filter((call) => call.method === 'POST' && call.path.endsWith('/settlements')),
+    ).toHaveLength(2);
+    expect(controller.getSnapshot().settlement.status).toBe('blocked');
+    // The first try already removed everything older than it; the refusal removes nothing more.
+    expect(JSON.stringify(f.saved())).toBe(before);
   });
 
   it('removes a copy from before an edit that was still being written when the edit was confirmed', async () => {
