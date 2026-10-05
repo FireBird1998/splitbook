@@ -7,6 +7,8 @@ const sam = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@exam
 const priya = { id: 'a00000000000000000000003', name: 'Priya Shah', email: 'priya@example.test' };
 const groupId = 'a00000000000000000000010';
 const expenseId = 'b00000000000000000000001';
+/** Another Expense in the same Group. */
+const otherId = 'b00000000000000000000002';
 const iso = '2026-09-20T10:00:00.000Z';
 const person = (user: typeof sam) => ({ _id: user.id, name: user.name, image: null });
 const group = {
@@ -24,8 +26,8 @@ const group = {
   createdAt: iso,
   updatedAt: iso,
 };
-const record = (revision: number, description: string) => ({
-  _id: expenseId,
+const record = (revision: number, description: string, id = expenseId) => ({
+  _id: id,
   group: groupId,
   revision,
   description,
@@ -48,19 +50,35 @@ const record = (revision: number, description: string) => ({
   isDeleted: false,
   editHistory: [],
 });
-const event = (id: string, at: string, type: string, changes: Record<string, unknown> = {}) => ({
+const event = (
+  id: string,
+  at: string,
+  type: string,
+  changes: Record<string, unknown> = {},
+  about = expenseId,
+  description = 'Electricity bill',
+) => ({
   _id: id,
   group: groupId,
   actor: person(priya),
   createdAt: at,
   type,
-  metadata: { expenseId, description: 'Electricity bill', changes },
+  metadata: { expenseId: about, description, changes },
 });
 const added = event('d00000000000000000000001', iso, 'expense_added');
 /** Priya renamed the Expense while Sam was offline. */
 const renamed = event('d00000000000000000000002', '2026-09-27T10:00:00.000Z', 'expense_updated', {
   description: { old: 'Electricity bill', new: 'Electricity bill (August)' },
 });
+const other = record(1, 'Water bill', otherId);
+const otherAdded = event(
+  'd00000000000000000000003',
+  iso,
+  'expense_added',
+  {},
+  otherId,
+  'Water bill',
+);
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 const groupPath = `/api/groups/${groupId}`;
@@ -98,7 +116,7 @@ function fixture() {
     events: [added],
     /** The Group: refused (403) or gone (404) answers every read of it. */
     group: 200,
-    /** The Expense's own read only, after its Group has been read. */
+    /** The Expense's own path only, after its Group has been read. */
     expense: 200,
   };
   let cookie: string | null = null,
@@ -110,7 +128,7 @@ function fixture() {
   const requests: string[] = [];
   const held = gate();
   let holding: (path: string) => boolean = () => false;
-  const respond = (path: string): FetchResponse => {
+  const respond = (path: string, method = 'GET', revision?: string): FetchResponse => {
     if (path.endsWith('/sign-in'))
       return new Response(JSON.stringify({ user: sam }), {
         headers: { 'Set-Cookie': 'better-auth.session_token=sam.signature; Path=/; HttpOnly' },
@@ -124,22 +142,29 @@ function fixture() {
     if (path.startsWith(groupPath) && server.group !== 200)
       return json({ error: 'Unavailable', status: server.group }, server.group);
     if (path === groupPath) return json({ status: 200, data: group });
-    if (path === recordPath)
-      return server.expense === 200
-        ? json({ status: 200, data: server.record })
-        : json({ error: 'Unavailable', status: server.expense }, server.expense);
+    if (path === recordPath && server.expense !== 200)
+      return json({ error: 'Unavailable', status: server.expense }, server.expense);
+    if (path === recordPath && method !== 'GET') {
+      // An edit or deletion applies only to the revision it was shown.
+      if (revision !== String(server.record.revision))
+        return json({ error: 'This Expense changed', code: 'STALE_REVISION', status: 409 }, 409);
+      server.record = {
+        ...server.record,
+        revision: server.record.revision + 1,
+        isDeleted: method === 'DELETE',
+      };
+    }
+    if (path === recordPath) return json({ status: 200, data: server.record });
+    if (path === `${groupPath}/expenses/${otherId}`) return json({ status: 200, data: other });
     if (path.startsWith(`${groupPath}/activity?`)) {
-      const page = Number(new URL(path, 'http://local').searchParams.get('page'));
+      const query = new URL(path, 'http://local').searchParams;
+      const page = Number(query.get('page'));
+      const events = query.get('expenseId') === otherId ? [otherAdded] : server.events;
       return json({
         status: 200,
         data: {
-          activities: server.events.slice((page - 1) * 20, page * 20),
-          pagination: {
-            page,
-            limit: 20,
-            total: server.events.length,
-            totalPages: Math.ceil(server.events.length / 20),
-          },
+          activities: events.slice((page - 1) * 20, page * 20),
+          pagination: { page, limit: 20, total: events.length, totalPages: 1 },
         },
       });
     }
@@ -147,9 +172,9 @@ function fixture() {
       return json({
         status: 200,
         data: {
-          expenses: [server.record],
-          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
-          summary: { count: 1, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
+          expenses: [server.record, other],
+          pagination: { page: 1, limit: 20, total: 2, totalPages: 1 },
+          summary: { count: 2, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
         },
       });
     if (path === `${groupPath}/balances`)
@@ -250,10 +275,17 @@ function fixture() {
         fetch: async (url, init) => {
           const address = new URL(url);
           const path = address.pathname + address.search;
-          if (server.offline) throw new Error('Offline');
-          requests.push(`${init.method ?? 'GET'} ${path}`);
+          const method = init.method ?? 'GET';
+          const revision = (init.headers as Record<string, string>)['X-Splitbook-Revision'];
+          const sent = `${method} ${path}${revision === undefined ? '' : ` (revision ${revision})`}`;
+          // Attempts made offline are logged too, marked as never reaching the server.
+          if (server.offline) {
+            requests.push(`${sent} (offline)`);
+            throw new Error('Offline');
+          }
+          requests.push(sent);
           if (holding(path)) return held.hold(path);
-          return respond(path);
+          return respond(path, method, revision);
         },
         // An invitation opened here can't be kept, so it stays on its error until retried.
         pendingInvitation: {
@@ -275,9 +307,9 @@ function fixture() {
     hold(match: (path: string) => boolean) {
       holding = match;
     },
-    /** The answer the fictional backend gives Sam for this path right now. */
+    /** The answer the fictional backend gives Sam for this read right now. */
     answer: (path: string) => respond(path),
-    /** Requests sent since the last call. */
+    /** Requests made since the last call, those attempted offline included. */
     sent: () => requests.splice(0),
     /** Whether this device keeps a saved copy of this path for Sam. */
     saved: (path: string) => cache.get(sam.id + path) as { value: { data: unknown } } | undefined,
@@ -286,7 +318,10 @@ function fixture() {
 type Fixture = ReturnType<typeof fixture>;
 type Controller = ReturnType<Fixture['create']>;
 
-/** Group reads, the Expense's included, among these requests. */
+/**
+ * The reads of the Group, the Expense and its changes among these requests, in order. Each read
+ * made while the offline notice is up checks the session first; those checks are left out.
+ */
 const groupReads = (requests: string[]) =>
   requests.filter((request) => request.startsWith(`GET ${groupPath}`));
 
@@ -370,9 +405,11 @@ describe('Try again on an Expense record opened from its saved copy (#192)', () 
     async (_, restart) => {
       const { f, controller, savedAt } = await openedOffline(restart);
 
-      // Still offline: the saved copy stays, with the time it was saved.
+      // Still offline: only reads are tried, and the saved copy stays with the time it was saved.
       await controller.refresh();
-      expect(f.sent()).toEqual([]);
+      const tried = f.sent();
+      expect(tried[0]).toBe(`${sessionRead} (offline)`);
+      expect(tried.every((request) => /^GET .* \(offline\)$/.test(request))).toBe(true);
       expect(controller.getSnapshot()).toMatchObject({
         offline: { active: true, refreshedAt: savedAt },
         expense: { status: 'detail', draft: { original: { revision: 3 } } },
@@ -382,7 +419,8 @@ describe('Try again on an Expense record opened from its saved copy (#192)', () 
       renamedMeanwhile(f);
       await controller.refresh();
       const sent = f.sent();
-      // Access is checked first: the session, then the Group, then the record and its changes.
+      // The session is checked first, and again before each read while the offline notice is
+      // up; the Group, the record and its changes are read in that order.
       expect(sent[0]).toBe(sessionRead);
       expect(groupReads(sent)).toEqual([
         `GET ${groupPath}`,
@@ -412,6 +450,18 @@ describe('Try again on an Expense record opened from its saved copy (#192)', () 
       expect(sent.filter((request) => !request.startsWith('GET '))).toEqual([]);
     },
   );
+
+  it('reads only the session and the Group on a foreground refresh; only Try again reads the record', async () => {
+    const { f, controller, savedAt } = await openedOffline(false);
+    f.server.offline = false;
+    renamedMeanwhile(f);
+    await controller.refresh('foreground');
+    expect(f.sent()).toEqual([sessionRead, sessionRead, `GET ${groupPath}`]);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: true, refreshedAt: savedAt },
+      expense: { status: 'detail', draft: { original: { revision: 3 } } },
+    });
+  });
 
   it('keeps the saved record and its notice when reading the record again fails', async () => {
     const { f, controller, savedAt } = await openedOffline(false);
@@ -469,6 +519,92 @@ describe('Try again on an Expense record opened from its saved copy (#192)', () 
     expect(f.saved(groupPath)).toBeDefined();
   });
 
+  it('clears the notice for an edit begun offline, keeping its draft and the revision it started from', async () => {
+    const { f, controller } = await openedOffline(false);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Meter read on the 20th' });
+    f.server.offline = false;
+    renamedMeanwhile(f);
+    await controller.refresh();
+    expect(groupReads(f.sent())).toEqual([
+      `GET ${groupPath}`,
+      `GET ${recordPath}`,
+      `GET ${historyPath}`,
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false },
+      expense: {
+        status: 'editing',
+        context: { group: { id: groupId } },
+        draft: {
+          description: 'Electricity bill',
+          notes: 'Meter read on the 20th',
+          original: { revision: 3 },
+        },
+      },
+    });
+    expect(f.saved(recordPath)?.value.data).toMatchObject({ revision: 4 });
+
+    // Saving sends the revision the edit started from; the server's check refuses it as stale,
+    // and the member compares it with the current version, as for any stale edit.
+    await controller.saveExpense();
+    expect(f.sent().filter((request) => !request.startsWith('GET '))).toEqual([
+      `PATCH ${recordPath} (revision 3)`,
+    ]);
+    expect(f.server.record).toMatchObject({ revision: 4, isDeleted: false });
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'conflict',
+      latest: { revision: 4, description: 'Electricity bill (August)' },
+      draft: { notes: 'Meter read on the 20th', original: { revision: 3 } },
+    });
+  });
+
+  it('clears the notice for a deletion reviewed offline, which still sends the revision it was shown', async () => {
+    const { f, controller } = await openedOffline(false);
+    controller.reviewExpenseDeletion();
+    f.server.offline = false;
+    renamedMeanwhile(f);
+    await controller.refresh();
+    expect(groupReads(f.sent())).toEqual([
+      `GET ${groupPath}`,
+      `GET ${recordPath}`,
+      `GET ${historyPath}`,
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false },
+      expense: {
+        status: 'delete-review',
+        draft: { original: { revision: 3, description: 'Electricity bill' } },
+      },
+    });
+
+    await controller.deleteExpense();
+    expect(f.sent().filter((request) => !request.startsWith('GET '))).toEqual([
+      `DELETE ${recordPath} (revision 3)`,
+    ]);
+    expect(f.server.record).toMatchObject({ revision: 4, isDeleted: false });
+    expect(controller.getSnapshot().expense).toMatchObject({ latest: { revision: 4 } });
+  });
+
+  it('keeps an edit, with its Group’s details, when its Expense is found gone', async () => {
+    const { f, controller } = await openedOffline(false);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Meter read on the 20th' });
+    f.server.offline = false;
+    f.server.expense = 404;
+    await controller.refresh();
+    expect(groupReads(f.sent())).toEqual([`GET ${groupPath}`, `GET ${recordPath}`]);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false },
+      expense: {
+        status: 'editing',
+        message: null,
+        context: { group: { id: groupId } },
+        draft: { notes: 'Meter read on the 20th', original: { revision: 3 } },
+      },
+    });
+  });
+
   it('keeps an edit begun while the record is read again, on the version it started from', async () => {
     const { f, controller } = await openedOffline(false);
     f.server.offline = false;
@@ -486,20 +622,29 @@ describe('Try again on an Expense record opened from its saved copy (#192)', () 
         () => f.answer(recordPath),
       ),
     ).toBe(true);
-    expect(controller.getSnapshot().expense).toMatchObject({
-      status: 'editing',
-      draft: {
-        description: 'Electricity bill',
-        notes: 'Meter read on the 20th',
-        original: { revision: 3 },
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false },
+      expense: {
+        status: 'editing',
+        draft: {
+          description: 'Electricity bill',
+          notes: 'Meter read on the 20th',
+          original: { revision: 3 },
+        },
       },
     });
-    expect(groupReads(f.sent())).toEqual([`GET ${groupPath}`, `GET ${recordPath}`]);
+    expect(groupReads(f.sent())).toEqual([
+      `GET ${groupPath}`,
+      `GET ${recordPath}`,
+      `GET ${historyPath}`,
+    ]);
   });
 
   it.each([
     ['Back', 200],
     ['Back', 404],
+    ['Back, then opening another Expense', 200],
+    ['Back, then opening another Expense', 404],
     ['sign-out', 200],
     ['sign-out', 404],
     ['an invitation opened over it', 200],
@@ -512,9 +657,13 @@ describe('Try again on an Expense record opened from its saved copy (#192)', () 
       renamedMeanwhile(f);
       let left: ReturnType<Controller['getSnapshot']>['expense'] | undefined;
       const moving = async () => {
-        if (move === 'Back') await controller.back();
-        else if (move === 'sign-out') await controller.signOut();
-        else await controller.openInvitation('http://localhost:4138/join/abcdef12');
+        if (move === 'sign-out') await controller.signOut();
+        else if (move === 'an invitation opened over it')
+          await controller.openInvitation('http://localhost:4138/join/abcdef12');
+        else {
+          await controller.back();
+          if (move !== 'Back') await controller.openExpense(groupId, otherId);
+        }
         left = controller.getSnapshot().expense;
       };
       const response = () =>
@@ -524,11 +673,20 @@ describe('Try again on an Expense record opened from its saved copy (#192)', () 
       );
       const state = controller.getSnapshot(),
         sent = f.sent();
-      // The Expense is as the member left it, and nothing more is read for it.
+      // The Expense on screen is as the member left it, and the late record's changes aren't read.
       expect(state.expense).toEqual(left);
-      expect(sent.filter((request) => request.includes('/activity?expenseId='))).toEqual([]);
+      expect(sent).not.toContain(`GET ${historyPath}`);
       if (move === 'Back')
         expect(state).toMatchObject({ screen: 'group', detail: { id: groupId, status: 'ready' } });
+      else if (move === 'Back, then opening another Expense')
+        expect(state).toMatchObject({
+          screen: 'expense',
+          expense: {
+            status: 'detail',
+            draft: { original: { _id: otherId, description: 'Water bill' } },
+            history: { expenseId: otherId, status: 'ready', events: [{ _id: otherAdded._id }] },
+          },
+        });
       else if (move === 'sign-out') {
         expect(state.auth.status).toBe('signed-out');
         expect(f.cache.size).toBe(0);
