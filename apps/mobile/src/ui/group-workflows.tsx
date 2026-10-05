@@ -17,6 +17,7 @@ import {
   TopBar,
   radius,
 } from './compact';
+import { savingNeedsConnection } from './offline-notice';
 import { Copy, Icon } from './primitives';
 import { fonts, useTheme } from './theme';
 
@@ -29,6 +30,8 @@ export interface GroupCreateFormProps {
   busy: boolean;
   message: string | null;
   uncertain: boolean;
+  /** Creating needs a connection: Create is unavailable, and the entries stay. */
+  offline?: boolean;
   onCheckGroups: () => void;
   onDiscard: () => void;
   /** Corrections to show now: after a field was left or a create was attempted. */
@@ -123,6 +126,7 @@ export function GroupCreateForm({
   busy,
   message,
   uncertain,
+  offline = false,
   onCheckGroups,
   onDiscard,
   errors = {},
@@ -348,14 +352,19 @@ export function GroupCreateForm({
             label={busy ? 'Creating your Group…' : `Create ${noun}`}
             block
             icon={busy ? undefined : 'add-outline'}
-            hint={busy ? creating : undefined}
-            disabled={busy}
+            hint={busy ? creating : offline ? savingNeedsConnection : undefined}
+            disabled={busy || offline}
             onPress={onSubmit}
           />
         )}
         {busy && (
           <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
             {creating}
+          </CompactText>
+        )}
+        {offline && !busy && !uncertain && (
+          <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
+            {savingNeedsConnection}
           </CompactText>
         )}
         <CompactButton

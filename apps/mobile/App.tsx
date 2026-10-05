@@ -458,6 +458,7 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
               onSubmit={() => void controller.createGroup()}
               busy={state.creation.status === 'saving'}
               uncertain={state.creation.status === 'uncertain'}
+              offline={state.offline.active}
               message={state.creation.message}
               errors={visibleFieldErrors(groupFields, state.creation.validation)}
               focus={state.creation.validation.focus}

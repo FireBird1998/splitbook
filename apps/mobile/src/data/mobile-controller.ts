@@ -3768,8 +3768,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (
       snapshot.screen !== 'expense' ||
       editor.status !== (kind === 'delete' ? 'delete-review' : 'editing') ||
-      // Saving needs a connection; the form says so.
-      (kind === 'edit' && snapshot.offline.active) ||
+      // Saving and deleting need a connection; the form and the confirmation say so.
+      snapshot.offline.active ||
       editor.persistence === 'error' ||
       !original ||
       !draft ||
@@ -5244,6 +5244,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const createGroup = async () => {
     if (
       snapshot.auth.status !== 'authenticated' ||
+      // Creating needs a connection; the form says so and keeps its entries.
+      snapshot.offline.active ||
       ['saving', 'uncertain'].includes(snapshot.creation.status)
     )
       return;

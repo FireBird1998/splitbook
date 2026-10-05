@@ -36,6 +36,7 @@ import {
   type BadgeTone,
 } from './compact';
 import { WhoOwesWhat } from './expense-form';
+import { savingNeedsConnection } from './offline-notice';
 import { Copy, Icon, Label, Panel, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
 
@@ -71,6 +72,7 @@ export function ExpenseRecordScreen({
   state,
   currentUserId,
   notice,
+  offline = false,
   onClose,
   onEdit,
   onReviewDelete,
@@ -84,6 +86,8 @@ export function ExpenseRecordScreen({
   state: Editor;
   currentUserId?: string;
   notice?: ReactNode;
+  /** Deleting needs a connection: the confirmation stays open, with Delete unavailable. */
+  offline?: boolean;
   /** Back: returns to the Group destination the record opened from. */
   onClose?: () => void;
   onEdit: () => void;
@@ -344,7 +348,18 @@ export function ExpenseRecordScreen({
             {state.message}
           </CompactText>
         ) : null}
-        <CompactButton label="Delete expense" block onPress={onDelete} />
+        <CompactButton
+          label="Delete expense"
+          block
+          disabled={offline}
+          hint={offline ? savingNeedsConnection : undefined}
+          onPress={onDelete}
+        />
+        {offline ? (
+          <CompactText variant="small" tone="secondary">
+            {savingNeedsConnection}
+          </CompactText>
+        ) : null}
       </BottomSheet>
     </View>
   );

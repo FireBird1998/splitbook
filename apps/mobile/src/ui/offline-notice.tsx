@@ -5,6 +5,9 @@ import { Icon } from './primitives';
 import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
 
+/** Why saving, deleting an Expense or creating a Group waits while offline. */
+export const savingNeedsConnection = 'Saving needs a connection.';
+
 /**
  * The screen's one offline banner: what's shown was saved on this device, and when. Each write
  * says why it's unavailable where it is. `onRetry` is for screens without pull-to-refresh.

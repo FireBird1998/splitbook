@@ -16,9 +16,35 @@ const group = {
   createdAt: iso,
   updatedAt: iso,
 };
+const expenseId = 'e00000000000000000000001';
+const expense = {
+  _id: expenseId,
+  group: groupId,
+  revision: 0,
+  description: 'Market run',
+  amount: 12,
+  amountMinor: 1200,
+  moneyVersion: 1,
+  currency: 'INR',
+  paidBy: [{ user: { _id: accountId, name: 'Alex', image: null }, amount: 12, amountMinor: 1200 }],
+  splitBetween: [
+    { user: { _id: accountId, name: 'Alex', image: null }, amount: 12, amountMinor: 1200 },
+  ],
+  splitMethod: 'equal',
+  date: iso,
+  createdAt: iso,
+  updatedAt: iso,
+  category: 'food',
+  tagId: 'c00000000000000000000001',
+  tag: 'Food',
+  notes: '',
+  isDeleted: false,
+  editHistory: [],
+};
 function fixture() {
   let offline = false,
     revoked = false,
+    deleted = false,
     writes = 0,
     cookie: string | null = null,
     owner: string | null = null,
@@ -28,6 +54,7 @@ function fixture() {
   let activeUser = user;
   const errors = new Map<string, number>();
   const failedPaths = new Set<string>();
+  const requests: string[] = [];
   const cache = new Map<string, unknown>(),
     drafts = new Map<string, unknown>(),
     creations = new Map<string, unknown>();
@@ -152,6 +179,7 @@ function fixture() {
           ],
         },
         fetch: async (url, init) => {
+          requests.push(`${init.method ?? 'GET'} ${new URL(url).pathname}`);
           if (offline) throw new Error('Offline');
           const path = new URL(url).pathname;
           if (errors.has(path)) return Response.json({}, { status: errors.get(path)! });
@@ -176,6 +204,18 @@ function fixture() {
               user: activeUser,
               session: { userId: activeUser.id, expiresAt: '2030-01-01T00:00:00.000Z' },
             });
+          if (path === '/api/groups' && init.method === 'POST')
+            return Response.json(
+              {
+                status: 201,
+                data: {
+                  ...group,
+                  _id: 'b00000000000000000000002',
+                  name: JSON.parse(String(init.body)).name,
+                },
+              },
+              { status: 201 },
+            );
           if (path === '/api/groups')
             return Response.json({
               status: 200,
@@ -187,6 +227,10 @@ function fixture() {
               data: { buckets: [{ currency: 'INR', youOwe: 0, youAreOwed: 12 }] },
             });
           if (path === `/api/groups/${groupId}`) return Response.json({ status: 200, data: group });
+          if (path === `/api/groups/${groupId}/expenses/${expenseId}`) {
+            if (init.method === 'DELETE') deleted = true;
+            return Response.json({ status: 200, data: { ...expense, isDeleted: deleted } });
+          }
           if (path.endsWith('/balances'))
             return Response.json({
               status: 200,
@@ -246,6 +290,9 @@ function fixture() {
       failedPaths.add(path);
     },
     writes: () => writes,
+    /** Every request sent so far, as `METHOD /path`. */
+    requests: () => [...requests],
+    deleted: () => deleted,
     revoke: () => {
       revoked = true;
     },
@@ -384,6 +431,71 @@ describe('account-scoped offline financial views', () => {
     await restarted.refresh();
     expect(restarted.getSnapshot().creation).toMatchObject({ status: 'uncertain' });
     expect(f.writes()).toBe(0);
+  });
+  it('keeps an Expense delete from sending anything offline, with its review still open (#200)', async () => {
+    const f = fixture(),
+      first = f.create();
+    await first.signIn('alex');
+    await first.openExpense(groupId, expenseId);
+    first.dispose();
+    f.goOffline();
+    const restarted = f.create();
+    await restarted.restore();
+    await restarted.openExpense(groupId, expenseId);
+    restarted.reviewExpenseDeletion();
+    // Reconnected, but nothing has been read since: the saved copies are still what's shown.
+    f.goOnline();
+    const before = f.requests().length;
+    await restarted.deleteExpense();
+    expect(f.requests().slice(before)).toEqual([]);
+    expect(restarted.getSnapshot()).toMatchObject({
+      offline: { active: true },
+      expense: {
+        status: 'delete-review',
+        mutation: null,
+        draft: { original: { _id: expenseId, isDeleted: false } },
+      },
+    });
+    expect(f.drafts.size).toBe(0);
+    expect(f.deleted()).toBe(false);
+
+    // Online, Delete works as before.
+    await restarted.openExpense(groupId, expenseId);
+    restarted.reviewExpenseDeletion();
+    expect(restarted.getSnapshot().offline.active).toBe(false);
+    await restarted.deleteExpense();
+    expect(f.requests()).toContain(`DELETE /api/groups/${groupId}/expenses/${expenseId}`);
+    expect(f.deleted()).toBe(true);
+  });
+  it('keeps Create from sending a Group offline, with the form’s entries kept (#200)', async () => {
+    const f = fixture(),
+      first = f.create();
+    await first.signIn('alex');
+    first.dispose();
+    f.goOffline();
+    const restarted = f.create();
+    await restarted.restore();
+    restarted.startCreate();
+    restarted.updateCreation({ name: 'Cabin Weekend' });
+    f.goOnline();
+    const before = f.requests().length;
+    await restarted.createGroup();
+    expect(f.requests().slice(before)).toEqual([]);
+    expect(restarted.getSnapshot()).toMatchObject({
+      screen: 'create',
+      offline: { active: true },
+      creation: { status: 'editing', draft: { name: 'Cabin Weekend' }, attempt: null },
+    });
+
+    // Online, Create works as before.
+    await restarted.refresh();
+    expect(restarted.getSnapshot().offline.active).toBe(false);
+    await restarted.createGroup();
+    expect(f.requests()).toContain('POST /api/groups');
+    expect(restarted.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { data: { name: 'Cabin Weekend' } },
+    });
   });
   it('removes denied cached Group data so it cannot return on a later offline restart', async () => {
     const f = fixture(),
