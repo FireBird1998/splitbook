@@ -97,6 +97,8 @@ describe("Home's totals read contract", () => {
     ['a missing amount owed back', [...bucket, 'youAreOwed'], REMOVE],
     ['null Group balances', ['data', 'groups'], null],
     ['a malformed Group id', [...group, 'groupId'], 'maple'],
+    ['a Group id one character too long', [...group, 'groupId'], `${maple}0`],
+    ['a Group id one character too short', [...group, 'groupId'], maple.slice(1)],
     ['a missing Group balance list', [...group, 'balances'], REMOVE],
     ['a non-finite Group balance', [...group, 'balances', 0, 'balance'], NaN],
     ['a Group balance that is not a number', [...group, 'balances', 0, 'balance'], '-1480'],

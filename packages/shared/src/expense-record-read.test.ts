@@ -73,6 +73,15 @@ describe('Expense record read contract', () => {
     expect(parseExpenseRecordResponse(body)).toStrictEqual(body.data);
   });
 
+  // Times keep their offset as sent; a time without a zone is refused, as Android refuses it.
+  it.each(['2026-09-27T15:30:00+05:30', '2026-09-27T06:30:00.000-03:30'])(
+    'accepts the time %s with its offset, unchanged',
+    (time) => {
+      const body = changed(['data', 'updatedAt'], time);
+      expect(parseExpenseRecordResponse(body)).toStrictEqual(body.data);
+    },
+  );
+
   it('accepts an Expense in a historical currency', () => {
     expect(parseExpenseRecordResponse(changed(['data', 'currency'], 'DEM')).currency).toBe('DEM');
   });
@@ -108,6 +117,9 @@ describe('Expense record read contract', () => {
     ['a wrong status', ['status'], 201],
     ['missing data', ['data'], REMOVE],
     ['a malformed id', ['data', '_id'], 'bill'],
+    ['an id one character too long', ['data', '_id'], `${response.data._id}0`],
+    ['a Tag id one character too short', ['data', 'tagId'], response.data.tagId.slice(1)],
+    ['a time without a zone', ['data', 'updatedAt'], '2026-08-20T10:00:00'],
     ['a malformed Group id', ['data', 'group'], null],
     ['a missing revision', ['data', 'revision'], REMOVE],
     ['a negative revision', ['data', 'revision'], -1],

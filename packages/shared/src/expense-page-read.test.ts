@@ -89,6 +89,15 @@ describe('Expense page read contract', () => {
     ).toBe(limit);
   });
 
+  // Times keep their offset as sent; a time without a zone is refused, as Android refuses it.
+  it.each(['2026-09-27T15:30:00+05:30', '2026-09-27T06:30:00.000-03:30'])(
+    'accepts the time %s with its offset, unchanged',
+    (time) => {
+      const body = changed([...row, 'date'], time);
+      expect(parseExpensePageResponse(body)).toStrictEqual(body.data);
+    },
+  );
+
   it('accepts an Expense and a total in a historical currency', () => {
     const body = changed([...row, 'currency'], 'DEM');
     body.data.summary.totalsByCurrency[0].currency = 'FRF';
@@ -129,6 +138,8 @@ describe('Expense page read contract', () => {
     ['a zero page', ['data', 'pagination', 'page'], 0],
     ['a negative total', ['data', 'pagination', 'total'], -1],
     ['a malformed id', [...row, '_id'], 'groceries'],
+    ['an id one character too long', [...row, '_id'], `${expense._id}0`],
+    ['a Group id one character too short', [...row, 'group'], groupId.slice(1)],
     ['a malformed Group id', [...row, 'group'], 'maple'],
     ['a malformed Tag id', [...row, 'tagId'], 'shared'],
     ['a non-finite amount', [...row, 'amount'], Infinity],

@@ -77,6 +77,15 @@ describe('Activity page read contract', () => {
     expect(page.activities[3].metadata).toBeNull();
   });
 
+  // Times keep their offset as sent; a time without a zone is refused, as Android refuses it.
+  it.each(['2026-09-27T15:30:00+05:30', '2026-09-27T06:30:00.000-03:30'])(
+    'accepts the time %s with its offset, unchanged',
+    (time) => {
+      const body = changed([...event, 'createdAt'], time);
+      expect(parseActivityPageResponse(body)).toStrictEqual(body.data);
+    },
+  );
+
   it('accepts an event without metadata', () => {
     const body = changed([...event, 'metadata'], REMOVE);
     expect(parseActivityPageResponse(body)).toStrictEqual(body.data);
@@ -121,6 +130,13 @@ describe('Activity page read contract', () => {
     ['a fractional page', ['data', 'pagination', 'page'], 1.5],
     ['a negative page count', ['data', 'pagination', 'totalPages'], -1],
     ['a malformed id', [...event, '_id'], 'dinner'],
+    ['an id one character too long', [...event, '_id'], 'e000000000000000000000010'],
+    [
+      'an Expense id one character too short',
+      [...event, 'metadata', 'expenseId'],
+      expenseId.slice(1),
+    ],
+    ['a time without a zone', [...event, 'createdAt'], '2026-09-28T12:00:00'],
     ['a malformed Group id', [...event, 'group'], 7],
     ['an empty type', [...event, 'type'], ''],
     ['a malformed actor id', [...event, 'actor'], 'alex'],

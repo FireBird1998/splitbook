@@ -73,6 +73,8 @@ describe('Group Balances read contract', () => {
     ['a negative debt', [...bucket, 'debts', 0, 'amount'], -30],
     ['a NaN debt', [...bucket, 'debts', 0, 'amount'], NaN],
     ['a malformed person id', [...bucket, 'balances', 1, 'user'], 'priya'],
+    ['a person id one character too long', [...bucket, 'balances', 1, 'user'], `${priya}0`],
+    ['a person id one character too short', [...bucket, 'balances', 1, 'user'], priya.slice(1)],
     ['a malformed populated id', [...bucket, 'debts', 0, 'from'], { _id: 'sam' }],
     ['a name that is not a string', [...bucket, 'debts', 0, 'to', 'name'], 7],
     ['an image that is not a string', [...bucket, 'balances', 0, 'user', 'image'], {}],
