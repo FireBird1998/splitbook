@@ -492,15 +492,16 @@ async function renderApp() {
  * ceilings. A journey that breaks fails on its end screen, not by rendering less. Every
  * journey of a test reports its counts before the test fails on a ceiling.
  *
- * A journey only reads unless it says it `writes`: opening, going back, refreshing, returning
- * to the foreground and loading a page send nothing but GETs. A read never resumes or replays
- * a financial write (ADR 0004), so any other request fails the journey.
+ * A journey only reads: opening, going back, refreshing, returning to the foreground and
+ * loading a page send nothing but GETs. A read never resumes or replays a financial write
+ * (ADR 0004), so any other request fails the journey. A journey that must send something else
+ * names each such request in `allow`, as `METHOD /path`; any other non-GET still fails it.
  */
 async function journey(
   name: string,
   run: () => Promise<unknown>,
   reached: () => void,
-  options: { writes?: true } = {},
+  options: { allow?: readonly string[] } = {},
 ) {
   counting.renders.clear();
   publishes = 0;
@@ -526,14 +527,19 @@ async function journey(
     sent: [...sent],
   };
   samples.push(sample);
-  // Before the end screen: a write is reported even when the journey also broke.
-  if (!options.writes)
-    expect
-      .soft(
-        sample.sent.filter((request) => !request.startsWith('GET ')),
-        `${name} only reads, so it may send nothing but GETs`,
-      )
-      .toEqual([]);
+  // Before the end screen: a write is reported even when the journey also broke. An allowed
+  // request matches on its method and path, whatever its query.
+  const allowed = options.allow ?? [];
+  expect
+    .soft(
+      sample.sent.filter(
+        (request) => !request.startsWith('GET ') && !allowed.includes(request.split('?')[0]!),
+      ),
+      allowed.length
+        ? `${name} may send nothing but GETs and ${allowed.join(', ')}`
+        : `${name} only reads, so it may send nothing but GETs`,
+    )
+    .toEqual([]);
   reached();
   if (recording) return sample;
   const ceiling = ceilings[name];
@@ -564,8 +570,8 @@ describe('render and request profile (#177, #206)', () => {
         app = await renderApp();
       },
       home,
-      // Signing in posts the persona sign-in.
-      { writes: true },
+      // Signing in posts the persona sign-in, and nothing else may write.
+      { allow: ['POST /api/auth/demo-persona/sign-in'] },
     );
     await journey('Foreground on Home within 30 s', () => app.foreground(), home);
     await journey(

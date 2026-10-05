@@ -10,12 +10,14 @@
  * - a higher ceiling, a journey removed or renamed, or a measure that lost its ceiling needs
  *   a re-record, which only an approver allows, with the `re-record-ceilings` label.
  *
- * In CI (`--pull-request`, `--repository` and `--approvers`, with `GITHUB_TOKEN`) it reads
- * the pull request's timeline, every page of it, and accepts the label only when its latest
- * `labeled` event was made by one of the approvers. CI passes the repository variable
- * `CEILINGS_APPROVERS`, which only an admin can set, or the repository owner without it. An
- * empty list approves nobody. Without a pull request, as `pnpm swarm gate` runs it, it
- * reports what would need a re-record and fails.
+ * In CI (`--pull-request`, `--repository`, `--approvers` and `--labels-json`, with
+ * `GITHUB_TOKEN`), when something needs a re-record, it accepts the label only when the pull
+ * request has it now and the label's latest `labeled` event on the timeline, every page of it,
+ * was made by one of the approvers. CI passes the repository variable `CEILINGS_APPROVERS`,
+ * which only an admin can set, or the repository owner without it. The list is read only
+ * when a re-record needs it, and then an empty list, or one with an entry that isn't a login,
+ * stops the comparison: it never approves anyone. Without a pull request, as
+ * `pnpm swarm gate` runs it, it reports what would need a re-record and fails.
  *
  * Exit codes: 0 passes, 1 needs an approver's re-record label, 2 could not compare.
  */
@@ -189,6 +191,8 @@ const labelEvent = z.looseObject({
 });
 /** 5,000 timeline items; a pull request with more is not one this check can judge. */
 const maxPages = 50;
+/** How long each request to GitHub, its body included, may take. */
+export const fetchTimeoutMs = 30_000;
 
 /** The URL of the next page in a GitHub Link header, if any. */
 const nextPage = (link: string | null) => /<([^>]+)>\s*;\s*rel="next"/.exec(link ?? '')?.[1];
@@ -200,8 +204,10 @@ export async function fetchLabelEvents(options: {
   readonly pullRequest: number;
   readonly token: string;
   readonly fetch: typeof fetch;
+  readonly timeoutMs?: number;
 }): Promise<TimelineEvent[]> {
   const origin = new URL(options.apiUrl).origin;
+  const timeoutMs = options.timeoutMs ?? fetchTimeoutMs;
   const events: TimelineEvent[] = [];
   let url: string | undefined =
     `${options.apiUrl.replace(/\/+$/, '')}/repos/${options.repository}/issues/${options.pullRequest}/timeline?per_page=100`;
@@ -210,14 +216,27 @@ export async function fetchLabelEvents(options: {
       throw new Error(
         `Pull request #${options.pullRequest}'s timeline has more than ${maxPages} pages.`,
       );
-    const response = await options.fetch(url, {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        Authorization: `Bearer ${options.token}`,
-        'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': 'splitbook-ceilings-compare',
-      },
-    });
+    const signal = AbortSignal.timeout(timeoutMs);
+    const where = `pull request #${options.pullRequest}'s timeline (${url})`;
+    const unreachable = (error: unknown) =>
+      new Error(
+        signal.aborted
+          ? `GitHub didn't answer within ${timeoutMs / 1000} s for ${where}.`
+          : `Couldn't read ${where}: ${(error as Error).message}`,
+      );
+    const response = await options
+      .fetch(url, {
+        headers: {
+          Accept: 'application/vnd.github+json',
+          Authorization: `Bearer ${options.token}`,
+          'X-GitHub-Api-Version': '2022-11-28',
+          'User-Agent': 'splitbook-ceilings-compare',
+        },
+        signal,
+      })
+      .catch((error: unknown) => {
+        throw unreachable(error);
+      });
     if (!response.ok)
       throw new Error(
         `GitHub answered HTTP ${response.status} for pull request #${options.pullRequest}'s timeline (${url}).` +
@@ -225,7 +244,10 @@ export async function fetchLabelEvents(options: {
             ? " The job's token needs the pull-requests: read permission."
             : ''),
       );
-    const items = timelinePage.safeParse(await response.json());
+    const body: unknown = await response.json().catch((error: unknown) => {
+      throw unreachable(error);
+    });
+    const items = timelinePage.safeParse(body);
     if (!items.success) throw new Error(`GitHub's timeline page ${page} is not a list of events.`);
     for (const item of items.data) {
       if (item.event !== 'labeled' && item.event !== 'unlabeled') continue;
@@ -248,16 +270,34 @@ export interface CompareContext {
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly fetch: typeof fetch;
   readonly print: (line: string) => void;
+  /** Each GitHub request's limit; `fetchTimeoutMs` unless a test sets it. */
+  readonly fetchTimeoutMs?: number;
 }
 
 export const usage = [
   'Usage: pnpm mobile ceilings:compare --base <commit>',
-  '         [--pull-request <number> --repository <owner/name> --approvers <login,login>]',
-  '         [--label <name>]',
+  '         [--pull-request <number> --repository <owner/name> --approvers <logins>',
+  "          --labels-json <the pull request's labels, as a JSON array>] [--label <name>]",
   'With --pull-request, GITHUB_TOKEN must be set (and GITHUB_API_URL, if not api.github.com).',
 ].join('\n');
 
 class Refused extends Error {}
+
+const login = /^[a-z\d](?:[a-z\d-]*[a-z\d])?$/i;
+
+/**
+ * The approvers in `--approvers`: logins separated by commas or whitespace, each with or
+ * without a leading `@`. `invalid` lists what isn't a login.
+ */
+export function parseApprovers(value: string | undefined) {
+  const logins = (value ?? '')
+    .split(/[\s,]+/)
+    .map((entry) => entry.replace(/^@/, ''))
+    .filter(Boolean);
+  return { logins, invalid: logins.filter((entry) => !login.test(entry)) };
+}
+
+const labelList = z.array(z.string());
 
 const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`;
 
@@ -308,6 +348,7 @@ async function compare(argv: readonly string[], context: CompareContext): Promis
         'pull-request': { type: 'string' },
         repository: { type: 'string' },
         approvers: { type: 'string' },
+        'labels-json': { type: 'string' },
         label: { type: 'string', default: reRecordLabel },
       },
       strict: true,
@@ -319,24 +360,20 @@ async function compare(argv: readonly string[], context: CompareContext): Promis
   const { base, repository } = values;
   const label = values.label ?? reRecordLabel;
   if (!base || base.startsWith('-')) throw new Refused('--base <commit> is required.');
-  const onPullRequest = [values['pull-request'], repository, values.approvers].some(
-    (value) => value !== undefined,
-  );
-  // Logins, comma-separated. An empty list is refused rather than read as "anyone".
-  const approvers = (values.approvers ?? '')
-    .split(',')
-    .map((login) => login.trim())
-    .filter(Boolean);
+  const onPullRequest = [
+    values['pull-request'],
+    repository,
+    values.approvers,
+    values['labels-json'],
+  ].some((value) => value !== undefined);
+  // GitHub's own context gives these, so they are checked on every run. The approvers and the
+  // labels are read only when a re-record needs them, so a bad CEILINGS_APPROVERS can't fail
+  // a pull request whose ceilings didn't rise.
   if (onPullRequest) {
     if (!/^[1-9]\d*$/.test(values['pull-request'] ?? ''))
       throw new Refused('--pull-request needs the pull request number.');
     if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? ''))
       throw new Refused('--repository needs <owner>/<name>.');
-    if (approvers.length === 0)
-      throw new Refused('--approvers needs at least one login: an empty list approves nobody.');
-    const invalid = approvers.filter((login) => !/^[a-z\d](?:[a-z\d-]*[a-z\d])?$/i.test(login));
-    if (invalid.length)
-      throw new Refused(`--approvers has a value that isn't a login: ${invalid.join(', ')}`);
   }
 
   const git = (...args: string[]) =>
@@ -400,6 +437,33 @@ async function compare(argv: readonly string[], context: CompareContext): Promis
     return 1;
   }
   const pullRequest = Number(values['pull-request']);
+  const needsLabel = () => {
+    const message = `${summary}, and pull request #${pullRequest} doesn't have the ${label} label. ${steps} Adding it runs this check again.`;
+    print(message);
+    if (env.GITHUB_ACTIONS === 'true')
+      print(annotation('error', 'Ceilings need a re-record', message));
+    return 1 as const;
+  };
+  const approvers = parseApprovers(values.approvers);
+  if (approvers.logins.length === 0)
+    throw new Error(
+      '--approvers (CEILINGS_APPROVERS) has no login, and an empty list approves nobody.',
+    );
+  if (approvers.invalid.length)
+    throw new Error(
+      `--approvers (CEILINGS_APPROVERS) has entries that aren't logins: ${approvers.invalid.join(', ')}. Separate logins with commas or spaces.`,
+    );
+  if (values['labels-json'] === undefined)
+    throw new Refused("--labels-json needs the pull request's labels.");
+  let labels: string[];
+  try {
+    labels = labelList.parse(JSON.parse(values['labels-json']));
+  } catch {
+    throw new Error(`--labels-json isn't a JSON array of label names: ${values['labels-json']}`);
+  }
+  // The label must be on the pull request now, as well as applied last by an approver, so a
+  // stale labeled event can't approve once the label is gone without an unlabeled event.
+  if (!labels.some((name) => same(name, label))) return needsLabel();
   const token = env.GITHUB_TOKEN;
   if (!token)
     throw new Error(
@@ -411,19 +475,18 @@ async function compare(argv: readonly string[], context: CompareContext): Promis
     pullRequest,
     token,
     fetch: context.fetch,
+    timeoutMs: context.fetchTimeoutMs,
   });
-  const approval = labelApproval(events, label, approvers);
-  const listed = approvers.join(', ');
+  const approval = labelApproval(events, label, approvers.logins);
+  const listed = approvers.logins.join(', ');
   if (approval.status === 'approved') {
     const message = `${summary}. ${approval.actor} applied ${label} at ${approval.at}, which approves this re-record.`;
     print(message);
     if (env.GITHUB_ACTIONS === 'true') print(annotation('notice', 'Ceilings re-recorded', message));
     return 0;
   }
-  const message =
-    approval.status === 'absent'
-      ? `${summary}, and pull request #${pullRequest} doesn't have the ${label} label. ${steps} Adding it runs this check again.`
-      : `${summary}. The ${label} label on pull request #${pullRequest} was last applied by ${approval.actor ?? 'a deleted account'}, who isn't an approver (${listed}), so it doesn't approve this re-record. Only an approver's label counts: ask one of them to remove it and apply it again.`;
+  if (approval.status === 'absent') return needsLabel();
+  const message = `${summary}. The ${label} label on pull request #${pullRequest} was last applied by ${approval.actor ?? 'a deleted account'}, who isn't an approver (${listed}), so it doesn't approve this re-record. Only an approver's label counts: ask one of them to remove it and apply it again.`;
   print(message);
   if (env.GITHUB_ACTIONS === 'true')
     print(annotation('error', 'Ceilings need a re-record', message));

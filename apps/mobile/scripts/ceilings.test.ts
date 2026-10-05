@@ -9,6 +9,7 @@ import {
   harnessCeilings,
   labelApproval,
   needsReRecord,
+  parseApprovers,
   parseCeilings,
   reRecordLabel,
   runCeilingsCompare,
@@ -272,7 +273,7 @@ describe('ceilings:compare', () => {
 
   const run = async (
     args: readonly string[],
-    options: { token?: string; fetch?: typeof globalThis.fetch } = {},
+    options: { token?: string; fetch?: typeof globalThis.fetch; fetchTimeoutMs?: number } = {},
   ) => {
     const lines: string[] = [];
     const code = await runCeilingsCompare(args, {
@@ -284,10 +285,14 @@ describe('ceilings:compare', () => {
           throw new Error('GitHub must not be asked');
         }),
       print: (line) => lines.push(line),
+      fetchTimeoutMs: options.fetchTimeoutMs,
     });
     return { code, output: lines.join('\n') };
   };
   const pullRequest = ['--pull-request', '42', '--repository', 'maple-owner/fictional-ledger'];
+  /** The pull request's labels now, as CI passes them from the event. */
+  const labelled = ['--labels-json', JSON.stringify(['full-ci', 're-record-ceilings'])];
+  const unlabelled = ['--labels-json', JSON.stringify(['full-ci'])];
 
   it('passes when nothing changed, without asking GitHub', async () => {
     const { code, output } = await run([
@@ -296,9 +301,26 @@ describe('ceilings:compare', () => {
       ...pullRequest,
       '--approvers',
       approvers.join(','),
+      ...unlabelled,
     ]);
     expect(code).toBe(0);
     expect(output).toMatch(/No ceiling rose, and no journey was removed or renamed/);
+  });
+
+  it('never reads the approvers or the labels when nothing needs a re-record', async () => {
+    write(withCeiling('Switch to Balances', 'renders', 40));
+    for (const list of ['', ' , ', 'not a login!', '@maple-owner;rm -rf']) {
+      const { code } = await run([
+        '--base',
+        withFile,
+        ...pullRequest,
+        '--approvers',
+        list,
+        '--labels-json',
+        'not json',
+      ]);
+      expect(code).toBe(0);
+    }
   });
 
   it('passes when the base commit has no data file yet: every journey is new', async () => {
@@ -342,16 +364,41 @@ describe('ceilings:compare', () => {
   describe('on a pull request whose ceiling rose', () => {
     beforeEach(() => write(withCeiling('Open a Group on Expenses', 'requests', 5)));
     /** CI with CEILINGS_APPROVERS set to the owner and the owner's second account. */
-    const args = () => ['--base', withFile, ...pullRequest, '--approvers', approvers.join(',')];
+    const args = (labels = labelled) => [
+      '--base',
+      withFile,
+      ...pullRequest,
+      '--approvers',
+      approvers.join(','),
+      ...labels,
+    ];
     /** CI without the variable: `github.repository_owner` alone. */
-    const ownerOnly = () => ['--base', withFile, ...pullRequest, '--approvers', owner];
+    const ownerOnly = () => ['--base', withFile, ...pullRequest, '--approvers', owner, ...labelled];
     const timelineAfter = (count: number, perPage?: number) => ({
       token: 'fixture-token',
       fetch: github(after(count), { perPage }).fetch,
     });
 
-    it('fails without the label', async () => {
-      const { code, output } = await run(args(), timelineAfter(3));
+    it("fails without the label, and doesn't ask GitHub", async () => {
+      const { code, output } = await run(args(unlabelled), { token: 'fixture-token' });
+      expect(code).toBe(1);
+      expect(output).toMatch(/doesn't have the re-record-ceilings label/);
+    });
+
+    it("fails when the label is gone though an approver's labeled event is the latest", async () => {
+      // The label was deleted, or deleted and recreated, without an unlabeled event: the
+      // timeline still ends with the owner's labeled event, but the pull request lacks it.
+      const { code, output } = await run(args(unlabelled), {
+        token: 'fixture-token',
+        fetch: github(after(4), {}).fetch,
+      });
+      expect(code).toBe(1);
+      expect(output).toMatch(/doesn't have the re-record-ceilings label/);
+    });
+
+    it('fails when the labels list it but the timeline last removed it', async () => {
+      // An old run's event still lists the label; the timeline, read now, says it was removed.
+      const { code, output } = await run(args(), timelineAfter(6));
       expect(code).toBe(1);
       expect(output).toMatch(/doesn't have the re-record-ceilings label/);
     });
@@ -375,6 +422,21 @@ describe('ceilings:compare', () => {
       const { code, output } = await run(args(), timelineAfter(11));
       expect(code).toBe(0);
       expect(output).toMatch(/maple-second applied re-record-ceilings at 2026-10-05T11:00:10Z/);
+    });
+
+    it('reads approvers separated by commas or spaces, with or without @', async () => {
+      const list = ['@maple-owner  maple-second', ' maple-owner,\n@maple-second ', 'maple-second'];
+      for (const value of list) {
+        const { code } = await run(
+          ['--base', withFile, ...pullRequest, '--approvers', value, ...labelled],
+          timelineAfter(11),
+        );
+        expect(code).toBe(0);
+      }
+      expect(parseApprovers('@maple-owner, maple-second\tthird')).toEqual({
+        logins: ['maple-owner', 'maple-second', 'third'],
+        invalid: [],
+      });
     });
 
     it('fails when an account not on the list applied the label, and names it', async () => {
@@ -401,20 +463,43 @@ describe('ceilings:compare', () => {
 
     it('takes the approvers from its input, never a fixed login', async () => {
       const { code, output } = await run(
-        ['--base', withFile, ...pullRequest, '--approvers', 'helpful-collaborator'],
+        ['--base', withFile, ...pullRequest, '--approvers', 'helpful-collaborator', ...labelled],
         timelineAfter(4),
       );
       expect(code).toBe(1);
       expect(output).toMatch(/last applied by maple-owner, who isn't an approver/);
     });
 
-    it('fails closed on an empty or missing list of approvers, without asking GitHub', async () => {
-      for (const list of [[], ['--approvers', ''], ['--approvers', ' , ']]) {
-        const { code, output } = await run(['--base', withFile, ...pullRequest, ...list], {
-          token: 'fixture-token',
-        });
+    it('fails closed on an empty, missing or invalid list of approvers, without asking GitHub', async () => {
+      const lists = [[], ['--approvers', ''], ['--approvers', ' , @ ']];
+      for (const list of lists) {
+        const { code, output } = await run(
+          ['--base', withFile, ...pullRequest, ...list, ...labelled],
+          { token: 'fixture-token' },
+        );
         expect(code).toBe(2);
-        if (list.length) expect(output).toMatch(/an empty list approves nobody/);
+        expect(output).toMatch(/an empty list approves nobody/);
+      }
+      const invalid = await run(
+        ['--base', withFile, ...pullRequest, '--approvers', 'maple-owner,not!a!login', ...labelled],
+        { token: 'fixture-token' },
+      );
+      expect(invalid.code).toBe(2);
+      expect(invalid.output).toMatch(/entries that aren't logins: not!a!login/);
+    });
+
+    it("can't compare without the pull request's labels, or with labels that aren't a list", async () => {
+      const without = await run(['--base', withFile, ...pullRequest, '--approvers', owner], {
+        token: 'fixture-token',
+      });
+      expect(without.code).toBe(2);
+      expect(without.output).toMatch(/--labels-json/);
+      for (const value of ['not json', '{"name":"re-record-ceilings"}', '[1]']) {
+        const { code } = await run(
+          ['--base', withFile, ...pullRequest, '--approvers', owner, '--labels-json', value],
+          { token: 'fixture-token' },
+        );
+        expect(code).toBe(2);
       }
     });
 
@@ -426,6 +511,20 @@ describe('ceilings:compare', () => {
       expect(code).toBe(2);
       expect(output).toMatch(/HTTP 403/);
       expect(output).toMatch(/pull-requests: read/);
+    });
+
+    it("can't compare when GitHub doesn't answer in time", async () => {
+      const hanging = ((_input: unknown, init?: RequestInit) =>
+        new Promise((_resolve, reject) =>
+          init?.signal?.addEventListener('abort', () => reject(init.signal?.reason)),
+        )) as typeof globalThis.fetch;
+      const { code, output } = await run(args(), {
+        token: 'fixture-token',
+        fetch: hanging,
+        fetchTimeoutMs: 20,
+      });
+      expect(code).toBe(2);
+      expect(output).toMatch(/GitHub didn't answer within 0\.02 s/);
     });
 
     it("can't compare a pull request without a token", async () => {
@@ -441,10 +540,10 @@ describe('ceilings:compare', () => {
       Response.json(after(3), {
         headers: { Link: '<https://example.test/steal?page=2>; rel="next"' },
       })) as typeof globalThis.fetch;
-    const { code, output } = await run(['--base', withFile, ...pullRequest, '--approvers', owner], {
-      token: 'fixture-token',
-      fetch,
-    });
+    const { code, output } = await run(
+      ['--base', withFile, ...pullRequest, '--approvers', owner, ...labelled],
+      { token: 'fixture-token', fetch },
+    );
     expect(code).toBe(2);
     expect(output).toMatch(/example\.test/);
   });
@@ -465,9 +564,6 @@ describe('ceilings:compare', () => {
     expect((await run(['--base', withFile, '--labl', 'x'])).code).toBe(2);
     expect((await run(['--base', withFile, '--pull-request', '42'])).code).toBe(2);
     expect((await run(['--base', withFile, '--owner', owner])).code).toBe(2);
-    expect(
-      (await run(['--base', withFile, ...pullRequest, '--approvers', 'maple-owner,not a login']))
-        .code,
-    ).toBe(2);
+    expect((await run(['--base', withFile, '--approvers', owner])).code).toBe(2);
   });
 });
