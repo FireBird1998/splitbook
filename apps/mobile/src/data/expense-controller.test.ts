@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { toDateParam } from '@splitbook/shared/date';
+import { hangUntilAborted, manualTimer } from '../test-utils/transport-faults';
 import { resolveDraftReview, type ExpenseDraft, type ExpenseField } from './expense-draft';
 import { createMobileController, type MobileController } from './mobile-controller';
-import type { FetchResponse, MobileFetch } from './types';
+import type { FetchResponse, MobileFetch, MobileTimer } from './types';
 
 const memberIds = [
   'a00000000000000000000001',
@@ -43,7 +44,7 @@ const json = (data: unknown, status = 200, cookie?: string) =>
   });
 function setup(
   intercept?: (path: string, init: RequestInit) => Promise<FetchResponse> | undefined,
-  options: { newSubmissionKey?: () => string } = {},
+  options: { newSubmissionKey?: () => string; timer?: MobileTimer } = {},
 ) {
   let cookie: string | null = null;
   let account: string | null = null;
@@ -140,6 +141,7 @@ function setup(
         },
         now: () => now,
         newSubmissionKey: options.newSubmissionKey ?? (() => 'native-expense-test-0001'),
+        timer: options.timer,
       },
     );
   return { create, controller: create(), drafts, records };
@@ -2011,6 +2013,40 @@ describe('a save that may already be recorded', () => {
     expect(controller.getSnapshot().expense.status).toBe('saved');
     expect(records.size).toBe(0);
   });
+
+  it.each(['headers', 'body'] as const)(
+    'ends unconfirmed, with its stored key and body, when its request times out waiting for the %s (#209)',
+    async (stage) => {
+      const timers = manualTimer();
+      const submissions: { key: string | null; body: string }[] = [];
+      const { controller, records } = setup(
+        (path, init) => {
+          if (!path.endsWith('/expenses') || init.method !== 'POST') return;
+          submissions.push({
+            key: new Headers(init.headers).get('Idempotency-Key'),
+            body: String(init.body),
+          });
+          return hangUntilAborted(init, stage);
+        },
+        { timer: timers.timer },
+      );
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Shared dinner', amount: '10.00', tagId });
+      const saving = controller.saveExpense();
+      await vi.waitFor(() => expect(submissions).toHaveLength(1));
+      // Stored before it was sent.
+      expect([...records.values()]).toEqual([expect.objectContaining({ attempt: submissions[0] })]);
+      timers.elapse(20_000);
+      await saving;
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'uncertain',
+        attempt: submissions[0],
+      });
+      expect([...records.values()]).toEqual([expect.objectContaining({ attempt: submissions[0] })]);
+      expect(submissions).toEqual([{ key: 'native-expense-test-0001', body: expect.any(String) }]);
+    },
+  );
 });
 
 describe('a retried save the server rejects', () => {
