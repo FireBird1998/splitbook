@@ -8,7 +8,11 @@ import type { FetchResponse } from './types';
 // #191: a member's own confirmed or unconfirmed change leaves no saved copy older than it.
 
 // This device's SQLite records, kept in memory. The real saved-copy store runs on top of them.
-const device = vi.hoisted(() => ({ records: new Map<string, unknown>() }));
+const device = vi.hoisted(() => ({
+  records: new Map<string, unknown>(),
+  /** The next write of an environment's saved copies is held part-way, as on a slow disk. */
+  stall: null as null | { environment: string; arrive: () => void; released: Promise<void> },
+}));
 vi.mock('./account-record-storage', () => ({
   createAccountGroupRecordStore: (environment: string, kind: string) => {
     const key = (accountId: string, id: string) => `${environment}|${kind}|${accountId}|${id}`;
@@ -16,6 +20,12 @@ vi.mock('./account-record-storage', () => ({
       load: async (accountId: string, id: string) =>
         structuredClone(device.records.get(key(accountId, id)) ?? null),
       save: async (accountId: string, id: string, value: unknown) => {
+        const stall = device.stall;
+        if (kind === 'cache' && stall?.environment === environment) {
+          device.stall = null;
+          stall.arrive();
+          await stall.released;
+        }
         device.records.set(key(accountId, id), structuredClone(value));
       },
       remove: async (accountId: string, id: string) => {
@@ -339,13 +349,44 @@ function fixture() {
         fetch: async (url, init) => {
           if (server.offline) throw new Error('Offline');
           const path = new URL(url).pathname + new URL(url).search;
-          calls.push({ method: init.method ?? 'GET', path });
+          const method = init.method ?? 'GET';
+          calls.push({ method, path });
           // Every answer takes a moment to arrive.
           clock.now += 1;
-          return respond(path, init);
+          const response = respond(path, init);
+          // The server has answered; a held answer is still on its way back.
+          const held = holds.findIndex((entry) => entry.match(path, method));
+          if (held >= 0) {
+            const [entry] = holds.splice(held, 1);
+            entry.arrive();
+            await entry.released;
+          }
+          return response;
         },
       },
     );
+
+  const holds: {
+    match: (path: string, method: string) => boolean;
+    arrive: () => void;
+    released: Promise<void>;
+  }[] = [];
+  /** Holds the server's answer to the next matching request on its way back, until released. */
+  const hold = (match: (path: string, method: string) => boolean) => {
+    let arrive!: () => void, release!: () => void;
+    const arrived = new Promise<void>((resolve) => (arrive = resolve));
+    const released = new Promise<void>((resolve) => (release = resolve));
+    holds.push({ match, arrive, released });
+    return { arrived, release };
+  };
+  /** Holds the next write of this device's saved copies part-way, until released. */
+  const stallSave = () => {
+    let arrive!: () => void, release!: () => void;
+    const arrived = new Promise<void>((resolve) => (arrive = resolve));
+    const released = new Promise<void>((resolve) => (release = resolve));
+    device.stall = { environment, arrive, released };
+    return { arrived, release };
+  };
 
   /** This device's saved copies for Alex, by path. */
   const saved = () =>
@@ -379,7 +420,7 @@ function fixture() {
           return [view, copy];
         }),
     );
-  return { create, clock, server, calls, saved, savedOf };
+  return { create, clock, server, calls, saved, savedOf, hold, stallSave };
 }
 type Fixture = ReturnType<typeof fixture>;
 type Controller = ReturnType<Fixture['create']>;
@@ -464,6 +505,9 @@ async function readOffline(controller: Controller) {
         : record.message,
   };
 }
+
+/** Lets answers and storage steps already under way go as far as they can. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
 
 /** The same, after the app restarts without a connection. */
 async function restartOffline(f: Fixture, controller: Controller) {
@@ -628,5 +672,65 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
       record: notSaved,
     });
     expect(controller.getSnapshot().auth.status).toBe('authenticated');
+  });
+
+  it('saves nothing that a read still in flight across a confirmed edit brings back from before it', async () => {
+    const f = fixture();
+    const controller = await visitEverything(f);
+    await controller.openGroup(mapleId);
+    // Activity is read before the edit; its answer is still on its way when the edit is confirmed.
+    const activity = f.hold((path) => path.startsWith(`/api/groups/${mapleId}/activity?page=`));
+    const reading = controller.openActivity(mapleId);
+    await activity.arrived;
+    await controller.openExpense(mapleId, dinnerId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Lake dinner' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.status).toBe('saved');
+    expect(f.server.ledger).toBe(1);
+    activity.release();
+    await reading;
+
+    expect(Object.keys(f.savedOf(mapleId)).sort()).toEqual([
+      'Balances',
+      'Expenses 2026-09 page 1',
+      'Group',
+    ]);
+    f.server.offline = true;
+    expect((await readOffline(controller)).activity).toBe(notSaved);
+  });
+
+  it('removes a copy from before an edit that was still being written when the edit was confirmed', async () => {
+    const f = fixture();
+    const controller = await visitEverything(f);
+    await controller.openGroup(mapleId);
+    const activity = f.hold((path) => path.startsWith(`/api/groups/${mapleId}/activity?page=`));
+    const reading = controller.openActivity(mapleId);
+    await activity.arrived;
+    await controller.openExpense(mapleId, dinnerId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Lake dinner' });
+    const edit = f.hold((_, method) => method === 'PATCH');
+    const saving = controller.saveExpense();
+    await edit.arrived;
+    expect(f.server.ledger).toBe(1);
+    // Activity's answer from before the edit lands while the edit's answer is on its way, and
+    // this device is still writing it when the edit is confirmed.
+    const write = f.stallSave();
+    activity.release();
+    await write.arrived;
+    edit.release();
+    await settle();
+    write.release();
+    await Promise.all([saving, reading]);
+    expect(controller.getSnapshot().expense.status).toBe('saved');
+
+    expect(Object.keys(f.savedOf(mapleId)).sort()).toEqual([
+      'Balances',
+      'Expenses 2026-09 page 1',
+      'Group',
+    ]);
+    f.server.offline = true;
+    expect((await readOffline(controller)).activity).toBe(notSaved);
   });
 });
