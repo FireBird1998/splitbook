@@ -18,9 +18,10 @@ every test in UTC, whatever the machine's zone. Set `TZ` to run another zone,
 for example `TZ=Pacific/Kiritimati pnpm test:unit`. Each package's
 `src/test-time-zone.test.ts` names the zone the run resolved to.
 
-CI runs the unit tests in four zones. **verify** runs them in UTC, with the
-integration tests. A time-zone matrix (`unit-time-zones`) runs `pnpm test:unit`
-again, one job per zone, in three zones that observe no daylight saving time:
+CI runs the unit tests in four zones. **PR checks** runs them in UTC on every
+pull request, and **verify** runs them in UTC with the integration tests. In the
+full suite, a time-zone matrix (`unit-time-zones`) runs `pnpm test:unit` again,
+one job per zone, in three zones that observe no daylight saving time:
 
 - **Unit tests (Pacific/Tongatapu)**: UTC+13
 - **Unit tests (Pacific/Kiritimati)**: UTC+14
@@ -180,14 +181,28 @@ helpers live in [`playwright/`](../apps/web/playwright/).
 
 ## CI
 
-Three jobs. **verify** and **playwright** each have a `mongo:7` service
-container:
+Run `pnpm swarm gate` before every push: it is the local CI. GitHub Actions
+then runs one fast job on each pull request and the full suite on `main`
+(#277). [tools/swarm](../tools/swarm/README.md#in-ci) says what runs where, how
+to ask for the full suite on a pull request, and who hears about a failure.
+
+- **PR checks** (`pr-checks`) — every pull request, and with the full suite.
+  The one check branch protection requires. Install, format check, lint,
+  typecheck, design-system style policy, `pnpm test:unit` in UTC, then every
+  mobile HTTP verifier against a production backend that `pnpm swarm up` starts
+  on the job's `mongo:7` service. A docs-only pull request runs the format check
+  alone.
+
+The full suite runs on each push to `main`, nightly, on a manual run, and on a
+pull request labelled `full-ci`. **verify** and **playwright** each have a
+`mongo:7` service container:
 
 - **verify** — install, lint, `pnpm test` (unit + integration against the
-  service MongoDB), typecheck, build.
+  service MongoDB), typecheck, the authenticated expense-access and Google
+  sign-in recovery suites, build.
 - **playwright** — install, Chromium, build, `pnpm web test:e2e` (webServer runs
-  `next start` on 3100), then `pnpm web test:e2e:google`, and uploads the report and
-  review screenshots.
+  `next start` on 3100), then `pnpm web test:e2e:google`, the component lab and
+  the pilot's visual comparisons, and uploads the report and review screenshots.
 - **unit-time-zones** — a matrix that installs and runs `pnpm test:unit` with
   `TZ` set, as **Unit tests (Pacific/Tongatapu)**,
   **Unit tests (Pacific/Kiritimati)** and **Unit tests (Pacific/Pago_Pago)**.
