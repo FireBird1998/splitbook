@@ -6,11 +6,18 @@ import {
   toMajorAmount,
 } from '@splitbook/shared/exact-money';
 import {
+  ExpensePageReadError,
   parseExpensePageResponse,
   type ExpenseAllocationRead,
 } from '@splitbook/shared/expense-page-read';
-import { parseGroupBalancesResponse } from '@splitbook/shared/group-balances-read';
-import { parseHomeBalancesResponse } from '@splitbook/shared/home-balances-read';
+import {
+  GroupBalancesReadError,
+  parseGroupBalancesResponse,
+} from '@splitbook/shared/group-balances-read';
+import {
+  HomeBalancesReadError,
+  parseHomeBalancesResponse,
+} from '@splitbook/shared/home-balances-read';
 import type { FinancialPersonRead } from '@splitbook/shared/wire-fields';
 import type {
   GroupCurrencyBalance,
@@ -23,8 +30,12 @@ import type {
 // The shared decoders check each response's fields (#211). Android adds what it asks for and
 // what it can show: today's currencies only, 20-row pages, exact amounts and stored money.
 const PAGE_SIZE = 20;
-function assertCurrencies(codes: string[]) {
-  if (codes.some((code) => getCurrency(code) === undefined)) throw new Error('Unknown currency');
+/**
+ * A currency outside today's list fails the read the way a malformed response does: settling
+ * up shows this message, so it stays the decoder's sentence.
+ */
+function assertCurrencies(codes: string[], Failure: new () => Error) {
+  if (codes.some((code) => getCurrency(code) === undefined)) throw new Failure();
 }
 const exact = (value: number, code: string) => toMajorAmount(parseAmountMinor(value, code), code);
 function personData(value: FinancialPersonRead): FinancialPerson {
@@ -35,7 +46,10 @@ function personData(value: FinancialPersonRead): FinancialPerson {
 
 export function parseGroupBalances(value: unknown): GroupCurrencyBalance[] {
   const body = parseGroupBalancesResponse(value);
-  assertCurrencies(body.byCurrency.map((row) => row.currency));
+  assertCurrencies(
+    body.byCurrency.map((row) => row.currency),
+    GroupBalancesReadError,
+  );
   return body.byCurrency.map((row) => ({
     currency: row.currency,
     balances: row.balances.map((item) => ({
@@ -52,10 +66,13 @@ export function parseGroupBalances(value: unknown): GroupCurrencyBalance[] {
 
 export function parseExpensePage(value: unknown, groupId: string, defaultCurrency: string) {
   const body = parseExpensePageResponse(value);
-  assertCurrencies([
-    ...body.expenses.map((row) => row.currency),
-    ...body.summary.totalsByCurrency.map((row) => row.currency),
-  ]);
+  assertCurrencies(
+    [
+      ...body.expenses.map((row) => row.currency),
+      ...body.summary.totalsByCurrency.map((row) => row.currency),
+    ],
+    ExpensePageReadError,
+  );
   if (body.pagination.limit !== PAGE_SIZE) throw new Error('Unexpected Expense page size');
   if (body.summary.count !== body.pagination.total) throw new Error('Inconsistent expense count');
   const expenses: MobileExpense[] = body.expenses.map((row) => {
@@ -135,10 +152,13 @@ export function parseHomeBalances(value: unknown): {
   const body = parseHomeBalancesResponse(value);
   // Without Group balances, Home still shows its totals and leaves each Group's balance unknown.
   const groups = body.groups ?? [];
-  assertCurrencies([
-    ...body.buckets.map((bucket) => bucket.currency),
-    ...groups.flatMap((group) => group.balances.map((row) => row.currency)),
-  ]);
+  assertCurrencies(
+    [
+      ...body.buckets.map((bucket) => bucket.currency),
+      ...groups.flatMap((group) => group.balances.map((row) => row.currency)),
+    ],
+    HomeBalancesReadError,
+  );
   return {
     buckets: body.buckets.map((bucket) => ({
       currency: bucket.currency,

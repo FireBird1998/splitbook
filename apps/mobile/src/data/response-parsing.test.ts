@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { GroupBalancesReadError } from '@splitbook/shared/group-balances-read';
 import { parseActivityPage } from './activity';
 import { expenseRecordSchema, parseExpenseRecord } from './expense-record';
 import { parseExpensePage, parseGroupBalances, parseHomeBalances } from './financial-dto';
@@ -79,6 +80,15 @@ describe('parseGroupBalances', () => {
     const body = clone(response);
     change(body);
     expect(() => parseGroupBalances(body)).toThrow();
+  });
+
+  // No figure in the bucket reaches the money checks, so only Android's currency check stops it.
+  // Settling up shows this message (submitSettlement), so it reads as a sentence.
+  it('rejects a historical currency with no balances or debts', () => {
+    const body = clone(response);
+    body.data.byCurrency.push({ currency: 'DEM', balances: [], debts: [] });
+    expect(() => parseGroupBalances(body)).toThrow(GroupBalancesReadError);
+    expect(() => parseGroupBalances(body)).toThrow('Unable to load Balances. Please retry.');
   });
 });
 
