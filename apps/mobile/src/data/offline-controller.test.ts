@@ -45,6 +45,7 @@ function fixture() {
   let offline = false,
     revoked = false,
     deleted = false,
+    created: typeof group | null = null,
     writes = 0,
     cookie: string | null = null,
     owner: string | null = null,
@@ -204,18 +205,17 @@ function fixture() {
               user: activeUser,
               session: { userId: activeUser.id, expiresAt: '2030-01-01T00:00:00.000Z' },
             });
-          if (path === '/api/groups' && init.method === 'POST')
-            return Response.json(
-              {
-                status: 201,
-                data: {
-                  ...group,
-                  _id: 'b00000000000000000000002',
-                  name: JSON.parse(String(init.body)).name,
-                },
-              },
-              { status: 201 },
-            );
+          if (path === '/api/groups' && init.method === 'POST') {
+            created = {
+              ...group,
+              _id: 'b00000000000000000000002',
+              name: JSON.parse(String(init.body)).name,
+            };
+            return Response.json({ status: 201, data: created }, { status: 201 });
+          }
+          // A created Group opens through its own read (#189).
+          if (created && path === `/api/groups/${created._id}`)
+            return Response.json({ status: 200, data: created });
           if (path === '/api/groups')
             return Response.json({
               status: 200,
