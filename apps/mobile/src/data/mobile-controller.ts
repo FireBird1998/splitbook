@@ -55,7 +55,7 @@ import {
   type ExpenseField,
   type ExpenseValidation,
 } from './expense-draft';
-import { decodeStoredSession, encodeStoredSession, readSessionCookie } from './cookies';
+import { decodeStoredSession, encodeStoredSession } from './cookies';
 import { emptyFormValidation, rejectFields, touchField } from './field-feedback';
 import {
   groupCorrectionSummary,
@@ -82,10 +82,16 @@ import {
 } from './dto';
 import { parseInvitationLink } from './invitation-links';
 import { parseExpensePage, parseGroupBalances, parseHomeBalances } from './financial-dto';
+import {
+  createTransport,
+  expiredMessage,
+  RequestError,
+  storageMessage,
+  Superseded,
+} from './transport';
 import type {
   AccountStorageLease,
   ExpenseDraftSummary,
-  FetchResponse,
   GroupCreation,
   GroupDestination,
   GroupDraft,
@@ -211,8 +217,6 @@ function emptyHome(): HomeFinancialState {
   };
 }
 
-const expiredMessage = 'Your session has expired. Sign in again to continue.';
-const storageMessage = 'Could not safely save your session. Please try signing in again.';
 const unrestorableMessage = 'Your saved session could not be restored. Please sign in again.';
 const keptUntilConfirmedMessage = 'Your saved data is kept. Connect once to confirm your session.';
 const disabledMessage = 'Development persona sign-in is disabled in this build.';
@@ -220,7 +224,6 @@ const disabledMessage = 'Development persona sign-in is disabled in this build.'
 const unconfirmedSignOut =
   'This device is signed out, but the server didn’t confirm that the session ended. Try again, or continue signed out.';
 
-class Superseded extends Error {}
 class AccountCleanupError extends Error {
   constructor() {
     super('Could not remove this account from the device. Try signing out again.');
@@ -232,19 +235,6 @@ const recoveryStorageMissing =
   'Payments need this device to keep a recovery copy of each submission, and that storage isn’t available right now. Try again, or sign out and back in.';
 const recoveryStorageUnreadable =
   'Couldn’t read this device’s payment recovery records, so payments can’t be recorded right now. Any unresolved payment is kept. Try again, or restart the app.';
-class RequestError extends Error {
-  constructor(
-    message: string,
-    readonly status = 0,
-    readonly code: string | null = null,
-    readonly networkFailure = false,
-    /** The server's own `error` text, shown only where it is known to be member-facing copy. */
-    readonly serverMessage: string | null = null,
-  ) {
-    super(message);
-  }
-}
-
 const rejectionMessages: Record<string, string> = {
   INVALID_TAG: 'Choose an active Tag in this Group. Your entries are kept.',
   INVALID_MEMBERS: 'Review the payer and participants: Group membership changed.',
@@ -393,10 +383,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     config.googleWebClientId && secureTransport && authOrigin === apiBase,
   );
   let googlePending = false;
-  let verifiedGoogleBackend = -1;
   const now = dependencies.now ?? Date.now;
   const listeners = new Set<() => void>();
-  const requests = new Set<AbortController>();
   let snapshot = cleanSnapshot({ status: 'restoring', user: null, message: null });
   let cookie: string | null = null;
   /**
@@ -536,8 +524,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     groupsUnanswered = false;
     listedGroups = null;
     unlistedGroups = new Set();
-    requests.forEach((request) => request.abort());
-    requests.clear();
+    transport.abortAll();
     cookie = null;
     cookieAccount = null;
     return generation;
@@ -836,34 +823,31 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (!confirmed) showUnconfirmedSignOut(next);
   };
 
-  const adoptCookie = async (response: FetchResponse, owner: number) => {
-    assertCurrent(owner);
-    let next: string | null | undefined;
-    try {
-      next = readSessionCookie(response.headers, secureTransport, now());
-    } catch {
-      // The session in use is still valid on the server: revoked before it's given up.
-      await failSession(owner, storageMessage, 'error', cookie);
-      throw new Superseded();
-    }
-    if (next === undefined) return;
-    if (next === null) {
-      await failSession(owner, expiredMessage);
-      throw new Superseded();
-    }
-    if (next === cookie) return;
-    try {
-      // A server refresh of a verified cookie keeps its account; any other cookie is unverified.
-      await store(owner, () =>
-        dependencies.credentials.save(encodeStoredSession(next, cookieAccount)),
-      );
-      assertCurrent(owner);
-      cookie = next;
-    } catch (error) {
-      if (!(error instanceof Superseded)) await failSession(owner, storageMessage, 'error', next);
-      throw new Superseded();
-    }
-  };
+  const transport = createTransport({
+    apiBase,
+    authOrigin,
+    secureTransport,
+    googleEnabled,
+    googleWebClientId: config.googleWebClientId,
+    fetch: dependencies.fetch,
+    now,
+    session: {
+      current,
+      cookie: () => cookie,
+      saveCookie: async (owner, next) => {
+        // A server refresh of a verified cookie keeps its account; any other cookie is unverified.
+        await store(owner, () =>
+          dependencies.credentials.save(encodeStoredSession(next, cookieAccount)),
+        );
+        assertCurrent(owner);
+        cookie = next;
+      },
+    },
+    onExpired: failSession,
+    // Today's denial purge: its reads, saved copies and content on screen go.
+    onGroupDenied: (groupId, status, owner) => forgetGroup(groupId, status, owner),
+  });
+  const { request, verifyGoogleBackend } = transport;
 
   /**
    * Records the cookie, on disk, for the account `get-session` just confirmed. Only a recorded
@@ -881,121 +865,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     } catch (error) {
       if (!(error instanceof Superseded)) await failSession(owner, storageMessage, 'error', cookie);
       throw new Superseded();
-    }
-  };
-
-  const request = async (
-    path: string,
-    owner: number,
-    options: {
-      method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
-      revision?: number;
-      body?: unknown;
-      sessionCookie?: string | null;
-      logout?: boolean;
-      adoptSession?: boolean;
-      serializedBody?: string;
-      idempotencyKey?: string;
-    } = {},
-  ): Promise<unknown> => {
-    assertCurrent(owner);
-    // Invitations can open even after restoration fails. Every ordinary request
-    // must verify staging before it can send or adopt a session cookie.
-    if (path !== '/.well-known/splitbook-mobile.json') await verifyGoogleBackend(owner);
-    assertCurrent(owner);
-    const abort = new AbortController();
-    requests.add(abort);
-    const timeout = setTimeout(() => abort.abort(), 20_000);
-    let received = false;
-    try {
-      const outgoingCookie = options.sessionCookie === undefined ? cookie : options.sessionCookie;
-      const response = await dependencies.fetch(`${apiBase}${path}`, {
-        method: options.method ?? 'GET',
-        headers: {
-          Accept: 'application/json',
-          Origin: authOrigin,
-          ...(options.body === undefined && options.serializedBody === undefined
-            ? {}
-            : { 'Content-Type': 'application/json' }),
-          ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),
-          // Not If-Match: a host may evaluate that as an HTTP precondition and answer 412
-          // after the route has saved.
-          ...(options.revision === undefined
-            ? {}
-            : { 'X-Splitbook-Revision': String(options.revision) }),
-          ...(outgoingCookie ? { Cookie: outgoingCookie } : {}),
-        },
-        credentials: 'omit',
-        redirect: 'error',
-        signal: abort.signal,
-        ...(options.serializedBody === undefined
-          ? options.body === undefined
-            ? {}
-            : { body: JSON.stringify(options.body) }
-          : { body: options.serializedBody }),
-      });
-      received = true;
-      assertCurrent(owner);
-      // Logout responses must never reinstall a cookie, even a surprising one.
-      if (!options.logout && options.adoptSession !== false) await adoptCookie(response, owner);
-      assertCurrent(owner);
-      if (
-        response.status === 401 &&
-        !options.logout &&
-        options.adoptSession !== false &&
-        path !== '/api/auth/sign-in/social'
-      ) {
-        await failSession(owner, expiredMessage);
-        throw new Superseded();
-      }
-      if (!response.ok) {
-        const deniedGroup = /^\/api\/groups\/([a-f\d]{24})(?:\/|\?|$)/i.exec(path)?.[1];
-        if (
-          (response.status === 403 ||
-            (response.status === 404 && path === `/api/groups/${deniedGroup}`)) &&
-          deniedGroup
-        )
-          await forgetGroup(deniedGroup, response.status, owner);
-        const message =
-          response.status === 403
-            ? 'You no longer have access to this group.'
-            : response.status === 404
-              ? 'This group is no longer available.'
-              : response.status === 429
-                ? 'Too many attempts. Wait a moment and try again.'
-                : 'The server could not complete this request. Please try again.';
-        const details: unknown = await response.json().catch(() => null);
-        const code =
-          details &&
-          typeof details === 'object' &&
-          'code' in details &&
-          typeof details.code === 'string'
-            ? details.code
-            : null;
-        const serverMessage =
-          details &&
-          typeof details === 'object' &&
-          'error' in details &&
-          typeof details.error === 'string'
-            ? details.error
-            : null;
-        throw new RequestError(message, response.status, code, false, serverMessage);
-      }
-      const body = await response.json();
-      assertCurrent(owner);
-      return body;
-    } catch (error) {
-      if (!current(owner)) throw new Superseded();
-      if (error instanceof RequestError || error instanceof Superseded) throw error;
-      throw new RequestError(
-        'Could not reach SplitBook. Check your connection and try again.',
-        0,
-        null,
-        !received,
-      );
-    } finally {
-      clearTimeout(timeout);
-      requests.delete(abort);
     }
   };
 
@@ -1040,38 +909,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         if (!current(owner) || error instanceof Superseded) throw error;
       }
     }
-  };
-
-  const verifyGoogleBackend = async (owner: number) => {
-    if (!googleEnabled || verifiedGoogleBackend === owner) return;
-    let value: unknown;
-    try {
-      value = await request('/.well-known/splitbook-mobile.json', owner, {
-        sessionCookie: null,
-        adoptSession: false,
-      });
-    } catch (error) {
-      if (error instanceof RequestError && error.status) {
-        throw new RequestError(
-          'This server is not configured for the Android beta. Please contact the beta organizer.',
-        );
-      }
-      throw error;
-    }
-    if (
-      !value ||
-      typeof value !== 'object' ||
-      !('environment' in value) ||
-      value.environment !== 'staging' ||
-      !('googleWebClientId' in value) ||
-      value.googleWebClientId !== config.googleWebClientId
-    ) {
-      throw new RequestError(
-        'This build does not match the staging login configuration. Please contact the beta organizer.',
-      );
-    }
-    assertCurrent(owner);
-    verifiedGoogleBackend = owner;
   };
 
   const revalidateSession = async (owner: number) => {
