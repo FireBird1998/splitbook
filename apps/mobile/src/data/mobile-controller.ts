@@ -3043,6 +3043,49 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const refreshExpenseHistory = () => readExpenseHistory(false);
   const loadOlderExpenseHistory = () => readExpenseHistory(true);
 
+  /**
+   * Try again on a saved record, once its Group has been read: the record and its changes are
+   * read again, so a record shown from this device's saved copy is replaced, and no longer keeps
+   * the offline notice up. An edit or deletion begun meanwhile keeps the version it started
+   * from. A record that's gone gives way to a notice, as when opening it; a refusal is thrown,
+   * so the caller withdraws the Group as it does for the Group's own read.
+   */
+  const rereadExpenseRecord = async (owner: number, view: number) => {
+    const editor = snapshot.expense,
+      groupId = editor.groupId,
+      expenseId = editor.draft?.original?._id;
+    if (snapshot.screen !== 'expense' || editor.status !== 'detail' || !groupId || !expenseId)
+      return;
+    const path = `/api/groups/${groupId}/expenses/${expenseId}`;
+    const showing = () =>
+      current(owner) &&
+      view === viewRequest &&
+      snapshot.screen === 'expense' &&
+      snapshot.expense.status === 'detail' &&
+      snapshot.expense.groupId === groupId &&
+      snapshot.expense.draft?.original?._id === expenseId;
+    try {
+      const original = await readCached(path, owner, (value) =>
+        parseExpenseRecord(value, groupId, expenseId),
+      );
+      if (!showing()) return;
+      const draft = draftFromExpense(original);
+      publish({
+        ...snapshot,
+        expense: { ...snapshot.expense, draft, preview: previewExpense(draft) },
+      });
+    } catch (error) {
+      if (!(error instanceof RequestError) || error.status !== 404) throw error;
+      if (!showing()) return;
+      // The Group was just read: what's missing is this Expense, and nothing saved of it is shown.
+      const history = `/api/groups/${groupId}/activity?expenseId=${expenseId}&`;
+      for (const stale of staleReads.keys())
+        if (stale === path || stale.startsWith(history)) staleReads.delete(stale);
+      return publish({ ...snapshot, expense: withdrawExpense('This Expense isn’t available.') });
+    }
+    await readExpenseHistory(false);
+  };
+
   const resumeExpenseDraft = () => {
     const editor = snapshot.expense;
     if (snapshot.screen !== 'expense') return;
@@ -5449,6 +5492,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             publish({ ...snapshot, expense: { ...snapshot.expense, context } });
           else
             publish({ ...snapshot, settlement: { ...snapshot.settlement, group: context.group } });
+          // Try again on a saved record reads the record and its changes too.
+          if (screen === 'expense' && !reuse) {
+            await rereadExpenseRecord(owner, view);
+            if (!current(owner) || view !== viewRequest || snapshot.screen !== screen) return;
+          }
         }
         readingGroup = false;
         publishReadFreshness();
@@ -5482,8 +5530,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                 message: error.message,
               },
             });
-          else {
-            // Members now shows none of the Group: its saved copies no longer keep the offline banner.
+          if (screen !== 'settlement') {
+            // Members, or the Expense, now shows none of the Group: its saved copies no longer keep
+            // the offline banner.
             for (const path of staleReads.keys())
               if (path.startsWith(`/api/groups/${groupId}`)) staleReads.delete(path);
             publishReadFreshness();
