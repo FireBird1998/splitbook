@@ -65,16 +65,17 @@ The backend's own scripts keep their rules: they refuse root and `apps/web` `.en
 
 **`pnpm swarm gate` is the local CI: run it, and see it pass, before every push.** GitHub Actions then runs one fast check on each pull request and each push to `main`, and the full suite nightly (#277), to stay within the Actions minutes of a private repository. Everything is in `.github/workflows/ci.yml`:
 
-| When                                                                          | What runs                        |
-| ----------------------------------------------------------------------------- | -------------------------------- |
-| Each push to a pull request, and each push to `main`                          | **PR checks**                    |
-| Nightly at 04:17 UTC, a manual run, and a pull request labelled **`full-ci`** | **PR checks** and the full suite |
+| When                                                                           | What runs                        |
+| ------------------------------------------------------------------------------ | -------------------------------- |
+| Each push to a pull request, and each push to `main` or `pilot/tanstack-reads` | **PR checks**                    |
+| Nightly at 04:17 UTC, a manual run, and a pull request labelled **`full-ci`**  | **PR checks** and the full suite |
 
 - **PR checks** (`pr-checks`) is one job that installs once, then runs the format check, lint, typecheck, the design-system style policy (`pnpm web check:design-system`), the workspace unit tests in UTC, every mobile HTTP verifier (below) and, last, on a pull request, the ceilings ratchet (below). That is the gate without its install check, plus the style policy. It is the one check branch protection requires, so its name, `PR checks`, must not change.
 - **The full suite** adds `verify` (the unit and integration tests, the authenticated Playwright suites and the build), `playwright` (the browser journeys, the Google sign-in journeys and the visual comparisons) and the unit tests in three more time zones.
 - **A docs-only pull request,** one that changes only Markdown, `docs/` or `.claude/` files, passes PR checks after the format check alone. Prettier formats Markdown and the `docs/` mockups, so that check still runs.
 - **A push to `main` runs PR checks only,** on the merged result, since branches needn't be up to date with `main` to merge. The full suite never runs on a push: a merge reaches it in that night's run.
-- **A new push cancels** the run of the push before it, on a pull request and on `main`. On `main` that run is PR checks only, and the newer commit, which contains it, is checked anyway. Nightly runs and manual runs are never cancelled.
+- **`pilot/tanstack-reads`,** the integration branch of ADR 0006's TanStack pilot (#214 to #217), is checked like `main`: each push to it, such as merging `main` into it, runs PR checks only, and a pull request into it runs PR checks with the ceilings ratchet against that branch.
+- **A new push cancels** the run of the push before it, on a pull request and on `main` or `pilot/tanstack-reads`. On a branch that run is PR checks only, and the newer commit, which contains it, is checked anyway. Nightly runs and manual runs are never cancelled.
 - **The nightly run is skipped** when `main`'s commit has already passed the full suite, in an earlier nightly run or in a manual run. A push run doesn't count, since it doesn't run the full suite. So a night runs the suite when `main` moved since the last full run, or when that run failed.
 
 **To run the full suite on a pull request,** for a risky change such as auth, money, the lockfile or CI itself, do one of these:

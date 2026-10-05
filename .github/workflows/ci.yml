@@ -18,13 +18,16 @@ name: CI
 # - Every label event reruns all of PR checks, even for labels nothing reads. Keep it that
 #   way: a skipped required check counts as passing, so skipping PR checks on other label
 #   events could turn a red commit green.
-# - Each push to main runs PR checks only, on the merged result.
+# - Each push to main runs PR checks only, on the merged result. So does each push to
+#   pilot/tanstack-reads, the integration branch of ADR 0006's TanStack pilot (#214 to #217),
+#   so merging main into it is checked too. A pull request into that branch runs PR checks,
+#   ratchet included, as one into main does: pull_request has no branch filter.
 # - The full suite (verify, playwright and the unit-test time-zone matrix) runs nightly, on a
 #   manual run (workflow_dispatch), and on a pull request labelled full-ci, never on a push.
 #   A nightly run is skipped when main's commit already passed the full suite in an earlier
 #   nightly or manual run.
-# - A new push to a pull request, or to main, cancels the run of the push before it. Nightly
-#   and manual runs are never cancelled.
+# - A new push to a pull request, or to a pushed branch, cancels that pull request's or
+#   branch's run of the push before it. Nightly and manual runs are never cancelled.
 #
 # GitHub e-mails a failed push run to whoever pushed it, and a failed nightly run to whoever
 # last changed the cron line below, so the owner merges changes to that line;
@@ -36,7 +39,7 @@ on:
     # re-record-ceilings label.
     types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
-    branches: [main]
+    branches: [main, pilot/tanstack-reads]
   schedule:
     # 04:17 UTC (09:47 in India): the quietest hour of the repository's runs, after the evening
     # merges, and off the top of the hour, when GitHub delays scheduled runs the most.
@@ -46,8 +49,9 @@ on:
 permissions:
   contents: read
 
-# One group per pull request, and one for pushes to main, so a new push cancels the run it
-# supersedes: on main that run is PR checks only, and the newer commit is tested anyway.
+# One group per pull request, and one per pushed branch (main, pilot/tanstack-reads), so a new
+# push cancels the run it supersedes: on a branch that run is PR checks only, and the newer
+# commit is tested anyway.
 # Adding a label other than full-ci, or removing any label, gets a group of its own: it must
 # not cancel a full-ci run in progress. Nightly and manual runs each get a group of their own,
 # so none is cancelled.
@@ -105,7 +109,7 @@ jobs:
   # verify, unit-time-zones and playwright are the full suite. Each repeats one condition:
   # a nightly run the gate let through; a manual run; or a pull request labelled full-ci,
   # when the label is added and on each push after that (adding another label, or removing
-  # any label, doesn't rerun them). A push to main never runs them.
+  # any label, doesn't rerun them). A push, to main or pilot/tanstack-reads, never runs them.
   verify:
     needs: nightly-gate
     if: >-
@@ -235,8 +239,8 @@ jobs:
           TZ: ${{ matrix.tz }}
 
   # PR checks is the one check branch protection requires: keep its name. It runs on every
-  # event, so each push to main is checked merged, and the nightly run gets it too (nothing
-  # else formats or runs the verifiers).
+  # event, so each push to main or pilot/tanstack-reads is checked merged, and the nightly run
+  # gets it too (nothing else formats or runs the verifiers).
   #
   # The mobile verify:* scripts drive the real mobile controller over HTTP against a
   # fictional backend of this run's own (#228). tools/swarm starts it on the job's Mongo
