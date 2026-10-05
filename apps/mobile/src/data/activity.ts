@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { parseActivityPageResponse } from '@splitbook/shared/activity-page-read';
 import { getCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import { objectId } from './dto';
@@ -84,43 +85,38 @@ export function emptyExpenseHistory(): ExpenseHistoryState {
     moreStatus: 'idle',
   };
 }
-/** With `expenseId`, every event must be about that Expense. */
+const PAGE_SIZE = 20;
+/**
+ * The shared decoder checks the page's fields (#211). `eventSchema` then reads each event as
+ * Android shows it, in today's currencies only. With `expenseId`, every event must be about
+ * that Expense.
+ */
 export function parseActivityPage(
   value: unknown,
   groupId: string,
   requestedPage: number,
   expenseId?: string,
 ) {
-  const data = z
-    .object({
-      status: z.literal(200),
-      data: z.object({
-        activities: z.array(eventSchema),
-        pagination: z.object({
-          page: z.number().int().positive(),
-          limit: z.literal(20),
-          total: z.number().int().nonnegative(),
-          totalPages: z.number().int().nonnegative(),
-        }),
-      }),
-    })
-    .parse(value).data;
+  const read = parseActivityPageResponse(value);
+  const { page, limit, total, totalPages } = read.pagination;
+  if (limit !== PAGE_SIZE) throw new Error('Unexpected Activity page size');
+  const activities = read.activities.map((event) => eventSchema.parse(event));
   if (
-    data.pagination.page !== requestedPage ||
-    data.activities.some(
+    page !== requestedPage ||
+    activities.some(
       (event) =>
         event.group !== groupId ||
         (expenseId !== undefined && event.metadata.expenseId !== expenseId),
     )
   )
     throw new Error('Unexpected Activity scope');
-  for (const event of data.activities) {
+  for (const event of activities) {
     const { amount, currency } = event.metadata;
     if (amount !== undefined && currency !== undefined) parseAmountMinor(amount, currency);
   }
   return {
-    events: [...new Map(data.activities.map((event) => [event._id, event])).values()],
-    pagination: data.pagination,
+    events: [...new Map(activities.map((event) => [event._id, event])).values()],
+    pagination: { page, limit: PAGE_SIZE, total, totalPages },
   };
 }
 

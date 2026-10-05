@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { readExpenseMoney } from '@splitbook/shared/expense-money-edit';
+import { parseExpenseRecordResponse } from '@splitbook/shared/expense-record-read';
 import { objectId } from './dto';
 
 const person = z.union([
@@ -76,8 +77,12 @@ export function storedExpenseMoney(record: ExpenseRecord) {
     })),
   };
 }
+/**
+ * The shared decoder checks the response's fields (#211); `expenseRecordSchema`, which saved
+ * drafts also read, then gives Android's view of the record.
+ */
 export function parseExpenseRecord(value: unknown, groupId: string, expenseId: string) {
-  const record = z.object({ status: z.literal(200), data: expenseRecordSchema }).parse(value).data;
+  const record = expenseRecordSchema.parse(parseExpenseRecordResponse(value));
   if (record.group !== groupId || record._id !== expenseId)
     throw new Error('Unexpected Expense identity');
   readExpenseMoney(storedExpenseMoney(record));
