@@ -537,6 +537,8 @@ test('a non-member, and a member who has left, get the same refusal on every tab
   page,
   ledger,
 }) => {
+  // Fourteen page loads, each of a route the local `next dev` may still be compiling.
+  test.slow();
   // groupA is Alex's alone; Sam joined this one and then left it.
   const left = await dataOf(
     await ledger.priya.post('/api/groups', {
