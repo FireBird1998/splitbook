@@ -223,6 +223,10 @@ interface View {
   household: boolean | null;
   /** The Month shown before, kept when this Group opens again; undefined for a first open. */
   previousMonth: string | null | undefined;
+  /** When this open began: what its reads answer before its check of the Group waits for it. */
+  since: number;
+  /** When a change written in this Group made its Balances out of date, until they are read. */
+  changedAt: number | null;
 }
 type Step = 'group' | 'expenses' | 'balances';
 
@@ -826,10 +830,10 @@ export function createGroupQueries(session: GroupSession) {
     if (view === opened && session.current(owner)) session.publish({});
   };
   /**
-   * The view's reads, in today's order: the Group, then the Expenses of the Month shown, then
-   * Balances. `fresh` reads each again (a pull, Retry or a change); otherwise a read verified
-   * within the freshness window is reused. `from` starts at a later step, as a Month change does.
-   * A refusal is thrown; any other failure shows on its section.
+   * The view's reads: the Group and the Expenses of the Month shown together, then Balances.
+   * `fresh` reads each again (a pull, Retry or a change); otherwise a read verified within the
+   * freshness window is reused. `from` starts at a later step, as a Month change does. A refusal
+   * is thrown; any other failure shows on its section.
    */
   const read = async (owner: number, { fresh = false, from = 'group' as Step } = {}) => {
     const opened = view;
@@ -855,6 +859,36 @@ export function createGroupQueries(session: GroupSession) {
     from: Step,
     still: () => boolean,
   ): Promise<boolean> => {
+    /** A Month changed meanwhile reads its own list: this one isn't read again. */
+    const sameMonth = (list: QueryKey) => () =>
+      still() && hashKey(shownList() ?? []) === hashKey(list);
+    /**
+     * The Month's Expenses, read once: the read that began beside the Group, if it's this list.
+     * That read isn't read again before the Group's check passes; one a change cancelled
+     * meanwhile is read again then.
+     */
+    let early: { hash: string; reading: Promise<Pages> } | null = null;
+    const readList = (list: QueryKey) => {
+      const read = () => readNow<Pages>(listOptions(list, fresh), owner, sameMonth(list));
+      if (early?.hash !== hashKey(list)) return read();
+      return early.reading.catch((error: unknown) => {
+        if (error instanceof Superseded && opened.checked && sameMonth(list)()) return read();
+        throw error;
+      });
+    };
+    /** Balances, once the Expense reads of the Month shown have settled: they follow them. */
+    const followBalances = async () => {
+      // An Expense read of the Month shown is still running: Balances follow it there.
+      if (!listSettled(shownList())) return false;
+      // An Expense read of the Month shown that begins meanwhile reads Balances after it.
+      const after = () => still() && listSettled(shownList());
+      await readNow(balancesOptions(opened.groupId, true, fresh), owner, after).catch(
+        (error: unknown) => {
+          if (refused(error) || error instanceof Superseded) throw error;
+        },
+      );
+      return true;
+    };
     if (from === 'group') {
       const reading = readNow<Envelope>(
         groupOptions(opened.groupId, fresh),
@@ -863,7 +897,42 @@ export function createGroupQueries(session: GroupSession) {
       );
       reading.catch(() => undefined);
       await preview(owner, opened).catch(() => undefined);
-      const answer = await reading;
+      // With the Month known, from this view, a saved copy or the Groups list, its Expenses are
+      // read beside the Group: neither waits for the other. They show only once the Group's check
+      // passes (`projectExpenses`). Balances still follow both, since each read can add due
+      // recurring Expenses (M1-5, AMEND-1).
+      const listed = session.snapshot().groups.data.find(({ id }) => id === opened.groupId);
+      if (opened.household === null && listed && lists(listed)) decide(listed);
+      const list = view === opened ? shownList() : null,
+        shown = onScreen();
+      if (list && shown && shown.destination !== 'activity') {
+        const listing = readNow<Pages>(
+          listOptions(list, fresh),
+          owner,
+          () => opened.checked && sameMonth(list)(),
+        );
+        early = { hash: hashKey(list), reading: listing };
+        early.reading.catch(() => undefined);
+      }
+      let answer: Envelope;
+      try {
+        answer = await reading;
+      } catch (error) {
+        // The Expense read beside it ends first: nothing this read began runs on after it. When
+        // the Group fails but was checked before, that read shows, and Balances follow it.
+        const read = early;
+        if (read) await read.reading.catch(() => undefined);
+        if (
+          read &&
+          opened.checked &&
+          !refused(error) &&
+          !(error instanceof Superseded) &&
+          still() &&
+          hashKey(shownList() ?? []) === read.hash
+        )
+          await followBalances().catch(() => undefined);
+        throw error;
+      }
       if (!session.current(owner) || view !== opened || opened.lost) return false;
       opened.checked = true;
       decide(groupOf(answer.value));
@@ -874,10 +943,8 @@ export function createGroupQueries(session: GroupSession) {
     const list = shownList();
     if (list && from !== 'balances') {
       const reread = rereadOf(list);
-      // A Month changed meanwhile reads its own list: this one isn't read again.
-      const month = () => still() && hashKey(shownList() ?? []) === hashKey(list);
       try {
-        await readNow<Pages>(listOptions(list, fresh), owner, month);
+        await readList(list);
         if (reread) shownRereads.add(reread);
       } catch (error) {
         if (refused(error) || error instanceof Superseded) throw error;
@@ -885,18 +952,9 @@ export function createGroupQueries(session: GroupSession) {
       }
       // A Month the member has left leaves Balances to the Month shown, which follows it.
       if (!session.current(owner)) return false;
-      if (!month()) return still();
+      if (!sameMonth(list)()) return still();
     }
-    // An Expense read of the Month shown is still running: Balances follow it there.
-    if (!listSettled(shownList())) return false;
-    // An Expense read of the Month shown that begins meanwhile reads Balances after it.
-    const after = () => still() && listSettled(shownList());
-    await readNow(balancesOptions(opened.groupId, true, fresh), owner, after).catch(
-      (error: unknown) => {
-        if (refused(error) || error instanceof Superseded) throw error;
-      },
-    );
-    return true;
+    return followBalances();
   };
 
   /** The Expenses shown for the Month, from their query, in the snapshot's shape. */
@@ -910,7 +968,10 @@ export function createGroupQueries(session: GroupSession) {
     const read = data?.pages.filter((page) => page.source !== 'failed') ?? [];
     const failed = data?.pages.find((page) => page.source === 'failed');
     let base: Expenses = shown.month === month ? shown : emptyExpenses(month);
-    if (read.length) {
+    // Read beside the Group in this open, before its check passed: shown only once it has.
+    const unchecked =
+      !opened.checked && !!data && !previews.has(data) && state.dataUpdatedAt >= opened.since;
+    if (read.length && !unchecked) {
       const parsed = read.map((page) => pageOf(page.value, groupId, currencyOf(groupId)));
       const rows = parsed.flatMap((page) => page.expenses);
       base = {
@@ -982,7 +1043,7 @@ export function createGroupQueries(session: GroupSession) {
     });
   };
   /** The Group's all-time Balances, from their query, in the snapshot's shape. */
-  const projectBalances = (shown: Balances, opened: View, financial: GroupFinancialState) => {
+  const balancesFrom = (shown: Balances, opened: View, financial: GroupFinancialState) => {
     const state = stateOf<Envelope>(balancesKey(opened.groupId));
     const list = stateOf<Pages>(shownList(financial));
     // The Expense read Balances follow failed: they weren't read again after it.
@@ -994,17 +1055,14 @@ export function createGroupQueries(session: GroupSession) {
       !!failure(list) &&
       !unreachable(list.error);
     if (!state) {
-      // Not read since a read that may have changed them: kept, unverified.
+      // Not read since a change or a read that may have changed them removed their query: kept,
+      // unverified, so none of their payments is offered until they're read again (#219).
+      const kept = { ...shown, stale: shown.data !== null };
       if (behind)
-        return same(shown, {
-          ...shown,
-          status: 'error',
-          message: balancesNotUpdated,
-          stale: shown.data !== null,
-        });
+        return same(shown, { ...kept, status: 'error' as const, message: balancesNotUpdated });
       if (!opened.reading && shown.status === 'loading')
-        return { ...shown, status: 'idle' as const };
-      return shown;
+        return same(shown, { ...kept, status: 'idle' as const });
+      return same(shown, kept);
     }
     let figures: Balances['data'] = null;
     try {
@@ -1045,6 +1103,12 @@ export function createGroupQueries(session: GroupSession) {
       refreshedAt: state.data!.refreshedAt,
       stale: false,
     });
+  };
+  /** Out of date since a change written in this Group: no payment is offered until read (#219). */
+  const projectBalances = (shown: Balances, opened: View, financial: GroupFinancialState) => {
+    const next = balancesFrom(shown, opened, financial),
+      changed = opened.changedAt !== null;
+    return (next.changed ?? false) === changed ? next : { ...next, changed };
   };
   /** The Group as its query holds it, in the snapshot's shape. */
   const projectDetail = (shown: MobileSnapshot['detail'], opened: View) => {
@@ -1148,7 +1212,17 @@ export function createGroupQueries(session: GroupSession) {
       { again, previousMonth }: { again: boolean; previousMonth?: string | null },
     ) {
       if (again && view?.groupId === groupId && !view.lost) return;
-      view = { groupId, checked: false, lost: false, reading: 0, household: null, previousMonth };
+      view = {
+        groupId,
+        checked: false,
+        lost: false,
+        reading: 0,
+        household: null,
+        previousMonth,
+        since: Date.now(),
+        // A change still to be read stays so when its Group opens again.
+        changedAt: view?.groupId === groupId ? view.changedAt : null,
+      };
       // A Group opened anew lists each Month from its newest page, as a return or a refresh of
       // the view on screen never does: their pages beyond it go from memory (#215).
       for (const query of client.getQueryCache().getAll()) {
@@ -1284,6 +1358,10 @@ export function createGroupQueries(session: GroupSession) {
     ) {
       return (await readNow<Envelope>(groupOptions(groupId, fresh), owner, wanted)).value;
     },
+    /** A change was written in this Group, or may have been: its Balances wait to be read. */
+    changed(groupId: string) {
+      if (view?.groupId === groupId) view.changedAt = Date.now();
+    },
     /**
      * The member lost this Group: its view reads and observes nothing more, so a removed query's
      * observer can't read it back, and a late answer lands nowhere.
@@ -1344,6 +1422,16 @@ export function createGroupQueries(session: GroupSession) {
           if (event.action.type === 'success' && !event.action.manual) saveAnswer(query);
           if (!view || key[3] !== view.groupId) return;
           if (client.getQueryCache().get(query.queryHash) !== query) return;
+          // Balances read from the server since a change written here: payments are offered again.
+          const answered = query.state.data as Envelope | undefined;
+          if (
+            key[0] === 'balances' &&
+            view.changedAt !== null &&
+            event.action.type === 'success' &&
+            answered?.source === 'network' &&
+            query.state.dataUpdatedAt >= view.changedAt
+          )
+            view.changedAt = null;
           const before = session.snapshot();
           if (project(before) !== before) session.publish({});
           if (observers.group)

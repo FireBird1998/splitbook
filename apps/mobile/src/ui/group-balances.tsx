@@ -23,6 +23,8 @@ import { Icon } from './primitives';
 import { useTheme } from './theme';
 
 export const recordNeedsConnection = 'Recording a payment needs a connection.';
+/** Balances not yet read again after a change: their payments wait for the read (#219). */
+export const recordWaitsForBalances = 'Record is available once these balances are updated.';
 
 /**
  * Whether Home last read the member as settled up in a Group: its balances there are known,
@@ -198,11 +200,14 @@ function SuggestedPayments({
   payments,
   currentUserId,
   offline,
+  locked,
   onRecord,
 }: {
   payments: ReturnType<typeof recordablePayments>;
   currentUserId: string;
   offline: boolean;
+  /** A change written in this Group made the Balances shown out of date: Record waits for them. */
+  locked: boolean;
   onRecord: (paidBy: string, paidTo: string, currency: string) => void;
 }) {
   const theme = useTheme();
@@ -257,8 +262,10 @@ function SuggestedPayments({
                   label="Record"
                   variant="tonal"
                   dense
-                  disabled={offline}
-                  hint={offline ? recordNeedsConnection : undefined}
+                  disabled={offline || locked}
+                  hint={
+                    offline ? recordNeedsConnection : locked ? recordWaitsForBalances : undefined
+                  }
                   accessibilityLabel={
                     youPay
                       ? `Record your payment to ${payment.recipient}`
@@ -519,6 +526,7 @@ export function GroupBalancesView({
           payments={payments}
           currentUserId={currentUserId}
           offline={offline}
+          locked={balances.changed === true}
           onRecord={onRecord}
         />
       ) : null}

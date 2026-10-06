@@ -928,7 +928,12 @@ describe('stable financial refresh', () => {
         refreshedAt: verifiedAt,
         message: 'The server could not complete this request. Please try again.',
       },
-      financial: before.financial,
+      // The Expenses, read beside the Group (#219), and Balances, which follow them, are read again.
+      financial: {
+        ...before.financial,
+        expenses: { ...before.financial.expenses, refreshedAt: clock.now },
+        balances: { ...before.financial.balances, refreshedAt: clock.now },
+      },
     });
     failing = false;
     await controller.refresh('pull');

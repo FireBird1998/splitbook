@@ -472,7 +472,7 @@ describe('first load and refresh', () => {
     const app = await start(phone);
     await settle();
     await app.press('Open Maple House, Household · 2 members');
-    const refresh = async (path: string, destination: string) => {
+    const refresh = async (path: string, destination: string, cue = /Saved .+ · refreshing/) => {
       if (destination !== 'Expenses') await app.press(destination);
       const read = phone.hold(path);
       await app.press('Group options');
@@ -482,7 +482,7 @@ describe('first load and refresh', () => {
       expect(app.headers()[0]).toBe('Maple House');
       expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Refreshing']);
       const { inside, outside } = app.content();
-      expect(inside).toMatch(/Saved .+ · refreshing/);
+      expect(inside).toMatch(cue);
       expect(outside).not.toContain('refreshing');
       read.release();
       await settle();
@@ -490,7 +490,12 @@ describe('first load and refresh', () => {
       expect(app.text()).not.toContain('· refreshing');
     };
     await refresh(`/api/groups/${maple}`, 'Expenses');
-    await refresh(`/api/groups/${maple}`, 'Balances');
+    // The Expenses, read beside the Group (#219), have answered: Balances wait to follow them.
+    await refresh(
+      `/api/groups/${maple}`,
+      'Balances',
+      /Updating balances\. These figures are from .+ and may change\./,
+    );
     await refresh(`/api/groups/${maple}/activity?`, 'Activity');
   });
 

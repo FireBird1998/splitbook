@@ -456,13 +456,14 @@ describe('query defaults (#214, M1-6)', () => {
     f.state.offline = true;
     const before = f.calls.length;
     await controller.openGroup(groupId);
-    // The Group is read once, then its saved copy stands in, with its original time. Offline
-    // now, its Expenses and Balances check the session first, once each, and fall back too.
-    expect(f.calls.slice(before).map((call) => call.path)).toEqual([
-      groupPath,
-      '/api/auth/get-session',
-      '/api/auth/get-session',
-    ]);
+    // The Group and its Expenses are read together, once each (#219), then their saved copies
+    // stand in, with their original time. Offline now, Balances check the session first, once,
+    // and fall back too.
+    expect(
+      f.calls
+        .slice(before)
+        .map((call) => (call.path.startsWith(expensesPath) ? expensesPath : call.path)),
+    ).toEqual([groupPath, expensesPath, '/api/auth/get-session']);
     expect(controller.getSnapshot()).toMatchObject({
       offline: { active: true, refreshedAt: start },
       detail: { status: 'ready', data: { id: groupId }, refreshedAt: start },
@@ -693,8 +694,14 @@ describe('reads cancelled, refused or out of date (#214)', () => {
       await new Promise((resolve) => setTimeout(resolve, 20));
 
       const sent = f.calls.slice(before);
-      expect(sent.filter((call) => call.path.startsWith(groupPath))).toEqual([
+      // One read of the Group, and one of its Expenses, read beside it (#219).
+      expect(
+        sent
+          .filter((call) => call.path.startsWith(groupPath))
+          .map((call) => ({ ...call, path: call.path.split('?')[0] })),
+      ).toEqual([
         { method: 'GET', path: groupPath },
+        { method: 'GET', path: `${groupPath}/expenses` },
       ]);
       expect(f.purges()).toBe(1);
       expect(controller.getSnapshot()).toMatchObject({

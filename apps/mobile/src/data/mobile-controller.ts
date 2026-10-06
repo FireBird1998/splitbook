@@ -402,6 +402,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let route: Route = home;
   /** The latest return's request to scroll back (`restoreScroll`); the next return asks anew. */
   let scrollRequests = 0;
+  /** A confirmed change's message, shown once the Group's view has read the change (#219). */
+  let heldSnackbar: GroupSnackbar | null = null;
   /** The Activity pages of a return (`GroupReread`) that a read has already shown again. */
   const rereadsShown = new WeakSet<object>();
   let offlineSession = false;
@@ -558,6 +560,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     viewRequest += 1;
     listedGroups = null;
     unlistedGroups = new Set();
+    heldSnackbar = null;
     lostGroups.clear();
     // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
     homeQueries.reset();
@@ -1815,9 +1818,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   /**
    * The member can no longer see this Group (denied, gone, or left): its reads, its saved copy on
-   * this device and its content on screen go, and the Groups list and Home read again.
+   * this device and its content on screen go, and the Groups list and Home read again. A refusal
+   * that arrives while that removal runs, such as one of the Expenses read beside the Group
+   * (#219), is the same loss: it joins it.
    */
-  const forgetGroup = async (groupId: string, status: number, owner: number) => {
+  const forgetGroup = (groupId: string, status: number, owner: number) => {
+    const running = forgetting.get(groupId);
+    if (running?.owner === owner) return running.removal;
+    const removal = removeGroup(groupId, status, owner).finally(() => {
+      if (forgetting.get(groupId)?.removal === removal) forgetting.delete(groupId);
+    });
+    forgetting.set(groupId, { owner, removal });
+    return removal;
+  };
+  const forgetting = new Map<string, { owner: number; removal: Promise<void> }>();
+  const removeGroup = async (groupId: string, status: number, owner: number) => {
     cacheEpoch += 1;
     lostGroups.set(groupId, { status, at: ++losses });
     const scopes = [
@@ -1829,9 +1844,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     ];
     // Its view observes nothing more, so its removed queries are never read back (F5).
     groupQueries.lose(groupId);
+    // A Groups list read before this could list it again, unless the latest one already leaves it
+    // out: that list, still being saved perhaps, stands (#219, a read beside the Group's).
+    const listed = !listedGroups || listedGroups.has(groupId);
     // The Group leaves the screen in the publish that shows Home's queries reading again.
     homeQueries.quietly(() => {
-      invalidateReads(...scopes);
+      invalidateReads(...scopes.filter((scope) => listed || scope !== 'groups'));
       evictGroupContent(groupId, status);
     });
     const lease = accountStorage(),
@@ -2907,16 +2925,32 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     } finally {
       if (current(owner)) {
         ledgerChanged(groupId);
-        if (!refused) await removeLedgerCopies(groupId, owner);
+        if (!refused) {
+          // It may have reached the server: its Balances offer no payment until read again.
+          groupQueries.changed(groupId);
+          await removeLedgerCopies(groupId, owner);
+        }
       }
     }
   };
 
-  /** After a confirmed change: every affected view reads again; earlier responses cannot return. */
+  /**
+   * After a confirmed change: every affected view reads again; earlier responses cannot return.
+   * Its message shows once the Group's view has read the change, never beside what it replaces.
+   */
   const refreshLedgerViews = async (groupId: string, owner: number, returned: boolean) => {
+    groupQueries.changed(groupId);
     ledgerChanged(groupId);
-    if (returned || (snapshot.screen === 'group' && snapshot.detail.id === groupId))
-      await openGroup(groupId, false);
+    try {
+      if (returned || (snapshot.screen === 'group' && snapshot.detail.id === groupId))
+        await openGroup(groupId, false);
+    } finally {
+      const message = heldSnackbar;
+      if (message?.groupId === groupId && current(owner)) {
+        heldSnackbar = null;
+        publish({ ...snapshot, snackbar: message });
+      }
+    }
     if (current(owner)) await refreshHome();
   };
 
@@ -2965,6 +2999,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const { groupId } = to,
       { detail, financial } = snapshot,
       origin = to.reread?.expenses;
+    // A confirmed change's message waits for the view's read of it (`refreshLedgerViews`).
+    heldSnackbar = snackbar;
     navigate(to, {
       detail:
         detail.id === groupId
@@ -2975,7 +3011,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         : financial.groupId === groupId && financial.month === origin.month
           ? financial
           : { ...emptyFinancial(), groupId, month: origin.month },
-      snackbar,
+      snackbar: null,
     });
   };
 
@@ -4074,7 +4110,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.screen !== 'group' ||
       snapshot.destination !== 'balances' ||
       !groupId ||
-      snapshot.offline.active
+      snapshot.offline.active ||
+      // Balances out of date since a change written here offer no payment until read (#219).
+      snapshot.financial.balances.changed
     )
       return;
     await openSettlements(groupId);
@@ -4136,6 +4174,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   ) => {
     settlementRequest += 1;
     pendingRequest += 1;
+    // A recorded payment's message waits for Balances read after it (`refreshLedgerViews`).
+    heldSnackbar = snackbar;
     navigate(to, {
       detail:
         snapshot.detail.id === to.groupId
@@ -4143,7 +4183,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           : { status: 'loading', id: to.groupId, data: null, message: null, refreshedAt: null },
       settlement: emptySettlement(),
       pendingPayment: pending,
-      snackbar,
+      snackbar: null,
     });
   };
 

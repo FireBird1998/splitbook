@@ -378,8 +378,8 @@ describe('cached views and coalesced reads (#103)', () => {
         destination: 'balances',
         financial: { expenses: { status: 'ready' }, balances: { status: 'ready' } },
       });
+      // The Month's Expenses were read beside the Group (#219): only Balances follow its answer.
       expect(f.calls.slice(before).map((call) => [call.method, call.path.split('?')[0]])).toEqual([
-        ['GET', `/api/groups/${groupId}/expenses`],
         ['GET', balanceReads],
       ]);
     },
@@ -650,7 +650,9 @@ describe('cached views and coalesced reads (#103)', () => {
     await controller.back();
     const before = f.calls.length;
     await controller.openGroup(groupId);
-    expect(f.calls.slice(before)).toEqual([]);
+    // The newer reads are reused. Balances may be read again: the pre-save Expense read, sent
+    // beside the Group (#219), can finish after them, once the member has left (AMEND-1).
+    expect(f.calls.slice(before).filter(({ path }) => path !== balanceReads)).toEqual([]);
     expect(controller.getSnapshot().financial.expenses.data).toMatchObject([
       { description: '2026-09 rent, ledger 1' },
     ]);

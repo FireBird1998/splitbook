@@ -150,6 +150,11 @@ export interface GroupFinancialState {
     status: LoadStatus;
     data: GroupCurrencyBalance[] | null;
     message: string | null;
+    /**
+     * A change written in this Group made them out of date: no payment is offered on them until
+     * they're read again after it (#219). Unset before any change.
+     */
+    changed?: boolean;
   };
 }
 

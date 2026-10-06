@@ -412,7 +412,11 @@ describe('App refresh rendering', () => {
     await retried.reached;
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
-    expect(app.text()).toContain(`Saved ${verifiedAt} · refreshing`);
+    // The pull read Expenses and Balances again beside the failed Group read; the retry reads the
+    // Expenses beside the Group again (#219), so Balances wait to follow them.
+    expect(app.text()).toContain(
+      `Updating balances. These figures are from ${refreshedLabel(app.clock.now)} and may change.`,
+    );
     expect(app.text()).toContain('You owe₹30.00');
 
     app.use(() => undefined);
@@ -458,7 +462,10 @@ describe('App refresh rendering', () => {
     expect(app.text()).toContain(`Saved ${verifiedAt} · refreshing`);
     expect(app.text()).toContain('September groceries');
     await app.press('Balances');
-    expect(app.text()).toContain(`Saved ${verifiedAt} · refreshing`);
+    // The Expenses, read beside the Group (#219), have answered: Balances wait to follow them.
+    expect(app.text()).toContain(
+      `Updating balances. These figures are from ${verifiedAt} and may change.`,
+    );
     expect(app.text()).toContain('You owe₹30.00');
     expect(app.refreshControl().refreshing).toBe(false);
     app.use(() => undefined);

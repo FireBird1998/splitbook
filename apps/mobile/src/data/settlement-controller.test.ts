@@ -836,7 +836,9 @@ describe('native payment recording', () => {
     });
   });
 
-  it('keeps a reopened sheet as it is when the refresh after an earlier payment finishes', async () => {
+  // #219 (loading-state audit): until Balances are read after a payment, they offer none, so the
+  // sheet can't reopen on the debt the payment just settled.
+  it('offers no payment while Balances are read again after an earlier one, then opens on the new figures', async () => {
     let committed = false,
       held = false;
     let release!: (value: FetchResponse) => void, entered!: () => void;
@@ -865,16 +867,27 @@ describe('native payment recording', () => {
     controller.updateSettlement({ amount: '10', note: 'Paid already' });
     const saving = controller.recordSettlement();
     await dispatched;
-    // The sheet closed onto Balances, which are still being read; the member opens it again.
-    expect(controller.getSnapshot().screen).toBe('group');
+    // The sheet closed onto Balances, which are still being read: choosing Record does nothing.
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      snackbar: null,
+      financial: { balances: { changed: true } },
+    });
     await controller.openRecordPayment(actor, recipient, 'INR');
-    controller.updateSettlement({ amount: '5' });
-    const reopened = controller.getSnapshot().settlement;
-    expect(reopened).toMatchObject({ status: 'editing', suggested: 20, draft: { amount: '5' } });
+    expect(controller.getSnapshot().screen).toBe('group');
     release(json(balances(20)));
     await saving;
-    expect(controller.getSnapshot().screen).toBe('settlement');
-    expect(controller.getSnapshot().settlement).toEqual(reopened);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      snackbar: { message: 'Payment recorded' },
+      financial: { balances: { data: [{ debts: [{ amount: 20 }] }] } },
+    });
+    expect(controller.getSnapshot().financial.balances.changed).toBeFalsy();
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      settlement: { status: 'editing', suggested: 20 },
+    });
   });
 
   it('persists the exact actual payment before recording, then closes onto refreshed Balances', async () => {
