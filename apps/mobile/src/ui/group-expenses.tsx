@@ -20,9 +20,10 @@ import {
   ListRow,
   Money,
   RowAmount,
-  Skeleton,
+  SkeletonText,
   SummaryStats,
   type SummaryStat,
+  useLargeText,
 } from './compact';
 import { Freshness, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
@@ -227,6 +228,7 @@ function ExpenseSummary({
   onSelectMonth: (month: string | null) => void;
 }) {
   const figures = summary ? summaryStats(summary, currentUserId) : null;
+  const large = useLargeText();
   const updated = <Freshness refreshedAt={refreshedAt} refreshing={refreshing} offline={offline} />;
   const count = summary ? `${summary.count} ${summary.count === 1 ? 'expense' : 'expenses'}` : '';
   const within = !month
@@ -302,7 +304,16 @@ function ExpenseSummary({
               paddingVertical: 8,
             }}
           >
-            <Skeleton width="40%" line="small" />
+            {/* At large text a Household's count and its "Updated" time wrap onto two lines. */}
+            <SkeletonText
+              gap={8}
+              lines={[
+                { width: '40%', line: 'small' },
+                ...(large && household
+                  ? [{ width: '30%' as const, line: 'caption' as const }]
+                  : []),
+              ]}
+            />
           </View>
         </>
       ) : (

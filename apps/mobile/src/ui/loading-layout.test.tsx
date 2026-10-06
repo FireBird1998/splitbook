@@ -5,7 +5,7 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type {
   ExpenseWindowSummary,
   GroupFinancialState,
@@ -20,11 +20,18 @@ import { HomeBalances, HomeGroups } from './home';
 
 // #331: content takes its skeleton's place at the same height, so nothing below it moves when
 // it arrives: Home's Groups and balances, and a Group's Expenses, at 100% and 130% text. The
-// heights come from the rendered styles (`layoutHeight`); text here stays on one line.
+// heights come from the rendered styles (`layoutHeight`), with rows that wrap broken into lines
+// at a 360dp phone's width; text here stays on one line.
 setFileWindow({ width: 360, height: 640 });
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const at = new Date(2026, 8, 30, 10, 42);
+// Figures read today say "Updated 10:42 AM", as a fresh load does.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date(2026, 8, 30, 12));
+});
+afterAll(() => vi.useRealTimers());
 const you = 'a00000000000000000000001';
 const person = (id: string, name: string) => ({ id, name, image: null });
 const group = (id: string, name: string, category: MobileGroup['category']): MobileGroup => ({
@@ -56,14 +63,16 @@ function heights(element: ReactElement, next: ReactElement, fontScale: number) {
   act(() => {
     renderer = create(element);
   });
-  const before = layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale);
+  const before = layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale, content);
   act(() => renderer!.update(next));
-  const after = layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale);
+  const after = layoutHeight(renderer!.toJSON() as ReactTestRendererJSON, fontScale, content);
   act(() => renderer!.unmount());
   renderer = undefined;
   return { before, after };
 }
 const scales = [1, 1.3];
+/** The screens' content width on a 360dp phone: 16 each side. */
+const content = 360 - 32;
 
 describe('Home', () => {
   const groups = (loading: boolean) => (
