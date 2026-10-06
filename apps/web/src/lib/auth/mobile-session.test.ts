@@ -2,7 +2,7 @@
 import { randomBytes } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { betterAuth } from 'better-auth';
-import { memoryAdapter } from 'better-auth/adapters/memory';
+import { memoryAdapter, type MemoryDB } from 'better-auth/adapters/memory';
 import { buildAuthOptions } from './create-auth';
 import { signTestIdToken } from './test-id-token';
 import { decodeStoredSession } from '../../../../mobile/src/data/cookies';
@@ -11,11 +11,26 @@ import { createMobileController } from '../../../../mobile/src/data/mobile-contr
 const origin = 'https://staging.splitbook.test';
 const clientId = '123-test.apps.googleusercontent.com';
 const secret = 'isolated-test-only-google-token-secret';
+/** The memory adapter, whose session deletes throw while `faults.deleteSession` is set. */
+function withSessionDeleteFault(db: MemoryDB, faults: { deleteSession: boolean }) {
+  const base = memoryAdapter(db);
+  return ((options) => {
+    const adapter = base(options);
+    return {
+      ...adapter,
+      delete: (args) =>
+        faults.deleteSession && args.model === 'session'
+          ? Promise.reject(new Error('Session store unavailable'))
+          : adapter.delete(args),
+    };
+  }) satisfies typeof base;
+}
 function setup(email: string) {
-  const db = { user: [], session: [], account: [], verification: [], rateLimit: [] };
+  const db: MemoryDB = { user: [], session: [], account: [], verification: [], rateLimit: [] };
+  const faults = { deleteSession: false };
   const auth = betterAuth({
     ...buildAuthOptions({
-      database: memoryAdapter(db),
+      database: withSessionDeleteFault(db, faults),
       env: {
         NEXT_PUBLIC_APP_URL: origin,
         AUTH_MODE: 'google',
@@ -30,6 +45,8 @@ function setup(email: string) {
     advanced: { database: { generateId: () => randomBytes(12).toString('hex') } },
   });
   let saved: string | null = null;
+  let owner: string | null = null;
+  let cleanupPending = false;
   const controller = createMobileController(
     {
       apiBaseUrl: origin,
@@ -61,6 +78,29 @@ function setup(email: string) {
           saved = null;
         },
       },
+      // As the Android runtime wires it: the cleanup marker keeps the saved cookie until the
+      // server confirms the sign-out.
+      accountLocal: {
+        owner: {
+          load: async () => owner,
+          save: async (accountId) => {
+            owner = accountId;
+          },
+          clear: async () => {
+            owner = null;
+          },
+        },
+        cleanupMarker: {
+          load: async () => cleanupPending,
+          mark: async () => {
+            cleanupPending = true;
+          },
+          clear: async () => {
+            cleanupPending = false;
+          },
+        },
+        stores: [],
+      },
       fetch: async (url, init) => {
         const path = new URL(url).pathname;
         // Deployment identity is a fixture; real deployments refuse synthetic-token mode.
@@ -74,7 +114,7 @@ function setup(email: string) {
       },
     },
   );
-  return { controller, db, saved: () => saved };
+  return { controller, db, faults, saved: () => saved };
 }
 describe('Android token exchange through Better Auth', () => {
   it('admits an approved identity, restores its secure cookie, and revokes it on logout', async () => {
@@ -93,6 +133,33 @@ describe('Android token exchange through Better Auth', () => {
     await test.controller.restore();
     expect(test.controller.getSnapshot().auth.status).toBe('authenticated');
     await test.controller.signOut();
+    expect(test.db.session).toHaveLength(0);
+    expect(test.saved()).toBeNull();
+  });
+  it('keeps the saved cookie while the server cannot end the session, then Try again signs out', async () => {
+    const test = setup('invited@example.com');
+    await test.controller.signInWithGoogle();
+    expect(test.controller.getSnapshot().auth.status).toBe('authenticated');
+    const kept = test.saved();
+    expect(kept).not.toBeNull();
+
+    test.faults.deleteSession = true;
+    await test.controller.signOut();
+    expect(test.controller.getSnapshot().auth).toMatchObject({
+      status: 'sign-out-unconfirmed',
+      user: null,
+    });
+    expect(test.saved()).toBe(kept);
+    expect(test.db.session).toHaveLength(1);
+
+    // Try again, once the server can delete the session.
+    test.faults.deleteSession = false;
+    await test.controller.restore();
+    expect(test.controller.getSnapshot().auth).toEqual({
+      status: 'signed-out',
+      user: null,
+      message: null,
+    });
     expect(test.db.session).toHaveLength(0);
     expect(test.saved()).toBeNull();
   });

@@ -8,9 +8,11 @@
  * refreshed after a day of use, rate limiting stored in the database,
  * Google as the only provider behind the `AUTH_ALLOWED_EMAILS` gate, the demo
  * persona plugin only when demo auth is allowed, `nextCookies()` last.
+ * Sign-out answers success only once the session is gone (#285).
  */
 
 import { betterAuth, type BetterAuthOptions } from 'better-auth';
+import { APIError, createAuthMiddleware } from 'better-auth/api';
 import { nextCookies } from 'better-auth/next-js';
 import { validateAllowedUser } from '@/lib/auth/allowlist';
 import { demoPersonaPluginIfAllowed } from '@/lib/auth/demo-persona-plugin';
@@ -43,6 +45,36 @@ export interface CreateAuthInput {
   database: BetterAuthOptions['database'];
   env?: AuthEnv;
 }
+
+export const SESSION_NOT_ENDED = {
+  code: 'SESSION_NOT_ENDED',
+  message: 'The session could not be ended. Try signing out again.',
+} as const;
+
+/**
+ * Better Auth's sign-out logs a failed session delete and still answers 200,
+ * clearing the cookie, so a session both clients believe ended stays valid
+ * for up to 30 days. This runs first: it ends the session the signed cookie
+ * names and checks it is gone, or answers 500 and leaves the cookie, which
+ * the client keeps to try again. Without a readable session cookie there is
+ * nothing to end, and sign-out goes on as before.
+ */
+const endSessionBeforeSignOut = createAuthMiddleware(async (ctx) => {
+  if (ctx.path !== '/sign-out') return;
+  const { authCookies, internalAdapter, logger, secret } = ctx.context;
+  const token = await ctx.getSignedCookie(authCookies.sessionToken.name, secret);
+  if (!token) return;
+  let ended: boolean;
+  try {
+    await internalAdapter.deleteSession(token);
+    // A failed lookup before the delete is swallowed and deletes nothing, so check.
+    ended = (await internalAdapter.findSession(token)) === null;
+  } catch (error) {
+    logger.error('Failed to end the session at sign-out', error);
+    ended = false;
+  }
+  if (!ended) throw APIError.from('INTERNAL_SERVER_ERROR', SESSION_NOT_ENDED);
+});
 
 function rateLimitEnabled(env: AuthEnv): boolean | undefined {
   if (env.AUTH_RATE_LIMIT_ENABLED === 'true') return true;
@@ -110,6 +142,7 @@ export function buildAuthOptions({ database, env = process.env }: CreateAuthInpu
         },
       },
     },
+    hooks: { before: endSessionBeforeSignOut },
     plugins: [...(demoPlugin ? [demoPlugin] : []), nextCookies()],
   } satisfies BetterAuthOptions;
 }
