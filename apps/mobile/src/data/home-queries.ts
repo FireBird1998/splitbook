@@ -419,8 +419,9 @@ export function createHomeQueries(session: HomeSession) {
   /**
    * A Groups list from the server. One in which a Group doesn't list the member is refused, as
    * malformed. The Groups it leaves out lose their reads and saved copies, in both stores, and
-   * Home's figures with them; a removal that fails leaves those copies untrusted, and never signs
-   * the member out (#212).
+   * the saved list and Home's figures with them, so no older list shows them even when this one
+   * can't be saved; a removal that fails leaves those copies untrusted, and never signs the
+   * member out (#212, #323).
    */
   const acceptList: Accept = (value, owner) => {
     const groups = listOf(value);
@@ -450,12 +451,13 @@ export function createHomeQueries(session: HomeSession) {
     try {
       await lease.write(async () => {
         await session.retain(lease.accountId, [...listed]);
-        if (lost.size) await forget(lease.accountId, [homePath]);
+        if (lost.size) await forget(lease.accountId);
       });
     } catch (error) {
       if (!session.current(owner) || error instanceof Superseded) throw new Superseded();
       session.distrust(lease.accountId, [
         ...[...lost].flatMap((id) => [`group:${id}`, `ledger:${id}`, `balances:${id}`]),
+        ...(lost.size ? ['groups'] : []),
         'home',
       ]);
     }
