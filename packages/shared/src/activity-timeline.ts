@@ -1,5 +1,6 @@
 import { formatCurrency } from './currency';
 import { formatDate, formatDateTime } from './date';
+import { toMajorAmount } from './exact-money';
 
 export interface ActivityLike {
   _id: string;
@@ -107,4 +108,114 @@ export function formatActivityDetail(activity: ActivityLike): string | null {
 
 export function formatActivityTimestamp(activity: ActivityLike): string {
   return formatDateTime(activity.createdAt);
+}
+
+/**
+ * One event as a line of Home's latest changes (#309): "{actor} {action} {subject}", such as
+ * "Priya Shah edited Wi-Fi", in the words Android's Activity uses. The viewer is "You".
+ */
+export interface ActivityLineParts {
+  actor: string;
+  action: string;
+  /** The Expense the event is about, by its description; null for any other event. */
+  subject: string | null;
+}
+
+const words = (value: unknown) => (typeof value === 'string' && value.trim() ? value.trim() : null);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+export function activityLineParts(activity: ActivityLike, viewerId?: string): ActivityLineParts {
+  const meta = activity.metadata || {};
+  const actor =
+    viewerId && activity.actor?._id === viewerId
+      ? 'You'
+      : (words(activity.actor?.name) ?? 'Someone');
+  const expense = words(meta.description) ?? 'an Expense';
+  const line = (action: string, subject: string | null = null) => ({ actor, action, subject });
+
+  switch (activity.type) {
+    case 'expense_added':
+      return line('added', expense);
+    case 'expense_updated':
+      return line(meta.action === 'restored' ? 'restored' : 'edited', expense);
+    case 'expense_deleted':
+      return line('deleted', expense);
+    case 'settlement_recorded':
+      return line('recorded a payment');
+    case 'member_joined':
+      return line('joined the Group');
+    case 'member_left':
+      return line(meta.method === 'removed' ? 'removed a member' : 'left the Group');
+    case 'group_created':
+      return line('created the Group');
+    case 'group_updated':
+      return line('updated the Group');
+    default:
+      return line('made a change');
+  }
+}
+
+/** An event's amount; an edit that changed the amount also has what it was before. */
+export interface ActivityAmount {
+  before?: string;
+  after: string;
+}
+
+/** Exact minor units when recorded, otherwise the recorded major amount. */
+function recordedMoney(
+  value: { amount?: unknown; amountMinor?: unknown },
+  currency: string | null,
+): string | null {
+  if (!currency) return null;
+  if (typeof value.amountMinor === 'number') {
+    try {
+      return formatCurrency(toMajorAmount(value.amountMinor, currency), currency);
+    } catch {
+      // A currency outside today's list, or an unsafe figure: the major amount follows.
+    }
+  }
+  return typeof value.amount === 'number' && Number.isFinite(value.amount)
+    ? formatCurrency(value.amount, currency)
+    : null;
+}
+
+const RECORDED_AMOUNT = ['expense_added', 'expense_deleted', 'settlement_recorded'];
+
+/**
+ * The amount an event records, in its own currency and never converted: an Expense added or
+ * deleted, or a payment, and for an Expense edit that changed the amount, the amount before and
+ * after ("₹899.00 → ₹999.00"). An edit records only what changed, so `currency` names the
+ * Expense's currency when the event doesn't. Any other event, or an edit that left the amount
+ * alone, has none.
+ */
+export function formatActivityAmount(
+  activity: ActivityLike,
+  currency?: string,
+): ActivityAmount | null {
+  const meta = activity.metadata || {};
+  const recorded = words(meta.currency) ?? words(currency);
+
+  if (RECORDED_AMOUNT.includes(activity.type)) {
+    const after = recordedMoney({ amount: meta.amount }, recorded);
+    return after ? { after } : null;
+  }
+  const changes = meta.changes;
+  if (activity.type !== 'expense_updated' || !isRecord(changes)) return null;
+
+  const field = (name: string): Record<string, unknown> => {
+    const change = changes[name];
+    return isRecord(change) ? change : {};
+  };
+  const after = words(field('currency').new) ?? recorded;
+  const before = words(field('currency').old) ?? after;
+  const was = recordedMoney(
+    { amount: field('amount').old, amountMinor: field('amountMinor').old },
+    before,
+  );
+  const now = recordedMoney(
+    { amount: field('amount').new, amountMinor: field('amountMinor').new },
+    after,
+  );
+  return was && now ? { before: was, after: now } : null;
 }

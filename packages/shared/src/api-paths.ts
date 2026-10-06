@@ -88,6 +88,15 @@ export const activityPagePath = (groupId: string, { expenseId, page, limit }: Ac
 
 /** Home's totals across the member's Groups. */
 export const homeBalancesPath = () => '/api/user/balances';
+
+export interface UserActivityQuery {
+  /** How many of the latest events to read. The server caps it (`user-activity-read`). */
+  limit?: number;
+}
+
+/** The latest Activity across the member's Groups, newest first: Home's latest changes (#309). */
+export const userActivityPath = ({ limit }: UserActivityQuery = {}) =>
+  `/api/user/activity${query([['limit', limit]])}`;
 export const invitationsPath = () => '/api/invitations';
 export const settlementsPath = (groupId: string) => `${group(groupId)}/settlements`;
 export const recurringExpensesPath = (groupId: string) => `${group(groupId)}/recurring`;

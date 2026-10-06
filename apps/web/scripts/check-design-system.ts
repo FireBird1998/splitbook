@@ -11,6 +11,7 @@ const adoptedFiles = [
   'src/components/common/EmptyState.tsx',
   'src/components/design-system/DesignSystemLab.tsx',
   'src/components/dashboard/DashboardView.tsx',
+  'src/components/dashboard/LatestChangesCard.tsx',
   'src/components/balances/BalancesView.tsx',
   'src/app/(main)/layout.tsx',
   'src/components/layout/AppShell.tsx',

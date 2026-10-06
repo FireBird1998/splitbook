@@ -102,6 +102,8 @@ src/
 │   │   │   └── [code]/
 │   │   │       └── route.ts        # GET (public preview), POST (join via link)
 │   │   └── user/
+│   │       ├── activity/
+│   │       │   └── route.ts        # GET (latest Activity across the member's Groups)
 │   │       ├── profile/
 │   │       │   └── route.ts        # GET, PATCH
 │   │       └── balances/
@@ -154,7 +156,8 @@ src/
 │   │   └── BalancesView.tsx        # Balance summary + simplified debts
 │   ├── dashboard/
 │   │   ├── DashboardView.tsx       # Groups overview + invitations
-│   │   └── InvitationCard.tsx
+│   │   ├── InvitationCard.tsx
+│   │   └── LatestChangesCard.tsx   # Home's latest changes across Groups (#309)
 │   ├── activity/
 │   │   └── ActivityView.tsx        # Activity feed (single page, no Load More)
 │   ├── join/
@@ -186,7 +189,8 @@ src/
 │   │   ├── settlement.service.ts
 │   │   ├── balance.service.ts
 │   │   ├── invitation.service.ts
-│   │   └── activity.service.ts
+│   │   ├── activity.service.ts
+│   │   └── user-activity.service.ts # Latest Activity across Groups (read-only)
 │   ├── theme/
 │   │   ├── tokens.ts               # Semantic light/dark design tokens
 │   │   └── createAppTheme.ts       # MUI theme + palette augmentation
