@@ -52,6 +52,7 @@ import {
   toMajorAmount,
 } from '@splitbook/shared/exact-money';
 import { apiFetch } from '@/lib/utils/api-fetch';
+import { recurringRefusal } from '@/components/groups/recurring-refusal';
 
 interface RecurringExpensesSectionProps {
   groupId: string;
@@ -355,8 +356,9 @@ export default function RecurringExpensesSection({
       });
       const json = await res.json();
       if (!res.ok) {
-        setFormError(json.error || 'Failed to save');
-        setFormConflict(res.status === 409 || res.status === 428);
+        const refusal = recurringRefusal(res.status, json, 'Failed to save');
+        setFormError(refusal.message);
+        setFormConflict(refusal.conflict);
         return;
       }
       mutate();
@@ -388,9 +390,9 @@ export default function RecurringExpensesSection({
         mutate();
         onNotify(selected.isPaused ? 'Recurring expense resumed' : 'Recurring expense paused');
       } else {
-        const json = await res.json();
-        setActionError(json.error || 'Failed to update');
-        setActionConflict(res.status === 409 || res.status === 428);
+        const refusal = recurringRefusal(res.status, await res.json(), 'Failed to update');
+        setActionError(refusal.message);
+        setActionConflict(refusal.conflict);
       }
     } catch {
       onNotify('Failed to update');
@@ -416,9 +418,9 @@ export default function RecurringExpensesSection({
         setDeleteDialogOpen(false);
         setSelected(null);
       } else {
-        const json = await res.json();
-        setActionError(json.error || 'Failed to delete');
-        setActionConflict(res.status === 409 || res.status === 428);
+        const refusal = recurringRefusal(res.status, await res.json(), 'Failed to delete');
+        setActionError(refusal.message);
+        setActionConflict(refusal.conflict);
       }
     } catch {
       onNotify('Failed to delete');

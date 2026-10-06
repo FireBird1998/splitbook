@@ -141,6 +141,12 @@ export class RecurringExpenseService {
     assertTemplateData(group, data);
     const money = normalizeExpenseMoney(data);
     await lockLedgerCurrency(groupId, data.currency);
+    // Record a turn back on before the insert, so this template counts as created after it
+    // and catches up from its own start. The generation run below reads the record again and
+    // reports a failure to read it, so one here only needs logging.
+    await lastSwitchedOnAt(new Date()).catch((err: unknown) =>
+      console.error('Could not read when recurring Expenses were turned on:', err),
+    );
 
     const template = await RecurringExpense.create({
       group: groupId,
@@ -330,8 +336,15 @@ export class RecurringExpenseService {
         return { generated: 0, complete };
       }
       // Read before the templates, so the first run after turning the switch back on records
-      // that moment even in a Group with nothing due.
-      const switchedOnAt = await lastSwitchedOnAt(now);
+      // that moment even in a Group with nothing due. A record that can't be read holds up
+      // only a Group that would generate (below): a Group with nothing to add is unaffected.
+      const switchedOn = await lastSwitchedOnAt(now).then(
+        (at) => ({ at }),
+        (err: unknown) => {
+          console.error('Could not read when recurring Expenses were turned on:', err);
+          return null;
+        },
+      );
 
       const templates = await RecurringExpense.find({ group: groupId });
       if (templates.length === 0) return { generated: 0, complete };
@@ -343,6 +356,11 @@ export class RecurringExpenseService {
       // An archived Group creates no recurring Expenses. Markers stay where they
       // are, so nothing is lost: were it un-archived, the next read catches up.
       if (group.isArchived) return { generated: 0, complete };
+
+      // Without the record, the months these templates may add are unknown: add none, and
+      // report the run unfinished, as any generation failure is. The next read retries.
+      if (!switchedOn) return { generated: 0, complete: false };
+      const switchedOnAt = switchedOn.at;
 
       const currentPeriod = toPeriod(now);
 

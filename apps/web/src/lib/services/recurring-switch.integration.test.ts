@@ -10,6 +10,7 @@
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Expense from '@/lib/models/Expense';
+import ProductSwitch from '@/lib/models/ProductSwitch';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
@@ -66,7 +67,10 @@ beforeEach(async () => {
   await createTestUsers('alice', 'bob', 'carol', 'dave');
   session.userId = null;
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+});
 afterAll(db.teardown);
 
 const NOW = new Date();
@@ -116,6 +120,20 @@ function rent(overrides: Partial<CreateRecurringExpenseInput> = {}): CreateRecur
     startsOn: expenseDateForPeriod(CURRENT_PERIOD, 1),
     ...overrides,
   };
+}
+
+/** The month before last. */
+const TWO_MONTHS_AGO = previousPeriod(PREVIOUS_PERIOD);
+
+/** A WiFi template that started the month before last, so it has three months to add. */
+function wifiSinceTwoMonthsAgo(): CreateRecurringExpenseInput {
+  return rent({
+    description: 'WiFi',
+    amount: 1200,
+    tag: 'Utilities',
+    paidBy: [{ user: bob, amount: 1200 }],
+    startsOn: expenseDateForPeriod(TWO_MONTHS_AGO, 1),
+  });
 }
 
 /** A Household with its Rent template, created while recurring Expenses were on. */
@@ -373,20 +391,36 @@ describe('turning recurring Expenses back on', () => {
     switchRecurringExpenses(true);
     await recurringExpenseService.generateDueExpenses(groupId);
 
-    const wifi = await recurringExpenseService.create(
-      groupId,
-      rent({
-        description: 'WiFi',
-        amount: 1200,
-        tag: 'Utilities',
-        paidBy: [{ user: bob, amount: 1200 }],
-        startsOn: expenseDateForPeriod(previousPeriod(PREVIOUS_PERIOD), 1),
-      }),
-      alice,
-    );
+    const wifi = await recurringExpenseService.create(groupId, wifiSinceTwoMonthsAgo(), alice);
 
     expect(await periodsOf(String(wifi!._id))).toEqual([
-      previousPeriod(PREVIOUS_PERIOD),
+      TWO_MONTHS_AGO,
+      PREVIOUS_PERIOD,
+      CURRENT_PERIOD,
+    ]);
+  });
+
+  it('still adds every month of a template created before anything is read once it is back on', async () => {
+    const { groupId } = await householdWithRent();
+    switchRecurringExpenses(false);
+    await recurringExpenseService.generateDueExpenses(groupId);
+    switchRecurringExpenses(true);
+
+    // Nothing reads a Group after it is turned back on. The new template's own generation run
+    // follows its insert a moment later, as on a busy server.
+    const insert = RecurringExpense.create.bind(RecurringExpense) as (
+      ...args: unknown[]
+    ) => Promise<unknown>;
+    vi.spyOn(RecurringExpense, 'create').mockImplementation((async (...args: unknown[]) => {
+      const created = await insert(...args);
+      await new Promise((resolve) => setTimeout(resolve, 25));
+      return created;
+    }) as never);
+
+    const wifi = await recurringExpenseService.create(groupId, wifiSinceTwoMonthsAgo(), alice);
+
+    expect(await periodsOf(String(wifi!._id))).toEqual([
+      TWO_MONTHS_AGO,
       PREVIOUS_PERIOD,
       CURRENT_PERIOD,
     ]);
@@ -404,5 +438,61 @@ describe('turning recurring Expenses back on', () => {
       periodOffset(2),
       periodOffset(3),
     ]);
+  });
+});
+
+describe('with recurring Expenses on and the switch’s record unreadable', () => {
+  /** Reads of `productswitches` fail, as for a database user with no access to it. */
+  function recordUnreadable() {
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(ProductSwitch, 'findById').mockImplementation((() => ({
+      lean: () => Promise.reject(new Error('not authorized to execute find on productswitches')),
+    })) as never);
+  }
+
+  /** The three reads the Group page starts, as Bob. */
+  async function openGroupPage(groupId: string) {
+    session.userId = bob;
+    const reads = await Promise.all([
+      call(readGroup, groupId, { id: groupId }),
+      call(readExpenses, `${groupId}/expenses`, { id: groupId }),
+      call(readBalances, `${groupId}/balances`, { id: groupId }),
+    ]);
+    return reads.map((read) => read.status);
+  }
+
+  it('reads a Group with no templates as before, and lets a member leave it', async () => {
+    switchRecurringExpenses(true);
+    const trip = await groupService.create(
+      { name: 'Hill trip', category: 'trip', defaultCurrency: 'INR', alternateCurrencies: [] },
+      alice,
+    );
+    const tripId = String(trip._id);
+    await groupService.addMember(tripId, bob);
+    recordUnreadable();
+
+    expect(await openGroupPage(tripId)).toEqual([200, 200, 200]);
+    expect(await recurringExpenseService.materializeDueExpenses(tripId)).toEqual({
+      generated: 0,
+      complete: true,
+    });
+    await expect(groupService.leave(tripId, bob)).resolves.toEqual({ archived: false });
+  });
+
+  it('reports a Group with templates as incomplete: its reads answer, nothing is added, a leave waits', async () => {
+    const { groupId, templateId } = await householdWithRentDue();
+    recordUnreadable();
+
+    expect(await recurringExpenseService.materializeDueExpenses(groupId)).toEqual({
+      generated: 0,
+      complete: false,
+    });
+    expect(await openGroupPage(groupId)).toEqual([200, 200, 200]);
+    await expect(groupService.leave(groupId, bob)).rejects.toThrow('LEAVE_CONFLICT');
+    expect(await periodsOf(templateId)).toEqual([PREVIOUS_PERIOD]);
+
+    // A new template is still saved; its months wait for the record, as missed periods do.
+    const wifi = await recurringExpenseService.create(groupId, wifiSinceTwoMonthsAgo(), alice);
+    expect(await periodsOf(String(wifi!._id))).toEqual([]);
   });
 });

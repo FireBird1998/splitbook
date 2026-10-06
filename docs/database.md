@@ -288,6 +288,13 @@ The recurring generation run writes it: `enabled: false` the first time it finds
 it finds it on again. Generation reads `since` as the month existing templates
 resume from. A database that has never seen the switch off has no document.
 
+**Access:** the application's database user needs `find`, `insert`, `update` and
+`createCollection` on `productswitches`. `readWrite` on the database covers it;
+a custom role granted per collection must add it. While it can't be read, the
+switch on, a Group with recurring templates generates nothing and reports the
+run unfinished, so leaving it is refused until a read works; Groups without
+templates are unaffected.
+
 ---
 
 ## Settlement

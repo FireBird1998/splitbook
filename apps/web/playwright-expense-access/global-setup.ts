@@ -36,6 +36,8 @@ export async function startIsolatedApp(
   authMode: 'demo' | 'google' = 'demo',
   googleTestIdentity?: { email: string; idTokenSecret: string },
   production = false,
+  /** Turn recurring Expenses on (off by default, #289) for a suite that covers them. */
+  { recurringExpenses = false }: { recurringExpenses?: boolean } = {},
 ) {
   // Never accept a caller's Mongo URI or app URL. Match the integration suite's
   // splitbook-test-* convention, but use a unique, loopback-only DB per run.
@@ -101,8 +103,7 @@ export async function startIsolatedApp(
         : {}),
       MONGODB_URI: uri,
       NEXT_PUBLIC_APP_URL: baseURL,
-      // Recurring Expenses are off by default (#289); the expense-access journeys cover them.
-      RECURRING_EXPENSES_ENABLED: 'true',
+      ...(recurringExpenses ? { RECURRING_EXPENSES_ENABLED: 'true' } : {}),
     };
     if (production) {
       // Build only the temporary snapshot. The user's .next and environment
@@ -176,5 +177,6 @@ export async function startIsolatedApp(
 export default async function globalSetup() {
   // CI verifies the production server without paying route compilation costs
   // during browser assertions. Local runs keep the faster development startup.
-  return startIsolatedApp('demo', undefined, Boolean(process.env.CI));
+  // The expense-access journeys cover recurring Expenses, which are off by default (#289).
+  return startIsolatedApp('demo', undefined, Boolean(process.env.CI), { recurringExpenses: true });
 }
