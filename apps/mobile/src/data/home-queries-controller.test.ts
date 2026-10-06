@@ -173,6 +173,12 @@ function fixture() {
     const user = signedIn(init);
     if (path.endsWith('/get-session'))
       return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
+    if (path === listPath && method === 'POST') {
+      // Alex creates Zed Club, as its admin; the list holds it from now on.
+      server.listed = [...server.listed, zed];
+      const admin = zed.members.map((member) => ({ ...member, role: 'admin' }));
+      return json({ status: 201, data: { ...zed, members: admin } }, 201);
+    }
     if (path === listPath) return json({ status: 200, data: listed() });
     if (path === homePath)
       return json({
@@ -269,6 +275,16 @@ function fixture() {
         },
         expenseDrafts: records(drafts),
         settlementAttempts: records(attempts),
+        groupCreations: {
+          load: async (account) => structuredClone(attempts.get(`creation:${account}`) ?? null),
+          save: async (account, value) => {
+            attempts.set(`creation:${account}`, structuredClone(value));
+          },
+          remove: async (account) => {
+            attempts.delete(`creation:${account}`);
+          },
+          clear: async () => undefined,
+        },
         accountLocal: {
           owner: {
             load: async () => owner,
@@ -520,6 +536,44 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
       groups: { status: 'ready' },
       home: { status: 'ready', refreshedAt: start + 31_000 },
     });
+  });
+
+  it('checks the session once on reconnect after an offline restart, then reads Home', async () => {
+    const f = fixture();
+    const first = f.create();
+    await first.signIn('alex');
+    await settle();
+    first.dispose();
+    f.connect(false);
+    const restarted = f.create();
+    await restarted.restore();
+    const sent = f.calls.length;
+    f.connect(true);
+    await settle();
+    // Both of Home's reads wait for the same check.
+    expect(f.calls.slice(sent).map(({ method, path }) => `${method} ${path}`)).toEqual([
+      'GET /api/auth/get-session',
+      `GET ${listPath}`,
+      `GET ${homePath}`,
+    ]);
+  });
+
+  it('still reads again on reconnect once an older controller is disposed', async () => {
+    const f = fixture();
+    const older = f.create();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    older.dispose();
+    later(31_000);
+    const sent = f.calls.length;
+    f.connect(false);
+    f.connect(true);
+    await settle();
+    expect(f.calls.slice(sent).map(({ method, path }) => `${method} ${path}`)).toEqual([
+      `GET ${listPath}`,
+      `GET ${homePath}`,
+    ]);
   });
 
   it.each([
@@ -924,6 +978,61 @@ describe('after a write (M2-2)', () => {
       },
       offline: { active: true, refreshedAt: null },
     });
+  });
+
+  it('never holds a confirmed save behind a saved copy being written, and that copy goes once it lands', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(mapleId);
+    await controller.back();
+    await settle();
+    later(31_000);
+    // A pull: Home's figures are read again, and their row is being written, slowly.
+    const writing = f.holdWrite(homePath);
+    await controller.refresh('pull');
+    await writing.reached;
+    await controller.openGroup(mapleId);
+    await controller.openExpense(mapleId);
+    await controller.updateExpenseDraft({ description: 'Groceries', amount: '12', tagId });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.status).toBe('saved');
+    expect(f.row(homePath)).toBeNull();
+    // The figures from before the save land, and go; those read after it are written next.
+    const next = f.holdWrite(homePath);
+    writing.release();
+    await next.reached;
+    expect(f.row(homePath)).toBeNull();
+    next.release();
+    await settle();
+    expect(f.row(homePath)).toMatchObject({ value: { data: { buckets: [{ youOwe: 31 }] } } });
+  });
+});
+
+describe('Home after Create Group (#283)', () => {
+  it('reads the Groups list and Home’s figures again on Back, though within the read window', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'Zed Club', category: 'home' });
+    let sent = f.calls.length;
+    await controller.createGroup();
+    expect(controller.getSnapshot()).toMatchObject({ screen: 'group', detail: { id: zedId } });
+    expect(f.calls.slice(sent).map(({ method, path }) => `${method} ${path}`)).toEqual([
+      `POST ${listPath}`,
+      `GET /api/groups/${zedId}`,
+      `GET /api/groups/${zedId}/expenses?page=1&limit=20&includeMemberBreakdown=1`,
+      `GET /api/groups/${zedId}/balances`,
+    ]);
+    // The create changed the Groups list, so Back reads it again, with Home's figures (#283).
+    sent = f.calls.length;
+    await controller.back();
+    expect(f.calls.slice(sent).map(({ method, path }) => `${method} ${path}`)).toEqual([
+      `GET ${listPath}`,
+      `GET ${homePath}`,
+    ]);
+    expect(names(controller.getSnapshot())).toEqual(['Maple House', 'Cabin Weekend', 'Zed Club']);
   });
 });
 

@@ -85,6 +85,16 @@ export const groupRefused = (status: number) =>
     ? 'You no longer have access to this group.'
     : 'This group is no longer available.';
 
+/** `run` once at a time for each key (a session): calls made while it runs share its result. */
+export function singleFlight<K, T>(run: (key: K) => Promise<T>) {
+  const running = new Map<K, Promise<T>>();
+  return (key: K) => {
+    const shared = running.get(key) ?? run(key).finally(() => running.delete(key));
+    running.set(key, shared);
+    return shared;
+  };
+}
+
 /** The caller's own signal ended the request. */
 const cancelled = () =>
   new RequestError('This request was cancelled.', 0, null, false, null, 'cancelled');

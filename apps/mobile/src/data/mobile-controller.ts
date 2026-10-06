@@ -111,6 +111,7 @@ import {
   RequestError,
   storageMessage,
   groupRefused,
+  singleFlight,
   Superseded,
   type RequestOptions,
 } from './transport';
@@ -1035,7 +1036,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  const revalidateSession = async (owner: number) => {
+  /** Reads that need the session checked first, as on a reconnect, share one check. */
+  const revalidateSession = singleFlight(async (owner: number) => {
     await verifyGoogleBackend(owner);
     const session = parseSession(await request('/api/auth/get-session', owner));
     assertCurrent(owner);
@@ -1049,7 +1051,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     offlineSession = false;
     await saveVerifiedIdentity(session, owner);
-  };
+  });
 
   /** The signed-in account in the environment the app reads from: every query key holds both. */
   const account = () => {

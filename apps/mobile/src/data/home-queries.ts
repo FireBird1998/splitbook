@@ -252,6 +252,9 @@ type HomeRead = { answered: boolean; ended?: boolean; reading: Promise<Envelope>
 /** Checks an answer, and returns what it sets off, which runs only if it is still current. */
 type Accept = (value: unknown, owner: number) => (() => Promise<void>) | void;
 
+/** Which `listen` wired NetInfo to TanStack's online manager: only it unwires it. */
+const wired = new WeakMap<object, object>();
+
 /**
  * Home's two queries (ADR 0006, M1-1): the Groups list and Home's figures. The current screen
  * decides whether they are active: while Home shows they are observed, so they read what they
@@ -286,6 +289,8 @@ export function createHomeQueries(session: HomeSession) {
       return false;
     }
   };
+  /** How often `forget` removed each row: one being written meanwhile goes once it lands. */
+  const forgotten = new Map<string, number>();
   /** The persister's row for `path`, read on the account queue, checked like every saved copy. */
   const savedRow = async (lease: AccountStorageLease, path: string) =>
     cachedRead(
@@ -312,12 +317,16 @@ export function createHomeQueries(session: HomeSession) {
       if (!session.current(owner) || !session.owns(lease.accountId)) return;
       if (version !== session.versionOf(key)) return;
       const { accountId } = lease,
+        removed = forgotten.get(path),
         row = { version: 1, accountId, path, groupId: null, refreshedAt, value };
       await rows.save(accountId, path, row).catch(() => {
         const { offline } = session.snapshot();
         if (session.current(owner))
           session.publish({ offline: { ...offline, message: notSavedHere } });
       });
+      // Removed while it was being written: it goes too, since `forget` never waits for it.
+      if (forgotten.get(path) !== removed)
+        await rows.remove(accountId, path).catch(() => session.distrust(accountId, [key[0]]));
     });
   };
   /**
@@ -527,12 +536,13 @@ export function createHomeQueries(session: HomeSession) {
   };
   /**
    * Removes these rows (both, unless named), inside a lease write: a lost Group, a shorter Groups
-   * list or a write (M2-2). The saved copy being written lands first, then goes; any still
-   * waiting is refused, since what made these obsolete has already moved their version.
+   * list or a write (M2-2). It never waits for the saved-copy queue, so a confirmed change never
+   * waits on a saved copy: one being written goes once it lands (`saveRow`), and any still waiting
+   * is refused, since what made these obsolete has already moved their version.
    */
   const forget = async (accountId: string, paths = [listPath, homePath]) => {
     if (!rows) return;
-    await queue.idle();
+    for (const path of paths) forgotten.set(path, (forgotten.get(path) ?? 0) + 1);
     for (const path of paths) await rows.remove(accountId, path);
   };
   /** Home's Expense drafts (`draftSummaries`), read from this device whenever Home settles. */
@@ -690,13 +700,19 @@ export function createHomeQueries(session: HomeSession) {
         focus.subscribe((focused) => focused && client.getQueryCache().onFocus()),
         online.subscribe((connected) => connected && client.getQueryCache().onOnline()),
       ];
-      if (netInfo)
+      const own = {};
+      if (netInfo) {
+        wired.set(online, own);
         online.setEventListener((setOnline) =>
           netInfo.addEventListener(({ isConnected }) => setOnline(isConnected !== false)),
         );
+      }
       return () => {
         stops.forEach((stopListening) => stopListening());
-        if (netInfo) online.setEventListener(() => undefined);
+        // Only its own: a newer controller's NetInfo stays wired.
+        if (wired.get(online) !== own) return;
+        wired.delete(online);
+        online.setEventListener(() => undefined);
       };
     },
     /** Settles once no saved copy is being written. */
