@@ -47,6 +47,7 @@ import { SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
 import { ExpenseEditor } from './src/ui/expense-editor';
+import { recordOutline } from './src/ui/expense-record-view';
 import { RefreshStatus, RetainedNotice } from './src/ui/financial-views';
 import { GroupExpensesView } from './src/ui/group-expenses';
 import { TripStrip } from './src/ui/trip-strip';
@@ -915,10 +916,17 @@ function MembersScreen({ state }: { state: MobileSnapshot }) {
 
 /** Adding, editing or reviewing an Expense: a full-screen task without the Group's navigation. */
 function ExpenseScreen({ state }: { state: MobileSnapshot }) {
+  // The list row an Expense opens from already says much of what its record shows.
+  const { requestedExpenseId, groupId } = state.expense;
+  const row =
+    requestedExpenseId && state.financial.groupId === groupId
+      ? state.financial.expenses.data.find((expense) => expense.id === requestedExpenseId)
+      : undefined;
   return (
     <ExpenseEditor
       state={state.expense}
       currentUserId={state.auth.user?.id}
+      outline={row ? recordOutline(row, state.auth.user?.id) : null}
       notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
       offline={state.offline.active}
       onClose={() => void controller.back()}

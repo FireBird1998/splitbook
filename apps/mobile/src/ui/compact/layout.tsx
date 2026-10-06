@@ -360,6 +360,46 @@ export function SkeletonText({
   );
 }
 
+/**
+ * A placeholder exactly the size of content whose value is already known, such as a list row's
+ * amount on the record it opens: the content is laid out but unseen, so it takes its real
+ * width, wraps where it would, and the row around it wraps where it would; a breathing block
+ * sits over it. `bar` draws a text's bar, inset from its line's top and bottom, instead of a
+ * block over the whole box. Hidden from screen readers.
+ */
+export function SkeletonOf({
+  children,
+  bar = false,
+  rounded = 6,
+  align = 'flex-start',
+}: {
+  children: ReactNode;
+  bar?: boolean;
+  rounded?: number;
+  /** How it sits across its parent: at the start, as text in a column, or centred in a row. */
+  align?: 'flex-start' | 'center';
+}) {
+  const theme = useTheme();
+  const opacity = usePulse();
+  return (
+    <View {...hiddenFromReaders} style={{ alignSelf: align, maxWidth: '100%' }}>
+      <View style={{ opacity: 0 }}>{children}</View>
+      <Animated.View
+        style={{
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: bar ? '18%' : 0,
+          bottom: bar ? '18%' : 0,
+          borderRadius: rounded,
+          backgroundColor: theme.border,
+          opacity,
+        }}
+      />
+    </View>
+  );
+}
+
 /** Rows with a list row's exact box, as `ListRow` and the day headings above them lay out. */
 function SkeletonList({
   rows = 3,

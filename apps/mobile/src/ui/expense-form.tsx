@@ -311,6 +311,9 @@ export function ExpenseTiles({
  * "Who owes what": each person's paid amount and share, an "Adds up" badge and the totals.
  * With more than four people it shows three and "Show all".
  */
+/** Under an equal split whose shares differ by the smallest unit. */
+export const sharesDifferNote = 'Shares differ by the smallest unit so the whole amount is shared.';
+
 export function WhoOwesWhat({
   draft,
   allocation,
@@ -505,7 +508,7 @@ export function WhoOwesWhat({
           )}
           {rounded ? (
             <CompactText variant="caption" tone="secondary">
-              Shares differ by the smallest unit so the whole amount is shared.
+              {sharesDifferNote}
             </CompactText>
           ) : null}
         </View>

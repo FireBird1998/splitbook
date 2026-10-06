@@ -1,4 +1,5 @@
 import type { ReactTestRendererJSON } from 'react-test-renderer';
+import { scaledSp } from '../ui/compact/scale';
 
 type Node = ReactTestRendererJSON;
 type Style = Record<string, unknown>;
@@ -7,7 +8,8 @@ type Style = Record<string, unknown>;
  * How tall a rendered host tree lays out, worked out from its styles as Yoga stacks boxes:
  * fixed heights, minimum heights, padding, borders, margins and gaps, columns summed and rows
  * taking their tallest child. A line of text is its line height, which Android scales with the
- * text size (`fontScale`); an icon is its size. Absolutely positioned children take no room.
+ * text size (`fontScale`) by its non-linear curves (`scaledSp`); an icon is its size. Absolutely
+ * positioned children take no room. Calibrated against an emulator at 100% and at 130% (#331).
  *
  * Without a `width`, text is one line and rows never wrap. Given the width the tree lays out
  * in, text wraps onto as many lines as its estimated width needs (up to `numberOfLines`), and a
@@ -39,7 +41,7 @@ export function layoutHeight(node: Node | string | null, fontScale = 1, width?: 
       const room = width === undefined ? 0 : width - horizontal(style);
       const needed = room > 0 ? Math.max(1, Math.ceil(textWidth(node, fontScale) / room)) : 1;
       const limit = Number(node.props.numberOfLines) || Infinity;
-      return box(number(style.lineHeight) * fontScale * Math.min(needed, limit));
+      return box(scaledSp(number(style.lineHeight), fontScale) * Math.min(needed, limit));
     }
     case 'Ionicons':
       return box(number(node.props.size));
@@ -157,14 +159,33 @@ const inFlow = (node: Node) =>
   );
 
 /**
- * One line of a text node's characters, estimated: IBM Plex Mono's advance is 0.6 of the font
- * size; Outfit's is taken as 0.55. Letter spacing adds to each character.
+ * Outfit's advance, as a fraction of the font size, by kind of character. Fitted to seven texts
+ * measured on an emulator at 100% and 130% (#331), each within 3.5%: "0 expenses this month"
+ * at 130% measured 171.0dp (this gives 171.3), "Updated 3:22 AM" at 100% 92.2dp (92.2), "QA U1
+ * rerun 3 e" as a 130% heading 141.0dp (141.4); and "Shares differ by the smallest unit so the
+ * whole amount is shared." fits a 349dp line at 100%, as it did there.
+ */
+function outfitAdvance(character: string) {
+  if ('iljtfr'.includes(character)) return 0.22;
+  if ('mw'.includes(character)) return 0.8;
+  if (/[a-z]/.test(character)) return 0.55;
+  if (/[A-Z]/.test(character)) return 0.72;
+  if (/[0-9]/.test(character)) return 0.6;
+  return 0.25;
+}
+
+/**
+ * One line of a text node's characters, estimated: IBM Plex Mono's advance is exactly 0.6 of
+ * the font size; Outfit's comes from `outfitAdvance`. Letter spacing adds to each character.
  */
 function textWidth(node: Node, fontScale: number) {
   const style = flatten(node.props.style);
-  const advance = String(style.fontFamily ?? '').includes('Mono') ? 0.6 : 0.55;
-  return (
-    text(node).length * (number(style.fontSize) * fontScale * advance + number(style.letterSpacing))
+  const size = scaledSp(number(style.fontSize), fontScale);
+  const mono = String(style.fontFamily ?? '').includes('Mono');
+  return [...text(node)].reduce(
+    (width, character) =>
+      width + size * (mono ? 0.6 : outfitAdvance(character)) + number(style.letterSpacing),
+    0,
   );
 }
 

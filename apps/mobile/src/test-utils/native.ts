@@ -186,7 +186,8 @@ export const reactNative = {
   Modal: 'Modal',
   // Hands its config straight through as the handlers, so a test can drive a drag.
   PanResponder: { create: (config: object) => ({ panHandlers: config }) },
-  Platform: { OS: 'android' },
+  // Android 15: text scales by Android 14's non-linear curves.
+  Platform: { OS: 'android', Version: 35 },
   Pressable: 'Pressable',
   RefreshControl: 'RefreshControl',
   ScrollView: 'ScrollView',

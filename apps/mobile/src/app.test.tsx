@@ -312,6 +312,7 @@ async function renderApp() {
     ).length;
   return {
     ...harness,
+    root,
     text,
     pressable,
     refreshControl,
@@ -930,6 +931,36 @@ describe('App return from an Expense', () => {
     await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
     expect(app.text()).not.toContain('Draft: Kept for later');
     expect(app.pressable('Add expense').props.accessibilityRole).toBe('button');
+  });
+
+  // #331: the record's skeleton takes the shape of what the list row already says about it.
+  it('opens an Expense from its row over a skeleton of that record', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    const read = hold();
+    app.use((path) =>
+      path === `/api/groups/${groupId}/expenses/${september._id}` ? read.respond() : undefined,
+    );
+    await app.press('September groceries');
+    await read.reached;
+    const opening = app
+      .root()
+      .findAll(
+        (node) =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityLabel === 'Opening this Expense…',
+      );
+    expect(opening).toHaveLength(1);
+    const laidOut = opening[0]
+      .findAll((node) => (node.type as unknown) === 'Text')
+      .flatMap((node) => node.children.filter((child) => typeof child === 'string'));
+    // Its texts are laid out, unseen, under the skeleton: the row's, not a stand-in's.
+    expect(laidOut).toContain('September groceries');
+    expect(laidOut).toContain('₹10.00');
+    expect(opening[0].props.accessibilityState).toEqual({ busy: true });
+    read.release(json({ status: 200, data: { ...september, revision: 0, isDeleted: false } }));
+    await settle();
+    expect(app.text()).toContain('You paid your share');
   });
 
   it('the top-bar back arrow names the Group it returns to', async () => {

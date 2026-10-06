@@ -3,6 +3,7 @@ import {
   ExpenseRecordScreen,
   ExpenseRecordSkeleton,
   ExpenseRecordView,
+  type RecordOutline,
 } from './expense-record-view';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-native';
@@ -171,6 +172,7 @@ function ExpenseTask({
   onReveal,
   onLoadOlderHistory,
   onRetryHistory,
+  outline,
 }: {
   state: Editor;
   /** Shown as "You" in the form. */
@@ -202,6 +204,8 @@ function ExpenseTask({
   /** The saved record's older changes, and another read of its changes after a failure. */
   onLoadOlderHistory?: () => void;
   onRetryHistory?: () => void;
+  /** What the list row an Expense opens from already says, so its skeleton takes its shape. */
+  outline?: RecordOutline | null;
 }) {
   const theme = useTheme();
   const [editor, setEditor] = useState<'payers' | null>(null);
@@ -342,7 +346,7 @@ function ExpenseTask({
   if (state.status === 'loading')
     return frame(
       opening ? (
-        <ExpenseRecordSkeleton label="Opening this Expense…" />
+        <ExpenseRecordSkeleton label="Opening this Expense…" outline={outline} />
       ) : (
         <Loading label={requested ? 'Opening this Expense…' : 'Opening your draft…'} />
       ),

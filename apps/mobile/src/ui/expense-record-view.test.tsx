@@ -6,6 +6,8 @@ import { createMobileController, type MobileController } from '../data/mobile-co
 import type { FetchResponse, MobileFetch } from '../data/types';
 import { clockTime } from './activity-format';
 import { ExpenseEditor } from './expense-editor';
+import { recordOutline, type RecordOutline } from './expense-record-view';
+import { parseExpensePage } from '../data/financial-dto';
 import { fonts } from './theme';
 import { motion } from './compact';
 import { findHosts, flatten, layoutHeight } from '../test-utils/layout';
@@ -26,6 +28,8 @@ const ids = {
   historical: 'b00000000000000000000004',
   weekly: 'b00000000000000000000005',
   taxi: 'b00000000000000000000006',
+  tea: 'b00000000000000000000007',
+  rerun: 'b00000000000000000000008',
 };
 const iso = '2026-09-29T14:32:00.000Z';
 const group = {
@@ -114,6 +118,28 @@ const records: Record<string, Record<string, unknown>> = {
     paidBy: [row(alex, 150000)],
     splitBetween: [row(alex, 50000), row(sam, 50000), row(priya, 50000)],
     createdBy: alex.id,
+  }),
+  // As two records on an emulator measured them (#331): three people whose equal shares differ
+  // by a paisa, and two people with a short amount.
+  [ids.tea]: expense(ids.tea, {
+    description: 'Tea stall',
+    amount: 100,
+    amountMinor: 10000,
+    paidBy: [row(alex, 10000)],
+    splitBetween: [row(alex, 3334), row(sam, 3333), row(priya, 3333)],
+    createdBy: alex.id,
+  }),
+  [ids.rerun]: expense(ids.rerun, {
+    description: 'QA U1 rerun 3 e',
+    amount: 10,
+    amountMinor: 1000,
+    date: '2026-10-06T06:30:00.000Z',
+    tag: 'General',
+    tagId: 'c00000000000000000000099',
+    paidBy: [row(alex, 1000)],
+    splitBetween: [row(alex, 500), row(sam, 500)],
+    createdBy: alex.id,
+    updatedAt: '2026-10-06T18:40:00.000Z',
   }),
   [ids.weekly]: expense(ids.weekly, {
     description: 'Weekly groceries',
@@ -744,18 +770,13 @@ describe('compact Expense record', () => {
 
 // #331: the record opens over a skeleton of its own shape, then fades in where it was.
 describe('compact Expense record, opening', () => {
-  /** The first card in the scrolling content: the record's summary, or its skeleton. */
-  const summaryCard = () => {
-    const [content] = findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView');
-    const [card] = findHosts(content, (props) => {
-      const style = flatten(props.style);
-      return style.borderRadius === 14 && style.overflow === 'hidden';
-    });
-    return card;
-  };
-  const editor = (state: Parameters<typeof ExpenseEditor>[0]['state']) => (
+  const editor = (
+    state: Parameters<typeof ExpenseEditor>[0]['state'],
+    outline: RecordOutline | null = null,
+  ) => (
     <ExpenseEditor
       state={state}
+      outline={outline}
       currentUserId={alex.id}
       onChange={() => undefined}
       onLeaveField={() => undefined}
@@ -778,35 +799,104 @@ describe('compact Expense record, opening', () => {
     requestedExpenseId: ids.dinner,
   });
 
-  // The amount and its badge share a wrapping row: on a 360dp phone this one's don't fit on one
-  // line even at 100% text, on a 412dp phone they do until 130%. The skeleton stacks to match.
+  /** The record's cards in the scrolling content, in order: summary, Who owes what, … */
+  const cards = () => {
+    const [content] = findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView');
+    return findHosts(content, (props) => {
+      const style = flatten(props.style);
+      return style.borderRadius === 14 && style.overflow === 'hidden';
+    });
+  };
+  /** What the Expenses list holds for this Expense: its row, as the list reads it. */
+  const listRow = (id: string) =>
+    parseExpensePage(
+      {
+        status: 200,
+        data: {
+          expenses: [records[id]],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+          summary: {
+            count: 1,
+            totalsByCurrency: [],
+            userOwes: 0,
+            userGetsBack: 0,
+            byMember: [],
+          },
+        },
+      },
+      groupId,
+      'INR',
+    ).expenses[0]!;
+  /** The heights of the summary and Who owes what, and how many cards come before History. */
+  const shape = (room: number, fontScale: number) => {
+    const [summary, owes, ...rest] = cards();
+    return {
+      summary: layoutHeight(summary!, fontScale, room),
+      owes: layoutHeight(owes!, fontScale, room),
+      before: rest.length,
+    };
+  };
+
+  // On an emulator (#331): "Tea stall", three people whose equal shares differ by a paisa, at
+  // 100% on its 411dp screen; "QA U1 rerun 3 e", two people, at 360dp and 130%. The estimate
+  // the skeleton tests rely on has to agree with what that device drew.
+  it('lays out as an emulator drew it, at 100% and at 130% text', async () => {
+    setWindow({ width: 411, fontScale: 1 });
+    await render(open(ids.tea));
+    expect(text(screen!.root)).toContain('Shares differ by the smallest unit');
+    const normal = shape(411 - 32, 1);
+    expect(Math.abs(normal.summary - 118.5)).toBeLessThanOrEqual(1);
+    expect(Math.abs(normal.owes - 245)).toBeLessThanOrEqual(1);
+    act(() => screen?.unmount());
+    setWindow({ width: 360, fontScale: 1.3 });
+    await render(open(ids.rerun));
+    const large = shape(360 - 32, 1.3);
+    expect(Math.abs(large.summary - 125.5)).toBeLessThanOrEqual(1);
+    // Its amounts sit on baselines under each name, which this estimate doesn't model.
+    expect(Math.abs(large.owes - 173)).toBeLessThan(4);
+  });
+
+  // The record's skeleton, from the row the Expense opened from, takes the record's place:
+  // History, after the summary and Who owes what, starts where it will stay.
   it.each([
-    [360, 1, 'wraps'],
-    [360, 1.3, 'wraps'],
-    [412, 1, 'fits'],
-    [412, 1.3, 'wraps'],
+    ['Tea stall', 411, 1, ids.tea],
+    ['Tea stall', 360, 1.3, ids.tea],
+    ['QA U1 rerun 3 e', 411, 1, ids.rerun],
+    ['QA U1 rerun 3 e', 360, 1.3, ids.rerun],
+    ['Electricity bill', 360, 1, ids.bill],
+    ['Electricity bill', 360, 1.3, ids.bill],
   ] as const)(
-    'its summary takes the place of the skeleton’s at the same height, %sdp wide at %s× text (%s)',
-    async (width, fontScale, row) => {
+    '%s takes its skeleton’s place, %sdp wide at %s× text',
+    async (_name, width, fontScale, id) => {
       setWindow({ width, fontScale });
-      // The card's width: the screen less the scrolling content's 16 each side.
-      const card = width - 32;
+      const room = width - 32;
       await act(async () => {
-        screen = create(opening);
+        screen = create(
+          editor(
+            {
+              ...emptyExpenseEditor(),
+              status: 'loading',
+              requestedExpenseId: id,
+            },
+            recordOutline(listRow(id), alex.id),
+          ),
+        );
       });
-      const skeleton = layoutHeight(summaryCard(), fontScale, card);
+      const skeleton = shape(room, fontScale);
       act(() => screen?.unmount());
-      await render(open(ids.dinner));
-      expect(text(screen!.root)).toContain('Sunday dinner');
-      // The fixture's amount and badge do wrap where the case says, so the comparison means it.
-      expect(layoutHeight(summaryCard(), fontScale, card) - layoutHeight(summaryCard(), fontScale))[
-        row === 'wraps' ? 'toBeGreaterThan' : 'toBe'
-      ](0);
-      expect(skeleton).toBeGreaterThan(100);
-      expect(layoutHeight(summaryCard(), fontScale, card)).toBe(skeleton);
+      await render(open(id));
+      expect(shape(room, fontScale)).toEqual(skeleton);
     },
   );
 
+  it('without a list row, stands in a typical record: two people, both History times', async () => {
+    await act(async () => {
+      screen = create(opening);
+    });
+    const [, owes, history] = cards();
+    expect(findHosts(owes!, (props) => flatten(props.style).minHeight === 48)).toHaveLength(2);
+    expect(findHosts(history!, (props) => flatten(props.style).minHeight === 60)).toHaveLength(2);
+  });
   // Discarding an unconfirmed edit takes the form through loading and back to the form: that
   // isn't a record opening, so it shows the spinner it always did, and nothing fades.
   it('keeps the spinner, not the record’s skeleton, while a form briefly loads', async () => {
