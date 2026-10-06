@@ -5,13 +5,14 @@
 
 import { config } from 'dotenv';
 import { resolve } from 'path';
+import type { SeedResult } from '../src/lib/demo/seed';
 
 config({ path: resolve(process.cwd(), '.env.local') });
 
 async function main() {
   const { resetDemoData, disconnectDemoDb } = await import('../src/lib/demo/seed');
 
-  console.log('Resetting demo data (wipe trip + reseed)…');
+  console.log('Resetting demo data (wipe the demo Groups + reseed)…');
   console.log(`MONGODB_URI database: ${summarizeUri(process.env.MONGODB_URI)}`);
 
   try {
@@ -23,8 +24,28 @@ async function main() {
     console.log(`  tags ensured:         ${result.tagsEnsured}`);
     console.log(`  expenses created:     ${result.expensesCreated}`);
     console.log(`  settlements created:  ${result.settlementsCreated}`);
+    printDemoGroups(result);
   } finally {
     await disconnectDemoDb();
+  }
+}
+
+function printDemoGroups(result: SeedResult): void {
+  console.log(`  recurring Expenses:   ${result.recurringExpenses}`);
+  for (const group of result.demoGroups) {
+    console.log(
+      `  ${group.name}: ${group.groupCreated ? 'created' : 'already there'}, ` +
+        `${group.expensesCreated} expenses (${group.expensesEdited} edited, ` +
+        `${group.expensesDeleted} deleted), ${group.recurringTemplatesCreated} recurring templates, ` +
+        `${group.settlementsCreated} settlements, ${group.invitationsCreated} invitations` +
+        (group.skippedTransactions ? ' (ledger already present — skipped)' : ''),
+    );
+  }
+  if (result.recurringExpenses === 'off') {
+    console.log(
+      '  Recurring Expenses are off, so the Household’s monthly bills were entered by hand.\n' +
+        '  For templates, set RECURRING_EXPENSES_ENABLED=true and run pnpm web demo:reset.',
+    );
   }
 }
 

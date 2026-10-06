@@ -54,8 +54,11 @@ without I/O:
 - **Demo personas** (`lib/demo-personas.ts`, `lib/auth/demo-persona-plugin.ts`) —
   lookup normalisation, and the plugin end to end on the memory adapter:
   absent outside demo mode, unknown/unseeded personas, session cookie.
-- **Seed plan invariants** (`demo/seed-plan.ts`) — idempotency decision,
-  members/tags/currency consistency of the seeded trip.
+- **Seed plan invariants** (`demo/seed-plan.ts`, `demo/groups-plan.ts`) — idempotency
+  decision, members/tags/currency consistency of the seeded trip; for the demo Groups
+  (#302): six-plus months of Household history on any run date, recurring Months, the
+  six-day Trip, one currency per Group, each persona's Home, and the balances every run
+  date settles on.
 - **Settlement authorization** (`utils/settlement-authorization.ts`) — only
   the payer or recipient may record a settlement.
 
@@ -84,6 +87,10 @@ through the actual service layer (no mocked models):
   (only the invited email may accept/decline), expiry, duplicates.
 - `demo/seed.integration.test.ts` — end-to-end seed idempotency, reset, and
   the exact persona balances the private-beta UI promises.
+- `demo/seed-groups.integration.test.ts` — the demo Groups beside the trip
+  (#302): one currency per Group, the Household's history, edits, deletion and
+  recurring Months, the same ledger with recurring Expenses on or off, the same
+  data after a reset, and a reset that removes only what the seed created.
 - `auth/migrate-auth.integration.test.ts` — the Auth.js → Better Auth data
   migration (`pnpm web migrate:auth`): forward run, idempotent re-run, dry
   run, a database without the legacy index, and `--revert`.
@@ -163,8 +170,8 @@ Configured in [`playwright.config.ts`](../apps/web/playwright.config.ts); specs 
 helpers live in [`playwright/`](../apps/web/playwright/).
 
 - The app runs on **port 3100** with `AUTH_MODE=demo`; global setup resets
-  and reseeds the `splitbook-demo` database (`pnpm web demo:reset`) so every run
-  starts from the known seeded state.
+  and reseeds the `splitbook-demo` database (`pnpm web demo:reset`, with recurring
+  Expenses switched on for the seed) so every run starts from the known seeded state.
 - **Journeys** (`demo-journeys.spec.ts`, serial): Alex enters and inspects
   her seeded balance (exact amounts asserted once, on desktop-light, before
   any mutation), creates a trip, adds and edits an expense; Sam switches in

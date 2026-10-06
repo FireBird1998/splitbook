@@ -10,7 +10,9 @@ import Group from '@/lib/models/Group';
 import Expense from '@/lib/models/Expense';
 import Settlement from '@/lib/models/Settlement';
 import Activity from '@/lib/models/Activity';
-import { DEMO_PERSONAS, DEMO_GROUP_ID } from '@/lib/demo-personas';
+import RecurringExpense from '@/lib/models/RecurringExpense';
+import Invitation from '@/lib/models/Invitation';
+import { DEMO_PERSONAS, DEMO_SEEDED_GROUP_IDS } from '@/lib/demo-personas';
 import { expenseService } from '@/lib/services/expense.service';
 import { settlementService } from '@/lib/services/settlement.service';
 import { activityService } from '@/lib/services/activity.service';
@@ -20,6 +22,9 @@ import {
   shouldInsertTripTransactions,
   type DemoSeedPlan,
 } from '@/lib/demo/seed-plan';
+import { buildDemoGroupsPlan } from '@/lib/demo/groups-plan';
+import { seedDemoGroup, type DemoGroupSeedResult } from '@/lib/demo/seed-groups';
+import { recurringExpensesEnabled } from '@/lib/recurring-expenses-switch';
 
 export interface SeedResult {
   usersUpserted: number;
@@ -29,6 +34,13 @@ export interface SeedResult {
   expensesCreated: number;
   settlementsCreated: number;
   skippedTransactions: boolean;
+  /**
+   * The recurring Expenses switch (#289) while seeding: on, the Household's monthly bills
+   * are templates; off, the same bills are entered by hand.
+   */
+  recurringExpenses: 'on' | 'off';
+  /** The Groups seeded beside the Goa trip (#302); the fields above describe the trip. */
+  demoGroups: DemoGroupSeedResult[];
 }
 
 async function upsertDemoUsers(): Promise<number> {
@@ -192,8 +204,9 @@ async function insertTripTransactions(plan: DemoSeedPlan): Promise<{
 }
 
 /**
- * Idempotent seed: upserts personas + ensures one demo trip.
- * Re-running does not duplicate expenses or settlements.
+ * Idempotent seed: upserts personas, ensures the Goa trip, then the demo Groups beside it
+ * (a Household, a week-long Trip and a Work Group, #302).
+ * Re-running does not duplicate expenses, settlements, templates or invitations.
  */
 export async function seedDemoData(): Promise<SeedResult> {
   await connectDB();
@@ -225,6 +238,12 @@ export async function seedDemoData(): Promise<SeedResult> {
     skippedTransactions = true;
   }
 
+  const recurringOn = recurringExpensesEnabled();
+  const demoGroups: DemoGroupSeedResult[] = [];
+  for (const groupPlan of buildDemoGroupsPlan(new Date())) {
+    demoGroups.push(await seedDemoGroup(groupPlan, recurringOn));
+  }
+
   return {
     usersUpserted,
     groupCreated,
@@ -233,20 +252,26 @@ export async function seedDemoData(): Promise<SeedResult> {
     expensesCreated,
     settlementsCreated,
     skippedTransactions,
+    recurringExpenses: recurringOn ? 'on' : 'off',
+    demoGroups,
   };
 }
 
 /**
- * Wipe demo trip data (and optionally users), then reseed.
+ * Wipe every Group the seed creates, with everything recorded in them, then reseed.
+ * Other Groups, and the persona users, are left alone.
  */
 export async function resetDemoData(): Promise<SeedResult> {
   await connectDB();
 
+  const inSeededGroups = { group: { $in: [...DEMO_SEEDED_GROUP_IDS] } };
   await Promise.all([
-    Expense.deleteMany({ group: DEMO_GROUP_ID }),
-    Settlement.deleteMany({ group: DEMO_GROUP_ID }),
-    Activity.deleteMany({ group: DEMO_GROUP_ID }),
-    Group.deleteOne({ _id: DEMO_GROUP_ID }),
+    Expense.deleteMany(inSeededGroups),
+    Settlement.deleteMany(inSeededGroups),
+    Activity.deleteMany(inSeededGroups),
+    RecurringExpense.deleteMany(inSeededGroups),
+    Invitation.deleteMany(inSeededGroups),
+    Group.deleteMany({ _id: { $in: [...DEMO_SEEDED_GROUP_IDS] } }),
   ]);
 
   // Keep persona user docs; seed upserts them again.

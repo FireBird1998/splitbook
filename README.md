@@ -91,12 +91,20 @@ Demo mode uses real Better Auth sessions with three fixed seeded personas (Alex,
    AUTH_MODE=demo
    ```
 
-2. Seed (or reset) the trip:
+2. Seed (or reset) the demo Groups:
 
    ```bash
    pnpm web demo:seed    # idempotent — safe to re-run
-   pnpm web demo:reset   # wipe demo trip data, then reseed
+   pnpm web demo:reset   # wipe the demo Groups, then reseed
    ```
+
+   The seed holds four fictional Groups: the **Goa Friends Trip**, the **Banyan Court Flat 4B**
+   Household (seven months of rent, bills and groceries, with edits, a deletion and payments),
+   the six-day **Kochi to Alleppey** Trip with payments left to settle, and the settled
+   **Studio Lunch Club** (Work, Alex and Sam), which Alex has invited Priya to join. Dates
+   count back from the day you seed. With `RECURRING_EXPENSES_ENABLED=true` the Household's
+   rent and broadband are recurring templates; switched off, the same bills are entered by
+   hand, so every balance is the same either way.
 
 3. Run the app (`pnpm dev`) and open `/`. Pick **Alex** (organizer), **Sam**, or **Priya**.
 
@@ -149,8 +157,8 @@ setup steps and a non-interactive smoke test (`pnpm web test:e2e:google`) are in
 | `pnpm typecheck`           | Run TypeScript without emitting files                     |
 | `pnpm format`              | Format code with Prettier                                 |
 | `pnpm format:check`        | Check formatting without writing                          |
-| `pnpm web demo:seed`       | Idempotently seed demo personas + Goa friends trip        |
-| `pnpm web demo:reset`      | Wipe demo trip data and reseed                            |
+| `pnpm web demo:seed`       | Idempotently seed demo personas + the four demo Groups    |
+| `pnpm web demo:reset`      | Wipe the demo Groups and reseed                           |
 | `pnpm web migrate:auth`    | Prepare an Auth.js-era database for Better Auth           |
 
 ## Testing
