@@ -584,7 +584,8 @@ describe('cold start (#127 decision): the saved Home while the session is checke
   it('replaces the saved Home with recovery when the session can’t be checked', async () => {
     const f = fixture();
     await previousSession(f);
-    f.state.session = 503;
+    // A 500, a server fault: an uncoded 503 now counts as can't reach the server (#231).
+    f.state.session = 500;
     const restarted = f.create();
     const published = record(restarted);
     await restarted.restore();

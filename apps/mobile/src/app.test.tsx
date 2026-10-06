@@ -383,7 +383,8 @@ describe('App refresh rendering', () => {
     await app.press('Open Maple House');
     const verifiedAt = refreshedLabel(app.clock.now);
     app.clock.now += 5 * 60_000;
-    app.use((path) => (path === `/api/groups/${groupId}` ? json({}, 503) : undefined));
+    // A 500, a server fault: an uncoded 503 now counts as can't reach the server (#231).
+    app.use((path) => (path === `/api/groups/${groupId}` ? json({}, 500) : undefined));
     await settle(Promise.resolve(app.refreshControl().onRefresh()));
 
     const retained = `The server could not complete this request. Please try again. Showing Maple House from ${verifiedAt}.`;

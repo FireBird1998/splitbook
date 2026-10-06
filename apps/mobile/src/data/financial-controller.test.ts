@@ -709,8 +709,9 @@ describe('stable financial refresh', () => {
 
   it('keeps Home figures and Groups with their original time when a background refresh fails', async () => {
     let failing = false;
+    // A 500, a server fault: an uncoded 503 now counts as can't reach the server (#231).
     const { controller, clock } = setup((path) =>
-      failing && path === '/api/user/balances' ? json({}, 503) : undefined,
+      failing && path === '/api/user/balances' ? json({}, 500) : undefined,
     );
     await controller.signIn('sam');
     const verifiedAt = clock.now;
@@ -908,8 +909,9 @@ describe('stable financial refresh', () => {
 
   it('keeps Group figures with their original time when the Group read fails', async () => {
     let failing = false;
+    // A 500, a server fault: an uncoded 503 now counts as can't reach the server (#231).
     const { controller, clock } = setup((path) =>
-      failing && path === `/api/groups/${groupId}` ? json({}, 503) : undefined,
+      failing && path === `/api/groups/${groupId}` ? json({}, 500) : undefined,
     );
     await controller.signIn('sam');
     await controller.openGroup(groupId);

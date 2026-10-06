@@ -288,7 +288,8 @@ describe('rendered refresh feedback', () => {
     await controller.openGroup(groupId);
     const verifiedAt = refreshedLabel(clock.now);
     clock.now += 5 * 60_000;
-    use((path) => (path.includes('/expenses?') ? json({}, 503) : undefined));
+    // A 500, a server fault: an uncoded 503 now counts as can't reach the server (#231).
+    use((path) => (path.includes('/expenses?') ? json({}, 500) : undefined));
     const root = await render(controller);
     await act(async () => {
       await controller.refresh();

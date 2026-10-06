@@ -8,6 +8,7 @@ import type { FetchResponse, MobileTimer } from '../data/types';
 export function hangUntilAborted(
   init: RequestInit,
   stage: 'headers' | 'body',
+  status = 200,
 ): Promise<FetchResponse> {
   const aborted = () =>
     new Promise<never>((_, reject) => {
@@ -17,8 +18,38 @@ export function hangUntilAborted(
     });
   return stage === 'headers'
     ? aborted()
-    : Promise.resolve({ ok: true, status: 200, headers: new Headers(), json: aborted });
+    : Promise.resolve({ ok: status < 300, status, headers: new Headers(), json: aborted });
 }
+
+/** A reply whose headers arrive, then whose body stops arriving, as when the connection drops. */
+export function bodyFails(): FetchResponse {
+  return {
+    ok: true,
+    status: 200,
+    headers: new Headers(),
+    json: () => Promise.reject(new TypeError('Network request failed')),
+  };
+}
+
+/**
+ * What a gateway in front of SplitBook answers with when it can't reach SplitBook: no body, a
+ * page of its own, or JSON without the `code` every SplitBook error carries.
+ */
+export const gatewayBodies = {
+  empty: '',
+  HTML: '<html><body><h1>The upstream server is unavailable.</h1></body></html>',
+  'uncoded JSON': '{"error":"Upstream unavailable"}',
+};
+export type GatewayBody = keyof typeof gatewayBodies;
+
+/** A gateway's 502, 503 or 504, with one of its bodies. */
+export const gatewayReply = (status: number, body: GatewayBody = 'HTML') =>
+  new Response(gatewayBodies[body] || null, { status });
+
+/** Every gateway status with every gateway body, for `it.each`. */
+export const gatewayFailures = [502, 503, 504].flatMap((status) =>
+  (Object.keys(gatewayBodies) as GatewayBody[]).map((body) => [status, body] as const),
+);
 
 /** A timer the test runs by hand: `elapse(ms)` runs every pending timer of that length. */
 export function manualTimer() {

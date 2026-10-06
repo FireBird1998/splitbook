@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { hangUntilAborted, manualTimer, within } from '../test-utils/transport-faults';
+import {
+  bodyFails,
+  gatewayFailures,
+  gatewayReply,
+  hangUntilAborted,
+  manualTimer,
+  within,
+} from '../test-utils/transport-faults';
 import { createTransport, RequestError, Superseded } from './transport';
 import type { FetchResponse } from './types';
 
@@ -106,12 +113,10 @@ describe('a caller’s own cancel', () => {
     expect(t.started).toEqual([]);
   });
 
-  it.each([
-    ['headers', true],
-    ['body', false],
-  ] as const)(
-    'keeps today’s timeout while waiting for the %s, even when the caller aborts after it',
-    async (stage, networkFailure) => {
+  // #231: a timeout after the headers counts as can't reach the server too.
+  it.each(['headers', 'body'] as const)(
+    'times out as can’t reach the server while waiting for the %s, even when the caller aborts after it',
+    async (stage) => {
       const t = setup((init) => hangUntilAborted(init, stage));
       const caller = new AbortController();
       const error = caught(t.request(`/api/groups/${groupId}`, 1, { signal: caller.signal }));
@@ -124,7 +129,7 @@ describe('a caller’s own cancel', () => {
         message: unreachable,
         status: 0,
         code: null,
-        networkFailure,
+        networkFailure: true,
       });
     },
   );
@@ -157,6 +162,54 @@ describe('a caller’s own cancel', () => {
     caller.abort();
     expect(t.sent).toEqual([`GET /api/groups/${groupId}`]);
   });
+
+  it('ends as cancelled, never as can’t reach the server, when the caller aborts while a gateway’s 502 body is read (#231)', async () => {
+    const t = setup((init) => hangUntilAborted(init, 'body', 502));
+    const caller = new AbortController();
+    const error = caught(t.request(`/api/groups/${groupId}`, 1, { signal: caller.signal }));
+    await vi.waitFor(() => expect(t.sent).toHaveLength(1));
+    caller.abort();
+    expect(await within(error)).toMatchObject({ kind: 'cancelled', networkFailure: false });
+    expect(t.sent).toHaveLength(1);
+  });
+
+  it.each([
+    [500, `/api/groups/${groupId}/expenses`, []],
+    // Its code is in the body the caller cancelled, so it is never read.
+    [503, `/api/groups/${groupId}/expenses`, []],
+    [429, `/api/groups/${groupId}/expenses`, []],
+    // The headers already said denied, so the Group is still purged first.
+    [403, `/api/groups/${groupId}/expenses`, [`denied: ${groupId} 403`]],
+  ])(
+    'ends a %i as cancelled when the caller aborts while its body is read',
+    async (status, path, hooks) => {
+      let reading = false;
+      const t = setup((init) =>
+        hangUntilAborted(init, 'body', status).then((response) => ({
+          ...response,
+          json: () => {
+            reading = true;
+            return response.json();
+          },
+        })),
+      );
+      const caller = new AbortController();
+      const error = caught(t.request(path, 1, { signal: caller.signal }));
+      await vi.waitFor(() => expect(reading).toBe(true));
+      caller.abort();
+      const cancelled = await within(error);
+      expect(cancelled).toBeInstanceOf(RequestError);
+      expect(cancelled).toMatchObject({
+        kind: 'cancelled',
+        networkFailure: false,
+        status: 0,
+        code: null,
+        serverMessage: null,
+      });
+      expect(t.hooks).toEqual(hooks);
+      expect(t.sent).toHaveLength(1);
+    },
+  );
 });
 
 describe('failure kinds (#208)', () => {
@@ -172,9 +225,7 @@ describe('failure kinds (#208)', () => {
     [428, 'REVISION_REQUIRED', 'rejected', incomplete],
     [429, null, 'server-error', 'Too many attempts. Wait a moment and try again.'],
     [500, null, 'server-error', incomplete],
-    [502, null, 'server-error', incomplete],
     [503, 'ACTIVITY_BACKLOG_FULL', 'server-error', incomplete],
-    [504, null, 'server-error', incomplete],
   ])(
     'gives a %i (%s) the %s kind, with today’s message, status and code',
     async (status, code, kind, message) => {
@@ -219,6 +270,38 @@ describe('failure kinds (#208)', () => {
       status: 0,
       networkFailure: false,
     });
+  });
+
+  it.each(gatewayFailures)(
+    'gives a gateway’s %i with a body that is %s the network kind, with no status or code (#231)',
+    async (status, body) => {
+      const t = setup(async () => gatewayReply(status, body));
+      const error = await caught(
+        t.request(`/api/groups/${groupId}/expenses`, 1, { method: 'POST', body: {} }),
+      );
+      expect(error).toBeInstanceOf(RequestError);
+      expect(error).toMatchObject({
+        kind: 'network',
+        message: unreachable,
+        status: 0,
+        code: null,
+        networkFailure: true,
+        serverMessage: null,
+      });
+      expect(t.sent).toHaveLength(1);
+      expect(t.hooks).toEqual([]);
+    },
+  );
+
+  it('gives a body that stops arriving the network kind (#231)', async () => {
+    const t = setup(async () => bodyFails());
+    expect(await caught(t.request('/api/groups', 1))).toMatchObject({
+      kind: 'network',
+      message: unreachable,
+      status: 0,
+      networkFailure: true,
+    });
+    expect(t.sent).toHaveLength(1);
   });
 });
 
