@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { lostGroupId } from './group-access';
+import { changesAccountGroups, lostGroupId } from './group-access';
 
 const ACTOR = 'a00000000000000000000002';
 const LOST = 'b00000000000000000000001';
@@ -51,6 +51,37 @@ describe('lostGroupId: which refused read means the account lost a Group', () =>
     ['GET', `/api/groups/${LOST}0/expenses`, 403],
   ])('%s %s answered %i keeps the Group', (method, path, status) => {
     expect(lostGroupId(method, path, status)).toBeNull();
+  });
+});
+
+describe('changesAccountGroups: which answer refreshes the sidebar’s Groups and balances (#303)', () => {
+  it.each([
+    ['POST', '/api/groups', 201],
+    ['PATCH', `/api/groups/${KEPT}`, 200],
+    ['POST', `/api/groups/${KEPT}/expenses`, 201],
+    ['PUT', `/api/groups/${KEPT}/expenses/${EXPENSE}`, 200],
+    ['DELETE', `/api/groups/${KEPT}/expenses/${EXPENSE}`, 200],
+    ['POST', `/api/groups/${KEPT}/settlements`, 201],
+    ['DELETE', `/api/groups/${KEPT}/members/${ACTOR}`, 200],
+    ['POST', `/api/invitations/${EXPENSE}`, 200],
+    ['POST', '/api/join/synthetic-code', 200],
+  ])('%s %s answered %i does', (method, path, status) => {
+    expect(changesAccountGroups(method, path, status)).toBe(true);
+  });
+
+  it.each([
+    // Reads change nothing; their polls keep themselves current.
+    ['GET', `/api/groups/${KEPT}/expenses`, 200],
+    ['GET', '/api/user/balances', 200],
+    // Refused or failed writes change nothing.
+    ['POST', `/api/groups/${KEPT}/expenses`, 403],
+    ['POST', `/api/groups/${KEPT}/settlements`, 409],
+    ['PATCH', `/api/groups/${KEPT}`, 500],
+    // Not about Groups.
+    ['PATCH', '/api/user/profile', 200],
+    ['POST', '/api/groupsx', 200],
+  ])('%s %s answered %i does not', (method, path, status) => {
+    expect(changesAccountGroups(method, path, status)).toBe(false);
   });
 });
 

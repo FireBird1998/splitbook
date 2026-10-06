@@ -1,82 +1,152 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { NAV_HEIGHT, SIDEBAR_WIDTH, RADIUS } from '@/lib/theme/tokens';
 import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
-import DashboardIcon from '@mui/icons-material/Dashboard';
-import GroupIcon from '@mui/icons-material/Group';
-import SettingsIcon from '@mui/icons-material/Settings';
+import IconButton from '@mui/material/IconButton';
+import CloseIcon from '@mui/icons-material/Close';
+import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
+import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import BrandLogo from './BrandLogo';
+import AccountMenu, { type ShellUser } from './AccountMenu';
+import SidebarGroups from './SidebarGroups';
+import { HOME_HREF, MAIN_NAV, SETTINGS_HREF, navCurrent } from './shell-nav';
 
-const navItems = [
-  { href: '/dashboard', label: 'Dashboard', icon: DashboardIcon },
-  { href: '/groups', label: 'Groups', icon: GroupIcon },
-  { href: '/settings', label: 'Settings', icon: SettingsIcon },
-];
+const NAV_ICONS = { [HOME_HREF]: DashboardOutlinedIcon } as const;
 
-export default function Sidebar() {
-  const pathname = usePathname();
+/** A sidebar link (web.css: .nav-a): 44 px high, and tinted brand when it is the current page. */
+const navLinkSx = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 1.5,
+  minHeight: 44,
+  px: 1.5,
+  borderRadius: '10px',
+  color: 'text.secondary',
+  fontSize: '0.875rem',
+  fontWeight: 500,
+  textDecoration: 'none',
+  '&:hover': { bgcolor: 'surface.hover', color: 'text.primary' },
+  '&[aria-current="page"]': { bgcolor: 'tint.brand', color: 'primary.main', fontWeight: 600 },
+} as const;
+
+interface SidebarProps {
+  user: ShellUser & { id: string };
+  pathname: string;
+  /** The phone drawer's copy: a close button, and every target at least 44 px. */
+  variant?: 'desktop' | 'drawer';
+  /** Called as any link is followed, so the drawer closes on navigation. */
+  onNavigate?: () => void;
+  onClose?: () => void;
+}
+
+/**
+ * The shell's sidebar (design canvas "Web portal"): the logo linking Home, the main
+ * navigation, the member's Groups with their balances, and Settings and the account at the
+ * foot. The desktop sidebar and the phone drawer render the same items.
+ */
+export default function Sidebar({
+  user,
+  pathname,
+  variant = 'desktop',
+  onNavigate,
+  onClose,
+}: SidebarProps) {
+  const drawer = variant === 'drawer';
 
   return (
     <Box
-      component="aside"
       sx={{
-        display: { xs: 'none', lg: 'flex' },
+        display: 'flex',
         flexDirection: 'column',
-        width: SIDEBAR_WIDTH,
-        position: 'fixed',
-        top: NAV_HEIGHT,
-        bottom: 0,
-        borderRight: 1,
-        borderColor: 'divider',
-        bgcolor: 'background.paper',
-        p: 2,
-        pt: 3,
+        gap: '18px',
+        height: '100%',
+        minHeight: 0,
+        pt: 2,
+        px: 1.5,
+        pb: 3,
       }}
     >
-      <Stack component="nav" aria-label="Primary" spacing={0.5}>
-        {navItems.map((item) => {
-          const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
-          const Icon = item.icon;
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          pl: '10px',
+          pt: drawer ? 0 : 0.5,
+        }}
+      >
+        <BrandLogo
+          height={32}
+          href={HOME_HREF}
+          onClick={onNavigate}
+          linkSx={drawer ? { minHeight: 44, alignItems: 'center' } : undefined}
+        />
+        {drawer ? (
+          <IconButton
+            onClick={onClose}
+            aria-label="Close navigation menu"
+            sx={{ width: 44, height: 44, borderRadius: '12px', color: 'text.secondary' }}
+          >
+            <CloseIcon />
+          </IconButton>
+        ) : null}
+      </Box>
 
+      <Box
+        component="nav"
+        aria-label="Main"
+        sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}
+      >
+        {/* #317 adds Export here, after Home. */}
+        {MAIN_NAV.map((item) => {
+          const Icon = NAV_ICONS[item.href];
           return (
             <Box
               key={item.href}
               component={Link}
               href={item.href}
-              aria-current={isActive ? 'page' : undefined}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.5,
-                px: 2,
-                minHeight: 44,
-                borderRadius: `${RADIUS.sm}px`,
-                fontSize: '0.875rem',
-                fontWeight: isActive ? 600 : 500,
-                textDecoration: 'none',
-                transition: 'background-color 0.15s, color 0.15s',
-                ...(isActive
-                  ? {
-                      bgcolor: 'tint.brand',
-                      color: 'primary.main',
-                    }
-                  : {
-                      color: 'text.secondary',
-                      '&:hover': {
-                        bgcolor: 'action.hover',
-                        color: 'text.primary',
-                      },
-                    }),
-              }}
+              onClick={onNavigate}
+              aria-current={navCurrent(pathname, item.href)}
+              sx={navLinkSx}
             >
-              <Icon fontSize="small" />
+              <Icon sx={{ fontSize: 20 }} />
               {item.label}
             </Box>
           );
         })}
-      </Stack>
+      </Box>
+
+      <Box sx={{ flex: '1 1 auto', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <SidebarGroups
+          userId={user.id}
+          pathname={pathname}
+          touch={drawer}
+          onNavigate={onNavigate}
+        />
+      </Box>
+
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '2px',
+          borderTop: 1,
+          borderColor: 'divider',
+          pt: 1.5,
+        }}
+      >
+        <Box
+          component={Link}
+          href={SETTINGS_HREF}
+          onClick={onNavigate}
+          aria-current={navCurrent(pathname, SETTINGS_HREF)}
+          sx={navLinkSx}
+        >
+          <SettingsOutlinedIcon sx={{ fontSize: 20 }} />
+          Settings
+        </Box>
+        <AccountMenu user={user} onNavigate={onNavigate} />
+      </Box>
     </Box>
   );
 }

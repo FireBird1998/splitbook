@@ -8,7 +8,7 @@ import { brandImages, links, text } from '@/lib/test-utils/markup';
 
 /*
  * Where the brand kit shows in the web app (the "Brand in the product" design): the logo in the
- * navbar, sign in, the invite page and the landing page, and the mark where a name sits beside
+ * shell's sidebar and top bar, sign in, the invite page and the landing page, and the mark where a name sits beside
  * it or a page is loading. Each surface keeps its own words. The invite page's loaded card is
  * checked in the browser (playwright/theme-a11y.spec.ts), since it renders after a request.
  */
@@ -28,7 +28,8 @@ vi.mock('@/lib/auth-client', () => ({
 }));
 vi.mock('@/lib/utils/api-response', () => ({ getAuthUser: vi.fn(async () => null) }));
 
-const { default: Navbar } = await import('./Navbar');
+const { default: Sidebar } = await import('./Sidebar');
+const { default: TopBar } = await import('./TopBar');
 const { default: LoginForm } = await import('@/components/auth/LoginForm');
 const { default: LoginPage } = await import('@/app/(auth)/login/page');
 const { default: DemoPersonaPicker } = await import('@/components/demo/DemoPersonaPicker');
@@ -55,16 +56,30 @@ function brand(html: string) {
   return brandImages(html).map(({ src, alt, style }) => ({ src, alt, height: style.height }));
 }
 
-describe('the navbar', () => {
-  it('shows the 32 px logo as the link home, named Splitbook home, in place of the typed name', () => {
+describe('the shell', () => {
+  it('leads the sidebar with the 32 px logo as the link Home, named Splitbook home, in place of the typed name', () => {
     for (const mode of MODES) {
       const html = render(
         mode,
-        createElement(Navbar, { user: { name: 'Alex Rivera', email: 'alex@example.test' } }),
+        createElement(Sidebar, {
+          user: { id: 'a00000000000000000000001', name: 'Alex Rivera', email: 'alex@example.test' },
+          pathname: '/dashboard',
+        }),
       );
       expect(brand(html)).toEqual([{ src: logo(mode), alt: 'Splitbook home', height: '32px' }]);
       expect(links(html)[0]).toBe('/dashboard');
       expect(text(html)).not.toContain('Splitbook');
+    }
+  });
+
+  it('shows the same logo in the top bar, where phones see it', () => {
+    for (const mode of MODES) {
+      const html = render(
+        mode,
+        createElement(TopBar, { demoMode: false, menuOpen: false, onOpenMenu: vi.fn() }),
+      );
+      expect(brand(html)).toEqual([{ src: logo(mode), alt: 'Splitbook home', height: '32px' }]);
+      expect(links(html)).toEqual(['/dashboard']);
     }
   });
 });

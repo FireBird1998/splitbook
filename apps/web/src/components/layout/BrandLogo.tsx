@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import Box from '@mui/material/Box';
-import { useTheme } from '@mui/material/styles';
+import { useTheme, type SxProps, type Theme } from '@mui/material/styles';
 import { PRODUCT_NAME } from '@/lib/product';
 
 /** Both logo variants share this viewBox (public/brand/logo-*.svg). */
@@ -23,6 +23,8 @@ interface BrandLogoProps {
   /** Makes the logo the link to this page; it is then named "Splitbook home". */
   href?: string;
   onClick?: () => void;
+  /** Extra styles for the link, such as a 44 px touch target in the phone drawer. */
+  linkSx?: SxProps<Theme>;
 }
 
 /**
@@ -30,7 +32,7 @@ interface BrandLogoProps {
  * Width and height are both fixed from the ratio, and object-fit keeps the artwork whole,
  * so a flex parent's stretch can't distort it.
  */
-export default function BrandLogo({ height = 32, href, onClick }: BrandLogoProps) {
+export default function BrandLogo({ height = 32, href, onClick, linkSx }: BrandLogoProps) {
   const dark = useTheme().palette.mode === 'dark';
   const logo = (
     <Image
@@ -56,7 +58,10 @@ export default function BrandLogo({ height = 32, href, onClick }: BrandLogoProps
       component={Link}
       href={href}
       onClick={onClick}
-      sx={{ display: 'inline-flex', flexShrink: 0, borderRadius: 1 }}
+      sx={[
+        { display: 'inline-flex', flexShrink: 0, borderRadius: 1 },
+        ...(Array.isArray(linkSx) ? linkSx : [linkSx]),
+      ]}
     >
       {logo}
     </Box>

@@ -25,9 +25,33 @@ export async function enterAsPersona(page: Page, persona: PersonaKey): Promise<v
   ).toBeVisible();
 }
 
-/** Sign out via the navbar account menu and land back on the persona picker. */
+/** Whether the project runs at phone width, where the sidebar is a drawer. */
+export function isPhone(testInfo: TestInfo): boolean {
+  return testInfo.project.name.startsWith('mobile-');
+}
+
+/**
+ * The shell's navigation: the sidebar on desktop, or on phones the drawer, opened from the
+ * top bar's menu button.
+ */
+export async function openNavigation(page: Page) {
+  // The sidebar shows from MUI's lg breakpoint up.
+  if (page.viewportSize()!.width >= 1200)
+    return page.getByRole('complementary', { name: 'Splitbook' });
+  const drawer = page.getByRole('dialog', { name: 'Navigation menu' });
+  const menu = page.getByRole('banner').getByRole('button', { name: 'Open navigation menu' });
+  // A click that lands before the page hydrates does nothing, so click until it opens.
+  await expect(async () => {
+    if (!(await drawer.isVisible())) await menu.click({ timeout: 1_000 });
+    await expect(drawer).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+  return drawer;
+}
+
+/** Sign out from the account menu at the foot of the sidebar, and land back on the persona picker. */
 export async function signOut(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Account menu' }).click();
+  const navigation = await openNavigation(page);
+  await navigation.getByRole('button', { name: 'Account menu' }).click();
   await page.getByRole('menuitem', { name: 'Sign Out' }).click();
   await page.waitForURL((url) => url.pathname === '/');
   await expect(page.getByRole('button', { name: `Enter as ${PERSONAS.alex}` })).toBeVisible();

@@ -12,6 +12,13 @@ const adoptedFiles = [
   'src/components/design-system/DesignSystemLab.tsx',
   'src/components/dashboard/DashboardView.tsx',
   'src/components/balances/BalancesView.tsx',
+  'src/app/(main)/layout.tsx',
+  'src/components/layout/AppShell.tsx',
+  'src/components/layout/Sidebar.tsx',
+  'src/components/layout/SidebarGroups.tsx',
+  'src/components/layout/TopBar.tsx',
+  'src/components/layout/AccountMenu.tsx',
+  'src/components/layout/BrandLogo.tsx',
 ];
 
 let failed = false;

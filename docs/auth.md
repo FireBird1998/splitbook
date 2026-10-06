@@ -25,7 +25,7 @@ The active mode resolves through [`src/lib/auth-mode.ts`](../apps/web/src/lib/au
 | unset / `google` / anything else | any              | any               | **google**               |
 
 In demo mode `/` renders the persona picker; in Google mode it renders the
-marketing landing. A **Demo mode** badge shows in the navbar while demo auth
+marketing landing. A **Demo mode** badge shows in the top bar while demo auth
 is active. See the README for seeding (`pnpm web demo:seed` / `pnpm web demo:reset`).
 
 Both modes produce the same session: a `sessions` row referencing the user,
@@ -278,8 +278,8 @@ export function UserMenu() {
 
 `signInWithGoogle(callbackURL)` starts the redirect flow with
 `errorCallbackURL: '/login'`; `signOutToHome()` revokes the session and reloads
-at `/`. The Navbar receives the user from the server layout rather than the
-hook.
+at `/`. The shell's account menu receives the user from the server layout rather
+than the hook.
 
 `callbackUrl` values from the query string pass through
 [`resolveCallbackUrl`](../apps/web/src/lib/auth/callback-url.ts), which only
