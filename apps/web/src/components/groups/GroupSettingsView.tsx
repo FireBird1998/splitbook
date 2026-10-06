@@ -53,6 +53,8 @@ import { apiFetch } from '@/lib/utils/api-fetch';
 interface GroupSettingsViewProps {
   groupId: string;
   userId: string;
+  /** The server's recurring Expenses switch (#289): off hides the recurring section. */
+  recurringExpensesEnabled: boolean;
 }
 
 /** The API's `{ error }` message for a rejected request, or `fallback` when it has none. */
@@ -66,7 +68,11 @@ export default function GroupSettingsView(props: GroupSettingsViewProps) {
   return <GroupSettingsContent key={`${props.userId}:${props.groupId}`} {...props} />;
 }
 
-function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
+function GroupSettingsContent({
+  groupId,
+  userId,
+  recurringExpensesEnabled,
+}: GroupSettingsViewProps) {
   const { mutate: globalMutate } = useSWRConfig();
   const { data: group, isLoading, error, mutate } = useGroup(userId, groupId);
 
@@ -853,8 +859,8 @@ function GroupSettingsContent({ groupId, userId }: GroupSettingsViewProps) {
           </DialogActions>
         </Dialog>
 
-        {/* ─── Recurring (Household only) ──────────── */}
-        {theme.recurringExpenses && (
+        {/* ─── Recurring (Household only, while the product offers it) ── */}
+        {recurringExpensesEnabled && theme.recurringExpenses && (
           <RecurringExpensesSection
             groupId={groupId}
             tags={tags}

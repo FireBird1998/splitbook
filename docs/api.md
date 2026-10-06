@@ -190,7 +190,8 @@ No balance is included — use `GET /api/user/balances` for that.
 
 Returns the populated group. **Side effect:** this handler calls
 `recurringExpenseService.generateDueExpenses` before responding, so a read can
-create expenses (see [Recurring expenses](#recurring-expenses)).
+create expenses while recurring Expenses are switched on (see
+[Recurring expenses](#recurring-expenses)).
 
 ### PATCH /api/groups/[id]
 
@@ -236,7 +237,7 @@ Any member may leave, with no body. The rules:
   `code: "LEAVE_CONFLICT"`; trying again adds what is still missing. A template in
   its problem state (for example, its Tag archived) doesn't hold up the leave: its
   missed periods are not generated for the departing member. An archived Group
-  adds none.
+  adds none, and neither does any Group while recurring Expenses are switched off.
 - **The last admin hands over first.** While other members remain, the only admin
   gets **409** `code: "LAST_ADMIN"`, `Make someone else an admin before you leave.`
 - **The last member archives the Group.** Nobody would be left to reach it, so the
@@ -444,7 +445,7 @@ API path can set it.
 ### GET /api/groups/[id]/expenses
 
 **Side effect:** calls `generateDueExpenses` before listing, so due recurring
-templates are materialized on read.
+templates are materialized on read while recurring Expenses are switched on.
 
 **Query params:**
 
@@ -519,6 +520,23 @@ Household-themed groups only (`category: "home"`). Templates materialize
 expenses lazily when the group, its expense list or its balances are read, and
 before a member's leave is checked. An archived Group materializes nothing.
 
+**Off by default (#289).** The whole feature sits behind the server's
+`RECURRING_EXPENSES_ENABLED` switch, on only when it is `true`. While it is off:
+
+- POST, PATCH (edit, pause or resume) and DELETE answer **409**
+  `{ "error": "Recurring Expenses are turned off.", "code": "RECURRING_EXPENSES_OFF" }`
+  to any signed-in caller, before the body or the caller's role is checked, and
+  change nothing. A signed-out caller still gets 401.
+- GET answers a member with an empty list (`{ "data": [] }`), not a refusal, so a
+  page that still lists templates shows none instead of an error (a 403 from a
+  read under a Group means the reader lost it). A non-member still gets 403.
+- No read and no leave materializes anything, and no template or Expense is
+  changed. Expenses generated earlier stay ordinary Expenses.
+
+When it is turned back on, nothing is added for the months it was off: every
+template that existed then resumes from the month it was turned on (see
+[Generation semantics](#generation-semantics)).
+
 | Method | Path                                       | Description     |
 | ------ | ------------------------------------------ | --------------- |
 | POST   | `/api/groups/[id]/recurring`               | Create template |
@@ -573,6 +591,15 @@ against group state — archived tag, removed member, currency drift — is skip
 silently without advancing its marker; the settings list surfaces the problem
 state, though its client-side check does not cover currency drift.
 
+The switch's history is one document in `productswitches`
+(`_id: "recurringExpenses"`). The first generation run that finds the switch off
+records `enabled: false`; the first that finds it on again records
+`enabled: true` with the time. From then on, a template created before that time
+skips every period before that month, so the months the switch was off are never
+back-filled, as with resuming a paused template. A template created later
+catches up from its `startsOn`, as before. A database that has never seen the
+switch off has no such document and generates exactly as before.
+
 ---
 
 ## Settlements
@@ -621,7 +648,8 @@ per-member balances and the minimum-transaction debt list.
 
 **Side effect:** calls `generateDueExpenses` after the membership check and
 before computing, so due recurring templates are materialized on read and the
-balances include them. A non-member gets `403` and nothing is materialized.
+balances include them, while recurring Expenses are switched on. A non-member
+gets `403` and nothing is materialized.
 
 **Response:**
 

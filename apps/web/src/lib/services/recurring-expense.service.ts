@@ -2,6 +2,7 @@ import connectDB from '@/lib/db';
 import mongoose from 'mongoose';
 import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
+import ProductSwitch from '@/lib/models/ProductSwitch';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import '@/lib/models/User'; // Ensure User model is registered for populate()
 import { activityService } from './activity.service';
@@ -28,6 +29,10 @@ import { makePendingActivity } from '@/lib/financial-write';
 import { assertExpectedRevision } from '@/lib/ledger-revision';
 import { lockLedgerCurrency } from '@/lib/ledger-currency';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
+import {
+  assertRecurringExpensesOn,
+  recurringExpensesEnabled,
+} from '@/lib/recurring-expenses-switch';
 
 type TemplateData = {
   description: string;
@@ -82,12 +87,50 @@ function isDuplicateKeyError(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === 11000;
 }
 
+/** The switch's record in `productswitches` (see `ProductSwitch`). */
+const RECURRING_SWITCH = 'recurringExpenses';
+
+/**
+ * Remember that recurring Expenses are off, from the first run that finds them off. Only the
+ * switch's own record is written: templates and Expenses stay exactly as they are.
+ */
+async function recordSwitchedOff(now: Date): Promise<void> {
+  const state = await ProductSwitch.findById(RECURRING_SWITCH).lean();
+  if (state?.enabled === false) return;
+  await ProductSwitch.updateOne(
+    { _id: RECURRING_SWITCH },
+    { $set: { enabled: false, since: now } },
+    { upsert: true },
+  );
+}
+
+/**
+ * When recurring Expenses were last turned back on, or null when this database has never seen
+ * them off. The first run that finds them on after one that found them off records its time.
+ */
+async function lastSwitchedOnAt(now: Date): Promise<Date | null> {
+  const state = await ProductSwitch.findById(RECURRING_SWITCH).lean();
+  if (!state) return null;
+  if (state.enabled) return state.since;
+  const switchedOn = await ProductSwitch.findOneAndUpdate(
+    { _id: RECURRING_SWITCH, enabled: false },
+    { $set: { enabled: true, since: now } },
+    { returnDocument: 'after' },
+  ).lean();
+  if (switchedOn) return switchedOn.since;
+  // Another run changed the record in between. Without a turn-on time to trust, resume from now.
+  const latest = await ProductSwitch.findById(RECURRING_SWITCH).lean();
+  return latest?.enabled ? latest.since : now;
+}
+
 export class RecurringExpenseService {
   /**
    * Create a recurring template. Admins only, Household groups only.
    * Due periods are materialized immediately (idempotent lazy generation).
+   * Refused with `RECURRING_EXPENSES_OFF` while recurring Expenses are off.
    */
   async create(groupId: string, data: CreateRecurringExpenseInput, userId: string) {
+    assertRecurringExpensesOn();
     await connectDB();
 
     const group = await Group.findById(groupId);
@@ -98,6 +141,12 @@ export class RecurringExpenseService {
     assertTemplateData(group, data);
     const money = normalizeExpenseMoney(data);
     await lockLedgerCurrency(groupId, data.currency);
+    // Record a turn back on before the insert, so this template counts as created after it
+    // and catches up from its own start. The generation run below reads the record again and
+    // reports a failure to read it, so one here only needs logging.
+    await lastSwitchedOnAt(new Date()).catch((err: unknown) =>
+      console.error('Could not read when recurring Expenses were turned on:', err),
+    );
 
     const template = await RecurringExpense.create({
       group: groupId,
@@ -120,9 +169,11 @@ export class RecurringExpenseService {
   }
 
   /**
-   * List a group's recurring templates (any member may read).
+   * List a group's recurring templates (any member may read). While recurring Expenses are
+   * off, none is listed; the stored templates stay as they are.
    */
   async list(groupId: string) {
+    if (!recurringExpensesEnabled()) return [];
     await connectDB();
     const group = await Group.findById(groupId).select('tags').lean();
     const templates = await RecurringExpense.find({ group: groupId })
@@ -142,6 +193,7 @@ export class RecurringExpenseService {
    * generated are ordinary expenses and stay untouched. Resuming a paused
    * template skips the on-hold window: the marker advances to the period
    * before the current month, so generation resumes from the current month.
+   * Refused with `RECURRING_EXPENSES_OFF` while recurring Expenses are off.
    */
   async update(
     groupId: string,
@@ -150,6 +202,7 @@ export class RecurringExpenseService {
     userId: string,
     expectedRevision?: number,
   ) {
+    assertRecurringExpensesOn();
     await connectDB();
     const group = await Group.findById(groupId);
     if (!group) return null;
@@ -206,8 +259,10 @@ export class RecurringExpenseService {
   /**
    * Delete a template. Hard-deletes the template only — expenses it already
    * generated are never touched.
+   * Refused with `RECURRING_EXPENSES_OFF` while recurring Expenses are off.
    */
   async remove(groupId: string, recurringId: string, userId: string, expectedRevision?: number) {
+    assertRecurringExpensesOn();
     await connectDB();
     const group = await Group.findById(groupId);
     if (!group) return null;
@@ -242,6 +297,9 @@ export class RecurringExpenseService {
    * (tag archived, member removed, currency drift) is skipped without
    * advancing its marker — the settings list surfaces that problem state.
    * An archived Group generates nothing, and generation moves none of its markers.
+   * While recurring Expenses are off (#289) nothing is generated in any Group and
+   * no template or Expense changes; once they are back on, a template that existed
+   * then resumes from the month they were turned on, so the months off are never added.
    * This method never throws into the read path, and reads ignore whether the
    * run finished: a period that failed is retried on the next read.
    */
@@ -270,6 +328,24 @@ export class RecurringExpenseService {
     try {
       await connectDB();
 
+      if (!recurringExpensesEnabled()) {
+        // Off: no Expense is due, so the run is complete whatever happens to the record below.
+        await recordSwitchedOff(now).catch((err) =>
+          console.error('Could not record that recurring Expenses are off:', err),
+        );
+        return { generated: 0, complete };
+      }
+      // Read before the templates, so the first run after turning the switch back on records
+      // that moment even in a Group with nothing due. A record that can't be read holds up
+      // only a Group that would generate (below): a Group with nothing to add is unaffected.
+      const switchedOn = await lastSwitchedOnAt(now).then(
+        (at) => ({ at }),
+        (err: unknown) => {
+          console.error('Could not read when recurring Expenses were turned on:', err);
+          return null;
+        },
+      );
+
       const templates = await RecurringExpense.find({ group: groupId });
       if (templates.length === 0) return { generated: 0, complete };
 
@@ -281,10 +357,15 @@ export class RecurringExpenseService {
       // are, so nothing is lost: were it un-archived, the next read catches up.
       if (group.isArchived) return { generated: 0, complete };
 
+      // Without the record, the months these templates may add are unknown: add none, and
+      // report the run unfinished, as any generation failure is. The next read retries.
+      if (!switchedOn) return { generated: 0, complete: false };
+      const switchedOnAt = switchedOn.at;
+
       const currentPeriod = toPeriod(now);
 
       for (const template of templates) {
-        const duePeriods = getDuePeriods(
+        let duePeriods = getDuePeriods(
           {
             dayOfMonth: template.dayOfMonth,
             startsOn: template.startsOn,
@@ -294,6 +375,13 @@ export class RecurringExpenseService {
           },
           currentPeriod,
         );
+        // A template that existed while recurring Expenses were off resumes from the month
+        // they were turned back on, as resuming a paused template does. A template created
+        // since then catches up from its start, as any new template does.
+        if (switchedOnAt && !(template.createdAt >= switchedOnAt)) {
+          const resumeFrom = toPeriod(switchedOnAt);
+          duePeriods = duePeriods.filter((period) => period >= resumeFrom);
+        }
         if (duePeriods.length === 0) continue;
 
         let money: ReturnType<typeof readExpenseMoney>;

@@ -7,6 +7,7 @@ import {
   ACCOUNT_CHANGED_STATUS,
   EXPECTED_ACCOUNT_HEADER,
 } from '@/lib/expected-account';
+import { RECURRING_EXPENSES_OFF } from '@/lib/recurring-expenses-switch';
 
 export interface AuthUser {
   /** 24-hex user id, byte-for-byte the stored ObjectId string. */
@@ -93,6 +94,7 @@ export function serverError(err?: unknown) {
       ],
       REVISION_REQUIRED: ['Reload this record before changing it.', 428],
       CURRENCY_LOCKED: ['Currency cannot change after this Group has financial records.', 409],
+      [RECURRING_EXPENSES_OFF]: ['Recurring Expenses are turned off.', 409],
       ACTIVITY_BACKLOG_FULL: [
         'The audit feed is temporarily unavailable. Please retry later.',
         503,

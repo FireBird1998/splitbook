@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import Group from '@/lib/models/Group';
 import Expense from '@/lib/models/Expense';
 import RecurringExpense from '@/lib/models/RecurringExpense';
@@ -7,6 +7,9 @@ import { expenseService } from './expense.service';
 import { recurringExpenseService } from './recurring-expense.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { createTestUsers, TEST_USER_IDS } from '@/lib/test-utils/fixtures';
+
+// Recurring Expenses are off unless switched on (#289); this file covers them switched on.
+vi.stubEnv('RECURRING_EXPENSES_ENABLED', 'true');
 
 const db = integrationTestDb('tag-identity');
 const { alice } = TEST_USER_IDS;
