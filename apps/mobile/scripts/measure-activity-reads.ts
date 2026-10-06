@@ -50,6 +50,10 @@ function memoryStore() {
     clear: async () => {
       records.clear();
     },
+    list: async (account: string) =>
+      [...records]
+        .filter(([key]) => key.startsWith(`${account}:`))
+        .map(([key, value]) => ({ groupId: key.slice(account.length + 1), value })),
     records,
   };
 }

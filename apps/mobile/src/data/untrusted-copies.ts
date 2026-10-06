@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { homePath, listPath } from './home-queries';
+import { removeGroupRows } from './group-queries';
 import type { MobileDependencies } from './types';
 
 const recorded = z.object({ accountId: z.string(), scopes: z.record(z.string(), z.number()) });
@@ -22,13 +23,22 @@ export function untrustedCopies({
     const parsed = recorded.safeParse(await record?.load());
     return parsed.success ? parsed.data : null;
   };
-  /** A scope's saved copies: a Group's, its ledger's (Balances too), the Groups list or Home's. */
+  /**
+   * A scope's saved copies: a Group's, its ledger's (Balances too), the Groups list or Home's.
+   * A Group's view keeps its rows on the persister (#219), the rest of its ledger in the older
+   * store.
+   */
   const remove = async (accountId: string, scope: string) => {
     const [name, groupId = ''] = scope.split(':');
     if (name === 'groups' || name === 'home')
       await rows?.remove(accountId, name === 'groups' ? listPath : homePath);
-    else if (name === 'group') await readCache?.invalidateGroup(accountId, groupId);
-    else await readCache?.invalidateLedger(accountId, groupId);
+    else if (name === 'group') {
+      await readCache?.invalidateGroup(accountId, groupId);
+      await removeGroupRows(rows, accountId, groupId, 'group');
+    } else {
+      await readCache?.invalidateLedger(accountId, groupId);
+      await removeGroupRows(rows, accountId, groupId, 'ledger');
+    }
   };
   return Object.assign(untrusted, {
     /** These scopes' saved copies from `time` or before couldn't be removed. */

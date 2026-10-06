@@ -154,6 +154,13 @@ function fixture() {
       await pause(removals, key);
       rows.delete(account + key);
     },
+    list: async (account: string) =>
+      [...rows]
+        .filter(([key]) => key.startsWith(account))
+        .map(([key, value]) => ({
+          groupId: key.slice(account.length),
+          value: structuredClone(value),
+        })),
   };
   const readCache = {
     ...records(disk),
@@ -474,7 +481,11 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
     expect(controller.getSnapshot().expense.status).toBe('saved');
     await controller.back();
     await settle();
-    expect([...f.rows.keys()].sort()).toEqual([`${alex.id}${listPath}`, `${alex.id}${homePath}`]);
+    // Maple House's own view has its rows too since #219: its Group, Expenses and Balances.
+    expect([...f.rows.keys()].filter((key) => !key.includes(mapleId)).sort()).toEqual([
+      `${alex.id}${listPath}`,
+      `${alex.id}${homePath}`,
+    ]);
     expect(JSON.stringify([...f.rows.values()])).not.toContain('home-queries-attempt-0001');
     expect(JSON.stringify([...f.rows.values()])).not.toContain('Groceries');
   });
@@ -541,14 +552,17 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
       `GET ${homePath}`,
     ]);
 
-    // On a Group, nothing Home shows is active, so a reconnect reads nothing of it.
+    // On a Group, nothing Home shows is active, so a reconnect reads nothing of it. (The Group's
+    // own view reads again since #219, M1-4.)
     await controller.openGroup(mapleId);
     later(31_000);
     sent = f.calls.length;
     f.connect(false);
     f.connect(true);
     await settle();
-    expect(f.calls.slice(sent)).toEqual([]);
+    expect(
+      f.calls.slice(sent).filter(({ path }) => path === listPath || path === homePath),
+    ).toEqual([]);
   });
 
   it('reads nothing on return to the foreground within the window, and after it only what Home shows', async () => {
@@ -808,7 +822,7 @@ describe('losing access and leaving the list (#217)', () => {
     await controller.back();
     await settle();
     expect(names(controller.getSnapshot())).toEqual(['Maple House', 'Cabin Weekend']);
-    expect(f.disk.has(`${alex.id}${maplePath}`)).toBe(true);
+    expect(f.rows.has(`${alex.id}${maplePath}`)).toBe(true);
     const published = record(controller);
     // Home's two queries are being read again when Maple House refuses Alex.
     const list = f.hold(listPath);
@@ -822,7 +836,7 @@ describe('losing access and leaving the list (#217)', () => {
       groups: { data: [{ name: 'Cabin Weekend' }] },
       home: { data: null },
     });
-    expect([...f.disk.keys()].some((key) => key.includes(mapleId))).toBe(false);
+    expect([...f.disk.keys(), ...f.rows.keys()].some((key) => key.includes(mapleId))).toBe(false);
     expect(f.row(listPath)).toBeNull();
     expect(f.row(homePath)).toBeNull();
     list.release();
@@ -844,14 +858,14 @@ describe('losing access and leaving the list (#217)', () => {
     await controller.openGroup(cabinId);
     await controller.back();
     await settle();
-    expect([...f.disk.keys()].some((key) => key.includes(cabinId))).toBe(true);
+    expect([...f.disk.keys(), ...f.rows.keys()].some((key) => key.includes(cabinId))).toBe(true);
     // Cabin Weekend leaves the list (the member left it on the web).
     f.server.listed = [maple];
     const sent = f.calls.length;
     await controller.refresh('pull');
     await settle();
     expect(names(controller.getSnapshot())).toEqual(['Maple House']);
-    expect([...f.disk.keys()].some((key) => key.includes(cabinId))).toBe(false);
+    expect([...f.disk.keys(), ...f.rows.keys()].some((key) => key.includes(cabinId))).toBe(false);
     expect(f.row(listPath)).toMatchObject({ value: { data: [{ name: 'Maple House' }] } });
     // Its reads went with it: opening it reads it again, though it was read seconds ago.
     await controller.openGroup(cabinId);
@@ -880,7 +894,7 @@ describe('losing access and leaving the list (#217)', () => {
     await controller.openGroup(cabinId);
     await controller.back();
     await settle();
-    const saved = [...f.disk.keys()].filter((key) => key.includes(cabinId));
+    const saved = [...f.disk.keys(), ...f.rows.keys()].filter((key) => key.includes(cabinId));
     expect(saved.length).toBeGreaterThan(0);
     const sent = f.calls.length;
     stale.release();
@@ -888,7 +902,9 @@ describe('losing access and leaving the list (#217)', () => {
     await settle();
     // The older list is no answer: Cabin Weekend keeps its saved copies and its reads.
     expect(names(controller.getSnapshot())).toEqual(['Maple House', 'Cabin Weekend']);
-    expect([...f.disk.keys()].filter((key) => key.includes(cabinId))).toEqual(saved);
+    expect([...f.disk.keys(), ...f.rows.keys()].filter((key) => key.includes(cabinId))).toEqual(
+      saved,
+    );
     expect(f.row(listPath)).toMatchObject({
       value: { data: [{ name: 'Maple House' }, { name: 'Cabin Weekend' }] },
     });
@@ -937,7 +953,7 @@ describe('losing access and leaving the list (#217)', () => {
     await settle();
     expect(f.row(listPath)).toBeNull();
     expect(f.row(homePath)).toBeNull();
-    expect([...f.disk.keys()].some((key) => key.includes(mapleId))).toBe(false);
+    expect([...f.disk.keys(), ...f.rows.keys()].some((key) => key.includes(mapleId))).toBe(false);
     expect(published.some((state) => names(state).includes('Maple House'))).toBe(false);
     expect(restarted.getSnapshot().auth.status).toBe('authenticated');
   });
@@ -967,7 +983,7 @@ describe('a lost Group never returns from the saved Groups list (#323)', () => {
     await controller.back();
     await settle();
     expect(JSON.stringify(f.row(listPath))).toContain('Maple House');
-    expect([...f.disk.keys()].some((key) => key.includes(mapleId))).toBe(true);
+    expect([...f.disk.keys(), ...f.rows.keys()].some((key) => key.includes(mapleId))).toBe(true);
     return controller;
   }
   /** Alex loses Maple House, and the list is read online: it leaves the screen. */
@@ -1092,7 +1108,7 @@ describe('a lost Group never returns from the saved Groups list (#323)', () => {
     const { restarted, published } = await restartOffline(f, failing.restarted);
     expect(f.row(listPath)).toBeNull();
     expect(f.row(homePath)).toBeNull();
-    expect([...f.disk.keys()].some((key) => key.includes(mapleId))).toBe(false);
+    expect([...f.disk.keys(), ...f.rows.keys()].some((key) => key.includes(mapleId))).toBe(false);
     expect(f.untrusted()).toBeNull();
     expect([...failing.published, ...published].some(withMaple)).toBe(false);
 
@@ -1220,7 +1236,9 @@ describe('a lost Group never returns from the saved Groups list (#323)', () => {
       });
       if (storage === 'working again') {
         expect(f.row(listPath)).toBeNull();
-        expect([...f.disk.keys()].some((key) => key.includes(mapleId))).toBe(false);
+        expect([...f.disk.keys(), ...f.rows.keys()].some((key) => key.includes(mapleId))).toBe(
+          false,
+        );
         expect(f.untrusted()).toBeNull();
       }
     },
@@ -1360,7 +1378,9 @@ describe('a lost Group never returns from the saved Groups list (#323)', () => {
       // Once a start could remove copies, no saved copy of Maple House is left: not even the list.
       if (storage === 'working again' || !failing.includes('failRemoval')) {
         expect(JSON.stringify(f.row(listPath))).not.toContain('Maple House');
-        expect([...f.disk.keys()].some((key) => key.includes(mapleId))).toBe(false);
+        expect([...f.disk.keys(), ...f.rows.keys()].some((key) => key.includes(mapleId))).toBe(
+          false,
+        );
         expect(f.untrusted()).toBeNull();
       }
     },
@@ -1725,12 +1745,13 @@ describe('Balances and Home follow every read of a Group (M1-5, AMEND-1)', () =>
       `GET ${maplePath}/balances`,
     ]);
     await controller.closeSettlement();
-    // Within the window, Home's figures and then the Group's Balances are read again.
+    // Within the window, Home's figures are read again. The Group's Balances are not: the sheet
+    // read them after its check of the Group, and they stand verified as the view's (#219).
     sent = f.calls.length;
     await controller.back();
     expect(f.reads(homePath, sent)).toBe(1);
     sent = f.calls.length;
     await controller.openGroup(mapleId, true, 'balances');
-    expect(f.reads(`${maplePath}/balances`, sent)).toBe(1);
+    expect(f.reads(`${maplePath}/balances`, sent)).toBe(0);
   });
 });

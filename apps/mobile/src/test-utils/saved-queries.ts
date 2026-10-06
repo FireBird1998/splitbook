@@ -21,6 +21,14 @@ export function savedQueriesIn(
       map.delete(key(account, path));
     },
     clear: async () => map.clear(),
+    // Rows by path, as the persister lists them; a key of the map that holds no path isn't one.
+    list: async (account) =>
+      [...map]
+        .filter(([entry]) => entry.startsWith(key(account, '/api/')))
+        .map(([entry, value]) => ({
+          groupId: entry.slice(key(account, '').length),
+          value: structuredClone(value),
+        })),
     ...store,
   };
 }

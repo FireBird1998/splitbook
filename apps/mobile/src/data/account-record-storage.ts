@@ -4,7 +4,10 @@ export interface AccountGroupRecordStore {
   save(accountId: string, groupId: string, value: unknown): Promise<void>;
   remove(accountId: string, groupId: string): Promise<void>;
   clear(): Promise<void>;
-  /** Every record this account has in this environment, such as Home's Expense drafts. */
+  /**
+   * Every record this account has in this environment, such as Home's Expense drafts, or the
+   * persister's rows, each by its query's path.
+   */
   list?(accountId: string): Promise<{ groupId: string; value: unknown }[]>;
 }
 

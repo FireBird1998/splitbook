@@ -677,9 +677,9 @@ describe('Returning to an Expense beyond the first page', () => {
     expect(financial.expenses.pagination?.page).toBe(2);
     expect(server.pagesRead().slice(reads)).toEqual([1, 2]);
 
-    // Only the return restores the range; an ordinary refresh starts from the first page.
+    // A refresh reads the pages loaded again too (#219, M1-3), not only the first page.
     await controller.refresh('pull');
-    expect(server.pagesRead().slice(reads + 2)).toEqual([1]);
+    expect(server.pagesRead().slice(reads + 2)).toEqual([1, 2]);
   });
 
   it('reads the same pages again after an edit or a new Expense is saved', async () => {
