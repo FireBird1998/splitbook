@@ -2216,6 +2216,59 @@ describe('sign-out revokes the session on the server (#202)', () => {
     });
   });
 
+  it.each(['the link', 'the return to the app'] as const)(
+    'says an invitation opened offline after Continue is saved, when %s comes first (#286)',
+    async (first) => {
+      const device = phone();
+      let offline = false,
+        confirming = false;
+      const controller = device.start((path) =>
+        offline
+          ? Promise.reject(new TypeError('Network request failed'))
+          : path === '/api/auth/sign-out' && !confirming
+            ? json({}, 503)
+            : path === '/api/join/deadbeef'
+              ? json({
+                  data: { _id: otherGroupId, name: 'Book Club', category: 'other', memberCount: 3 },
+                  status: 200,
+                })
+              : undefined,
+      );
+      await controller.signIn('alex');
+      await controller.signOut();
+      controller.continueSignedOut();
+      offline = true;
+      const before = device.sent.length;
+      // Opening the link also brings the app to the foreground, which retries the revoke quietly.
+      const open = () => controller.openInvitation('http://localhost:4127/join/deadbeef');
+      const foreground = () => controller.refresh('foreground');
+      await Promise.all(first === 'the link' ? [open(), foreground()] : [foreground(), open()]);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'groups',
+        auth: { status: 'signed-out', user: null },
+        invitation: { code: 'deadbeef' },
+      });
+      expect(showsNoAccount(controller.getSnapshot())).toBe(true);
+      expect(device.invitation.read()).toBe('deadbeef');
+      // Only the revoke was sent again: the invitation waits until the sign-out is confirmed.
+      expect(device.sent.slice(before).map(({ method, path }) => `${method} ${path}`)).toEqual([
+        'POST /api/auth/sign-out',
+      ]);
+
+      // Back online, the next return to the app has the sign-out confirmed, then shows it.
+      offline = false;
+      confirming = true;
+      await controller.refresh('foreground');
+      expect(device.revokes()).toEqual([alexCookie, alexCookie, alexCookie]);
+      expect(device.store.read()).toBeNull();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'invite',
+        auth: { status: 'signed-out', user: null },
+        invitation: { code: 'deadbeef', status: 'ready', preview: { name: 'Book Club' } },
+      });
+    },
+  );
+
   it('retries the revoke quietly on a return to the app after Continue', async () => {
     const device = phone();
     const refuse = (path: string) => (path === '/api/auth/sign-out' ? json({}, 503) : undefined);

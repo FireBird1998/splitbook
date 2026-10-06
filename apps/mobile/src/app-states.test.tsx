@@ -123,6 +123,17 @@ function device() {
         },
         status: 200,
       });
+    // Sam's invitation to Cedar Flat, a Household Alex hasn't joined.
+    if (path === '/api/join/deadbeef')
+      return json({
+        data: {
+          _id: 'b00000000000000000000003',
+          name: 'Cedar Flat',
+          category: 'home',
+          memberCount: 1,
+        },
+        status: 200,
+      });
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
     const found = groups.find((item) => item._id === id);
     if (!found) return json({}, 404);
@@ -253,6 +264,8 @@ function device() {
             const [item] = holds.splice(index, 1);
             item.arrive();
             await item.response;
+            // The connection may have dropped while it waited.
+            if (!network.online) throw new Error('Offline');
           }
           return respond(path);
         },
@@ -669,6 +682,59 @@ describe('offline', () => {
     expect(app.hosts((p) => p.accessibilityLabel === 'Trip name, required')[0].props.value).toBe(
       'Cabin Weekend',
     );
+  });
+
+  /**
+   * Sam's invitation, ready, opened while Home's Groups list was read again; the connection then
+   * dropped before the list answered, so the app counts itself offline.
+   */
+  async function invitationOffline() {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    const controller = runtime.controller as MobileController;
+    const list = phone.hold('/api/groups');
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    await settle(controller.openInvitation('http://localhost:4138/join/deadbeef'));
+    expect(app.disabled('Join Group')).toBe(false);
+    expect(app.text()).not.toContain('Joining needs a connection.');
+    phone.network.online = false;
+    list.release();
+    await settle(pulling);
+    return { phone, app };
+  }
+
+  it('keeps Join disabled while offline, saying why (#286)', async () => {
+    const { app } = await invitationOffline();
+    const join = app.button('Join Group')!;
+    expect(join.props.accessibilityState).toEqual({ disabled: true });
+    expect(join.props.accessibilityHint).toBe('Joining needs a connection.');
+    expect(app.text()).toContain('Joining needs a connection.');
+    expect(app.text()).toContain('Cedar Flat');
+  });
+
+  it('checks the session again on a pull over the invitation, then offers Join (#286)', async () => {
+    const { phone, app } = await invitationOffline();
+    // The connection is back. A pull checks the session before the invitation is read again.
+    phone.network.online = true;
+    const check = phone.hold('/api/auth/get-session');
+    expect(app.hosts((p) => !!p.refreshControl)).toHaveLength(1);
+    void app.pull().onRefresh();
+    await check.reached;
+    await settle();
+    expect(app.pull().refreshing).toBe(true);
+    expect(app.disabled('Join Group')).toBe(true);
+
+    check.release();
+    await settle();
+    expect(app.pull().refreshing).toBe(false);
+    const join = app.button('Join Group')!;
+    expect(join.props.accessibilityState).toEqual({ disabled: false });
+    expect(join.props.accessibilityHint).toBeUndefined();
+    expect(app.text()).not.toContain('Joining needs a connection.');
+    expect(app.text()).toContain('Cedar Flat');
   });
 
   it('says a Group never opened here isn’t available offline, keeping its navigation', async () => {

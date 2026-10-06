@@ -5015,11 +5015,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({ ...snapshot, invitation: loadingInvitation(pendingCode) });
     return readInvitation(pendingCode);
   };
-  /** Reads the invitation shown loading; it never moves the member. */
+  /**
+   * Reads the invitation shown loading; it never moves the member. As every display read does, it
+   * checks a session the app counts as offline online first, so Join is offered only once the
+   * session is (#286).
+   */
   const readInvitation = async (code: string) => {
     const owner = generation;
     const view = ++viewRequest;
     try {
+      if (snapshot.auth.status === 'authenticated' && (offlineSession || snapshot.offline.active)) {
+        await revalidateSession(owner);
+        assertCurrent(owner);
+        if (view !== viewRequest) return;
+        // The invitation shows nothing saved on this device, so the app is online again.
+        startReadView();
+      }
       const preview = parseInvitationPreview(await request(`/api/join/${code}`, owner));
       assertCurrent(owner);
       if (view !== viewRequest) return;
@@ -5048,13 +5059,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
+  /**
+   * Signed out, with a sign-out the server hasn't confirmed: after Continue (#202), or while its
+   * revoke is sent. A return to the foreground then only retries the revoke, quietly, on the
+   * sign-in screen (`refreshView`, `restore`).
+   */
+  const signOutPending = () => snapshot.auth.status === 'signed-out' && accountCleanupRequired;
+
   const openInvitation = async (url: string) => {
     const code = parseInvitationLink(url, inviteOrigin);
     const owner = generation;
+    // A sign-in or restore since then shows the saved invitation itself. The quiet revoke retry
+    // that the link's return to the foreground starts doesn't, so it never stops this (#286).
+    const shows = () => current(owner) || signOutPending();
     try {
       await savePending(code);
     } catch {
-      if (!current(owner)) return;
+      if (!shows()) return;
       showInvitation({
         code,
         status: 'error',
@@ -5063,7 +5084,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       return;
     }
-    if (!current(owner) || pendingCode !== code) return;
+    if (!shows() || pendingCode !== code) return;
     if (!code) {
       viewRequest += 1;
       showInvitation({
@@ -5075,12 +5096,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       return;
     }
+    if (signOutPending()) {
+      // Until the sign-out is confirmed, the invitation waits on the sign-in screen, which says
+      // it's saved, as after Continue and at a restart. It's read once the revoke is confirmed (a
+      // return to the foreground or a restart retries it), or after sign-in (#286).
+      viewRequest += 1;
+      navigate(home, { invitation: { code, status: 'idle', preview: null, message: null } });
+      return;
+    }
     await previewInvitation(code);
   };
 
   const joinInvitation = async () => {
     if (
       snapshot.auth.status !== 'authenticated' ||
+      // Joining needs a connection, as every other write does; the invitation says so (#286).
+      snapshot.offline.active ||
       snapshot.invitation.status !== 'ready' ||
       !pendingCode
     )
