@@ -113,12 +113,12 @@ test('alex: Needs you → Record opens the payment’s Group on its Balances', a
   await expect(main.getByText('Who pays whom')).toBeVisible();
   // The same payment, as the Group's Balances suggests it: recording it there fills in its
   // amount. The dialog is closed again, so nothing is recorded.
-  const recordHere = main.getByRole('button', { name: 'Record settlement', exact: true });
+  // The innermost block holding the other person, the amount and its Record settlement button.
   const row = main
     .locator('div')
     .filter({ hasText: payment!.counterpartyName })
-    .filter({ has: main.getByText(amount, { exact: true }) })
-    .filter({ has: recordHere })
+    .filter({ has: page.getByText(amount, { exact: true }) })
+    .filter({ has: page.getByRole('button', { name: 'Record settlement', exact: true }) })
     .last();
   await row.getByRole('button', { name: 'Record settlement', exact: true }).click();
   const dialog = page.getByRole('dialog');
