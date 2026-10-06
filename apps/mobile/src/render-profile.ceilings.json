@@ -3,13 +3,13 @@
   "journeys": {
     "Sign in and show Home (20 Groups)": {
       "requests": 7,
-      "publishes": 9,
+      "publishes": 8,
       "commits": 5,
       "renders": 461
     },
     "Foreground on Home within 30 s": {
       "requests": 0,
-      "publishes": 6,
+      "publishes": 2,
       "commits": 1,
       "renders": 146
     },
