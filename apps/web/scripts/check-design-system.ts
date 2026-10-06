@@ -27,6 +27,9 @@ const adoptedFiles = [
   'src/components/groups/GroupExpensesTab.tsx',
   'src/components/expenses/AddExpenseLauncher.tsx',
   'src/components/expenses/GroupChooserDialog.tsx',
+  'src/components/search/SearchLauncher.tsx',
+  'src/components/search/SearchDialog.tsx',
+  'src/components/search/SearchPanel.tsx',
 ];
 
 let failed = false;

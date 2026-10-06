@@ -795,6 +795,70 @@ the next write to the same Expense or Settlement publishes them.
 
 ---
 
+## Search
+
+| Method | Path                | Description                                                 |
+| ------ | ------------------- | ----------------------------------------------------------- |
+| GET    | `/api/search?q=...` | Search the member's Groups, the people in them and Expenses |
+
+### GET /api/search
+
+The top bar's search (#321). It reads only the Groups the member belongs to now, the
+same Groups as `GET /api/groups` (archived Groups are left out), so a Group they left
+or never joined is never searched.
+
+- **Query:** `q`, trimmed and with whitespace collapsed; at most 100 characters
+  (422 `QUERY_TOO_LONG` above that). An empty or missing `q` answers empty sections.
+- **Matching:** each word of the query must start a word of a Group's name, a
+  member's name or an Expense's description, ignoring case, in any script. "din"
+  finds "Dinner" and "Seafood dinner"; "ner" finds neither. Rules and the database
+  pattern live in `@splitbook/shared/search`.
+- **People** are the other members of the member's Groups, by name only; no email
+  is read or returned. Each person comes once, with the first Group shared with
+  them in the order of the member's Group list, and how many Groups they share.
+- **Expenses:** deleted ones are left out; the newest come first. Recurring
+  Expenses that have fallen due are not added first, since search totals nothing.
+- **Caps:** 5 Groups, 5 people and 8 Expenses (`SEARCH_LIMITS`), with `more`
+  saying whether a section had more matches.
+
+**Response:**
+
+```json
+{
+  "data": {
+    "query": "goa",
+    "groups": [{ "id": "...", "name": "Goa Friends Trip", "category": "trip", "memberCount": 3 }],
+    "people": [
+      {
+        "id": "...",
+        "name": "Sam Chen",
+        "groupId": "...",
+        "groupName": "Goa Friends Trip",
+        "groupCount": 2
+      }
+    ],
+    "expenses": [
+      {
+        "id": "...",
+        "groupId": "...",
+        "groupName": "Goa Friends Trip",
+        "description": "Goa beach shack dinner",
+        "amountMinor": 240000,
+        "currency": "INR",
+        "date": "2026-09-12T00:00:00.000Z"
+      }
+    ],
+    "more": { "groups": false, "people": false, "expenses": true }
+  }
+}
+```
+
+`amountMinor` is exact minor units, or `null` when the stored amount can't be read
+exactly. The shared path, query key (scope `search`) and decoder are `searchPath`,
+`searchKey` and `parseSearchResponse`.
+
+---
+
 ## Not implemented
 
 Documented in earlier drafts but absent from the codebase:

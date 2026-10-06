@@ -5,6 +5,7 @@
  * never change which route is called. Android's paths come out exactly as its controller
  * builds them today, so its saved copies and path-based invalidation still match.
  */
+import { normalizeSearchQuery } from './search';
 import type { ExpenseFilters } from './types';
 
 /**
@@ -100,3 +101,9 @@ export const userActivityPath = ({ limit }: UserActivityQuery = {}) =>
 export const invitationsPath = () => '/api/invitations';
 export const settlementsPath = (groupId: string) => `${group(groupId)}/settlements`;
 export const recurringExpensesPath = (groupId: string) => `${group(groupId)}/recurring`;
+/**
+ * Search across the member's Groups (#321), for the query as it is searched: trimmed, its
+ * whitespace collapsed, so the same search always has one path.
+ */
+export const searchPath = (searchQuery: string) =>
+  `/api/search${query([['q', normalizeSearchQuery(searchQuery)]])}`;

@@ -9,6 +9,7 @@ import MenuIcon from '@mui/icons-material/Menu';
 import { useThemeMode } from '@/providers/ThemeProvider';
 import DemoModeBadge from '@/components/demo/DemoModeBadge';
 import AddExpenseLauncher from '@/components/expenses/AddExpenseLauncher';
+import SearchLauncher from '@/components/search/SearchLauncher';
 import { TOPBAR_HEIGHT } from '@/lib/theme/tokens';
 import BrandLogo from './BrandLogo';
 import { HOME_HREF } from './shell-nav';
@@ -49,8 +50,9 @@ export default function TopBar({ userId, demoMode, menuOpen, onOpenMenu }: TopBa
         flexWrap: 'wrap',
         alignItems: 'center',
         gap: { xs: 1, sm: 1.5 },
-        // A 320 px phone fits the menu button, logo, demo badge and theme switch on one line.
-        '@media (max-width: 359.95px)': { gap: 0.5 },
+        // A 360 px phone fits the menu button, logo, search, demo badge and theme switch on one
+        // line. Below 360 px, in demo mode, the theme switch wraps onto a second line.
+        '@media (max-width: 374.95px)': { gap: 0.5 },
         minHeight: TOPBAR_HEIGHT,
         px: { xs: 2, lg: 4 },
         py: { xs: 1.25, lg: 1.5 },
@@ -72,8 +74,8 @@ export default function TopBar({ userId, demoMode, menuOpen, onOpenMenu }: TopBa
         <BrandLogo height={32} href={HOME_HREF} />
       </Box>
 
-      {/* #321 puts the search field here, at the start of the bar on desktop. */}
-      <Box sx={{ flex: '1 1 auto' }} />
+      {/* Search (#321) fills the start of the bar: a field, or an icon button on phones. */}
+      <SearchLauncher />
 
       {demoMode ? <DemoModeBadge compact /> : null}
       <Tooltip title={themeLabel}>

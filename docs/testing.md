@@ -193,6 +193,12 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   through "Choose a Group" (axe on the chooser; the save keeps Home in place,
   confirms with the Group's name and rereads the balances), from inside a Group
   (no chooser), the old `?action=add-expense` link, and the no-Groups state.
+- **Search** (`search.spec.ts`): the top bar's search and ⌘K / Ctrl+K open
+  the dialog and Escape closes it; the shortcut never fires while typing in
+  another field; searching the seed with the arrow keys and Enter jumps to a
+  Group, and a clicked Expense opens its Group with the Expense list searched
+  for it; a person's result carries no email; Priya never finds the Group she
+  isn't in; a failed search offers Try again; axe on the dialog.
 - **Theme + a11y matrix** (`theme-a11y.spec.ts`): persona entry, dashboard,
   and trip workspace at **desktop 1280×800** and **mobile 390×844**, each in
   **light and dark** (driven by `prefers-color-scheme` emulation), plus the

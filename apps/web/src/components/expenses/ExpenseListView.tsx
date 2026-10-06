@@ -2,6 +2,7 @@
 
 import useSWR from 'swr';
 import { useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
@@ -71,8 +72,10 @@ export default function ExpenseListView({
   includeMemberBreakdown = false,
   onSummaryChange,
 }: ExpenseListViewProps) {
+  // A link with `?search=` (an Expense chosen in the top bar's search, #321) fills the search.
+  const linkedSearch = useSearchParams().get('search') ?? '';
   const [quickFilter, setQuickFilter] = useState('all');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(linkedSearch);
   const [category, setCategory] = useState('');
   const [tagFilter, setTagFilter] = useState('');
   const [sortBy, setSortBy] = useState<'date' | 'amount'>('date');
@@ -87,6 +90,19 @@ export default function ExpenseListView({
 
   const [editingExpense, setEditingExpense] = useState<Record<string, unknown> | null>(null);
   const [deletingExpense, setDeletingExpense] = useState<Record<string, unknown> | null>(null);
+
+  // A later search link, on this same page, searches again with no filter hiding the Expense.
+  const [appliedLinkedSearch, setAppliedLinkedSearch] = useState(linkedSearch);
+  if (linkedSearch !== appliedLinkedSearch) {
+    setAppliedLinkedSearch(linkedSearch);
+    if (linkedSearch) {
+      setSearch(linkedSearch);
+      setQuickFilter('all');
+      setCategory('');
+      setTagFilter('');
+      setPage(1);
+    }
+  }
 
   const [snackbar, setSnackbar] = useState<{
     open: boolean;

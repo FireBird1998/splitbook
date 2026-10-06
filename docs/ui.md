@@ -198,15 +198,27 @@ xl: 1536px    — Large desktop
 
 ### Layout (`src/components/layout/`)
 
-| Component       | Description                                                      |
-| --------------- | ---------------------------------------------------------------- |
-| `AppShell`      | Sidebar (lg+) or drawer, the top bar and `main`                  |
-| `Sidebar`       | Logo, main navigation, Group list, Settings and the account      |
-| `SidebarGroups` | The live Group list: Theme icon, name and balance line per Group |
-| `TopBar`        | Phones' menu button and logo, demo badge, theme, Add expense     |
-| `AccountMenu`   | Avatar and name at the sidebar's foot; Settings and Sign out     |
-| `BrandLogo`     | The logo artwork, light or dark                                  |
-| `BrandMark`     | The mark beside a name                                           |
+| Component       | Description                                                          |
+| --------------- | -------------------------------------------------------------------- |
+| `AppShell`      | Sidebar (lg+) or drawer, the top bar and `main`                      |
+| `Sidebar`       | Logo, main navigation, Group list, Settings and the account          |
+| `SidebarGroups` | The live Group list: Theme icon, name and balance line per Group     |
+| `TopBar`        | Phones' menu button and logo, search, demo badge, theme, Add expense |
+| `AccountMenu`   | Avatar and name at the sidebar's foot; Settings and Sign out         |
+| `BrandLogo`     | The logo artwork, light or dark                                      |
+| `BrandMark`     | The mark beside a name                                               |
+
+### Search (`src/components/search/`)
+
+| Component        | Description                                                               |
+| ---------------- | ------------------------------------------------------------------------- |
+| `SearchLauncher` | The top bar's search field (an icon button on phones) and ⌘K / Ctrl+K     |
+| `SearchDialog`   | The search dialog: query, debounced read, arrow keys, Enter and Escape    |
+| `SearchPanel`    | Its content: empty, loading, error, no-results and grouped results states |
+
+The shortcut is never taken while the member is typing in another field. A result
+opens `/groups/[id]`: a person opens the first Group shared with them, and an
+Expense opens its Group with `?search=` filling the Expense list's search.
 
 ### Groups (`src/components/groups/`)
 

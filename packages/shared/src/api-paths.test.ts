@@ -9,6 +9,7 @@ import {
   homeBalancesPath,
   invitationsPath,
   recurringExpensesPath,
+  searchPath,
   settlementsPath,
   userActivityPath,
 } from './api-paths';
@@ -106,6 +107,19 @@ describe('the reads only the web makes', () => {
     expect(invitationsPath()).toBe('/api/invitations');
     expect(settlementsPath(groupId)).toBe(`/api/groups/${groupId}/settlements`);
     expect(recurringExpensesPath(groupId)).toBe(`/api/groups/${groupId}/recurring`);
+  });
+
+  it('a search, with the query as it is searched', () => {
+    expect(searchPath('goa')).toBe('/api/search?q=goa');
+    expect(searchPath('  Kerala   sadya ')).toBe('/api/search?q=Kerala%20sadya');
+    expect(searchPath('rent & bills?')).toBe('/api/search?q=rent%20%26%20bills%3F');
+    expect(queryOf(searchPath('a=b&q=c#d'))).toEqual([['q', 'a=b&q=c#d']]);
+    expect(searchPath('किराया')).toBe(`/api/search?q=${encodeURIComponent('किराया')}`);
+  });
+
+  it('no query for an empty search', () => {
+    expect(searchPath('')).toBe('/api/search');
+    expect(searchPath('   ')).toBe('/api/search');
   });
 
   it('the page sizes it asks for', () => {

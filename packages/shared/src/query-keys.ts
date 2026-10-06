@@ -14,6 +14,7 @@ import {
   homeBalancesPath,
   invitationsPath,
   recurringExpensesPath,
+  searchPath,
   settlementsPath,
   userActivityPath,
   type ActivityPageQuery,
@@ -25,16 +26,18 @@ import type { ExpenseFilters } from './types';
  * Which follow-ups must reach a read: the Groups list, Home's reads across the member's
  * Groups (its totals and latest changes), one Group's details, its running Balances, or the
  * rest of its ledger (Expense pages and records, Activity, Settlements and recurring
- * Expenses). Invitations belong to no Group.
+ * Expenses). Invitations and search (#321), which reads across the member's Groups, belong
+ * to no Group.
  */
 export type QueryScope = AccountScope | GroupScope;
-export type AccountScope = 'groups' | 'home' | 'invitations';
+export type AccountScope = 'groups' | 'home' | 'invitations' | 'search';
 export type GroupScope = 'group' | 'balances' | 'ledger';
 
 const accountScopes: readonly unknown[] = [
   'groups',
   'home',
   'invitations',
+  'search',
 ] satisfies AccountScope[];
 const groupScopes: readonly unknown[] = ['group', 'balances', 'ledger'] satisfies GroupScope[];
 
@@ -103,6 +106,10 @@ export const userActivityKey = (account: QueryAccount, activity?: UserActivityQu
 export const invitationsKey = (account: QueryAccount) =>
   accountKey('invitations', account, invitationsPath());
 
+/** One search across the member's Groups; the same query, however spaced, has one key. */
+export const searchKey = (account: QueryAccount, query: string) =>
+  accountKey('search', account, searchPath(query));
+
 export const groupKey = (account: QueryAccount, groupId: string) =>
   groupScopedKey('group', account, groupId, groupPath(groupId));
 
@@ -145,8 +152,8 @@ export function matchAccount(account: QueryAccount) {
 }
 
 /**
- * One Group's reads: its details, Balances and ledger. Never the Groups list, Home or
- * invitations; a rule that needs those names them.
+ * One Group's reads: its details, Balances and ledger. Never the Groups list, Home,
+ * invitations or search; a rule that needs those names them.
  */
 export const matchGroup =
   (groupId: string) =>
