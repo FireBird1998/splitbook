@@ -201,6 +201,8 @@ export function createSavedCopyQueue() {
       });
     },
     cancel: () => waiting.clear(),
+    /** A write for `key` still waiting is never made. */
+    drop: (key: string) => void waiting.delete(key),
     /** Settles once the write running now, and every one still waiting, has. */
     idle: () => tail,
   };
@@ -300,6 +302,19 @@ export function createHomeQueries(session: HomeSession) {
       session.now(),
     );
   /**
+   * The Groups this device's saved list lists, inside a lease write: null if it can't be read, or
+   * is refused for now (dated after this device's clock), since it may list a Group later.
+   */
+  const savedIds = async (accountId: string) => {
+    try {
+      const row = await rows?.load(accountId, listPath),
+        read = cachedRead(row, accountId, listPath, session.now());
+      return read ? listOf(read.value).map(({ id }) => id) : row == null ? [] : null;
+    } catch {
+      return null;
+    }
+  };
+  /**
    * Saves an answer as its row on the saved-copy queue, where a newer answer replaces it. The
    * session, the account and the read's version are checked at write time, so nothing lands
    * after sign-out, an account change or a change that made it obsolete.
@@ -334,14 +349,16 @@ export function createHomeQueries(session: HomeSession) {
    * one a change, a denial or a failed removal made obsolete, one it can't read, and never once
    * the read answered.
    */
-  const restoreRow = async (key: QueryKey, owner: number) => {
+  const restoreRow = async (key: QueryKey, owner: number, read: HomeRead) => {
     const lease = session.lease(),
       version = session.versionOf(key);
     if (!lease || !rows) return;
     const row = await savedRow(lease, queryKeyPath(key)).catch(() => null);
     const state = held(key);
+    // Its load waits on the account queue, where an answer's trim may already be waiting too.
     if (
       !row ||
+      read.answered ||
       !session.current(owner) ||
       version !== session.versionOf(key) ||
       state?.fetchStatus !== 'fetching' ||
@@ -372,7 +389,7 @@ export function createHomeQueries(session: HomeSession) {
       version = session.versionOf(key),
       lease = session.lease();
     const obsolete = () => !session.current(owner) || version !== session.versionOf(key);
-    if (!shown()) void restoreRow(key, owner).catch(() => undefined);
+    if (!shown()) void restoreRow(key, owner, read).catch(() => undefined);
     let value: unknown;
     try {
       value = await session.read(path, owner);
@@ -419,8 +436,9 @@ export function createHomeQueries(session: HomeSession) {
   /**
    * A Groups list from the server. One in which a Group doesn't list the member is refused, as
    * malformed. The Groups it leaves out lose their reads and saved copies, in both stores, and
-   * Home's figures with them; a removal that fails leaves those copies untrusted, and never signs
-   * the member out (#212).
+   * the saved list and Home's figures with them, so no older list shows them even when this one
+   * can't be saved; a removal that fails leaves those copies untrusted, and never signs the
+   * member out (#212, #323).
    */
   const acceptList: Accept = (value, owner) => {
     const groups = listOf(value);
@@ -447,15 +465,28 @@ export function createHomeQueries(session: HomeSession) {
       session.invalidate('home');
     const lease = session.lease();
     if (!lease) return;
+    let unchecked = false;
     try {
       await lease.write(async () => {
+        // The saved list may list a Group lost while it wasn't on screen: lost too (#323). One
+        // this device can't read goes as well, since it may.
+        const saved = await savedIds(lease.accountId);
+        // They join the Set the session holds as this list's unlisted Groups, which only keeps
+        // them unsaved, as Groups off screen already are.
+        for (const id of saved ?? []) if (!listed.has(id)) lost.add(id);
+        unchecked = !saved;
         await session.retain(lease.accountId, [...listed]);
-        if (lost.size) await forget(lease.accountId, [homePath]);
+        if (!lost.size && saved) return;
+        // An older list still waiting to be saved would list them again: this list moves no
+        // version, so nothing else refuses it.
+        queue.drop(listPath);
+        await forget(lease.accountId);
       });
     } catch (error) {
       if (!session.current(owner) || error instanceof Superseded) throw new Superseded();
       session.distrust(lease.accountId, [
         ...[...lost].flatMap((id) => [`group:${id}`, `ledger:${id}`, `balances:${id}`]),
+        ...(lost.size || unchecked ? ['groups'] : []),
         'home',
       ]);
     }
@@ -538,7 +569,8 @@ export function createHomeQueries(session: HomeSession) {
    * Removes these rows (both, unless named), inside a lease write: a lost Group, a shorter Groups
    * list or a write (M2-2). It never waits for the saved-copy queue, so a confirmed change never
    * waits on a saved copy: one being written goes once it lands (`saveRow`), and any still waiting
-   * is refused, since what made these obsolete has already moved their version.
+   * is refused, since what made these obsolete has already moved their version (or, for a list
+   * that lost a Group, `trim` dropped it).
    */
   const forget = async (accountId: string, paths = [listPath, homePath]) => {
     if (!rows) return;
