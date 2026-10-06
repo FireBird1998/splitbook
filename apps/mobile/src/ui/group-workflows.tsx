@@ -455,12 +455,17 @@ export function GroupCreateForm({
 
 export type InvitationPreviewData = InvitationPreviewModel;
 
+/** Why Join waits while the app counts itself offline. */
+export const joinNeedsConnection = 'Joining needs a connection.';
+
 export interface InvitationPreviewProps {
   preview: InvitationPreviewData | null;
   status: 'loading' | 'ready' | 'joining' | 'error' | 'invalid' | 'denied';
   message: string | null;
   alreadyMember: boolean;
   signedIn?: boolean;
+  /** Joining needs a connection: Join is unavailable, and says why. */
+  offline?: boolean;
   onJoin: () => void;
   onOpenGroup: () => void;
   onRetry: () => void;
@@ -473,6 +478,7 @@ export function InvitationPreview({
   message,
   alreadyMember,
   signedIn = true,
+  offline = false,
   onJoin,
   onOpenGroup,
   onRetry,
@@ -480,6 +486,8 @@ export function InvitationPreview({
 }: InvitationPreviewProps) {
   const descriptor = preview ? getGroupTheme(preview.category) : null;
   const joining = status === 'joining';
+  // Opening a Group the member is already in, or signing in, isn't a write.
+  const waiting = offline && signedIn && !alreadyMember && !joining;
   if (status === 'loading') {
     return (
       <View style={{ gap: 12 }}>
@@ -550,10 +558,16 @@ export function InvitationPreview({
                     : 'Sign in to continue'
             }
             block
-            disabled={joining}
+            disabled={joining || waiting}
+            hint={waiting ? joinNeedsConnection : undefined}
             onPress={alreadyMember ? onOpenGroup : onJoin}
             icon={joining ? undefined : 'arrow-forward-outline'}
           />
+          {waiting && (
+            <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
+              {joinNeedsConnection}
+            </CompactText>
+          )}
         </View>
       </Card>
       <CompactText variant="small" tone="secondary">

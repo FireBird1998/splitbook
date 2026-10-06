@@ -492,6 +492,7 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
               status={state.invitation.status === 'idle' ? 'loading' : state.invitation.status}
               message={state.invitation.message}
               signedIn={authenticated}
+              offline={state.offline.active}
               alreadyMember={state.groups.data.some(
                 (group) => group.id === state.invitation.preview?.id,
               )}

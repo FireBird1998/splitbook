@@ -5015,11 +5015,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({ ...snapshot, invitation: loadingInvitation(pendingCode) });
     return readInvitation(pendingCode);
   };
-  /** Reads the invitation shown loading; it never moves the member. */
+  /**
+   * Reads the invitation shown loading; it never moves the member. As every display read does, it
+   * checks a session the app counts as offline online first, so Join is offered only once the
+   * session is (#286).
+   */
   const readInvitation = async (code: string) => {
     const owner = generation;
     const view = ++viewRequest;
     try {
+      if (snapshot.auth.status === 'authenticated' && (offlineSession || snapshot.offline.active)) {
+        await revalidateSession(owner);
+        assertCurrent(owner);
+        if (view !== viewRequest) return;
+        // The invitation shows nothing saved on this device, so the app is online again.
+        startReadView();
+      }
       const preview = parseInvitationPreview(await request(`/api/join/${code}`, owner));
       assertCurrent(owner);
       if (view !== viewRequest) return;
@@ -5081,6 +5092,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const joinInvitation = async () => {
     if (
       snapshot.auth.status !== 'authenticated' ||
+      // Joining needs a connection, as every other write does; the invitation says so (#286).
+      snapshot.offline.active ||
       snapshot.invitation.status !== 'ready' ||
       !pendingCode
     )
