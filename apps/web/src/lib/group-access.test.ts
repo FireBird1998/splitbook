@@ -5,6 +5,8 @@ const ACTOR = 'a00000000000000000000002';
 const LOST = 'b00000000000000000000001';
 const KEPT = 'c00000000000000000000001';
 const EXPENSE = 'd00000000000000000000001';
+/** Home's latest changes across the account's Groups (#309), as the card reads them. */
+const LATEST_CHANGES = '/api/user/activity?limit=10';
 
 describe('lostGroupId: which refused read means the account lost a Group', () => {
   it.each([
@@ -199,7 +201,7 @@ describe('losing a Group deletes what this tab holds for it', () => {
     keptGroup: doc.groupReadKey(ACTOR, `/api/groups/${KEPT}`),
   });
   /** Account-wide reads that list every Group, the lost one included. */
-  const accountReads = () => [keys().groupList, '/api/user/balances'];
+  const accountReads = () => [keys().groupList, '/api/user/balances', LATEST_CHANGES];
 
   /**
    * Leave an entry the way a mounted `useSWR` hook leaves it: SWR records the
@@ -233,6 +235,9 @@ describe('losing a Group deletes what this tab holds for it', () => {
     remember(groupList, { data: { data: [{ _id: LOST }, { _id: KEPT }] } });
     remember('/api/user/balances', {
       data: { data: { groups: [{ groupId: LOST }] } },
+    });
+    remember(LATEST_CHANGES, {
+      data: { activities: [{ group: { _id: LOST, name: 'Synthetic lantern trip' } }], limit: 10 },
     });
     remember(lostGroup, {
       data: { data: { _id: LOST, name: 'Synthetic lantern trip' } },

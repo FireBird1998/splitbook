@@ -10,6 +10,7 @@ import {
   invitationsPath,
   recurringExpensesPath,
   settlementsPath,
+  userActivityPath,
 } from './api-paths';
 import { getLocalMonthIsoRange } from './date';
 import type { ExpenseFilters } from './types';
@@ -114,6 +115,12 @@ describe('the reads only the web makes', () => {
     expect(activityPagePath(groupId, { page: 1, limit: 50 })).toBe(
       `/api/groups/${groupId}/activity?page=1&limit=50`,
     );
+  });
+
+  it("Home's latest changes across Groups, with or without a size", () => {
+    expect(userActivityPath({ limit: 10 })).toBe('/api/user/activity?limit=10');
+    expect(userActivityPath()).toBe('/api/user/activity');
+    expect(queryOf(userActivityPath({ limit: 50 }))).toEqual([['limit', '50']]);
   });
 });
 
