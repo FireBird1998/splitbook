@@ -349,7 +349,7 @@ describe('Home', () => {
       '/api/invitations': invitations,
     });
 
-  it('lays out the canvas’s order: the heading, Your balances beside Needs you, then the Groups beside Latest changes', () => {
+  it('lays out the canvas’s order: the heading, Your balances beside Needs you, Your share of spending, then the Groups beside Latest changes', () => {
     const html = home(BALANCES);
     const headings = [...html.matchAll(/<h([12])\b[^>]*>([^<]+)<\/h\1>/g)].map(
       ([, , name]) => name,
@@ -358,6 +358,7 @@ describe('Home', () => {
       'Home',
       'Your balances',
       'Needs you',
+      'Your share of spending',
       'Your groups',
       'Latest changes',
     ]);
@@ -390,6 +391,8 @@ describe('Home', () => {
     const html = render(createElement(DashboardView, { userId: USER.id, userName: USER.name }));
     expect(html).toContain('aria-label="Loading your balances"');
     expect(html).toContain('aria-label="Loading what needs you"');
+    // The server can't know the viewer's time zone, so the spending chart waits for the browser.
+    expect(html).toContain('aria-label="Loading your spending"');
     expect(text(html)).toContain('Home');
   });
 });

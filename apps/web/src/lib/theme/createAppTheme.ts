@@ -1,4 +1,6 @@
 import { createTheme, darken, lighten, type Shadows, type Theme } from '@mui/material/styles';
+// Types only: lets the theme style the charts (MuiChartsGrid, MuiChartsXAxis, …).
+import type {} from '@mui/x-charts/themeAugmentation';
 import { FONT_MONO, FONT_UI, RADIUS, getSemanticTokens, type ThemeMode } from './tokens';
 
 declare module '@mui/material/styles' {
@@ -21,6 +23,8 @@ declare module '@mui/material/styles' {
       stub: string;
     };
     focus: { main: string; ring: string };
+    chart: { series: string; seriesSoft: string; grid: string };
+    inverse: { bg: string; text: string };
   }
 
   interface PaletteOptions {
@@ -42,6 +46,8 @@ declare module '@mui/material/styles' {
       stub?: string;
     };
     focus?: { main?: string; ring?: string };
+    chart?: { series?: string; seriesSoft?: string; grid?: string };
+    inverse?: { bg?: string; text?: string };
   }
 
   interface TypographyVariants {
@@ -111,6 +117,8 @@ export function createAppTheme(mode: ThemeMode): Theme {
       strip: { ...tokens.strip },
       focus: { main: tokens.focus, ring: tokens.focusRing },
       status: { ...tokens.status },
+      chart: { ...tokens.chart },
+      inverse: { ...tokens.inverse },
     },
     typography: {
       fontFamily: FONT_UI,
@@ -294,6 +302,39 @@ export function createAppTheme(mode: ThemeMode): Theme {
           paper: {
             borderRadius: RADIUS.md,
             border: `1px solid ${tokens.border}`,
+          },
+        },
+      },
+      // Charts (design canvas "Web portal"): a hairline grid, a baseline in the strong border,
+      // tick labels in text colours, and tooltips on the inverse surface. Series colours come
+      // from `palette.chart` in each chart.
+      MuiChartsGrid: {
+        styleOverrides: { line: { stroke: tokens.chart.grid, shapeRendering: 'crispEdges' } },
+      },
+      MuiChartsXAxis: {
+        styleOverrides: {
+          root: {
+            '& .MuiChartsAxis-line': { stroke: tokens.borderStrong },
+            '& .MuiChartsAxis-tickLabel': { fill: tokens.textSecondary },
+          },
+        },
+      },
+      MuiChartsYAxis: {
+        styleOverrides: {
+          root: {
+            '& .MuiChartsAxis-line': { stroke: tokens.borderStrong },
+            '& .MuiChartsAxis-tickLabel': { fill: tokens.textMuted },
+          },
+        },
+      },
+      MuiChartsTooltip: {
+        styleOverrides: {
+          paper: {
+            backgroundColor: tokens.inverse.bg,
+            color: tokens.inverse.text,
+            border: 0,
+            borderRadius: 10,
+            boxShadow: tokens.shadowMd,
           },
         },
       },

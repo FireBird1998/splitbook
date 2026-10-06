@@ -49,13 +49,27 @@ interface HomeCardProps {
   title: string;
   /** Wide cards take the row's larger share; narrow ones sit beside them. */
   width?: 'wide' | 'narrow';
+  /** Under the title, in small secondary text: what the card covers, as on the canvas. */
+  subtitle?: ReactNode;
   /** Beside the title: a count, a hint or a link. */
   aside?: ReactNode;
   children: ReactNode;
 }
 
+function HomeCardTitle({ id, children }: { id: string; children: ReactNode }) {
+  return (
+    <Typography
+      id={id}
+      component="h2"
+      sx={{ fontSize: '1rem', lineHeight: 1.3, fontWeight: 600, color: 'text.primary' }}
+    >
+      {children}
+    </Typography>
+  );
+}
+
 /** One card: a labelled region with its heading row, then its content. */
-export function HomeCard({ id, title, width = 'wide', aside, children }: HomeCardProps) {
+export function HomeCard({ id, title, width = 'wide', subtitle, aside, children }: HomeCardProps) {
   const headingId = `${id}-heading`;
   return (
     <Box
@@ -86,13 +100,16 @@ export function HomeCard({ id, title, width = 'wide', aside, children }: HomeCar
           minHeight: 56,
         }}
       >
-        <Typography
-          id={headingId}
-          component="h2"
-          sx={{ fontSize: '1rem', lineHeight: 1.3, fontWeight: 600, color: 'text.primary' }}
-        >
-          {title}
-        </Typography>
+        {subtitle ? (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px', minWidth: 0 }}>
+            <HomeCardTitle id={headingId}>{title}</HomeCardTitle>
+            <Typography sx={{ fontSize: '0.75rem', lineHeight: 1.35, color: 'text.secondary' }}>
+              {subtitle}
+            </Typography>
+          </Box>
+        ) : (
+          <HomeCardTitle id={headingId}>{title}</HomeCardTitle>
+        )}
         {aside}
       </Box>
       {children}

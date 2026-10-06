@@ -12,6 +12,7 @@ import {
   searchPath,
   settlementsPath,
   userActivityPath,
+  userSpendingPath,
 } from './api-paths';
 import { getLocalMonthIsoRange } from './date';
 import type { ExpenseFilters } from './types';
@@ -135,6 +136,24 @@ describe('the reads only the web makes', () => {
     expect(userActivityPath({ limit: 10 })).toBe('/api/user/activity?limit=10');
     expect(userActivityPath()).toBe('/api/user/activity');
     expect(queryOf(userActivityPath({ limit: 50 }))).toEqual([['limit', '50']]);
+  });
+});
+
+describe("Home's spending chart (#307)", () => {
+  it('sends the Month count and the time zone, encoded', () => {
+    const path = userSpendingPath({ months: 6, timeZone: 'Asia/Kolkata' });
+    expect(path).toBe('/api/user/spending?months=6&tz=Asia%2FKolkata');
+    expect(queryOf(path)).toEqual([
+      ['months', '6'],
+      ['tz', 'Asia/Kolkata'],
+    ]);
+  });
+
+  it('keeps a zone with a plus sign intact', () => {
+    expect(queryOf(userSpendingPath({ months: 12, timeZone: 'Etc/GMT+5' }))).toEqual([
+      ['months', '12'],
+      ['tz', 'Etc/GMT+5'],
+    ]);
   });
 });
 

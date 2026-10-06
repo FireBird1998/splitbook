@@ -35,4 +35,30 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
     for (const [pair, [foreground, background]] of Object.entries(pairs))
       expect(getContrastRatio(foreground, background), pair).toBeGreaterThanOrEqual(4.5);
   });
+
+  it('keeps chart text readable and the series colour visible', () => {
+    const { palette } = createAppTheme(mode);
+    const text = {
+      'tooltip text on the inverse surface': [palette.inverse.text, palette.inverse.bg],
+      'y-axis labels on a card': [palette.text.disabled, palette.background.paper],
+      'x-axis labels on a card': [palette.text.secondary, palette.background.paper],
+    };
+    for (const [pair, [foreground, background]] of Object.entries(text))
+      expect(getContrastRatio(foreground, background), pair).toBeGreaterThanOrEqual(4.5);
+    // A graphic, not text: WCAG 1.4.11 asks 3:1 against what is next to it.
+    expect(getContrastRatio(palette.chart.series, palette.background.paper)).toBeGreaterThanOrEqual(
+      3,
+    );
+  });
+
+  it('styles every chart from the theme: grid, axes and tooltip', () => {
+    const { components, palette } = createAppTheme(mode);
+    expect(components?.MuiChartsGrid?.styleOverrides?.line).toMatchObject({
+      stroke: palette.chart.grid,
+    });
+    expect(components?.MuiChartsTooltip?.styleOverrides?.paper).toMatchObject({
+      backgroundColor: palette.inverse.bg,
+      color: palette.inverse.text,
+    });
+  });
 });

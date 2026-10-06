@@ -18,6 +18,8 @@ const adoptedFiles = [
   'src/components/dashboard/NeedsYouCard.tsx',
   'src/components/dashboard/InvitationRow.tsx',
   'src/components/dashboard/GroupCardGrid.tsx',
+  'src/components/dashboard/SpendingChartCard.tsx',
+  'src/components/charts/SegmentedControl.tsx',
   'src/components/balances/BalancesView.tsx',
   'src/app/(main)/layout.tsx',
   'src/components/layout/AppShell.tsx',

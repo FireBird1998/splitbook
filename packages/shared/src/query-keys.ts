@@ -17,17 +17,19 @@ import {
   searchPath,
   settlementsPath,
   userActivityPath,
+  userSpendingPath,
   type ActivityPageQuery,
   type UserActivityQuery,
+  type UserSpendingQuery,
 } from './api-paths';
 import type { ExpenseFilters } from './types';
 
 /**
  * Which follow-ups must reach a read: the Groups list, Home's reads across the member's
- * Groups (its totals and latest changes), one Group's details, its running Balances, or the
- * rest of its ledger (Expense pages and records, Activity, Settlements and recurring
- * Expenses). Invitations and search (#321), which reads across the member's Groups, belong
- * to no Group.
+ * Groups (its totals, latest changes and spending chart), one Group's details, its running
+ * Balances, or the rest of its ledger (Expense pages and records, Activity, Settlements and
+ * recurring Expenses). Invitations and search (#321), which reads across the member's Groups,
+ * belong to no Group.
  */
 export type QueryScope = AccountScope | GroupScope;
 export type AccountScope = 'groups' | 'home' | 'invitations' | 'search';
@@ -102,6 +104,10 @@ export const homeBalancesKey = (account: QueryAccount) =>
 /** Home's latest changes: every Group's writes reach it, as they reach Home's totals. */
 export const userActivityKey = (account: QueryAccount, activity?: UserActivityQuery) =>
   accountKey('home', account, userActivityPath(activity));
+
+/** Home's spending chart. In the `home` scope: whatever must reach Home's totals reaches it too. */
+export const userSpendingKey = (account: QueryAccount, spending: UserSpendingQuery) =>
+  accountKey('home', account, userSpendingPath(spending));
 
 export const invitationsKey = (account: QueryAccount) =>
   accountKey('invitations', account, invitationsPath());

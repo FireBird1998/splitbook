@@ -98,6 +98,21 @@ export interface UserActivityQuery {
 /** The latest Activity across the member's Groups, newest first: Home's latest changes (#309). */
 export const userActivityPath = ({ limit }: UserActivityQuery = {}) =>
   `/api/user/activity${query([['limit', limit]])}`;
+
+export interface UserSpendingQuery {
+  /** How many Months, ending with the current one: 1–12. */
+  months: number;
+  /** The viewer's named IANA time zone, such as `Asia/Kolkata`: it decides each Month. */
+  timeZone: string;
+}
+
+/** The member's share of spending across their Groups, by Month (#307). */
+export const userSpendingPath = ({ months, timeZone }: UserSpendingQuery) =>
+  `/api/user/spending${query([
+    ['months', months],
+    ['tz', timeZone],
+  ])}`;
+
 export const invitationsPath = () => '/api/invitations';
 export const settlementsPath = (groupId: string) => `${group(groupId)}/settlements`;
 export const recurringExpensesPath = (groupId: string) => `${group(groupId)}/recurring`;
