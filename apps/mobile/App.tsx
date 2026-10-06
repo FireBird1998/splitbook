@@ -420,8 +420,10 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
             paddingBottom: 24,
             gap: 12,
           }}
+          // A pull on New Group or an invitation checks the session, as the write it offers needs
+          // (#286): on an invitation it then reads the invitation again.
           refreshControl={
-            state.screen === 'create' ? (
+            ['create', 'invite'].includes(state.screen) ? (
               <RefreshControl
                 refreshing={feedback.pull}
                 onRefresh={() => void controller.refresh('pull')}
