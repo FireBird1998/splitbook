@@ -303,7 +303,7 @@ async function until(check: () => boolean) {
 }
 
 describe('display reads on TanStack Query (#214)', () => {
-  it('a read the query cache cancels is never offline: no saved copy, and Save still sends', async () => {
+  it('never treats a cancelled read as offline: no saved copy is shown, and Save still sends', async () => {
     const f = fixture();
     const controller = f.create();
     await controller.signIn('alex');
@@ -350,7 +350,7 @@ describe('display reads on TanStack Query (#214)', () => {
     });
   });
 
-  it('a 403 during a read leaves nothing of the Group, and a late answer brings none of it back', async () => {
+  it('leaves nothing of a Group refused during a read, and a late answer brings none of it back', async () => {
     const f = fixture();
     const controller = f.create();
     await controller.signIn('alex');
@@ -396,7 +396,7 @@ describe('display reads on TanStack Query (#214)', () => {
     });
   });
 
-  it('a read that answers after sign-out or an account switch is never shown, saved or reused', async () => {
+  it('never shows, saves or reuses a read that answers after sign-out or an account switch', async () => {
     const f = fixture();
     const controller = f.create();
     await controller.signIn('alex');
@@ -500,7 +500,7 @@ describe('query defaults (#214, M1-6)', () => {
   });
 });
 
-describe('review of #214', () => {
+describe('reads cancelled, refused or out of date (#214)', () => {
   /**
    * Three Month changes on Maple House, each Expense read held: each supersedes the one before,
    * and each may add recurring Expenses when it ends, so Balances and Home read during them are
@@ -538,7 +538,7 @@ describe('review of #214', () => {
     }
   }
 
-  it('a Home read that changes keep cancelling reads again until it lands, never left loading', async () => {
+  it('reads Home again each time a change cancels its read, and ends ready, never loading', async () => {
     const f = fixture();
     const { controller, held, months } = await threeMonthReads(
       f,
@@ -556,7 +556,7 @@ describe('review of #214', () => {
     });
   });
 
-  it('a Balances read that changes keep cancelling reads again until it lands, never left loading', async () => {
+  it('reads Balances again each time a change cancels their read, and ends ready, never loading', async () => {
     const f = fixture();
     const { controller, held, months } = await threeMonthReads(f, (path) => path === balancesPath);
     const balances = f.reads(balancesPath);
@@ -572,7 +572,7 @@ describe('review of #214', () => {
     });
   });
 
-  it('reads again when the clock has moved back past a read, as it did before the query cache', async () => {
+  it('reads the Group again after the clock moves back past its last read', async () => {
     const f = fixture();
     const controller = f.create();
     await controller.signIn('alex');
@@ -582,7 +582,7 @@ describe('review of #214', () => {
     expect(f.reads(groupPath)).toBe(2);
   });
 
-  it('a read that joined one refused with a 403 takes that refusal: no second request or purge', async () => {
+  it('gives a pull that joined a refused read the same refusal, without a second request or purge', async () => {
     const f = fixture();
     const controller = f.create();
     await controller.signIn('alex');
@@ -611,7 +611,7 @@ describe('review of #214', () => {
   // Accepted with the swap (#214): a read that failed with an HTTP error is no longer reused,
   // even inside the window, so the next foreground refresh reads it again. Before, the answer
   // verified before the failure was reused.
-  it('reads again on a foreground refresh inside the window after a read failed with an HTTP error', async () => {
+  it('reads the Group again on a foreground refresh inside the window after its read failed', async () => {
     const f = fixture();
     const controller = f.create();
     await controller.signIn('alex');
@@ -633,7 +633,7 @@ describe('review of #214', () => {
     });
   });
 
-  it('reads a refusal’s reply before losing the Group aborts anything', async () => {
+  it('reads a refusal’s reply before losing the Group aborts its read', async () => {
     const f = fixture();
     const controller = f.create();
     await controller.signIn('alex');
