@@ -375,3 +375,125 @@ describe('cleaning up after each request', () => {
     expect(t.started).toEqual([{ ms: 20_000, ended: 1 }]);
   });
 });
+
+describe('a session no session holds any more (#284)', () => {
+  const staging = 'https://staging.splitbook.test';
+  const client = '123-test.apps.googleusercontent.com';
+  const late = '__Secure-better-auth.session_token=alex-1.signature';
+
+  /**
+   * A Google build's transport. Each request's reply waits for `release(path)`, and an abort
+   * before then fails it as expo/fetch does. `bootstrap` is what the backend says it is.
+   */
+  function held(bootstrap: unknown = { environment: 'staging', googleWebClientId: client }) {
+    let generation = 1;
+    const sent: { path: string; cookie: string | null }[] = [];
+    const replies = new Map<string, () => void>();
+    const saved: string[] = [];
+    const hooks: string[] = [];
+    const transport = createTransport({
+      apiBase: staging,
+      authOrigin: staging,
+      secureTransport: true,
+      googleEnabled: true,
+      googleWebClientId: client,
+      fetch: (url, init) => {
+        const path = new URL(url).pathname;
+        sent.push({ path, cookie: new Headers(init.headers).get('Cookie') });
+        const answer =
+          path === '/.well-known/splitbook-mobile.json'
+            ? Response.json(bootstrap)
+            : path === '/api/auth/sign-in/social'
+              ? new Response(JSON.stringify({ user: {} }), {
+                  headers: { 'Set-Cookie': `${late}; Path=/; HttpOnly; Secure; Max-Age=2592000` },
+                })
+              : Response.json({ success: true });
+        return new Promise((resolve, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(new TypeError('Network request failed')),
+          );
+          replies.set(path, () => resolve(answer));
+        });
+      },
+      now: () => Date.parse('2026-10-06T09:00:00.000Z'),
+      timer: manualTimer().timer,
+      session: {
+        current: (owner) => owner === generation,
+        cookie: () => null,
+        saveCookie: async (_owner, cookie) => {
+          saved.push(cookie);
+        },
+      },
+      onExpired: async (_owner, message) => {
+        hooks.push(`expired: ${message}`);
+      },
+      onGroupDenied: async (id) => {
+        hooks.push(`denied: ${id}`);
+      },
+    });
+    return {
+      transport,
+      sent,
+      saved,
+      hooks,
+      /** Answers the request waiting on `path`, once it has been sent. */
+      release: async (path: string) => {
+        await vi.waitFor(() => expect(replies.has(path)).toBe(true));
+        replies.get(path)!();
+        replies.delete(path);
+      },
+      changeSession: () => {
+        generation += 1;
+        transport.abortAll();
+      },
+    };
+  }
+
+  it('hands a replaced sign-in’s session to onAbandoned, never adopts it, and the caller gets Superseded', async () => {
+    const t = held();
+    const abandoned: string[] = [];
+    const signingIn = caught(
+      t.transport.request('/api/auth/sign-in/social', 1, {
+        method: 'POST',
+        body: { provider: 'google' },
+        onAbandoned: async (cookie) => {
+          abandoned.push(cookie);
+        },
+      }),
+    );
+    await t.release('/.well-known/splitbook-mobile.json');
+    await vi.waitFor(() => expect(t.sent).toHaveLength(2));
+    // The session changes while the reply is on its way; the sign-in isn't ended by it.
+    t.changeSession();
+    await t.release('/api/auth/sign-in/social');
+    expect(await within(signingIn)).toBeInstanceOf(Superseded);
+    expect(abandoned).toEqual([late]);
+    expect(t.saved).toEqual([]);
+    expect(t.hooks).toEqual([]);
+  });
+
+  it('revokes it with its own cookie after the Google check, whatever session changes meanwhile', async () => {
+    const t = held();
+    const revoking = t.transport.revokeDetached(late);
+    await vi.waitFor(() => expect(t.sent).toHaveLength(1));
+    t.changeSession();
+    await t.release('/.well-known/splitbook-mobile.json');
+    t.changeSession();
+    await t.release('/api/auth/sign-out');
+    expect(await within(revoking)).toBe(true);
+    expect(t.sent).toEqual([
+      { path: '/.well-known/splitbook-mobile.json', cookie: null },
+      { path: '/api/auth/sign-out', cookie: late },
+    ]);
+    expect(t.saved).toEqual([]);
+    expect(t.hooks).toEqual([]);
+  });
+
+  it('never sends it to a backend that fails the Google check', async () => {
+    const t = held({ environment: 'production', googleWebClientId: client });
+    const revoking = t.transport.revokeDetached(late);
+    await t.release('/.well-known/splitbook-mobile.json');
+    expect(await within(revoking)).toBe(false);
+    expect(t.sent).toEqual([{ path: '/.well-known/splitbook-mobile.json', cookie: null }]);
+  });
+});
