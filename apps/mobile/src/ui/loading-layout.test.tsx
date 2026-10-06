@@ -17,7 +17,7 @@ import type {
 import { findHosts, flatten, layoutHeight } from '../test-utils/layout';
 import { setFileWindow, setWindow, timing } from '../test-utils/native';
 import { motion } from './compact';
-import { GroupBalancesView } from './group-balances';
+import { GroupBalancesView, settledIn } from './group-balances';
 import { GroupExpensesView } from './group-expenses';
 import { HomeBalances, HomeGroups } from './home';
 
@@ -307,10 +307,20 @@ describe('A Household’s Balances', () => {
       },
     ],
   };
-  const view = (loading: boolean) => (
+  // Everyone square: the card says "Settled up" where an amount would be.
+  const settled = {
+    currency: 'INR',
+    balances: [
+      { user: person(you, 'Alex Rivera'), balance: 0 },
+      { user: person('a00000000000000000000002', 'Sam Chen'), balance: 0 },
+    ],
+    debts: [],
+  };
+  const view = (loading: boolean, square = false) => (
     <GroupBalancesView
       group={maple}
       currentUserId={you}
+      knownSettled={square}
       state={{
         groupId: maple.id,
         month: '2026-09',
@@ -329,7 +339,7 @@ describe('A Household’s Balances', () => {
           ? { status: 'loading', data: null, message: null, refreshedAt: null, stale: false }
           : {
               status: 'ready',
-              data: [owing],
+              data: [square ? settled : owing],
               message: null,
               refreshedAt: at.getTime(),
               stale: false,
@@ -368,5 +378,37 @@ describe('A Household’s Balances', () => {
     expect(layoutHeight(card(), fontScale, room)).toBe(skeleton);
     act(() => renderer!.unmount());
     renderer = undefined;
+  });
+
+  // On the emulator a settled card arrived 14.5dp shorter than its skeleton (10dp at 130%):
+  // when Home last read the member as settled here, the skeleton has no amount either.
+  it.each([
+    [360, 1],
+    [360, 1.3],
+    [411, 1],
+  ])(
+    'a settled card takes its skeleton’s place when Home last read it settled, %sdp at %s×',
+    (width, fontScale) => {
+      setWindow({ width, fontScale });
+      const room = width - 32;
+      act(() => {
+        renderer = create(view(true, true));
+      });
+      const skeleton = layoutHeight(card(), fontScale, room);
+      act(() => renderer!.update(view(false, true)));
+      expect(renderer!.root.findAll((node) => node.children.includes('Settled up'))).not.toEqual(
+        [],
+      );
+      expect(layoutHeight(card(), fontScale, room)).toBe(skeleton);
+      act(() => renderer!.unmount());
+      renderer = undefined;
+    },
+  );
+
+  it('reads Home’s last balances: settled only when known and nothing is owed', () => {
+    expect(settledIn(undefined)).toBe(false);
+    expect(settledIn([])).toBe(true);
+    expect(settledIn([{ balance: 0 }, { balance: 0.004 }])).toBe(true);
+    expect(settledIn([{ balance: 0 }, { balance: -1480 }])).toBe(false);
   });
 });

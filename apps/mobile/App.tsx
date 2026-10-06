@@ -65,7 +65,7 @@ import { GroupSnackbar, HomeSnackbar } from './src/ui/group-snackbar';
 import { visibleFieldErrors } from './src/data/field-feedback';
 import { groupFields } from './src/data/group-draft';
 import { GroupShell } from './src/ui/group-shell';
-import { GroupBalancesView } from './src/ui/group-balances';
+import { GroupBalancesView, settledIn } from './src/ui/group-balances';
 import { RecordPaymentSheet } from './src/ui/record-payment-sheet';
 import { GroupActivity } from './src/ui/group-activity';
 import { GroupMembers } from './src/ui/group-members';
@@ -871,6 +871,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               offline={state.offline.active}
               refreshing={feedback.quiet}
               silent={feedback.silent}
+              knownSettled={settledIn(state.home.byGroup[group.id])}
               onRecord={(paidBy, paidTo, currency) =>
                 void controller.openRecordPayment(paidBy, paidTo, currency)
               }

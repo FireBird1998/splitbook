@@ -958,6 +958,43 @@ describe('App return from an Expense', () => {
     expect(layoutHeight(slot)).toBe(3);
   });
 
+  // #331: a settled card is shorter than one with an amount; Home's last read shapes the wait.
+  it('shapes the Balances placeholder as settled when Home last read the member settled there', async () => {
+    const app = await renderApp();
+    app.use((path) =>
+      path === '/api/user/balances'
+        ? json({
+            data: {
+              buckets: [],
+              groups: [{ groupId, balances: [{ currency: 'INR', balance: 0 }] }],
+            },
+            status: 200,
+          })
+        : undefined,
+    );
+    await app.press('Refresh Home');
+    const read = hold();
+    app.use((path) => (path === `/api/groups/${groupId}/balances` ? read.respond() : undefined));
+    await app.press('Open Maple House');
+    await app.press('Balances');
+    const [placeholder] = app
+      .root()
+      .findAll(
+        (node) =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityLabel === 'Loading balances' &&
+          node.props.accessibilityRole !== 'progressbar',
+      );
+    // No line as tall as an amount (35dp); a "Settled up" line (20dp) instead.
+    const heights = placeholder!
+      .findAll((node) => typeof node.type === 'string')
+      .map((node) => (node.props.style as { height?: number } | undefined)?.height);
+    expect(heights).not.toContain(35);
+    expect(heights).toContain(20);
+    read.release(json({ data: { byCurrency: [] }, status: 200 }));
+    await settle();
+  });
+
   // #331: the record's skeleton takes the shape of what the list row already says about it.
   it('opens an Expense from its row over a skeleton of that record', async () => {
     const app = await renderApp();
