@@ -1104,6 +1104,26 @@ describe('a confirmed write in the Group: its message at once, never beside figu
     expect(shown.filter(oldDebtAsCurrent)).toEqual([]);
   });
 
+  it('offers Record again once Balances are read after a payment, even with the clock moved back', async () => {
+    const f = fixture();
+    const { controller } = await paying(f);
+    // Alex pays 10 of the 30; 20 is still owed afterwards.
+    controller.updateSettlement({ amount: '10' });
+    const reread = f.hold(maplePath, { afterWrite: true, exact: true });
+    const recording = controller.recordSettlement();
+    await reread.reached;
+    expect(recordable(controller.getSnapshot())).toEqual([]);
+    // The phone's clock is set back a minute while Balances are read again.
+    later(-60_000);
+    reread.release();
+    await recording;
+    await settle();
+    expect(controller.getSnapshot().financial.balances).toMatchObject({
+      status: 'ready',
+      stale: false,
+    });
+    expect(recordable(controller.getSnapshot())).toEqual([20]);
+  });
   it('never loses “Payment recorded” when the member leaves while Balances are read again', async () => {
     const f = fixture();
     const { controller, states } = await paying(f);
@@ -1219,11 +1239,12 @@ describe('a confirmed write in the Group: its message at once, never beside figu
     await settle();
     expect(f.savedRows(balancesPath)).not.toEqual([]);
     controller.dispose();
-    // The app restarts online, and the Group answers late.
-    f.device.failRemoval = false;
+    // The app restarts online, and the Group answers late. The copy still can't be removed, so
+    // only its mark as untrusted keeps it from showing.
     f.server.offline = false;
     const restarted = f.create();
     await restarted.restore();
+    expect(f.savedRows(balancesPath)).not.toEqual([]);
     const states: MobileSnapshot[] = [];
     restarted.subscribe(() => states.push(restarted.getSnapshot()));
     const group = f.hold(maplePath, { exact: true });
