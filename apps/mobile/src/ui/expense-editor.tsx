@@ -249,8 +249,11 @@ function ExpenseTask({
   useEffect(() => {
     if (reviewing) showReview();
   }, [reviewing]);
-  // An Expense opens over its record's skeleton; the record then fades in where it was.
-  const recordReveal = useReveal(state.status === 'loading' && !!state.requestedExpenseId);
+  // An Expense opening from nothing shows its record's skeleton, and the record then fades in
+  // where it was. A form that is briefly loading, as while a save is discarded, isn't opening a
+  // record: it keeps the spinner it always had.
+  const opening = state.status === 'loading' && !!state.requestedExpenseId && !state.draft;
+  const recordReveal = useReveal(opening);
   const errors = state.validation.errors;
   const section = (field: ExpenseField) => (node: View | null) => {
     sections.current[field] = node;
@@ -338,10 +341,10 @@ function ExpenseTask({
   const requested = !!state.requestedExpenseId;
   if (state.status === 'loading')
     return frame(
-      requested ? (
+      opening ? (
         <ExpenseRecordSkeleton label="Opening this Expense…" />
       ) : (
-        <Loading label="Opening your draft…" />
+        <Loading label={requested ? 'Opening this Expense…' : 'Opening your draft…'} />
       ),
     );
   if (!draft)

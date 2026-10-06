@@ -807,6 +807,31 @@ describe('compact Expense record, opening', () => {
     },
   );
 
+  // Discarding an unconfirmed edit takes the form through loading and back to the form: that
+  // isn't a record opening, so it shows the spinner it always did, and nothing fades.
+  it('keeps the spinner, not the record’s skeleton, while a form briefly loads', async () => {
+    const harness = backend();
+    await harness.controller.signIn('alex');
+    await harness.controller.openExpense(groupId, ids.dinner);
+    await harness.controller.editExpense();
+    const form = harness.controller.getSnapshot().expense;
+    expect(form.draft).not.toBeNull();
+    expect(form.requestedExpenseId).toBe(ids.dinner);
+    await act(async () => {
+      screen = create(editor({ ...form, status: 'loading' }));
+    });
+    expect(
+      findHosts(screen!.toJSON(), (props) => props.accessibilityLabel === 'Opening this Expense…'),
+    ).toEqual([]);
+    expect(screen!.root.findAll((node) => isHost(node, 'ActivityIndicator'))).toHaveLength(1);
+    expect(text(screen!.root)).toContain('Opening this Expense…');
+    timing.mockClear();
+    act(() => screen!.update(editor(form)));
+    expect(
+      timing.mock.results.filter((result) => result.value.config.duration === motion.reveal),
+    ).toEqual([]);
+  });
+
   it('fades in where its skeleton was, on the native driver', async () => {
     const harness = backend();
     await harness.controller.signIn('alex');
