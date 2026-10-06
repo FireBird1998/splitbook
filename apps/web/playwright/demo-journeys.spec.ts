@@ -53,11 +53,17 @@ test('alex: creates a trip that is ready for a first expense', async ({ page }, 
   await page.getByLabel('Trip name').fill(qaTripName);
   await page.getByRole('button', { name: 'Create trip' }).click();
 
-  await page.waitForURL((url) => /^\/groups\/[a-f0-9]{24}$/.test(url.pathname));
+  // A new Group opens on its Expenses tab (#305).
+  await page.waitForURL((url) => /^\/groups\/[a-f0-9]{24}\/expenses$/.test(url.pathname));
   qaTripUrl = new URL(page.url()).pathname;
 
-  // Trip strip shows the new trip; checklist guides the first expense.
-  await expect(page.getByRole('main').getByText(qaTripName)).toBeVisible();
+  // The header and the trip strip show the new trip; checklist guides the first expense.
+  await expect(
+    page.getByRole('main').getByRole('heading', { level: 1, name: qaTripName }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('main').getByRole('region', { name: new RegExp(`^${qaTripName} trip,`) }),
+  ).toBeVisible();
   await expect(page.getByText('Get this trip going')).toBeVisible();
 
   await reviewScreenshot(page, testInfo, 'alex-new-trip');
@@ -110,7 +116,10 @@ test('sam: switches persona and records a settlement; balances update', async ({
   await expect(balancePanel.getByText('You owe')).toBeVisible();
 
   await page.goto(`/groups/${DEMO_GROUP_ID}`);
-  await page.getByRole('tab', { name: 'Balances' }).click();
+  await page
+    .getByRole('navigation', { name: `${DEMO_TRIP_NAME} sections` })
+    .getByRole('link', { name: 'Balances' })
+    .click();
 
   // Sam is a party to exactly one open debt, so exactly one settle action.
   const settleButton = page.getByRole('button', { name: 'Record settlement' });
@@ -150,7 +159,10 @@ test('priya: switches persona and verifies her seeded balance', async ({ page },
   await expect(balancePanel.getByText('₹4,680.00')).toBeVisible();
 
   await page.goto(`/groups/${DEMO_GROUP_ID}`);
-  await page.getByRole('tab', { name: 'Balances' }).click();
+  await page
+    .getByRole('navigation', { name: `${DEMO_TRIP_NAME} sections` })
+    .getByRole('link', { name: 'Balances' })
+    .click();
   await expect(page.getByText('Who pays whom')).toBeVisible();
   await expect(page.getByText('₹4,680.00').first()).toBeVisible();
 

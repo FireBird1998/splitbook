@@ -182,6 +182,13 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   Group highlighted, Settings, the Groups list link), the phone drawer
   (opens from the top bar, traps focus, 44 px targets, closes on Escape and
   on navigation), Sign out from the account at the foot, and axe on each.
+- **Group page** (`group-page.spec.ts`, read-only): the header (Theme icon,
+  name, "Theme · N members · currency", avatars, Invite, settings), the tabs
+  as links with their own addresses through Back, Forward and reload, the old
+  `?tab=balances` and `?action=add-expense` links, the Members roster (names
+  and roles, no emails) with Invite, and axe on every tab. Until #310 rebuilds
+  Expenses, its rows and two summary captions are left out of that tab's axe
+  check.
 - **Theme + a11y matrix** (`theme-a11y.spec.ts`): persona entry, dashboard,
   and trip workspace at **desktop 1280×800** and **mobile 390×844**, each in
   **light and dark** (driven by `prefers-color-scheme` emulation), plus the

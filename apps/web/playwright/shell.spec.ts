@@ -82,15 +82,20 @@ test('desktop: a full-height sidebar holds the logo, Home, the live Group list a
   await expect(header.getByRole('link', { name: 'Splitbook home' })).toBeHidden();
   await expectNoSeriousA11yViolations(page, testInfo, 'shell-home');
 
-  // The open Group is highlighted, and Home no longer is.
+  // The open Group is highlighted, and Home no longer is. The Group opens on its Expenses tab.
   await trip.click();
-  await page.waitForURL((url) => url.pathname === `/groups/${DEMO_GROUP_ID}`);
+  await page.waitForURL((url) => url.pathname === `/groups/${DEMO_GROUP_ID}/expenses`);
   await expect(trip).toHaveAttribute('aria-current', 'page');
   await expect(main.getByRole('link', { name: 'Home' })).not.toHaveAttribute('aria-current');
-  // Axe runs on the Balances tab, as the trip workspace check in theme-a11y does: the
-  // Expenses tab's cards carry their own findings, which the Group page rewrite (#305) owns.
-  await page.getByRole('main').getByRole('tab', { name: 'Balances' }).click();
+  // Every tab of the Group is the Group's page (#305).
+  await page
+    .getByRole('main')
+    .getByRole('navigation', { name: `${DEMO_TRIP_NAME} sections` })
+    .getByRole('link', { name: 'Balances' })
+    .click();
+  await page.waitForURL((url) => url.pathname === `/groups/${DEMO_GROUP_ID}/balances`);
   await expect(page.getByRole('main').getByText('Who pays whom')).toBeVisible();
+  await expect(trip).toHaveAttribute('aria-current', 'page');
   await expectNoSeriousA11yViolations(page, testInfo, 'shell-group');
   await reviewScreenshot(page, testInfo, 'shell-group');
 });
@@ -172,11 +177,17 @@ test('phone: the drawer opens from the top bar with the same items, traps focus 
   // Following a link closes it; the open Group is then the highlighted one.
   await openNavigation(page);
   await tripRow(drawer).click();
-  await page.waitForURL((url) => url.pathname === `/groups/${DEMO_GROUP_ID}`);
+  await page.waitForURL((url) => url.pathname === `/groups/${DEMO_GROUP_ID}/expenses`);
   await expect(drawer).toHaveCount(0);
-  // Axe below runs over the Balances tab, as in the desktop journey.
-  await page.getByRole('main').getByRole('tab', { name: 'Balances' }).click();
+  // The drawer stays closed as the Group's tabs change the address.
+  await page
+    .getByRole('main')
+    .getByRole('navigation', { name: `${DEMO_TRIP_NAME} sections` })
+    .getByRole('link', { name: 'Balances' })
+    .click();
+  await page.waitForURL((url) => url.pathname === `/groups/${DEMO_GROUP_ID}/balances`);
   await expect(page.getByRole('main').getByText('Who pays whom')).toBeVisible();
+  await expect(drawer).toHaveCount(0);
   await openNavigation(page);
   await expect(tripRow(drawer)).toHaveAttribute('aria-current', 'page');
   await expect(

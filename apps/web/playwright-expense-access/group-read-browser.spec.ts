@@ -383,7 +383,11 @@ for (const { tab, poll, read, shows, empty } of [
     // The local suite runs `next dev`, which may still be compiling these routes.
     await expect(header).toContainText(balance, { timeout: 30_000 });
     await expect(header).toContainText(tripTotal);
-    if (tab !== 'Expenses') await main.getByRole('tab', { name: tab, exact: true }).click();
+    const tabLink = main
+      .getByRole('navigation', { name: `${name} sections` })
+      .getByRole('link', { name: tab, exact: true });
+    if (tab !== 'Expenses') await tabLink.click();
+    await page.waitForURL((url) => url.pathname === `/groups/${groupId}/${read}`);
     for (const text of shows) await expect(main.getByText(text).first()).toBeVisible();
     // Hold every timer: only the tab's own poll may run, never the Group's 30 s poll.
     await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
@@ -422,6 +426,9 @@ for (const { tab, poll, read, shows, empty } of [
     await denied.getByRole('button', { name: 'Retry', exact: true }).click();
     await reread;
     await expect(header).toBeVisible();
+    // Back on the tab the member was on: the tab is the address.
+    expect(new URL(page.url()).pathname).toBe(`/groups/${groupId}/${read}`);
+    await expect(tabLink).toHaveAttribute('aria-current', 'page');
     await outage;
     await expect(header).toContainText('Balance unavailable');
     await expect(header).not.toContainText('Trip total');
@@ -467,27 +474,35 @@ test('a Household reopened after Sam is back shows no month figures or dialog fr
   const main = page.getByRole('main');
   const monthFigures = main.getByText(/you fronted/);
 
+  const sections = main.getByRole('navigation', { name: 'Synthetic lantern household sections' });
+  const expensesTab = `/groups/${household._id}/expenses`;
+
   await page.clock.install();
-  // Opened the way a Dashboard card's "Add expense" opens it.
+  // Opened the way a Dashboard card's "Add expense" opens it: the old link lands on the
+  // Expenses tab, keeps the Month and opens the form once.
   await enter(page, ledger, `/groups/${household._id}?month=${month}&action=add-expense`);
   await expect(page.getByRole('dialog')).toBeVisible({ timeout: 30_000 });
+  await page.waitForURL((url) => url.pathname === expensesTab && url.search === `?month=${month}`);
   await page.keyboard.press('Escape');
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(monthFigures).toContainText('864.26');
-  // The month's figures stay in the bar while another tab is open.
-  await main.getByRole('tab', { name: 'Balances', exact: true }).click();
+  // The Month bar belongs to the Expenses tab (#305): Balances always include every Month.
+  await sections.getByRole('link', { name: 'Balances', exact: true }).click();
   await expect(main.getByText('432.13').first()).toBeVisible();
+  await expect(monthFigures).toHaveCount(0);
+  await page.goBack();
+  await page.waitForURL((url) => url.pathname === expensesTab && url.search === `?month=${month}`);
   await expect(monthFigures).toContainText('864.26');
-  await main.getByRole('button', { name: 'Invite friends' }).click();
+  await main.getByRole('button', { name: 'Invite', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
 
   await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
   await dataOf(await ledger.priya.delete(`${groupPath}/members/${SAM}`));
   const refused = page.waitForResponse(
     (response) =>
-      new URL(response.url()).pathname === `${groupPath}/balances` && response.status() === 403,
+      new URL(response.url()).pathname === `${groupPath}/expenses` && response.status() === 403,
   );
-  await page.clock.runFor(15_000);
+  await page.clock.runFor(10_000);
   await refused;
   const denied = main.getByRole('alert').filter({ hasText: 'Group could not be loaded.' });
   await expect(denied).toBeVisible();
@@ -509,13 +524,50 @@ test('a Household reopened after Sam is back shows no month figures or dialog fr
   // Neither the dialog left open before the loss nor the deep link's opens again by itself.
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(main.getByText('Synthetic lantern household', { exact: true })).toBeVisible();
-  await expect(main.getByRole('tab', { name: 'Balances', exact: true })).toHaveAttribute(
-    'aria-selected',
-    'true',
+  await expect(sections.getByRole('link', { name: 'Expenses', exact: true })).toHaveAttribute(
+    'aria-current',
+    'page',
   );
   await unavailable;
   await expect(monthFigures).toHaveCount(0);
   for (const text of ['864.26', '432.13']) await expect(main).not.toContainText(text);
+});
+
+test('a non-member, and a member who has left, get the same refusal on every tab and from the old links', async ({
+  page,
+  ledger,
+}) => {
+  // Fourteen page loads, each of a route the local `next dev` may still be compiling.
+  test.slow();
+  // groupA is Alex's alone; Sam joined this one and then left it.
+  const left = await dataOf(
+    await ledger.priya.post('/api/groups', {
+      data: { name: 'Synthetic lantern flat Sam left', category: 'home', defaultCurrency: 'INR' },
+    }),
+    201,
+  );
+  await joinGroup(ledger.priya, ledger.sam, left._id);
+  await dataOf(await ledger.sam.post(`/api/groups/${left._id}/leave`));
+  const main = page.getByRole('main');
+
+  for (const groupId of [ledger.groupA, left._id]) {
+    for (const path of [
+      '',
+      '/expenses',
+      '/balances',
+      '/activity',
+      '/members',
+      '?tab=balances',
+      '?action=add-expense',
+    ]) {
+      await enter(page, ledger, `/groups/${groupId}${path}`);
+      const denied = main.getByRole('alert').filter({ hasText: 'Group could not be loaded.' });
+      // The local suite runs `next dev`, which may still be compiling these routes.
+      await expect(denied, path).toBeVisible({ timeout: 30_000 });
+      await expect(main, path).toHaveText(/^\s*Group could not be loaded\.\s*Retry\s*$/);
+      await expect(page.getByRole('dialog'), path).toHaveCount(0);
+    }
+  }
 });
 
 test('the Dashboard after a loss shows none of the lost Group, even when its refetch fails', async ({

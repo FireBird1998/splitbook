@@ -206,13 +206,32 @@ xl: 1536px    — Large desktop
 | -------------------------- | ----------------------------------------------------- |
 | `GroupCard`                | Card with group name, theme, members, balance         |
 | `GroupsListView`           | Grid of GroupCards + create button                    |
-| `GroupDetailView`          | Tabs (expenses, balances, activity) + FAB             |
-| `GroupHeader`              | Neutral header for non-trip themes                    |
+| `GroupDetailView`          | The Group page's layout: header, tabs, dialogs        |
+| `GroupPageHeader`          | Theme icon, name, members, currency, Invite, settings |
+| `GroupTabs`                | Tabs as links, each with its own address              |
+| `GroupMembersView`         | Read-only roster: names and roles, Invite             |
+| `GroupHeader`              | Neutral header for non-trip Group cards               |
 | `GroupSettingsView`        | Admin page: info, currency, members, tags, recurring  |
 | `MonthCycleBar`            | Household month switcher (`?month=YYYY-MM`)           |
 | `MonthMemberTable`         | Per-member fronted / share / net for the active month |
 | `RecurringExpensesSection` | Household recurring templates: list, add, edit, pause |
 | `InviteDialog`             | Email invite + copy invite link                       |
+
+**The Group page (#305).** Each tab is its own route under the Group:
+`/groups/[id]/expenses`, `/balances`, `/activity` and `/members`, so reloading,
+Back and a shared link land on the tab. Insights joins them with #314; until
+then it is hidden, and `GROUP_TABS` in `group-tabs.ts` is where it goes.
+
+- `/groups/[id]` redirects to Expenses. The old `?tab=balances` link redirects
+  to Balances, and `?action=add-expense` (with `?month=`) goes along to the tab,
+  opens the Expense form once and then leaves the address.
+- The tabs' shared layout, `(tabs)/layout.tsx`, renders `GroupDetailView`: the
+  Group read, the header, a Trip's strip and setup checklist, the tabs and the
+  dialogs. A refused or lost Group gets the same refusal on every tab.
+- A Household's Month bar sits on the Expenses tab: a Month filters Expenses,
+  and Balances always include every Month.
+- Members is read-only: names and roles, never an email. Role changes and
+  leaving stay in Group settings.
 
 ### Trip (`src/components/trip/`)
 

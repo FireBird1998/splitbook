@@ -1,12 +1,17 @@
-import { getAuthUser } from '@/lib/utils/api-response';
 import { redirect } from 'next/navigation';
-import GroupDetailView from '@/components/groups/GroupDetailView';
+import { groupLandingHref, type SearchParamsRecord } from '@/components/groups/group-tabs';
 
-export default async function GroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const user = await getAuthUser();
-  if (!user) redirect('/login');
-
+/**
+ * A Group's own address lands on its Expenses tab (#305). Old links keep working:
+ * `?tab=balances` opens Balances, and `?action=add-expense` and `?month=` go along to the tab.
+ */
+export default async function GroupPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<SearchParamsRecord>;
+}) {
   const { id } = await params;
-
-  return <GroupDetailView groupId={id} userId={user.id} />;
+  redirect(groupLandingHref(id, await searchParams));
 }

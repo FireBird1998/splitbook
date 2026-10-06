@@ -237,14 +237,20 @@ describe('the sidebar', () => {
   });
 
   it('marks the open Group current on its page, and as the current Group inside it', () => {
-    expect(groupRows(sidebar(`/groups/${id(2)}`)).map(({ current }) => current)).toEqual([
-      null,
-      'page',
-      null,
-      null,
-      null,
-      null,
-    ]);
+    // A Group's page is any of its tabs (#305).
+    for (const path of [
+      `/groups/${id(2)}`,
+      `/groups/${id(2)}/expenses`,
+      `/groups/${id(2)}/members`,
+    ])
+      expect(groupRows(sidebar(path)).map(({ current }) => current)).toEqual([
+        null,
+        'page',
+        null,
+        null,
+        null,
+        null,
+      ]);
     const inside = anchors(sidebar(`/groups/${id(2)}/settings`)).filter(({ current }) => current);
     expect(inside).toEqual([
       expect.objectContaining({ href: `/groups/${id(2)}`, current: 'true' }),
@@ -338,6 +344,7 @@ describe('which link is current', () => {
     expect(groupsListCurrent('/groups')).toBe('page');
     expect(groupsListCurrent(`/groups/${id(1)}`)).toBeUndefined();
     expect(groupCurrent(`/groups/${id(1)}`, id(1))).toBe('page');
+    expect(groupCurrent(`/groups/${id(1)}/balances`, id(1))).toBe('page');
     expect(groupCurrent(`/groups/${id(1)}/settings`, id(1))).toBe('true');
     expect(groupCurrent(`/groups/${id(1)}`, id(2))).toBeUndefined();
     expect(groupCurrent('/groups/new', id(1))).toBeUndefined();

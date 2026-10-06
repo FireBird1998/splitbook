@@ -1,6 +1,7 @@
 import { expect, test, type TestInfo } from '@playwright/test';
 import {
   DEMO_GROUP_ID,
+  DEMO_TRIP_NAME,
   enterAsPersona,
   expectedTheme,
   expectNoSeriousA11yViolations,
@@ -111,9 +112,13 @@ test('trip workspace respects the project theme and is accessible', async ({ pag
   await page.goto(`/groups/${DEMO_GROUP_ID}`);
   await expectThemeApplied(page, testInfo);
 
-  // Trip strip + tab navigation render; balances tab is reachable.
-  await expect(page.getByRole('tab', { name: 'Expenses' })).toBeVisible();
-  await page.getByRole('tab', { name: 'Balances' }).click();
+  // Trip strip + tab navigation render; the Balances tab is a link away.
+  const sections = page.getByRole('navigation', { name: `${DEMO_TRIP_NAME} sections` });
+  await expect(sections.getByRole('link', { name: 'Expenses' })).toHaveAttribute(
+    'aria-current',
+    'page',
+  );
+  await sections.getByRole('link', { name: 'Balances' }).click();
   await expect(page.getByText('Who pays whom')).toBeVisible();
 
   await expectNoSeriousA11yViolations(page, testInfo, 'trip-balances');

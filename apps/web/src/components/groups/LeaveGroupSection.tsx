@@ -13,6 +13,7 @@ import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { apiFetch } from '@/lib/utils/api-fetch';
+import { groupTabHref } from './group-tabs';
 
 interface LeaveGroupSectionProps {
   groupId: string;
@@ -95,7 +96,7 @@ export default function LeaveGroupSection({ groupId, groupName }: LeaveGroupSect
               sx={{ mt: 2 }}
               action={
                 refusal.code === 'OPEN_BALANCE' ? (
-                  <Button component={Link} href={`/groups/${groupId}?tab=balances`} size="small">
+                  <Button component={Link} href={groupTabHref(groupId, 'balances')} size="small">
                     Go to Balances
                   </Button>
                 ) : undefined

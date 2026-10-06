@@ -121,9 +121,11 @@ export default function ActivityView({ groupId }: ActivityViewProps) {
                         {detail}
                       </Typography>
                     )}
+                    {/* Secondary, not disabled: the timestamps sit on the page background,
+                        where the muted tone falls short of 4.5:1 in light (#305, axe). */}
                     <Typography
                       variant="caption"
-                      color="text.disabled"
+                      color="text.secondary"
                       sx={{ mt: 0.25, display: 'block' }}
                     >
                       {formatActivityTimestamp(activity)}

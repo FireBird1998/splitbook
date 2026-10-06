@@ -1,31 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import useSWR from 'swr';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import Box from '@mui/material/Box';
-import Container from '@mui/material/Container';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Skeleton from '@mui/material/Skeleton';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import IconButton from '@mui/material/IconButton';
 import Button from '@mui/material/Button';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
-import SettingsIcon from '@mui/icons-material/Settings';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AddIcon from '@mui/icons-material/Add';
-import ShareIcon from '@mui/icons-material/Share';
 import TripStrip from '@/components/trip/TripStrip';
-import GroupHeader from '@/components/groups/GroupHeader';
-import MonthCycleBar, { parseMonthParam } from '@/components/groups/MonthCycleBar';
-import MonthMemberTable from '@/components/groups/MonthMemberTable';
-import ExpenseListView from '@/components/expenses/ExpenseListView';
-import BalancesView from '@/components/balances/BalancesView';
-import ActivityView from '@/components/activity/ActivityView';
+import { parseMonthParam } from '@/components/groups/MonthCycleBar';
 import ExpenseFormDialog from '@/components/expenses/ExpenseFormDialog';
 import InviteDialog from '@/components/groups/InviteDialog';
 import { useGroup } from '@/lib/hooks/use-groups';
@@ -34,14 +21,31 @@ import { fetcher } from '@/lib/utils/fetcher';
 import { formatDate } from '@splitbook/shared/date';
 import { buildTripChecklist, shouldShowTripChecklist } from '@splitbook/shared/trip-setup';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
-import type { ExpenseMemberBreakdownRow } from '@splitbook/shared/types';
 import type { GroupRead } from '@splitbook/shared/group-read';
+import GroupPageHeader from './GroupPageHeader';
+import GroupTabs from './GroupTabs';
+import {
+  GroupPageContext,
+  type GroupBalancesRead,
+  type GroupPageValue,
+} from './group-page-context';
+import { groupSettingsHref, groupTabHref } from './group-tabs';
 
 interface GroupDetailViewProps {
   groupId: string;
   userId: string;
+  /** The open tab's route (`/groups/[id]/expenses`, …). */
+  children?: ReactNode;
 }
 
+/**
+ * The Group page (#305): the layout around every tab. It reads the Group and shows the header,
+ * the trip strip and checklist on a Trip, the tabs and the open tab, while the Group can be
+ * shown. When it cannot (a refused read, #201, or a deleted Group), every tab gets the same
+ * refusal and the tab's content unmounts, so the month figures it surfaced and any dialog it
+ * had open go with it; when access returns, the content mounts afresh, on the tab the member
+ * was on, since the tab is the address.
+ */
 export default function GroupDetailView(props: GroupDetailViewProps) {
   return <GroupDetailPage key={`${props.userId}:${props.groupId}`} {...props} />;
 }
@@ -56,22 +60,10 @@ interface HeaderReads {
       summary?: { totalAmount?: number };
     };
   };
-  balancesData?: {
-    data?: {
-      balances?: Array<{ user: { _id: string }; balance: number }>;
-      debts?: Array<{ from: { _id: string }; to: { _id: string }; amount: number }>;
-    };
-  };
+  balancesData?: GroupBalancesRead;
 }
 
-/**
- * Reads the Group and renders its content only while the Group can be shown.
- * When it cannot (a refused read, #201, or a deleted Group), the content
- * unmounts, so the month figures it surfaced and any dialog it had open go
- * with it; when access returns, the content mounts afresh, on the tab the
- * member was on.
- */
-function GroupDetailPage({ groupId, userId }: GroupDetailViewProps) {
+function GroupDetailPage({ groupId, userId, children }: GroupDetailViewProps) {
   const { data: group, isLoading, error, mutate } = useGroup(userId, groupId);
 
   const { data: expensesData } = useSWR(`/api/groups/${groupId}/expenses?page=1&limit=1`, fetcher, {
@@ -82,11 +74,9 @@ function GroupDetailPage({ groupId, userId }: GroupDetailViewProps) {
     refreshInterval: 30_000,
   });
 
-  // The deep link (`?tab=balances`, `?action=add-expense`) last applied on this
-  // page, so content mounted again after the Group was unavailable does not
-  // reopen a dialog by itself.
+  // The query (with or without `?action=add-expense`) last applied on this page, so content
+  // mounted again after the Group was unavailable does not reopen the form by itself.
   const appliedDeepLink = useRef<string | null>(null);
-  const [tab, setTab] = useState(0);
   const takeDeepLink = useCallback((link: string) => {
     if (appliedDeepLink.current === link) return false;
     appliedDeepLink.current = link;
@@ -95,34 +85,28 @@ function GroupDetailPage({ groupId, userId }: GroupDetailViewProps) {
 
   if (isLoading && !group) {
     return (
-      <Container maxWidth="lg" disableGutters>
+      <Box>
         <Skeleton variant="text" width={192} height={32} sx={{ mb: 2 }} />
         <Skeleton variant="text" width={128} height={20} sx={{ mb: 4 }} />
         <Skeleton variant="rounded" height={384} />
-      </Container>
+      </Box>
     );
   }
 
   if (error && !group) {
-    return (
-      <Container maxWidth="lg" disableGutters>
-        <ErrorState message="Group could not be loaded." onRetry={() => void mutate()} />
-      </Container>
-    );
+    return <ErrorState message="Group could not be loaded." onRetry={() => void mutate()} />;
   }
 
   if (!group) {
     return (
-      <Container maxWidth="lg" disableGutters>
-        <Box sx={{ textAlign: 'center', py: 6 }}>
-          <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
-            Group not found
-          </Typography>
-          <Typography color="text.secondary">
-            This group may have been deleted or you don&apos;t have access.
-          </Typography>
-        </Box>
-      </Container>
+      <Box sx={{ textAlign: 'center', py: 6 }}>
+        <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
+          Group not found
+        </Typography>
+        <Typography color="text.secondary">
+          This group may have been deleted or you don&apos;t have access.
+        </Typography>
+      </Box>
     );
   }
 
@@ -136,9 +120,9 @@ function GroupDetailPage({ groupId, userId }: GroupDetailViewProps) {
       expensesData={expensesData}
       balancesData={balancesData}
       takeDeepLink={takeDeepLink}
-      tab={tab}
-      onTabChange={setTab}
-    />
+    >
+      {children}
+    </GroupDetailContent>
   );
 }
 
@@ -149,9 +133,6 @@ interface GroupDetailContentProps extends GroupDetailViewProps, HeaderReads {
   onRetry: () => void;
   /** Whether this deep link has yet to be applied on the page. */
   takeDeepLink: (link: string) => boolean;
-  /** Navigation, not Group content: kept while the Group is unavailable. */
-  tab: number;
-  onTabChange: (tab: number) => void;
 }
 
 function GroupDetailContent({
@@ -163,30 +144,30 @@ function GroupDetailContent({
   expensesData,
   balancesData,
   takeDeepLink,
-  tab,
-  onTabChange: setTab,
+  children,
 }: GroupDetailContentProps) {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-  // Month-view summary surfaced from ExpenseListView while a month is active.
-  const [monthSummary, setMonthSummary] = useState<{
-    totalAmount: number;
-    count: number;
-    byMember?: ExpenseMemberBreakdownRow[];
-    userFronted: number;
-  } | null>(null);
 
   useEffect(() => {
-    // Defer so deep-link params apply after mount without sync setState-in-effect.
+    // `?action=add-expense` (an old link, or Home's "Add expense") opens the form once, then
+    // leaves the address, so reloading the tab or coming Back to it doesn't open the form
+    // again. Deferred so it applies after mount.
     const link = searchParams.toString();
     const timeout = window.setTimeout(() => {
-      if (!takeDeepLink(link)) return;
-      if (searchParams.get('tab') === 'balances') setTab(1);
-      if (searchParams.get('action') === 'add-expense') setExpenseDialogOpen(true);
+      if (!takeDeepLink(link) || searchParams.get('action') !== 'add-expense') return;
+      setExpenseDialogOpen(true);
+      const rest = new URLSearchParams(link);
+      rest.delete('action');
+      const query = rest.toString();
+      // Next keeps its router in step with the native history API.
+      window.history.replaceState(null, '', query ? `${pathname}?${query}` : pathname);
     }, 0);
     return () => window.clearTimeout(timeout);
-  }, [searchParams, takeDeepLink, setTab]);
+  }, [searchParams, pathname, takeDeepLink]);
 
   const checklist = useMemo(() => {
     const memberCount = group.members.length;
@@ -198,26 +179,15 @@ function GroupDetailContent({
     return buildTripChecklist({ memberCount, expenseCount, outstandingDebtCount });
   }, [group.members, expensesData, balancesData]);
 
-  const handleMonthSummaryChange = useCallback(
-    (summary: Record<string, unknown> | undefined) => {
-      if (!summary) {
-        setMonthSummary(null);
-        return;
-      }
-      const byMember = summary.byMember as ExpenseMemberBreakdownRow[] | undefined;
-      setMonthSummary({
-        totalAmount: (summary.totalAmount as number) ?? 0,
-        count: (summary.count as number) ?? 0,
-        byMember,
-        userFronted: byMember?.find((row) => row.user._id === userId)?.paid ?? 0,
-      });
-    },
-    [userId],
+  const openExpenseForm = useCallback(() => setExpenseDialogOpen(true), []);
+  const openInvite = useCallback(() => setInviteDialogOpen(true), []);
+  const page = useMemo<GroupPageValue>(
+    () => ({ groupId, userId, group, balancesData, openExpenseForm, openInvite }),
+    [groupId, userId, group, balancesData, openExpenseForm, openInvite],
   );
 
   const members = group.members;
   const theme = getGroupTheme(group.category);
-  const nounTitle = theme.nouns.singular.charAt(0).toUpperCase() + theme.nouns.singular.slice(1);
   const startDate = group.startDate;
   const endDate = group.endDate;
   const dateLabel =
@@ -231,49 +201,33 @@ function GroupDetailContent({
         ? `Tracking since ${formatDate(startDate)}`
         : null;
   const currency = group.defaultCurrency;
-  const userBalance = (
-    (balancesData?.data?.balances || []) as Array<{
-      user: { _id: string };
-      balance: number;
-    }>
-  ).find((balance) => balance.user._id === userId);
+  const userBalance = (balancesData?.data?.balances || []).find(
+    (balance) => balance.user._id === userId,
+  );
   const tripTotal = expensesData?.data?.summary?.totalAmount as number | undefined;
   const showChecklist = shouldShowTripChecklist(checklist);
 
-  // ── Household month view (read-only lens; balances stay running) ──
-  const hasMonthCycle = theme.signature === 'monthCycle';
-  const activeMonth = hasMonthCycle ? parseMonthParam(searchParams.get('month')) : null;
-  const runningDebts = (balancesData?.data?.debts || []) as Array<{
-    from: { _id: string };
-    to: { _id: string };
-    amount: number;
-  }>;
-  const memberFronted = activeMonth
-    ? (monthSummary?.byMember?.find((row) => row.user._id === userId)?.paid ?? 0)
-    : 0;
-  // Amendment B: opening the form from a past-month view defaults the expense
-  // date to that month's last day (viewer-local). Current month / All time → today.
+  // Amendment B: opening the form from a past-month view defaults the expense date to that
+  // month's last day (viewer-local). Current month / All time → today.
+  const activeMonth =
+    theme.signature === 'monthCycle' ? parseMonthParam(searchParams.get('month')) : null;
   const expenseDefaultDate =
     activeMonth && !activeMonth.isCurrentMonth
       ? `${activeMonth.key}-${String(activeMonth.lastDay.getDate()).padStart(2, '0')}`
       : null;
-  // Amendment D: the "Settle {Month}?" nudge — past month + outstanding running debt.
-  const showSettlePrompt = Boolean(
-    activeMonth && !activeMonth.isCurrentMonth && runningDebts.length > 0,
-  );
 
   const handleChecklistAction = (id: 'invite' | 'expense' | 'settle') => {
     if (id === 'invite') setInviteDialogOpen(true);
     if (id === 'expense') setExpenseDialogOpen(true);
-    if (id === 'settle') setTab(1);
+    if (id === 'settle') router.push(groupTabHref(groupId, 'balances'));
   };
 
   return (
-    <Container
-      maxWidth="lg"
-      disableGutters
+    <Box
       sx={{
-        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 2.5,
         pb: { xs: 'calc(88px + env(safe-area-inset-bottom, 0px))', sm: 0 },
       }}
     >
@@ -283,50 +237,23 @@ function GroupDetailContent({
           onRetry={onRetry}
         />
       )}
-      <Stack
-        direction="row"
-        alignItems="center"
-        justifyContent="space-between"
-        sx={{ mb: 2, animation: 'panel-in 280ms ease-out both' }}
-      >
-        <Button
-          component={Link}
-          href="/"
-          size="small"
-          startIcon={<ArrowBackIcon />}
-          sx={{ color: 'text.secondary', px: 0 }}
-        >
-          Dashboard
-        </Button>
-        <Stack direction="row" spacing={0.5} sx={{ flexShrink: 0 }}>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setExpenseDialogOpen(true)}
-            sx={{ display: { xs: 'none', sm: 'inline-flex' }, mr: 1 }}
-          >
-            Add expense
-          </Button>
-          <IconButton
-            onClick={() => setInviteDialogOpen(true)}
-            size="small"
-            aria-label="Invite friends"
-          >
-            <ShareIcon />
-          </IconButton>
-          <IconButton
-            component={Link}
-            href={`/groups/${groupId}/settings`}
-            size="small"
-            aria-label={`${nounTitle} settings`}
-          >
-            <SettingsIcon />
-          </IconButton>
-        </Stack>
-      </Stack>
 
-      <Box sx={{ mb: 3, animation: 'panel-in 280ms ease-out both' }}>
-        {theme.header === 'strip' ? (
+      <Box sx={{ animation: 'panel-in 280ms ease-out both' }}>
+        <GroupPageHeader
+          name={group.name}
+          category={group.category}
+          themeLabel={theme.label}
+          currency={currency}
+          members={members.map((member) => member.user)}
+          userId={userId}
+          settingsHref={groupSettingsHref(groupId)}
+          onInvite={openInvite}
+          onAddExpense={openExpenseForm}
+        />
+      </Box>
+
+      {theme.header === 'strip' && (
+        <Box sx={{ animation: 'panel-in 280ms ease-out both' }}>
           <TripStrip
             name={group.name}
             currency={currency}
@@ -341,44 +268,12 @@ function GroupDetailContent({
             balanceUnavailable={!balancesData}
             tripTotal={typeof tripTotal === 'number' ? { amount: tripTotal, currency } : null}
           />
-        ) : (
-          <GroupHeader
-            name={group.name}
-            themeLabel={theme.label}
-            themeIcon={theme.icon}
-            currency={currency}
-            variant="full"
-            dateLabel={dateLabel}
-            members={members.map((member) => member.user)}
-            userId={userId}
-            inviteCode={group.inviteCode ?? null}
-            balance={userBalance ? { amount: userBalance.balance, currency } : null}
-            balanceUnavailable={!balancesData}
-          />
-        )}
-      </Box>
-
-      {hasMonthCycle && (
-        <Box sx={{ mb: 3, animation: 'panel-in 280ms ease-out both' }}>
-          <MonthCycleBar
-            currency={currency}
-            summary={
-              activeMonth && monthSummary
-                ? {
-                    totalAmount: monthSummary.totalAmount,
-                    count: monthSummary.count,
-                    userFronted: memberFronted,
-                  }
-                : null
-            }
-          />
         </Box>
       )}
 
       {theme.signature === 'checklist' && showChecklist && (
         <Box
           sx={{
-            mb: 3,
             border: '1px solid',
             borderColor: 'divider',
             borderRadius: '12px',
@@ -440,82 +335,9 @@ function GroupDetailContent({
         </Box>
       )}
 
-      <Tabs
-        value={tab}
-        onChange={(_, v) => setTab(v)}
-        variant="scrollable"
-        scrollButtons="auto"
-        allowScrollButtonsMobile
-        aria-label={`${nounTitle} sections`}
-        sx={{ mb: 3 }}
-      >
-        <Tab label="Expenses" />
-        <Tab label="Balances" />
-        <Tab label="Activity" />
-      </Tabs>
+      <GroupTabs groupId={groupId} label={`${group.name} sections`} />
 
-      {tab === 0 && (
-        <Stack spacing={2}>
-          {activeMonth && monthSummary?.byMember && monthSummary.byMember.length > 0 && (
-            <MonthMemberTable
-              rows={monthSummary.byMember}
-              currency={currency}
-              userId={userId}
-              monthName={activeMonth.monthName}
-            />
-          )}
-
-          {showSettlePrompt && activeMonth && (
-            <Box
-              sx={{
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: '12px',
-                px: { xs: 2, sm: 2.5 },
-                py: 1.75,
-                display: 'flex',
-                alignItems: { xs: 'flex-start', sm: 'center' },
-                justifyContent: 'space-between',
-                flexDirection: { xs: 'column', sm: 'row' },
-                gap: 1.5,
-                bgcolor: 'tint.info',
-              }}
-            >
-              <Box sx={{ minWidth: 0 }}>
-                <Typography variant="body2" fontWeight={600} color="text.primary">
-                  Settle {activeMonth.monthName}?
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {activeMonth.monthName}&apos;s numbers are in — settle the running balance on the
-                  Balances tab.
-                </Typography>
-              </Box>
-              <Button
-                size="small"
-                variant="contained"
-                onClick={() => setTab(1)}
-                sx={{ textTransform: 'none', flexShrink: 0 }}
-              >
-                Open Balances
-              </Button>
-            </Box>
-          )}
-
-          <ExpenseListView
-            groupId={groupId}
-            userId={userId}
-            group={group}
-            onAddExpense={() => setExpenseDialogOpen(true)}
-            controlledDateRange={
-              activeMonth ? { dateFrom: activeMonth.dateFrom, dateTo: activeMonth.dateTo } : null
-            }
-            includeMemberBreakdown={Boolean(activeMonth)}
-            onSummaryChange={activeMonth ? handleMonthSummaryChange : undefined}
-          />
-        </Stack>
-      )}
-      {tab === 1 && <BalancesView groupId={groupId} userId={userId} group={group} />}
-      {tab === 2 && <ActivityView groupId={groupId} />}
+      <GroupPageContext.Provider value={page}>{children}</GroupPageContext.Provider>
 
       <Box
         sx={{
@@ -537,7 +359,7 @@ function GroupDetailContent({
           fullWidth
           variant="contained"
           startIcon={<AddIcon />}
-          onClick={() => setExpenseDialogOpen(true)}
+          onClick={openExpenseForm}
           sx={{ textTransform: 'none', minHeight: 44 }}
         >
           Add expense
@@ -558,6 +380,6 @@ function GroupDetailContent({
         onClose={() => setInviteDialogOpen(false)}
         groupId={groupId}
       />
-    </Container>
+    </Box>
   );
 }
