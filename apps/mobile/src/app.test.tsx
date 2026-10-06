@@ -550,6 +550,41 @@ describe('App Settings sign-out', () => {
     expect(app.text()).toContain('Shared expenses.');
     expect(app.text()).not.toContain('Couldn’t sign out of the server');
   });
+
+  it.each(['the link', 'the return to the app'] as const)(
+    'says an invitation opened offline after Continue is saved, when %s comes first (#286)',
+    async (first) => {
+      const app = await renderApp();
+      app.use((path) =>
+        path === '/api/auth/sign-out' ? json({ success: false }, 503) : undefined,
+      );
+      await app.press('Account and settings');
+      await app.press('Sign out');
+      const [, , buttons] = vi.mocked(Alert.alert).mock.calls.at(-1)!;
+      await settle(
+        Promise.resolve(buttons!.find((button) => button.text === 'Sign out')!.onPress!()),
+      );
+      await app.press('Continue');
+      expect(app.text()).not.toContain('Your invitation is saved');
+
+      // Offline, Sam's link opens the app, which also returns it to the foreground.
+      app.use(() => Promise.reject(new TypeError('Network request failed')));
+      const open = () => app.controller.openInvitation('http://localhost:4138/join/deadbeef');
+      if (first === 'the link') {
+        const opening = open();
+        app.foreground();
+        await settle(opening);
+      } else {
+        app.foreground();
+        await settle(open());
+      }
+      expect(app.text()).toContain(
+        'Your invitation is saved. Sign in to continue, then choose whether to join.',
+      );
+      expect(app.text()).toContain('Shared expenses.');
+      expect(app.text()).not.toContain('Maple House');
+    },
+  );
 });
 
 describe('App Group being created', () => {

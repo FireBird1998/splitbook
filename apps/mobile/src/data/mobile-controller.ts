@@ -5059,13 +5059,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
+  /**
+   * Signed out, with a sign-out the server hasn't confirmed: after Continue (#202), or while its
+   * revoke is sent. A return to the foreground then only retries the revoke, quietly, on the
+   * sign-in screen (`refreshView`, `restore`).
+   */
+  const signOutPending = () => snapshot.auth.status === 'signed-out' && accountCleanupRequired;
+
   const openInvitation = async (url: string) => {
     const code = parseInvitationLink(url, inviteOrigin);
     const owner = generation;
+    // A sign-in or restore since then shows the saved invitation itself. The quiet revoke retry
+    // that the link's return to the foreground starts doesn't, so it never stops this (#286).
+    const shows = () => current(owner) || signOutPending();
     try {
       await savePending(code);
     } catch {
-      if (!current(owner)) return;
+      if (!shows()) return;
       showInvitation({
         code,
         status: 'error',
@@ -5074,7 +5084,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       return;
     }
-    if (!current(owner) || pendingCode !== code) return;
+    if (!shows() || pendingCode !== code) return;
     if (!code) {
       viewRequest += 1;
       showInvitation({
@@ -5084,6 +5094,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         message:
           'This link does not belong to this SplitBook environment, or is not a valid invitation.',
       });
+      return;
+    }
+    if (signOutPending()) {
+      // Until the sign-out is confirmed, the invitation waits on the sign-in screen, which says
+      // it's saved, as after Continue and at a restart. It's read once the revoke is confirmed (a
+      // return to the foreground or a restart retries it), or after sign-in (#286).
+      viewRequest += 1;
+      navigate(home, { invitation: { code, status: 'idle', preview: null, message: null } });
       return;
     }
     await previewInvitation(code);
