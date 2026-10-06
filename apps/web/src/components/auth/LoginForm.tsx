@@ -6,7 +6,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import GoogleIcon from '@mui/icons-material/Google';
-import BrandMark from '@/components/layout/BrandMark';
+import BrandLogo from '@/components/layout/BrandLogo';
 import { EMAIL_NOT_ALLOWED } from '@/lib/auth/allowlist';
 import { resolveCallbackUrl } from '@/lib/auth/callback-url';
 import { GOOGLE_SIGN_IN_FAILED, signInWithGoogle } from '@/lib/auth-client';
@@ -35,13 +35,8 @@ export default function LoginForm() {
       }}
     >
       <Box sx={{ textAlign: 'center', p: 4 }}>
-        <Box sx={{ mb: 4 }}>
-          <Stack direction="row" alignItems="center" justifyContent="center" spacing={1.5}>
-            <BrandMark size={44} fontSize={20} />
-            <Typography variant="h4" fontWeight={700} color="text.primary">
-              {PRODUCT_NAME}
-            </Typography>
-          </Stack>
+        <Box sx={{ mb: 4, display: 'flex', justifyContent: 'center' }}>
+          <BrandLogo height={40} />
         </Box>
 
         <Box sx={{ mb: 4 }}>

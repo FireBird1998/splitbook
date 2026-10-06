@@ -17,9 +17,22 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: `${PRODUCT_NAME} - Shared Expenses, Settled Fairly`,
+  title: {
+    default: `${PRODUCT_NAME} - Shared Expenses, Settled Fairly`,
+    // A page that names itself reads "<page> · Splitbook", so a row of tabs tells them apart.
+    template: `%s · ${PRODUCT_NAME}`,
+  },
   description:
     'Track group expenses, settle debts with minimal transactions, and never argue about money again.',
+  // The brand kit's icons (docs/design/brand). There is no app/favicon.ico on purpose: that
+  // file convention would override these.
+  icons: {
+    icon: [
+      { url: '/brand/favicon.ico', sizes: '16x16 32x32 48x48' },
+      { url: '/brand/favicon.svg', type: 'image/svg+xml' },
+    ],
+    apple: [{ url: '/brand/icon-180.png', sizes: '180x180', type: 'image/png' }],
+  },
 };
 
 export default function RootLayout({

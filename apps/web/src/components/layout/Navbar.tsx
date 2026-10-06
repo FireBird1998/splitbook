@@ -26,8 +26,7 @@ import DarkModeIcon from '@mui/icons-material/DarkMode';
 import { usePathname } from 'next/navigation';
 import { useThemeMode } from '@/providers/ThemeProvider';
 import DemoModeBadge from '@/components/demo/DemoModeBadge';
-import BrandMark from '@/components/layout/BrandMark';
-import { PRODUCT_NAME } from '@/lib/product';
+import BrandLogo from '@/components/layout/BrandLogo';
 import { signOutToHome } from '@/lib/auth-client';
 import { NAV_HEIGHT } from '@/lib/theme/tokens';
 
@@ -90,29 +89,7 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
               <MenuIcon />
             </IconButton>
 
-            <Box
-              component={Link}
-              href="/dashboard"
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.25,
-                textDecoration: 'none',
-              }}
-            >
-              <BrandMark size={28} fontSize={13} />
-              <Typography
-                component="span"
-                sx={{
-                  fontSize: '1.125rem',
-                  fontWeight: 700,
-                  letterSpacing: '-0.02em',
-                  color: 'text.primary',
-                }}
-              >
-                {PRODUCT_NAME}
-              </Typography>
-            </Box>
+            <BrandLogo height={32} href="/dashboard" />
           </Stack>
 
           <Stack direction="row" alignItems="center" spacing={1}>
@@ -202,20 +179,9 @@ export default function Navbar({ user, demoMode = false }: NavbarProps) {
       {/* Mobile Drawer */}
       <Drawer anchor="left" open={drawerOpen} onClose={() => setDrawerOpen(false)}>
         <Box sx={{ width: 256, p: 2 }}>
-          <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mb: 3 }}>
-            <BrandMark size={28} fontSize={13} />
-            <Typography
-              component="span"
-              sx={{
-                fontSize: '1.125rem',
-                fontWeight: 700,
-                letterSpacing: '-0.02em',
-                color: 'text.primary',
-              }}
-            >
-              {PRODUCT_NAME}
-            </Typography>
-          </Stack>
+          <Box sx={{ display: 'flex', mb: 3 }}>
+            <BrandLogo height={32} href="/dashboard" onClick={() => setDrawerOpen(false)} />
+          </Box>
           <List>
             {mobileNavItems.map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/');

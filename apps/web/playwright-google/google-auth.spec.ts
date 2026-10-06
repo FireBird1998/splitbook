@@ -41,12 +41,21 @@ test.describe('google auth mode', () => {
     await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();
     await expect(page.getByText(/demo persona/i)).toHaveCount(0);
     await expect(page.getByText('Demo mode', { exact: true })).toHaveCount(0);
+
+    // The brand kit: the logo leads home, and the footer's mark is decorative beside the name.
+    const home = page.getByRole('link', { name: 'Splitbook home' });
+    await expect(home).toHaveAttribute('href', '/');
+    await expect(home.getByRole('img')).toHaveAttribute('src', '/brand/logo-light.svg');
+    const footer = page.getByRole('contentinfo');
+    await expect(footer).toHaveText('Splitbook — shared expenses, settled fairly.');
+    await expect(footer.locator('img')).toHaveAttribute('alt', '');
+    await expect(footer.locator('img')).toHaveAttribute('src', '/brand/mark-indigo.svg');
   });
 
   test('/login shows the Google sign-in button, not the demo picker', async ({ page }) => {
     await page.goto('/login');
 
-    await expect(page.getByText('Splitbook', { exact: true })).toBeVisible();
+    await expect(page.getByRole('img', { name: 'Splitbook', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Sign in with Google' })).toBeVisible();
     await expect(page.getByText(/demo persona/i)).toHaveCount(0);
   });
@@ -70,7 +79,7 @@ test.describe('google auth mode', () => {
     await page.goto('/dashboard');
 
     await expect(page).toHaveURL(/\/dashboard$/);
-    await expect(page.getByText('Splitbook', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Splitbook home' })).toBeVisible();
     await expect(
       page.getByRole('heading', { name: /good (morning|afternoon|evening)/i }),
     ).toBeVisible();

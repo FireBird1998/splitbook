@@ -27,11 +27,12 @@ export default async function LoginPage() {
             bgcolor: 'background.default',
           }}
         >
-          <Box sx={{ textAlign: 'center' }}>
-            <BrandMark size={44} fontSize={20} />
-            <Typography color="text.secondary" sx={{ mt: 2 }}>
-              Loading...
-            </Typography>
+          <Box
+            role="status"
+            sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}
+          >
+            <BrandMark size={48} decorative={false} />
+            <Typography color="text.secondary">Loading...</Typography>
           </Box>
         </Box>
       }

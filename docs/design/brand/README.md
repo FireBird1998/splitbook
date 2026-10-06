@@ -74,7 +74,7 @@ Ready-to-use copies are in `apps/web/public/brand/`. A header can use:
 
 Choose `logo-dark.svg` through the app's existing theme state on dark surfaces. Both SVGs have the same viewBox and intrinsic dimensions. If using Next Image, supply the SVG's actual width/height ratio rather than inventing dimensions.
 
-For a later application integration, point Next metadata to `/brand/favicon.svg`, `/brand/favicon.ico` and `/brand/icon-180.png`. Account for the existing `apps/web/src/app/favicon.ico` file-convention asset so it does not override the intended favicon. If using maskable PWA icons, copy the generated maskable assets into `public/brand` and give them a separate manifest entry with `purpose: "maskable"`.
+The web app already does this: use `BrandLogo` (24, 32 or 40 px, with an `href` when it links home) and `BrandMark` (decorative beside the name) from `apps/web/src/components/layout/`, which pick the light or dark artwork from the MUI theme. The root metadata in `apps/web/src/app/layout.tsx` points at `/brand/favicon.svg`, `/brand/favicon.ico` and `/brand/icon-180.png`; there is deliberately no `app/favicon.ico`, `icon.*` or `apple-icon.*` file, because those file conventions would override it. If using maskable PWA icons, copy the generated maskable assets into `public/brand` and give them a separate manifest entry with `purpose: "maskable"`.
 
 ## Mobile integration
 
