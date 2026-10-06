@@ -301,12 +301,15 @@ export function createHomeQueries(session: HomeSession) {
       path,
       session.now(),
     );
-  /** The Groups this device's saved list lists, inside a lease write: null if it can't be read. */
+  /**
+   * The Groups this device's saved list lists, inside a lease write: null if it can't be read, or
+   * is refused for now (dated after this device's clock), since it may list a Group later.
+   */
   const savedIds = async (accountId: string) => {
     try {
       const row = await rows?.load(accountId, listPath),
         read = cachedRead(row, accountId, listPath, session.now());
-      return read ? listOf(read.value).map(({ id }) => id) : [];
+      return read ? listOf(read.value).map(({ id }) => id) : row == null ? [] : null;
     } catch {
       return null;
     }
@@ -468,6 +471,8 @@ export function createHomeQueries(session: HomeSession) {
         // The saved list may list a Group lost while it wasn't on screen: lost too (#323). One
         // this device can't read goes as well, since it may.
         const saved = await savedIds(lease.accountId);
+        // They join the Set the session holds as this list's unlisted Groups, which only keeps
+        // them unsaved, as Groups off screen already are.
         for (const id of saved ?? []) if (!listed.has(id)) lost.add(id);
         unchecked = !saved;
         await session.retain(lease.accountId, [...listed]);

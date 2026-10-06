@@ -1299,6 +1299,22 @@ describe('a lost Group never returns from the saved Groups list (#323)', () => {
     },
   );
 
+  it('never lists a lost Group from a saved list dated after this device’s clock, once the clock passes it', async () => {
+    const f = fixture();
+    const controller = await savedWithMaple(f);
+    await loseMapleSignedOut(f, controller);
+    // The device clock moves back before Alex signs in again, and the new list can't be saved.
+    vi.setSystemTime(start - 60_000);
+    f.device.failSave = true;
+    await controller.signIn('alex');
+    await settle();
+    expect(names(controller.getSnapshot())).toEqual(['Cabin Weekend']);
+
+    vi.setSystemTime(start + 60_000);
+    const { published } = await restartOffline(f, controller);
+    expect(published.some(withMaple)).toBe(false);
+  });
+
   // Every combination of the trim's device writes failing: the older store's trim to the listed
   // Groups, a removal of a saved copy, and a save of a row; after a restart with storage still
   // failing or working again.
