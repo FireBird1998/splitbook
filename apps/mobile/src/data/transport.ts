@@ -30,7 +30,8 @@ export class Superseded extends Error {}
  * - `network`: SplitBook couldn't be reached: no reply arrived, its body stopped arriving, or a
  *   gateway in front of SplitBook answered 502, 503 or 504 without a SplitBook error code;
  * - `timeout`: the 20-second limit passed, before or after the headers;
- * - `cancelled`: the caller's own signal ended it. It is never a reason to show a saved copy;
+ * - `cancelled`: the caller's own signal ended it. It is never a reason to show a saved copy. A
+ *   denial whose headers arrived stays `access-denied`, even when its body read is cancelled;
  * - `signed-out`: a 401 that doesn't end the session here (sign-out, the staging check, Google
  *   sign-in);
  * - `access-denied`: a 403, or a 404: the member can't see it, or it's gone;
@@ -369,9 +370,12 @@ export function createTransport({
           typeof details.error === 'string'
             ? details.error
             : null;
-        // The caller cancelled while the body was read. A denial has already been purged above;
-        // only the error the caller gets is its own.
-        if (aborted === 'caller') throw cancelled();
+        // The caller cancelled while the body was read: the error it gets is its own. A denial is
+        // the exception. Its headers already said denied and the Group is purged above, and that
+        // purge cancels the Group's reads, this one included. The denial is still this read's
+        // answer, so it never ends as cancelled, or a caller that still shows the read would
+        // read the Group again, and be refused again, for ever.
+        if (aborted === 'caller' && !denied) throw cancelled();
         // SplitBook's own errors carry a code, so a gateway answered: SplitBook wasn't reached.
         if (gatewayStatuses.includes(response.status) && code === null)
           throw unreachable(aborted === 'timeout' ? 'timeout' : 'network');
