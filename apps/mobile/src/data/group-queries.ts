@@ -3,6 +3,7 @@ import {
   hashKey,
   InfiniteQueryObserver,
   QueryObserver,
+  replaceEqualDeep,
   type focusManager,
   type InfiniteData,
   type onlineManager,
@@ -44,6 +45,26 @@ export type PageEnvelope =
   | (Envelope & { page: number })
   | { source: 'failed'; page: number; refreshedAt: number; value: null; message: string };
 type Pages = InfiniteData<PageEnvelope, number>;
+/**
+ * A list read again keeps each page that answered the same, matched by its number, not its place:
+ * after the window slides, the pages that stayed keep their rows, which then render as they were
+ * (#219). TanStack shares by position, which a dropped page would shift.
+ */
+const sharePages = (old: unknown, next: unknown): unknown => {
+  const before = old as Pages | undefined,
+    after = next as Pages;
+  if (!before?.pages || !after?.pages) return next;
+  const pages = after.pages.map((page, index) => {
+    const at = before.pageParams.indexOf(after.pageParams[index]);
+    return at < 0 ? page : (replaceEqualDeep(before.pages[at], page) as PageEnvelope);
+  });
+  const pageParams = replaceEqualDeep(before.pageParams, after.pageParams);
+  return pageParams === before.pageParams &&
+    pages.length === before.pages.length &&
+    pages.every((page, index) => page === before.pages[index])
+    ? before
+    : { pages, pageParams };
+};
 type Expenses = GroupFinancialState['expenses'];
 type Balances = GroupFinancialState['balances'];
 
@@ -646,6 +667,7 @@ export function createGroupQueries(session: GroupSession) {
       getPreviousPageParam: (_first: PageEnvelope, _all: PageEnvelope[], param: number) =>
         param > 1 ? param - 1 : undefined,
       maxPages: MAX_PAGES,
+      structuralSharing: sharePages,
       ...(pages ? { pages } : {}),
       ...(fresh || (reread && reread.pages > 1) ? { staleTime: STALE } : {}),
     };
@@ -999,19 +1021,6 @@ export function createGroupQueries(session: GroupSession) {
     return followBalances();
   };
 
-  /**
-   * Each page as read, parsed once: a page a re-read answers the same keeps its rows, which then
-   * render as they were (#219).
-   */
-  const parsedPages = new WeakMap<object, { currency: string; page: ReturnType<typeof pageOf> }>();
-  const parsePage = (value: unknown, groupId: string) => {
-    const currency = currencyOf(groupId),
-      known = value && typeof value === 'object' ? parsedPages.get(value) : undefined;
-    if (known?.currency === currency) return known.page;
-    const page = pageOf(value, groupId, currency);
-    if (value && typeof value === 'object') parsedPages.set(value, { currency, page });
-    return page;
-  };
   /** The Expenses shown for the Month, from their query, in the snapshot's shape. */
   const projectExpenses = (shown: Expenses, opened: View, financial: GroupFinancialState) => {
     const key = shownList(financial),
@@ -1033,13 +1042,18 @@ export function createGroupQueries(session: GroupSession) {
     const unchecked =
       !opened.checked && !!data && !previews.has(data) && state.dataUpdatedAt >= opened.since;
     if (read.length && !unchecked) {
-      const parsed = read.map((page) => parsePage(page.value, groupId));
-      const rows = parsed.flatMap((page) => page.expenses);
+      const parsed = read.map((page) => pageOf(page.value, groupId, currencyOf(groupId)));
+      // A row read on two pages, as Expenses are added above it, is listed once; the rows shown
+      // stay the same list when nothing in them changed, so an unchanged read publishes nothing.
+      const rows = [
+        ...new Map(parsed.flatMap((page) => page.expenses).map((row) => [row.id, row])).values(),
+      ];
+      const kept =
+        rows.length === base.data.length && rows.every((row, index) => row === base.data[index]);
       base = {
         ...base,
         month,
-        // A row read on two pages, as Expenses are added above it, is listed once.
-        data: [...new Map(rows.map((row) => [row.id, row])).values()],
+        data: kept ? base.data : rows,
         summary: parsed[0].summary,
         pagination: parsed[parsed.length - 1].pagination,
         firstPage: read[0].page,
