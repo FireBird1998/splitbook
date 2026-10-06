@@ -579,7 +579,7 @@ export function buildExpensePatch(draft: ExpenseDraft, context: ExpenseContext):
   return JSON.stringify(patch);
 }
 
-/** The fields a stored edit's body can carry, as `buildExpensePatch` writes them. */
+/** The fields `buildExpensePatch` writes into an edit's body: the only ones a check compares. */
 const editFields = new Set([
   'description',
   'notes',
@@ -587,8 +587,6 @@ const editFields = new Set([
   'date',
   'tag',
   'tagId',
-  'predefinedItem',
-  'isDeleted',
   'amount',
   'currency',
   'paidBy',
@@ -601,18 +599,19 @@ const moneyFields = ['amount', 'currency', 'paidBy', 'splitBetween', 'splitMetho
  * Whether the saved Expense shows the member's own edit or delete, read after its answer was
  * lost (ADR 0006). A delete counts once the Expense reads deleted. An edit counts only at exactly
  * one revision past the one it was sent against, since each update bumps the revision once, and
- * only when every field it sent holds what was sent, compared as the ledger keeps it: member ids,
- * minor units, and the instant that carries the chosen day. Anything that can't be compared
- * exactly, including an edit that sent nothing, leaves it for the member to review.
+ * only when every field it sent holds what was sent, compared as the ledger keeps it: the Tag by
+ * its identity, whose name follows it; member ids; minor units; and the instant that carries the
+ * chosen day. Anything that can't be compared exactly, including an edit that sent nothing or
+ * names a Tag without its identity, leaves it for the member to review.
  */
 export function savedAsSent(mutation: ExpenseMutation, saved: ExpenseRecord): boolean {
   if (mutation.kind === 'delete') return saved.isDeleted;
   if (saved.isDeleted || saved.revision !== mutation.revision + 1) return false;
   try {
-    const body: unknown = JSON.parse(mutation.body);
-    if (!body || typeof body !== 'object' || Array.isArray(body)) return false;
+    const body = z.record(z.string(), z.unknown()).parse(JSON.parse(mutation.body));
     const fields = Object.keys(body);
     if (!fields.length || fields.some((field) => !editFields.has(field))) return false;
+    if (fields.includes('tag') && !fields.includes('tagId')) return false;
     const sent = updateExpenseSchema.parse(body);
     const kept = (value: unknown, savedValue: unknown) =>
       value === undefined || value === savedValue;
@@ -620,10 +619,7 @@ export function savedAsSent(mutation: ExpenseMutation, saved: ExpenseRecord): bo
       kept(sent.description, saved.description) &&
       kept(sent.notes, saved.notes) &&
       kept(sent.category, saved.category) &&
-      kept(sent.tag, saved.tag) &&
       kept(sent.tagId, saved.tagId) &&
-      kept(sent.predefinedItem, saved.predefinedItem ?? null) &&
-      kept(sent.isDeleted, saved.isDeleted) &&
       kept(sent.date?.getTime(), Date.parse(saved.date)) &&
       (!moneyFields.some((field) => fields.includes(field)) || sameMoney(sent, saved))
     );
@@ -632,11 +628,16 @@ export function savedAsSent(mutation: ExpenseMutation, saved: ExpenseRecord): bo
   }
 }
 
-/** The money an edit sent, which carries all of it, against the saved Expense's, in minor units. */
+/**
+ * The money an edit sent, which carries all of it, against the saved Expense's: each payer and
+ * each person in the split, in order, by member id and minor units, with any percentage or shares.
+ * Equal rows mean equal totals, which both sides check add up.
+ */
 function sameMoney(sent: UpdateExpenseInput, saved: ExpenseRecord) {
   const { amount, currency, splitMethod, paidBy, splitBetween } = sent;
   if (amount === undefined || !currency || !splitMethod || !paidBy || !splitBetween) return false;
-  if (currency !== saved.currency || splitMethod !== saved.splitMethod) return false;
+  if (currency !== saved.currency) return false;
+  if (splitMethod !== saved.splitMethod) return false;
   const expected = normalizeExpenseMoney({ amount, currency, splitMethod, paidBy, splitBetween });
   const stored = readExpenseMoney(storedExpenseMoney(saved));
   type Row = { user: unknown; amountMinor: number; percentage?: number; shares?: number };
@@ -650,8 +651,6 @@ function sameMoney(sent: UpdateExpenseInput, saved: ExpenseRecord) {
         row.shares === savedRows[index].shares,
     );
   return (
-    expected.amountMinor === stored.amountMinor &&
-    sameRows(expected.paidBy, stored.paidBy) &&
-    sameRows(expected.splitBetween, stored.splitBetween)
+    sameRows(expected.paidBy, stored.paidBy) && sameRows(expected.splitBetween, stored.splitBetween)
   );
 }

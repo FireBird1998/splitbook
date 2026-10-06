@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './mobile-controller';
+import type { ExpenseDraft } from './expense-draft';
 import type { FetchResponse, MobileFetch } from './types';
 
 // Fictional people and Groups only.
@@ -13,6 +14,8 @@ const alex = { ...people[0], email: 'person0@example.test', image: null };
 const householdId = 'a00000000000000000000010';
 const tripId = 'a00000000000000000000011';
 const tagId = 'a00000000000000000000020';
+const rentTagId = 'a00000000000000000000021';
+const utilitiesTagId = 'a00000000000000000000022';
 const iso = '2026-09-28T10:00:00.000Z';
 const group = (id: string, name: string, category: 'home' | 'trip') => ({
   _id: id,
@@ -26,7 +29,11 @@ const group = (id: string, name: string, category: 'home' | 'trip') => ({
     role: 'member',
     joinedAt: iso,
   })),
-  tags: [{ _id: tagId, name: 'Groceries', isArchived: false, createdAt: iso }],
+  tags: [
+    { _id: tagId, name: 'Groceries', isArchived: false, createdAt: iso },
+    { _id: rentTagId, name: 'Rent', isArchived: false, createdAt: iso },
+    { _id: utilitiesTagId, name: 'Utilities', isArchived: false, createdAt: iso },
+  ],
   createdAt: iso,
   updatedAt: iso,
 });
@@ -51,12 +58,18 @@ interface Held {
  * A fictional ledger with the backend's recovery rules: a create commits before its
  * response can be lost, a repeated submission key returns the Expense it already created,
  * and an edit or a delete must carry the current revision, which each one it applies bumps once.
+ * With `savedCopies`, the app keeps saved copies on the device and can restart offline.
  */
-function ledger() {
+function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
   const requests: { method: string; path: string; key: string | null; body: string }[] = [];
   const records = new Map<string, Record<string, unknown>>();
   const created = new Map<string, string>();
   const drafts = new Map<string, unknown>();
+  /** Saved copies on the device, by account and path. */
+  const copies = new Map<string, unknown>();
+  let identity: unknown = null;
+  let offline = false;
+  let savesFirst: ((record: Record<string, unknown>) => void) | null = null;
   /** What the ledger answered each edit and delete it received, delivered or not. */
   const answers: string[] = [];
   let cookie: string | null = null;
@@ -120,6 +133,32 @@ function ledger() {
     },
     householdId,
   );
+
+  /** An edit as the ledger applies it, by `editor`, at the next revision. */
+  const applyEdit = (
+    record: Record<string, unknown>,
+    patch: Record<string, unknown>,
+    editor: string,
+  ) => {
+    const changes = Object.fromEntries(
+      Object.entries(patch).map(([field, value]) => [field, { old: record[field], new: value }]),
+    );
+    Object.assign(record, patch, {
+      // Money is kept in minor units too, as the ledger keeps it.
+      ...('amount' in patch ? { amountMinor: Math.round(Number(patch.amount) * 100) } : {}),
+      ...('paidBy' in patch ? { paidBy: minor(patch.paidBy) } : {}),
+      ...('splitBetween' in patch ? { splitBetween: minor(patch.splitBetween) } : {}),
+      // A Tag's name follows its identity.
+      ...('tagId' in patch
+        ? { tag: groups[0].tags.find((row) => row._id === patch.tagId)?.name ?? record.tag }
+        : {}),
+      revision: Number(record.revision) + 1,
+      editHistory: [
+        ...(record.editHistory as unknown[]),
+        { editedBy: person(editor), editedAt: iso, changes },
+      ],
+    });
+  };
 
   const respond = async (method: string, path: string, init: RequestInit) => {
     const url = new URL(path, 'http://local');
@@ -197,21 +236,7 @@ function ledger() {
     if (method === 'PATCH') {
       if (new Headers(init.headers).get('X-Splitbook-Revision') !== String(record.revision))
         return json({ code: 'STALE_REVISION', status: 409 }, 409);
-      const patch = JSON.parse(String(init.body));
-      const changes = Object.fromEntries(
-        Object.entries(patch).map(([field, value]) => [field, { old: record[field], new: value }]),
-      );
-      Object.assign(record, patch, {
-        // Money is kept in minor units too, as the ledger keeps it.
-        ...('amount' in patch ? { amountMinor: Math.round(Number(patch.amount) * 100) } : {}),
-        ...('paidBy' in patch ? { paidBy: minor(patch.paidBy) } : {}),
-        ...('splitBetween' in patch ? { splitBetween: minor(patch.splitBetween) } : {}),
-        revision: Number(record.revision) + 1,
-        editHistory: [
-          ...(record.editHistory as unknown[]),
-          { editedBy: person(people[0].id), editedAt: iso, changes },
-        ],
-      });
+      applyEdit(record, JSON.parse(String(init.body)), people[0].id);
       if (loseResponses > 0) {
         loseResponses -= 1;
         throw new Error('The response was lost after the server committed the edit');
@@ -248,10 +273,19 @@ function ledger() {
       key: new Headers(init.headers).get('Idempotency-Key'),
       body: String(init.body ?? ''),
     });
+    if (offline) throw new TypeError('Network request failed');
     const held = holds.find((hold) => hold.match(method, pathname + search));
     if (held) {
       holds.splice(holds.indexOf(held), 1);
       await held.wait;
+    }
+    const differ = method === 'PATCH' ? savesFirst : null;
+    if (differ) {
+      // Sam saves the same change first, but for what `differ` changes.
+      savesFirst = null;
+      const record = records.get(pathname.split('/').pop()!)!;
+      applyEdit(record, JSON.parse(String(init.body)), people[1].id);
+      differ(record);
     }
     if (method !== 'PATCH' && method !== 'DELETE') return respond(method, pathname + search, init);
     const fault = writeFault;
@@ -283,6 +317,46 @@ function ledger() {
             cookie = null;
           },
         },
+        ...(savedCopies
+          ? {
+              offlineIdentity: {
+                load: async () => structuredClone(identity),
+                save: async (value: unknown) => {
+                  identity = structuredClone(value);
+                },
+                clear: async () => {
+                  identity = null;
+                },
+              },
+              readCache: {
+                load: async (account: string, path: string) =>
+                  structuredClone(copies.get(account + path) ?? null),
+                save: async (account: string, path: string, value: unknown) => {
+                  copies.set(account + path, structuredClone(value));
+                },
+                clear: async () => copies.clear(),
+                invalidateGroup: async (account: string, id: string) => {
+                  for (const key of [...copies.keys()])
+                    if (
+                      key.startsWith(`${account}/api/groups/${id}`) ||
+                      key === `${account}/api/groups` ||
+                      key === `${account}/api/user/balances`
+                    )
+                      copies.delete(key);
+                },
+                invalidateLedger: async (account: string, id: string) => {
+                  for (const key of [...copies.keys()])
+                    if (
+                      key.startsWith(`${account}/api/groups/${id}/`) ||
+                      key.startsWith(`${account}/api/groups/${id}?`) ||
+                      key === `${account}/api/user/balances`
+                    )
+                      copies.delete(key);
+                },
+                retainGroups: async () => undefined,
+              },
+            }
+          : {}),
         expenseDrafts: {
           load: async (accountId, id) => structuredClone(drafts.get(`${accountId}:${id}`) ?? null),
           save: async (accountId, id, value) => {
@@ -314,7 +388,7 @@ function ledger() {
               cleanup = false;
             },
           },
-          stores: [{ clear: async () => drafts.clear() }],
+          stores: [{ clear: async () => drafts.clear() }, { clear: async () => copies.clear() }],
         },
         now: () => now,
         newSubmissionKey: () => `native-return-${requests.length}-0001`,
@@ -372,6 +446,18 @@ function ledger() {
       loseResponses += 1;
     },
     answers,
+    copies,
+    /** Every later request fails as a lost connection does. */
+    goOffline: () => {
+      offline = true;
+    },
+    /**
+     * When Alex's next edit arrives, Sam has just saved the same change, but for what `differ`
+     * changes, at the next revision: Alex's edit is refused as stale.
+     */
+    anotherMemberSavesFirst: (differ: (record: Record<string, unknown>) => void) => {
+      savesFirst = differ;
+    },
     /**
      * The next edit or delete never arrives (`request`), arrives but its answer is lost
      * (`reply`), or is sent twice by the transport with only the second answer arriving
@@ -1050,47 +1136,117 @@ describe('An edit or delete whose answer was lost (#232)', () => {
     });
   });
 
-  it.each([
+  const [alexId, samId, priyaId] = people.map(({ id }) => id);
+  /** Allocation rows as the ledger keeps them, in minor units too. */
+  const rows = (...entries: [string, number][]) =>
+    entries.map(([user, amount]) => ({ user, amount, amountMinor: Math.round(amount * 100) }));
+  /** 45, split equally between Alex and Sam: 22.50 each. */
+  const twoWays: Partial<ExpenseDraft> = { amount: '45', participantIds: [alexId, samId] };
+  /**
+   * Alex's edit, and what Sam's save at the next revision changed differently. Each differs in
+   * that one field alone, so only the comparison of that field can refuse it.
+   */
+  const differences: [string, Partial<ExpenseDraft>, (saved: Record<string, unknown>) => void][] = [
+    ['date', { date: '2026-08-22' }, (saved) => void (saved.date = '2026-08-23T06:30:00.000Z')],
+    [
+      'Tag',
+      { tagId: rentTagId },
+      (saved) => void Object.assign(saved, { tagId: utilitiesTagId, tag: 'Utilities' }),
+    ],
+    ['category', { category: 'food' }, (saved) => void (saved.category = 'travel')],
     [
       'amount',
-      {
-        amount: 50,
-        amountMinor: 5000,
-        paidBy: [{ user: people[0].id, amount: 50, amountMinor: 5000 }],
-        splitBetween: [people[0], people[1]].map(({ id }) => ({
-          user: id,
-          amount: 25,
-          amountMinor: 2500,
-        })),
-      },
+      twoWays,
+      (saved) =>
+        void Object.assign(saved, {
+          amount: 50,
+          amountMinor: 5000,
+          paidBy: rows([alexId, 50]),
+          splitBetween: rows([alexId, 25], [samId, 25]),
+        }),
     ],
     [
       'split',
-      {
-        amount: 45,
-        amountMinor: 4500,
-        paidBy: [{ user: people[0].id, amount: 45, amountMinor: 4500 }],
-        splitBetween: people.map(({ id }) => ({ user: id, amount: 15, amountMinor: 1500 })),
-      },
+      twoWays,
+      (saved) => void (saved.splitBetween = rows([alexId, 15], [samId, 15], [priyaId, 15])),
     ],
-  ])(
-    'keeps a conflict when another member saved a different %s at the next revision',
-    async (_field, theirs) => {
-      const server = ledger();
-      const { controller } = await signedIn(server);
-      await editMoney(controller);
-      // Sam saved first, at revision 0 + 1. Alex's edit is refused as stale, and that answer is lost.
-      Object.assign(server.records.get(expenseId)!, theirs, { revision: 1 });
-      server.faultNextWrite('reply');
-      await controller.saveExpense();
+    [
+      'person in the split, for the same share',
+      twoWays,
+      (saved) => void (saved.splitBetween = rows([alexId, 22.5], [priyaId, 22.5])),
+    ],
+    ['payer, for the same amount', twoWays, (saved) => void (saved.paidBy = rows([samId, 45]))],
+    [
+      'share for each person',
+      { ...twoWays, splitMethod: 'unequal', splitValues: { [alexId]: '20', [samId]: '25' } },
+      (saved) => void (saved.splitBetween = rows([alexId, 25], [samId, 20])),
+    ],
+    [
+      'set of people, with one more at nothing',
+      { ...twoWays, splitMethod: 'unequal', splitValues: { [alexId]: '22.5', [samId]: '22.5' } },
+      (saved) => void (saved.splitBetween = rows([alexId, 22.5], [samId, 22.5], [priyaId, 0])),
+    ],
+    [
+      'percentages, for the same shares',
+      { ...twoWays, splitMethod: 'percentage', splitValues: { [alexId]: '40', [samId]: '60' } },
+      (saved) =>
+        void (saved.splitBetween = [
+          { ...rows([alexId, 18])[0], percentage: 40.01 },
+          { ...rows([samId, 27])[0], percentage: 59.99 },
+        ]),
+    ],
+    [
+      'shares, for the same amounts',
+      { ...twoWays, splitMethod: 'shares', splitValues: { [alexId]: '1', [samId]: '2' } },
+      (saved) =>
+        void (saved.splitBetween = [
+          { ...rows([alexId, 15])[0], shares: 2 },
+          { ...rows([samId, 30])[0], shares: 4 },
+        ]),
+    ],
+    ['currency', twoWays, (saved) => void (saved.currency = 'USD')],
+    ['split method', twoWays, (saved) => void (saved.splitMethod = 'unequal')],
+  ];
+  /** Alex makes `edit`; Sam saved first at revision 0 + 1, and Alex's refused answer is lost. */
+  const metFirst = async (
+    edit: Partial<ExpenseDraft>,
+    differ: (saved: Record<string, unknown>) => void,
+  ) => {
+    const server = ledger();
+    const { controller } = await signedIn(server);
+    await controller.openGroup(householdId);
+    await controller.openExpense(householdId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft(edit);
+    server.anotherMemberSavesFirst(differ);
+    server.faultNextWrite('reply');
+    await controller.saveExpense();
+    expect(sent(server)).toEqual([ledgerWrite('PATCH')]);
+    expect(server.answers).toEqual(['PATCH 409']);
+    return { server, controller };
+  };
 
-      expect(sent(server)).toEqual([ledgerWrite('PATCH')]);
-      expect(server.answers).toEqual(['PATCH 409']);
+  it.each(differences)(
+    'confirms when another member saved the very same change at the next revision (%s)',
+    async (_field, edit) => {
+      const { server, controller } = await metFirst(edit, () => undefined);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        expense: { status: 'saved', mutation: null, message: 'Expense updated.' },
+      });
+      expect(server.drafts.size).toBe(0);
+    },
+  );
+
+  it.each(differences)(
+    'keeps a conflict when another member saved a different %s at the next revision',
+    async (_field, edit, differ) => {
+      const { server, controller } = await metFirst(edit, differ);
       expect(controller.getSnapshot()).toMatchObject({
         screen: 'expense',
         expense: {
           status: 'conflict',
-          latest: { revision: 1, amountMinor: theirs.amountMinor },
+          latest: { revision: 1 },
           mutation: { kind: 'edit', revision: 0 },
           message: expect.stringContaining('Compare your version with the saved one'),
         },
@@ -1102,6 +1258,149 @@ describe('An edit or delete whose answer was lost (#232)', () => {
       ]);
     },
   );
+
+  it('keeps today’s blocked state when the next revision holds the change but reads deleted', async () => {
+    const { server, controller } = await metFirst(
+      { description: 'Electricity bill' },
+      (saved) => void Object.assign(saved, { isDeleted: true, deletedAt: iso }),
+    );
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'blocked',
+      latest: { revision: 1, isDeleted: true, description: 'Electricity bill' },
+      mutation: { kind: 'edit', revision: 0 },
+      message: expect.stringContaining('This Expense has been deleted'),
+    });
+    expect(server.drafts.size).toBe(1);
+  });
+
+  it('confirms a Tag change by the Tag’s identity, whatever the Tag is called by the check', async () => {
+    const server = ledger();
+    const { controller } = await signedIn(server);
+    await controller.openGroup(householdId);
+    await controller.openExpense(householdId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ tagId: rentTagId });
+    server.faultNextWrite('reply');
+    const check = server.hold('GET', recordPath);
+    const saving = controller.saveExpense();
+    await check.reached;
+    // The Tag is renamed before the check reads the Expense; the Expense keeps the same Tag.
+    server.records.get(expenseId)!.tag = 'Rent and maintenance';
+    check.release();
+    await saving;
+
+    expect(sent(server)).toEqual([ledgerWrite('PATCH')]);
+    expect(server.records.get(expenseId)).toMatchObject({ tagId: rentTagId, revision: 1 });
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      expense: { status: 'saved', message: 'Expense updated.' },
+    });
+    expect(server.drafts.size).toBe(0);
+  });
+
+  it.each([
+    ['nothing', '{}'],
+    [
+      'a field the app never sends',
+      JSON.stringify({ description: 'Electricity bill', receiptUrl: 'https://example.test/r.png' }),
+    ],
+    ['only isDeleted', '{"isDeleted":false}'],
+    ['only predefinedItem', '{"predefinedItem":null}'],
+    ['part of the money', '{"amount":45}'],
+    ['a Tag’s name without its identity', '{"tag":"Groceries"}'],
+  ])(
+    'keeps a conflict when the stored edit carries %s, even at the next revision',
+    async (_carried, body) => {
+      const server = ledger();
+      const { controller } = await signedIn(server);
+      await controller.openGroup(householdId);
+      await controller.openExpense(householdId, expenseId);
+      await controller.editExpense();
+      await controller.updateExpenseDraft({ description: 'Electricity bill' });
+      server.faultNextWrite('request');
+      await controller.saveExpense();
+      controller.dispose();
+      // The edit never arrived. The device holds it with this body instead, as a damaged
+      // record or another version of the app could...
+      const [[slot, stored]] = [...server.drafts] as [string, { mutation: object }][];
+      server.drafts.set(slot, { ...stored, mutation: { ...stored.mutation, body } });
+      // ...and Sam's save at the next revision holds every value that body names.
+      Object.assign(server.records.get(expenseId)!, {
+        description: 'Electricity bill',
+        amount: 45,
+        amountMinor: 4500,
+        paidBy: rows([alexId, 45]),
+        splitBetween: rows([alexId, 15], [samId, 15], [priyaId, 15]),
+        revision: 1,
+      });
+
+      const restarted = server.create();
+      await restarted.restore();
+      await restarted.openExpense(householdId, expenseId);
+      restarted.resumeExpenseDraft();
+      await restarted.reconcileExpense();
+      expect(sent(server)).toEqual([ledgerWrite('PATCH')]);
+      expect(restarted.getSnapshot().expense).toMatchObject({
+        status: 'conflict',
+        latest: { revision: 1 },
+        mutation: { kind: 'edit', revision: 0, body },
+      });
+      expect(server.drafts.size).toBe(1);
+    },
+  );
+
+  it('removes the Group’s older saved copies when a check after a restart confirms the edit', async () => {
+    const server = ledger({ savedCopies: true });
+    /** Saved copies of the Group's ledger that still show the Expense from before the edit. */
+    const olderCopies = () =>
+      [...server.copies]
+        .filter(
+          ([key, value]) =>
+            key.includes(`/api/groups/${householdId}/`) &&
+            JSON.stringify(value).includes('"description":"Electricity"'),
+        )
+        .map(([key]) => key);
+    const { controller } = await signedIn(server);
+    await controller.openGroup(householdId);
+    await controller.selectMonth('2026-08');
+    await controller.openExpense(householdId, expenseId);
+    expect(olderCopies()).not.toEqual([]);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Electricity bill' });
+    const patch = server.hold('PATCH', recordPath);
+    const saving = controller.saveExpense();
+    await patch.reached;
+    // The app closes; the ledger then commits the edit, and its answer reaches no one.
+    controller.dispose();
+    patch.release();
+    await saving;
+    expect(server.answers).toEqual(['PATCH 200']);
+
+    const restarted = server.create();
+    await restarted.restore();
+    await restarted.openExpense(householdId, expenseId);
+    restarted.resumeExpenseDraft();
+    await restarted.reconcileExpense();
+    expect(restarted.getSnapshot().expense).toMatchObject({
+      status: 'saved',
+      message: 'Expense updated.',
+    });
+    expect(sent(server)).toEqual([ledgerWrite('PATCH')]);
+    // No saved copy from before the edit is kept...
+    expect(olderCopies()).toEqual([]);
+
+    // ...so the app, restarted offline, shows none.
+    restarted.dispose();
+    server.goOffline();
+    const offline = server.create();
+    await offline.restore();
+    await offline.openGroup(householdId);
+    await offline.selectMonth('2026-08');
+    expect(offline.getSnapshot().offline.active).toBe(true);
+    expect(
+      offline.getSnapshot().financial.expenses.data.map((row) => row.description),
+    ).not.toContain('Electricity');
+  });
 
   it('keeps a conflict when the saved Expense is more than one revision on, even holding what was sent', async () => {
     const server = ledger();

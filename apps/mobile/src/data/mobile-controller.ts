@@ -3727,6 +3727,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         if (!lease || !storage) throw new Error('Draft storage is unavailable.');
         await forgetConfirmedChange(lease, storage, groupId, original._id, mutation);
         if (!current(owner)) return;
+        // As after an answer that arrived: the app may have closed before the write's own
+        // clean-up ran, so the Group's older saved copies go now.
+        await removeLedgerCopies(groupId, owner);
+        if (!current(owner)) return;
         if (view === viewRequest)
           showConfirmedChange(groupId, mutation.kind, draft, original, snapshot.expense.context);
         await refreshLedgerViews(groupId, owner, view === viewRequest);
