@@ -83,10 +83,14 @@ function fixture() {
     owe: 30,
     /** Groups that refuse Alex and Sam (403), and are left out of the list. */
     revoked: new Set<string>(),
+    /** Groups whose answer no longer lists Alex, though their other reads still answer. */
+    left: new Set<string>(),
     offline: false,
     /** A page of September that answers 500 instead. */
     failPage: 0,
     created: 0,
+    /** How long each GET takes to answer, in ms of the fake clock; 0 answers at once. */
+    delay: 0,
   };
   let cookie: string | null = null,
     owner: string | null = null,
@@ -107,8 +111,17 @@ function fixture() {
     step.arrive();
     await step.released;
   };
-  const calls: { method: string; path: string; account: string }[] = [];
-  const held: { path: string; arrive: () => void; answer: Promise<void>; lost: boolean }[] = [];
+  const calls: { method: string; path: string; account: string; at: number }[] = [];
+  const held: {
+    path: string;
+    arrive: () => void;
+    answer: Promise<void>;
+    lost: boolean;
+    /** Holds only a request sent after the next write. */
+    afterWrite: boolean;
+    /** Holds only a request for exactly `path`. */
+    exact: boolean;
+  }[] = [];
   const connection = new Set<(state: { isConnected: boolean | null }) => void>();
   const records = (map: Map<string, unknown>) => ({
     load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
@@ -222,7 +235,13 @@ function fixture() {
     const group = [maple, cabin].find(({ _id }) => _id === id);
     if (!id || !group) return json({}, 404);
     if (server.revoked.has(id)) return json({}, 403);
-    if (path === `/api/groups/${id}`) return json({ status: 200, data: group });
+    if (path === `/api/groups/${id}`)
+      return json({
+        status: 200,
+        data: server.left.has(id)
+          ? { ...group, members: group.members.filter(({ user }) => user._id !== alex.id) }
+          : group,
+      });
     if (path.startsWith(`/api/groups/${id}/expenses?`)) {
       const number = pageOf(path);
       if (id === mapleId && monthOf(path) === '2026-09' && number === server.failPage)
@@ -245,14 +264,38 @@ function fixture() {
             {
               currency: 'INR',
               balances: [],
-              debts: [{ from: person(alex), to: person(sam), amount: server.owe }],
+              debts: server.owe
+                ? [{ from: person(alex), to: person(sam), amount: server.owe }]
+                : [],
             },
           ],
         },
       });
     if (path === `/api/groups/${id}/settlements` && method === 'POST') {
-      server.owe -= 5;
-      return json({ status: 201, data: {} }, 201);
+      // The payment as recorded, echoing what was sent.
+      const sent = JSON.parse(String(init.body)) as { amount: number; currency: string };
+      server.owe -= sent.amount;
+      const people = [alex, sam].map((user) => ({ ...person(user), email: user.email }));
+      return json(
+        {
+          status: 201,
+          data: {
+            _id: hex('f', 1),
+            group: id,
+            paidBy: people[0],
+            paidTo: people[1],
+            createdBy: people[0],
+            amount: sent.amount,
+            amountMinor: Math.round(sent.amount * 100),
+            moneyVersion: 1,
+            currency: sent.currency,
+            note: '',
+            createdAt: iso,
+            updatedAt: iso,
+          },
+        },
+        201,
+      );
     }
     return json({}, 404);
   };
@@ -319,9 +362,17 @@ function fixture() {
         },
         fetch: async (url, init) => {
           const path = new URL(url).pathname + new URL(url).search;
-          calls.push({ method: init.method ?? 'GET', path, account: signedIn(init).id });
+          const method = init.method ?? 'GET';
+          calls.push({ method, path, account: signedIn(init).id, at: Date.now() });
           if (server.offline) throw new TypeError('Network request failed');
-          const index = held.findIndex((request) => path.startsWith(request.path));
+          if (server.delay && method === 'GET')
+            await new Promise((resolve) => setTimeout(resolve, server.delay));
+          if (method !== 'GET') held.forEach((request) => (request.afterWrite = false));
+          const index = held.findIndex(
+            (request) =>
+              !request.afterWrite &&
+              (request.exact ? path === request.path : path.startsWith(request.path)),
+          );
           if (index >= 0) {
             // The server answers as it is when the request arrives; the reply comes on release.
             const [request] = held.splice(index, 1),
@@ -359,7 +410,7 @@ function fixture() {
                 : path,
         ),
     /** The next request whose path starts with `path` is answered at once; its reply on release. */
-    hold(path: string, { lost = false } = {}) {
+    hold(path: string, { lost = false, afterWrite = false, exact = false } = {}) {
       let arrive!: () => void;
       let release!: () => void;
       const reached = new Promise<void>((resolve) => {
@@ -368,7 +419,7 @@ function fixture() {
       const answer = new Promise<void>((resolve) => {
         release = resolve;
       });
-      held.push({ path, arrive, answer, lost });
+      held.push({ path, arrive, answer, lost, afterWrite, exact });
       return { reached, release };
     },
     /** The next write of this path's row waits until released. */
@@ -880,5 +931,169 @@ describe('sessions and access for this view (#173 gates)', () => {
     await settle();
     expect(f.savedRows(maplePath)).toEqual([]);
     expect(controller.getSnapshot().detail).toMatchObject({ status: 'denied', data: null });
+  });
+});
+// The loading-state audit's data-flow items for this view (#219, 2026-10-07).
+describe('a confirmed write in the Group never leaves older figures beside its success message', () => {
+  /** The debts Balances show, as amounts. */
+  const debts = (state: MobileSnapshot) =>
+    (state.financial.balances.data ?? []).flatMap((bucket) =>
+      bucket.debts.map(({ amount }) => amount),
+    );
+  /** The debts Balances offer Record on: none offline, or while a change has them out of date. */
+  const recordable = (state: MobileSnapshot) =>
+    state.offline.active || state.financial.balances.changed ? [] : debts(state);
+
+  it('never offers the old debt for Record after a confirmed payment, nor shows “Payment recorded” beside it', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(mapleId, true, 'balances');
+    expect(recordable(controller.getSnapshot())).toEqual([30]);
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    const states: MobileSnapshot[] = [];
+    controller.subscribe(() => states.push(controller.getSnapshot()));
+    // The view's reads after the payment are slow: its Group, which Balances follow, answers late.
+    const reread = f.hold(maplePath, { afterWrite: true, exact: true });
+    const recording = controller.recordSettlement();
+    await reread.reached;
+    await settle();
+    // The sheet has closed onto Balances: the old debt is no longer offered, and Record does nothing.
+    expect(controller.getSnapshot().screen).toBe('group');
+    expect(recordable(controller.getSnapshot())).toEqual([]);
+    expect(controller.getSnapshot()).toMatchObject({ destination: 'balances', snackbar: null });
+    const sent = f.calls.length;
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    expect(controller.getSnapshot().screen).toBe('group');
+    expect(f.calls.length).toBe(sent);
+    reread.release();
+    await recording;
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      snackbar: { message: 'Payment recorded' },
+      financial: { balances: { status: 'ready', stale: false } },
+    });
+    expect(debts(controller.getSnapshot())).toEqual([]);
+    // Over the whole write, no snapshot offered the old debt, or showed it beside the message.
+    const shown = states.filter((state) => state.screen === 'group');
+    expect(shown.filter((state) => recordable(state).includes(30))).toEqual([]);
+    expect(shown.filter((state) => state.snackbar && debts(state).includes(30))).toEqual([]);
+  });
+
+  it('shows “Expense saved” only once the list it returns to holds the saved Expense', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(mapleId);
+    await controller.openExpense(mapleId);
+    await controller.updateExpenseDraft({
+      description: 'Fresh groceries',
+      amount: '12',
+      tagId,
+      date: '2026-09-14',
+    });
+    const states: MobileSnapshot[] = [];
+    controller.subscribe(() => states.push(controller.getSnapshot()));
+    // The list, read again after the save, is slow to answer.
+    const reread = f.hold(septemberPath(1), { afterWrite: true });
+    const saving = controller.saveExpense();
+    await reread.reached;
+    await settle();
+    // Back on Expenses, the rows read before the save say they're read again, with no message.
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'expenses',
+      snackbar: null,
+      financial: { expenses: { status: 'loading' } },
+    });
+    reread.release();
+    await saving;
+    expect(controller.getSnapshot()).toMatchObject({
+      snackbar: { message: 'Expense saved · Fresh groceries' },
+      financial: { expenses: { status: 'ready' } },
+    });
+    const saved = states.filter((state) => state.snackbar?.message.startsWith('Expense saved'));
+    expect(saved.length).toBeGreaterThan(0);
+    expect(saved.filter((state) => listed(state)[0] !== 'Fresh groceries')).toEqual([]);
+  });
+});
+
+describe('opening and refreshing a Group read independent things together', () => {
+  // Every GET answers `delay` ms after it's sent, on vitest's fake clock, as on a slow network.
+  const delay = 1_000;
+  /**
+   * Runs `step` with the delay on, moving the clock 100 ms at a time until it ends. Returns how
+   * long it took and when each GET was sent, in ms from its start.
+   */
+  async function timed(f: ReturnType<typeof fixture>, step: () => Promise<unknown>) {
+    const began = Date.now(),
+      from = f.calls.length;
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    vi.setSystemTime(began);
+    f.server.delay = delay;
+    let done = false;
+    const running = step().finally(() => {
+      done = true;
+    });
+    while (!done) await vi.advanceTimersByTimeAsync(100);
+    await running;
+    const ended = Date.now();
+    f.server.delay = 0;
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(ended);
+    const labels = f.gets(from);
+    return {
+      took: ended - began,
+      sent: f.calls
+        .slice(from)
+        .filter((call) => call.method === 'GET')
+        .map((call, index) => `${labels[index]} at ${call.at - began}`),
+    };
+  }
+
+  it('reads the Group and the Month’s Expenses together, then Balances after both', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const opened = await timed(f, () => controller.openGroup(mapleId));
+    // Balances follow both: the Group's read and the Expense read can each add due recurring
+    // Expenses (M1-5, AMEND-1).
+    const together = {
+      took: 2 * delay,
+      sent: ['group at 0', 'expenses 2026-09 p1 at 0', 'balances at 1000'],
+    };
+    expect(opened).toEqual(together);
+    expect(controller.getSnapshot()).toMatchObject({
+      detail: { status: 'ready' },
+      financial: {
+        expenses: { status: 'ready' },
+        balances: { status: 'ready' },
+      },
+    });
+    expect(await timed(f, () => controller.refresh('pull'))).toEqual(together);
+  });
+
+  it('never shows or keeps Expenses read beside a Group that then refuses the member', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const states: MobileSnapshot[] = [];
+    controller.subscribe(() => states.push(controller.getSnapshot()));
+    // Alex has left Maple House: its Group no longer lists Alex, and answers late, after the
+    // Month's Expenses, read beside it, have answered.
+    f.server.left.add(mapleId);
+    const group = f.hold(maplePath, { exact: true });
+    const opening = controller.openGroup(mapleId);
+    await group.reached;
+    await settle();
+    group.release();
+    await opening;
+    await settle();
+    expect(controller.getSnapshot().detail).toMatchObject({
+      status: 'denied',
+      data: null,
+    });
+    expect(states.filter((state) => state.financial.expenses.data.length > 0)).toEqual([]);
+    expect(f.savedRows(maplePath)).toEqual([]);
   });
 });
