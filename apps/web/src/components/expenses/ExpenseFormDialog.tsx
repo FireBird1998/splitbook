@@ -62,6 +62,10 @@ interface ExpenseFormDialogProps {
    * edit mode; the user can still override it.
    */
   defaultDate?: string | null;
+  /** Name the Group under the title, for a form opened away from the Group's page (#304). */
+  showGroupName?: boolean;
+  /** Called once the save is confirmed, just before the form closes. */
+  onSaved?: () => void;
 }
 
 // ─── Component ─────────────────────────────────────────
@@ -83,6 +87,8 @@ function ExpenseDraftDialog({
   userId,
   expense: initialExpense = null,
   defaultDate = null,
+  showGroupName = false,
+  onSaved,
 }: ExpenseFormDialogProps) {
   const { mutate } = useSWRConfig();
   const members = group.members;
@@ -321,6 +327,7 @@ function ExpenseDraftDialog({
           (typeof key === 'string' && key.startsWith(`/api/groups/${submission.groupId}`)) ||
           isGroupReadKey(key, `/api/groups/${submission.groupId}`),
       );
+      onSaved?.();
       onClose();
     } catch (error) {
       if (mounted.current)
@@ -408,7 +415,24 @@ function ExpenseDraftDialog({
           pb: 1,
         }}
       >
-        {isEditMode ? 'Edit expense' : 'Add expense'}
+        {showGroupName ? (
+          <Box component="span" sx={{ minWidth: 0 }}>
+            {isEditMode ? 'Edit expense' : 'Add expense'}
+            <Typography
+              component="span"
+              variant="body2"
+              color="text.secondary"
+              noWrap
+              sx={{ display: 'block' }}
+            >
+              {group.name}
+            </Typography>
+          </Box>
+        ) : isEditMode ? (
+          'Edit expense'
+        ) : (
+          'Add expense'
+        )}
         <IconButton onClick={onClose} size="small" aria-label="Close expense form">
           <CloseIcon />
         </IconButton>

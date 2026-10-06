@@ -130,7 +130,7 @@ and `CONTENT_MAX_WIDTH` 1320.
 
 ```
 ┌────────────┬─────────────────────────────────────────┐
-│ [logo]     │ Top bar  (search)     Demo  ☾  (Add exp)│
+│ [logo]     │ Top bar (search)  Demo ☾ [+ Add expense]│
 │ Home       ├─────────────────────────────────────────┤
 │            │                                         │
 │ GROUPS  [+]│        Main content                     │
@@ -155,12 +155,19 @@ and `CONTENT_MAX_WIDTH` 1320.
   in several currencies shows its own currency first and "· +N".
 - The current page has `aria-current="page"`; the Group a page belongs to is
   highlighted too.
+- The top bar ends with the primary **Add expense** button (#304), on every
+  signed-in page. Inside a Group (its page or its settings) it opens that
+  Group's Expense form; anywhere else it first opens "Choose a Group", which
+  lists the member's active Groups (never an archived one), or tells a member
+  with none to create a Group first. The form is the Group page's own
+  `ExpenseFormDialog`, so saving is unchanged. After a save the member stays
+  on the page and a snackbar says "Expense added to {Group}".
 
 ### Mobile (<1200px)
 
 ```
 ┌─────────────────────┐
-│ ☰ logo   Demo  ☾    │  ← sticky top bar
+│ ☰ logo  Demo  ☾  [+]│  ← sticky top bar
 ├─────────────────────┤
 │                     │
 │   Main content      │
@@ -170,6 +177,7 @@ and `CONTENT_MAX_WIDTH` 1320.
 
 ☰ opens the sidebar as a drawer: the same items, Group list included, with
 44 px targets. It traps focus, closes on Escape and closes when you navigate.
+Below 600 px, Add expense is a 44 px icon button [+], still named "Add expense".
 ```
 
 ---
@@ -195,7 +203,7 @@ xl: 1536px    — Large desktop
 | `AppShell`      | Sidebar (lg+) or drawer, the top bar and `main`                  |
 | `Sidebar`       | Logo, main navigation, Group list, Settings and the account      |
 | `SidebarGroups` | The live Group list: Theme icon, name and balance line per Group |
-| `TopBar`        | Menu button and logo on phones, demo badge, theme switch         |
+| `TopBar`        | Phones' menu button and logo, demo badge, theme, Add expense     |
 | `AccountMenu`   | Avatar and name at the sidebar's foot; Settings and Sign out     |
 | `BrandLogo`     | The logo artwork, light or dark                                  |
 | `BrandMark`     | The mark beside a name                                           |
@@ -228,6 +236,9 @@ then it is hidden, and `GROUP_TABS` in `group-tabs.ts` is where it goes.
 - The tabs' shared layout, `(tabs)/layout.tsx`, renders `GroupDetailView`: the
   Group read, the header, a Trip's strip and setup checklist, the tabs and the
   dialogs. A refused or lost Group gets the same refusal on every tab.
+- The header has no Add expense and phones have no bar at the foot: the top
+  bar's Add expense (#304) opens this Group's form on every tab and on its
+  settings.
 - A Household's Month bar sits on the Expenses tab: a Month filters Expenses,
   and Balances always include every Month.
 - Members is read-only: names and roles, never an email. Role changes and
@@ -250,9 +261,12 @@ airport codes are derived from the group name and become noise off a trip.
 | `ExpenseCard`         | Expandable card with inline detail (paid by, split, notes, history) |
 | `ExpenseFormDialog`   | Two-tier create/edit form (simple + advanced)                       |
 | `DeleteExpenseDialog` | Confirmation dialog with undo snackbar                              |
+| `AddExpenseLauncher`  | Top bar Add expense: the current Group's form, or choose one first  |
+| `GroupChooserDialog`  | "Choose a Group": the member's active Groups, or create one first   |
 
 `expense-form-helpers.ts` and `expense-duplicate-check.ts` hold the pure,
-unit-tested logic extracted from the dialog.
+unit-tested logic extracted from the dialog; `add-expense.ts` holds the top bar
+Add expense's (where it adds from a page, which Groups it offers, its wording).
 
 ### Balances & Settlements
 

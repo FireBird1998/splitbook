@@ -1,4 +1,4 @@
-import { expect, type Page, type TestInfo } from '@playwright/test';
+import { expect, type Locator, type Page, type TestInfo } from '@playwright/test';
 import { AxeBuilder } from '@axe-core/playwright';
 import { darkTokens, lightTokens } from '../src/lib/theme/tokens';
 
@@ -46,6 +46,26 @@ export async function openNavigation(page: Page) {
     await expect(drawer).toBeVisible({ timeout: 1_000 });
   }).toPass();
   return drawer;
+}
+
+/** The top bar's Add expense (#304): labelled on desktop, an icon button of the same name on phones. */
+export const addExpenseButton = (page: Page) =>
+  page.getByRole('banner').getByRole('button', { name: 'Add expense', exact: true });
+
+/**
+ * Open Add expense from the top bar and return the dialog it opens: inside a Group, the Group's
+ * Expense form; elsewhere pass the chooser. A click that lands before the page hydrates does
+ * nothing, so it clicks until the dialog opens.
+ */
+export async function openAddExpense(
+  page: Page,
+  dialog: Locator = page.getByRole('dialog', { name: /^Add expense/ }),
+): Promise<Locator> {
+  await expect(async () => {
+    if (!(await dialog.isVisible())) await addExpenseButton(page).click({ timeout: 1_000 });
+    await expect(dialog).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+  return dialog;
 }
 
 /** Sign out from the account menu at the foot of the sidebar, and land back on the persona picker. */

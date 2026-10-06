@@ -1,4 +1,4 @@
-import { test, expect, dataOf } from './fixtures';
+import { test, expect, dataOf, openAddExpense } from './fixtures';
 
 test('a lost create response preserves the draft and retries the same submission exactly once', async ({
   page,
@@ -6,7 +6,7 @@ test('a lost create response preserves the draft and retries the same submission
 }) => {
   await page.context().addCookies((await ledger.sam.storageState()).cookies);
   await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${ledger.groupB}`);
-  await page.getByRole('button', { name: 'Add expense' }).last().click();
+  await openAddExpense(page);
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('What was it for?').fill('Lost response retry');
   await dialog.getByLabel('Amount').fill('101.01');
@@ -66,7 +66,7 @@ test('changing a draft after a lost committed response creates a distinct explic
 }) => {
   await page.context().addCookies((await ledger.sam.storageState()).cookies);
   await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${ledger.groupB}`);
-  await page.getByRole('button', { name: 'Add expense' }).last().click();
+  await openAddExpense(page);
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('What was it for?').fill('First explicit action');
   await dialog.getByLabel('Amount').fill('7.13');
@@ -111,7 +111,7 @@ test('validation and cancelled duplicate confirmation retain the draft; advisory
 }) => {
   await page.context().addCookies((await ledger.sam.storageState()).cookies);
   await page.goto(`${process.env.EXPENSE_ACCESS_BASE_URL}/groups/${ledger.groupB}`);
-  await page.getByRole('button', { name: 'Add expense' }).last().click();
+  await openAddExpense(page);
   const dialog = page.getByRole('dialog');
   const description = dialog.getByLabel('What was it for?');
   const amount = dialog.getByLabel('Amount');

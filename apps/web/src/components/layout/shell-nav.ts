@@ -39,3 +39,8 @@ export function groupCurrent(pathname: string, groupId: string): 'page' | 'true'
   if (!match || match[1].toLowerCase() !== groupId.toLowerCase()) return undefined;
   return !match[2] || groupTabFromPath(pathname) ? 'page' : 'true';
 }
+
+/** The Group a page belongs to: its own page or a page inside it (its settings), else null. */
+export function groupIdInPath(pathname: string): string | null {
+  return GROUP_PATH.exec(pathname)?.[1] ?? null;
+}

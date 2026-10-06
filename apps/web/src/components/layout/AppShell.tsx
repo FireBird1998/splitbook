@@ -66,6 +66,7 @@ export default function AppShell({ user, demoMode, children }: AppShellProps) {
 
       <Box sx={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column' }}>
         <TopBar
+          userId={user.id}
           demoMode={demoMode}
           menuOpen={drawerOpen}
           onOpenMenu={() => setDrawerPath(pathname)}

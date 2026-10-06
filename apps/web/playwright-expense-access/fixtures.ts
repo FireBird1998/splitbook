@@ -4,8 +4,30 @@ import {
   request,
   type APIRequestContext,
   type APIResponse,
+  type Locator,
+  type Page,
 } from '@playwright/test';
 import { DEMO_PERSONA_IDS, type DemoPersonaKey } from '../src/lib/demo-personas';
+
+/** The top bar's Add expense (#304): labelled on desktop, an icon button of the same name on phones. */
+export const addExpenseButton = (page: Page) =>
+  page.getByRole('banner').getByRole('button', { name: 'Add expense', exact: true });
+
+/**
+ * Open Add expense from the top bar and return the dialog it opens: inside a Group, the Group's
+ * Expense form; elsewhere pass the chooser. A click that lands before the page hydrates does
+ * nothing, so it clicks until the dialog opens.
+ */
+export async function openAddExpense(
+  page: Page,
+  dialog: Locator = page.getByRole('dialog', { name: /^Add expense/ }),
+): Promise<Locator> {
+  await expect(async () => {
+    if (!(await dialog.isVisible())) await addExpenseButton(page).click({ timeout: 1_000 });
+    await expect(dialog).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+  return dialog;
+}
 
 export async function dataOf(response: APIResponse, status = 200) {
   expect(response.status(), await response.text()).toBe(status);

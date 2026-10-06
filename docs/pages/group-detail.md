@@ -29,10 +29,8 @@ The main page for interacting with a group. Uses tabs to switch between Expenses
 │         │  │  (see below for each tab)                │  │
 │         │  │                                          │  │
 │         │  └──────────────────────────────────────────┘  │
-│         │                                                │
-│         │                              [+ Add Expense]   │
-│         │                              (FAB button)      │
 └─────────┴────────────────────────────────────────────────┘
+  Add expense is the top bar's button (#304), on every tab.
 ```
 
 ---
@@ -98,11 +96,13 @@ Shows at the top of all tabs:
 
 ---
 
-## Add Expense FAB
+## Add expense
 
-- Floating action button in bottom-right corner
-- Always visible regardless of active tab
-- Opens expense form modal (desktop) or full-page (mobile)
+- The top bar's primary Add expense (#304), an icon button on phones, opens
+  this Group's form on every tab and on its settings; the page has no button
+  of its own
+- The trip checklist's Add expense, the empty Expense list's "Add first
+  expense" and the old `?action=add-expense` link open the same form
 - See [add-expense.md](./add-expense.md) for the form spec
 
 ---
@@ -156,7 +156,6 @@ if (!isMember) redirect('/dashboard');
 - `ExpenseListView` (Expenses tab)
 - `BalancesView` (Balances tab — balances _and_ simplified debts in one component)
 - `ActivityView` (Activity tab)
-- MUI `Fab` for add expense button
 
 Which header renders is decided by `theme.header`, and the month bar by
 `theme.signature === 'monthCycle'` — never by switching on the raw category

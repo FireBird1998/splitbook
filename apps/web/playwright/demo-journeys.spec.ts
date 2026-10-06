@@ -4,6 +4,7 @@ import {
   DEMO_TRIP_NAME,
   enterAsPersona,
   expectThemeApplied,
+  openAddExpense,
   parseMoneyText,
   reviewScreenshot,
   switchPersona,
@@ -73,9 +74,8 @@ test('alex: adds an expense to the new trip', async ({ page }) => {
   await enterAsPersona(page, 'alex');
   await page.goto(qaTripUrl);
 
-  // A fresh trip offers the same editor through its checklist and workspace action.
-  await page.getByRole('button', { name: 'Add expense' }).last().click();
-  const dialog = page.getByRole('dialog');
+  // The top bar's Add expense opens the trip's form (#304).
+  const dialog = await openAddExpense(page);
   await expect(dialog.getByText('Add expense')).toBeVisible();
 
   await dialog.getByLabel('What was it for?').fill('QA Dinner');
