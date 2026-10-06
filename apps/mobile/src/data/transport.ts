@@ -101,6 +101,11 @@ export interface RequestOptions {
    * be revoked, never adopted or saved, and the caller then gets `Superseded`.
    */
   onAbandoned?: (cookie: string) => Promise<void>;
+  /**
+   * Sent for no session (`revokeDetached` only): no session change ends it or makes its answer
+   * `Superseded`, and it changes no session state.
+   */
+  detached?: boolean;
 }
 
 export interface TransportDependencies {
@@ -226,11 +231,16 @@ export function createTransport({
     owner: number,
     options: RequestOptions = {},
   ): Promise<unknown> => {
-    assertCurrent(owner);
+    const live = () => options.detached === true || session.current(owner);
+    const assertLive = () => {
+      if (!live()) throw new Superseded();
+    };
+    assertLive();
     // Invitations can open even after restoration fails. Every ordinary request
     // must verify staging before it can send or adopt a session cookie.
-    if (path !== '/.well-known/splitbook-mobile.json') await verifyGoogleBackend(owner);
-    assertCurrent(owner);
+    if (path !== '/.well-known/splitbook-mobile.json')
+      await verifyGoogleBackend(owner, options.detached);
+    assertLive();
     // A request its caller has already cancelled is never sent.
     if (options.signal?.aborted) throw cancelled();
     const abort = new AbortController();
@@ -242,7 +252,7 @@ export function createTransport({
       abort.abort();
     };
     // A sign-in outlives a session change: its reply is the only way to learn its session.
-    if (!options.onAbandoned) requests.add(stop);
+    if (!options.onAbandoned && !options.detached) requests.add(stop);
     const endTimeout = timer(() => stop('timeout'), REQUEST_TIMEOUT_MS);
     // Linked with a listener of its own, not AbortSignal.any, so a cancel is told apart.
     const cancel = () => stop('caller');
@@ -277,12 +287,11 @@ export function createTransport({
           : { body: options.serializedBody }),
       });
       received = true;
-      if (options.onAbandoned && !session.current(owner))
-        await abandon(response, options.onAbandoned);
-      assertCurrent(owner);
+      if (options.onAbandoned && !live()) await abandon(response, options.onAbandoned);
+      assertLive();
       // Logout responses must never reinstall a cookie, even a surprising one.
       if (!options.logout && options.adoptSession !== false) await adoptCookie(response, owner);
-      assertCurrent(owner);
+      assertLive();
       if (
         response.status === 401 &&
         !options.logout &&
@@ -328,10 +337,10 @@ export function createTransport({
         throw new RequestError(message, response.status, code, false, serverMessage);
       }
       const body = await response.json();
-      assertCurrent(owner);
+      assertLive();
       return body;
     } catch (error) {
-      if (!session.current(owner) || aborted === 'session') throw new Superseded();
+      if (!live() || aborted === 'session') throw new Superseded();
       if (error instanceof RequestError || error instanceof Superseded) throw error;
       if (aborted === 'caller') throw cancelled();
       throw new RequestError(
@@ -349,13 +358,15 @@ export function createTransport({
     }
   };
 
-  const verifyGoogleBackend = async (owner: number) => {
-    if (!googleEnabled || verifiedGoogleBackend === owner) return;
+  /** `detached`: checked for a detached request, every time, and kept for no session. */
+  const verifyGoogleBackend = async (owner: number, detached = false) => {
+    if (!googleEnabled || (!detached && verifiedGoogleBackend === owner)) return;
     let value: unknown;
     try {
       value = await request('/.well-known/splitbook-mobile.json', owner, {
         sessionCookie: null,
         adoptSession: false,
+        detached,
       });
     } catch (error) {
       if (error instanceof RequestError && error.status) {
@@ -377,18 +388,42 @@ export function createTransport({
         'This build does not match the staging login configuration. Please contact the beta organizer.',
       );
     }
+    if (detached) return;
     assertCurrent(owner);
     verifiedGoogleBackend = owner;
   };
 
   /**
-   * A session change: every request in flight but a sign-in ends, and its caller gets
-   * `Superseded`. A sign-in's caller gets it once the reply lands (see `onAbandoned`).
+   * Revokes a session nothing here holds any more, such as one a replaced sign-in's reply set.
+   * It is sent once, with its own cookie and only to `/api/auth/sign-out`, after the backend
+   * passes the Google check. It belongs to no session, so no session change ends it, and it
+   * changes nothing here. Resolves whether the server confirmed it.
+   */
+  const revokeDetached = async (cookie: string) => {
+    try {
+      // No session sends it, so no generation is current or stale for it.
+      await request('/api/auth/sign-out', Number.NaN, {
+        method: 'POST',
+        body: {},
+        sessionCookie: cookie,
+        logout: true,
+        detached: true,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * A session change: every request in flight but a sign-in or a detached one ends, and its
+   * caller gets `Superseded`. A sign-in's caller gets it once the reply lands (see
+   * `onAbandoned`); a detached request belongs to no session.
    */
   const abortAll = () => {
     requests.forEach((stop) => stop('session'));
     requests.clear();
   };
 
-  return { request, verifyGoogleBackend, abortAll };
+  return { request, verifyGoogleBackend, revokeDetached, abortAll };
 }

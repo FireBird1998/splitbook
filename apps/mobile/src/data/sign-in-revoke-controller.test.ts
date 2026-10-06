@@ -466,3 +466,84 @@ describe('a sign-in reply that lands after sign-out (#284)', () => {
     });
   });
 });
+
+describe('a late reply’s revoke goes on without blocking anything (#284)', () => {
+  it('lets Google sign-in start again after sign-out while the first reply is held, and still revokes that session once', async () => {
+    const device = phone({ google: true });
+    const controller = device.start();
+    const reply = device.hold('/api/auth/sign-in/social');
+    const first = controller.signInWithGoogle();
+    await reply.arrived;
+    await controller.signOut();
+    await controller.signInWithGoogle();
+    const alex2 = issued('alex', 2, true);
+    expect(controller.getSnapshot().auth).toMatchObject({
+      status: 'authenticated',
+      user: { id: alex.id },
+    });
+    expect(device.savedCookie()).toBe(alex2);
+
+    reply.release();
+    await first;
+    const alex1 = issued('alex', 1, true);
+    expect(device.revokes()).toEqual([alex1]);
+    expect(device.carrying(alex1)).toEqual(['POST /api/auth/sign-out']);
+    expect(device.saved).not.toContain(alex1);
+    expect(controller.getSnapshot().auth).toMatchObject({
+      status: 'authenticated',
+      user: { id: alex.id },
+    });
+    expect(device.savedCookie()).toBe(alex2);
+  });
+
+  it.each([
+    ['a second sign-out', (controller: Controller) => controller.signOut()],
+    ['a return to the app', (controller: Controller) => controller.refresh('foreground')],
+  ] as const)(
+    'sends it once when %s lands while the backend is checked for it',
+    async (_, change) => {
+      const device = phone({ google: true });
+      const controller = device.start();
+      const reply = device.hold('/api/auth/sign-in/social');
+      const signingIn = controller.signInWithGoogle();
+      await reply.arrived;
+      await controller.signOut();
+      const check = device.hold('/.well-known/splitbook-mobile.json');
+      reply.release();
+      await check.arrived;
+      await change(controller);
+      check.release();
+      await signingIn;
+      const alex1 = issued('alex', 1, true);
+      expect(device.revokes()).toEqual([alex1]);
+      expect(device.carrying(alex1)).toEqual(['POST /api/auth/sign-out']);
+      expect(device.saved).toEqual([]);
+      expect(device.device.session).toBeNull();
+      expect(controller.getSnapshot().auth).toEqual({
+        status: 'signed-out',
+        user: null,
+        message: null,
+      });
+    },
+  );
+
+  it('still revokes a reply that lands after the controller is disposed, and changes nothing', async () => {
+    const device = phone();
+    const controller = device.start();
+    const reply = device.hold('/api/auth/demo-persona/sign-in');
+    const signingIn = controller.signIn('alex');
+    await reply.arrived;
+    controller.dispose();
+    const disposed = controller.getSnapshot();
+    const seen = published(controller);
+    reply.release();
+    await signingIn;
+    const alex1 = issued('alex', 1);
+    expect(device.revokes()).toEqual([alex1]);
+    expect(device.carrying(alex1)).toEqual(['POST /api/auth/sign-out']);
+    expect(device.saved).toEqual([]);
+    expect(device.device.session).toBeNull();
+    expect(seen).toEqual([]);
+    expect(controller.getSnapshot()).toBe(disposed);
+  });
+});

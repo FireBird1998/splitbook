@@ -383,7 +383,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const googleEnabled = Boolean(
     config.googleWebClientId && secureTransport && authOrigin === apiBase,
   );
-  let googlePending = false;
+  /**
+   * The Google sign-in under way: its session's generation, and whether the OS account chooser
+   * is open. Another waits while the chooser is open and while this one is current. Once
+   * replaced, it finishes its reply, and any revoke, without holding up the next.
+   */
+  let googleAttempt: { owner: number; choosing: boolean } | null = null;
   const now = dependencies.now ?? Date.now;
   const listeners = new Set<() => void>();
   let snapshot = cleanSnapshot({ status: 'restoring', user: null, message: null });
@@ -624,20 +629,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /**
    * Revokes the session a sign-in's reply set after something replaced that sign-in. It was
    * never adopted or saved. It goes only to `/api/auth/sign-out`, and once, whatever the answer,
-   * as a sign-in sends a pending revoke: whatever replaced the sign-in has moved on. `request`
-   * sends nothing to a backend that fails the Google check.
+   * as a sign-in sends a pending revoke: whatever replaced the sign-in has moved on. It belongs
+   * to no session, so a later session change, or `dispose`, never stops it, and nothing is sent
+   * to a backend that fails the Google check.
    */
   const revokeAbandoned = async (abandoned: string) => {
-    try {
-      await request('/api/auth/sign-out', generation, {
-        method: 'POST',
-        body: {},
-        sessionCookie: abandoned,
-        logout: true,
-      });
-    } catch {
-      // Sent once, whatever the answer.
-    }
+    await revokeDetached(abandoned);
   };
 
   /**
@@ -872,7 +869,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // Today's denial purge: its reads, saved copies and content on screen go.
     onGroupDenied: (groupId, status, owner) => forgetGroup(groupId, status, owner),
   });
-  const { request, verifyGoogleBackend } = transport;
+  const { request, verifyGoogleBackend, revokeDetached } = transport;
 
   /**
    * Records the cookie, on disk, for the account `get-session` just confirmed. Only a recorded
@@ -1826,12 +1823,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const signInWithGoogle = async () => {
-    // An OS account chooser cannot be aborted like fetch. Keep one active until it returns.
-    if (googlePending) return;
-    googlePending = true;
+    // An OS account chooser cannot be aborted like fetch. Keep one active until it returns, and
+    // one Google sign-in at a time until something replaces it.
+    if (googleAttempt && (googleAttempt.choosing || current(googleAttempt.owner))) return;
     // As for a persona sign-in, a sign-in this one replaces may already have its session.
     const replacing = snapshot.auth.status === 'signing-in';
     const owner = invalidate();
+    const attempt = { owner, choosing: false };
+    googleAttempt = attempt;
     publish(cleanSnapshot({ status: 'signing-in', user: null, message: null }));
     try {
       await finishSignOut(owner, true);
@@ -1842,7 +1841,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return;
       }
       await verifyGoogleBackend(owner);
-      const identity = await dependencies.googleSignIn();
+      attempt.choosing = true;
+      const identity = await dependencies.googleSignIn().finally(() => {
+        attempt.choosing = false;
+      });
       assertCurrent(owner);
       if (identity.status !== 'success') {
         await failSession(
@@ -1885,7 +1887,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         cookie,
       );
     } finally {
-      googlePending = false;
+      if (googleAttempt === attempt) googleAttempt = null;
     }
   };
 
