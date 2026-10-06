@@ -390,13 +390,14 @@ describe('A status change cross-fades', () => {
     expect(room.props.importantForAccessibility).toBe('no-hide-descendants');
     expect(style(room)).toMatchObject({ position: 'absolute', left: 0 });
     const [fade] = timings();
-    // It holds a moment before it fades, so a text replaced at once never shows.
+    // It starts at once: a delay left the view showing the new text at full strength, from the
+    // last fade's native value, until the fade began (#331).
     expect(fade.config).toMatchObject({
       toValue: 1,
       duration: motion.status,
-      delay: motion.statusSettle,
       useNativeDriver: true,
     });
+    expect(fade.config.delay).toBeUndefined();
     expect(fade.value.value).toBe(0);
     // Both run off the one fade: the outgoing copy takes its reverse.
     expect((style(outgoing).opacity as { of: unknown }).of).toBe(fade.value);
@@ -415,27 +416,42 @@ describe('A status change cross-fades', () => {
     expect(style(outgoing).textAlign).toBe('right');
   });
 
-  it('never fades from, or to, a text that was replaced before it showed', async () => {
+  // On the emulator, going back to "Updated" showed the new time alone for 100ms, then the old
+  // text at full strength again, then the fade. It must fade once, from what is on screen.
+  it('fades once from what is on screen to the final text, through a change mid-fade', async () => {
     const root = await render(<StatusText>Saved 3:21 AM · refreshing</StatusText>);
     // The refresh ends a moment before its new time arrives.
     update(<StatusText>Updated 3:21 AM</StatusText>);
+    const [fade] = timings();
+    const incoming = () => hosts(root, 'AnimatedView')[0]!;
+    expect(style(incoming()).opacity).toBe(fade.value);
     update(<StatusText>Updated 3:22 AM</StatusText>);
+    // The same fade carries on: not stopped, not restarted, not reset.
+    expect(timing).toHaveBeenCalledOnce();
+    expect(fade.stop).not.toHaveBeenCalled();
+    expect(style(incoming()).opacity).toBe(fade.value);
     expect(text(root)).toBe('Updated 3:22 AM');
     const outgoing = hosts(root, 'AnimatedText');
     expect(outgoing.map((node) => node.children)).toEqual([['Saved 3:21 AM · refreshing']]);
   });
 
-  it('stops a fade when the text changes again, or the line goes', async () => {
+  it('stops its fade when the line goes', async () => {
     await render(<StatusText>Updated 10:42</StatusText>);
     update(<StatusText>Saved 10:42 · refreshing</StatusText>);
-    const [first] = timings();
-    expect(first.stop).not.toHaveBeenCalled();
-    update(<StatusText>Updated 10:43</StatusText>);
-    expect(first.stop).toHaveBeenCalledOnce();
-    const [, second] = timings();
-    expect(second.start).toHaveBeenCalledOnce();
+    const [fade] = timings();
+    expect(fade.start).toHaveBeenCalledOnce();
     act(() => renderer!.unmount());
     renderer = undefined;
-    expect(second.stop).toHaveBeenCalledOnce();
+    expect(fade.stop).toHaveBeenCalledOnce();
+  });
+
+  it('shows its old text again at once if it returns mid-fade, and stops the fade', async () => {
+    const root = await render(<StatusText>Updated 10:42</StatusText>);
+    update(<StatusText>Saved 10:42 · refreshing</StatusText>);
+    const [fade] = timings();
+    update(<StatusText>Updated 10:42</StatusText>);
+    expect(fade.stop).toHaveBeenCalledOnce();
+    expect(hosts(root, 'AnimatedText')).toEqual([]);
+    expect((style(hosts(root, 'AnimatedView')[0]!).opacity as { value: number }).value).toBe(1);
   });
 });

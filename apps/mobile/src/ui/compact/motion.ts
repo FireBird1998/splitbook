@@ -23,11 +23,6 @@ export const motion = {
   reveal: 200,
   /** A status line's old text fades out while the new one fades in. */
   status: 180,
-  /**
-   * How long a status line's new text must hold before it fades in, so a text that is replaced
-   * at once (a refresh ends a moment before its new time arrives) is never drawn.
-   */
-  statusSettle: 100,
 } as const;
 
 /** The skeletons' opacity at rest and at the top of a breath, over the border colour. */
@@ -233,39 +228,60 @@ export function useReveal(loading: boolean): Reveal | null {
 
 // Status cross-fade -------------------------------------------------------------------------
 
+interface StatusChange {
+  /** The text fading out; null when there's nothing to fade. */
+  from: string | null;
+  /** 0 to 1: the new text follows it while the old one takes the reverse (`out`). */
+  fade: Animated.Value;
+  out: Animated.AnimatedInterpolation<number>;
+}
+
 /**
- * A status line's change: the text it fades out (null when there's nothing to fade) and the
- * fade, from 0 to 1, the new text follows while the old one takes the reverse. The text faded
- * out is always the last one shown in full, never one that was replaced before it faded in;
- * the new text waits `motion.statusSettle` before it fades in, so one replaced within that time
- * never shows. A first render, and any change with reduce motion on, shows the new text at once.
+ * A status line's change, as one fade from what is on screen to the final text. The text faded
+ * out is the one last shown in full. A change that arrives while a fade is running (a refresh
+ * ends a moment before its new time arrives) carries the same fade on to the newer text, so the
+ * line never restarts from the old text or shows the one in between at full strength. The fade
+ * starts at once, on the native driver, so the view never shows a value left from the last one.
+ * A first render, and any change with reduce motion on, shows the new text at once.
  */
-export function useStatusFade(text: string) {
+export function useStatusFade(text: string): StatusChange {
   useWatchReducedMotion();
   /** The text last shown in full. */
   const settled = useRef(text);
+  /** The fade running now, if any. */
+  const running = useRef<StatusChange | null>(null);
+  /** The text this line shows now, for when a fade ends. */
+  const latest = useRef(text);
   const change = useMemo(() => {
+    if (running.current && settled.current !== text) return running.current;
     const from = settled.current !== text && moving() ? settled.current : null;
     const fade = new Animated.Value(from === null ? 1 : 0);
     const out = fade.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
     return { from, fade, out };
   }, [text]);
   useEffect(() => {
+    latest.current = text;
+  }, [text]);
+  useEffect(() => {
     if (change.from === null) {
-      settled.current = text;
+      settled.current = latest.current;
       return;
     }
+    running.current = change;
     const animation = Animated.timing(change.fade, {
       toValue: 1,
       duration: motion.status,
-      delay: motion.statusSettle,
       easing: Easing.inOut(Easing.quad),
       useNativeDriver: true,
     });
     animation.start(({ finished }) => {
-      if (finished) settled.current = text;
+      if (running.current === change) running.current = null;
+      if (finished) settled.current = latest.current;
     });
-    return () => animation.stop();
-  }, [text, change]);
+    return () => {
+      if (running.current === change) running.current = null;
+      animation.stop();
+    };
+  }, [change]);
   return change;
 }
