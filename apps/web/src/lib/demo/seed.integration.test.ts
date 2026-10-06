@@ -132,14 +132,22 @@ describe('demo seed integration', () => {
   it('keeps each persona’s dashboard in a single INR bucket', async () => {
     await seedDemoData();
 
+    // The demo Groups (#302) add to each bucket, but Alex is still owed ₹6,160 only in Goa
+    // and Priya still owes ₹4,680 only there: the figures the demo journeys check on Home.
     const samBalances = await balanceService.getUserBalances(DEMO_PERSONA_IDS.sam);
     expect(samBalances.buckets).toEqual([
-      { currency: 'INR', youOwe: 1480, youAreOwed: 0, net: -1480 },
+      { currency: 'INR', youOwe: 4725.69, youAreOwed: 2812, net: -1913.69 },
     ]);
 
     const alexBalances = await balanceService.getUserBalances(DEMO_PERSONA_IDS.alex);
     expect(alexBalances.buckets).toEqual([
-      { currency: 'INR', youOwe: 0, youAreOwed: 6160, net: 6160 },
+      { currency: 'INR', youOwe: 11387.77, youAreOwed: 6160, net: -5227.77 },
     ]);
+
+    const priyaBalances = await balanceService.getUserBalances(DEMO_PERSONA_IDS.priya);
+    expect(priyaBalances.buckets).toEqual([
+      { currency: 'INR', youOwe: 4680, youAreOwed: 11821.46, net: 7141.46 },
+    ]);
+    expect(samBalances.hasMixedCurrencies).toBe(false);
   });
 });

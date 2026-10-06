@@ -5,6 +5,7 @@
 
 import { config } from 'dotenv';
 import { resolve } from 'path';
+import type { SeedResult } from '../src/lib/demo/seed';
 
 config({ path: resolve(process.cwd(), '.env.local') });
 
@@ -26,9 +27,29 @@ async function main() {
     if (result.skippedTransactions) {
       console.log('  (expenses/settlements already present — skipped to stay idempotent)');
     }
+    printDemoGroups(result);
     console.log('\nStart the app with AUTH_MODE=demo and open http://localhost:4127');
   } finally {
     await disconnectDemoDb();
+  }
+}
+
+function printDemoGroups(result: SeedResult): void {
+  console.log(`  recurring Expenses:   ${result.recurringExpenses}`);
+  for (const group of result.demoGroups) {
+    console.log(
+      `  ${group.name}: ${group.groupCreated ? 'created' : 'already there'}, ` +
+        `${group.expensesCreated} expenses (${group.expensesEdited} edited, ` +
+        `${group.expensesDeleted} deleted), ${group.recurringTemplatesCreated} recurring templates, ` +
+        `${group.settlementsCreated} settlements, ${group.invitationsCreated} invitations` +
+        (group.skippedTransactions ? ' (ledger already present — skipped)' : ''),
+    );
+  }
+  if (result.recurringExpenses === 'off') {
+    console.log(
+      '  Recurring Expenses are off, so the Household’s monthly bills were entered by hand.\n' +
+        '  For templates, set RECURRING_EXPENSES_ENABLED=true and run pnpm web demo:reset.',
+    );
   }
 }
 

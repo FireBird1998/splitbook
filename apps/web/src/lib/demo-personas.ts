@@ -24,6 +24,23 @@ export const DEMO_PERSONA_IDS = {
 
 export const DEMO_GROUP_ID = 'a00000000000000000000010';
 
+/**
+ * The Groups the demo seed adds beside the Goa trip, for the web portal (#302). Kept clear of
+ * the mobile fixture Groups (`…020` Maple House, `…030` Alex's private Group) and of `…099`,
+ * which the mobile verifiers use as an id that matches nothing.
+ */
+export const DEMO_HOUSEHOLD_ID = 'a00000000000000000000201';
+export const DEMO_WEEK_TRIP_ID = 'a00000000000000000000202';
+export const DEMO_WORK_GROUP_ID = 'a00000000000000000000203';
+
+/** Every Group the demo seed creates; `demo:reset` removes exactly these and their records. */
+export const DEMO_SEEDED_GROUP_IDS = [
+  DEMO_GROUP_ID,
+  DEMO_HOUSEHOLD_ID,
+  DEMO_WEEK_TRIP_ID,
+  DEMO_WORK_GROUP_ID,
+] as const;
+
 export const DEMO_PERSONAS: readonly DemoPersona[] = [
   {
     key: 'alex',

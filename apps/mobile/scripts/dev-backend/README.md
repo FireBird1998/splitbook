@@ -63,7 +63,7 @@ Next allows one `next dev` per app directory, so a worktree runs at most one bac
 
 ## Fixtures and controls
 
-Fictional personas Alex, Sam, and Priya share **Goa Friends Trip** and **Maple House**. **Alex private test Group** permits only Alex. The seed Trip contains seven fictional Expenses and one Settlement; the Household starts empty. This fixture does not claim verification of later mobile financial features. Verifier runs and manual QA add their own test Groups, so a database in use holds more Groups than the seed.
+Fictional personas Alex, Sam, and Priya share **Goa Friends Trip** and **Maple House**. **Alex private test Group** permits only Alex. The seed Trip contains seven fictional Expenses and one Settlement; Maple House starts empty. The web demo seed also adds the Groups the web portal uses (#302): the **Banyan Court Flat 4B** Household with seven months of history, the six-day **Kochi to Alleppey** Trip, and the **Studio Lunch Club** (Alex and Sam, with a pending invitation for Priya). This backend leaves recurring Expenses off, so the Household's monthly bills are ordinary Expenses and it has no templates. This fixture does not claim verification of later mobile financial features. Verifier runs and manual QA add their own test Groups, so a database in use holds more Groups than the seed.
 
 For native session/access recovery checks:
 

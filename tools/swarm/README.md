@@ -32,7 +32,7 @@ Drop `--offline` if a package is missing from the store. A stale install looks l
 ## `pnpm swarm up`
 
 1. Picks a port the operating system reports free on 127.0.0.1, skipping 4138 and every port the Fetch standard blocks, and a fresh database name with this worktree's prefix (below).
-2. Seeds it with the existing fictional seed (`apps/mobile/scripts/dev-backend/seed.mjs`: the web app's demo seed, the Household and the Alex-only Group).
+2. Seeds it with the existing fictional seed (`apps/mobile/scripts/dev-backend/seed.mjs`: the web app's demo seed, Maple House and the Alex-only Group).
 3. Starts the backend (`start.mjs`) through #185's `SPLITBOOK_NATIVE_ORIGIN_PORT`, `SPLITBOOK_NATIVE_DATABASE` and `SPLITBOOK_NATIVE_MONGO_PORT`, in its own process group, and waits until `GET /api/auth/ok` answers.
 4. Prints `MOBILE_VERIFY_URL` and the three `SPLITBOOK_NATIVE_*` variables for this backend, and returns. Give the verifiers `MOBILE_VERIFY_URL`, and the backend's controls (`control.mjs`) the three `SPLITBOOK_NATIVE_*` variables, so they act on this worktree's database, never `splitbook_mobile_50`. The backend keeps running until `pnpm swarm down`; its log is `tools/swarm/out/backend.log`.
 
