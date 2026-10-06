@@ -1,4 +1,11 @@
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
+import { findHosts, layoutHeight } from './test-utils/layout';
 import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
@@ -931,6 +938,23 @@ describe('App return from an Expense', () => {
     await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
     expect(app.text()).not.toContain('Draft: Kept for later');
     expect(app.pressable('Add expense').props.accessibilityRole).toBe('button');
+  });
+
+  // #331: on the emulator Home moved up 3dp when its progress bar went.
+  it('keeps the progress bar’s room on Home when nothing loads', async () => {
+    const app = await renderApp();
+    expect(app.progressbars()).toBe(0);
+    const json = screen!.toJSON() as ReactTestRendererJSON;
+    // The host that holds Home's scrolling content, and what sits just above it.
+    const [frame] = findHosts(json, () => true).filter((node) =>
+      (node.children ?? []).some(
+        (child) => typeof child !== 'string' && child.type === 'ScrollView',
+      ),
+    );
+    const children = frame!.children as ReactTestRendererJSON[];
+    const slot = children[children.findIndex((child) => child.type === 'ScrollView') - 1]!;
+    expect(slot.props.accessibilityRole).toBeUndefined();
+    expect(layoutHeight(slot)).toBe(3);
   });
 
   // #331: the record's skeleton takes the shape of what the list row already says about it.

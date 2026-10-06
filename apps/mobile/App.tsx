@@ -42,6 +42,7 @@ import {
   LinearProgress,
   SkeletonRows,
   TopBar,
+  progressHeight,
 } from './src/ui/compact';
 import { SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
@@ -556,7 +557,12 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
         onRefresh={refresh}
         onAccount={controller.openSettings}
       />
-      {feedback.progress ? <LinearProgress label={feedback.progress} /> : null}
+      {/* The bar's room stays when nothing loads, so Home never moves. */}
+      {feedback.progress ? (
+        <LinearProgress label={feedback.progress} />
+      ) : (
+        <View style={{ height: progressHeight }} />
+      )}
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
         refreshControl={

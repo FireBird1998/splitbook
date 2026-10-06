@@ -456,6 +456,12 @@ export function SkeletonRows({ label, ...shape }: SkeletonShape & { label: strin
 }
 
 /**
+ * The progress bar's height. A screen keeps this much room under its top bar while nothing
+ * loads, so its content never moves when the bar comes or goes.
+ */
+export const progressHeight = 3;
+
+/**
  * One thin indeterminate bar under the top bar: the single progress cue for a screen. A brand
  * segment, a little over a third of the track, sweeps across it and repeats while the bar is
  * shown; with reduce motion on it rests where the still bar always sat.
@@ -469,7 +475,7 @@ export function LinearProgress({ label }: { label: string }) {
       accessibilityLabel={label}
       accessibilityState={{ busy: true }}
       onLayout={sweep.onLayout}
-      style={{ height: 3, backgroundColor: theme.brand.bg, overflow: 'hidden' }}
+      style={{ height: progressHeight, backgroundColor: theme.brand.bg, overflow: 'hidden' }}
     >
       <Animated.View
         style={{
