@@ -1,5 +1,13 @@
 import type { Page } from '@playwright/test';
-import { test, expect, dataOf, expensePath, joinGroup, type Ledger } from './fixtures';
+import {
+  test,
+  expect,
+  dataOf,
+  expensePath,
+  joinGroup,
+  openAddExpense,
+  type Ledger,
+} from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
 /*
@@ -476,7 +484,7 @@ const writes: StaleWrite[] = [
       path: `/api/groups/${ledger.groupA}/expenses`,
     }),
     open: async (page: Page) => {
-      await page.getByRole('button', { name: 'Add expense' }).last().click();
+      await openAddExpense(page);
       const dialog = page.getByRole('dialog');
       await dialog.getByLabel('What was it for?').fill('Stale tab groceries');
       await dialog.getByLabel('Amount').fill('321.00');

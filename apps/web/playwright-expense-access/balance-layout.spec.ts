@@ -1,4 +1,4 @@
-import { test, expect, dataOf } from './fixtures';
+import { test, expect, dataOf, openAddExpense } from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
 for (const colorScheme of ['light', 'dark'] as const) {
@@ -65,8 +65,7 @@ for (const colorScheme of ['light', 'dark'] as const) {
         .toBe(true);
     }
     await page.screenshot({ path: testInfo.outputPath(`balances-${colorScheme}.png`) });
-    // The page's own Add action; the top bar has one too (#304).
-    await page.getByRole('main').getByRole('button', { name: 'Add expense', exact: true }).click();
-    await expect(page.getByRole('dialog', { name: /Add expense/i })).toBeVisible();
+    // Add expense is in the top bar (#304), and opens this Group's form.
+    await openAddExpense(page);
   });
 }

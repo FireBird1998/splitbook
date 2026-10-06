@@ -105,7 +105,6 @@ describe('the Group header', () => {
         userId: ALEX,
         settingsHref: `/groups/${GROUP}/settings`,
         onInvite: vi.fn(),
-        onAddExpense: vi.fn(),
       }),
     );
 
@@ -230,6 +229,8 @@ describe('the Group page around its tabs', () => {
     // The canvas header replaces the old back link and the neutral header card.
     expect(text(html)).not.toMatch(/Dashboard|Your balance/);
     expect(html).not.toMatch(EMAILS);
+    // The top bar's Add expense adds to this Group (#304): no header button, no phone bar.
+    expect(text(html)).not.toContain('Add expense');
   });
 
   it('keeps a Trip’s strip and setup checklist above the tabs', () => {
@@ -244,6 +245,15 @@ describe('the Group page around its tabs', () => {
     expect(checklist).toBeGreaterThan(strip);
     expect(tabs).toBeGreaterThan(checklist);
     expect(text(html)).toContain('Trip · 3 members · INR');
+    // The checklist keeps its own Add expense for the first Expense, and it is the page's only
+    // one: the top bar has Add expense for every tab (#304).
+    expect(text(html)).toContain('Add the first expense');
+    const adds = [...html.matchAll(/<button\b[^>]*>([\s\S]*?)<\/button>/g)].filter(
+      ([, inner]) => text(inner) === 'Add expense',
+    );
+    expect(adds).toHaveLength(1);
+    expect(html.indexOf(adds[0][0])).toBeGreaterThan(checklist);
+    expect(html.indexOf(adds[0][0])).toBeLessThan(tabs);
   });
 
   it('puts a Household’s Month bar on the Expenses tab only', () => {

@@ -1,7 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { MongoClient, ObjectId } from 'mongodb';
 import type { APIRequestContext, Page } from '@playwright/test';
-import { test, expect, dataOf, expensePath, joinGroup, type Ledger } from './fixtures';
+import {
+  test,
+  expect,
+  dataOf,
+  expensePath,
+  joinGroup,
+  openAddExpense,
+  type Ledger,
+} from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
 const { sam, priya } = DEMO_PERSONA_IDS;
@@ -47,7 +55,7 @@ for (const layout of [
     await page.emulateMedia({ colorScheme: layout.colorScheme });
     const group = await yenGroup(ledger);
     await enter(page, ledger.priya, `/groups/${group}`);
-    await page.getByRole('button', { name: 'Add expense' }).last().click();
+    await openAddExpense(page);
     const dialog = page.getByRole('dialog');
     const description = `Whole-yen shares ${layout.name}`;
     await dialog.getByLabel('What was it for?').fill(description);

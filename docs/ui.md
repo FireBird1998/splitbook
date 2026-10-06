@@ -236,6 +236,9 @@ then it is hidden, and `GROUP_TABS` in `group-tabs.ts` is where it goes.
 - The tabs' shared layout, `(tabs)/layout.tsx`, renders `GroupDetailView`: the
   Group read, the header, a Trip's strip and setup checklist, the tabs and the
   dialogs. A refused or lost Group gets the same refusal on every tab.
+- The header has no Add expense and phones have no bar at the foot: the top
+  bar's Add expense (#304) opens this Group's form on every tab and on its
+  settings.
 - A Household's Month bar sits on the Expenses tab: a Month filters Expenses,
   and Balances always include every Month.
 - Members is read-only: names and roles, never an email. Role changes and

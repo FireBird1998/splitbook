@@ -10,7 +10,6 @@ import Skeleton from '@mui/material/Skeleton';
 import Button from '@mui/material/Button';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
-import AddIcon from '@mui/icons-material/Add';
 import TripStrip from '@/components/trip/TripStrip';
 import { parseMonthParam } from '@/components/groups/MonthCycleBar';
 import ExpenseFormDialog from '@/components/expenses/ExpenseFormDialog';
@@ -223,14 +222,7 @@ function GroupDetailContent({
   };
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 2.5,
-        pb: { xs: 'calc(88px + env(safe-area-inset-bottom, 0px))', sm: 0 },
-      }}
-    >
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
       {refreshFailed && (
         <ErrorState
           message="Group could not be refreshed. Showing previously loaded group."
@@ -248,7 +240,6 @@ function GroupDetailContent({
           userId={userId}
           settingsHref={groupSettingsHref(groupId)}
           onInvite={openInvite}
-          onAddExpense={openExpenseForm}
         />
       </Box>
 
@@ -339,33 +330,8 @@ function GroupDetailContent({
 
       <GroupPageContext.Provider value={page}>{children}</GroupPageContext.Provider>
 
-      <Box
-        sx={{
-          display: { xs: 'flex', sm: 'none' },
-          position: 'fixed',
-          left: 0,
-          right: 0,
-          bottom: 0,
-          px: 2,
-          pt: 1.5,
-          pb: 'calc(12px + env(safe-area-inset-bottom, 0px))',
-          bgcolor: 'background.paper',
-          borderTop: '1px solid',
-          borderColor: 'divider',
-          zIndex: (theme) => theme.zIndex.appBar,
-        }}
-      >
-        <Button
-          fullWidth
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={openExpenseForm}
-          sx={{ textTransform: 'none', minHeight: 44 }}
-        >
-          Add expense
-        </Button>
-      </Box>
-
+      {/* The page's own form, for `?action=add-expense`, the trip checklist and the empty
+          Expense list. The top bar's Add expense (#304) opens its own for this Group. */}
       <ExpenseFormDialog
         open={expenseDialogOpen}
         onClose={() => setExpenseDialogOpen(false)}

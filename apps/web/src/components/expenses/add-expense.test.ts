@@ -105,6 +105,8 @@ describe('the top bar’s Add expense', () => {
       '/groups',
       '/groups/new',
       `/groups/${id(1)}`,
+      `/groups/${id(1)}/expenses`,
+      `/groups/${id(1)}/members`,
       `/groups/${id(1)}/settings`,
     ]) {
       const buttons = [...header(pathname).matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/g)];
@@ -136,11 +138,12 @@ describe('the top bar’s Add expense', () => {
   });
 
   it('opens the form for the Group inside a Group, and asks which Group everywhere else', () => {
-    expect(addExpenseTarget(`/groups/${id(2)}`)).toEqual({ kind: 'group', groupId: id(2) });
-    expect(addExpenseTarget(`/groups/${id(2)}/settings`)).toEqual({
-      kind: 'group',
-      groupId: id(2),
-    });
+    // The Group's address, each of its tabs (#305) and its settings.
+    for (const page of ['', '/expenses', '/balances', '/activity', '/members', '/settings'])
+      expect(addExpenseTarget(`/groups/${id(2)}${page}`), page).toEqual({
+        kind: 'group',
+        groupId: id(2),
+      });
     for (const pathname of ['/dashboard', '/settings', '/groups', '/groups/new', '/export'])
       expect(addExpenseTarget(pathname), pathname).toEqual({ kind: 'choose' });
   });

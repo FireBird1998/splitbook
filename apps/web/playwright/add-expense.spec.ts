@@ -1,18 +1,13 @@
-import {
-  expect,
-  test,
-  type Locator,
-  type Page,
-  type Response,
-  type TestInfo,
-} from '@playwright/test';
+import { expect, test, type Page, type Response, type TestInfo } from '@playwright/test';
 import {
   DEMO_GROUP_ID,
   DEMO_TRIP_NAME,
+  addExpenseButton,
   enterAsPersona,
   expectNoSeriousA11yViolations,
   expectThemeApplied,
   isPhone,
+  openAddExpense,
   reviewScreenshot,
 } from './fixtures';
 
@@ -35,18 +30,6 @@ async function createOwnGroup(page: Page, testInfo: TestInfo, label: string) {
   expect(response.status()).toBe(201);
   const { data } = await response.json();
   return { id: data._id as string, name };
-}
-
-/** The top bar's button: labelled on desktop, an icon button with the same name on phones. */
-const addExpenseButton = (page: Page) =>
-  page.getByRole('banner').getByRole('button', { name: 'Add expense', exact: true });
-
-/** Click Add expense until `dialog` opens: a click that lands before hydration does nothing. */
-async function openFromTopBar(page: Page, dialog: Locator) {
-  await expect(async () => {
-    if (!(await dialog.isVisible())) await addExpenseButton(page).click({ timeout: 1_000 });
-    await expect(dialog).toBeVisible({ timeout: 1_000 });
-  }).toPass();
 }
 
 const chooserDialog = (page: Page) => page.getByRole('dialog', { name: 'Choose a Group' });
@@ -124,7 +107,7 @@ test('from Home: choose a Group, add the Expense, and stay on Home with a confir
   await expect(card).toContainText('so far · ₹0.00 across 0 expenses');
 
   const chooser = chooserDialog(page);
-  await openFromTopBar(page, chooser);
+  await openAddExpense(page, chooser);
   await expect(chooser).toHaveAccessibleDescription('Pick the Group this expense belongs to.');
   const groups = chooser.getByRole('list', { name: 'Your Groups' });
   await expect(
@@ -172,13 +155,13 @@ test('inside a Group: the form opens for that Group, with no chooser', async ({
 }, testInfo) => {
   await enterAsPersona(page, 'alex');
   const group = await createOwnGroup(page, testInfo, 'in a Group');
-  await page.goto(`/groups/${group.id}`);
+  const expensesTab = `/groups/${group.id}/expenses`;
+  await page.goto(expensesTab);
   const main = page.getByRole('main');
   await expect(main.getByText(group.name).first()).toBeVisible();
   await expect(main.getByText('No expenses yet')).toBeVisible();
 
-  const form = formDialog(page);
-  await openFromTopBar(page, form);
+  const form = await openAddExpense(page);
   await expect(chooserDialog(page)).toHaveCount(0);
   await expect(form.getByText(group.name, { exact: true })).toBeVisible();
   await reviewScreenshot(page, testInfo, 'add-expense-in-group');
@@ -196,7 +179,7 @@ test('inside a Group: the form opens for that Group, with no chooser', async ({
     ],
   });
 
-  expect(new URL(page.url()).pathname).toBe(`/groups/${group.id}`);
+  expect(new URL(page.url()).pathname).toBe(expensesTab);
   await expect(page.getByRole('alert').filter({ hasText: 'Expense added to' })).toHaveText(
     `Expense added to ${group.name}`,
   );
@@ -207,10 +190,29 @@ test('inside a Group: the form opens for that Group, with no chooser', async ({
   await expect(main.getByText('No expenses yet')).toHaveCount(0);
 });
 
-// Opens and closes the seeded trip's form without saving: nothing is written.
+// Opens and closes the seeded trip's forms without saving: nothing is written.
+test('on every tab of a Group and on its settings, the form opens for that Group', async ({
+  page,
+}) => {
+  await enterAsPersona(page, 'alex');
+  for (const path of ['expenses', 'balances', 'activity', 'members', 'settings']) {
+    await page.goto(`/groups/${DEMO_GROUP_ID}/${path}`);
+    // The page has its Group: the tab's header, or the settings form.
+    await expect(page.getByRole('main').getByText(DEMO_TRIP_NAME).first()).toBeVisible();
+    const form = await openAddExpense(page);
+    await expect(chooserDialog(page), path).toHaveCount(0);
+    await expect(form.getByText(DEMO_TRIP_NAME, { exact: true }), path).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(form, path).toHaveCount(0);
+    expect(new URL(page.url()).pathname).toBe(`/groups/${DEMO_GROUP_ID}/${path}`);
+  }
+});
+
 test('the ?action=add-expense link still opens the Group’s form', async ({ page }) => {
   await enterAsPersona(page, 'alex');
   await page.goto(`/groups/${DEMO_GROUP_ID}?action=add-expense`);
+  // The old address lands on the Expenses tab (#305), with the form open.
+  await page.waitForURL((url) => url.pathname === `/groups/${DEMO_GROUP_ID}/expenses`);
   const form = formDialog(page);
   await expect(form).toBeVisible();
   await expect(page.getByRole('dialog')).toHaveCount(1);
@@ -228,7 +230,7 @@ test('a member with no Groups is told to create one first', async ({ page }, tes
   await enterAsPersona(page, 'alex');
 
   const chooser = chooserDialog(page);
-  await openFromTopBar(page, chooser);
+  await openAddExpense(page, chooser);
   await expect(chooser.getByRole('heading', { name: 'No Groups yet' })).toBeVisible();
   await expect(chooser).toContainText('Create a Group first, then add expenses to it.');
   await expectNoSeriousA11yViolations(page, testInfo, 'add-expense-no-groups');

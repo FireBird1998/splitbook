@@ -8,7 +8,6 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import type { Theme } from '@mui/material/styles';
-import AddIcon from '@mui/icons-material/Add';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import type { GroupCategory } from '@splitbook/shared/types';
@@ -36,13 +35,13 @@ interface GroupPageHeaderProps {
   userId: string;
   settingsHref: string;
   onInvite: () => void;
-  onAddExpense: () => void;
 }
 
 /**
  * The top of a Group's page (#305, design canvas "Web portal"): the Theme's line icon, the
  * Group's name, "Theme · N members · currency", the members' avatars, Invite and settings.
- * The shell's sidebar does the navigating, so there is no back link.
+ * The shell's sidebar does the navigating, so there is no back link, and the top bar's Add
+ * expense (#304) adds to this Group, so the header has none of its own.
  */
 export default function GroupPageHeader({
   name,
@@ -53,7 +52,6 @@ export default function GroupPageHeader({
   userId,
   settingsHref,
   onInvite,
-  onAddExpense,
 }: GroupPageHeaderProps) {
   const people = viewerFirst(
     members.map((member) => ({ user: member })),
@@ -168,21 +166,6 @@ export default function GroupPageHeader({
         >
           <SettingsOutlinedIcon />
         </IconButton>
-        {/* Until the top bar's Add expense arrives (#304); phones use the bar at the foot. */}
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={onAddExpense}
-          sx={{
-            display: { xs: 'none', sm: 'inline-flex' },
-            minHeight: 44,
-            px: 2,
-            borderRadius: CONTROL_RADIUS,
-            fontWeight: 600,
-          }}
-        >
-          Add expense
-        </Button>
       </Box>
     </Box>
   );

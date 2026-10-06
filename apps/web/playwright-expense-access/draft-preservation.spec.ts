@@ -1,7 +1,7 @@
 import { MongoClient, ObjectId } from 'mongodb';
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { test, expect, dataOf, expensePath, type Ledger } from './fixtures';
+import { test, expect, dataOf, expensePath, openAddExpense, type Ledger } from './fixtures';
 
 async function enterGroup(page: Page, ledger: Ledger) {
   const origin = process.env.EXPENSE_ACCESS_BASE_URL;
@@ -37,7 +37,7 @@ test('new expense keeps entered fields when Group data refreshes in the backgrou
   ledger,
 }) => {
   await enterGroup(page, ledger);
-  await page.getByRole('button', { name: 'Add expense', exact: true }).last().click();
+  await openAddExpense(page);
   const dialog = page.getByRole('dialog');
   await dialog.getByLabel('What was it for?').fill('Unsaved household purchase');
   await dialog.getByLabel('Amount').fill('27.19');
