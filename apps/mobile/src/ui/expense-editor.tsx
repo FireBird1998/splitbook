@@ -1,5 +1,9 @@
 import { canEditExpense } from '../data/expense-record';
-import { ExpenseRecordScreen, ExpenseRecordView } from './expense-record-view';
+import {
+  ExpenseRecordScreen,
+  ExpenseRecordSkeleton,
+  ExpenseRecordView,
+} from './expense-record-view';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
@@ -31,6 +35,7 @@ import {
   IconTile,
   ListRow,
   TopBar,
+  useReveal,
 } from './compact';
 import { TagSheet, inactiveTagReport } from './tag-sheet';
 import { PayerSheet, paidBySummary } from './payer-sheet';
@@ -244,6 +249,8 @@ function ExpenseTask({
   useEffect(() => {
     if (reviewing) showReview();
   }, [reviewing]);
+  // An Expense opens over its record's skeleton; the record then fades in where it was.
+  const recordReveal = useReveal(state.status === 'loading' && !!state.requestedExpenseId);
   const errors = state.validation.errors;
   const section = (field: ExpenseField) => (node: View | null) => {
     sections.current[field] = node;
@@ -330,7 +337,13 @@ function ExpenseTask({
 
   const requested = !!state.requestedExpenseId;
   if (state.status === 'loading')
-    return frame(<Loading label={requested ? 'Opening this Expense…' : 'Opening your draft…'} />);
+    return frame(
+      requested ? (
+        <ExpenseRecordSkeleton label="Opening this Expense…" />
+      ) : (
+        <Loading label="Opening your draft…" />
+      ),
+    );
   if (!draft)
     return frame(
       <Notice
@@ -355,6 +368,7 @@ function ExpenseTask({
         onRefresh={onRetry}
         onLoadOlderHistory={onLoadOlderHistory}
         onRetryHistory={onRetryHistory}
+        reveal={recordReveal}
       />
     );
   const locked = state.status !== 'editing';

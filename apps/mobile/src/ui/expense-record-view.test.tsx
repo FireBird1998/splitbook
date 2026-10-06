@@ -7,6 +7,9 @@ import type { FetchResponse, MobileFetch } from '../data/types';
 import { clockTime } from './activity-format';
 import { ExpenseEditor } from './expense-editor';
 import { fonts } from './theme';
+import { motion } from './compact';
+import { findHosts, flatten, layoutHeight } from '../test-utils/layout';
+import { setWindow, timing } from '../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -719,7 +722,14 @@ describe('compact Expense record', () => {
         />,
       );
     });
-    expect(text(screen!.root)).toContain('Opening this Expense…');
+    // The record's skeleton stands in, announced as busy under the Expense's name for the wait.
+    const opening = screen!.root.findAll(
+      (node) =>
+        typeof node.type === 'string' && node.props.accessibilityLabel === 'Opening this Expense…',
+    );
+    expect(opening).toHaveLength(1);
+    expect(opening[0].props.accessibilityState).toEqual({ busy: true });
+    expect(opening[0].props.accessibilityLiveRegion).toBe('polite');
     act(() => screen?.unmount());
 
     const ui = await render((controller) =>
@@ -729,5 +739,83 @@ describe('compact Expense record', () => {
     // The Group is still there; only the Expense is missing.
     expect(text(ui.root())).toContain('This Expense isn’t available.');
     expect(text(ui.root())).not.toMatch(/draft|group/i);
+  });
+});
+
+// #331: the record opens over a skeleton of its own shape, then fades in where it was.
+describe('compact Expense record, opening', () => {
+  /** The first card in the scrolling content: the record's summary, or its skeleton. */
+  const summaryCard = () => {
+    const [content] = findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView');
+    const [card] = findHosts(content, (props) => {
+      const style = flatten(props.style);
+      return style.borderRadius === 14 && style.overflow === 'hidden';
+    });
+    return card;
+  };
+  const editor = (state: Parameters<typeof ExpenseEditor>[0]['state']) => (
+    <ExpenseEditor
+      state={state}
+      currentUserId={alex.id}
+      onChange={() => undefined}
+      onLeaveField={() => undefined}
+      onSave={() => undefined}
+      onResume={() => undefined}
+      onDiscard={() => undefined}
+      onRetry={() => undefined}
+      onEdit={() => undefined}
+      onReviewDelete={() => undefined}
+      onDelete={() => undefined}
+      onCancelDelete={() => undefined}
+      onReconcile={() => undefined}
+      onReviewLatest={() => undefined}
+      onAcceptCurrent={() => undefined}
+    />
+  );
+  const opening = editor({
+    ...emptyExpenseEditor(),
+    status: 'loading',
+    requestedExpenseId: ids.dinner,
+  });
+
+  it.each([1, 1.3])(
+    'its summary takes the place of the skeleton’s at the same height, at %s× text',
+    async (fontScale) => {
+      setWindow({ fontScale });
+      await act(async () => {
+        screen = create(opening);
+      });
+      const skeleton = layoutHeight(summaryCard(), fontScale);
+      act(() => screen?.unmount());
+      await render(open(ids.dinner));
+      expect(text(screen!.root)).toContain('Sunday dinner');
+      expect(skeleton).toBeGreaterThan(100);
+      expect(layoutHeight(summaryCard(), fontScale)).toBe(skeleton);
+    },
+  );
+
+  it('fades in where its skeleton was, on the native driver', async () => {
+    const harness = backend();
+    await harness.controller.signIn('alex');
+    await harness.controller.openExpense(groupId, ids.dinner);
+    const record = harness.controller.getSnapshot().expense;
+    // Shown over its skeleton first, once Android has said reduce motion is off.
+    await act(async () => {
+      screen = create(opening);
+    });
+    timing.mockClear();
+    act(() => screen!.update(editor(record)));
+    expect(text(screen!.root)).toContain('Sunday dinner');
+    const fade = timing.mock.results
+      .map((result) => result.value)
+      .find((animation) => animation.config.duration === motion.reveal);
+    expect(fade.config).toMatchObject({ toValue: 1, useNativeDriver: true });
+    expect(fade.value.value).toBe(0);
+    expect(fade.start).toHaveBeenCalledOnce();
+    const faded = screen!.root.findAll(
+      (node) => isHost(node, 'AnimatedView') && flatten(node.props.style).opacity === fade.value,
+    );
+    expect(faded).toHaveLength(1);
+    expect(text(faded[0])).toContain('Sunday dinner');
   });
 });

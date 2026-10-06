@@ -1,5 +1,12 @@
 import { Fragment, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { getCategory } from '@splitbook/shared/categories';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
@@ -27,13 +34,19 @@ import {
   CompactButton,
   CompactText,
   Divider,
+  FadeIn,
   IconButton,
   IconTile,
   ListRow,
   Money,
   SectionHeader,
+  Skeleton,
+  SkeletonText,
   TopBar,
+  useLargeText,
+  useLineBox,
   type BadgeTone,
+  type Reveal,
 } from './compact';
 import { WhoOwesWhat } from './expense-form';
 import { savingNeedsConnection } from './offline-notice';
@@ -82,6 +95,7 @@ export function ExpenseRecordScreen({
   onRefresh,
   onLoadOlderHistory,
   onRetryHistory,
+  reveal = null,
 }: {
   state: Editor;
   currentUserId?: string;
@@ -100,6 +114,8 @@ export function ExpenseRecordScreen({
   onLoadOlderHistory?: () => void;
   /** Reads the Expense's changes again after they couldn't be read. */
   onRetryHistory?: () => void;
+  /** The record fades in where its skeleton was, when it opened over one. */
+  reveal?: Reveal | null;
 }) {
   const theme = useTheme();
   const [options, setOptions] = useState(false);
@@ -204,90 +220,92 @@ export function ExpenseRecordScreen({
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
       >
         {notice}
-        {state.groupDraft ? (
-          <Banner
-            tone="info"
-            message="This Group has an unfinished draft. Finish or discard it to edit or delete this Expense."
-          >
-            <CompactButton label="Resume draft" variant="text" dense onPress={onResume} />
-          </Banner>
-        ) : null}
-        {state.message && state.status !== 'delete-review' ? (
-          <CompactText variant="small" accessibilityRole="alert">
-            {state.message}
-          </CompactText>
-        ) : null}
-        <Card padded>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <IconTile icon={categoryIcons[record.category] ?? 'receipt-outline'} />
-            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-              <CompactText variant="heading" accessibilityRole="header">
-                {record.description}
-              </CompactText>
-              <CompactText
-                variant="small"
-                tone="secondary"
-                accessibilityLabel={`${date}, Tag ${tag}`}
-              >
-                {date} · {tag}
-              </CompactText>
-            </View>
-          </View>
-          <View
-            style={{
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 8,
-              marginTop: 12,
-            }}
-          >
-            {/* Shrinks to fit rather than cutting the amount short. */}
-            <Money size="form" adjustsFontSizeToFit>
-              {allocation
-                ? money(allocation.amountMinor)
-                : formatCurrency(record.amount, record.currency)}
-            </Money>
-            {badge ? <Badge label={badge.label} tone={badge.tone} icon={badge.icon} /> : null}
-          </View>
-          {record.isDeleted ? (
-            <CompactText variant="small" tone="secondary" style={{ marginTop: 8 }}>
-              This Expense was deleted. It no longer counts in balances.
-            </CompactText>
-          ) : !editable ? (
-            <CompactText variant="small" tone="secondary" style={{ marginTop: 8 }}>
-              This Expense includes a member whose account is no longer available. It can be
-              deleted, but not edited.
+        <FadeIn reveal={reveal} style={{ gap: 12 }}>
+          {state.groupDraft ? (
+            <Banner
+              tone="info"
+              message="This Group has an unfinished draft. Finish or discard it to edit or delete this Expense."
+            >
+              <CompactButton label="Resume draft" variant="text" dense onPress={onResume} />
+            </Banner>
+          ) : null}
+          {state.message && state.status !== 'delete-review' ? (
+            <CompactText variant="small" accessibilityRole="alert">
+              {state.message}
             </CompactText>
           ) : null}
-        </Card>
-        <WhoOwesWhat
-          draft={draft}
-          allocation={allocation}
-          problem="This allocation can’t be shown."
-          name={name}
-          currentUserId={currentUserId}
-          money={money}
-          saved
-        />
-        {category || record.notes ? (
-          <Card>
-            {category ? <DetailRow label="Category" value={category} /> : null}
-            {category && record.notes ? <Divider /> : null}
-            {record.notes ? <DetailRow label="Notes" value={record.notes} /> : null}
+          <Card padded>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <IconTile icon={categoryIcons[record.category] ?? 'receipt-outline'} />
+              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <CompactText variant="heading" accessibilityRole="header">
+                  {record.description}
+                </CompactText>
+                <CompactText
+                  variant="small"
+                  tone="secondary"
+                  accessibilityLabel={`${date}, Tag ${tag}`}
+                >
+                  {date} · {tag}
+                </CompactText>
+              </View>
+            </View>
+            <View
+              style={{
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                marginTop: 12,
+              }}
+            >
+              {/* Shrinks to fit rather than cutting the amount short. */}
+              <Money size="form" adjustsFontSizeToFit>
+                {allocation
+                  ? money(allocation.amountMinor)
+                  : formatCurrency(record.amount, record.currency)}
+              </Money>
+              {badge ? <Badge label={badge.label} tone={badge.tone} icon={badge.icon} /> : null}
+            </View>
+            {record.isDeleted ? (
+              <CompactText variant="small" tone="secondary" style={{ marginTop: 8 }}>
+                This Expense was deleted. It no longer counts in balances.
+              </CompactText>
+            ) : !editable ? (
+              <CompactText variant="small" tone="secondary" style={{ marginTop: 8 }}>
+                This Expense includes a member whose account is no longer available. It can be
+                deleted, but not edited.
+              </CompactText>
+            ) : null}
           </Card>
-        ) : null}
-        <RecordHistory
-          record={record}
-          history={state.history}
-          currentUserId={currentUserId}
-          name={name}
-          people={members}
-          tags={context?.tags}
-          onLoadOlder={onLoadOlderHistory}
-          onRetry={onRetryHistory}
-        />
+          <WhoOwesWhat
+            draft={draft}
+            allocation={allocation}
+            problem="This allocation can’t be shown."
+            name={name}
+            currentUserId={currentUserId}
+            money={money}
+            saved
+          />
+          {category || record.notes ? (
+            <Card>
+              {category ? <DetailRow label="Category" value={category} /> : null}
+              {category && record.notes ? <Divider /> : null}
+              {record.notes ? <DetailRow label="Notes" value={record.notes} /> : null}
+            </Card>
+          ) : null}
+          <RecordHistory
+            record={record}
+            history={state.history}
+            currentUserId={currentUserId}
+            name={name}
+            people={members}
+            tags={context?.tags}
+            onLoadOlder={onLoadOlderHistory}
+            onRetry={onRetryHistory}
+          />
+        </FadeIn>
       </ScrollView>
       <BottomSheet
         visible={options}
@@ -361,6 +379,131 @@ export function ExpenseRecordScreen({
           </CompactText>
         ) : null}
       </BottomSheet>
+    </View>
+  );
+}
+
+/**
+ * The record's shape while it opens: its summary card, Who owes what for two people, and two
+ * History rows, laid out as the record lays them out at this text size, so the record takes
+ * their place without moving. Announced as busy under `label`.
+ */
+export function ExpenseRecordSkeleton({ label }: { label: string }) {
+  const large = useLargeText();
+  const { width } = useWindowDimensions();
+  // As Who owes what decides: amounts sit under each name at large text or on a narrow screen.
+  const stacked = large || width < 360;
+  const badge = useLineBox('caption').height + 6;
+  return (
+    <View
+      accessibilityLabel={label}
+      accessibilityState={{ busy: true }}
+      accessibilityLiveRegion="polite"
+      style={{ gap: 12 }}
+    >
+      <Card padded>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Skeleton width={40} height={40} rounded={12} />
+          <SkeletonText
+            style={{ flex: 1 }}
+            gap={2}
+            lines={[
+              { width: '60%', line: 'heading' },
+              { width: '45%', line: 'small' },
+            ]}
+          />
+        </View>
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            marginTop: 12,
+          }}
+        >
+          <Skeleton width="45%" line="form" />
+          <Skeleton width={96} height={badge} rounded={999} />
+        </View>
+      </Card>
+      <Card>
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            paddingHorizontal: 14,
+            paddingTop: 12,
+          }}
+        >
+          <Skeleton width="32%" line="overline" />
+          <Skeleton width="24%" line="caption" />
+        </View>
+        {stacked ? (
+          <View style={{ height: 6 }} />
+        ) : (
+          <View style={{ alignItems: 'flex-end', paddingHorizontal: 14, paddingTop: 6 }}>
+            <Skeleton width={148} line="caption" />
+          </View>
+        )}
+        {[0, 1].map((person) => (
+          <View
+            key={person}
+            style={{
+              minHeight: 48,
+              justifyContent: 'center',
+              gap: 2,
+              paddingHorizontal: 14,
+              paddingVertical: stacked ? 6 : 4,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Skeleton width={26} height={26} rounded={9} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Skeleton width="45%" line="body" />
+              </View>
+              {stacked ? null : <Skeleton width={148} line="table" />}
+            </View>
+            {stacked ? (
+              <View style={{ paddingLeft: 36 }}>
+                <Skeleton width="60%" line="table" />
+              </View>
+            ) : null}
+          </View>
+        ))}
+        <View style={{ height: 8 }} />
+      </Card>
+      <View style={{ gap: 8 }}>
+        <View style={{ minHeight: 32, justifyContent: 'center', paddingHorizontal: 2 }}>
+          <Skeleton width="18%" line="overline" />
+        </View>
+        <Card>
+          {[0, 1].map((row) => (
+            <View key={row}>
+              {row > 0 ? <Divider inset={58} /> : null}
+              <View
+                style={{
+                  minHeight: 60,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                  paddingVertical: 8,
+                  paddingHorizontal: 14,
+                }}
+              >
+                <Skeleton width={32} height={32} rounded={11} />
+                <SkeletonText
+                  style={{ flex: 1 }}
+                  gap={2}
+                  lines={[
+                    { width: '55%', line: 'body' },
+                    { width: '35%', line: 'caption' },
+                  ]}
+                />
+              </View>
+            </View>
+          ))}
+        </Card>
+      </View>
     </View>
   );
 }
