@@ -346,14 +346,16 @@ export function createHomeQueries(session: HomeSession) {
    * one a change, a denial or a failed removal made obsolete, one it can't read, and never once
    * the read answered.
    */
-  const restoreRow = async (key: QueryKey, owner: number) => {
+  const restoreRow = async (key: QueryKey, owner: number, read: HomeRead) => {
     const lease = session.lease(),
       version = session.versionOf(key);
     if (!lease || !rows) return;
     const row = await savedRow(lease, queryKeyPath(key)).catch(() => null);
     const state = held(key);
+    // Its load waits on the account queue, where an answer's trim may already be waiting too.
     if (
       !row ||
+      read.answered ||
       !session.current(owner) ||
       version !== session.versionOf(key) ||
       state?.fetchStatus !== 'fetching' ||
@@ -384,7 +386,7 @@ export function createHomeQueries(session: HomeSession) {
       version = session.versionOf(key),
       lease = session.lease();
     const obsolete = () => !session.current(owner) || version !== session.versionOf(key);
-    if (!shown()) void restoreRow(key, owner).catch(() => undefined);
+    if (!shown()) void restoreRow(key, owner, read).catch(() => undefined);
     let value: unknown;
     try {
       value = await session.read(path, owner);

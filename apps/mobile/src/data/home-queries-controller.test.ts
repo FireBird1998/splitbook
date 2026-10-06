@@ -1245,6 +1245,41 @@ describe('a lost Group never returns from the saved Groups list (#323)', () => {
     });
   });
 
+  it.each(['before', 'after'] as const)(
+    'shows the saved list during a sign-in’s list read only until it answers: this device reads it %s the answer',
+    async (order) => {
+      const f = fixture();
+      const controller = await savedWithMaple(f);
+      await loseMapleSignedOut(f, controller);
+      const load = f.holdLoad(listPath);
+      const answer = f.hold(listPath);
+      const signingIn = controller.signIn('alex');
+      await Promise.all([load.reached, answer.reached]);
+      if (order === 'before') {
+        // While the list is still being read, the saved list stands in for it, as on main.
+        load.release();
+        await settle();
+        expect(controller.getSnapshot().groups).toMatchObject({
+          status: 'loading',
+          data: [{ name: 'Maple House' }, { name: 'Cabin Weekend' }],
+        });
+        answer.release();
+      } else {
+        // Once the answer has arrived, the saved list read after it never shows.
+        answer.release();
+        await settle();
+        const published = record(controller);
+        load.release();
+        await signingIn;
+        await settle();
+        expect(published.some(withMaple)).toBe(false);
+      }
+      await signingIn;
+      await settle();
+      expect(names(controller.getSnapshot())).toEqual(['Cabin Weekend']);
+    },
+  );
+
   // Every combination of the trim's device writes failing: the older store's trim to the listed
   // Groups, a removal of a saved copy, and a save of a row; after a restart with storage still
   // failing or working again.
