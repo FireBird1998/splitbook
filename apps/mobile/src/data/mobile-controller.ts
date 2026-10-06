@@ -912,6 +912,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   });
   const { request, verifyGoogleBackend, revokeDetached } = transport;
 
+  /**
+   * A read answered: from the server (`saved` undefined), or from this device's copy saved at
+   * `saved`. The Group's view reads a page at a time, so for it only a change of what the
+   * offline banner says publishes (`onlyChanges`, #219).
+   */
+  const answered = (path: string, saved?: number | null, onlyChanges = false) => {
+    offlineSession ||= saved !== undefined;
+    if (saved === undefined) staleReads.delete(path);
+    else staleReads.set(path, saved);
+    publishReadFreshness({ onlyChanges });
+  };
   /** The session the declarative views read in: their queries, saved copies and checks. */
   const session = {
     client: queryClient,
@@ -931,12 +942,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (offlineSession || snapshot.offline.active) await revalidateSession(owner);
       return request(path, owner, { signal });
     },
-    answered: (path: string, saved?: number | null) => {
-      offlineSession ||= saved !== undefined;
-      if (saved === undefined) staleReads.delete(path);
-      else staleReads.set(path, saved);
-      publishReadFreshness();
-    },
+    answered: (path: string, saved?: number | null) => answered(path, saved),
     now,
   };
   /** Home's two queries and their saved copies (ADR 0006, M1-1, M3-1). */
@@ -961,6 +967,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** A Group's own view: the Group, its Expenses and its Balances (ADR 0006, M1-1, #219). */
   const groupQueries = createGroupQueries({
     ...session,
+    answered: (path, saved) => answered(path, saved, true),
     route: () => route,
     savable: (key) => savable(key),
     freshness,
@@ -974,7 +981,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // Expense reads can add due recurring Expenses. Older Home and Balances no longer describe
       // the same ledger: they stay on screen, unverified, until read again after it (M1-5).
       invalidateReads(`balances:${groupId}`, 'home');
-      const { home, financial } = snapshot;
+      const { home, financial } = snapshot,
+        shown = financial.groupId === groupId ? financial.balances : null;
+      // Each page of a read reports here: only what it changes on screen is published.
+      if (
+        home.status === 'idle' &&
+        home.message === null &&
+        home.stale === (home.data !== null) &&
+        (!shown ||
+          (shown.status === 'loading' &&
+            shown.message === null &&
+            shown.stale === (shown.data !== null)))
+      )
+        return;
       publish({
         ...snapshot,
         home: { ...home, status: 'idle', message: null, stale: home.data !== null },
@@ -1018,7 +1037,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  const publishReadFreshness = () => {
+  const publishReadFreshness = ({ onlyChanges = false } = {}) => {
     const visible = [...staleReads.entries()].filter(([path]) => {
       const home = path === '/api/groups' || path === '/api/user/balances';
       return snapshot.screen === 'groups' ? home : !home;
@@ -1026,14 +1045,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const times = visible
       .map(([, time]) => time)
       .filter((value): value is number => value !== null);
-    publish({
-      ...snapshot,
-      offline: {
-        ...snapshot.offline,
-        active: offlineSession || visible.length > 0,
-        refreshedAt: times.length ? Math.min(...times) : null,
-      },
-    });
+    const active = offlineSession || visible.length > 0,
+      refreshedAt = times.length ? Math.min(...times) : null;
+    if (
+      onlyChanges &&
+      snapshot.offline.active === active &&
+      snapshot.offline.refreshedAt === refreshedAt
+    )
+      return;
+    publish({ ...snapshot, offline: { ...snapshot.offline, active, refreshedAt } });
   };
   const startReadView = () => {
     // Home remains in memory while a child view is open, including its provenance.

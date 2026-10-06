@@ -717,6 +717,22 @@ export function createGroupQueries(session: GroupSession) {
     observers.balances?.destroy();
     observers = {};
   };
+  const bindLater = () => {
+    if (pending) return;
+    pending = true;
+    queueMicrotask(() => {
+      if (pending) bind();
+    });
+  };
+  /**
+   * The view as its queries now hold it: published only when that changes what shows; the
+   * observers follow either way (#219).
+   */
+  const reproject = () => {
+    const before = session.snapshot();
+    if (project(before) !== before) session.publish({});
+    else bindLater();
+  };
 
   /**
    * The Month this open shows, once its Group (or a saved copy of it) is known: a Household's
@@ -807,7 +823,8 @@ export function createGroupQueries(session: GroupSession) {
 
   /**
    * While the Group is first read, what this device saved for its view shows, each part with its
-   * own time: the Group, and when it lists the member, the Month's Expenses and Balances.
+   * own time: the Group, and when it lists the member, the Month's Expenses and Balances. Each
+   * shows as its query takes it.
    */
   const preview = async (owner: number, opened: View) => {
     const key = groupQueryKey(opened.groupId);
@@ -827,7 +844,6 @@ export function createGroupQueries(session: GroupSession) {
       list && held(list)?.state.data === undefined ? restore(list, owner) : null,
       held(balances)?.state.data === undefined ? restore(balances, owner) : null,
     ]);
-    if (view === opened && session.current(owner)) session.publish({});
   };
   /**
    * The view's reads: the Group and the Expenses of the Month shown together, then Balances.
@@ -840,13 +856,13 @@ export function createGroupQueries(session: GroupSession) {
     if (!opened || opened.lost) return;
     const still = () => view === opened && !opened.lost && onScreen() !== null;
     opened.reading += 1;
-    session.publish({});
+    // Shown with the first of its reads to start, which says what is being read.
     let ended = false;
     try {
       ended = await steps(opened, owner, fresh, from, still);
     } finally {
       opened.reading -= 1;
-      if (session.current(owner)) session.publish({});
+      if (session.current(owner)) reproject();
     }
     // What its reads set off meanwhile, such as Balances read again after another Month's read.
     if (ended && session.current(owner) && view === opened && !onScreen()?.sheet)
@@ -936,7 +952,7 @@ export function createGroupQueries(session: GroupSession) {
       if (!session.current(owner) || view !== opened || opened.lost) return false;
       opened.checked = true;
       decide(groupOf(answer.value));
-      session.publish({});
+      reproject();
     }
     const shown = onScreen();
     if (!shown || !opened.checked || shown.destination === 'activity') return false;
@@ -957,6 +973,19 @@ export function createGroupQueries(session: GroupSession) {
     return followBalances();
   };
 
+  /**
+   * Each page as read, parsed once: a page a re-read answers the same keeps its rows, which then
+   * render as they were (#219).
+   */
+  const parsedPages = new WeakMap<object, { currency: string; page: ReturnType<typeof pageOf> }>();
+  const parsePage = (value: unknown, groupId: string) => {
+    const currency = currencyOf(groupId),
+      known = value && typeof value === 'object' ? parsedPages.get(value) : undefined;
+    if (known?.currency === currency) return known.page;
+    const page = pageOf(value, groupId, currency);
+    if (value && typeof value === 'object') parsedPages.set(value, { currency, page });
+    return page;
+  };
   /** The Expenses shown for the Month, from their query, in the snapshot's shape. */
   const projectExpenses = (shown: Expenses, opened: View, financial: GroupFinancialState) => {
     const key = shownList(financial),
@@ -972,7 +1001,7 @@ export function createGroupQueries(session: GroupSession) {
     const unchecked =
       !opened.checked && !!data && !previews.has(data) && state.dataUpdatedAt >= opened.since;
     if (read.length && !unchecked) {
-      const parsed = read.map((page) => pageOf(page.value, groupId, currencyOf(groupId)));
+      const parsed = read.map((page) => parsePage(page.value, groupId));
       const rows = parsed.flatMap((page) => page.expenses);
       base = {
         ...base,
@@ -1182,13 +1211,7 @@ export function createGroupQueries(session: GroupSession) {
   return {
     project,
     /** After the publish that showed the view, and what runs in the same turn (a denial's purge). */
-    bindLater() {
-      if (pending) return;
-      pending = true;
-      queueMicrotask(() => {
-        if (pending) bind();
-      });
-    },
+    bindLater,
     /**
      * The observers take their queries again: removing a query never tells them (module-4 brief
      * F5), so they move to the new ones, which read what they lack.
