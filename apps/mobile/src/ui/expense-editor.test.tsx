@@ -66,6 +66,7 @@ function backend({
   conflict,
   losePatch = false,
   refuseRetries = false,
+  holdCreate,
 }: {
   record?: Record<string, unknown>;
   /** Loses every create response, or only this many. */
@@ -76,6 +77,8 @@ function backend({
   losePatch?: boolean;
   /** Validation tightened after the lost creates: every later create is refused. */
   refuseRetries?: boolean;
+  /** Creates wait for this before they're answered, so a save stays in flight. */
+  holdCreate?: Promise<void>;
 } = {}) {
   const writes: string[] = [];
   const submissions: { key: string | null; body: string }[] = [];
@@ -118,6 +121,7 @@ function backend({
         key: new Headers(init.headers).get('Idempotency-Key'),
         body: String(init.body),
       });
+      await holdCreate;
       if (loseCreate === true || submissions.length <= Number(loseCreate))
         throw new Error('The response was lost after the server committed it');
       if (refuseRetries)
@@ -490,6 +494,30 @@ describe('rendered Expense corrections', () => {
     });
     await settle();
     expect(ui.writes).toEqual([]);
+    await act(async () => release());
+    await settle();
+    expect(ui.writes).toEqual([`POST /api/groups/${groupId}/expenses`]);
+  });
+
+  // #331: Save says what it's doing while it sends, beside a spinner, at the same size.
+  it('is busy, labelled “Saving expense…” and announced busy while the save is sent', async () => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const ui = await render((controller) => controller.openExpense(groupId), { holdCreate: held });
+    await ui.type('Amount, required', '120');
+    await ui.press('Tag: Groceries');
+    await ui.type('Description, required', 'Milk');
+    await ui.press('Save expense');
+    expect(ui.controller.getSnapshot().expense.status).toBe('saving');
+    const saving = ui
+      .root()
+      .findAll(
+        (node) => isHost(node, 'Pressable') && node.props.accessibilityLabel === 'Saving expense…',
+      );
+    expect(saving).toHaveLength(1);
+    expect(saving[0].props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(saving[0].props.disabled).toBe(true);
+    expect(saving[0].findAll((node) => isHost(node, 'ActivityIndicator'))).toHaveLength(1);
     await act(async () => release());
     await settle();
     expect(ui.writes).toEqual([`POST /api/groups/${groupId}/expenses`]);
