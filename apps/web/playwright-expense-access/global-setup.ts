@@ -78,8 +78,16 @@ export async function startIsolatedApp(
 
     // A separate source snapshot avoids the working server's .next lock and
     // Next's automatic .env.local loading. No env files or local data are copied.
+    // Test files stay out: they aren't part of the app, some import from outside
+    // apps/web, and from Next 16.3 the production build type-checks every file
+    // the tsconfig includes, tests among them.
+    const isAppSource = (source: string) =>
+      !/\.test\.tsx?$/.test(source) && path.basename(source) !== '__tests__';
     for (const entry of ['src', 'public', 'package.json', 'tsconfig.json', 'next.config.ts']) {
-      await cp(path.join(repo, entry), path.join(appDir, entry), { recursive: true });
+      await cp(path.join(repo, entry), path.join(appDir, entry), {
+        recursive: true,
+        filter: isAppSource,
+      });
     }
     await symlink(path.join(repo, 'node_modules'), path.join(appDir, 'node_modules'), 'dir');
     const port = await unusedPort();
