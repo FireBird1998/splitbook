@@ -11,6 +11,7 @@ import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import type { HomeSuggestedPaymentRead } from '@splitbook/shared/home-balances-read';
 import { initials } from '@/components/layout/AccountMenu';
+import { groupTabHref } from '@/components/groups/group-tabs';
 import { RADIUS } from '@/lib/theme/tokens';
 import {
   HomeCard,
@@ -41,9 +42,12 @@ const visuallyHidden = {
   border: 0,
 } as const;
 
-/** Where Record goes: the payment's Group, open on its Balances (the link Home always used). */
+/**
+ * Where Record goes: the payment's Group, on its Balances tab (#305), where the payment is
+ * listed under "Who pays whom" and recording it fills in its amount.
+ */
 export function recordPaymentHref(groupId: string): string {
-  return `/groups/${groupId}?tab=balances`;
+  return groupTabHref(groupId, 'balances');
 }
 
 /** "You pay Sam Chen" or "Sam Chen pays you". */

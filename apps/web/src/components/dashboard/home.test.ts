@@ -204,9 +204,9 @@ describe('Needs you', () => {
     );
     // Record opens the payment's Group on its Balances.
     expect(anchors(html).map(({ href }) => href)).toEqual([
-      `/groups/${id(1)}?tab=balances`,
-      `/groups/${id(1)}?tab=balances`,
-      `/groups/${id(2)}?tab=balances`,
+      `/groups/${id(1)}/balances`,
+      `/groups/${id(1)}/balances`,
+      `/groups/${id(2)}/balances`,
     ]);
     expect(html).toContain(
       'aria-label="Record payment: You pay Sam Chen, ₹1,060.00, in Maple House"',
@@ -262,7 +262,7 @@ describe('Needs you', () => {
   it('words each payment from the member’s side and links Record to the Group’s Balances', () => {
     expect(paymentTitle(payment({}))).toBe('You pay Sam Chen');
     expect(paymentTitle(payment({ direction: 'receive' }))).toBe('Sam Chen pays you');
-    expect(recordPaymentHref(id(3))).toBe(`/groups/${id(3)}?tab=balances`);
+    expect(recordPaymentHref(id(3))).toBe(`/groups/${id(3)}/balances`);
   });
 
   it('describes an invitation with what the read sent', () => {

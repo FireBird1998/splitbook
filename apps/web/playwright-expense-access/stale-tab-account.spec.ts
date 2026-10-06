@@ -123,7 +123,7 @@ async function giveSamDistinctFigures(ledger: Ledger): Promise<Marker[]> {
     ...samTotals.map((text) => ({ within: totals, text })),
     { within: sharedGroupCard, text: money(633.33) }, // Sam's balance in the Group they share
     // Sam's suggested payment to Priya in Needs you: Record opens a Group Alex isn't in.
-    { within: `a[href="/groups/${ledger.groupB}?tab=balances"]` },
+    { within: `a[href="/groups/${ledger.groupB}/balances"]` },
     { within: 'body', text: INVITATION_GROUP }, // Sam's invitation
     { within: `a[href="/groups/${ledger.groupB}"]` }, // a Group only Sam belongs to
   ];
@@ -286,11 +286,11 @@ async function expectAlexDashboard(page: Page, ledger: Ledger) {
   await expectHomeFor(page, 'Alex Rivera');
   await expect(page.getByText('Alex Rivera', { exact: true }).first()).toBeVisible();
   // Alex's own figures have loaded: Needs you has his payment to Sam in the Group they share.
-  // (The Group's card links to its Balances too, so the link is found inside Needs you.)
+  // (Other links lead to the Group's Balances too, so the link is found inside Needs you.)
   await expect(
     page
       .getByRole('region', { name: 'Needs you' })
-      .locator(`a[href="/groups/${ledger.groupA}?tab=balances"]`),
+      .locator(`a[href="/groups/${ledger.groupA}/balances"]`),
   ).toHaveAccessibleName(/^Record payment: You pay Sam Chen, ₹300\.00, in /);
 }
 

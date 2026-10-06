@@ -104,15 +104,30 @@ test('alex: Needs you → Record opens the payment’s Group on its Balances', a
   const record = needsYouCard(page).getByRole('link', {
     name: `Record payment: You pay ${payment!.counterpartyName}, ${amount}, in ${payment!.groupName}`,
   });
-  await expect(record).toHaveAttribute('href', `/groups/${payment!.groupId}?tab=balances`);
+  // The Balances tab's own address (#305).
+  await expect(record).toHaveAttribute('href', `/groups/${payment!.groupId}/balances`);
   await record.click();
 
-  await page.waitForURL((url) => url.pathname.startsWith(`/groups/${payment!.groupId}`));
+  await page.waitForURL((url) => url.pathname === `/groups/${payment!.groupId}/balances`);
   const main = page.getByRole('main');
   await expect(main.getByText('Who pays whom')).toBeVisible();
-  // The same payment, as the Group's Balances suggests it.
-  await expect(main.getByText(amount, { exact: true }).first()).toBeVisible();
+  // The same payment, as the Group's Balances suggests it: recording it there fills in its
+  // amount. The dialog is closed again, so nothing is recorded.
+  const recordHere = main.getByRole('button', { name: 'Record settlement', exact: true });
+  const row = main
+    .locator('div')
+    .filter({ hasText: payment!.counterpartyName })
+    .filter({ has: main.getByText(amount, { exact: true }) })
+    .filter({ has: recordHere })
+    .last();
+  await row.getByRole('button', { name: 'Record settlement', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByRole('spinbutton', { name: 'Amount' })).toHaveValue(
+    String(payment!.amountMinor / 100),
+  );
   await reviewScreenshot(page, testInfo, 'alex-needs-you-record');
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect(dialog).toBeHidden();
 });
 
 test('alex: creates a trip that is ready for a first expense', async ({ page }, testInfo) => {
