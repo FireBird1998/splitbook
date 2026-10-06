@@ -23,6 +23,9 @@ importers:
       '@expo/vector-icons':
         specifier: ^15.0.2
         version: 15.1.1(expo-font@57.0.4(expo@57.0.25)(react-native@0.86.3(@babel/core@7.29.0)(@types/react@19.2.13)(react@19.2.3))(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.0)(@types/react@19.2.13)(react@19.2.3))(react@19.2.3)
+      '@react-native-community/netinfo':
+        specifier: 12.0.1
+        version: 12.0.1(react-native@0.86.3(@babel/core@7.29.0)(@types/react@19.2.13)(react@19.2.3))(react@19.2.3)
       '@splitbook/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -1577,6 +1580,12 @@ packages:
 
   '@popperjs/core@2.11.8':
     resolution: {integrity: sha512-P1st0aksCrn9sGZhp8GMYwBnQsbvAWsZAX44oXNNvLHGqAOcoVxmjZiohstwQ7SqKnbR47akdNi+uleWD8+g6A==}
+
+  '@react-native-community/netinfo@12.0.1':
+    resolution: {integrity: sha512-P/3caXIvfYSJG8AWJVefukg+ZGRPs+M4Lp3pNJtgcTYoJxCjWrKQGNnCkj/Cz//zWa/avGed0i/wzm0T8vV2IQ==}
+    peerDependencies:
+      react: '*'
+      react-native: '>=0.59'
 
   '@react-native/assets-registry@0.86.3':
     resolution: {integrity: sha512-TDhgCZA4wjJg84d5A9swiOQYPIWSKEEVdg9IwMFZDupQzW/F3QoLUrfAJOcalgqTDA9/buTB8awhE3Whwg6u9Q==}
@@ -6387,6 +6396,11 @@ snapshots:
       playwright: 1.62.1
 
   '@popperjs/core@2.11.8': {}
+
+  '@react-native-community/netinfo@12.0.1(react-native@0.86.3(@babel/core@7.29.0)(@types/react@19.2.13)(react@19.2.3))(react@19.2.3)':
+    dependencies:
+      react: 19.2.3
+      react-native: 0.86.3(@babel/core@7.29.0)(@types/react@19.2.13)(react@19.2.3)
 
   '@react-native/assets-registry@0.86.3': {}
 

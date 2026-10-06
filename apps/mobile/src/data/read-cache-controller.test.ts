@@ -3,6 +3,7 @@ import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { DISPLAY_FRESHNESS_MS, createMobileController } from './mobile-controller';
 import type { FetchResponse, PendingInvitationStore } from './types';
 import { refreshFeedback } from '../ui/refresh-feedback';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // #103: reuse cached views and coalesce foreground reads.
 const alex = {
@@ -236,6 +237,7 @@ function fixture(options: { freshness?: number; pendingInvitation?: PendingInvit
             cookie = null;
           },
         },
+        savedQueries: savedQueriesIn(disk),
         readCache: {
           ...records(disk),
           invalidateGroup: async (account, id) => {

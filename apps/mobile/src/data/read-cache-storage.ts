@@ -2,12 +2,11 @@ import { z } from 'zod';
 import { createAccountGroupRecordStore } from './account-record-storage';
 import type { FinancialReadStore } from './offline-cache';
 
-const savedReads = z.object({
-  version: z.literal(1),
-  entries: z.record(z.string(), z.unknown()),
-  groupIds: z.array(z.string()).optional(),
-});
-/** The account-storage lease serializes read/modify/write; SQLite replaces the document atomically. */
+const savedReads = z.object({ version: z.literal(1), entries: z.record(z.string(), z.unknown()) });
+/**
+ * The account-storage lease serializes read/modify/write; SQLite replaces the document atomically.
+ * The Groups list and Home's figures are the persister's (#217), so this store keeps neither.
+ */
 export function createFinancialReadStore(environment: string): FinancialReadStore {
   const storage = createAccountGroupRecordStore(environment, 'cache');
   const load = async (accountId: string) => {
@@ -30,13 +29,7 @@ export function createFinancialReadStore(environment: string): FinancialReadStor
         entries = document.entries,
         prefix = `/api/groups/${groupId}`;
       for (const path of Object.keys(entries)) {
-        if (
-          path === prefix ||
-          path.startsWith(`${prefix}/`) ||
-          path.startsWith(`${prefix}?`) ||
-          path === '/api/groups' ||
-          path === '/api/user/balances'
-        )
+        if (path === prefix || path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}?`))
           delete entries[path];
       }
       await storage.save(accountId, 'reads', document);
@@ -47,11 +40,7 @@ export function createFinancialReadStore(environment: string): FinancialReadStor
         prefix = `/api/groups/${groupId}`;
       let removed = false;
       for (const path of Object.keys(entries)) {
-        if (
-          path.startsWith(`${prefix}/`) ||
-          path.startsWith(`${prefix}?`) ||
-          path === '/api/user/balances'
-        ) {
+        if (path.startsWith(`${prefix}/`) || path.startsWith(`${prefix}?`)) {
           delete entries[path];
           removed = true;
         }
@@ -62,14 +51,12 @@ export function createFinancialReadStore(environment: string): FinancialReadStor
       const document = await load(accountId),
         entries = document.entries,
         allowed = new Set(groupIds);
-      if (document.groupIds?.some((id) => !allowed.has(id))) delete entries['/api/user/balances'];
-      document.groupIds = groupIds;
+      // A copy of either from before the persister is dropped, never carried over (#212).
+      delete entries['/api/groups'];
+      delete entries['/api/user/balances'];
       for (const path of Object.keys(entries)) {
         const id = /^\/api\/groups\/([a-f\d]{24})(?:\/|\?|$)/i.exec(path)?.[1];
-        if (id && !allowed.has(id)) {
-          delete entries[path];
-          delete entries['/api/user/balances'];
-        }
+        if (id && !allowed.has(id)) delete entries[path];
       }
       await storage.save(accountId, 'reads', document);
     },

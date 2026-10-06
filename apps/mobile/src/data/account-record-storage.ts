@@ -8,15 +8,24 @@ export interface AccountGroupRecordStore {
   list?(accountId: string): Promise<{ groupId: string; value: unknown }[]>;
 }
 
-/** Atomic account/Group JSON records. The two existing on-disk stores keep their identities. */
+/**
+ * Atomic account/Group JSON records. The two existing on-disk stores keep their identities.
+ * `saved` holds the persister's saved copies, one row per query, keyed by the query's path
+ * (ADR 0006, M3-1), beside the older saved-copy document in the same database.
+ */
 export function createAccountGroupRecordStore(
   environment: string,
-  kind: 'expense' | 'settlement' | 'cache' | 'group-creation' | 'sign-out',
+  kind: 'expense' | 'settlement' | 'cache' | 'saved' | 'group-creation' | 'sign-out',
 ): AccountGroupRecordStore {
-  const { file, table } = {
+  const {
+    file,
+    table,
+    column = 'group_id',
+  } = {
     expense: { file: 'splitbook-drafts.db', table: 'expense_drafts' },
     settlement: { file: 'splitbook-settlements.db', table: 'settlement_attempts' },
     cache: { file: 'splitbook-read-cache.db', table: 'financial_reads' },
+    saved: { file: 'splitbook-read-cache.db', table: 'saved_queries', column: 'query_key' },
     'group-creation': { file: 'splitbook-group-creations.db', table: 'group_creations' },
     'sign-out': { file: 'splitbook-sign-outs.db', table: 'pending_sign_outs' },
   }[kind];
@@ -26,8 +35,8 @@ export function createAccountGroupRecordStore(
       const db = await openDatabaseAsync(file);
       await db.execAsync(`PRAGMA secure_delete = ON;
         CREATE TABLE IF NOT EXISTS ${table} (
-          environment TEXT NOT NULL, account_id TEXT NOT NULL, group_id TEXT NOT NULL,
-          value TEXT NOT NULL, PRIMARY KEY (environment, account_id, group_id)
+          environment TEXT NOT NULL, account_id TEXT NOT NULL, ${column} TEXT NOT NULL,
+          value TEXT NOT NULL, PRIMARY KEY (environment, account_id, ${column})
         );`);
       return db;
     })().catch((error: unknown) => {
@@ -41,7 +50,7 @@ export function createAccountGroupRecordStore(
       const row = await (
         await database()
       ).getFirstAsync<{ value: string }>(
-        `SELECT value FROM ${table} WHERE environment = ? AND account_id = ? AND group_id = ?`,
+        `SELECT value FROM ${table} WHERE environment = ? AND account_id = ? AND ${column} = ?`,
         environment,
         accountId,
         groupId,
@@ -52,7 +61,7 @@ export function createAccountGroupRecordStore(
       await (
         await database()
       ).runAsync(
-        `INSERT INTO ${table} (environment, account_id, group_id, value) VALUES (?, ?, ?, ?) ON CONFLICT(environment, account_id, group_id) DO UPDATE SET value = excluded.value`,
+        `INSERT INTO ${table} (environment, account_id, ${column}, value) VALUES (?, ?, ?, ?) ON CONFLICT(environment, account_id, ${column}) DO UPDATE SET value = excluded.value`,
         environment,
         accountId,
         groupId,
@@ -63,7 +72,7 @@ export function createAccountGroupRecordStore(
       await (
         await database()
       ).runAsync(
-        `DELETE FROM ${table} WHERE environment = ? AND account_id = ? AND group_id = ?`,
+        `DELETE FROM ${table} WHERE environment = ? AND account_id = ? AND ${column} = ?`,
         environment,
         accountId,
         groupId,
@@ -75,12 +84,12 @@ export function createAccountGroupRecordStore(
     async list(accountId) {
       const rows = await (
         await database()
-      ).getAllAsync<{ group_id: string; value: string }>(
-        `SELECT group_id, value FROM ${table} WHERE environment = ? AND account_id = ?`,
+      ).getAllAsync<{ id: string; value: string }>(
+        `SELECT ${column} AS id, value FROM ${table} WHERE environment = ? AND account_id = ?`,
         environment,
         accountId,
       );
-      return rows.map((row) => ({ groupId: row.group_id, value: JSON.parse(row.value) }));
+      return rows.map((row) => ({ groupId: row.id, value: JSON.parse(row.value) }));
     },
   };
 }

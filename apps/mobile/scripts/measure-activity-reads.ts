@@ -77,6 +77,8 @@ async function run() {
   ).data._id;
   // Disk-like stores survive a controller restart, as do the cookie and verified identity.
   const cache = memoryStore(),
+    // The persister's rows: the Groups list and Home (#217).
+    savedRows = memoryStore(),
     drafts = memoryStore(),
     attempts = memoryStore();
   let cookie: string | null = null,
@@ -105,6 +107,7 @@ async function run() {
             cookie = null;
           },
         },
+        savedQueries: savedRows,
         readCache: {
           load: (account, path) => cache.load(account, path),
           save: (account, path, value) => cache.save(account, path, value),
@@ -160,7 +163,7 @@ async function run() {
               cleanup = false;
             },
           },
-          stores: [cache, drafts, attempts],
+          stores: [cache, savedRows, drafts, attempts],
         },
         fetch: async (url, init) => {
           const target = new URL(url);

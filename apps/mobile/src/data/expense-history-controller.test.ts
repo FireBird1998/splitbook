@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { describeExpenseEvents } from './expense-history';
 import { createMobileController } from './mobile-controller';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // Fictional people and Groups only.
 const sam = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@example.test' };
@@ -116,6 +117,7 @@ function setup() {
         },
         clear: async () => drafts.clear(),
       },
+      savedQueries: savedQueriesIn(cache),
       readCache: {
         retainGroups: async () => undefined,
         invalidateGroup: async () => undefined,

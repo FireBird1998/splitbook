@@ -79,6 +79,22 @@ export class RequestError extends Error {
   }
 }
 
+/** What the member is told when a Group refuses them (403) or is gone (404). */
+export const groupRefused = (status: number) =>
+  status === 403
+    ? 'You no longer have access to this group.'
+    : 'This group is no longer available.';
+
+/** `run` once at a time for each key (a session): calls made while it runs share its result. */
+export function singleFlight<K, T>(run: (key: K) => Promise<T>) {
+  const running = new Map<K, Promise<T>>();
+  return (key: K) => {
+    const shared = running.get(key) ?? run(key).finally(() => running.delete(key));
+    running.set(key, shared);
+    return shared;
+  };
+}
+
 /** The caller's own signal ended the request. */
 const cancelled = () =>
   new RequestError('This request was cancelled.', 0, null, false, null, 'cancelled');
@@ -177,6 +193,13 @@ export interface TransportDependencies {
    * `/api/groups/:id`. It finishes before the caller gets the error.
    */
   onGroupDenied(groupId: string, status: number, owner: number): Promise<void>;
+  /**
+   * A read of a Group or of its Expense list ended: answered, failed or cancelled once sent. The
+   * server may have created due recurring Expenses for it, so that Group's Balances and Home are
+   * out of date (ADR 0006, M1-5, AMEND-1). Every such GET comes here, the checks a save or a
+   * payment makes before it is sent included.
+   */
+  onLedgerRead?(groupId: string, owner: number, expenses: boolean): void;
 }
 
 /** What aborted a request first: a session change, the timeout, or the caller. */
@@ -202,6 +225,7 @@ export function createTransport({
   session,
   onExpired,
   onGroupDenied,
+  onLedgerRead,
 }: TransportDependencies) {
   /** Requests in flight, each by what aborts it. */
   const requests = new Set<(source: AbortSource) => void>();
@@ -284,6 +308,16 @@ export function createTransport({
     let received = false;
     /** The headers arrived and the body is being read. */
     let reading = false;
+    const ledger =
+      (options.method ?? 'GET') === 'GET'
+        ? /^\/api\/groups\/([a-f\d]{24})(\/expenses)?(?:\?|$)/i.exec(path)
+        : null;
+    // Once, as soon as the server has answered, so before a refusal's purge; or when it ends.
+    let noted = !ledger;
+    const ledgerRead = () => {
+      if (!noted) onLedgerRead?.(ledger![1], owner, !!ledger![2]);
+      noted = true;
+    };
     try {
       const outgoingCookie =
         options.sessionCookie === undefined ? session.cookie() : options.sessionCookie;
@@ -313,6 +347,7 @@ export function createTransport({
           : { body: options.serializedBody }),
       });
       received = true;
+      ledgerRead();
       if (options.onAbandoned && !live()) await abandon(response, options.onAbandoned);
       assertLive();
       // Logout responses must never reinstall a cookie, even a surprising one.
@@ -349,13 +384,11 @@ export function createTransport({
           : await reading;
         if (denied) await onGroupDenied(denied, response.status, owner);
         const message =
-          response.status === 403
-            ? 'You no longer have access to this group.'
-            : response.status === 404
-              ? 'This group is no longer available.'
-              : response.status === 429
-                ? 'Too many attempts. Wait a moment and try again.'
-                : 'The server could not complete this request. Please try again.';
+          response.status === 403 || response.status === 404
+            ? groupRefused(response.status)
+            : response.status === 429
+              ? 'Too many attempts. Wait a moment and try again.'
+              : 'The server could not complete this request. Please try again.';
         const code =
           details &&
           typeof details === 'object' &&
@@ -405,6 +438,7 @@ export function createTransport({
       endTimeout();
       requests.delete(stop);
       options.signal?.removeEventListener('abort', cancel);
+      ledgerRead();
     }
   };
 

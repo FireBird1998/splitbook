@@ -432,6 +432,16 @@ export interface AccountLocalStorage {
     mark(record: { invitationCleared: boolean }): Promise<void>;
     clear(): Promise<void>;
   };
+  /**
+   * Saved copies this device couldn't remove (#212), kept outside the stores that failed: each
+   * scope with when. The next start deletes them before anything reads a saved copy. One of
+   * `stores` too, so the purge removes it with them.
+   */
+  untrustedCopies?: {
+    load(): Promise<unknown>;
+    save(record: { accountId: string; scopes: Record<string, number> }): Promise<void>;
+    clear(): Promise<void>;
+  };
   /** Register at startup. Each store clears all its account keys for this backend. */
   stores: readonly { clear(): Promise<void> }[];
 }
@@ -475,10 +485,22 @@ export type GoogleIdentityResult =
   | { status: 'cancelled' }
   | { status: 'error'; message: string };
 
+/** What NetInfo tells the app: only whether the device has a connection (ADR 0006, M1-4). */
+export interface NetworkState {
+  addEventListener(listener: (state: { isConnected: boolean | null }) => void): () => void;
+}
+
 export interface MobileDependencies {
   /** Native identity acquisition only. The controller owns the app session. */
   googleSignIn?: () => Promise<GoogleIdentityResult>;
   readCache?: FinancialReadStore;
+  /**
+   * The persister's rows (ADR 0006, M3-1): one saved copy per query, keyed by its path, for the
+   * Groups list and Home's figures. Register it in `accountLocal.stores` too.
+   */
+  savedQueries?: AccountGroupRecordStore;
+  /** Reconnecting reads the screen's queries again (M1-4); NetInfo, or a fake in tests. */
+  netInfo?: NetworkState;
   offlineIdentity?: OfflineIdentityStore;
   fetch: MobileFetch;
   credentials: CredentialStore;

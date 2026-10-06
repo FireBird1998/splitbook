@@ -3,6 +3,7 @@ import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './mobile-controller';
 import type { ExpenseDraft } from './expense-draft';
 import type { FetchResponse, MobileFetch } from './types';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // Fictional people and Groups only.
 const people = [
@@ -328,6 +329,7 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
                   identity = null;
                 },
               },
+              savedQueries: savedQueriesIn(copies),
               readCache: {
                 load: async (account: string, path: string) =>
                   structuredClone(copies.get(account + path) ?? null),

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './mobile-controller';
 import { createFinancialReadStore } from './read-cache-storage';
+import { createAccountGroupRecordStore } from './account-record-storage';
 import type { FinancialReadStore } from './offline-cache';
 import type { FetchResponse } from './types';
 
@@ -118,6 +119,7 @@ function fixture() {
     attempts = memory();
   const environment = `http://localhost:4138/${Math.random()}`;
   const store = createFinancialReadStore(environment);
+  const savedQueries = createAccountGroupRecordStore(environment, 'saved');
   const readCache: FinancialReadStore = {
     ...store,
     invalidateLedger: (accountId, groupId) =>
@@ -330,6 +332,7 @@ function fixture() {
           },
         },
         readCache,
+        savedQueries,
         offlineIdentity,
         expenseDrafts: drafts,
         settlementAttempts: attempts,
@@ -352,7 +355,7 @@ function fixture() {
               cleanup = false;
             },
           },
-          stores: [readCache, offlineIdentity, drafts, attempts],
+          stores: [readCache, savedQueries, offlineIdentity, drafts, attempts],
         },
         fetch: async (url, init) => {
           if (server.offline) throw new Error('Offline');
@@ -396,13 +399,22 @@ function fixture() {
     return { arrived, release };
   };
 
-  /** This device's saved copies for Alex, by path. */
-  const saved = () =>
-    (
+  /** This device's saved copies for Alex, by path: the older document's, then the persister's rows. */
+  const saved = (): Record<string, { refreshedAt: number; value: unknown }> => ({
+    ...(
       device.records.get(`${environment}|cache|${alex.id}|reads`) as
         | { entries: Record<string, { refreshedAt: number; value: unknown }> }
         | undefined
-    )?.entries ?? {};
+    )?.entries,
+    ...Object.fromEntries(
+      [...device.records]
+        .filter(([key]) => key.startsWith(`${environment}|saved|${alex.id}|`))
+        .map(([key, row]) => [
+          key.split('|').at(-1),
+          row as { refreshedAt: number; value: unknown },
+        ]),
+    ),
+  });
   /** What this device keeps for a Group: each saved copy by the view it belongs to. */
   const savedOf = (groupId: string) =>
     Object.fromEntries(

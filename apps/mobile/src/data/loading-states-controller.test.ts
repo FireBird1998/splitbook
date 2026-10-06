@@ -3,6 +3,7 @@ import { currentMonthKey, getLocalMonthIsoRange, shiftMonthKey } from '@splitboo
 import { refreshFeedback } from '../ui/refresh-feedback';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse, MobileSnapshot } from './types';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // #127: first load, refresh, offline and cold-start states at the controller's public seam.
 const accountId = 'a00000000000000000000001',
@@ -214,6 +215,19 @@ function fixture() {
             identity = null;
           },
         },
+        // The persister's rows sit beside the other saved copies, read and held the same way.
+        savedQueries: savedQueriesIn(cache, {
+          load: (account, key) => read(() => structuredClone(cache.get(account + key) ?? null)),
+          save: async (account, key, value) => {
+            const held = saving?.path === key ? saving : null;
+            if (held) {
+              saving = null;
+              held.arrive();
+              await held.released;
+            }
+            cache.set(account + key, structuredClone(value));
+          },
+        }),
         readCache: {
           retainGroups: async (account, groupIds) => {
             const held = retaining;

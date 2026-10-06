@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createMobileController } from './mobile-controller';
 import { buildExpenseBody, type ExpenseDraft } from './expense-draft';
 import type { MobileGroup } from './types';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // Leave Group from Members and Group details. Fictional people and Groups only.
 const accountId = 'a00000000000000000000001',
@@ -114,6 +115,7 @@ function fixture() {
           identity = null;
         },
       },
+      savedQueries: savedQueriesIn(cache),
       readCache: {
         retainGroups: async () => undefined,
         invalidateGroup: async (account, id) => {

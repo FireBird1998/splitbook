@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createMobileController } from './mobile-controller';
 import type { FreshSnapshot, Unrouted } from './mobile-controller';
 import type { FetchResponse, MobileSnapshot } from './types';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // The route as a member meets it (ADR 0006, M8-2, #216): where Back goes from every screen and
 // what holds it, that moving around never writes, that reads never move the member, and that
@@ -344,6 +345,7 @@ function world({ google = false } = {}) {
           device.identity = null;
         },
       },
+      savedQueries: savedQueriesIn(device.cache),
       readCache: {
         retainGroups: async () => undefined,
         invalidateGroup: async (account, id) => {
