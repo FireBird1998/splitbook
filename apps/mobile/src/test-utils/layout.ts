@@ -39,7 +39,10 @@ export function layoutHeight(node: Node | string | null, fontScale = 1, width?: 
     case 'AnimatedText': {
       // Wrapped onto as many lines as its estimated width needs, up to `numberOfLines`.
       const room = width === undefined ? 0 : width - horizontal(style);
-      const needed = room > 0 ? Math.max(1, Math.ceil(textWidth(node, fontScale) / room)) : 1;
+      // A box sized to its text gets its width back through sums that can lose a hair: a text
+      // within a millionth of a dp of its room still fits.
+      const needed =
+        room > 0 ? Math.max(1, Math.ceil(textWidth(node, fontScale) / room - 1e-6)) : 1;
       const limit = Number(node.props.numberOfLines) || Infinity;
       return box(scaledSp(number(style.lineHeight), fontScale) * Math.min(needed, limit));
     }

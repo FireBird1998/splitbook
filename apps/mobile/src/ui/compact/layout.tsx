@@ -361,11 +361,21 @@ export function SkeletonText({
 }
 
 /**
+ * A text as a placeholder lays it out: as wide as the text (a word joiner, U+2060, is invisible
+ * and takes no room), but never the same string as the content it stands for. React Native
+ * measures each distinct text and style once and reuses that measure; an unseen copy measured in
+ * a skeleton could otherwise hand its measure to the real text, as when a record's badge, given
+ * the skeleton's measure, wrapped its amount out of the pill (#331).
+ */
+const wordJoiner = String.fromCodePoint(0x2060);
+export const unshared = (text: string) => text + wordJoiner;
+
+/**
  * A placeholder exactly the size of content whose value is already known, such as a list row's
  * amount on the record it opens: the content is laid out but unseen, so it takes its real
  * width, wraps where it would, and the row around it wraps where it would; a breathing block
  * sits over it. `bar` draws a text's bar, inset from its line's top and bottom, instead of a
- * block over the whole box. Hidden from screen readers.
+ * block over the whole box. Hidden from screen readers. Give it its texts through `unshared`.
  */
 export function SkeletonOf({
   children,

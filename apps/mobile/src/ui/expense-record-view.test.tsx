@@ -121,13 +121,17 @@ const records: Record<string, Record<string, unknown>> = {
   }),
   // As two records on an emulator measured them (#331): three people whose equal shares differ
   // by a paisa, and two people with a short amount.
+  // As the emulator's "Tea stall": Sam paid ₹1,250.00 for three, so Alex owes Sam ₹416.67.
   [ids.tea]: expense(ids.tea, {
     description: 'Tea stall',
-    amount: 100,
-    amountMinor: 10000,
-    paidBy: [row(alex, 10000)],
-    splitBetween: [row(alex, 3334), row(sam, 3333), row(priya, 3333)],
-    createdBy: alex.id,
+    amount: 1250,
+    amountMinor: 125000,
+    date: '2026-10-03T06:30:00.000Z',
+    tag: 'Food',
+    tagId: 'c00000000000000000000098',
+    paidBy: [row(sam, 125000)],
+    splitBetween: [row(alex, 41667), row(sam, 41667), row(priya, 41666)],
+    createdBy: person(sam),
   }),
   [ids.rerun]: expense(ids.rerun, {
     description: 'QA U1 rerun 3 e',
@@ -886,6 +890,49 @@ describe('compact Expense record, opening', () => {
       act(() => screen?.unmount());
       await render(open(id));
       expect(shape(room, fontScale)).toEqual(skeleton);
+    },
+  );
+
+  // On the emulator, Tea stall's badge drew "You owe Sam" and lost "₹416.67" once its skeleton
+  // had laid out the same badge text, unseen: React Native measures text once per string and
+  // style and reuses the result, so the record's badge took the skeleton's measurement and
+  // wrapped its amount out of the pill. The skeleton's texts must never be the record's.
+  it.each([
+    [411, 1],
+    [360, 1.3],
+  ])(
+    'Tea stall’s badge keeps its amount, and shares no text with its skeleton, %sdp at %s×',
+    async (width, fontScale) => {
+      setWindow({ width, fontScale });
+      const strings = (scope: ReactTestInstance) =>
+        scope
+          .findAll((node) => isHost(node, 'Text'))
+          .map((node) => node.children.filter((child) => typeof child === 'string').join(''));
+      await act(async () => {
+        screen = create(
+          editor(
+            { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: ids.tea },
+            recordOutline(listRow(ids.tea), alex.id),
+          ),
+        );
+      });
+      // What the skeleton lays out, unseen, inside its busy placeholder.
+      const [placeholder] = screen!.root.findAll(
+        (node) =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityLabel === 'Opening this Expense…',
+      );
+      const laidOut = new Set(strings(placeholder!));
+      expect(laidOut.size).toBeGreaterThan(4);
+      act(() => screen?.unmount());
+      await render(open(ids.tea));
+      const badge = screen!.root.findAll(
+        (node) => isHost(node, 'Text') && node.children.join('').startsWith('You owe'),
+      );
+      expect(badge.map((node) => node.children.join(''))).toEqual(['You owe Sam ₹416.67']);
+      expect(badge[0]!.props.numberOfLines).toBeUndefined();
+      const shared = strings(screen!.root).filter((text) => text && laidOut.has(text));
+      expect(shared).toEqual([]);
     },
   );
 
