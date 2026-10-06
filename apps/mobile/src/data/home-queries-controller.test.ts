@@ -1042,29 +1042,35 @@ describe('a lost Group never returns from the saved Groups list (#323)', () => {
     expect([...published, ...after].some(withMaple)).toBe(false);
   });
 
-  it('keeps the older saved list, with its own time, when a list that lost nothing can’t be saved', async () => {
-    const f = fixture();
-    const controller = f.create();
-    await controller.signIn('alex');
-    await settle();
-    later(31_000);
-    f.device.failSave = true;
-    f.server.listed = [maple, cabin, zed];
-    await controller.refresh('pull');
-    await settle();
-    expect(controller.getSnapshot()).toMatchObject({
-      groups: { status: 'ready', data: [{}, {}, { name: 'Zed Club' }] },
-      offline: { message: notSavedHere },
-    });
+  it.each([
+    ['its save fails', ['failSave']],
+    ['its save and the trim to the listed Groups fail', ['failSave', 'failRetain']],
+  ] as const)(
+    'keeps the older saved list, with its own time, when a list that lost nothing can’t be saved: %s',
+    async (_, failing) => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      await settle();
+      later(31_000);
+      for (const write of failing) f.device[write] = true;
+      f.server.listed = [maple, cabin, zed];
+      await controller.refresh('pull');
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', data: [{}, {}, { name: 'Zed Club' }] },
+        offline: { message: notSavedHere },
+      });
 
-    const { restarted } = await restartOffline(f, controller);
-    // Never as current: offline, with the time it was saved.
-    expect(restarted.getSnapshot()).toMatchObject({
-      auth: { status: 'authenticated', user: { id: alex.id } },
-      groups: { status: 'ready', data: [{ name: 'Maple House' }, { name: 'Cabin Weekend' }] },
-      offline: { active: true, refreshedAt: start },
-    });
-  });
+      const { restarted } = await restartOffline(f, controller);
+      // Never as current: offline, with the time it was saved.
+      expect(restarted.getSnapshot()).toMatchObject({
+        auth: { status: 'authenticated', user: { id: alex.id } },
+        groups: { status: 'ready', data: [{ name: 'Maple House' }, { name: 'Cabin Weekend' }] },
+        offline: { active: true, refreshedAt: start },
+      });
+    },
+  );
 
   it('deletes the untrusted list row at the next start where storage works, before anything reads it, then clears its record', async () => {
     const f = fixture();
