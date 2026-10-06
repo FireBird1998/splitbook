@@ -1245,6 +1245,25 @@ describe('a lost Group never returns from the saved Groups list (#323)', () => {
     });
   });
 
+  it('never shows a Group lost while its list was off screen when this device can neither read nor remove its saved list then', async () => {
+    const f = fixture();
+    const controller = await savedWithMaple(f);
+    await loseMapleSignedOut(f, controller);
+    Object.assign(f.device, { failLoad: true, failRemoval: true, failSave: true });
+    await controller.signIn('alex');
+    await settle();
+    expect(names(controller.getSnapshot())).toEqual(['Cabin Weekend']);
+
+    // Reads work again: a start while removals and saves still fail, then one where they work.
+    f.device.failLoad = false;
+    const failing = await restartOffline(f, controller);
+    Object.assign(f.device, { failRemoval: false, failSave: false });
+    const working = await restartOffline(f, failing.restarted);
+    expect([...failing.published, ...working.published].some(withMaple)).toBe(false);
+    expect(f.row(listPath)).toBeNull();
+    expect(f.untrusted()).toBeNull();
+  });
+
   it.each(['before', 'after'] as const)(
     'shows the saved list during a sign-in’s list read only until it answers: this device reads it %s the answer',
     async (order) => {
