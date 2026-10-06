@@ -2,6 +2,7 @@ import type { ReactElement } from 'react';
 import {
   act,
   create,
+  type ReactTestInstance,
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
@@ -13,8 +14,9 @@ import type {
   MobileExpense,
   MobileGroup,
 } from '../data/types';
-import { layoutHeight } from '../test-utils/layout';
-import { setFileWindow, setWindow } from '../test-utils/native';
+import { flatten, layoutHeight } from '../test-utils/layout';
+import { setFileWindow, setWindow, timing } from '../test-utils/native';
+import { motion } from './compact';
 import { GroupExpensesView } from './group-expenses';
 import { HomeBalances, HomeGroups } from './home';
 
@@ -70,6 +72,37 @@ function heights(element: ReactElement, next: ReactElement, fontScale: number) {
   renderer = undefined;
   return { before, after };
 }
+/**
+ * Renders `element`, lets Android answer that reduce motion is off, then replaces it with
+ * `next` in place: the content that arrived, and the text of each part of it that fades in.
+ */
+async function arrival(element: ReactElement, next: ReactElement) {
+  act(() => {
+    renderer = create(element);
+  });
+  await act(async () => undefined);
+  timing.mockClear();
+  act(() => renderer!.update(next));
+  const fades = timing.mock.results
+    .map((result) => result.value)
+    .filter((animation) => animation.config.duration === motion.reveal);
+  const text = (node: ReactTestInstance) =>
+    node
+      .findAll((child) => (child.type as unknown) === 'Text')
+      .flatMap((child) => child.children.filter((run) => typeof run === 'string'))
+      .join(' ');
+  return fades.map((fade) => {
+    expect(fade.value.value).toBe(0);
+    expect(fade.config).toMatchObject({ toValue: 1, useNativeDriver: true });
+    expect(fade.start).toHaveBeenCalledOnce();
+    const [faded] = renderer!.root.findAll(
+      (node) =>
+        (node.type as unknown) === 'AnimatedView' &&
+        flatten(node.props.style).opacity === fade.value,
+    );
+    return text(faded!);
+  });
+}
 const scales = [1, 1.3];
 /** The screens' content width on a 360dp phone: 16 each side. */
 const content = 360 - 32;
@@ -107,6 +140,14 @@ describe('Home', () => {
     },
   );
 
+  // The list's Card shows the skeleton, so the same Card fades the Groups in.
+  it('the Groups fade in where their skeleton was', async () => {
+    const faded = await arrival(groups(true), groups(false));
+    expect(faded).toHaveLength(1);
+    expect(faded[0]).toContain('Maple House');
+    expect(faded[0]).toContain('Sunday Football');
+  });
+
   const balances = (patch: Partial<HomeFinancialState>) => (
     <HomeBalances
       state={{
@@ -133,6 +174,16 @@ describe('Home', () => {
       expect(after).toBe(before);
     },
   );
+
+  it('the balances fade in under a header that stays still', async () => {
+    const faded = await arrival(
+      balances({ status: 'loading', data: null, refreshedAt: null }),
+      balances({}),
+    );
+    expect(faded).toHaveLength(1);
+    expect(faded[0]).toContain('You owe');
+    expect(faded[0]).not.toContain('Your balances');
+  });
 });
 
 describe('A Group’s Expenses', () => {
@@ -207,6 +258,13 @@ describe('A Group’s Expenses', () => {
       onDiscardDraft={vi.fn()}
     />
   );
+
+  it('the Month’s figures and its Expenses fade in where their skeletons were', async () => {
+    const faded = await arrival(view(maple, true, '2026-09'), view(maple, false, '2026-09'));
+    expect(faded).toHaveLength(2);
+    expect(faded.find((part) => part.includes('Spent'))).toBeDefined();
+    expect(faded.find((part) => part.includes('Weekly groceries'))).toBeDefined();
+  });
 
   it.each(scales)(
     'a Household’s Month summary and a day of Expenses take their skeletons’ place, at %s× text',
