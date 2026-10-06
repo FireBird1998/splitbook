@@ -615,14 +615,16 @@ export function createGroupQueries(session: GroupSession) {
   };
   const listOptions = (key: QueryKey, fresh = false) => {
     const reread = rereadOf(key);
-    // Read again from the window's first page: a return reads every page it left (#215).
-    const first = stateOf<Pages>(key)?.data?.pageParams[0] ?? 1;
+    // Read again from the window's first page: a return reads every page it left (#215), from
+    // where the window began when a change removed the list (owner decision 1A).
+    const start = reread?.first ?? 1;
+    const first = stateOf<Pages>(key)?.data?.pageParams[0] ?? start;
     const pages = reread ? Math.max(1, reread.pages - first + 1) : undefined;
     return {
       ...shared,
       queryKey: key,
       queryFn: readPage,
-      initialPageParam: 1,
+      initialPageParam: start,
       getNextPageParam: (last: PageEnvelope) => {
         if (last.source === 'failed') return undefined;
         const { pagination } = pageOf(last.value, key[3] as string, currencyOf(key[3] as string));

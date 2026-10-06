@@ -191,7 +191,11 @@ export interface GroupReturnContext {
  */
 export interface GroupReread {
   groupId: string;
-  expenses: { month: string | null; pages: number } | null;
+  /**
+   * `pages`: the last Expense page to read again. `first`: the window's first page, when it had
+   * slid past the newest page; reading starts there (#219, owner decision 1A).
+   */
+  expenses: { month: string | null; pages: number; first?: number } | null;
   activity: { pages: number } | null;
 }
 

@@ -2990,7 +2990,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     restoreScroll: origin && { groupId, y: origin.scrollY, request: scrollRequests + 1 },
     reread: origin && {
       groupId,
-      expenses: { month: origin.month, pages: origin.pages },
+      expenses: {
+        month: origin.month,
+        pages: origin.pages,
+        ...(origin.firstPage ? { first: origin.firstPage } : {}),
+      },
       activity: destination === 'activity' ? { pages: origin.activityPages } : null,
     },
   });
@@ -2999,15 +3003,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     route.screen === 'expense' && route.returnTo?.groupId === groupId ? route.returnTo : null;
   /**
    * A confirmed change returns to Expenses, where the change shows, whatever the task began on.
-   * A list that had slid past the newest page returns to it, at the top, where a new Expense
-   * sorts and its highlight can show (#215).
+   * A new Expense in a list that had slid past the newest page returns to it, at the top, where
+   * it sorts and its highlight can show (#215). An edit or a delete keeps the window where it was
+   * and reads its pages again, so the edited row shows where the member left it (owner decision
+   * 1A, #219).
    */
-  const savedReturn = (groupId: string) => {
+  const savedReturn = (groupId: string, kind: 'create' | ExpenseMutation['kind']) => {
     const origin = expenseOrigin(groupId);
     return returnView(
       groupId,
       'expenses',
-      origin?.firstPage ? { ...origin, firstPage: undefined, scrollY: 0, pages: 1 } : origin,
+      kind === 'create' && origin?.firstPage
+        ? { ...origin, firstPage: undefined, scrollY: 0, pages: 1 }
+        : origin,
     );
   };
 
@@ -3157,7 +3165,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       },
     });
     returnToGroup(
-      savedReturn(groupId),
+      savedReturn(groupId, kind),
       kind === 'delete'
         ? ledgerSnackbar(groupId, `Expense deleted · ${original.description}`, context)
         : ledgerSnackbar(
@@ -3623,7 +3631,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       successHandled = true;
       returnToGroup(
-        savedReturn(groupId),
+        savedReturn(groupId, 'create'),
         ledgerSnackbar(groupId, `Expense saved · ${draft.description.trim()}`, context, draft.date),
       );
       await refreshLedgerViews(groupId, owner, true);

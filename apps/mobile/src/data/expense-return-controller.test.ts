@@ -784,6 +784,66 @@ describe('Returning to an Expense beyond the first page', () => {
   });
 });
 
+// Owner decision 1A (2026-10-07): an edit or a delete made while the list has slid past its
+// newest page keeps the window where it was, and reads its pages again; a new Expense still goes
+// to the newest page, with its highlight (#215).
+describe('An edit or delete in a list that has slid past its newest page (#219, 1A)', () => {
+  /** 130 August Expenses read to page 6: the window holds pages 2 to 6. */
+  async function slid() {
+    const server = ledger();
+    server.seed(
+      '2026-08',
+      Array.from({ length: 130 }, (_, index) => (index % 28) + 1),
+    );
+    const { controller } = await signedIn(server);
+    await controller.openGroup(householdId);
+    await controller.selectMonth('2026-08');
+    for (let page = 2; page <= 6; page += 1) await controller.loadMoreExpenses();
+    const { expenses } = controller.getSnapshot().financial;
+    expect(expenses).toMatchObject({ firstPage: 2, pagination: { page: 6 } });
+    return { server, controller, last: expenses.data.at(-1)! };
+  }
+
+  it('keeps the window after an edit, reads its pages again, and highlights the edited row', async () => {
+    const { server, controller, last } = await slid();
+    await controller.openExpense(householdId, last.id, { scrollY: 6100 });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Seeded, corrected' });
+    const reads = server.pagesRead().length;
+    await controller.saveExpense();
+    const shown = controller.getSnapshot();
+    expect(shown).toMatchObject({
+      restoreScroll: { y: 6100 },
+      snackbar: {
+        message: 'Expense updated · Seeded, corrected',
+        expenseId: last.id,
+      },
+      financial: { expenses: { firstPage: 2, pagination: { page: 6 } } },
+    });
+    expect(shown.financial.expenses.data).toHaveLength(100);
+    expect(shown.financial.expenses.data.find((row) => row.id === last.id)?.description).toBe(
+      'Seeded, corrected',
+    );
+    expect(server.pagesRead().slice(reads)).toEqual([2, 3, 4, 5, 6]);
+  });
+
+  it('keeps the window after a delete, and reads its pages again', async () => {
+    const { server, controller, last } = await slid();
+    await controller.openExpense(householdId, last.id, { scrollY: 6100 });
+    controller.reviewExpenseDeletion();
+    const reads = server.pagesRead().length;
+    await controller.deleteExpense();
+    const shown = controller.getSnapshot();
+    expect(shown).toMatchObject({
+      restoreScroll: { y: 6100 },
+      financial: { expenses: { firstPage: 2, pagination: { page: 6 } } },
+    });
+    expect(shown.snackbar?.message).toMatch(/^Expense deleted · /);
+    expect(shown.snackbar?.expenseId).toBeUndefined();
+    expect(shown.financial.expenses.data.map((row) => row.id)).not.toContain(last.id);
+    expect(server.pagesRead().slice(reads)).toEqual([2, 3, 4, 5, 6]);
+  });
+});
 describe('Saving into the same or another Month', () => {
   it('stays on the current Month and confirms a save in that Month', async () => {
     const { server, controller } = await signedIn();
