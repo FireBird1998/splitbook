@@ -660,4 +660,53 @@ describe('reads cancelled, refused or out of date (#214)', () => {
     expect(bodies).toEqual([{ aborted: false }]);
     expect(controller.getSnapshot().detail).toMatchObject({ status: 'denied', data: null });
   });
+
+  // #231 with #214: losing the Group cancels its reads, the refused one included. The refusal is
+  // still that read's answer, never a cancel, or the Group view, which still shows the read,
+  // would read the Group again, be refused again, and never stop.
+  it.each([
+    [403, 'denied'],
+    [404, 'error'],
+  ])(
+    'sends one read of a Group that answers %i, though losing it cancels that read, and settles',
+    async (status, shown) => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      expect(f.reads(groupPath)).toBe(1);
+      later(31_000);
+      f.state.revoked = true;
+      const before = f.calls.length;
+      let refusals = 0;
+      f.answer((path, method) =>
+        path === groupPath && method === 'GET'
+          ? // Were it read again and again, a 500 past the third read ends the loop, so this
+            // fails on the count below instead of running out of memory.
+            Promise.resolve(json({}, ++refusals > 3 ? 500 : status))
+          : null,
+      );
+      await controller.refresh();
+      // Whatever the refusal set off has run by now.
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      const sent = f.calls.slice(before);
+      expect(sent.filter((call) => call.path.startsWith(groupPath))).toEqual([
+        { method: 'GET', path: groupPath },
+      ]);
+      expect(f.purges()).toBe(1);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        detail: { status: shown, id: groupId, data: null },
+        financial: { groupId: null, expenses: { data: [] }, balances: { data: null } },
+        offline: { active: false },
+      });
+      expect(controller.getSnapshot().groups.data.map(({ id }) => id)).not.toContain(groupId);
+      expect(f.savedOfGroup()).toEqual([]);
+      // The reads have settled: nothing more is sent.
+      const settled = f.calls.length;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      expect(f.calls).toHaveLength(settled);
+    },
+  );
 });

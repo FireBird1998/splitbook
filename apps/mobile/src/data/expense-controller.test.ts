@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { toDateParam } from '@splitbook/shared/date';
-import { hangUntilAborted, manualTimer } from '../test-utils/transport-faults';
+import { gatewayReply, hangUntilAborted, manualTimer } from '../test-utils/transport-faults';
 import { resolveDraftReview, type ExpenseDraft, type ExpenseField } from './expense-draft';
 import { createMobileController, type MobileController } from './mobile-controller';
-import type { FetchResponse, MobileFetch, MobileTimer } from './types';
+import type { FetchResponse, MobileFetch, MobileSnapshot, MobileTimer } from './types';
 
 const memberIds = [
   'a00000000000000000000001',
@@ -182,7 +182,7 @@ const savedExpense = {
 };
 
 describe('native Expense creation and editing', () => {
-  it('recovers a deleted historical Expense with missing member identities after restart', async () => {
+  it('confirms a lost delete of a historical Expense with missing member identities after restart', async () => {
     let deleted = false,
       offline = false,
       writes = 0;
@@ -219,8 +219,12 @@ describe('native Expense creation and editing', () => {
     expect(restarted.getSnapshot().expense.status).toBe('resume');
     restarted.resumeExpenseDraft();
     await restarted.reconcileExpense();
-    expect(restarted.getSnapshot().expense.latest?.isDeleted).toBe(true);
-    await restarted.acceptCurrentExpense();
+    // The saved Expense reads deleted: the member's own delete, confirmed as if its reply came.
+    expect(restarted.getSnapshot()).toMatchObject({
+      screen: 'group',
+      expense: { status: 'saved', mutation: null, draft: null, message: 'Expense deleted.' },
+      snackbar: { message: 'Expense deleted · Original dinner' },
+    });
     expect(records.size).toBe(0);
     expect(writes).toBe(1);
   });
@@ -275,7 +279,7 @@ describe('native Expense creation and editing', () => {
   });
 
   it.each(['edit', 'delete'] as const)(
-    'reads the current record after a lost %s response and never repeats the mutation on restart',
+    'confirms a lost %s response as the member’s own when checked after a restart, and never repeats it',
     async (kind) => {
       let changed = false,
         offline = false,
@@ -320,17 +324,57 @@ describe('native Expense creation and editing', () => {
       restarted.resumeExpenseDraft();
       await restarted.refresh();
       expect(writes).toBe(1);
+      // Revision 3 + 1, holding the description sent, or deleted: the member's own change.
       await restarted.reconcileExpense();
+      expect(restarted.getSnapshot()).toMatchObject({
+        screen: 'group',
+        expense: {
+          status: 'saved',
+          mutation: null,
+          draft: null,
+          message: kind === 'delete' ? 'Expense deleted.' : 'Expense updated.',
+        },
+        snackbar: {
+          message:
+            kind === 'delete'
+              ? 'Expense deleted · Original dinner'
+              : 'Expense updated · Saved correction',
+        },
+      });
+      expect(records.size).toBe(0);
       await restarted.saveExpense();
       await restarted.deleteExpense();
       expect(writes).toBe(1);
-      expect(restarted.getSnapshot().expense.latest?.revision).toBe(4);
-      expect(restarted.getSnapshot().expense.status).toBe(
-        kind === 'delete' ? 'blocked' : 'conflict',
-      );
-      await restarted.acceptCurrentExpense();
-      expect(records.size).toBe(0);
-      expect(restarted.getSnapshot().expense.status).toBe('detail');
+    },
+  );
+
+  it.each([403, 404])(
+    'keeps today’s blocked state when the check after a lost edit answer is refused with %s',
+    async (status) => {
+      let committed = false,
+        writes = 0;
+      const { controller } = setup((path, init) => {
+        if (!path.endsWith(`/${expenseId}`)) return;
+        if (init.method === 'PATCH') {
+          writes++;
+          committed = true;
+          return Promise.reject(new Error('Committed response lost'));
+        }
+        // The edit committed at revision 3 + 1 with the description sent, but this read is refused.
+        if (committed) return Promise.resolve(json({ status, error: 'Unavailable' }, status));
+        return Promise.resolve(json({ status: 200, data: savedExpense }));
+      });
+      await controller.signIn('alex');
+      await controller.openExpense(groupId, expenseId);
+      await controller.editExpense();
+      await controller.updateExpenseDraft({ description: 'Saved correction' });
+      await controller.saveExpense();
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'blocked',
+        mutation: { kind: 'edit', revision: 3 },
+        message: expect.stringContaining('This Expense is unavailable'),
+      });
+      expect(writes).toBe(1);
     },
   );
 
@@ -2332,6 +2376,101 @@ describe('a retried save the server rejects', () => {
     expect([...records]).toEqual(stored);
     expect(server.posts).toHaveLength(1);
   });
+});
+
+describe('a save that meets a gateway error (#231)', () => {
+  const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+  const header = (init: RequestInit, name: string) => new Headers(init.headers).get(name);
+
+  it('keeps a new Expense unconfirmed after one send, and sends it again only on Retry, with its key and body', async () => {
+    let gateway = true;
+    const posts: RequestInit[] = [];
+    const { controller, records } = setup((path, init) => {
+      if (path !== `/api/groups/${groupId}/expenses` || init.method !== 'POST') return;
+      posts.push(init);
+      return Promise.resolve(
+        gateway
+          ? gatewayReply(502)
+          : json({ data: { _id: expenseId, group: groupId }, status: 201 }, 201),
+      );
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+    await controller.saveExpense();
+    expect(posts).toHaveLength(1);
+    const expense = controller.getSnapshot().expense;
+    expect(expense.status).toBe('uncertain');
+    // Only its message changes: SplitBook couldn't be reached, so the save may have landed.
+    expect(expense.message).toBe(
+      `${unreachable} This Expense may already be saved. Checking reuses the same submission, so it can’t be recorded twice.`,
+    );
+    const attempt = { key: header(posts[0], 'Idempotency-Key'), body: posts[0].body };
+    expect(expense.attempt).toEqual(attempt);
+    expect([...records.values()]).toEqual([expect.objectContaining({ attempt })]);
+
+    // Nothing is sent again by itself, even once SplitBook can be reached.
+    gateway = false;
+    await controller.refresh();
+    expect(posts).toHaveLength(1);
+
+    await controller.saveExpense();
+    expect(posts).toHaveLength(2);
+    expect({ key: header(posts[1], 'Idempotency-Key'), body: posts[1].body }).toEqual(attempt);
+    expect(controller.getSnapshot().expense.status).toBe('saved');
+    expect(records.size).toBe(0);
+  });
+
+  it.each(['edit', 'delete'] as const)(
+    'keeps a stored %s after one send, checks the saved Expense, and never sends it again',
+    async (kind) => {
+      const sent: string[] = [];
+      const writes: RequestInit[] = [];
+      const { controller, records } = setup((path, init) => {
+        sent.push(`${init.method ?? 'GET'} ${path}`);
+        if (!path.endsWith(`/${expenseId}`)) return;
+        if (init.method === 'PATCH' || init.method === 'DELETE') {
+          writes.push(init);
+          return Promise.resolve(gatewayReply(502));
+        }
+        return Promise.resolve(json({ status: 200, data: savedExpense }));
+      });
+      await controller.signIn('alex');
+      await controller.openExpense(groupId, expenseId);
+      if (kind === 'edit') {
+        await controller.editExpense();
+        await controller.updateExpenseDraft({ description: 'Saved correction' });
+      } else controller.reviewExpenseDeletion();
+      const shown: MobileSnapshot['expense'][] = [];
+      controller.subscribe(() => shown.push(controller.getSnapshot().expense));
+      if (kind === 'edit') await controller.saveExpense();
+      else await controller.deleteExpense();
+
+      const method = kind === 'edit' ? 'PATCH' : 'DELETE';
+      expect(writes).toHaveLength(1);
+      expect(header(writes[0], 'X-Splitbook-Revision')).toBe('3');
+      const mutation = { kind, revision: 3, body: kind === 'edit' ? writes[0].body : '' };
+      expect([...records.values()]).toEqual([expect.objectContaining({ mutation })]);
+      // Only its message changes: SplitBook couldn't be reached. Then the saved Expense is checked.
+      expect(shown).toContainEqual(
+        expect.objectContaining({ status: 'uncertain', mutation, message: unreachable }),
+      );
+      const write = sent.indexOf(`${method} /api/groups/${groupId}/expenses/${expenseId}`);
+      expect(sent.slice(write + 1)).toContain(`GET /api/groups/${groupId}/expenses/${expenseId}`);
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'conflict',
+        mutation,
+        latest: { revision: 3 },
+      });
+
+      // Saving, deleting or refreshing never sends it again.
+      await controller.saveExpense();
+      await controller.deleteExpense();
+      await controller.refresh();
+      expect(writes).toHaveLength(1);
+      expect([...records.values()]).toEqual([expect.objectContaining({ mutation })]);
+    },
+  );
 });
 
 describe('an edit that meets a newer saved Expense', () => {

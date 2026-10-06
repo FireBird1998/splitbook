@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { hangUntilAborted, manualTimer, within } from '../test-utils/transport-faults';
+import {
+  bodyFails,
+  gatewayFailures,
+  gatewayReply,
+  hangUntilAborted,
+  manualTimer,
+  within,
+} from '../test-utils/transport-faults';
 import { createTransport, RequestError, Superseded } from './transport';
 import type { FetchResponse } from './types';
 
@@ -106,12 +113,10 @@ describe('a caller’s own cancel', () => {
     expect(t.started).toEqual([]);
   });
 
-  it.each([
-    ['headers', true],
-    ['body', false],
-  ] as const)(
-    'keeps today’s timeout while waiting for the %s, even when the caller aborts after it',
-    async (stage, networkFailure) => {
+  // #231: a timeout after the headers counts as can't reach the server too.
+  it.each(['headers', 'body'] as const)(
+    'times out as can’t reach the server while waiting for the %s, even when the caller aborts after it',
+    async (stage) => {
       const t = setup((init) => hangUntilAborted(init, stage));
       const caller = new AbortController();
       const error = caught(t.request(`/api/groups/${groupId}`, 1, { signal: caller.signal }));
@@ -124,7 +129,7 @@ describe('a caller’s own cancel', () => {
         message: unreachable,
         status: 0,
         code: null,
-        networkFailure,
+        networkFailure: true,
       });
     },
   );
@@ -157,6 +162,92 @@ describe('a caller’s own cancel', () => {
     caller.abort();
     expect(t.sent).toEqual([`GET /api/groups/${groupId}`]);
   });
+
+  it('ends as cancelled, never as can’t reach the server, when the caller aborts while a gateway’s 502 body is read (#231)', async () => {
+    const t = setup((init) => hangUntilAborted(init, 'body', 502));
+    const caller = new AbortController();
+    const error = caught(t.request(`/api/groups/${groupId}`, 1, { signal: caller.signal }));
+    await vi.waitFor(() => expect(t.sent).toHaveLength(1));
+    caller.abort();
+    expect(await within(error)).toMatchObject({ kind: 'cancelled', networkFailure: false });
+    expect(t.sent).toHaveLength(1);
+  });
+
+  it.each([
+    [500, `/api/groups/${groupId}/expenses`, []],
+    // Its code is in the body the caller cancelled, so it is never read.
+    [503, `/api/groups/${groupId}/expenses`, []],
+    [429, `/api/groups/${groupId}/expenses`, []],
+  ])(
+    'ends a %i as cancelled when the caller aborts while its body is read',
+    async (status, path, hooks) => {
+      let reading = false;
+      const t = setup((init) =>
+        hangUntilAborted(init, 'body', status).then((response) => ({
+          ...response,
+          json: () => {
+            reading = true;
+            return response.json();
+          },
+        })),
+      );
+      const caller = new AbortController();
+      const error = caught(t.request(path, 1, { signal: caller.signal }));
+      await vi.waitFor(() => expect(reading).toBe(true));
+      caller.abort();
+      const cancelled = await within(error);
+      expect(cancelled).toBeInstanceOf(RequestError);
+      expect(cancelled).toMatchObject({
+        kind: 'cancelled',
+        networkFailure: false,
+        status: 0,
+        code: null,
+        serverMessage: null,
+      });
+      expect(t.hooks).toEqual(hooks);
+      expect(t.sent).toHaveLength(1);
+    },
+  );
+
+  // A denial is the read's own answer, not a cancel. Its headers already said denied, so the
+  // Group is purged first, and on the query engine that purge is what cancels the Group's reads,
+  // this one included (#214). Ending it as cancelled would have its caller read the Group again,
+  // be refused again, and so on for ever; it ends as access denied whatever cancelled its body.
+  it.each([
+    [403, `/api/groups/${groupId}/expenses`, 'You no longer have access to this group.'],
+    [404, `/api/groups/${groupId}`, 'This group is no longer available.'],
+  ])(
+    'ends a denial (%i on %s) as access denied, not cancelled, when the caller aborts while its body is read',
+    async (status, path, message) => {
+      let reading = false;
+      const t = setup((init) =>
+        hangUntilAborted(init, 'body', status).then((response) => ({
+          ...response,
+          json: () => {
+            reading = true;
+            return response.json();
+          },
+        })),
+      );
+      const caller = new AbortController();
+      const error = caught(t.request(path, 1, { signal: caller.signal }));
+      await vi.waitFor(() => expect(reading).toBe(true));
+      caller.abort();
+      const denied = await within(error);
+      expect(denied).toBeInstanceOf(RequestError);
+      expect(denied).toMatchObject({
+        kind: 'access-denied',
+        networkFailure: false,
+        status,
+        message,
+        // Its body was cancelled, so it carries no code or server message.
+        code: null,
+        serverMessage: null,
+      });
+      expect(t.hooks).toEqual([`denied: ${groupId} ${status}`]);
+      expect(t.sent).toHaveLength(1);
+    },
+  );
 });
 
 describe('failure kinds (#208)', () => {
@@ -172,9 +263,7 @@ describe('failure kinds (#208)', () => {
     [428, 'REVISION_REQUIRED', 'rejected', incomplete],
     [429, null, 'server-error', 'Too many attempts. Wait a moment and try again.'],
     [500, null, 'server-error', incomplete],
-    [502, null, 'server-error', incomplete],
     [503, 'ACTIVITY_BACKLOG_FULL', 'server-error', incomplete],
-    [504, null, 'server-error', incomplete],
   ])(
     'gives a %i (%s) the %s kind, with today’s message, status and code',
     async (status, code, kind, message) => {
@@ -219,6 +308,38 @@ describe('failure kinds (#208)', () => {
       status: 0,
       networkFailure: false,
     });
+  });
+
+  it.each(gatewayFailures)(
+    'gives a gateway’s %i with a body that is %s the network kind, with no status or code (#231)',
+    async (status, body) => {
+      const t = setup(async () => gatewayReply(status, body));
+      const error = await caught(
+        t.request(`/api/groups/${groupId}/expenses`, 1, { method: 'POST', body: {} }),
+      );
+      expect(error).toBeInstanceOf(RequestError);
+      expect(error).toMatchObject({
+        kind: 'network',
+        message: unreachable,
+        status: 0,
+        code: null,
+        networkFailure: true,
+        serverMessage: null,
+      });
+      expect(t.sent).toHaveLength(1);
+      expect(t.hooks).toEqual([]);
+    },
+  );
+
+  it('gives a body that stops arriving the network kind (#231)', async () => {
+    const t = setup(async () => bodyFails());
+    expect(await caught(t.request('/api/groups', 1))).toMatchObject({
+      kind: 'network',
+      message: unreachable,
+      status: 0,
+      networkFailure: true,
+    });
+    expect(t.sent).toHaveLength(1);
   });
 });
 
@@ -290,5 +411,127 @@ describe('cleaning up after each request', () => {
     expect(remove.mock.calls[0][0]).toBe('abort');
     expect(remove.mock.calls[0][1]).toBe(add.mock.calls[0][1]);
     expect(t.started).toEqual([{ ms: 20_000, ended: 1 }]);
+  });
+});
+
+describe('a session no session holds any more (#284)', () => {
+  const staging = 'https://staging.splitbook.test';
+  const client = '123-test.apps.googleusercontent.com';
+  const late = '__Secure-better-auth.session_token=alex-1.signature';
+
+  /**
+   * A Google build's transport. Each request's reply waits for `release(path)`, and an abort
+   * before then fails it as expo/fetch does. `bootstrap` is what the backend says it is.
+   */
+  function held(bootstrap: unknown = { environment: 'staging', googleWebClientId: client }) {
+    let generation = 1;
+    const sent: { path: string; cookie: string | null }[] = [];
+    const replies = new Map<string, () => void>();
+    const saved: string[] = [];
+    const hooks: string[] = [];
+    const transport = createTransport({
+      apiBase: staging,
+      authOrigin: staging,
+      secureTransport: true,
+      googleEnabled: true,
+      googleWebClientId: client,
+      fetch: (url, init) => {
+        const path = new URL(url).pathname;
+        sent.push({ path, cookie: new Headers(init.headers).get('Cookie') });
+        const answer =
+          path === '/.well-known/splitbook-mobile.json'
+            ? Response.json(bootstrap)
+            : path === '/api/auth/sign-in/social'
+              ? new Response(JSON.stringify({ user: {} }), {
+                  headers: { 'Set-Cookie': `${late}; Path=/; HttpOnly; Secure; Max-Age=2592000` },
+                })
+              : Response.json({ success: true });
+        return new Promise((resolve, reject) => {
+          init.signal?.addEventListener('abort', () =>
+            reject(new TypeError('Network request failed')),
+          );
+          replies.set(path, () => resolve(answer));
+        });
+      },
+      now: () => Date.parse('2026-10-06T09:00:00.000Z'),
+      timer: manualTimer().timer,
+      session: {
+        current: (owner) => owner === generation,
+        cookie: () => null,
+        saveCookie: async (_owner, cookie) => {
+          saved.push(cookie);
+        },
+      },
+      onExpired: async (_owner, message) => {
+        hooks.push(`expired: ${message}`);
+      },
+      onGroupDenied: async (id) => {
+        hooks.push(`denied: ${id}`);
+      },
+    });
+    return {
+      transport,
+      sent,
+      saved,
+      hooks,
+      /** Answers the request waiting on `path`, once it has been sent. */
+      release: async (path: string) => {
+        await vi.waitFor(() => expect(replies.has(path)).toBe(true));
+        replies.get(path)!();
+        replies.delete(path);
+      },
+      changeSession: () => {
+        generation += 1;
+        transport.abortAll();
+      },
+    };
+  }
+
+  it('hands a replaced sign-in’s session to onAbandoned, never adopts it, and the caller gets Superseded', async () => {
+    const t = held();
+    const abandoned: string[] = [];
+    const signingIn = caught(
+      t.transport.request('/api/auth/sign-in/social', 1, {
+        method: 'POST',
+        body: { provider: 'google' },
+        onAbandoned: async (cookie) => {
+          abandoned.push(cookie);
+        },
+      }),
+    );
+    await t.release('/.well-known/splitbook-mobile.json');
+    await vi.waitFor(() => expect(t.sent).toHaveLength(2));
+    // The session changes while the reply is on its way; the sign-in isn't ended by it.
+    t.changeSession();
+    await t.release('/api/auth/sign-in/social');
+    expect(await within(signingIn)).toBeInstanceOf(Superseded);
+    expect(abandoned).toEqual([late]);
+    expect(t.saved).toEqual([]);
+    expect(t.hooks).toEqual([]);
+  });
+
+  it('revokes it with its own cookie after the Google check, whatever session changes meanwhile', async () => {
+    const t = held();
+    const revoking = t.transport.revokeDetached(late);
+    await vi.waitFor(() => expect(t.sent).toHaveLength(1));
+    t.changeSession();
+    await t.release('/.well-known/splitbook-mobile.json');
+    t.changeSession();
+    await t.release('/api/auth/sign-out');
+    expect(await within(revoking)).toBe(true);
+    expect(t.sent).toEqual([
+      { path: '/.well-known/splitbook-mobile.json', cookie: null },
+      { path: '/api/auth/sign-out', cookie: late },
+    ]);
+    expect(t.saved).toEqual([]);
+    expect(t.hooks).toEqual([]);
+  });
+
+  it('never sends it to a backend that fails the Google check', async () => {
+    const t = held({ environment: 'production', googleWebClientId: client });
+    const revoking = t.transport.revokeDetached(late);
+    await t.release('/.well-known/splitbook-mobile.json');
+    expect(await within(revoking)).toBe(false);
+    expect(t.sent).toEqual([{ path: '/.well-known/splitbook-mobile.json', cookie: null }]);
   });
 });

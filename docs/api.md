@@ -40,7 +40,7 @@ Handled by Better Auth under one catch-all route. The paths a client uses:
 | POST   | `/api/auth/sign-in/social`       | `{ provider: 'google', callbackURL }` starts the redirect flow; `{ provider: 'google', idToken: { token } }` signs a native client in | 🔓   |
 | GET    | `/api/auth/callback/google`      | Google redirect target                                                                                                                | 🔓   |
 | GET    | `/api/auth/get-session`          | `{ session, user }` or `null`                                                                                                         | 🔓   |
-| POST   | `/api/auth/sign-out`             | Revoke the session                                                                                                                    | 🔓   |
+| POST   | `/api/auth/sign-out`             | Revoke the session. Answers 500 `SESSION_NOT_ENDED` when the session can't be ended, and keeps the session cookie for a retry         | 🔓   |
 | POST   | `/api/auth/demo-persona/sign-in` | `{ personaId }` — demo mode only; the route is absent otherwise                                                                       | 🔓   |
 
 Google sign-ins are gated by `AUTH_ALLOWED_EMAILS` (rejections carry the code

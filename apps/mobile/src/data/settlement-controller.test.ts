@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { gatewayReply } from '../test-utils/transport-faults';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse } from './types';
 const actor = 'a00000000000000000000001',
@@ -789,6 +790,51 @@ describe('native payment recording', () => {
       expect(writes).toHaveLength(1);
     },
   );
+
+  it('keeps a payment unconfirmed after one send to a failing gateway, says SplitBook can’t be reached, and sends it again only on Retry (#231)', async () => {
+    // The gateway fails from the moment the payment is sent until it recovers.
+    let gateway: 'up' | 'down' | 'recovered' = 'up';
+    const { controller, writes, records } = setup((path, init) => {
+      if (gateway === 'up' && path.endsWith('/settlements') && init.method === 'POST')
+        gateway = 'down';
+      if (gateway === 'down') return gatewayReply(502);
+    });
+    const key = (init: RequestInit) => new Headers(init.headers).get('Idempotency-Key');
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    controller.updateSettlement({ amount: '10', note: 'Paid already' });
+    await controller.recordSettlement();
+    expect(writes).toHaveLength(1);
+    const attempt = { key: 'settlement-key-1', body: writes[0].body };
+    expect(key(writes[0])).toBe(attempt.key);
+    expect(controller.getSnapshot().settlement).toMatchObject({ status: 'uncertain', attempt });
+    expect([...records.values()]).toEqual([expect.objectContaining(attempt)]);
+
+    // Opened again while the gateway still fails, it says SplitBook can't be reached.
+    await controller.openSettlements(groupId);
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'uncertain',
+      attempt,
+      message: 'Could not reach SplitBook. Check your connection and try again.',
+    });
+    expect(writes).toHaveLength(1);
+
+    // Recovered: nothing is sent by itself, and Retry sends the same key and body.
+    gateway = 'recovered';
+    await controller.openSettlements(groupId);
+    expect(controller.getSnapshot().settlement).toMatchObject({ status: 'uncertain', attempt });
+    expect(writes).toHaveLength(1);
+    await controller.recordSettlement();
+    expect(writes).toHaveLength(2);
+    expect({ key: key(writes[1]), body: writes[1].body }).toEqual(attempt);
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      snackbar: { message: 'Payment recorded' },
+      settlement: { attempt: null },
+    });
+  });
 
   it('keeps a reopened sheet as it is when the refresh after an earlier payment finishes', async () => {
     let committed = false,

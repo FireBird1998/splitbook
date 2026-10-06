@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { gatewayReply } from '../test-utils/transport-faults';
 import { decodeStoredSession } from './cookies';
 import { createMobileController } from './mobile-controller';
 import type { GoogleIdentityResult, MobileDependencies, MobileFetch } from './types';
@@ -209,6 +210,58 @@ describe('Google login within the native session boundary', () => {
       expect(test.controller.getSnapshot().auth.user).toBeNull();
     }
   });
+  it.each([502, 503, 504])(
+    'counts a gateway’s %i on the staging check as can’t reach the server, never as a backend not configured for the beta (#231)',
+    async (status) => {
+      /** Restores, then tries Google sign-in, while the staging check fails as `fail` does. */
+      async function checkStaging(fail: () => Promise<Response>) {
+        const sent: { path: string; cookie: boolean }[] = [];
+        const test = setup({
+          saved: cookie,
+          dependencies: {
+            fetch: async (url, init) => {
+              sent.push({
+                path: new URL(url).pathname,
+                cookie: new Headers(init.headers).has('Cookie'),
+              });
+              return url.endsWith('/.well-known/splitbook-mobile.json')
+                ? fail()
+                : response({}, 404);
+            },
+          },
+        });
+        await test.controller.restore();
+        const restored = test.controller.getSnapshot();
+        await test.controller.signInWithGoogle();
+        return { sent, restored, signedIn: test.controller.getSnapshot(), acquire: test.acquire };
+      }
+      const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+      const lost = await checkStaging(() =>
+        Promise.reject(new TypeError('Network request failed')),
+      );
+      const gateway = await checkStaging(async () => gatewayReply(status));
+      expect(gateway.restored.auth).toMatchObject({
+        status: 'error',
+        user: null,
+        message: expect.stringContaining(unreachable),
+      });
+      expect(gateway.signedIn.auth).toMatchObject({
+        status: 'signed-out',
+        user: null,
+        message: unreachable,
+      });
+      expect([gateway.restored, gateway.signedIn]).toEqual([lost.restored, lost.signedIn]);
+      expect(gateway.acquire).not.toHaveBeenCalled();
+      // One staging check for each, without the saved cookie, as for a lost connection.
+      expect(gateway.sent).toHaveLength(2);
+      expect(
+        gateway.sent.every(
+          (sent) => sent.path === '/.well-known/splitbook-mobile.json' && !sent.cookie,
+        ),
+      ).toBe(true);
+      expect(gateway.sent).toEqual(lost.sent);
+    },
+  );
   it('does not send a saved cookie to an unrecognized backend even when signing out', async () => {
     const test = setup({ saved: cookie, bootstrap: {} });
     await test.controller.restore();

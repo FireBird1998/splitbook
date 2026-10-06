@@ -806,7 +806,8 @@ describe('cached views and coalesced reads (#103)', () => {
     f.clock.now += 60_000;
     const restarted = f.create();
     await restarted.restore();
-    f.state.failGroup = 503;
+    // A 500, a server fault: an uncoded 503 now counts as can't reach the server (#231).
+    f.state.failGroup = 500;
     await restarted.openGroup(groupId);
     const state = restarted.getSnapshot();
     expect(state).toMatchObject({
@@ -1129,7 +1130,8 @@ describe('Members and Group details reads its Group again (#238)', () => {
     },
   );
 
-  it.each([500, 502, 503])(
+  // A gateway's 502 or 503 now counts as can't reach the server: see the next test (#231).
+  it.each([500])(
     'keeps the Group and its saved copies when its read fails with %i, online or after an offline fallback',
     async (status) => {
       const { f, controller } = await onMembers();
@@ -1153,6 +1155,26 @@ describe('Members and Group details reads its Group again (#238)', () => {
       await controller.refresh();
       f.state.offline = false;
       await controller.refresh();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'members',
+        offline: { active: true, refreshedAt: savedAt },
+        detail: { id: groupId, data: { name: 'Maple House' }, refreshedAt: savedAt },
+      });
+      expect(listed(controller)).toContain(groupId);
+      expect(savedOfGroup(f)).toBe(3);
+    },
+  );
+
+  it.each([502, 503, 504])(
+    'keeps the Group and its saved copies, offline with their time, when a gateway answers its read with %i (#231)',
+    async (status) => {
+      const { f, controller } = await onMembers();
+      const savedAt = f.clock.now;
+      f.state.failGroup = status;
+      f.clock.now += 60_000;
+      const before = f.calls.length;
+      await controller.refresh('foreground');
+      expect(f.calls.slice(before)).toEqual([sessionRead, groupRead]);
       expect(controller.getSnapshot()).toMatchObject({
         screen: 'members',
         offline: { active: true, refreshedAt: savedAt },
