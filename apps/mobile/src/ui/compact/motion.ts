@@ -200,16 +200,16 @@ export type Reveal = Animated.Value;
 export function useReveal(loading: boolean): Reveal | null {
   // Known by the time the content arrives: the fade is decided as it renders.
   useWatchReducedMotion(loading);
-  /** `loading` as of the last commit. */
-  const committed = useRef(loading);
+  /** Whether this component has shown its placeholder. */
   const placeholder = useRef(loading);
+  // Recomputed only when `loading` changes, so a render with it false after a placeholder is the
+  // content arriving.
   const fade = useMemo(() => {
     if (!placeholder.current && !loading) return null;
-    const revealing = committed.current && !loading && moving();
+    const revealing = !loading && moving();
     return { opacity: new Animated.Value(revealing ? 0 : 1), revealing };
   }, [loading]);
   useEffect(() => {
-    committed.current = loading;
     if (loading) placeholder.current = true;
   }, [loading]);
   useEffect(() => {
