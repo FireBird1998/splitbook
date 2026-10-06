@@ -968,6 +968,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     onExpired: failSession,
     // Today's denial purge: its reads, saved copies and content on screen go.
     onGroupDenied: (groupId, status, owner) => forgetGroup(groupId, status, owner),
+    // Balances and Home follow every read of a Group or its Expenses (M1-5, AMEND-1); an Expense
+    // list read also leaves their saved copies from before it unshown (#191).
+    onLedgerRead: (groupId, owner, expenses) => {
+      if (current(owner)) (expenses ? invalidateReads : outdate)(`balances:${groupId}`, 'home');
+    },
   });
   const { request, verifyGoogleBackend, revokeDetached } = transport;
 
@@ -1090,12 +1095,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   const invalidateReads = (...scopes: string[]) => {
     const time = now();
-    for (const scope of scopes) {
-      versions.set(scope, (versions.get(scope) ?? 0) + 1);
-      invalidatedAt.set(scope, time);
-    }
-    // Their queries go, and a read of them still in flight is cancelled: whoever still shows it
-    // reads again.
+    for (const scope of scopes) invalidatedAt.set(scope, time);
+    outdate(...scopes);
+  };
+  /**
+   * Reads in these scopes are out of date: not reused, joined or saved. Their queries go, and a read
+   * of them still in flight is cancelled: whoever still shows it reads again.
+   */
+  const outdate = (...scopes: string[]) => {
+    for (const scope of scopes) versions.set(scope, (versions.get(scope) ?? 0) + 1);
     queryClient.removeQueries({
       predicate: ({ queryKey }) => scopes.some((scope) => inScope(scope)(queryKey)),
     });
@@ -1156,11 +1164,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /**
-   * An Expense read may materialize recurring Expenses whenever it reaches the server,
-   * even after its view moved on. When it settles, Balances and Home read before then are
-   * obsolete: they are not reused, and a read of them still in flight is read again.
+   * An Expense read may materialize recurring Expenses whenever it reaches the server, even after
+   * its view moved on, so Balances wait for it (and `onLedgerRead` makes older ones obsolete).
    */
-  const trackExpenseRead = (groupId: string, owner: number, read: Promise<unknown>) => {
+  const trackExpenseRead = (groupId: string, read: Promise<unknown>) => {
     const running = materializing;
     const pending = running.get(groupId) ?? new Set<Promise<unknown>>();
     running.set(groupId, pending);
@@ -1168,7 +1175,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const settle = () => {
       pending.delete(read);
       if (!pending.size && running.get(groupId) === pending) running.delete(groupId);
-      if (current(owner)) invalidateReads(`balances:${groupId}`, 'home');
     };
     read.then(settle, settle);
   };
@@ -2638,7 +2644,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         wanted,
       );
       // Even if this view moves on, Balances and Home read before it settles are replaced.
-      trackExpenseRead(group.id, owner, reading);
+      trackExpenseRead(group.id, reading);
       reading.catch(() => undefined);
       return reading;
     };
