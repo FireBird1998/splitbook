@@ -622,6 +622,25 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /**
+   * Revokes the session a sign-in's reply set after something replaced that sign-in. It was
+   * never adopted or saved. It goes only to `/api/auth/sign-out`, and once, whatever the answer,
+   * as a sign-in sends a pending revoke: whatever replaced the sign-in has moved on. `request`
+   * sends nothing to a backend that fails the Google check.
+   */
+  const revokeAbandoned = async (abandoned: string) => {
+    try {
+      await request('/api/auth/sign-out', generation, {
+        method: 'POST',
+        body: {},
+        sessionCookie: abandoned,
+        logout: true,
+      });
+    } catch {
+      // Sent once, whatever the answer.
+    }
+  };
+
+  /**
    * Purges account-local data. A sign-out also revokes its session alongside the purge, so a
    * failed purge never skips the revoke and a slow revoke never delays the purge. The cleanup
    * marker is cleared only once both are done. Rejects with AccountCleanupError when anything
@@ -686,7 +705,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if ([...(await immediate), ...cleanup].some((result) => result.status === 'rejected')) {
         if (mode === 'account-change') {
           // The new account's session goes too: revoked first, then its saved cookie cleared.
-          if (cookie) revoking = cookie;
+          // It's no longer held, so the failed sign-in doesn't revoke it again.
+          if (cookie && current(owner)) {
+            revoking = cookie;
+            cookie = null;
+          }
           if (!(await revokeSession(owner).catch(() => false)))
             await Promise.allSettled([clearSaved(owner)]);
         }
@@ -1756,11 +1779,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const signIn = async (personaId: string) => {
+    // A sign-in this one replaces may already have its session, saved here.
+    const replacing = snapshot.auth.status === 'signing-in';
     const owner = invalidate();
     publish(cleanSnapshot({ status: 'signing-in', user: null, message: null }));
     try {
-      // A pending sign-out's revoke is sent once before its saved cookie goes.
+      // A pending sign-out's revoke is sent once before its saved cookie goes, and so is the
+      // session of a sign-in this one replaced.
       await finishSignOut(owner, true);
+      if (replacing) await revokeSession(owner, true);
       await clearSaved(owner);
       if (!config.developmentPersonaEnabled) {
         publish(cleanSnapshot({ status: 'signed-out', user: null, message: disabledMessage }));
@@ -1772,6 +1799,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         await request('/api/auth/demo-persona/sign-in', owner, {
           method: 'POST',
           body: { personaId },
+          onAbandoned: revokeAbandoned,
         }),
       );
       if (!cookie)
@@ -1780,7 +1808,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;
       if (error instanceof AccountCleanupError) {
-        await failSession(owner, error.message, 'error');
+        // The session the reply gave is revoked, unless the failed account change already did.
+        await failSession(owner, error.message, 'error', cookie);
         return;
       }
       const message =
@@ -1800,10 +1829,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // An OS account chooser cannot be aborted like fetch. Keep one active until it returns.
     if (googlePending) return;
     googlePending = true;
+    // As for a persona sign-in, a sign-in this one replaces may already have its session.
+    const replacing = snapshot.auth.status === 'signing-in';
     const owner = invalidate();
     publish(cleanSnapshot({ status: 'signing-in', user: null, message: null }));
     try {
       await finishSignOut(owner, true);
+      if (replacing) await revokeSession(owner, true);
       await clearSaved(owner);
       if (!googleEnabled || !dependencies.googleSignIn) {
         await failSession(owner, 'Google sign-in is not configured for this build.');
@@ -1827,6 +1859,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         await request('/api/auth/sign-in/social', owner, {
           method: 'POST',
           body: { provider: 'google', idToken: { token: identity.idToken, nonce: identity.nonce } },
+          onAbandoned: revokeAbandoned,
         }),
       );
       if (!cookie)
@@ -1844,12 +1877,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               : error instanceof RequestError
                 ? error.message
                 : 'Could not sign in with Google. Please try again.';
-      // An account change that failed has already revoked its session; any other is revoked here.
+      // A session the reply already gave is revoked, unless a failed account change already did.
       await failSession(
         owner,
         message,
         error instanceof AccountCleanupError ? 'error' : 'signed-out',
-        error instanceof AccountCleanupError ? null : cookie,
+        cookie,
       );
     } finally {
       googlePending = false;
