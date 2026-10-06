@@ -102,9 +102,8 @@ describe('Skeletons breathe together', () => {
     expect(pulse.stop).not.toHaveBeenCalled();
     update(<CompactText>Loaded</CompactText>);
     expect(pulse.stop).toHaveBeenCalledOnce();
-    // Shown again, a new loop starts once Android has answered again.
+    // Shown again, a new loop starts.
     update(<Skeleton width={40} />);
-    await answered();
     expect(loop).toHaveBeenCalledTimes(2);
   });
 
@@ -190,7 +189,6 @@ describe('Content takes its placeholder’s place', () => {
     const [fade] = fades();
     update(placeholder);
     expect(fade.stop).toHaveBeenCalledOnce();
-    await answered();
     update(content);
     const [, again] = fades();
     act(() => renderer!.unmount());

@@ -128,8 +128,9 @@ export function resetNative() {
   appStateListeners.length = 0;
   connectionListeners.length = 0;
   backListeners.length = 0;
-  reduceMotionListeners.length = 0;
-  reduceMotion = false;
+  // The kit listens for reduce motion for the life of the app, here a file: it hears the
+  // setting go back off, as it would on a device, instead of losing its listener.
+  if (reduceMotion) setReduceMotion(false);
   spring.mockClear();
   timing.mockClear();
   loop.mockClear();

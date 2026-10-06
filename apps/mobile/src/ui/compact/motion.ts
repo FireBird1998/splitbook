@@ -35,10 +35,10 @@ export const sweepTrack = { segment: 0.36, from: -0.36, to: 1, rest: 0.22 } as c
 
 // Reduce motion -----------------------------------------------------------------------------
 
-/** Whether reduce motion is on; null until Android has answered. */
+/** Whether reduce motion is on; null until Android has first answered. */
 let reduced: boolean | null = null;
 const watchers = new Set<() => void>();
-let subscription: { remove: () => void } | null = null;
+let listening = false;
 
 function setReduced(value: boolean) {
   if (reduced === value) return;
@@ -48,22 +48,19 @@ function setReduced(value: boolean) {
 
 /**
  * Calls `onChange` each time reduce motion changes, until the returned function is called.
- * Android is asked again whenever something starts watching after nothing did, since a change
- * made while nobody listened was never heard; until it answers, nothing moves.
+ * The first watcher asks Android and starts listening for changes, for the rest of the app's
+ * life: one listener, so the answer stays current between screens. Until Android first
+ * answers, the setting counts as on, so nothing moves on a guess.
  */
 function watchReducedMotion(onChange: () => void) {
   watchers.add(onChange);
-  if (!subscription) {
-    // Unknown until Android answers: nothing starts on an answer that may be out of date.
-    reduced = null;
-    subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduced);
+  if (!listening) {
+    listening = true;
+    AccessibilityInfo.addEventListener('reduceMotionChanged', setReduced);
     AccessibilityInfo.isReduceMotionEnabled().then(setReduced, () => setReduced(false));
   }
   return () => {
     watchers.delete(onChange);
-    if (watchers.size) return;
-    subscription?.remove();
-    subscription = null;
   };
 }
 
@@ -71,11 +68,11 @@ function watchReducedMotion(onChange: () => void) {
 const moving = () => reduced === false;
 
 /**
- * Whether reduce motion is on, for a choice made while rendering, such as a still mark in place
- * of a spinner. It renders again only when the setting changes.
+ * Whether reduce motion is on, or not known yet, for a choice made while rendering, such as a
+ * still mark in place of a spinner. It renders again only when that changes.
  */
 export function useReducedMotion() {
-  return useSyncExternalStore(watchReducedMotion, () => reduced === true);
+  return useSyncExternalStore(watchReducedMotion, () => !moving());
 }
 
 /** Keeps the setting known while `active`, without rendering again when it changes. */
