@@ -41,6 +41,11 @@ export interface GroupCreateFormProps {
   onLeaveField?: (field: GroupField) => void;
   /** Scrolls a field into view within the screen's ScrollView. */
   onReveal?: (section: View) => void;
+  /**
+   * Scrolls a note that appears under the actions, such as "Sending this Group…", just far
+   * enough to show it whole within the screen's ScrollView.
+   */
+  onShowStatus?: (note: View) => void;
 }
 
 /** A correction shown directly below the control it belongs to. */
@@ -133,8 +138,14 @@ export function GroupCreateForm({
   focus = null,
   onLeaveField = () => undefined,
   onReveal = () => undefined,
+  onShowStatus = () => undefined,
 }: GroupCreateFormProps) {
   const theme = useTheme();
+  const status = useRef<View>(null);
+  useEffect(() => {
+    // Create sits at the end of a long form: its note appears below it, maybe off screen.
+    if (busy && status.current) onShowStatus(status.current);
+  }, [busy]);
   const sections = useRef<Partial<Record<GroupField, View | null>>>({});
   const inputs = useRef<Partial<Record<GroupField, TextInput | null>>>({});
   useEffect(() => {
@@ -359,9 +370,11 @@ export function GroupCreateForm({
           />
         )}
         {busy && (
-          <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
-            {creating}
-          </CompactText>
+          <View ref={status}>
+            <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>
+              {creating}
+            </CompactText>
+          </View>
         )}
         {offline && !busy && !uncertain && (
           <CompactText variant="small" tone="secondary" style={{ textAlign: 'center' }}>

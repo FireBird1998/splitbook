@@ -48,6 +48,7 @@ import { SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
 import { ExpenseEditor } from './src/ui/expense-editor';
+import { scrollToShow } from './src/ui/scroll';
 import { recordOutline } from './src/ui/expense-record-view';
 import { RefreshStatus, RetainedNotice } from './src/ui/financial-views';
 import { GroupExpensesView } from './src/ui/group-expenses';
@@ -373,6 +374,28 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
       () => undefined,
     );
   }, []);
+  const viewport = useRef(0);
+  const offset = useRef(0);
+  // Each screen's ScrollView starts at its top.
+  useEffect(() => {
+    offset.current = 0;
+  }, [state.screen]);
+  // Scroll just far enough to show a note that appeared under the actions, whole.
+  const showWhole = useCallback((section: View) => {
+    const content = scrollContent.current;
+    if (!content) return;
+    section.measureLayout(
+      content,
+      (_x, top, _width, height) => {
+        const to = scrollToShow(
+          { top, height },
+          { offset: offset.current, viewport: viewport.current },
+        );
+        if (to !== null) scroll.current?.scrollTo({ y: to, animated: true });
+      },
+      () => undefined,
+    );
+  }, []);
   const invite = state.screen === 'invite';
   return (
     <>
@@ -416,6 +439,13 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
           innerViewRef={scrollContent as RefObject<View>}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          scrollEventThrottle={100}
+          onScroll={(event) => {
+            offset.current = event.nativeEvent.contentOffset.y;
+          }}
+          onLayout={(event) => {
+            viewport.current = event.nativeEvent.layout.height;
+          }}
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingTop: 4,
@@ -478,6 +508,7 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
               focus={state.creation.validation.focus}
               onLeaveField={controller.touchCreationField}
               onReveal={reveal}
+              onShowStatus={showWhole}
               onCheckGroups={() => void controller.checkCreatedGroups()}
               onDiscard={() =>
                 Alert.alert('Discard this Group form?', 'Your unsaved entries will be cleared.', [

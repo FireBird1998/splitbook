@@ -822,6 +822,12 @@ export function SaveBar({
         backgroundColor: theme.bgElevated,
       }}
     >
+      {/* Above Save: the bar grows upward from the bottom of the screen, so Save stays put. */}
+      {blocked ? (
+        <CompactText variant="small" tone="secondary">
+          {blocked}
+        </CompactText>
+      ) : null}
       <CompactButton
         label={label}
         amount={amount}
@@ -831,11 +837,6 @@ export function SaveBar({
         hint={blocked ?? undefined}
         onPress={onSave}
       />
-      {blocked ? (
-        <CompactText variant="small" tone="secondary">
-          {blocked}
-        </CompactText>
-      ) : null}
       {secondary ? (
         <CompactButton label={secondary.label} variant="text" block onPress={secondary.onPress} />
       ) : null}

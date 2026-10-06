@@ -518,6 +518,17 @@ describe('rendered Expense corrections', () => {
     expect(saving[0].props.accessibilityState).toEqual({ disabled: true, busy: true });
     expect(saving[0].props.disabled).toBe(true);
     expect(saving[0].findAll((node) => isHost(node, 'ActivityIndicator'))).toHaveLength(1);
+    // Its note sits above it, so the bar grows upward from the bottom and Save stays where it
+    // was tapped (#331: on the emulator it moved up 42.7dp under the note).
+    const inOrder = ui
+      .root()
+      .findAll((node) => isHost(node, 'Text') || node === saving[0])
+      .map((node) => (node === saving[0] ? 'Save' : node.children.join('')));
+    const note = inOrder.indexOf(
+      'Sending this Expense. Keep this screen open until SplitBook confirms it.',
+    );
+    expect(note).toBeGreaterThanOrEqual(0);
+    expect(note).toBeLessThan(inOrder.indexOf('Save'));
     await act(async () => release());
     await settle();
     expect(ui.writes).toEqual([`POST /api/groups/${groupId}/expenses`]);
