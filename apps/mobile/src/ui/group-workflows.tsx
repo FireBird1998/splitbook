@@ -349,9 +349,10 @@ export function GroupCreateForm({
         {!uncertain && (
           // Create stays available for incomplete input so it can explain what is missing.
           <CompactButton
-            label={busy ? 'Creating your Group…' : `Create ${noun}`}
+            label={`Create ${noun}`}
+            busy={busy ? 'Creating your Group…' : undefined}
             block
-            icon={busy ? undefined : 'add-outline'}
+            icon="add-outline"
             hint={busy ? creating : offline ? savingNeedsConnection : undefined}
             disabled={busy || offline}
             onPress={onSubmit}
@@ -548,15 +549,8 @@ export function InvitationPreview({
           </CompactText>
           {message && <Banner tone="error" message={message} />}
           <CompactButton
-            label={
-              joining
-                ? 'Joining Group…'
-                : alreadyMember
-                  ? 'Open Group'
-                  : signedIn
-                    ? 'Join Group'
-                    : 'Sign in to continue'
-            }
+            label={alreadyMember ? 'Open Group' : signedIn ? 'Join Group' : 'Sign in to continue'}
+            busy={joining ? 'Joining Group…' : undefined}
             block
             disabled={joining || waiting}
             hint={waiting ? joinNeedsConnection : undefined}

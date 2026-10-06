@@ -637,13 +637,8 @@ function ExpenseTask({
           />
         ) : canSave ? (
           <SaveBar
-            label={
-              state.status === 'saving'
-                ? 'Saving expense…'
-                : draft.original
-                  ? 'Save changes'
-                  : 'Save expense'
-            }
+            label={draft.original ? 'Save changes' : 'Save expense'}
+            busy={state.status === 'saving' ? 'Saving expense…' : undefined}
             amount={
               allocation && state.status !== 'saving' ? money(allocation.amountMinor) : undefined
             }

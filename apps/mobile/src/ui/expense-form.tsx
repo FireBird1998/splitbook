@@ -791,12 +791,15 @@ export function OptionalDetails({
 export function SaveBar({
   label,
   amount,
+  busy,
   blocked,
   onSave,
   secondary,
 }: {
   label: string;
   amount?: string;
+  /** While saving, what Save says it's doing, beside a spinner, e.g. "Saving expense…". */
+  busy?: string;
   /** Why Save is unavailable, also spoken as its hint. */
   blocked: string | null;
   onSave: () => void;
@@ -819,6 +822,7 @@ export function SaveBar({
       <CompactButton
         label={label}
         amount={amount}
+        busy={busy}
         block
         disabled={blocked !== null}
         hint={blocked ?? undefined}
