@@ -14,7 +14,7 @@ import {
   Money,
   RowAmount,
   SectionHeader,
-  Skeleton,
+  SkeletonText,
 } from './compact';
 import { Freshness, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
@@ -429,11 +429,17 @@ export function GroupBalancesView({
         {notice}
         <View accessibilityLabel="Loading balances" accessibilityState={{ busy: true }}>
           <Card padded>
-            <View style={{ gap: 10 }}>
-              <Skeleton width="45%" />
-              <Skeleton width="70%" height={26} />
-              <Skeleton width="90%" />
-            </View>
+            {/* The balance card's lines, as MemberBalanceCard lays them out. */}
+            <SkeletonText
+              gap={4}
+              lines={[
+                { width: '45%', line: 'caption' },
+                { width: '70%', line: 'form' },
+                ...(group.category === 'home'
+                  ? [{ width: '90%' as const, line: 'small' as const }]
+                  : []),
+              ]}
+            />
           </Card>
         </View>
       </View>

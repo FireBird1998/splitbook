@@ -18,7 +18,6 @@ import {
   Divider,
   LinearProgress,
   SectionHeader,
-  SkeletonRows,
 } from './compact';
 import { Freshness } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
@@ -200,7 +199,7 @@ function ActivityList({
       ) : null}
       {/* Activity read empty stays empty while it's read again. */}
       {loading && state.pagination === null ? (
-        <SkeletonRows label="Loading Activity" avatar />
+        <Card loading="Loading Activity" skeleton={{ avatar: true, heading: true }} />
       ) : (state.status === 'ready' || loading) && !state.events.length ? (
         <Card padded>
           <CompactText weight="semibold">No changes yet</CompactText>
