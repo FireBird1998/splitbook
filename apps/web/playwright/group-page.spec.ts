@@ -86,12 +86,13 @@ test('each tab is a link with its own address; Back, Forward and reload land on 
   await page.goto(GROUP);
   await expectTab(page, 'Expenses', 'expenses');
   const main = page.getByRole('main');
-  await expect(main.getByText(TABS[0].shows).first()).toBeVisible();
+  await expect(main.getByText(TABS[0].shows).first()).toBeVisible({ timeout: 30_000 });
 
   for (const { label, slug, shows } of TABS.slice(1)) {
     await sections(page).getByRole('link', { name: label, exact: true }).click();
     await expectTab(page, label, slug);
-    await expect(main.getByText(shows).first()).toBeVisible();
+    // The local suite runs `next dev`, which may still be compiling the tab's reads.
+    await expect(main.getByText(shows).first()).toBeVisible({ timeout: 30_000 });
   }
 
   // Back walks the tabs in reverse, each with its own content.
@@ -120,12 +121,12 @@ test('the old ?tab=balances and ?action=add-expense links still open the right p
   await page.goto(`${GROUP}?tab=balances`);
   await expectTab(page, 'Balances', 'balances');
   expect(new URL(page.url()).search).toBe('');
-  await expect(main.getByText('Who pays whom')).toBeVisible();
+  await expect(main.getByText('Who pays whom')).toBeVisible({ timeout: 30_000 });
 
   await page.goto(`${GROUP}?action=add-expense`);
   await page.waitForURL((url) => url.pathname === `${GROUP}/expenses`);
   const dialog = page.getByRole('dialog');
-  await expect(dialog.getByText('Add expense')).toBeVisible();
+  await expect(dialog.getByText('Add expense')).toBeVisible({ timeout: 30_000 });
   // The form opens once: the address drops the request, so reloading doesn't reopen it.
   await expect.poll(() => new URL(page.url()).search).toBe('');
   await page.keyboard.press('Escape');
@@ -185,7 +186,7 @@ test('every tab passes axe', async ({ page }, testInfo) => {
     await page.goto(`${GROUP}/${slug}`);
     await expectTab(page, label, slug);
     await expectThemeApplied(page, testInfo);
-    await expect(page.getByRole('main').getByText(shows).first()).toBeVisible();
+    await expect(page.getByRole('main').getByText(shows).first()).toBeVisible({ timeout: 30_000 });
     if (slug !== 'expenses') {
       await expectNoSeriousA11yViolations(page, testInfo, `group-${slug}`);
       continue;
