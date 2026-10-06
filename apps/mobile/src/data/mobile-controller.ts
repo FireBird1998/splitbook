@@ -1,3 +1,19 @@
+import { CancelledError, QueryClient, type QueryFunctionContext } from '@tanstack/query-core';
+import {
+  activityPageKey,
+  expensePageKey,
+  expenseRecordKey,
+  groupBalancesKey,
+  groupKey,
+  groupsKey,
+  homeBalancesKey,
+  isQueryKey,
+  matchGroup,
+  matchScope,
+  queryKeyPath,
+  type QueryKey,
+  type QueryScope,
+} from '@splitbook/shared/query-keys';
 import { cachedRead } from './offline-cache';
 import {
   activityExpenseId,
@@ -117,21 +133,22 @@ export { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
 export const DISPLAY_FRESHNESS_MS = 30_000;
 
 /**
- * What a display read describes, for invalidation: the Groups list, Home, one Group's
- * details, its running Balances, or the rest of its ledger (Expense pages and records,
- * Month summaries and Activity).
+ * Whether a display read is in this invalidation scope: the Groups list ('groups'), Home
+ * ('home'), or for one Group its details, its running Balances or the rest of its ledger
+ * (Expense pages and records, Month summaries and Activity): 'group:<id>', 'balances:<id>',
+ * 'ledger:<id>'. The shared key matchers decide it.
  */
-function readScope(path: string) {
-  if (path === '/api/groups') return 'groups';
-  if (path === '/api/user/balances') return 'home';
-  const [, groupId, rest] = /^\/api\/groups\/([a-f\d]{24})(.*)$/i.exec(path) ?? [];
-  if (!groupId) return path;
-  return rest === ''
-    ? `group:${groupId}`
-    : rest === '/balances'
-      ? `balances:${groupId}`
-      : `ledger:${groupId}`;
-}
+const inScope = (scope: string) => {
+  const [name, groupId] = scope.split(':') as [QueryScope, string?];
+  return (key: unknown) =>
+    matchScope(name)(key) && (groupId === undefined || matchGroup(groupId)(key));
+};
+/** What a map of scopes holds for this read's scope. */
+const scoped = <T>(map: Map<string, T>, key: QueryKey) =>
+  [...map].find(([scope]) => inScope(scope)(key))?.[1];
+
+/** A read a change, a denial or a Groups list made obsolete, which its caller no longer shows. */
+class Obsolete extends Superseded {}
 
 /** The view on screen, which a pull or an automatic refresh belongs to. */
 export function shownView({
@@ -422,11 +439,31 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let offlineSession = false;
   const staleReads = new Map<string, number | null>();
   const freshness = dependencies.displayFreshnessMs ?? DISPLAY_FRESHNESS_MS;
-  type Verified = { value: unknown; refreshedAt: number; version: number };
-  /** This session's verified responses by path, with when each was received. */
-  const reads = new Map<string, Omit<Verified, 'version'>>();
-  /** At most one network read per path; later identical reads share it. */
-  const inflight = new Map<string, { owner: number; version: number; read: Promise<Verified> }>();
+  /**
+   * A display read as the query cache holds it (ADR 0006, AMEND-2): the server's JSON as
+   * received, parsed only when used, and when it was verified. A saved copy is never fresh.
+   */
+  type Envelope = { source: 'network' | 'saved'; refreshedAt: number; value: unknown };
+  const staleTime = ({ state }: { state: { data?: unknown } }) =>
+    (state.data as Envelope | undefined)?.source === 'saved' ? 0 : freshness;
+  /**
+   * The one owner of this controller's display reads (ADR 0006, M1-1): it fetches, joins and
+   * keeps every server response a view shows, under the shared query keys (#210). No automatic
+   * retries, so a failed read falls back to the saved copy at once; structural sharing on; fresh
+   * for the display freshness window on TanStack's own clock, `Date.now`; never paused (M1-4,
+   * M1-6). A read stays until a change, a denial or the session's end removes it.
+   */
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        structuralSharing: true,
+        staleTime,
+        networkMode: 'always',
+        gcTime: Infinity,
+      },
+    },
+  });
   /** Bumped when a confirmed change, denial or newer ledger read makes a scope's responses obsolete. */
   const versions = new Map<string, number>();
   const invalidatedAt = new Map<string, number>();
@@ -513,8 +550,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     returnPages = returnActivityPages = null;
     offlineSession = false;
     staleReads.clear();
-    reads.clear();
-    inflight.clear();
     versions.clear();
     invalidatedAt.clear();
     untrusted.clear();
@@ -525,6 +560,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     groupsUnanswered = false;
     listedGroups = null;
     unlistedGroups = new Set();
+    // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
+    queryClient.clear();
     transport.abortAll();
     cookie = null;
     cookieAccount = null;
@@ -929,15 +966,33 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     await saveVerifiedIdentity(session, owner);
   };
 
-  const versionOf = (path: string) => versions.get(readScope(path)) ?? 0;
+  /** The signed-in account in the environment the app reads from: every query key holds both. */
+  const account = () => {
+    if (!snapshot.auth.user) throw new Superseded();
+    return { environment: apiBase, accountId: snapshot.auth.user.id };
+  };
+  /** A page of 20 Expenses with the member's breakdown, by Month in a Household. */
+  const expenseKey = (groupId: string, category: string, month: string | null, page: number) =>
+    expensePageKey(account(), groupId, {
+      page,
+      limit: 20,
+      // Every Theme's summary shows the member's own share and paid amount.
+      includeMemberBreakdown: true,
+      ...(category === 'home' && month ? getLocalMonthIsoRange(month) : {}),
+    });
+  /** A page of 20 Activity events: the Group's, or one Expense's history. */
+  const activityKey = (groupId: string, page: number, expenseId?: string) =>
+    activityPageKey(account(), groupId, { page, limit: 20, ...(expenseId && { expenseId }) });
+
+  const versionOf = (key: QueryKey) => scoped(versions, key) ?? 0;
 
   /**
    * Saved copies are kept only for Groups the latest Groups list holds, or that Home has gained
    * since (a Group just created). One the list leaves out, such as an archived Group the member
    * can still open, is shown but never saved.
    */
-  const savable = (path: string) => {
-    const id = /^\/api\/groups\/([a-f\d]{24})/i.exec(path)?.[1];
+  const savable = (key: QueryKey) => {
+    const id = key.length === 5 ? key[3] : null;
     return (
       !id ||
       !listedGroups ||
@@ -956,7 +1011,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       versions.set(scope, (versions.get(scope) ?? 0) + 1);
       invalidatedAt.set(scope, time);
     }
-    for (const path of [...reads.keys()]) if (scopes.includes(readScope(path))) reads.delete(path);
+    // Their queries go, and a read of them still in flight is cancelled: whoever still shows it
+    // reads again.
+    queryClient.removeQueries({
+      predicate: ({ queryKey }) => scopes.some((scope) => inScope(scope)(queryKey)),
+    });
   };
   /** A confirmed Expense or Settlement change affects every page, Month, Balance, Home and Activity view. */
   const ledgerChanged = (groupId: string) =>
@@ -981,12 +1040,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /** The view a display read belongs to, for explicit refresh intent. */
-  const viewOf = (path: string) =>
-    path === '/api/groups' || path === '/api/user/balances'
-      ? path === '/api/groups'
-        ? 'groups'
-        : 'home'
-      : `group:${/^\/api\/groups\/([a-f\d]{24})/i.exec(path)?.[1]}`;
+  const viewOf = (key: QueryKey) => (key.length === 5 ? `group:${key[3]}` : key[0]);
 
   /** Runs an explicit refresh; while it runs, overlapping reads of these views read again too. */
   const explicitly = async <T>(views: string[], run: () => Promise<T>): Promise<T> => {
@@ -1004,17 +1058,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /** Reusable without a request: verified this session, recently, and never while offline. */
-  const freshRead = (path: string) => {
-    const saved = reads.get(path);
-    const age = saved ? now() - saved.refreshedAt : Infinity;
-    return saved &&
+  const freshRead = (key: QueryKey) => {
+    const query = queryClient.getQueryCache().find<Envelope>({ queryKey: key, exact: true });
+    return query?.state.data &&
       !offlineSession &&
       !snapshot.offline.active &&
       // An explicit refresh of this view is still running: join it instead.
-      !explicit.has(viewOf(path)) &&
-      age >= 0 &&
-      age < freshness
-      ? saved
+      !explicit.has(viewOf(key)) &&
+      // The clock moved back past it: how old it is can't be known, so it isn't reused.
+      query.state.dataUpdatedAt <= Date.now() &&
+      !query.isStaleByTime(staleTime(query))
+      ? query.state.data
       : null;
   };
 
@@ -1067,17 +1121,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * this device's saved copy for the same account and path. Never a substitute for the read.
    */
   const peek = async <T>(
-    path: string,
+    key: QueryKey,
     owner: number,
     parse: (value: unknown) => T,
   ): Promise<{ value: T; refreshedAt: number } | null> => {
     try {
-      const saved = reads.get(path);
+      const path = queryKeyPath(key);
+      const saved = queryClient.getQueryData<Envelope>(key);
       if (saved) return { value: parse(saved.value), refreshedAt: saved.refreshedAt };
       const lease = accountStorage();
       if (!lease || !dependencies.readCache) return null;
       const epoch = cacheEpoch,
-        version = versionOf(path);
+        version = versionOf(key);
       const stored = cachedRead(
         await lease.write(() => dependencies.readCache!.load(lease.accountId, path)),
         lease.accountId,
@@ -1088,8 +1143,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         !stored ||
         !current(owner) ||
         epoch !== cacheEpoch ||
-        version !== versionOf(path) ||
-        stored.refreshedAt <= (invalidatedAt.get(readScope(path)) ?? -Infinity)
+        version !== versionOf(key) ||
+        stored.refreshedAt <= (scoped(invalidatedAt, key) ?? -Infinity)
       )
         return null;
       return { value: parse(stored.value), refreshedAt: stored.refreshedAt };
@@ -1100,60 +1155,69 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /**
-   * One network read per path. A caller joins a read already in flight unless a confirmed
-   * change or denial since it started made it obsolete. `validate` runs before anything is
-   * kept, so a malformed response is never reused or saved.
+   * The request behind each query's latest read. When the query cache cancels a read, whoever
+   * sent or joined it waits for that request, and takes a refusal it answered with.
    */
-  const sharedRead = (path: string, owner: number, validate: (value: unknown) => unknown) => {
-    const version = versionOf(path);
-    const pending = inflight.get(path);
-    if (pending?.owner === owner && pending.version === version) return pending.read;
-    const lease = accountStorage(),
-      epoch = cacheEpoch;
-    const read = (async (): Promise<Verified> => {
+  const requests = new WeakMap<object, Promise<Envelope>>();
+
+  /**
+   * One network read through the query cache: a read of the same key already in flight is
+   * joined, never sent twice, and a confirmed change or denial cancels one it made obsolete.
+   * `validate` runs before anything is kept, so a malformed response is never reused or saved.
+   * The answer is saved on this device for offline use, unless it is obsolete by then.
+   */
+  const fetchRead = (key: QueryKey, owner: number, validate: (value: unknown) => unknown) => {
+    let started: Promise<Envelope> | undefined;
+    const read = async ({ signal }: QueryFunctionContext): Promise<Envelope> => {
+      const path = queryKeyPath(key),
+        version = versionOf(key),
+        lease = accountStorage(),
+        epoch = cacheEpoch;
       if (offlineSession || snapshot.offline.active) await revalidateSession(owner);
-      const value = await request(path, owner);
+      // A cancel ends it as cancelled, never as a network failure: it is never offline.
+      const value = await request(path, owner, { signal });
       validate(value);
-      const refreshedAt = now();
-      // An obsolete response still reaches its callers, which read again; it is never kept.
-      if (!current(owner) || version !== versionOf(path)) return { value, refreshedAt, version };
-      reads.set(path, { value, refreshedAt });
-      if (lease && dependencies.readCache) {
-        try {
-          await lease.write(async () => {
-            if (epoch !== cacheEpoch || version !== versionOf(path) || !savable(path))
-              throw new Superseded();
-            await dependencies.readCache!.save(lease.accountId, path, {
-              version: 1,
-              accountId: lease.accountId,
-              path,
-              refreshedAt,
-              value,
-            });
+      // Verified on the query cache's clock, which decides its freshness too.
+      const verified: Envelope = { source: 'network', refreshedAt: Date.now(), value };
+      if (!current(owner) || version !== versionOf(key) || !lease || !dependencies.readCache)
+        return verified;
+      try {
+        await lease.write(async () => {
+          if (epoch !== cacheEpoch || version !== versionOf(key) || !savable(key))
+            throw new Superseded();
+          await dependencies.readCache!.save(lease.accountId, path, {
+            version: 1,
+            accountId: lease.accountId,
+            path,
+            refreshedAt: verified.refreshedAt,
+            value,
           });
-        } catch (error) {
-          if (!current(owner)) throw new Superseded();
-          // A newer cache epoch only means this response isn't saved; it still answers its
-          // callers. A response for a Group since lost is obsolete by version and read again.
-          if (!(error instanceof Superseded) && epoch === cacheEpoch)
-            publish({
-              ...snapshot,
-              offline: {
-                ...snapshot.offline,
-                message:
-                  'Could not save this view for offline use. Online data is still available.',
-              },
-            });
-        }
+        });
+      } catch (error) {
+        if (!current(owner)) throw new Superseded();
+        // A newer cache epoch only means this response isn't saved; it still answers its
+        // callers. A response for a Group since lost is obsolete by version and read again.
+        if (!(error instanceof Superseded) && epoch === cacheEpoch)
+          publish({
+            ...snapshot,
+            offline: {
+              ...snapshot.offline,
+              message: 'Could not save this view for offline use. Online data is still available.',
+            },
+          });
       }
-      return { value, refreshedAt, version };
-    })();
-    inflight.set(path, { owner, version, read });
-    const settle = () => {
-      if (inflight.get(path)?.read === read) inflight.delete(path);
+      return verified;
     };
-    read.then(settle, settle);
-    return read;
+    const options = queryClient.defaultQueryOptions({
+      queryKey: key,
+      queryFn: (context: QueryFunctionContext) => (started = read(context)),
+    });
+    // Always a read: whether a verified one may be reused instead is the caller's (freshRead).
+    const query = queryClient.getQueryCache().build(queryClient, options);
+    const fetching = query.fetch(options);
+    if (started) requests.set(query, started);
+    // The request behind the read, whether this call sent it or joined it.
+    return { fetching, request: requests.get(query) };
   };
 
   /**
@@ -1162,29 +1226,44 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * response read again.
    */
   const readCached = async <T>(
-    path: string,
+    key: QueryKey,
     owner: number,
     parse: (value: unknown) => T,
     wanted?: () => boolean,
   ): Promise<T> => {
-    const lease = accountStorage(),
+    const path = queryKeyPath(key),
+      lease = accountStorage(),
       view = viewRequest,
       epoch = cacheEpoch,
-      startVersion = versionOf(path),
+      startVersion = versionOf(key),
       shown = wanted ?? (() => view === viewRequest),
       // Home's Groups list keeps its provenance while another view is open (startReadView),
       // so its read records where its answer came from on whatever screen it lands.
       recorded = path === '/api/groups' ? shown : () => view === viewRequest;
     try {
-      let result = await sharedRead(path, owner, parse);
-      // A confirmed change during the read made its response obsolete: read once more,
-      // joining the read that change already started where there is one.
-      for (
-        let attempt = 0;
-        attempt < 2 && result.version !== versionOf(path) && current(owner) && shown();
-        attempt += 1
-      )
-        result = await sharedRead(path, owner, parse);
+      let result: Envelope | null = null;
+      // A confirmed change or denial during the read cancelled it, as obsolete: while the caller
+      // still shows it, read again, joining the read that change already started where there is
+      // one. Each cancel takes a change of its own, so this ends; an obsolete answer is never
+      // shown. A cancel is never a failure to reach the server, so it never falls back to the
+      // saved copy.
+      while (!result) {
+        const read = fetchRead(key, owner, parse);
+        try {
+          result = await read.fetching;
+        } catch (error) {
+          if (!(error instanceof CancelledError)) throw error;
+          // The request ends first, so whatever its answer set off has finished: a session
+          // that ended, or a Group whose refusal is this read's answer.
+          const answer = await read.request?.then(
+            () => null,
+            (failure: unknown) => failure,
+          );
+          if (!current(owner) || answer instanceof Superseded) throw new Superseded();
+          if (answer instanceof RequestError && answer.kind !== 'cancelled') throw answer;
+          if (!shown()) throw new Obsolete();
+        }
+      }
       const parsed = parse(result.value);
       if (recorded() && current(owner)) {
         staleReads.delete(path);
@@ -1201,17 +1280,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         throw error;
       // A newer cache epoch, or a change, denial or Groups list that made this path obsolete,
       // may have dropped the saved copy read here: read again, while the caller still shows it.
-      const overtaken = () => epoch !== cacheEpoch || startVersion !== versionOf(path);
+      const overtaken = () => epoch !== cacheEpoch || startVersion !== versionOf(key);
       const again = () => {
         if (!current(owner) || !shown()) throw new Superseded();
-        return readCached(path, owner, parse, wanted);
+        return readCached(key, owner, parse, wanted);
       };
       if (overtaken()) return again();
       const stored = await lease.write(() => dependencies.readCache!.load(lease.accountId, path));
       const copy = cachedRead(stored, lease.accountId, path, now());
       // As in peek, a saved copy older than a change it couldn't be removed for is never shown.
-      const cached =
-        copy && copy.refreshedAt > (untrusted.get(readScope(path)) ?? -Infinity) ? copy : null;
+      const cached = copy && copy.refreshedAt > (scoped(untrusted, key) ?? -Infinity) ? copy : null;
       if (!current(owner)) throw new Superseded();
       if (overtaken()) return again();
       if (view === viewRequest) offlineSession = true;
@@ -1415,7 +1493,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     viewRequest += 1;
     const listRead = ++groupsRequest;
     groupsUnanswered = false;
-    const path = '/api/groups';
+    const key = groupsKey(account()),
+      path = queryKeyPath(key);
     startReadView();
     publish({
       ...snapshot,
@@ -1424,17 +1503,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
     });
     try {
-      const fresh = reuse ? freshRead(path) : null;
+      const fresh = reuse ? freshRead(key) : null;
       const reading = fresh
         ? null
-        : readCached(path, owner, parseGroups, () => listRead === groupsRequest);
+        : readCached(key, owner, parseGroups, () => listRead === groupsRequest);
       reading?.catch(() => undefined);
       // The version current just after the answer settles. readCached already reads again for a
       // change during the read; the checks below catch one between the answer and its use.
-      const answered = reading?.then(() => versionOf(path));
+      const answered = reading?.then(() => versionOf(key));
       answered?.catch(() => undefined);
       if (reading && !snapshot.groups.data.length) {
-        const saved = await peek(path, owner, parseGroups);
+        const saved = await peek(key, owner, parseGroups);
         if (
           saved &&
           current(owner) &&
@@ -1445,10 +1524,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           publish({ ...snapshot, groups: { ...snapshot.groups, data: saved.value, loaded: true } });
       }
       const groups = fresh ? parseGroups(fresh.value) : await reading!;
-      const version = answered ? await answered : versionOf(path);
+      const version = answered ? await answered : versionOf(key);
       assertCurrent(owner);
       if (listRead !== groupsRequest) return;
-      if (version !== versionOf(path)) throw new Superseded();
+      if (version !== versionOf(key)) throw new Superseded();
       // Do not display a malformed server response as somebody else's groups.
       if (!memberOfAll(groups)) {
         throw new RequestError('The server returned invalid group membership. Please refresh.');
@@ -1457,14 +1536,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const lost = new Set<string>();
       if (reading && !staleReads.has(path)) {
         const listed = new Set(groups.map((group) => group.id));
-        for (const key of [
-          ...snapshot.groups.data.map(({ id }) => `/api/groups/${id}`),
-          ...reads.keys(),
-          ...inflight.keys(),
-        ]) {
-          const id = /^\/api\/groups\/([a-f\d]{24})/i.exec(key)?.[1];
-          if (id && !listed.has(id)) lost.add(id);
-        }
+        const queries = queryClient.getQueryCache().findAll({
+          predicate: ({ state }) => state.data !== undefined || state.fetchStatus === 'fetching',
+        });
+        for (const id of [
+          ...snapshot.groups.data.map((group) => group.id),
+          ...queries.flatMap(({ queryKey }) =>
+            isQueryKey(queryKey) && queryKey.length === 5 ? [queryKey[3]] : [],
+          ),
+        ])
+          if (!listed.has(id)) lost.add(id);
         listedGroups = listed;
         unlistedGroups = lost;
         // They lose everything read for them, and Home with them. A read of one still running
@@ -1473,7 +1554,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           invalidateReads(`group:${id}`, `ledger:${id}`, `balances:${id}`, 'home');
         // With no list known yet, this device may hold Groups the trim drops, and Home's saved
         // figures with them: figures still being read are read again after it.
-        if (!snapshot.groups.loaded && inflight.has('/api/user/balances')) invalidateReads('home');
+        if (
+          !snapshot.groups.loaded &&
+          queryClient.isFetching({ queryKey: homeBalancesKey(account()), exact: true })
+        )
+          invalidateReads('home');
       }
       const lease = accountStorage();
       if (reading && lease && dependencies.readCache && !staleReads.has(path)) {
@@ -1492,7 +1577,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           throw new Superseded();
         }
         if (!current(owner) || listRead !== groupsRequest) return;
-        if (version !== versionOf(path)) throw new Superseded();
+        if (version !== versionOf(key)) throw new Superseded();
       }
       publish({
         ...snapshot,
@@ -1573,16 +1658,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /** Offline fallbacks and reused reads keep their original time. */
-  const readAt = (path: string) =>
-    staleReads.has(path) ? (staleReads.get(path) ?? null) : (reads.get(path)?.refreshedAt ?? now());
+  const readAt = (key: QueryKey) => {
+    const path = queryKeyPath(key);
+    return staleReads.has(path)
+      ? (staleReads.get(path) ?? null)
+      : (queryClient.getQueryData<Envelope>(key)?.refreshedAt ?? Date.now());
+  };
 
   /** `reuse` accepts figures verified within the display freshness window. */
   const readHome = async (reuse: boolean) => {
     if (snapshot.auth.status !== 'authenticated') return;
     const owner = generation;
     const read = ++homeRequest;
-    const path = '/api/user/balances';
-    const fresh = reuse ? freshRead(path) : null;
+    const key = homeBalancesKey(account());
+    const fresh = reuse ? freshRead(key) : null;
     if (fresh) {
       const { buckets, byGroup } = parseHomeBalances(fresh.value);
       publish({
@@ -1601,10 +1690,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // The same account's figures stay readable, and keep their time, until replaced.
     publish({ ...snapshot, home: { ...snapshot.home, status: 'loading', message: null } });
     try {
-      const reading = readCached(path, owner, parseHomeBalances, () => read === homeRequest);
+      const reading = readCached(key, owner, parseHomeBalances, () => read === homeRequest);
       reading.catch(() => undefined);
       if (snapshot.home.data === null) {
-        const saved = await peek(path, owner, parseHomeBalances);
+        const saved = await peek(key, owner, parseHomeBalances);
         if (saved && current(owner) && read === homeRequest && snapshot.home.data === null)
           publish({
             ...snapshot,
@@ -1625,7 +1714,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           data: buckets,
           byGroup,
           message: null,
-          refreshedAt: readAt(path),
+          refreshedAt: readAt(key),
           stale: false,
         },
       });
@@ -1866,7 +1955,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     view: number,
     previousMonth: string | null | undefined,
   ) => {
-    const saved = await peek(`/api/groups/${id}`, owner, parseGroup);
+    const saved = await peek(groupKey(account(), id), owner, parseGroup);
     const group = saved?.value;
     if (
       !saved ||
@@ -1882,10 +1971,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ? currentMonthKey(new Date(now()))
           : previousMonth;
     const [expenses, balances] = await Promise.all([
-      peek(expensePath(id, group.category, month, 1), owner, (value) =>
+      peek(expenseKey(id, group.category, month, 1), owner, (value) =>
         parseExpensePage(value, id, group.defaultCurrency),
       ),
-      peek(`/api/groups/${id}/balances`, owner, parseGroupBalances),
+      peek(groupBalancesKey(account(), id), owner, parseGroupBalances),
     ]);
     if (!current(owner) || view !== viewRequest || snapshot.detail.id !== id) return false;
     publish({
@@ -1942,7 +2031,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const destination =
       requested ?? (snapshot.detail.id === id ? snapshot.destination : 'expenses');
     const view = ++viewRequest;
-    const path = `/api/groups/${id}`;
     startReadView();
     publish({
       ...snapshot,
@@ -1975,8 +2063,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     try {
       if (!objectId.safeParse(id).success)
         throw new RequestError('This group is no longer available.', 404);
-      const fresh = reuse ? freshRead(path) : null;
-      const reading = fresh ? null : readCached(path, owner, parseGroup);
+      const key = groupKey(account(), id);
+      const fresh = reuse ? freshRead(key) : null;
+      const reading = fresh ? null : readCached(key, owner, parseGroup);
       reading?.catch(() => undefined);
       // The saved copy follows the same Month rule as figures retained on screen.
       if (!retained) retained = await showSavedGroup(id, owner, view, previousMonth);
@@ -1993,7 +2082,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       publish({
         ...snapshot,
-        detail: { status: 'ready', id, data: group, message: null, refreshedAt: readAt(path) },
+        detail: { status: 'ready', id, data: group, message: null, refreshedAt: readAt(key) },
         financial: {
           ...snapshot.financial,
           // While a refresh reads the Group, the member can still choose another Month:
@@ -2168,8 +2257,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     const read = ++balancesRequest;
-    const path = `/api/groups/${group.id}/balances`;
-    const fresh = reuse ? freshRead(path) : null;
+    const key = groupBalancesKey(account(), group.id);
+    const fresh = reuse ? freshRead(key) : null;
     if (fresh) {
       publish({
         ...snapshot,
@@ -2195,7 +2284,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     try {
       const data = await readCached(
-        path,
+        key,
         owner,
         parseGroupBalances,
         () => view === viewRequest && read === balancesRequest,
@@ -2209,7 +2298,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             status: 'ready',
             data,
             message: null,
-            refreshedAt: readAt(path),
+            refreshedAt: readAt(key),
             stale: false,
           },
         },
@@ -2310,21 +2399,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const refreshBalances = () =>
     explicitly([`group:${snapshot.detail.data?.id}`], () => loadBalances(false));
 
-  const expensePath = (groupId: string, category: string, month: string | null, page: number) => {
-    // Every Theme's summary shows the member's own share and paid amount.
-    const params = new URLSearchParams({
-      page: String(page),
-      limit: '20',
-      includeMemberBreakdown: '1',
-    });
-    if (category === 'home' && month) {
-      const { dateFrom, dateTo } = getLocalMonthIsoRange(month);
-      params.set('dateFrom', dateFrom);
-      params.set('dateTo', dateTo);
-    }
-    return `/api/groups/${groupId}/expenses?${params}`;
-  };
-
   const selectMonth = async (month: string | null) => {
     if (
       snapshot.auth.status !== 'authenticated' ||
@@ -2391,7 +2465,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // A reused first page alone would drop the rest of the range a return needs.
     const fresh =
       !append && reuse && through === 1
-        ? freshRead(expensePath(group.id, group.category, snapshot.financial.month, 1))
+        ? freshRead(expenseKey(group.id, group.category, snapshot.financial.month, 1))
         : null;
     if (fresh) {
       const page = parse(fresh.value);
@@ -2436,7 +2510,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const view = viewRequest;
     const read = ++financialRequest;
     const month = snapshot.financial.month;
-    const path = expensePath(group.id, group.category, month, pageNumber);
+    const key = expenseKey(group.id, group.category, month, pageNumber);
     const shown = expenses.month === month ? expenses : emptyExpenses(month);
     beginExpenseRead(group.id);
     // A refresh keeps Expenses readable only when they belong to the Month being read.
@@ -2452,7 +2526,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const wanted = () => current(owner) && view === viewRequest && read === financialRequest;
     const readPage = (number: number) => {
       const reading = readCached(
-        expensePath(group.id, group.category, month, number),
+        expenseKey(group.id, group.category, month, number),
         owner,
         parse,
         wanted,
@@ -2466,7 +2540,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const reading = readPage(pageNumber);
       // A Month not on screen shows its saved copy, with its own time, while it is read again.
       if (!append && !shown.data.length && shown.summary === null) {
-        const saved = await peek(path, owner, parse);
+        const saved = await peek(key, owner, parse);
         if (saved && wanted())
           publish({
             ...snapshot,
@@ -2485,7 +2559,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const first = await reading;
       if (!wanted()) return await followSupersededExpenseRead(group.id, owner);
       if (first.pagination.page !== pageNumber) throw new Error('Unexpected expense page.');
-      const refreshedAt = append ? expenses.refreshedAt : readAt(path);
+      const refreshedAt = append ? expenses.refreshedAt : readAt(key);
       const rows = [...(append ? expenses.data : []), ...first.expenses];
       let last = first;
       let more: { status: 'idle' | 'error'; message: string | null } = {
@@ -2538,9 +2612,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (!append && returnPages?.month === month) returnPages = null;
       await loadBalances(false);
     } catch (error) {
-      if (!current(owner) || error instanceof Superseded) return;
-      // A superseded read that failed may still have reached the server.
-      if (view !== viewRequest || read !== financialRequest)
+      if (!current(owner) || (error instanceof Superseded && !(error instanceof Obsolete))) return;
+      // A superseded read that failed, or that a change cancelled, may still have reached the
+      // server.
+      if (error instanceof Obsolete || view !== viewRequest || read !== financialRequest)
         return await followSupersededExpenseRead(group.id, owner);
       if (dropDeniedGroup(group.id, error)) return;
       const unavailableOffline =
@@ -2624,11 +2699,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (!objectId.safeParse(groupId).success)
         throw new RequestError('This Group is unavailable.', 404);
       const wanted = () => current(owner) && view === viewRequest && read === activityRequest;
-      const pagePath = (number: number) =>
-        `/api/groups/${groupId}/activity?page=${number}&limit=20`;
       const readPage = (number: number) =>
         readCached(
-          pagePath(number),
+          activityKey(groupId, number),
           owner,
           (value) => parseActivityPage(value, groupId, number),
           wanted,
@@ -2662,7 +2735,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           status: 'ready',
           moreStatus,
           message: null,
-          refreshedAt: append ? snapshot.activity.refreshedAt : readAt(pagePath(1)),
+          refreshedAt: append ? snapshot.activity.refreshedAt : readAt(activityKey(groupId, 1)),
         },
       });
       if (!append) returnActivityPages = null;
@@ -2758,7 +2831,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     let targetRequested = false;
     try {
-      const group = await readCached(`/api/groups/${groupId}`, owner, parseGroup);
+      const group = await readCached(groupKey(account(), groupId), owner, parseGroup);
       if (!current(owner) || view !== viewRequest || read !== activityDetailRequest) return;
       if (
         group.id !== groupId ||
@@ -2769,7 +2842,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       let target: typeof activity.target = { status: 'none' };
       if (expenseId) {
         targetRequested = true;
-        target = await readCached(`/api/groups/${groupId}/expenses/${expenseId}`, owner, (value) =>
+        target = await readCached(expenseRecordKey(account(), groupId, expenseId), owner, (value) =>
           parseActivityExpense(value, groupId, expenseId),
         );
       }
@@ -2979,7 +3052,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             blank: record.blank,
           },
         });
-      const context = await readCached(`/api/groups/${groupId}`, owner, parseExpenseContext);
+      const context = await readCached(groupKey(account(), groupId), owner, parseExpenseContext);
       if (!current(owner) || view !== viewRequest) return;
       if (
         context.group.id !== groupId ||
@@ -3020,7 +3093,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       const original =
         (record === null || held) && expenseId
-          ? await readCached(`/api/groups/${groupId}/expenses/${expenseId}`, owner, (value) =>
+          ? await readCached(expenseRecordKey(account(), groupId, expenseId), owner, (value) =>
               parseExpenseRecord(value, groupId, expenseId),
             ).catch((error: unknown) => {
               // The Group was just read: what's missing is this Expense.
@@ -3129,7 +3202,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     );
     try {
       const page = await readCached(
-        `/api/groups/${groupId}/activity?expenseId=${expenseId}&page=${pageNumber}&limit=20`,
+        activityKey(groupId, pageNumber, expenseId),
         owner,
         (value) => parseActivityPage(value, groupId, pageNumber, expenseId),
         wanted,
@@ -3180,7 +3253,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const groupId = snapshot.expense.groupId,
       expenseId = snapshot.expense.draft?.original?._id;
     if (snapshot.screen !== 'expense' || !onRecord() || !groupId || !expenseId) return;
-    const path = `/api/groups/${groupId}/expenses/${expenseId}`;
+    const key = expenseRecordKey(account(), groupId, expenseId),
+      path = queryKeyPath(key);
     const showing = () =>
       current(owner) &&
       view === viewRequest &&
@@ -3189,7 +3263,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.expense.groupId === groupId &&
       snapshot.expense.draft?.original?._id === expenseId;
     try {
-      const original = await readCached(path, owner, (value) =>
+      const original = await readCached(key, owner, (value) =>
         parseExpenseRecord(value, groupId, expenseId),
       );
       if (!showing()) return;
@@ -5591,9 +5665,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         readingGroup = true;
         if (screen === 'members' && groupId) {
           // Read as on the Group view: a foreground refresh reuses a recently verified read.
-          const path = `/api/groups/${groupId}`;
-          const fresh = reuse ? freshRead(path) : null;
-          const group = fresh ? parseGroup(fresh.value) : await readCached(path, owner, parseGroup);
+          const key = groupKey(account(), groupId);
+          const fresh = reuse ? freshRead(key) : null;
+          const group = fresh ? parseGroup(fresh.value) : await readCached(key, owner, parseGroup);
           if (!current(owner) || view !== viewRequest || snapshot.screen !== 'members') return;
           if (
             group.id !== groupId ||
@@ -5610,11 +5684,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               id: groupId,
               data: group,
               message: null,
-              refreshedAt: readAt(path),
+              refreshedAt: readAt(key),
             },
           });
         } else if (dependencies.readCache && groupId) {
-          const context = await readCached(`/api/groups/${groupId}`, owner, parseExpenseContext);
+          const context = await readCached(
+            groupKey(account(), groupId),
+            owner,
+            parseExpenseContext,
+          );
           if (!current(owner) || view !== viewRequest) return;
           if (
             context.group.id !== groupId ||

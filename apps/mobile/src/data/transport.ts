@@ -6,6 +6,11 @@ export const storageMessage = 'Could not safely save your session. Please try si
 
 /** How long a request may take, from sending it until its whole body is read. */
 const REQUEST_TIMEOUT_MS = 20_000;
+/**
+ * How long losing a Group waits for its refusal's body, whose code and message it keeps: the
+ * Group's content goes at once, never after a reply that stalls (#214).
+ */
+const DENIAL_BODY_MS = 1_000;
 
 /** The platform's own timer: the default for `MobileDependencies.timer`. */
 const platformTimer: MobileTimer = (run, ms) => {
@@ -271,12 +276,23 @@ export function createTransport({
         // The path decides the denial purge, never the failure's kind: a 404 under a Group's
         // Expenses is access-denied too, but purges nothing.
         const deniedGroup = /^\/api\/groups\/([a-f\d]{24})(?:\/|\?|$)/i.exec(path)?.[1];
-        if (
+        const denied =
           (response.status === 403 ||
             (response.status === 404 && path === `/api/groups/${deniedGroup}`)) &&
-          deniedGroup
-        )
-          await onGroupDenied(deniedGroup, response.status, owner);
+          deniedGroup;
+        const reading = response.json().catch(() => null);
+        let endWait = () => {};
+        // Read before losing the Group, which aborts its reads: a reply can't be read after that.
+        // A denial waits for it only briefly, then goes on without its code and message.
+        const details: unknown = denied
+          ? await Promise.race([
+              reading,
+              new Promise<null>((resolve) => {
+                endWait = timer(() => resolve(null), DENIAL_BODY_MS);
+              }),
+            ]).finally(() => endWait())
+          : await reading;
+        if (denied) await onGroupDenied(denied, response.status, owner);
         const message =
           response.status === 403
             ? 'You no longer have access to this group.'
@@ -285,7 +301,6 @@ export function createTransport({
               : response.status === 429
                 ? 'Too many attempts. Wait a moment and try again.'
                 : 'The server could not complete this request. Please try again.';
-        const details: unknown = await response.json().catch(() => null);
         const code =
           details &&
           typeof details === 'object' &&

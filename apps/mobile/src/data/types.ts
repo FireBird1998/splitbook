@@ -445,13 +445,18 @@ export interface MobileDependencies {
   credentials: CredentialStore;
   pendingInvitation?: PendingInvitationStore;
   accountLocal?: AccountLocalStorage;
+  /**
+   * The controller's clock: Months, dates, session expiry and saved copies' ages. Display reads
+   * are verified, and stay fresh, on TanStack Query's clock, `Date.now` (ADR 0006, AMEND-2).
+   */
   now?: () => number;
   /** Runs each request's 20-second timeout. Defaults to the platform's own `setTimeout`. */
   timer?: MobileTimer;
   /**
    * How long a verified read is shown again without another request when navigating
-   * or returning to the foreground. Defaults to `DISPLAY_FRESHNESS_MS`. Pull-to-refresh,
-   * Retry and confirmed changes always read again; it never extends session or access.
+   * or returning to the foreground: the query cache's stale time. Defaults to
+   * `DISPLAY_FRESHNESS_MS`. Pull-to-refresh, Retry and confirmed changes always read again;
+   * it never extends session or access.
    */
   displayFreshnessMs?: number;
   expenseDrafts?: ExpenseDraftStore;
