@@ -186,6 +186,7 @@ function view(props: Partial<Parameters<typeof GroupExpensesView>[0]> = {}) {
     onSelectMonth: vi.fn(),
     onRefreshExpenses: vi.fn(),
     onLoadMore: vi.fn(),
+    onLoadNewer: vi.fn(),
     onOpenExpense: vi.fn(),
     onResumeDraft: vi.fn(),
     onDiscardDraft: vi.fn(),
@@ -340,6 +341,141 @@ describe('Expense rows', () => {
 
   it('has no Load more on the last page', () => {
     expect(buttons(view().root)).not.toContain('Load more expenses');
+  });
+
+  it('loads newer above a list that has slid past its newest page, as Load more does (#219)', () => {
+    const slid = { firstPage: 2, pagination: { page: 6, limit: 20, total: 130, totalPages: 7 } };
+    expect(buttons(view().root)).not.toContain('Load newer expenses');
+    remount();
+
+    const { root, onLoadNewer } = view({ state: financial(slid) });
+    const order = buttons(root);
+    // Above the rows, and TalkBack names the list.
+    expect(order.indexOf('Load newer expenses')).toBeLessThan(
+      order.findIndex((label) => label?.startsWith('Weekly groceries')),
+    );
+    press(root, 'Load newer expenses');
+    expect(onLoadNewer).toHaveBeenCalledOnce();
+    remount();
+
+    const loading = view({ state: financial({ ...slid, newerStatus: 'loading' }) }).root;
+    expect(text(loading)).toContain('Loading newer expenses…');
+    expect(loading.findAll((node) => isHost(node, 'ActivityIndicator'))).toHaveLength(1);
+    expect(buttons(loading)).not.toContain('Load newer expenses');
+    expect(text(loading)).toContain('Weekly groceries');
+    remount();
+
+    const failed = view({
+      state: financial({
+        ...slid,
+        newerStatus: 'error',
+        newerMessage: 'Could not load newer expenses. Please try again.',
+      }),
+    });
+    const alert = failed.root.find(
+      (node) => isHost(node, 'Text') && node.props.accessibilityRole === 'alert',
+    );
+    expect(alert.children.join('')).toContain('The ones shown are still here.');
+    press(failed.root, 'Try loading newer expenses');
+    expect(failed.onLoadNewer).toHaveBeenCalledOnce();
+  });
+  describe('when the newest page drops (#219)', () => {
+    // 120 fictional rows of one day, 20 a page; each row is 60 high under a 30-high day heading.
+    const rows = Array.from({ length: 120 }, (_, index) =>
+      expense(
+        `e${String(index + 1).padStart(23, '0')}`,
+        `Fictional row ${index + 1}`,
+        20,
+        [[you, 1000]],
+        [[you, 1000]],
+      ),
+    );
+    const window = (first: number) =>
+      financial({
+        data: rows.slice((first - 1) * 20, (first + 4) * 20),
+        firstPage: first,
+        pagination: { page: first + 4, limit: 20, total: 120, totalPages: 6 },
+      });
+    const layout = (node: ReactTestInstance, y: number) =>
+      act(() =>
+        node.props.onLayout({
+          nativeEvent: { layout: { x: 0, y, width: 390, height: 60 } },
+        }),
+      );
+    /** The host Views that report the layout of a row, its day and the list, by row number. */
+    const places = (root: ReactTestInstance, number: number) => {
+      const found: ReactTestInstance[] = [];
+      let node: ReactTestInstance | null = root.find(
+        (candidate) =>
+          isHost(candidate, 'Pressable') &&
+          String(candidate.props.accessibilityLabel).startsWith(`Fictional row ${number},`),
+      );
+      while (node && found.length < 3) {
+        if (isHost(node, 'View') && node.props.onLayout) found.push(node);
+        node = node.parent;
+      }
+      const [row, day, list] = found;
+      return { row, day, list };
+    };
+    /** Lays the window out as a phone would: the list at `listY`, rows from `first`. */
+    const lay = (root: ReactTestInstance, first: number, listY: number) => {
+      const { day, list } = places(root, first * 20 - 19);
+      layout(list, listY);
+      layout(day, 0);
+      for (let number = first * 20 - 19; number <= (first + 4) * 20; number += 1)
+        layout(places(root, number).row, 30 + (number - (first * 20 - 19)) * 60);
+    };
+    const render = (first: number, onShift: (dy: number) => void) => {
+      const props = {
+        group: group(),
+        currentUserId: you,
+        kept: null,
+        savedExpenseId: null,
+        now,
+        onSelectMonth: vi.fn(),
+        onRefreshExpenses: vi.fn(),
+        onLoadMore: vi.fn(),
+        onLoadNewer: vi.fn(),
+        onShift,
+        onOpenExpense: vi.fn(),
+        onResumeDraft: vi.fn(),
+        onDiscardDraft: vi.fn(),
+      };
+      act(() => {
+        screen = create(<GroupExpensesView {...props} state={window(first)} />);
+      });
+      return (next: number) =>
+        act(() => screen!.update(<GroupExpensesView {...props} state={window(next)} />));
+    };
+    const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    it('keeps the row on screen in its place: the view moves up by the rows that went', async () => {
+      const onShift = vi.fn();
+      const slide = render(1, onShift);
+      lay(screen!.root, 1, 200);
+      await tick();
+      expect(onShift).not.toHaveBeenCalled();
+      // Load more read page 6: pages 2 to 6 show, below Load newer, 60 high, above the list.
+      slide(2);
+      lay(screen!.root, 2, 260);
+      await tick();
+      // Row 21 was at 200 + 30 + 20 × 60 = 1430; it is now at 260 + 30 = 290.
+      expect(onShift).toHaveBeenCalledExactlyOnceWith(290 - 1430);
+      // Only the slide's own layout moves the view.
+      layout(places(screen!.root, 21).list, 300);
+      await tick();
+      expect(onShift).toHaveBeenCalledOnce();
+    });
+
+    it('moves nothing when Load newer brings the newest page back', async () => {
+      const onShift = vi.fn();
+      const slide = render(2, onShift);
+      lay(screen!.root, 2, 260);
+      slide(1);
+      lay(screen!.root, 1, 200);
+      await tick();
+      expect(onShift).not.toHaveBeenCalled();
+    });
   });
 
   it('shows placeholders on a first load, and a retry when it fails', () => {

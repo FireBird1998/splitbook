@@ -1,3 +1,4 @@
+import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
@@ -83,7 +84,8 @@ function payers(expense: MobileExpense, currentUserId: string) {
   return user.id === currentUserId ? 'You paid' : `${user.name} paid`;
 }
 
-function ExpenseRow({
+/** A row renders again only when its Expense, or whether it was just saved, changes (#219). */
+const ExpenseRow = memo(function ExpenseRow({
   expense,
   currentUserId,
   saved,
@@ -92,7 +94,7 @@ function ExpenseRow({
   expense: MobileExpense;
   currentUserId: string;
   saved: boolean;
-  onOpen: () => void;
+  onOpen: (expenseId: string) => void;
 }) {
   const position = mobileExpensePosition(expense, currentUserId);
   const total = formatCurrency(expense.amount, expense.currency);
@@ -123,10 +125,10 @@ function ExpenseRow({
       ]
         .filter(Boolean)
         .join(', ')}
-      onPress={onOpen}
+      onPress={() => onOpen(expense.id)}
     />
   );
-}
+});
 
 /** Previous and next Month (next stops at the current one), and All time or This month. */
 function MonthBar({
@@ -395,6 +397,8 @@ export function GroupExpensesView({
   onSelectMonth,
   onRefreshExpenses,
   onLoadMore,
+  onLoadNewer,
+  onShift,
   onOpenExpense,
   onResumeDraft,
   onDiscardDraft,
@@ -414,12 +418,66 @@ export function GroupExpensesView({
   onSelectMonth: (month: string | null) => void;
   onRefreshExpenses: () => void;
   onLoadMore: () => void;
+  /** Reads the page before the list's window, once it has slid past its newest page (#219). */
+  onLoadNewer: () => void;
+  /** Scroll the view by `dy`: the rows above the one on screen changed by as much. */
+  onShift?: (dy: number) => void;
   onOpenExpense: (expenseId: string) => void;
   onResumeDraft: () => void;
   onDiscardDraft: () => void;
 }) {
   const theme = useTheme();
   const { expenses } = state;
+  // The latest handler, behind one that never changes, so no row renders again for it.
+  const opening = useRef(onOpenExpense);
+  useEffect(() => {
+    opening.current = onOpenExpense;
+  });
+  const open = useCallback((expenseId: string) => opening.current(expenseId), []);
+  // When the newest page drops (Load more past 5 pages), the rows above the one on screen go: the
+  // view scrolls up by as much as the first row left moved, so the row on screen keeps its
+  // place (#219). Where the list, each day and each row lie, as their layouts last said.
+  const places = useRef({
+    list: 0,
+    days: new Map<string, number>(),
+    rows: new Map<string, { day: string; y: number }>(),
+  });
+  const anchor = useRef<{ id: string; at: number; timer?: ReturnType<typeof setTimeout> } | null>(
+    null,
+  );
+  const firstPage = expenses.firstPage ?? 1;
+  const shownFirst = useRef(firstPage);
+  const top = (id: string) => {
+    const row = places.current.rows.get(id),
+      day = row && places.current.days.get(row.day);
+    return row && day !== undefined ? places.current.list + day + row.y : null;
+  };
+  useLayoutEffect(() => {
+    const slid = firstPage > shownFirst.current,
+      id = expenses.data[0]?.id;
+    shownFirst.current = firstPage;
+    if (anchor.current?.timer) clearTimeout(anchor.current.timer);
+    // Laid out before the slide: where it was.
+    const at = slid && id ? top(id) : null;
+    anchor.current = id && at !== null ? { id, at } : null;
+    // Only this commit's slide: the layout it leads to moves the view, once.
+  }, [firstPage]);
+  /** A layout changed: once the slide's layouts have all arrived, the view follows its row. */
+  const place = (
+    change: { list: number } | { day: string; y: number } | { row: string; day: string; y: number },
+  ) => {
+    if ('list' in change) places.current.list = change.list;
+    else if ('row' in change) places.current.rows.set(change.row, change);
+    else places.current.days.set(change.day, change.y);
+    const held = anchor.current;
+    if (!held || held.timer) return;
+    // A layout's events arrive together: the shift waits for all of them.
+    held.timer = setTimeout(() => {
+      if (anchor.current === held) anchor.current = null;
+      const at = top(held.id);
+      if (at !== null && at !== held.at) onShift?.(at - held.at);
+    }, 0);
+  };
   const household = group.category === 'home';
   // Never show one Month's Expenses under another Month's label.
   const current = expenses.month === state.month;
@@ -431,6 +489,8 @@ export function GroupExpensesView({
     expenses.status === 'ready' &&
     expenses.pagination !== null &&
     expenses.pagination.page < expenses.pagination.totalPages;
+  // The list has slid past its newest page: the pages before it are read with Load newer.
+  const newer = listed && expenses.status === 'ready' && (expenses.firstPage ?? 1) > 1;
   const scope = state.month ? monthLabel(state.month) : 'all-time';
   return (
     <View style={{ gap: 12 }}>
@@ -460,95 +520,147 @@ export function GroupExpensesView({
       {kept?.groupId === group.id ? (
         <KeptDraftNotice kept={kept} onResume={onResumeDraft} onDiscard={onDiscardDraft} />
       ) : null}
-      {!listed ? (
-        expenses.status === 'error' && offline ? (
-          <NotAvailableOffline
-            compact
-            message={
-              state.month
-                ? `${monthLabel(state.month)} hasn’t been opened on this phone yet. Connect to load it.`
-                : 'These expenses haven’t been opened on this phone yet. Connect to load them.'
-            }
-            onRetry={onRefreshExpenses}
-          />
-        ) : expenses.status === 'error' ? (
-          <View style={{ gap: 10 }}>
-            <Banner
-              tone="error"
-              message={expenses.message ?? 'These expenses couldn’t be loaded. Try again.'}
+      {newer
+        ? pageControl({
+            which: 'newer',
+            status: expenses.newerStatus ?? 'idle',
+            message: expenses.newerMessage ?? null,
+            color: theme.brand.main,
+            onPress: onLoadNewer,
+          })
+        : null}
+      {/* Where the list lies, for the row kept on screen when the newest page drops (#219). It
+          wraps every state of the list, so the Card that showed its skeleton stays the Card that
+          fades its rows in. */}
+      <View onLayout={({ nativeEvent }) => place({ list: nativeEvent.layout.y })}>
+        {!listed ? (
+          expenses.status === 'error' && offline ? (
+            <NotAvailableOffline
+              compact
+              message={
+                state.month
+                  ? `${monthLabel(state.month)} hasn’t been opened on this phone yet. Connect to load it.`
+                  : 'These expenses haven’t been opened on this phone yet. Connect to load them.'
+              }
+              onRetry={onRefreshExpenses}
             />
-            <CompactButton label="Retry expenses" variant="tonal" onPress={onRefreshExpenses} />
-          </View>
-        ) : (
-          <Card loading={`Loading ${scope} expenses`} skeleton={{ heading: true }} />
-        )
-      ) : expenses.data.length ? (
-        <Card>
-          {expenseDays(expenses.data, now).map((day) => (
-            <View key={day.key}>
-              <CompactText
-                variant="small"
-                tone="secondary"
-                accessibilityRole="header"
-                style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 2 }}
-              >
-                {day.label}
-              </CompactText>
-              {day.expenses.map((expense) => (
-                <ExpenseRow
-                  key={expense.id}
-                  expense={expense}
-                  currentUserId={currentUserId}
-                  saved={expense.id === savedExpenseId}
-                  onOpen={() => onOpenExpense(expense.id)}
-                />
-              ))}
+          ) : expenses.status === 'error' ? (
+            <View style={{ gap: 10 }}>
+              <Banner
+                tone="error"
+                message={expenses.message ?? 'These expenses couldn’t be loaded. Try again.'}
+              />
+              <CompactButton label="Retry expenses" variant="tonal" onPress={onRefreshExpenses} />
             </View>
-          ))}
-        </Card>
-      ) : (
-        <Card padded>
-          <CompactText weight="semibold">
-            {state.month ? `No expenses in ${monthLabel(state.month)}` : 'No expenses yet'}
-          </CompactText>
-          <CompactText variant="small" tone="secondary">
-            {state.month ? 'Try another Month or All time.' : 'Expenses you add appear here.'}
-          </CompactText>
-        </Card>
-      )}
-      {more && expenses.moreStatus === 'loading' ? (
-        <View
-          accessibilityLiveRegion="polite"
-          style={{
-            minHeight: 48,
-            flexDirection: 'row',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
-          }}
-        >
-          <ActivityIndicator color={theme.brand.main} />
-          <CompactText tone="secondary">Loading more expenses…</CompactText>
-        </View>
-      ) : more ? (
-        <>
-          {expenses.moreStatus === 'error' ? (
-            <CompactText variant="small" tone="negative" accessibilityRole="alert">
-              {expenses.moreMessage ?? 'Couldn’t load more expenses.'} The ones shown are still
-              here.
+          ) : (
+            <Card loading={`Loading ${scope} expenses`} skeleton={{ heading: true }} />
+          )
+        ) : expenses.data.length ? (
+          <Card>
+            {expenseDays(expenses.data, now).map((day) => (
+              <View
+                key={day.key}
+                onLayout={({ nativeEvent }) => place({ day: day.key, y: nativeEvent.layout.y })}
+              >
+                <CompactText
+                  variant="small"
+                  tone="secondary"
+                  accessibilityRole="header"
+                  style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 2 }}
+                >
+                  {day.label}
+                </CompactText>
+                {day.expenses.map((expense) => (
+                  <View
+                    key={expense.id}
+                    onLayout={({ nativeEvent }) =>
+                      place({ row: expense.id, day: day.key, y: nativeEvent.layout.y })
+                    }
+                  >
+                    <ExpenseRow
+                      expense={expense}
+                      currentUserId={currentUserId}
+                      saved={expense.id === savedExpenseId}
+                      onOpen={open}
+                    />
+                  </View>
+                ))}
+              </View>
+            ))}
+          </Card>
+        ) : (
+          <Card padded>
+            <CompactText weight="semibold">
+              {state.month ? `No expenses in ${monthLabel(state.month)}` : 'No expenses yet'}
             </CompactText>
-          ) : null}
-          <CompactButton
-            label={expenses.moreStatus === 'error' ? 'Try loading more' : 'Load more'}
-            accessibilityLabel={
-              expenses.moreStatus === 'error' ? 'Try loading more expenses' : 'Load more expenses'
-            }
-            variant="tonal"
-            block
-            onPress={onLoadMore}
-          />
-        </>
-      ) : null}
+            <CompactText variant="small" tone="secondary">
+              {state.month ? 'Try another Month or All time.' : 'Expenses you add appear here.'}
+            </CompactText>
+          </Card>
+        )}
+      </View>
+      {more
+        ? pageControl({
+            which: 'more',
+            status: expenses.moreStatus,
+            message: expenses.moreMessage,
+            color: theme.brand.main,
+            onPress: onLoadMore,
+          })
+        : null}
     </View>
+  );
+}
+
+/**
+ * Load more, below the list, or Load newer, above it once the list has slid past its newest
+ * page (#219): loading, failed with the rows kept, or offered. TalkBack names the list.
+ */
+function pageControl({
+  which,
+  status,
+  message,
+  color,
+  onPress,
+}: {
+  which: 'more' | 'newer';
+  status: 'idle' | 'loading' | 'error';
+  message: string | null;
+  color: string;
+  onPress: () => void;
+}) {
+  if (status === 'loading')
+    return (
+      <View
+        accessibilityLiveRegion="polite"
+        style={{
+          minHeight: 48,
+          flexDirection: 'row',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 10,
+        }}
+      >
+        <ActivityIndicator color={color} />
+        <CompactText tone="secondary">{`Loading ${which} expenses…`}</CompactText>
+      </View>
+    );
+  return (
+    <>
+      {status === 'error' ? (
+        <CompactText variant="small" tone="negative" accessibilityRole="alert">
+          {message ?? `Couldn’t load ${which} expenses.`} The ones shown are still here.
+        </CompactText>
+      ) : null}
+      <CompactButton
+        label={status === 'error' ? `Try loading ${which}` : `Load ${which}`}
+        accessibilityLabel={
+          status === 'error' ? `Try loading ${which} expenses` : `Load ${which} expenses`
+        }
+        variant="tonal"
+        block
+        onPress={onPress}
+      />
+    </>
   );
 }

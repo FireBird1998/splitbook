@@ -161,6 +161,7 @@ function Screen({ controller }: { controller: MobileController }) {
             onSelectMonth={noop}
             onRefreshExpenses={noop}
             onLoadMore={noop}
+            onLoadNewer={noop}
             onOpenExpense={noop}
             onResumeDraft={noop}
             onDiscardDraft={noop}

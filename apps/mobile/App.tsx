@@ -902,6 +902,12 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                 onSelectMonth={(month) => void controller.selectMonth(month)}
                 onRefreshExpenses={() => void controller.refreshExpenses()}
                 onLoadMore={() => void controller.loadMoreExpenses()}
+                onLoadNewer={() => void controller.loadNewerExpenses()}
+                // The newest page dropped: the row on screen keeps its place (#219).
+                onShift={(dy) => {
+                  scrollY.current = Math.max(0, scrollY.current + dy);
+                  scroll.current?.scrollTo({ y: scrollY.current, animated: false });
+                }}
                 onOpenExpense={(expenseId) => openExpense(group.id, expenseId)}
                 onResumeDraft={resumeDraft}
                 onDiscardDraft={discardDraft}
