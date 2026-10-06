@@ -5411,7 +5411,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     // A confirmed Group opens the way Home opens one, so its Expenses, Balances and Month are
     // read like any other Group's. A member who moved on before the confirmation stays there.
-    if (created && view === viewRequest) await openGroup(created);
+    if (!created || view !== viewRequest) return;
+    await openGroup(created);
+    // Then the Groups list is read again, as after a join, so the saved list holds the new Group
+    // beside its saved copies, for an offline restart (#283). It lists it, so its trim keeps them.
+    await homeQueries.listSince(owner);
   };
 
   /** Check Groups, on New Group or Home: Home, with the Groups list read again. */

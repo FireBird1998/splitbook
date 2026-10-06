@@ -82,6 +82,8 @@ function fixture() {
     expired: false,
     /** A status Maple House's own GET answers with, instead of the Group. */
     failGroup: 0,
+    /** A status Create Group answers with, instead of the new Group. */
+    refuseCreate: 0,
   };
   let cookie: string | null = null,
     owner: string | null = null,
@@ -191,6 +193,7 @@ function fixture() {
     if (path.endsWith('/get-session'))
       return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
     if (path === listPath && method === 'POST') {
+      if (server.refuseCreate) return json({}, server.refuseCreate);
       // Alex creates Zed Club, as its admin; the list holds it from now on.
       server.listed = [...server.listed, zed];
       const admin = zed.members.map((member) => ({ ...member, role: 'admin' }));
@@ -1468,7 +1471,7 @@ describe('after a write (M2-2)', () => {
 });
 
 describe('Home after Create Group (#283)', () => {
-  it('reads the Groups list and Home’s figures again on Back, though within the read window', async () => {
+  it('reads the Groups list again once the new Group has opened, and Home’s figures on Back', async () => {
     const f = fixture();
     const controller = f.create();
     await controller.signIn('alex');
@@ -1482,15 +1485,114 @@ describe('Home after Create Group (#283)', () => {
       `GET /api/groups/${zedId}`,
       `GET /api/groups/${zedId}/expenses?page=1&limit=20&includeMemberBreakdown=1`,
       `GET /api/groups/${zedId}/balances`,
+      // The create changed the Groups list: it's read again after the Group's own reads, as
+      // after a join, so the saved list holds the new Group (#283).
+      `GET ${listPath}`,
     ]);
-    // The create changed the Groups list, so Back reads it again, with Home's figures (#283).
+    // Back reads Home's figures, which the create also made obsolete; the list was just read.
     sent = f.calls.length;
     await controller.back();
     expect(f.calls.slice(sent).map(({ method, path }) => `${method} ${path}`)).toEqual([
-      `GET ${listPath}`,
       `GET ${homePath}`,
     ]);
     expect(names(controller.getSnapshot())).toEqual(['Maple House', 'Cabin Weekend', 'Zed Club']);
+  });
+
+  it('lists a Group created this session after an offline restart, from the saved list with its own time, and opens it from its saved copies', async () => {
+    const f = fixture();
+    const first = f.create();
+    await first.signIn('alex');
+    await settle();
+    // Ten seconds on, Alex creates Zed Club, the server confirms it, and Alex stays on it.
+    later(10_000);
+    first.startCreate();
+    first.updateCreation({ name: 'Zed Club' });
+    await first.createGroup();
+    expect(first.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { status: 'ready', id: zedId },
+    });
+    await settle();
+    // The saved list is the one read after the create, with the time it was verified then.
+    expect(f.row(listPath)).toMatchObject({
+      refreshedAt: start + 10_000,
+      value: { status: 200, data: [{ _id: mapleId }, { _id: cabinId }, { _id: zedId }] },
+    });
+    first.dispose();
+
+    later(5_000);
+    f.connect(false);
+    const restarted = f.create();
+    const published = record(restarted);
+    await restarted.restore();
+    // The saved Home shown while the session is checked lists it too.
+    const checking = published.find(
+      (state) => state.auth.status === 'restoring' && state.auth.user !== null,
+    );
+    expect(checking && names(checking)).toEqual(['Maple House', 'Cabin Weekend', 'Zed Club']);
+    // Offline, Home lists it with the others, as saved: never as read now. Home's time is the
+    // older of its two saved copies, its figures' from the sign-in.
+    expect(restarted.getSnapshot()).toMatchObject({
+      auth: { status: 'authenticated', user: { id: alex.id } },
+      screen: 'groups',
+      groups: { status: 'ready' },
+      offline: { active: true, refreshedAt: start },
+    });
+    expect(names(restarted.getSnapshot())).toEqual(['Maple House', 'Cabin Weekend', 'Zed Club']);
+
+    // It opens from the copies saved when it opened after the create.
+    await restarted.openGroup(zedId);
+    expect(restarted.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { status: 'ready', id: zedId, data: { name: 'Zed Club' } },
+      financial: { groupId: zedId, expenses: { data: [{ description: 'Rent' }] } },
+      offline: { active: true },
+    });
+  });
+
+  it('reads the list once when Alex goes back to Home while the new Group is still being read', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'Zed Club' });
+    const balances = f.hold(`/api/groups/${zedId}/balances`);
+    const sent = f.calls.length;
+    const creating = controller.createGroup();
+    await balances.reached;
+    // Home reads the list the create made obsolete; the create's own read reuses that answer.
+    await controller.back();
+    balances.release();
+    await creating;
+    await settle();
+    expect(f.reads(listPath, sent)).toBe(1);
+    expect(controller.getSnapshot().screen).toBe('groups');
+    expect(names(controller.getSnapshot())).toEqual(['Maple House', 'Cabin Weekend', 'Zed Club']);
+    expect(f.row(listPath)).toMatchObject({
+      value: { data: [{ _id: mapleId }, { _id: cabinId }, { _id: zedId }] },
+    });
+  });
+
+  it('reads and saves nothing more when the server refuses the create', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    const saved = structuredClone([...f.rows, ...f.disk]);
+    f.server.refuseCreate = 422;
+    controller.startCreate();
+    controller.updateCreation({ name: 'Zed Club' });
+    const sent = f.calls.length;
+    await controller.createGroup();
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'create',
+      creation: { status: 'error', message: 'Check the Group information and try again.' },
+    });
+    expect(f.calls.slice(sent).map(({ method, path }) => `${method} ${path}`)).toEqual([
+      `POST ${listPath}`,
+    ]);
+    expect([...f.rows, ...f.disk]).toEqual(saved);
   });
 });
 

@@ -548,10 +548,14 @@ export function createHomeQueries(session: HomeSession) {
       await ended(index);
     }
   };
-  /** Reads a query now, joining a read in flight; one a change cancels is read again. */
-  const readNow = async (index: 0 | 1, owner: number): Promise<void> => {
+  /**
+   * Reads a query now, joining a read in flight; one a change cancels is read again. `reuse`
+   * keeps an answer still within its stale time instead.
+   */
+  const readNow = async (index: 0 | 1, owner: number, reuse = false): Promise<void> => {
     while (session.current(owner)) {
-      const reading = client.fetchQuery({ ...options()[index], staleTime: 0 }),
+      const option = options()[index],
+        reading = client.fetchQuery(reuse ? option : { ...option, staleTime: 0 }),
         read = reads.get([listPath, homePath][index]);
       try {
         await reading;
@@ -651,6 +655,13 @@ export function createHomeQueries(session: HomeSession) {
     },
     /** Home's figures wait for the next Groups list read. */
     hold: () => void (figuresWait = true),
+    /**
+     * The Groups list after a change this device confirmed, which removed its query (a Group
+     * created, #283): read now and saved like any list, so an offline restart lists what the
+     * change did. A read since the change, such as Home's own if the member went back to it,
+     * is joined while under way and kept once it has answered, unless it is a saved copy.
+     */
+    listSince: (owner: number) => readNow(0, owner, true),
     /**
      * Reads the Groups list now, and its figures after it, and `show`s Home: the read starts
      * first, so the publish that shows Home shows the list loading (Check Groups, joining).

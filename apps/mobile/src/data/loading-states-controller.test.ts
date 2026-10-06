@@ -1600,7 +1600,8 @@ describe('Home after navigating while the Groups list loads (#190)', () => {
     controller.updateCreation({ name: 'Cabin Weekend' });
     await controller.createGroup();
     const created = controller.getSnapshot().detail.id;
-    // Reading the new Group again, before any list read lists it, saves it for offline use.
+    // Reading the new Group again saves it for offline use, as its reads did when it opened,
+    // before the list read after the create listed it (#283).
     await controller.refresh();
     expect(controller.getSnapshot().detail).toMatchObject({ status: 'ready', id: created });
     expect(f.saved(`/api/groups/${created}`)).not.toBeNull();
@@ -1654,6 +1655,8 @@ describe('a new Group opens ready (#189)', () => {
       `GET /api/groups/${created}`,
       `GET /api/groups/${created}/expenses`,
       `GET /api/groups/${created}/balances`,
+      // Then the Groups list, as after a join, so the saved list holds the new Group (#283).
+      'GET /api/groups',
     ]);
     // Empty Expenses and Balances, not placeholders.
     expect(controller.getSnapshot()).toMatchObject({
@@ -1675,6 +1678,9 @@ describe('a new Group opens ready (#189)', () => {
     expect(f.savedPaths().some((path) => path.startsWith(`/api/groups/${created}/expenses?`))).toBe(
       true,
     );
+    expect(f.saved('/api/groups')).toMatchObject({
+      value: { data: expect.arrayContaining([expect.objectContaining({ _id: created })]) },
+    });
   });
 
   it('opens a new Household on the current Month, whatever Month another Household was left on', async () => {
