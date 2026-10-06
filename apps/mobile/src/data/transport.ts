@@ -22,7 +22,8 @@ export class Superseded extends Error {}
 
 /**
  * What a failed request means, for callers to branch on instead of messages or codes (ADR 0006):
- * - `network`: no reply arrived;
+ * - `network`: SplitBook couldn't be reached: no reply arrived, its body stopped arriving, or a
+ *   gateway in front of SplitBook answered 502, 503 or 504 without a SplitBook error code;
  * - `timeout`: the 20-second limit passed, before or after the headers;
  * - `cancelled`: the caller's own signal ended it. It is never a reason to show a saved copy;
  * - `signed-out`: a 401 that doesn't end the session here (sign-out, the staging check, Google
@@ -31,8 +32,8 @@ export class Superseded extends Error {}
  * - `stale-revision`: a 409 `STALE_REVISION`: someone saved a newer revision first;
  * - `rejected`: any other definite 4xx, so any 4xx but 401, 403, 404, 408 and 429: the server
  *   refused this request as sent;
- * - `malformed`: a 2xx whose body can't be read;
- * - `server-error`: a 5xx, 408 or 429, or an answer the app can't use.
+ * - `malformed`: a 2xx whose body arrived whole but isn't JSON;
+ * - `server-error`: any other 5xx, a 408 or 429, or an answer the app can't use.
  */
 export type FailureKind =
   | 'network'
@@ -75,6 +76,23 @@ export class RequestError extends Error {
 /** The caller's own signal ended the request. */
 const cancelled = () =>
   new RequestError('This request was cancelled.', 0, null, false, null, 'cancelled');
+
+/**
+ * SplitBook couldn't be reached, so callers treat it as being offline: the saved copy, with the
+ * time it was last verified. It carries no status, so nothing takes it for SplitBook's answer.
+ */
+const unreachable = (kind: 'network' | 'timeout') =>
+  new RequestError(
+    'Could not reach SplitBook. Check your connection and try again.',
+    0,
+    null,
+    true,
+    null,
+    kind,
+  );
+
+/** The statuses a gateway in front of SplitBook answers with when it can't reach SplitBook. */
+const gatewayStatuses = [502, 503, 504];
 
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -225,6 +243,8 @@ export function createTransport({
     const cancel = () => stop('caller');
     options.signal?.addEventListener('abort', cancel);
     let received = false;
+    /** The headers arrived and the body is being read. */
+    let reading = false;
     try {
       const outgoingCookie =
         options.sessionCookie === undefined ? session.cookie() : options.sessionCookie;
@@ -300,8 +320,14 @@ export function createTransport({
           typeof details.error === 'string'
             ? details.error
             : null;
+        // SplitBook's own errors carry a code, so a gateway answered: SplitBook wasn't reached.
+        if (gatewayStatuses.includes(response.status) && code === null) {
+          if (aborted === 'caller') throw cancelled();
+          throw unreachable(aborted === 'timeout' ? 'timeout' : 'network');
+        }
         throw new RequestError(message, response.status, code, false, serverMessage);
       }
+      reading = true;
       const body = await response.json();
       assertCurrent(owner);
       return body;
@@ -309,14 +335,18 @@ export function createTransport({
       if (!session.current(owner) || aborted === 'session') throw new Superseded();
       if (error instanceof RequestError || error instanceof Superseded) throw error;
       if (aborted === 'caller') throw cancelled();
-      throw new RequestError(
-        'Could not reach SplitBook. Check your connection and try again.',
-        0,
-        null,
-        !received,
-        null,
-        aborted === 'timeout' ? 'timeout' : received ? 'malformed' : 'network',
-      );
+      // Only a body that arrived whole, but isn't JSON, is malformed; so is a failure after the
+      // headers that isn't the body's. A body that stopped arriving, or timed out, never arrived.
+      if (received && aborted !== 'timeout' && (!reading || error instanceof SyntaxError))
+        throw new RequestError(
+          'Could not reach SplitBook. Check your connection and try again.',
+          0,
+          null,
+          false,
+          null,
+          'malformed',
+        );
+      throw unreachable(aborted === 'timeout' ? 'timeout' : 'network');
     } finally {
       endTimeout();
       requests.delete(stop);

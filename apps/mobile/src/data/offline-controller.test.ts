@@ -1,5 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { hangUntilAborted, manualTimer, within } from '../test-utils/transport-faults';
+import {
+  bodyFails,
+  gatewayBodies,
+  gatewayFailures,
+  gatewayReply,
+  hangUntilAborted,
+  manualTimer,
+  within,
+  type GatewayBody,
+} from '../test-utils/transport-faults';
 import { createMobileController } from './mobile-controller';
 import type { MobileTimer } from './types';
 const accountId = 'a00000000000000000000001',
@@ -55,8 +64,13 @@ function fixture(options: { timer?: MobileTimer } = {}) {
     cleanup = false,
     sessionStatus = 200;
   let activeUser = user;
-  const errors = new Map<string, number>();
+  /** Replies with a status, and a body that defaults to an empty JSON object. */
+  const errors = new Map<string, { status: number; body?: string }>();
   const failedPaths = new Set<string>();
+  /** Replies whose body stops arriving once the headers are in. */
+  const brokenBodies = new Set<string>();
+  /** A gateway in front of the whole backend that can't reach it. */
+  let gateway: { status: number; body: GatewayBody } | null = null;
   /** Replies that hang until their request is aborted, before or after the headers. */
   const hung = new Map<string, 'headers' | 'body'>();
   const requests: string[] = [];
@@ -187,10 +201,17 @@ function fixture(options: { timer?: MobileTimer } = {}) {
         fetch: async (url, init) => {
           requests.push(`${init.method ?? 'GET'} ${new URL(url).pathname}`);
           if (offline) throw new Error('Offline');
+          if (gateway) return gatewayReply(gateway.status, gateway.body);
           const path = new URL(url).pathname;
           if (hung.has(path)) return hangUntilAborted(init, hung.get(path)!);
-          if (errors.has(path)) return Response.json({}, { status: errors.get(path)! });
+          if (errors.has(path)) {
+            const { status, body } = errors.get(path)!;
+            return body === undefined
+              ? Response.json({}, { status })
+              : new Response(body, { status });
+          }
           if (failedPaths.has(path)) throw new Error('Partial network failure');
+          if (brokenBodies.has(path)) return bodyFails();
           if (init.method !== 'GET' && !path.startsWith('/api/auth/')) writes += 1;
           if (revoked && path.startsWith(`/api/groups/${groupId}`))
             return Response.json({}, { status: 403 });
@@ -242,6 +263,11 @@ function fixture(options: { timer?: MobileTimer } = {}) {
               status: 200,
               data: { byCurrency: [{ currency: 'INR', balances: [], debts: [] }] },
             });
+          if (path === `/api/groups/${groupId}/expenses` && init.method === 'POST')
+            return Response.json(
+              { status: 201, data: { _id: 'e00000000000000000000002', group: groupId } },
+              { status: 201 },
+            );
           if (path.endsWith('/expenses'))
             return Response.json({
               status: 200,
@@ -287,8 +313,19 @@ function fixture(options: { timer?: MobileTimer } = {}) {
     expireSession: () => {
       sessionStatus = 401;
     },
-    failResponse: (path: string, status: number) => {
-      errors.set(path, status);
+    failResponse: (path: string, status: number, body?: string) => {
+      errors.set(path, { status, body });
+    },
+    /** The headers arrive, then the body stops arriving. */
+    breakBody: (path: string) => {
+      brokenBodies.add(path);
+    },
+    /** Every request meets a gateway that can't reach the backend, until `gatewayUp`. */
+    gatewayDown: (status: number, body: GatewayBody = 'HTML') => {
+      gateway = { status, body };
+    },
+    gatewayUp: () => {
+      gateway = null;
     },
     cache,
     drafts,
@@ -665,13 +702,12 @@ describe('account-scoped offline financial views', () => {
         offline: { active: true, refreshedAt: verifiedAt },
       });
     });
-    it('shows the error and no offline notice when it times out after the headers, as today (#231 changes this)', async () => {
+    it('shows the saved copy, with its own verification time, when it times out after the headers (#231)', async () => {
       const controller = await timedOut('body');
-      expect(controller.getSnapshot().detail).toMatchObject({
-        status: 'error',
-        message: 'Could not reach SplitBook. Check your connection and try again.',
+      expect(controller.getSnapshot()).toMatchObject({
+        detail: { status: 'ready', data: { id: groupId }, refreshedAt: verifiedAt },
+        offline: { active: true, refreshedAt: verifiedAt },
       });
-      expect(controller.getSnapshot().offline.active).toBe(false);
     });
     it('ends at once when the member signs out while it waits for its reply', async () => {
       const f = fixture({ timer: manualTimer().timer }),
@@ -689,6 +725,247 @@ describe('account-scoped offline financial views', () => {
         auth: { status: 'signed-out', user: null },
         detail: { data: null },
       });
+    });
+  });
+  describe('a gateway in front of SplitBook that can’t reach it (#231)', () => {
+    const path = `/api/groups/${groupId}`;
+    /** The saved Group was verified an hour before it is read again. */
+    const verifiedAt = now - 3_600_000;
+    const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+    const serverFault = 'The server could not complete this request. Please try again.';
+    type Fixture = ReturnType<typeof fixture>;
+    const count = (sent: string[], request: string) =>
+      sent.filter((sentRequest) => sentRequest === request).length;
+    /** The Group's saved copy now says it was verified at `verifiedAt`. */
+    const verifiedEarlier = (f: Fixture) =>
+      f.cache.set(accountId + path, {
+        ...(f.cache.get(accountId + path) as object),
+        refreshedAt: verifiedAt,
+      });
+
+    /** Opens the Group, then reads it again with Retry after `fail`: what it sent and showed. */
+    async function readAgain(fail: (f: Fixture) => void) {
+      const f = fixture(),
+        controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      verifiedEarlier(f);
+      fail(f);
+      const before = f.requests().length;
+      await controller.refresh();
+      return { snapshot: controller.getSnapshot(), sent: f.requests().slice(before) };
+    }
+
+    it.each(gatewayFailures)(
+      'shows the saved copy with its own time when a gateway answers %i with a body that is %s, as for a lost connection',
+      async (status, body) => {
+        const lost = await readAgain((f) => f.failPath(path));
+        const gateway = await readAgain((f) => f.failResponse(path, status, gatewayBodies[body]));
+        expect(gateway.snapshot).toMatchObject({
+          detail: { status: 'ready', data: { id: groupId }, refreshedAt: verifiedAt },
+          offline: { active: true, refreshedAt: verifiedAt },
+        });
+        expect(gateway.snapshot).toEqual(lost.snapshot);
+        expect(count(gateway.sent, `GET ${path}`)).toBe(1);
+        expect(gateway.sent).toEqual(lost.sent);
+      },
+    );
+
+    it.each([502, 503, 504])(
+      'shows a view with no saved copy as not saved on this device when a gateway answers %i, as for a lost connection',
+      async (status) => {
+        async function openUnsaved(fail: (f: Fixture) => void) {
+          const f = fixture(),
+            controller = f.create();
+          await controller.signIn('alex');
+          fail(f);
+          const before = f.requests().length;
+          await controller.openGroup(groupId);
+          return { snapshot: controller.getSnapshot(), sent: f.requests().slice(before) };
+        }
+        const lost = await openUnsaved((f) => f.failPath(path));
+        const gateway = await openUnsaved((f) => f.failResponse(path, status, gatewayBodies.HTML));
+        expect(gateway.snapshot).toMatchObject({
+          detail: {
+            status: 'error',
+            data: null,
+            message: 'This view was not saved on this device. Connect to load it.',
+          },
+          offline: { active: true },
+        });
+        expect(gateway.snapshot).toEqual(lost.snapshot);
+        expect(count(gateway.sent, `GET ${path}`)).toBe(1);
+        expect(gateway.sent).toEqual(lost.sent);
+      },
+    );
+
+    it('keeps SplitBook’s own coded 503 a server error with no saved copy, unlike a gateway’s uncoded one', async () => {
+      const coded = await readAgain((f) =>
+        f.failResponse(
+          path,
+          503,
+          JSON.stringify({
+            error: 'The audit feed is temporarily unavailable. Please retry later.',
+            status: 503,
+            code: 'ACTIVITY_BACKLOG_FULL',
+          }),
+        ),
+      );
+      // The Group on screen keeps its own time: the saved copy, an hour older, isn't loaded.
+      expect(coded.snapshot).toMatchObject({
+        detail: { status: 'error', data: { id: groupId }, refreshedAt: now, message: serverFault },
+        offline: { active: false, refreshedAt: null },
+      });
+      expect(count(coded.sent, `GET ${path}`)).toBe(1);
+
+      const gateway = await readAgain((f) =>
+        f.failResponse(path, 503, gatewayBodies['uncoded JSON']),
+      );
+      expect(gateway.snapshot).toMatchObject({
+        detail: { status: 'ready', refreshedAt: verifiedAt },
+        offline: { active: true, refreshedAt: verifiedAt },
+      });
+      expect(count(gateway.sent, `GET ${path}`)).toBe(1);
+    });
+
+    it.each([
+      ['without a code', '{"error":"Internal server error","status":500}'],
+      ['with a code', '{"error":"Internal server error","status":500,"code":"INTERNAL_ERROR"}'],
+    ])(
+      'keeps a 500 %s an error with Retry and no saved copy, unlike a gateway’s 502',
+      async (_, body) => {
+        const fault = await readAgain((f) => f.failResponse(path, 500, body));
+        expect(fault.snapshot).toMatchObject({
+          detail: {
+            status: 'error',
+            data: { id: groupId },
+            refreshedAt: now,
+            message: serverFault,
+          },
+          offline: { active: false, refreshedAt: null },
+        });
+        expect(count(fault.sent, `GET ${path}`)).toBe(1);
+
+        const gateway = await readAgain((f) => f.failResponse(path, 502, gatewayBodies.HTML));
+        expect(gateway.snapshot).toMatchObject({
+          detail: { status: 'ready', refreshedAt: verifiedAt },
+          offline: { active: true, refreshedAt: verifiedAt },
+        });
+        expect(count(gateway.sent, `GET ${path}`)).toBe(1);
+      },
+    );
+
+    it('shows the saved copy when a body stops arriving, but keeps today’s error for a whole reply that isn’t JSON', async () => {
+      const malformed = await readAgain((f) => f.failResponse(path, 200, '<html>Maple</html>'));
+      expect(malformed.snapshot).toMatchObject({
+        detail: { status: 'error', data: { id: groupId }, refreshedAt: now, message: unreachable },
+        offline: { active: false, refreshedAt: null },
+      });
+      expect(count(malformed.sent, `GET ${path}`)).toBe(1);
+
+      const lost = await readAgain((f) => f.failPath(path));
+      const broken = await readAgain((f) => f.breakBody(path));
+      expect(broken.snapshot).toMatchObject({
+        detail: { status: 'ready', data: { id: groupId }, refreshedAt: verifiedAt },
+        offline: { active: true, refreshedAt: verifiedAt },
+      });
+      expect(broken.snapshot).toEqual(lost.snapshot);
+      expect(count(broken.sent, `GET ${path}`)).toBe(1);
+      expect(broken.sent).toEqual(lost.sent);
+    });
+
+    it.each([502, 503, 504])(
+      'restores the saved Home offline when a gateway answers %i, as when the phone is offline',
+      async (status) => {
+        async function restart(fail: (f: Fixture) => void) {
+          const f = fixture(),
+            first = f.create();
+          await first.signIn('alex');
+          first.dispose();
+          fail(f);
+          const before = f.requests().length;
+          const restarted = f.create();
+          await restarted.restore();
+          return { snapshot: restarted.getSnapshot(), sent: f.requests().slice(before) };
+        }
+        const offline = await restart((f) => f.goOffline());
+        const gateway = await restart((f) => f.gatewayDown(status));
+        expect(gateway.snapshot).toMatchObject({
+          auth: { status: 'authenticated', user: { id: accountId } },
+          groups: { data: [{ id: groupId }] },
+          home: { data: [{ currency: 'INR', youAreOwed: 12 }] },
+          offline: { active: true, refreshedAt: now },
+        });
+        expect(gateway.snapshot).toEqual(offline.snapshot);
+        // Only session checks: the restore's, then one before each saved view, as offline.
+        expect(gateway.sent).toEqual(Array(3).fill('GET /api/auth/get-session'));
+        expect(gateway.sent).toEqual(offline.sent);
+      },
+    );
+
+    it('clears offline at the next pull that reaches SplitBook, with no reconnect event, and shows fresh data', async () => {
+      const f = fixture(),
+        controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      verifiedEarlier(f);
+      f.gatewayDown(502);
+      await controller.refresh('pull');
+      expect(controller.getSnapshot()).toMatchObject({
+        detail: { status: 'ready', data: { id: groupId }, refreshedAt: verifiedAt },
+        offline: { active: true, refreshedAt: verifiedAt },
+      });
+
+      // The backend is back, and the phone never went offline: the member pulls to refresh.
+      f.gatewayUp();
+      const before = f.requests().length;
+      await controller.refresh('pull');
+      const sent = f.requests().slice(before);
+      // The session is checked before anything is read live again.
+      expect(sent[0]).toBe('GET /api/auth/get-session');
+      expect(count(sent, `GET ${path}`)).toBe(1);
+      expect(controller.getSnapshot()).toMatchObject({
+        detail: { status: 'ready', data: { id: groupId }, refreshedAt: now },
+        offline: { active: false, refreshedAt: null },
+      });
+    });
+
+    it('blocks Save while a gateway fails, then allows it once a pull reaches SplitBook, sending it once', async () => {
+      const f = fixture(),
+        controller = f.create();
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({
+        description: 'Market run',
+        amount: '12',
+        tagId: 'c00000000000000000000001',
+      });
+      f.gatewayDown(503);
+      await controller.refresh('pull');
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'expense',
+        offline: { active: true },
+        expense: { status: 'editing', draft: { description: 'Market run' } },
+      });
+      let before = f.requests().length;
+      await controller.saveExpense();
+      // Saving needs SplitBook: nothing is sent, and nothing waits to be sent later.
+      expect(f.requests().slice(before)).toEqual([]);
+      expect(controller.getSnapshot().expense).toMatchObject({ status: 'editing', attempt: null });
+
+      f.gatewayUp();
+      before = f.requests().length;
+      await controller.refresh('pull');
+      expect(f.requests().slice(before)[0]).toBe('GET /api/auth/get-session');
+      expect(controller.getSnapshot().offline).toMatchObject({ active: false });
+      // Nothing was sent by the recovery itself.
+      expect(f.requests().filter((request) => request.startsWith('POST /api/groups/'))).toEqual([]);
+
+      await controller.saveExpense();
+      expect(f.requests().filter((request) => request.startsWith('POST /api/groups/'))).toEqual([
+        `POST ${path}/expenses`,
+      ]);
+      expect(controller.getSnapshot().expense.status).toBe('saved');
     });
   });
   it.each(['owner', 'future', 'corrupt'])('refuses a %s cache envelope', async (kind) => {
