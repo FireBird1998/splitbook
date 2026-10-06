@@ -1,5 +1,11 @@
-import { expect, test, type Locator, type Page, type Response } from '@playwright/test';
-import { DEMO_WORK_GROUP_ID } from '../src/lib/demo-personas';
+import {
+  expect,
+  test,
+  type Locator,
+  type Page,
+  type Response,
+  type TestInfo,
+} from '@playwright/test';
 import {
   DEMO_GROUP_ID,
   DEMO_TRIP_NAME,
@@ -13,14 +19,23 @@ import {
 /**
  * Add expense from anywhere (#304): the top bar's primary button. Outside a Group it asks which
  * Group first; inside one it opens that Group's Expense form. Either way the member stays on the
- * page, a confirmation names the Group, and the Group's figures refresh. Journeys elsewhere
- * change balances, so figures are compared with what this journey saw before saving.
+ * page, a confirmation names the Group, and the Group's figures refresh.
  *
- * Expenses go to the seeded Work Group, Alex's and Sam's only: the journeys check Priya's
- * seeded balance exactly, so nothing here may touch a Group she is in.
+ * Other specs check the seeded balances exactly, in whatever order the tests run. So every
+ * Expense here goes to a Group the test creates for Alex alone: no seeded Group changes, and
+ * no persona's balance moves. The refresh is shown with that Group's own figures.
  */
 
-const WORK_GROUP_NAME = 'Studio Lunch Club';
+/** A Household of Alex's own, named for this test, project and run. */
+async function createOwnGroup(page: Page, testInfo: TestInfo, label: string) {
+  const name = `Playwright QA Add expense ${label} ${testInfo.project.name} ${Date.now().toString(36)}${testInfo.repeatEachIndex}${testInfo.retry}`;
+  const response = await page.request.post('/api/groups', {
+    data: { name, category: 'home', defaultCurrency: 'INR' },
+  });
+  expect(response.status()).toBe(201);
+  const { data } = await response.json();
+  return { id: data._id as string, name };
+}
 
 /** The top bar's button: labelled on desktop, an icon button with the same name on phones. */
 const addExpenseButton = (page: Page) =>
@@ -83,6 +98,9 @@ test('from Home: choose a Group, add the Expense, and stay on Home with a confir
 }, testInfo) => {
   await enterAsPersona(page, 'alex');
   await expectThemeApplied(page, testInfo);
+  const group = await createOwnGroup(page, testInfo, 'from Home');
+  await page.reload();
+  const main = page.getByRole('main');
 
   const button = addExpenseButton(page);
   await expect(button).toBeVisible();
@@ -98,56 +116,54 @@ test('from Home: choose a Group, add the Expense, and stay on Home with a confir
     await expect(button.getByText('Add expense')).toBeVisible();
   }
 
-  // The Group's line in the sidebar, before the Expense: it changes once the save lands.
-  const sidebarRow = page
-    .getByRole('complementary', { name: 'Splitbook' })
-    .getByRole('navigation', { name: 'Your Groups' })
-    .getByRole('link', { name: new RegExp(`^${WORK_GROUP_NAME} `) });
-  const before = isPhone(testInfo)
-    ? null
-    : await sidebarRow.evaluate((element) => element.textContent);
+  // The Group's card on Home, before the Expense: this Month's spending, from its own read.
+  const card = main
+    .locator('.MuiPaper-root')
+    .filter({ hasText: group.name })
+    .filter({ hasText: 'so far' });
+  await expect(card).toContainText('so far · ₹0.00 across 0 expenses');
 
   const chooser = chooserDialog(page);
   await openFromTopBar(page, chooser);
   await expect(chooser).toHaveAccessibleDescription('Pick the Group this expense belongs to.');
   const groups = chooser.getByRole('list', { name: 'Your Groups' });
   await expect(
-    groups.getByRole('button', { name: new RegExp(`^${WORK_GROUP_NAME} `) }),
-  ).toBeVisible();
-  await expect(
     groups.getByRole('button', { name: new RegExp(`^${DEMO_TRIP_NAME} `) }),
   ).toBeVisible();
+  const choice = groups.getByRole('button', { name: new RegExp(`^${group.name} `) });
+  await expect(choice).toBeVisible();
   await expectNoSeriousA11yViolations(page, testInfo, 'add-expense-chooser');
   await reviewScreenshot(page, testInfo, 'add-expense-chooser');
 
-  await groups.getByRole('button', { name: new RegExp(`^${WORK_GROUP_NAME} `) }).click();
+  await choice.click();
   await expect(chooser).toHaveCount(0);
   const form = formDialog(page);
   await expect(form).toBeVisible();
   // The form names the Group it adds to.
-  await expect(form.getByText(WORK_GROUP_NAME, { exact: true })).toBeVisible();
+  await expect(form.getByText(group.name, { exact: true })).toBeVisible();
 
   const description = `Top bar lunch ${testInfo.project.name}`;
-  // Home's balances, which the sidebar reads too, and its Groups list.
+  // The Group's own read on Home, and the account's Groups and balances (the sidebar's too).
   await saveExpense(page, {
-    groupId: DEMO_WORK_GROUP_ID,
+    groupId: group.id,
     description,
     amount: '90',
-    rereads: ['/api/user/balances', '/api/groups'],
+    rereads: [`/api/groups/${group.id}/expenses`, '/api/groups', '/api/user/balances'],
   });
 
   // Still on Home, told where the Expense went, and back on the button.
   expect(new URL(page.url()).pathname).toBe('/dashboard');
   await expect(page.getByRole('alert').filter({ hasText: 'Expense added to' })).toHaveText(
-    `Expense added to ${WORK_GROUP_NAME}`,
+    `Expense added to ${group.name}`,
   );
   await expect(button).toBeFocused();
-  if (before !== null) await expect(sidebarRow).not.toHaveText(before);
+  // The Group's figures on Home now count the Expense.
+  await expect(card).toContainText('so far · ₹90.00 across 1 expense');
 
   // The Expense is in the Group.
-  await page.goto(`/groups/${DEMO_WORK_GROUP_ID}`);
+  await page.goto(`/groups/${group.id}`);
   await expect(
-    page.getByRole('main').getByRole('button', { name: new RegExp(`^${description}, ₹90\\.00`) }),
+    main.getByRole('button', { name: new RegExp(`^${description}, ₹90\\.00`) }),
   ).toBeVisible();
 });
 
@@ -155,38 +171,43 @@ test('inside a Group: the form opens for that Group, with no chooser', async ({
   page,
 }, testInfo) => {
   await enterAsPersona(page, 'alex');
-  await page.goto(`/groups/${DEMO_WORK_GROUP_ID}`);
+  const group = await createOwnGroup(page, testInfo, 'in a Group');
+  await page.goto(`/groups/${group.id}`);
   const main = page.getByRole('main');
-  await expect(main.getByText(WORK_GROUP_NAME).first()).toBeVisible();
+  await expect(main.getByText(group.name).first()).toBeVisible();
+  await expect(main.getByText('No expenses yet')).toBeVisible();
 
   const form = formDialog(page);
   await openFromTopBar(page, form);
   await expect(chooserDialog(page)).toHaveCount(0);
-  await expect(form.getByText(WORK_GROUP_NAME, { exact: true })).toBeVisible();
+  await expect(form.getByText(group.name, { exact: true })).toBeVisible();
   await reviewScreenshot(page, testInfo, 'add-expense-in-group');
 
   const description = `Top bar taxi ${testInfo.project.name}`;
-  // The Group page's balances; on desktop also the member's balances, for the sidebar.
+  // The Group page's own reads; on desktop also the account's balances, for the sidebar.
   await saveExpense(page, {
-    groupId: DEMO_WORK_GROUP_ID,
+    groupId: group.id,
     description,
     amount: '240',
     rereads: [
-      `/api/groups/${DEMO_WORK_GROUP_ID}/balances`,
+      `/api/groups/${group.id}/expenses`,
+      `/api/groups/${group.id}/balances`,
       ...(isPhone(testInfo) ? [] : ['/api/user/balances']),
     ],
   });
 
-  expect(new URL(page.url()).pathname).toBe(`/groups/${DEMO_WORK_GROUP_ID}`);
+  expect(new URL(page.url()).pathname).toBe(`/groups/${group.id}`);
   await expect(page.getByRole('alert').filter({ hasText: 'Expense added to' })).toHaveText(
-    `Expense added to ${WORK_GROUP_NAME}`,
+    `Expense added to ${group.name}`,
   );
   // The Group's own list refreshes with the new Expense.
   await expect(
     main.getByRole('button', { name: new RegExp(`^${description}, ₹240\\.00`) }),
   ).toBeVisible();
+  await expect(main.getByText('No expenses yet')).toHaveCount(0);
 });
 
+// Opens and closes the seeded trip's form without saving: nothing is written.
 test('the ?action=add-expense link still opens the Group’s form', async ({ page }) => {
   await enterAsPersona(page, 'alex');
   await page.goto(`/groups/${DEMO_GROUP_ID}?action=add-expense`);
