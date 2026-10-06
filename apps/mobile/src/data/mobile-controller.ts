@@ -8,8 +8,11 @@ import {
   groupsKey,
   homeBalancesKey,
   isQueryKey,
+  matchGroup,
+  matchScope,
   queryKeyPath,
   type QueryKey,
+  type QueryScope,
 } from '@splitbook/shared/query-keys';
 import { cachedRead } from './offline-cache';
 import {
@@ -130,12 +133,19 @@ export { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
 export const DISPLAY_FRESHNESS_MS = 30_000;
 
 /**
- * What a display read describes, for invalidation: the Groups list ('groups'), Home ('home'),
- * or for one Group its details, its running Balances or the rest of its ledger (Expense pages
- * and records, Month summaries and Activity): 'group:<id>', 'balances:<id>', 'ledger:<id>'.
- * The shared key's own scope, with its Group.
+ * Whether a display read is in this invalidation scope: the Groups list ('groups'), Home
+ * ('home'), or for one Group its details, its running Balances or the rest of its ledger
+ * (Expense pages and records, Month summaries and Activity): 'group:<id>', 'balances:<id>',
+ * 'ledger:<id>'. The shared key matchers decide it.
  */
-const readScope = (key: QueryKey) => (key.length === 5 ? `${key[0]}:${key[3]}` : key[0]);
+const inScope = (scope: string) => {
+  const [name, groupId] = scope.split(':') as [QueryScope, string?];
+  return (key: unknown) =>
+    matchScope(name)(key) && (groupId === undefined || matchGroup(groupId)(key));
+};
+/** What a map of scopes holds for this read's scope. */
+const scoped = <T>(map: Map<string, T>, key: QueryKey) =>
+  [...map].find(([scope]) => inScope(scope)(key))?.[1];
 
 /** A read a change, a denial or a Groups list made obsolete, which its caller no longer shows. */
 class Obsolete extends Superseded {}
@@ -974,7 +984,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const activityKey = (groupId: string, page: number, expenseId?: string) =>
     activityPageKey(account(), groupId, { page, limit: 20, ...(expenseId && { expenseId }) });
 
-  const versionOf = (key: QueryKey) => versions.get(readScope(key)) ?? 0;
+  const versionOf = (key: QueryKey) => scoped(versions, key) ?? 0;
 
   /**
    * Saved copies are kept only for Groups the latest Groups list holds, or that Home has gained
@@ -1004,7 +1014,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // Their queries go, and a read of them still in flight is cancelled: whoever still shows it
     // reads again.
     queryClient.removeQueries({
-      predicate: ({ queryKey }) => isQueryKey(queryKey) && scopes.includes(readScope(queryKey)),
+      predicate: ({ queryKey }) => scopes.some((scope) => inScope(scope)(queryKey)),
     });
   };
   /** A confirmed Expense or Settlement change affects every page, Month, Balance, Home and Activity view. */
@@ -1055,6 +1065,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !snapshot.offline.active &&
       // An explicit refresh of this view is still running: join it instead.
       !explicit.has(viewOf(key)) &&
+      // The clock moved back past it: how old it is can't be known, so it isn't reused.
+      query.state.dataUpdatedAt <= Date.now() &&
       !query.isStaleByTime(staleTime(query))
       ? query.state.data
       : null;
@@ -1132,7 +1144,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         !current(owner) ||
         epoch !== cacheEpoch ||
         version !== versionOf(key) ||
-        stored.refreshedAt <= (invalidatedAt.get(readScope(key)) ?? -Infinity)
+        stored.refreshedAt <= (scoped(invalidatedAt, key) ?? -Infinity)
       )
         return null;
       return { value: parse(stored.value), refreshedAt: stored.refreshedAt };
@@ -1141,6 +1153,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return null;
     }
   };
+
+  /**
+   * The request behind each query's latest read. When the query cache cancels a read, whoever
+   * sent or joined it waits for that request, and takes a refusal it answered with.
+   */
+  const requests = new WeakMap<object, Promise<Envelope>>();
 
   /**
    * One network read through the query cache: a read of the same key already in flight is
@@ -1195,9 +1213,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       queryFn: (context: QueryFunctionContext) => (started = read(context)),
     });
     // Always a read: whether a verified one may be reused instead is the caller's (freshRead).
-    const fetching = queryClient.getQueryCache().build(queryClient, options).fetch(options);
-    // The request this call sent, when it didn't join one already in flight.
-    return { fetching, started };
+    const query = queryClient.getQueryCache().build(queryClient, options);
+    const fetching = query.fetch(options);
+    if (started) requests.set(query, started);
+    // The request behind the read, whether this call sent it or joined it.
+    return { fetching, request: requests.get(query) };
   };
 
   /**
@@ -1222,24 +1242,26 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       recorded = path === '/api/groups' ? shown : () => view === viewRequest;
     try {
       let result: Envelope | null = null;
-      // A confirmed change or denial during the read cancelled it, as obsolete: read once more,
-      // joining the read that change already started where there is one. A cancel is never a
-      // failure to reach the server, so it never falls back to the saved copy.
-      for (let attempt = 0; !result; attempt += 1) {
+      // A confirmed change or denial during the read cancelled it, as obsolete: while the caller
+      // still shows it, read again, joining the read that change already started where there is
+      // one. Each cancel takes a change of its own, so this ends; an obsolete answer is never
+      // shown. A cancel is never a failure to reach the server, so it never falls back to the
+      // saved copy.
+      while (!result) {
         const read = fetchRead(key, owner, parse);
         try {
           result = await read.fetching;
         } catch (error) {
           if (!(error instanceof CancelledError)) throw error;
-          // Its own request ends first, so whatever its answer set off has finished: a session
+          // The request ends first, so whatever its answer set off has finished: a session
           // that ended, or a Group whose refusal is this read's answer.
-          const answer = await read.started?.then(
+          const answer = await read.request?.then(
             () => null,
             (failure: unknown) => failure,
           );
           if (!current(owner) || answer instanceof Superseded) throw new Superseded();
           if (answer instanceof RequestError && answer.kind !== 'cancelled') throw answer;
-          if (attempt >= 2 || !shown()) throw new Obsolete();
+          if (!shown()) throw new Obsolete();
         }
       }
       const parsed = parse(result.value);
@@ -1267,8 +1289,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const stored = await lease.write(() => dependencies.readCache!.load(lease.accountId, path));
       const copy = cachedRead(stored, lease.accountId, path, now());
       // As in peek, a saved copy older than a change it couldn't be removed for is never shown.
-      const cached =
-        copy && copy.refreshedAt > (untrusted.get(readScope(key)) ?? -Infinity) ? copy : null;
+      const cached = copy && copy.refreshedAt > (scoped(untrusted, key) ?? -Infinity) ? copy : null;
       if (!current(owner)) throw new Superseded();
       if (overtaken()) return again();
       if (view === viewRequest) offlineSession = true;

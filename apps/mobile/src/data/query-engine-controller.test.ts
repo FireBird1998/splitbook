@@ -69,6 +69,8 @@ function gate() {
 /** A fictional backend for Alex and Sam, and device stores that outlive a controller. */
 function fixture(options: { freshness?: number } = {}) {
   const state = { ledger: 0, offline: false, revoked: false };
+  /** How many times this device purged a lost Group's saved copies. */
+  let purges = 0;
   let cookie: string | null = null,
     owner: string | null = null,
     cleanup = false,
@@ -195,6 +197,7 @@ function fixture(options: { freshness?: number } = {}) {
         readCache: {
           ...records(disk),
           invalidateGroup: async (account, id) => {
+            purges += 1;
             for (const key of disk.keys())
               if (
                 key.startsWith(`${account}/api/groups/${id}`) ||
@@ -281,6 +284,7 @@ function fixture(options: { freshness?: number } = {}) {
     now: (path: string) => respond(path, { headers: { Cookie: 'alex.signature' } }),
     /** Every saved copy on this device of anything in the Group. */
     savedOfGroup: () => [...disk.keys()].filter((key) => key.includes(groupPath)),
+    purges: () => purges,
   };
 }
 
@@ -493,5 +497,167 @@ describe('query defaults (#214, M1-6)', () => {
     await controller.openGroup(groupId);
     expect(f.reads(groupPath)).toBe(3);
     expect(controller.getSnapshot().detail).toMatchObject({ status: 'ready', refreshedAt: start });
+  });
+});
+
+describe('review of #214', () => {
+  /**
+   * Three Month changes on Maple House, each Expense read held: each supersedes the one before,
+   * and each may add recurring Expenses when it ends, so Balances and Home read during them are
+   * obsolete. Returns the held reads, oldest first, and the Month changes still running.
+   */
+  async function threeMonthReads(f: ReturnType<typeof fixture>, also: (path: string) => boolean) {
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    f.hold((path) => path.startsWith(expensesPath) || also(path));
+    const months = ['2026-08', '2026-07', '2026-06'].map((month) => controller.selectMonth(month));
+    const held = [];
+    for (let read = 0; read < 3; read += 1) held.push(await f.held.next(expensesPath));
+    return { controller, held, months };
+  }
+  /** Lets every reply already released reach the controller. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+  /**
+   * Each held Expense read ends while `path` is being read, which cancels that read; its own
+   * request then answers, and the read is sent again. After the third, nothing holds it.
+   */
+  async function obsoleteThreeTimes(
+    f: ReturnType<typeof fixture>,
+    held: Awaited<ReturnType<typeof threeMonthReads>>['held'],
+    path: string,
+  ) {
+    for (const [index, expenses] of held.entries()) {
+      const read = await f.held.next(path);
+      expenses.release(f.now(expenses.path));
+      await settle();
+      if (index === held.length - 1) f.hold(() => false);
+      read.release(f.now(path));
+      await settle();
+    }
+  }
+
+  it('a Home read that changes keep cancelling reads again until it lands, never left loading', async () => {
+    const f = fixture();
+    const { controller, held, months } = await threeMonthReads(
+      f,
+      (path) => path === '/api/user/balances',
+    );
+    const home = f.reads('/api/user/balances');
+    const back = controller.back();
+    await obsoleteThreeTimes(f, held, '/api/user/balances');
+    await Promise.all([back, ...months]);
+    // One read for each change that made the one before it obsolete, then the one that lands.
+    expect(f.reads('/api/user/balances') - home).toBe(4);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'groups',
+      home: { status: 'ready', stale: false, data: [{ currency: 'INR' }] },
+    });
+  });
+
+  it('a Balances read that changes keep cancelling reads again until it lands, never left loading', async () => {
+    const f = fixture();
+    const { controller, held, months } = await threeMonthReads(f, (path) => path === balancesPath);
+    const balances = f.reads(balancesPath);
+    // Back on this Month, whose Expenses are still fresh: Balances are read again.
+    const september = controller.selectMonth('2026-09');
+    await obsoleteThreeTimes(f, held, balancesPath);
+    await Promise.all([september, ...months]);
+    expect(f.reads(balancesPath) - balances).toBe(4);
+    expect(controller.getSnapshot().financial).toMatchObject({
+      month: '2026-09',
+      expenses: { status: 'ready' },
+      balances: { status: 'ready', stale: false, refreshedAt: start },
+    });
+  });
+
+  it('reads again when the clock has moved back past a read, as it did before the query cache', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    vi.setSystemTime(start - 60 * 60_000);
+    await controller.refresh('foreground');
+    expect(f.reads(groupPath)).toBe(2);
+  });
+
+  it('a read that joined one refused with a 403 takes that refusal: no second request or purge', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    later(31_000);
+    // A foreground refresh reads the Group; a pull overlapping it joins that read.
+    f.hold((path) => path === groupPath);
+    const foreground = controller.refresh('foreground');
+    const read = await f.held.next(groupPath);
+    const pull = controller.refresh('pull');
+    await settle();
+    f.hold(() => false);
+    f.state.revoked = true;
+    read.release(f.now(groupPath));
+    await Promise.all([foreground, pull]);
+    expect(f.reads(groupPath)).toBe(2);
+    expect(f.purges()).toBe(1);
+    expect(controller.getSnapshot()).toMatchObject({
+      detail: { status: 'denied', data: null },
+      financial: { groupId: null, expenses: { data: [] }, balances: { data: null } },
+    });
+    expect(controller.getSnapshot().groups.data.map(({ id }) => id)).not.toContain(groupId);
+    expect(f.savedOfGroup()).toEqual([]);
+  });
+
+  // Accepted with the swap (#214): a read that failed with an HTTP error is no longer reused,
+  // even inside the window, so the next foreground refresh reads it again. Before, the answer
+  // verified before the failure was reused.
+  it('reads again on a foreground refresh inside the window after a read failed with an HTTP error', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    let failures = 0;
+    f.answer((path, method) =>
+      path === groupPath && method === 'GET' && failures++ === 0
+        ? Promise.resolve(json({}, 500))
+        : null,
+    );
+    await controller.refresh();
+    expect(controller.getSnapshot().detail.status).toBe('error');
+    later(5_000);
+    await controller.refresh('foreground');
+    expect(f.reads(groupPath)).toBe(3);
+    expect(controller.getSnapshot().detail).toMatchObject({
+      status: 'ready',
+      refreshedAt: start + 5_000,
+    });
+  });
+
+  it('reads a refusal’s reply before losing the Group aborts anything', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    later(31_000);
+    // A reply whose body can't be read once its request is aborted, as on a phone.
+    const bodies: { aborted: boolean }[] = [];
+    f.answer((path, method, init) => {
+      if (path !== groupPath || method !== 'GET') return null;
+      const reply = json({ error: 'You were removed from this Group.', code: 'NOT_A_MEMBER' }, 403);
+      return Promise.resolve({
+        ok: false,
+        status: 403,
+        headers: reply.headers,
+        json: () => {
+          bodies.push({ aborted: Boolean(init.signal?.aborted) });
+          return init.signal?.aborted
+            ? Promise.reject(new TypeError('Network request failed'))
+            : reply.json();
+        },
+      });
+    });
+    await controller.refresh('foreground');
+    expect(bodies).toEqual([{ aborted: false }]);
+    expect(controller.getSnapshot().detail).toMatchObject({ status: 'denied', data: null });
   });
 });

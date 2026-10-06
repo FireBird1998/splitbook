@@ -268,6 +268,8 @@ export function createTransport({
         throw new Superseded();
       }
       if (!response.ok) {
+        // Read first: losing a Group aborts its reads, and a reply can't be read after that.
+        const details: unknown = await response.json().catch(() => null);
         // The path decides the denial purge, never the failure's kind: a 404 under a Group's
         // Expenses is access-denied too, but purges nothing.
         const deniedGroup = /^\/api\/groups\/([a-f\d]{24})(?:\/|\?|$)/i.exec(path)?.[1];
@@ -285,7 +287,6 @@ export function createTransport({
               : response.status === 429
                 ? 'Too many attempts. Wait a moment and try again.'
                 : 'The server could not complete this request. Please try again.';
-        const details: unknown = await response.json().catch(() => null);
         const code =
           details &&
           typeof details === 'object' &&
