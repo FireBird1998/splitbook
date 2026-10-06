@@ -74,7 +74,7 @@ test('the top bar’s search and the shortcut open the dialog, and Escape closes
 
 test('the shortcut never fires while typing in another field', async ({ page }) => {
   await enterAsPersona(page, 'alex');
-  await page.goto(`/groups/${DEMO_GROUP_ID}`);
+  await page.goto(`/groups/${DEMO_GROUP_ID}/expenses`);
   const expenseSearch = page.getByRole('main').getByPlaceholder('Search expenses...');
   await expect(expenseSearch).toBeVisible();
   // Hydrated: the shortcut works from the page itself.
@@ -128,7 +128,8 @@ test('search the seed with the keyboard and jump to a Group', async ({ page }, t
   await expect(field(page)).toBeFocused();
 
   await page.keyboard.press('Enter');
-  await page.waitForURL((url) => url.pathname === `/groups/${DEMO_WEEK_TRIP_ID}`);
+  // The Group's own address lands on its Expenses tab (#305).
+  await page.waitForURL((url) => url.pathname === `/groups/${DEMO_WEEK_TRIP_ID}/expenses`);
   await expect(dialog(page)).toHaveCount(0);
   await expect(page.getByRole('main').getByText('Kochi to Alleppey').first()).toBeVisible();
 });
@@ -146,7 +147,7 @@ test('jump to an Expense’s Group, with its Expense list searched for it', asyn
   await expense.click();
   await page.waitForURL(
     (url) =>
-      url.pathname === `/groups/${DEMO_GROUP_ID}` &&
+      url.pathname === `/groups/${DEMO_GROUP_ID}/expenses` &&
       url.searchParams.get('search') === 'Seafood dinner at Anjuna',
   );
   await expect(dialog(page)).toHaveCount(0);
@@ -154,6 +155,17 @@ test('jump to an Expense’s Group, with its Expense list searched for it', asyn
   await expect(main.getByPlaceholder('Search expenses...')).toHaveValue('Seafood dinner at Anjuna');
   await expect(main.getByText('Seafood dinner at Anjuna')).toBeVisible();
   await expect(main.getByText('Scooter rental')).toHaveCount(0);
+
+  // Another Expense of the same Group, chosen from its Expenses tab, searches the list again.
+  await openByShortcut(page);
+  await field(page).pressSequentially('scooter');
+  await section(page, 'Expenses')
+    .getByRole('option', { name: /^Scooter rental, / })
+    .click();
+  await page.waitForURL((url) => url.searchParams.get('search') === 'Scooter rental');
+  await expect(main.getByPlaceholder('Search expenses...')).toHaveValue('Scooter rental');
+  await expect(main.getByText('Scooter rental')).toBeVisible();
+  await expect(main.getByText('Seafood dinner at Anjuna')).toHaveCount(0);
 });
 
 test('people by name only, and only in the member’s own Groups', async ({ page }) => {
@@ -183,7 +195,7 @@ test('people by name only, and only in the member’s own Groups', async ({ page
   ]);
   expect(href).toBe(`/groups/${data.people[0].groupId}`);
   await sam.click();
-  await page.waitForURL((url) => url.pathname === href);
+  await page.waitForURL((url) => url.pathname === `${href}/expenses`);
 });
 
 test('a failed search says so, and Try again searches again', async ({ page }) => {

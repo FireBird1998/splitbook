@@ -214,12 +214,12 @@ describe('the search dialog’s states', () => {
         text: 'SC Sam Goa Chen In Banyan Court and 2 other Groups',
       },
       {
-        href: `/groups/${goa}?search=Goa%20beach%20shack%20dinner%20%26%20drinks`,
+        href: `/groups/${goa}/expenses?search=Goa%20beach%20shack%20dinner%20%26%20drinks`,
         current: null,
         text: `Goa beach shack dinner & drinks Goa Friends Trip · ${shownDate(0)} ₹2,400.50`,
       },
       {
-        href: `/groups/${goa}?search=Goa%20ferry`,
+        href: `/groups/${goa}/expenses?search=Goa%20ferry`,
         current: null,
         text: `Goa ferry Goa Friends Trip · ${shownDate(1)}`,
       },
@@ -270,8 +270,8 @@ describe('results and where they go', () => {
     expect(groups.options.map((option) => option.href)).toEqual([`/groups/${goa}`]);
     expect(people.options.map((option) => option.href)).toEqual([`/groups/${flat}`]);
     expect(expenses.options.map((option) => option.href)).toEqual([
-      `/groups/${goa}?search=Goa%20beach%20shack%20dinner%20%26%20drinks`,
-      `/groups/${goa}?search=Goa%20ferry`,
+      `/groups/${goa}/expenses?search=Goa%20beach%20shack%20dinner%20%26%20drinks`,
+      `/groups/${goa}/expenses?search=Goa%20ferry`,
     ]);
   });
 
@@ -293,7 +293,7 @@ describe('results and where they go', () => {
 
   it('encodes a description so it never changes the address', () => {
     expect(expenseHref({ groupId: goa, description: 'Rent?tab=balances#x' })).toBe(
-      `/groups/${goa}?search=Rent%3Ftab%3Dbalances%23x`,
+      `/groups/${goa}/expenses?search=Rent%3Ftab%3Dbalances%23x`,
     );
   });
 

@@ -216,9 +216,9 @@ xl: 1536px    — Large desktop
 | `SearchDialog`   | The search dialog: query, debounced read, arrow keys, Enter and Escape    |
 | `SearchPanel`    | Its content: empty, loading, error, no-results and grouped results states |
 
-The shortcut is never taken while the member is typing in another field. A result
-opens `/groups/[id]`: a person opens the first Group shared with them, and an
-Expense opens its Group with `?search=` filling the Expense list's search.
+The shortcut is never taken while the member is typing in another field. A Group
+result opens `/groups/[id]`, and a person opens the first Group shared with them. An
+Expense opens `/groups/[id]/expenses?search=…`, which fills the Expense list's search.
 
 ### Groups (`src/components/groups/`)
 
