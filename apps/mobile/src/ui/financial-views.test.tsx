@@ -3,7 +3,8 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse } from '../data/types';
-import { RefreshStatus } from './financial-views';
+import { Freshness, RefreshStatus } from './financial-views';
+import { flatten } from '../test-utils/layout';
 import { GroupBalancesView } from './group-balances';
 import { GroupExpensesView } from './group-expenses';
 import { HomeBalances } from './home';
@@ -348,5 +349,23 @@ describe('rendered refresh feedback', () => {
     await next.release(json(page(rows.slice(20), 2, 21)));
     await settle(more);
     expect(text(root())).toContain('Item 21');
+  });
+});
+
+// #331: the freshness line ends its row on the right, so its old text fades out from there.
+describe('Freshness', () => {
+  it('fades its old text out from the right edge, where it sits', async () => {
+    const at = new Date(2026, 9, 7, 3, 21).getTime();
+    let line!: ReactTestRenderer;
+    act(() => {
+      line = create(<Freshness refreshedAt={at} refreshing />);
+    });
+    // Android answers that reduce motion is off.
+    await act(async () => undefined);
+    act(() => line.update(<Freshness refreshedAt={at} />));
+    const [outgoing] = line.root.findAll((node) => (node.type as unknown) === 'AnimatedText');
+    expect(outgoing!.children).toEqual([`Saved ${refreshedLabel(at)} · refreshing`]);
+    expect(flatten(outgoing!.parent!.props.style)).toMatchObject({ right: 0 });
+    act(() => line.unmount());
   });
 });

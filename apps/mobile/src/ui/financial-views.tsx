@@ -52,7 +52,8 @@ export function Freshness({
   const time = refreshedLabel(refreshedAt);
   if (offline) return <Badge label={`Saved ${time}`} />;
   return (
-    <StatusText tone={tone}>
+    // It ends its row, on the right: its old text fades out from there too.
+    <StatusText tone={tone} align="right">
       {refreshing ? `Saved ${time} · refreshing` : `Updated ${time}`}
     </StatusText>
   );

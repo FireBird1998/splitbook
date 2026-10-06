@@ -386,17 +386,43 @@ describe('A status change cross-fades', () => {
     expect(text(root)).toBe('Saved 10:42 · refreshing');
     const [outgoing] = hosts(root, 'AnimatedText');
     expect(outgoing.children).toEqual(['Updated 10:42']);
-    expect(outgoing.props.importantForAccessibility).toBe('no-hide-descendants');
-    expect(style(outgoing).position).toBe('absolute');
+    const room = outgoing.parent!;
+    expect(room.props.importantForAccessibility).toBe('no-hide-descendants');
+    expect(style(room)).toMatchObject({ position: 'absolute', left: 0 });
     const [fade] = timings();
+    // It holds a moment before it fades, so a text replaced at once never shows.
     expect(fade.config).toMatchObject({
       toValue: 1,
       duration: motion.status,
+      delay: motion.statusSettle,
       useNativeDriver: true,
     });
     expect(fade.value.value).toBe(0);
     // Both run off the one fade: the outgoing copy takes its reverse.
     expect((style(outgoing).opacity as { of: unknown }).of).toBe(fade.value);
+  });
+
+  // On the emulator, "Updated" fading in drew the old text from the left of a right-hand
+  // status, then snapped right.
+  it('keeps both texts to the status’s edge, the old one at full length', async () => {
+    const root = await render(<StatusText align="right">Saved 10:42 · refreshing</StatusText>);
+    update(<StatusText align="right">Updated 10:43</StatusText>);
+    const [outgoing] = hosts(root, 'AnimatedText');
+    const room = outgoing.parent!;
+    expect(style(room)).toMatchObject({ position: 'absolute', right: 0 });
+    expect(style(room).left).toBeUndefined();
+    expect(style(room).width as number).toBeGreaterThan(400);
+    expect(style(outgoing).textAlign).toBe('right');
+  });
+
+  it('never fades from, or to, a text that was replaced before it showed', async () => {
+    const root = await render(<StatusText>Saved 3:21 AM · refreshing</StatusText>);
+    // The refresh ends a moment before its new time arrives.
+    update(<StatusText>Updated 3:21 AM</StatusText>);
+    update(<StatusText>Updated 3:22 AM</StatusText>);
+    expect(text(root)).toBe('Updated 3:22 AM');
+    const outgoing = hosts(root, 'AnimatedText');
+    expect(outgoing.map((node) => node.children)).toEqual([['Saved 3:21 AM · refreshing']]);
   });
 
   it('stops a fade when the text changes again, or the line goes', async () => {

@@ -23,6 +23,11 @@ export const motion = {
   reveal: 200,
   /** A status line's old text fades out while the new one fades in. */
   status: 180,
+  /**
+   * How long a status line's new text must hold before it fades in, so a text that is replaced
+   * at once (a refresh ends a moment before its new time arrives) is never drawn.
+   */
+  statusSettle: 100,
 } as const;
 
 /** The skeletons' opacity at rest and at the top of a breath, over the border colour. */
@@ -229,29 +234,37 @@ export function useReveal(loading: boolean): Reveal | null {
 // Status cross-fade -------------------------------------------------------------------------
 
 /**
- * A status line's change: the text it replaced (null when there's nothing to fade out) and the
- * fade, from 0 to 1, the new text follows while the old one takes the reverse. A first render,
- * and any change with reduce motion on, shows the new text at once.
+ * A status line's change: the text it fades out (null when there's nothing to fade) and the
+ * fade, from 0 to 1, the new text follows while the old one takes the reverse. The text faded
+ * out is always the last one shown in full, never one that was replaced before it faded in;
+ * the new text waits `motion.statusSettle` before it fades in, so one replaced within that time
+ * never shows. A first render, and any change with reduce motion on, shows the new text at once.
  */
 export function useStatusFade(text: string) {
   useWatchReducedMotion();
-  const committed = useRef(text);
+  /** The text last shown in full. */
+  const settled = useRef(text);
   const change = useMemo(() => {
-    const from = committed.current !== text && moving() ? committed.current : null;
+    const from = settled.current !== text && moving() ? settled.current : null;
     const fade = new Animated.Value(from === null ? 1 : 0);
     const out = fade.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
     return { from, fade, out };
   }, [text]);
   useEffect(() => {
-    committed.current = text;
-    if (change.from === null) return;
+    if (change.from === null) {
+      settled.current = text;
+      return;
+    }
     const animation = Animated.timing(change.fade, {
       toValue: 1,
       duration: motion.status,
+      delay: motion.statusSettle,
       easing: Easing.inOut(Easing.quad),
       useNativeDriver: true,
     });
-    animation.start();
+    animation.start(({ finished }) => {
+      if (finished) settled.current = text;
+    });
     return () => animation.stop();
   }, [text, change]);
   return change;

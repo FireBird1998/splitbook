@@ -72,17 +72,26 @@ export function CompactText({
 /**
  * A short status that changes in place, such as "Updated 10:42" becoming "Saved 10:42 ·
  * refreshing": the old text fades out where it was while the new one fades in, instead of the
- * words jumping. Screen readers hear only the current text. `shrink` lets a long status wrap
- * inside a row rather than push its neighbours out.
+ * words jumping. Both keep to the edge the status sits on in its row (`align`), so a status on
+ * the right end of a row fades out and in from the right; the old text keeps its full length.
+ * Screen readers hear only the current text. `shrink` lets a long status wrap inside a row
+ * rather than push its neighbours out.
  */
 export function StatusText({
   children,
   variant = 'caption',
   tone = 'secondary',
   shrink = false,
+  align = 'left',
   style,
   ...props
-}: TextProps & { children: string; variant?: TextVariant; tone?: TextTone; shrink?: boolean }) {
+}: TextProps & {
+  children: string;
+  variant?: TextVariant;
+  tone?: TextTone;
+  shrink?: boolean;
+  align?: 'left' | 'right';
+}) {
   const theme = useTheme();
   const change = useStatusFade(children);
   const look = [textVariants[variant], { color: toneColor(theme, tone) }, style];
@@ -94,18 +103,31 @@ export function StatusText({
         </Text>
       </Animated.View>
       {change.from !== null ? (
-        <Animated.Text
+        // Anchored at the status's edge and wide enough for any old text, so it is never cut
+        // to the new text's box or drawn from its other end.
+        <View
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
-          numberOfLines={1}
-          style={[look, { position: 'absolute', top: 0, left: 0, right: 0, opacity: change.out }]}
+          pointerEvents="none"
+          style={[
+            { position: 'absolute', top: 0, width: outgoingRoom },
+            align === 'right' ? { right: 0 } : { left: 0 },
+          ]}
         >
-          {change.from}
-        </Animated.Text>
+          <Animated.Text
+            numberOfLines={1}
+            style={[look, { textAlign: align, opacity: change.out }]}
+          >
+            {change.from}
+          </Animated.Text>
+        </View>
       ) : null}
     </View>
   );
 }
+
+/** Room for the text a status fades out: wider than any status line on a phone. */
+const outgoingRoom = 600;
 
 /** A formatted amount (the caller formats it) in IBM Plex Mono with tabular figures. */
 export function Money({
