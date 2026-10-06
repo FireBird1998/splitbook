@@ -687,9 +687,15 @@ function shareInvite() {
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
 function GroupScreen({ state }: { state: MobileSnapshot }) {
   const feedback = refreshFeedback(state);
-  const group = state.detail.data;
   // The top bar keeps the Group's name and actions while it is first read.
   const known = shownGroup(state);
+  // Its details couldn't be read, but its Expenses answered, which proves the member belongs
+  // (owner decision 2A, #219): the Group shows as Home lists it, with the failure on its details.
+  const proven =
+    state.detail.status === 'error' &&
+    state.financial.groupId === state.detail.id &&
+    state.financial.expenses.status === 'ready';
+  const group = state.detail.data ?? (proven ? known : null);
   // Never opened on this phone, and offline: the navigation stays, without a banner.
   const unavailable = !group && state.detail.status === 'error' && state.offline.active;
   const userId = state.auth.user!.id;

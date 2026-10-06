@@ -800,7 +800,7 @@ describe('cached views and coalesced reads (#103)', () => {
     expect(restarted.getSnapshot().financial.balances.refreshedAt).toBe(f.clock.now);
   });
 
-  it('keeps a saved Group readable with its time, and no running cue, when its Group read fails', async () => {
+  it('keeps a saved Group readable with its time, and no running cue, when its Group read fails beside Expenses that answer', async () => {
     const f = fixture();
     const first = f.create();
     await first.signIn('alex');
@@ -814,15 +814,18 @@ describe('cached views and coalesced reads (#103)', () => {
     f.state.failGroup = 500;
     await restarted.openGroup(groupId);
     const state = restarted.getSnapshot();
+    // The saved Group shows with its time and the failure. The Expenses read beside it answered,
+    // which proves the member belongs, so they show as read now, and Balances after them (owner
+    // decision 2A, #219).
     expect(state).toMatchObject({
       detail: { status: 'error', data: { name: 'Maple House' }, refreshedAt: savedAt },
       financial: {
         expenses: {
-          status: 'idle',
-          refreshedAt: savedAt,
+          status: 'ready',
+          refreshedAt: f.clock.now,
           data: [{ description: '2026-09 rent, ledger 0' }],
         },
-        balances: { status: 'idle', refreshedAt: savedAt },
+        balances: { status: 'ready', refreshedAt: f.clock.now },
       },
     });
     expect(refreshFeedback(state)).toMatchObject({ quiet: false, pull: false });

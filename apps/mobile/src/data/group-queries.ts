@@ -225,8 +225,11 @@ interface View {
   previousMonth: string | null | undefined;
   /** When this open began: what its reads answer before its check of the Group waits for it. */
   since: number;
-  /** When a change written in this Group made its Balances out of date, until they are read. */
-  changedAt: number | null;
+  /**
+   * The latest change written in this Group that its Balances haven't been read after (0: none).
+   * Counted, not timed, so a clock moved back never holds them (#219).
+   */
+  change: number;
 }
 type Step = 'group' | 'expenses' | 'balances';
 
@@ -246,7 +249,9 @@ export function createGroupQueries(session: GroupSession) {
   /** Each query's latest read, by query hash. */
   const runs = new Map<string, Run>();
   /** Each fetch's start, by its promise: whose session and which version of its scope it read. */
-  const starts = new WeakMap<object, { owner: number; version: number }>();
+  const starts = new WeakMap<object, { owner: number; version: number; change: number }>();
+  /** How many changes have been written, or may have been, in this session's Group views. */
+  let changes = 0;
   /** How many pages each fetch of an Expense list has read so far, by its promise. */
   const pagesRead = new WeakMap<object, number>();
   /** Data restored from this device to show while the view is first read: never verified here. */
@@ -448,7 +453,11 @@ export function createGroupQueries(session: GroupSession) {
       reading.set(query, running.add(run.abort));
     }
     if (query?.promise && !starts.has(query.promise))
-      starts.set(query.promise, { owner: session.generation(), version: session.versionOf(key) });
+      starts.set(query.promise, {
+        owner: session.generation(),
+        version: session.versionOf(key),
+        change: changes,
+      });
     return query;
   };
   /** A saved copy as its query holds it, with the time it was verified. */
@@ -937,18 +946,29 @@ export function createGroupQueries(session: GroupSession) {
         answer = await reading;
       } catch (error) {
         // The Expense read beside it ends first: nothing this read began runs on after it. When
-        // the Group fails but was checked before, that read shows, and Balances follow it.
+        // the Group fails, but not as a refusal, that read shows if the Group was checked before,
+        // or if the server answered it in this open, which proves the member belongs (owner
+        // decision 2A, amending #180's Risk 5). Balances then follow it; the Group's details
+        // show the failure.
         const read = early;
         if (read) await read.reading.catch(() => undefined);
+        const list = read && shownList();
+        const pages = list && hashKey(list) === read.hash ? stateOf<Pages>(list) : undefined;
+        const answered =
+          pages?.status === 'success' &&
+          pages.dataUpdatedAt >= opened.since &&
+          pages.data?.pages[0]?.source === 'network';
         if (
-          read &&
-          opened.checked &&
+          (opened.checked || answered) &&
           !refused(error) &&
           !(error instanceof Superseded) &&
-          still() &&
-          hashKey(shownList() ?? []) === read.hash
-        )
+          session.current(owner) &&
+          still()
+        ) {
+          opened.checked = true;
+          reproject();
           await followBalances().catch(() => undefined);
+        }
         throw error;
       }
       if (!session.current(owner) || view !== opened || opened.lost) return false;
@@ -992,7 +1012,13 @@ export function createGroupQueries(session: GroupSession) {
   const projectExpenses = (shown: Expenses, opened: View, financial: GroupFinancialState) => {
     const key = shownList(financial),
       state = stateOf<Pages>(key);
-    if (!key || !state) return shown;
+    if (!key) return shown;
+    // A change written here removed the list it shows: until it is read again, the rows shown are
+    // marked as being read, never as current beside the change's message (#219).
+    if (!state)
+      return opened.change !== 0 && shown.status === 'ready' && shown.month === financial.month
+        ? same(shown, { ...shown, status: 'loading' as const })
+        : shown;
     const groupId = opened.groupId,
       { month } = financial,
       data = state.data;
@@ -1138,7 +1164,7 @@ export function createGroupQueries(session: GroupSession) {
   /** Out of date since a change written in this Group: no payment is offered until read (#219). */
   const projectBalances = (shown: Balances, opened: View, financial: GroupFinancialState) => {
     const next = balancesFrom(shown, opened, financial),
-      changed = opened.changedAt !== null;
+      changed = opened.change !== 0;
     return (next.changed ?? false) === changed ? next : { ...next, changed };
   };
   /** The Group as its query holds it, in the snapshot's shape. */
@@ -1246,7 +1272,7 @@ export function createGroupQueries(session: GroupSession) {
         previousMonth,
         since: Date.now(),
         // A change still to be read stays so when its Group opens again.
-        changedAt: view?.groupId === groupId ? view.changedAt : null,
+        change: view?.groupId === groupId ? view.change : 0,
       };
       // A Group opened anew lists each Month from its newest page, as a return or a refresh of
       // the view on screen never does: their pages beyond it go from memory (#215).
@@ -1385,7 +1411,7 @@ export function createGroupQueries(session: GroupSession) {
     },
     /** A change was written in this Group, or may have been: its Balances wait to be read. */
     changed(groupId: string) {
-      if (view?.groupId === groupId) view.changedAt = Date.now();
+      if (view?.groupId === groupId) view.change = ++changes;
     },
     /**
      * The member lost this Group: its view reads and observes nothing more, so a removed query's
@@ -1447,16 +1473,19 @@ export function createGroupQueries(session: GroupSession) {
           if (event.action.type === 'success' && !event.action.manual) saveAnswer(query);
           if (!view || key[3] !== view.groupId) return;
           if (client.getQueryCache().get(query.queryHash) !== query) return;
-          // Balances read from the server since a change written here: payments are offered again.
-          const answered = query.state.data as Envelope | undefined;
+          // Balances read from the server, by a read begun after the latest change written here:
+          // payments are offered again.
+          const answered = query.state.data as Envelope | undefined,
+            start = query.promise && starts.get(query.promise);
           if (
             key[0] === 'balances' &&
-            view.changedAt !== null &&
+            view.change !== 0 &&
             event.action.type === 'success' &&
             answered?.source === 'network' &&
-            query.state.dataUpdatedAt >= view.changedAt
+            start &&
+            start.change >= view.change
           )
-            view.changedAt = null;
+            view.change = 0;
           const before = session.snapshot();
           if (project(before) !== before) session.publish({});
           if (observers.group)

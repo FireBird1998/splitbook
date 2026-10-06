@@ -386,7 +386,8 @@ describe('App refresh rendering', () => {
     expect(shown).not.toContain('September');
   });
 
-  it('keeps Expenses and Balances with their time, a message and a retry when the Group read fails', async () => {
+  // Owner decision 2A (#219): the Expenses and Balances read beside a failed Group read show.
+  it('keeps the Group’s details with their time, a message and a retry when its read fails, beside Expenses and Balances read again', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');
     const verifiedAt = refreshedLabel(app.clock.now);
@@ -428,6 +429,17 @@ describe('App refresh rendering', () => {
     expect(app.refreshControl().refreshing).toBe(false);
     await app.press('Expenses');
     expect(app.text()).toContain('September groceries');
+  });
+
+  it('opens a Group whose own read fails as Home lists it, with its Expenses and the failure (2A)', async () => {
+    const app = await renderApp();
+    app.use((path) => (path === `/api/groups/${groupId}` ? json({}, 500) : undefined));
+    await app.press('Open Maple House');
+    expect(app.text()).toContain('The server could not complete this request. Please try again.');
+    expect(app.text()).not.toContain('Couldn’t open this Group');
+    expect(app.text()).toContain('September groceries');
+    await app.press('Balances');
+    expect(app.text()).toContain('You owe₹30.00');
   });
 
   it('reopens a recent Group without a request, then shows it with its time while it is read again', async () => {

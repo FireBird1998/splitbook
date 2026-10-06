@@ -88,6 +88,9 @@ function fixture() {
     offline: false,
     /** A page of September that answers 500 instead. */
     failPage: 0,
+    /** The Group, or its Balances, answers 500: a server fault, not a refusal. */
+    failGroup: false,
+    failBalances: false,
     created: 0,
     /** How long each GET takes to answer, in ms of the fake clock; 0 answers at once. */
     delay: 0,
@@ -235,6 +238,7 @@ function fixture() {
     const group = [maple, cabin].find(({ _id }) => _id === id);
     if (!id || !group) return json({}, 404);
     if (server.revoked.has(id)) return json({}, 403);
+    if (path === `/api/groups/${id}` && server.failGroup) return json({}, 500);
     if (path === `/api/groups/${id}`)
       return json({
         status: 200,
@@ -256,6 +260,7 @@ function fixture() {
       server.owe += 1;
       return json({ status: 201, data: { _id: created._id, group: id } }, 201);
     }
+    if (path === `/api/groups/${id}/balances` && server.failBalances) return json({}, 500);
     if (path === `/api/groups/${id}/balances`)
       return json({
         status: 200,
@@ -933,8 +938,11 @@ describe('sessions and access for this view (#173 gates)', () => {
     expect(controller.getSnapshot().detail).toMatchObject({ status: 'denied', data: null });
   });
 });
-// The loading-state audit's data-flow items for this view (#219, 2026-10-07).
-describe('a confirmed write in the Group never leaves older figures beside its success message', () => {
+// The loading-state audit's data-flow items for this view (#219, 2026-10-07), with the owner's
+// decided behaviour: a write's success shows when it is confirmed and is never lost; until the
+// view's read after it lands, the figures it changed show as updating and Record stays locked;
+// when that read fails, the message says so.
+describe('a confirmed write in the Group: its message at once, never beside figures shown as current', () => {
   /** The debts Balances show, as amounts. */
   const debts = (state: MobileSnapshot) =>
     (state.financial.balances.data ?? []).flatMap((bucket) =>
@@ -943,9 +951,18 @@ describe('a confirmed write in the Group never leaves older figures beside its s
   /** The debts Balances offer Record on: none offline, or while a change has them out of date. */
   const recordable = (state: MobileSnapshot) =>
     state.offline.active || state.financial.balances.changed ? [] : debts(state);
+  /**
+   * The old debt shown as current on the Group's view after the payment (the sheet closed): offered
+   * for Record, or not marked as updating.
+   */
+  const oldDebtAsCurrent = (state: MobileSnapshot) =>
+    state.screen === 'group' &&
+    debts(state).includes(30) &&
+    (recordable(state).includes(30) || !state.financial.balances.stale);
+  const failed = ' Balances couldn’t be updated yet — pull to refresh.';
 
-  it('never offers the old debt for Record after a confirmed payment, nor shows “Payment recorded” beside it', async () => {
-    const f = fixture();
+  /** Alex, on Maple House's Balances, opens Record payment for the 30 owed to Sam. */
+  async function paying(f: ReturnType<typeof fixture>) {
     const controller = f.create();
     await controller.signIn('alex');
     await controller.openGroup(mapleId, true, 'balances');
@@ -953,35 +970,10 @@ describe('a confirmed write in the Group never leaves older figures beside its s
     await controller.openRecordPayment(alex.id, sam.id, 'INR');
     const states: MobileSnapshot[] = [];
     controller.subscribe(() => states.push(controller.getSnapshot()));
-    // The view's reads after the payment are slow: its Group, which Balances follow, answers late.
-    const reread = f.hold(maplePath, { afterWrite: true, exact: true });
-    const recording = controller.recordSettlement();
-    await reread.reached;
-    await settle();
-    // The sheet has closed onto Balances: the old debt is no longer offered, and Record does nothing.
-    expect(controller.getSnapshot().screen).toBe('group');
-    expect(recordable(controller.getSnapshot())).toEqual([]);
-    expect(controller.getSnapshot()).toMatchObject({ destination: 'balances', snackbar: null });
-    const sent = f.calls.length;
-    await controller.openRecordPayment(alex.id, sam.id, 'INR');
-    expect(controller.getSnapshot().screen).toBe('group');
-    expect(f.calls.length).toBe(sent);
-    reread.release();
-    await recording;
-    await settle();
-    expect(controller.getSnapshot()).toMatchObject({
-      snackbar: { message: 'Payment recorded' },
-      financial: { balances: { status: 'ready', stale: false } },
-    });
-    expect(debts(controller.getSnapshot())).toEqual([]);
-    // Over the whole write, no snapshot offered the old debt, or showed it beside the message.
-    const shown = states.filter((state) => state.screen === 'group');
-    expect(shown.filter((state) => recordable(state).includes(30))).toEqual([]);
-    expect(shown.filter((state) => state.snackbar && debts(state).includes(30))).toEqual([]);
-  });
-
-  it('shows “Expense saved” only once the list it returns to holds the saved Expense', async () => {
-    const f = fixture();
+    return { controller, states };
+  }
+  /** Alex has the Expense form open on Maple House, with a new Expense ready to save. */
+  async function saving(f: ReturnType<typeof fixture>) {
     const controller = f.create();
     await controller.signIn('alex');
     await controller.openGroup(mapleId);
@@ -994,27 +986,221 @@ describe('a confirmed write in the Group never leaves older figures beside its s
     });
     const states: MobileSnapshot[] = [];
     controller.subscribe(() => states.push(controller.getSnapshot()));
-    // The list, read again after the save, is slow to answer.
-    const reread = f.hold(septemberPath(1), { afterWrite: true });
-    const saving = controller.saveExpense();
+    return { controller, states };
+  }
+  /** A saved Expense is highlighted only while its row is in the list. */
+  const highlightsMissingRow = (state: MobileSnapshot) =>
+    !!state.snackbar?.expenseId &&
+    !state.financial.expenses.data.some(({ id }) => id === state.snackbar?.expenseId);
+
+  it('says “Payment recorded” at once, with Balances updating and Record locked until they are read', async () => {
+    const f = fixture();
+    const { controller, states } = await paying(f);
+    // The view's reads after the payment are slow: its Group, which Balances follow, answers late.
+    const reread = f.hold(maplePath, { afterWrite: true, exact: true });
+    const recording = controller.recordSettlement();
     await reread.reached;
     await settle();
-    // Back on Expenses, the rows read before the save say they're read again, with no message.
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'balances',
+      snackbar: { message: 'Payment recorded' },
+      financial: { balances: { stale: true, changed: true } },
+    });
+    // The old debt is no longer offered, and Record does nothing.
+    expect(recordable(controller.getSnapshot())).toEqual([]);
+    const sent = f.calls.length;
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    expect(controller.getSnapshot().screen).toBe('group');
+    expect(f.calls.length).toBe(sent);
+    reread.release();
+    await recording;
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      snackbar: { message: 'Payment recorded' },
+      financial: { balances: { status: 'ready', stale: false } },
+    });
+    expect(controller.getSnapshot().financial.balances.changed).toBeFalsy();
+    expect(debts(controller.getSnapshot())).toEqual([]);
+    // Over the whole write, no snapshot offered the old debt, or showed it as current.
+    const shown = states.filter((state) => state.screen === 'group');
+    expect(shown.filter(oldDebtAsCurrent)).toEqual([]);
+  });
+
+  it('never loses “Payment recorded” when the member leaves while Balances are read again', async () => {
+    const f = fixture();
+    const { controller, states } = await paying(f);
+    const reread = f.hold(maplePath, { afterWrite: true, exact: true });
+    const recording = controller.recordSettlement();
+    await reread.reached;
+    await settle();
+    await controller.back();
+    reread.release();
+    await recording;
+    await settle();
+    expect(controller.getSnapshot().screen).toBe('groups');
+    expect(
+      states.filter((state) => state.snackbar?.message.startsWith('Payment recorded')),
+    ).not.toEqual([]);
+    expect(states.filter(oldDebtAsCurrent)).toEqual([]);
+  });
+
+  it.each([
+    ['answers 500', (f: ReturnType<typeof fixture>) => (f.server.failBalances = true)],
+    ['is offline', (f: ReturnType<typeof fixture>) => (f.server.offline = true)],
+  ])(
+    'says Balances couldn’t be updated, and keeps them locked, when their read after a payment %s',
+    async (_, fail) => {
+      const f = fixture();
+      const { controller, states } = await paying(f);
+      // The payment is recorded; the reads after it fail.
+      const post = f.hold(`${maplePath}/settlements`);
+      const recording = controller.recordSettlement();
+      await post.reached;
+      fail(f);
+      post.release();
+      await recording;
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        snackbar: { message: `Payment recorded.${failed}` },
+        financial: { balances: { stale: true, changed: true } },
+      });
+      expect(recordable(controller.getSnapshot())).toEqual([]);
+      expect(states.filter(oldDebtAsCurrent)).toEqual([]);
+    },
+  );
+
+  it('says “Expense saved” at once, with the list being read again, and highlights the row once it is listed', async () => {
+    const f = fixture();
+    const { controller, states } = await saving(f);
+    // The list, read again after the save, is slow to answer.
+    const reread = f.hold(septemberPath(1), { afterWrite: true });
+    const save = controller.saveExpense();
+    await reread.reached;
+    await settle();
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'group',
       destination: 'expenses',
-      snackbar: null,
+      snackbar: { message: 'Expense saved · Fresh groceries' },
       financial: { expenses: { status: 'loading' } },
     });
+    expect(controller.getSnapshot().snackbar?.expenseId).toBeUndefined();
     reread.release();
-    await saving;
-    expect(controller.getSnapshot()).toMatchObject({
+    await save;
+    const done = controller.getSnapshot();
+    expect(done).toMatchObject({
       snackbar: { message: 'Expense saved · Fresh groceries' },
       financial: { expenses: { status: 'ready' } },
     });
-    const saved = states.filter((state) => state.snackbar?.message.startsWith('Expense saved'));
-    expect(saved.length).toBeGreaterThan(0);
-    expect(saved.filter((state) => listed(state)[0] !== 'Fresh groceries')).toEqual([]);
+    expect(done.snackbar?.expenseId).toBe(done.financial.expenses.data[0].id);
+    expect(listed(done)[0]).toBe('Fresh groceries');
+    // While the message showed, the list never looked current without the new row.
+    const beside = states.filter(
+      (state) =>
+        state.snackbar?.message.startsWith('Expense saved') &&
+        state.financial.expenses.status === 'ready' &&
+        listed(state)[0] !== 'Fresh groceries',
+    );
+    expect(beside).toEqual([]);
+    expect(states.filter(highlightsMissingRow)).toEqual([]);
+  });
+
+  it('says the list couldn’t be updated, and highlights no row, when the read after a save is offline', async () => {
+    const f = fixture();
+    const { controller, states } = await saving(f);
+    const post = f.hold(`${maplePath}/expenses`);
+    const save = controller.saveExpense();
+    await post.reached;
+    f.server.offline = true;
+    post.release();
+    await save;
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      snackbar: {
+        message:
+          'Expense saved · Fresh groceries. Expenses couldn’t be updated yet — pull to refresh.',
+      },
+      financial: { balances: { changed: true } },
+    });
+    expect(controller.getSnapshot().snackbar?.expenseId).toBeUndefined();
+    expect(states.filter(highlightsMissingRow)).toEqual([]);
+  });
+
+  it('never shows a Balances copy whose removal failed after a payment, even before the Group answers on a restart', async () => {
+    const f = fixture();
+    const { controller } = await paying(f);
+    // The payment is recorded, its saved copies can't be removed, and the reads after it fail.
+    const post = f.hold(`${maplePath}/settlements`);
+    const recording = controller.recordSettlement();
+    await post.reached;
+    f.device.failRemoval = true;
+    f.server.offline = true;
+    post.release();
+    await recording;
+    await settle();
+    expect(f.savedRows(balancesPath)).not.toEqual([]);
+    controller.dispose();
+    // The app restarts online, and the Group answers late.
+    f.device.failRemoval = false;
+    f.server.offline = false;
+    const restarted = f.create();
+    await restarted.restore();
+    const states: MobileSnapshot[] = [];
+    restarted.subscribe(() => states.push(restarted.getSnapshot()));
+    const group = f.hold(maplePath, { exact: true });
+    const opening = restarted.openGroup(mapleId, true, 'balances');
+    await group.reached;
+    await settle();
+    expect(states.filter((state) => debts(state).includes(30))).toEqual([]);
+    group.release();
+    await opening;
+    expect(debts(restarted.getSnapshot())).toEqual([]);
+  });
+});
+
+// Owner decision 2A (2026-10-07), amending #180's Risk 5: an Expense list the server answers
+// proves the member belongs to the Group, so it shows though the Group's own read failed.
+describe('a Group read that fails beside Expenses that answer', () => {
+  it('shows the Expenses, and Balances after them, with an error on the Group’s details', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    f.server.failGroup = true;
+    const sent = f.calls.length;
+    await controller.openGroup(mapleId);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: {
+        status: 'error',
+        id: mapleId,
+        message: 'The server could not complete this request. Please try again.',
+      },
+      financial: {
+        month: '2026-09',
+        expenses: { status: 'ready' },
+        balances: { status: 'ready', data: [{ debts: [{ amount: 30 }] }] },
+      },
+    });
+    expect(listed(controller.getSnapshot())).toEqual(septemberRows(1, 20));
+    expect(f.gets(sent)).toEqual(['group', 'expenses 2026-09 p1', 'balances']);
+  });
+
+  it('keeps Expenses read from this device’s copy hidden when the Group can’t be read', async () => {
+    const f = fixture();
+    const first = f.create();
+    await first.signIn('alex');
+    await first.openGroup(mapleId);
+    await settle();
+    first.dispose();
+    // Offline, with no Group copy: the Expenses copy alone proves nothing.
+    f.server.offline = true;
+    f.rows.delete(alex.id + maplePath);
+    const restarted = f.create();
+    await restarted.restore();
+    await restarted.openGroup(mapleId);
+    expect(restarted.getSnapshot().financial.expenses.data).toEqual([]);
   });
 });
 

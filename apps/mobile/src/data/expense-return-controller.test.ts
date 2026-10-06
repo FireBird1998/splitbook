@@ -1412,6 +1412,43 @@ describe('An edit or delete whose answer was lost (#232)', () => {
     },
   );
 
+  // #219: a change this app learns of only by checking, after a restart, still holds Balances'
+  // payments back until they are read after it.
+  it('offers no payment on Balances read before a check confirms an edit made before a restart', async () => {
+    const server = ledger();
+    const { controller } = await signedIn(server);
+    await controller.openGroup(householdId);
+    await controller.openExpense(householdId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ amount: '45' });
+    const patch = server.hold('PATCH', recordPath);
+    const saving = controller.saveExpense();
+    await patch.reached;
+    // The app closes; the ledger then commits the edit, and its answer reaches no one.
+    controller.dispose();
+    patch.release();
+    await saving;
+
+    const restarted = server.create();
+    await restarted.restore();
+    await restarted.openGroup(householdId, true, 'balances');
+    expect(restarted.getSnapshot().financial.balances).toMatchObject({
+      status: 'ready',
+    });
+    expect(restarted.getSnapshot().financial.balances.changed).toBeFalsy();
+    await restarted.openExpense(householdId, expenseId);
+    restarted.resumeExpenseDraft();
+    const balances = server.hold('GET', new RegExp(`/api/groups/${householdId}/balances$`));
+    const checking = restarted.reconcileExpense();
+    await balances.reached;
+    expect(restarted.getSnapshot()).toMatchObject({
+      screen: 'group',
+      financial: { balances: { changed: true } },
+    });
+    balances.release();
+    await checking;
+    expect(restarted.getSnapshot().financial.balances.changed).toBeFalsy();
+  });
   it('removes the Group’s older saved copies when a check after a restart confirms the edit', async () => {
     const server = ledger({ savedCopies: true });
     /** Saved copies of the Group's ledger that still show the Expense from before the edit. */

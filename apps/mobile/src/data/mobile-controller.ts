@@ -157,6 +157,12 @@ const scoped = <T>(map: Map<string, T>, key: QueryKey) =>
 class Obsolete extends Superseded {}
 /** A Group's refusal, in the transport's words. */
 const refusal = (status: number) => new RequestError(groupRefused(status), status);
+/** A confirmation without its highlight: the saved row isn't listed (yet). */
+const unhighlighted = ({ groupId, message, viewMonth }: GroupSnackbar): GroupSnackbar => ({
+  groupId,
+  message,
+  viewMonth,
+});
 
 /** The view on screen, which a pull or an automatic refresh belongs to. */
 export function shownView({
@@ -402,8 +408,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let route: Route = home;
   /** The latest return's request to scroll back (`restoreScroll`); the next return asks anew. */
   let scrollRequests = 0;
-  /** A confirmed change's message, shown once the Group's view has read the change (#219). */
-  let heldSnackbar: GroupSnackbar | null = null;
+  /**
+   * A confirmed change's message, shown when the change is confirmed. Once the Group's view has
+   * read the change, it highlights the saved row, or says what couldn't be updated (#219).
+   */
+  let confirmation: { snackbar: GroupSnackbar; subject: 'Expenses' | 'Balances' } | null = null;
   /** The Activity pages of a return (`GroupReread`) that a read has already shown again. */
   const rereadsShown = new WeakSet<object>();
   let offlineSession = false;
@@ -510,6 +519,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // Return feedback belongs to the Group view it was made for; leaving that view ends it.
     const showing = (groupId: string) => next.screen === 'group' && next.detail.id === groupId;
     if (next.snackbar && !showing(next.snackbar.groupId)) next = { ...next, snackbar: null };
+    // A saved Expense is highlighted only while its row is listed (#219).
+    const highlighted = next.snackbar?.expenseId;
+    if (highlighted && !next.financial.expenses.data.some(({ id }) => id === highlighted))
+      next = { ...next, snackbar: unhighlighted(next.snackbar!) };
     // Likewise Home's, and the Leave Group sheet belongs to Members and Group details.
     if (next.homeSnackbar && next.screen !== 'groups') next = { ...next, homeSnackbar: null };
     if (next.leave.status !== 'closed' && next.screen !== 'members')
@@ -560,7 +573,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     viewRequest += 1;
     listedGroups = null;
     unlistedGroups = new Set();
-    heldSnackbar = null;
+    confirmation = null;
     lostGroups.clear();
     // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
     homeQueries.reset();
@@ -2956,7 +2969,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   /**
    * After a confirmed change: every affected view reads again; earlier responses cannot return.
-   * Its message shows once the Group's view has read the change, never beside what it replaces.
+   * Its message, shown when the change was confirmed, then says what that read found: the saved
+   * row is highlighted once it is listed, or the figures that couldn't be updated are named.
    */
   const refreshLedgerViews = async (groupId: string, owner: number, returned: boolean) => {
     groupQueries.changed(groupId);
@@ -2965,13 +2979,35 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (returned || (snapshot.screen === 'group' && snapshot.detail.id === groupId))
         await openGroup(groupId, false);
     } finally {
-      const message = heldSnackbar;
-      if (message?.groupId === groupId && current(owner)) {
-        heldSnackbar = null;
-        publish({ ...snapshot, snackbar: message });
-      }
+      if (confirmation?.snackbar.groupId === groupId && current(owner)) confirmed(confirmation);
     }
     if (current(owner)) await refreshHome();
+  };
+  /** The change's message, still showing, after the view read the change (or failed to). */
+  const confirmed = ({ snackbar, subject }: NonNullable<typeof confirmation>) => {
+    confirmation = null;
+    const shown = snapshot.snackbar,
+      { financial } = snapshot;
+    if (shown?.groupId !== snackbar.groupId || shown.message !== snackbar.message) return;
+    const ours = financial.groupId === snackbar.groupId;
+    const stale =
+      subject === 'Expenses' && !(ours && financial.expenses.status === 'ready')
+        ? 'Expenses'
+        : !ours || financial.balances.changed
+          ? 'Balances'
+          : null;
+    publish({
+      ...snapshot,
+      snackbar: stale
+        ? {
+            ...unhighlighted(shown),
+            message: `${snackbar.message}. ${stale} couldn’t be updated yet — pull to refresh.`,
+          }
+        : {
+            ...shown,
+            ...(snackbar.expenseId ? { expenseId: snackbar.expenseId } : {}),
+          },
+    });
   };
 
   /**
@@ -3027,8 +3063,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const { groupId } = to,
       { detail, financial } = snapshot,
       origin = to.reread?.expenses;
-    // A confirmed change's message waits for the view's read of it (`refreshLedgerViews`).
-    heldSnackbar = snackbar;
+    // A confirmed change says so at once; `refreshLedgerViews` finishes its message.
+    confirmation = snackbar && { snackbar, subject: 'Expenses' };
     navigate(to, {
       detail:
         detail.id === groupId
@@ -3039,7 +3075,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         : financial.groupId === groupId && financial.month === origin.month
           ? financial
           : { ...emptyFinancial(), groupId, month: origin.month },
-      snackbar: null,
+      snackbar: snackbar && unhighlighted(snackbar),
     });
   };
 
@@ -4202,8 +4238,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   ) => {
     settlementRequest += 1;
     pendingRequest += 1;
-    // A recorded payment's message waits for Balances read after it (`refreshLedgerViews`).
-    heldSnackbar = snackbar;
+    // A recorded payment says so at once; `refreshLedgerViews` finishes its message.
+    confirmation = snackbar && { snackbar, subject: 'Balances' };
     navigate(to, {
       detail:
         snapshot.detail.id === to.groupId
@@ -4211,7 +4247,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           : { status: 'loading', id: to.groupId, data: null, message: null, refreshedAt: null },
       settlement: emptySettlement(),
       pendingPayment: pending,
-      snackbar: null,
+      snackbar,
     });
   };
 

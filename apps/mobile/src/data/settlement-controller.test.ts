@@ -782,7 +782,10 @@ describe('native payment recording', () => {
       if (status === 503)
         expect(snapshot).toMatchObject({
           destination: 'balances',
-          snackbar: { message: 'Payment recorded' },
+          // Said truthfully: the payment is recorded, its Balances aren't updated yet (#219).
+          snackbar: {
+            message: 'Payment recorded. Balances couldn’t be updated yet — pull to refresh.',
+          },
           financial: { balances: { status: 'error' } },
         });
       else expect(snapshot.detail.status).toBe('denied');
@@ -837,13 +840,19 @@ describe('native payment recording', () => {
   });
 
   // #219 (loading-state audit): until Balances are read after a payment, they offer none, so the
-  // sheet can't reopen on the debt the payment just settled.
-  it('offers no payment while Balances are read again after an earlier one, then opens on the new figures', async () => {
+  // sheet can't reopen on the debt the payment just settled. Once they are, a sheet reopened while
+  // the rest of the refresh after it runs (Home's figures) is kept as it is.
+  it('offers no payment while Balances are read again after an earlier one, then opens on the new figures and keeps that sheet', async () => {
     let committed = false,
-      held = false;
+      held = false,
+      homeHeld = false;
     let release!: (value: FetchResponse) => void, entered!: () => void;
+    let releaseHome!: (value: FetchResponse) => void, homeEntered!: () => void;
     const dispatched = new Promise<void>((resolve) => {
       entered = resolve;
+    });
+    const homeDispatched = new Promise<void>((resolve) => {
+      homeEntered = resolve;
     });
     const { controller } = setup((path, init) => {
       if (path.endsWith('/settlements') && init.method === 'POST') {
@@ -860,6 +869,13 @@ describe('native payment recording', () => {
         }
         return json(balances(20));
       }
+      if (committed && path === '/api/user/balances' && !homeHeld) {
+        homeHeld = true;
+        return new Promise((resolve) => {
+          releaseHome = resolve;
+          homeEntered();
+        });
+      }
     });
     await controller.signIn('alex');
     await controller.openGroup(groupId, true, 'balances');
@@ -867,16 +883,18 @@ describe('native payment recording', () => {
     controller.updateSettlement({ amount: '10', note: 'Paid already' });
     const saving = controller.recordSettlement();
     await dispatched;
-    // The sheet closed onto Balances, which are still being read: choosing Record does nothing.
+    // The sheet closed onto Balances, which are still being read: the payment says it is recorded,
+    // and choosing Record does nothing.
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'group',
-      snackbar: null,
+      snackbar: { message: 'Payment recorded' },
       financial: { balances: { changed: true } },
     });
     await controller.openRecordPayment(actor, recipient, 'INR');
     expect(controller.getSnapshot().screen).toBe('group');
     release(json(balances(20)));
-    await saving;
+    // Balances are read; Home's figures, read last, are slow.
+    await homeDispatched;
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'group',
       snackbar: { message: 'Payment recorded' },
@@ -884,10 +902,17 @@ describe('native payment recording', () => {
     });
     expect(controller.getSnapshot().financial.balances.changed).toBeFalsy();
     await controller.openRecordPayment(actor, recipient, 'INR');
-    expect(controller.getSnapshot()).toMatchObject({
-      screen: 'settlement',
-      settlement: { status: 'editing', suggested: 20 },
+    controller.updateSettlement({ amount: '5' });
+    const reopened = controller.getSnapshot().settlement;
+    expect(reopened).toMatchObject({
+      status: 'editing',
+      suggested: 20,
+      draft: { amount: '5' },
     });
+    releaseHome(json({ status: 200, data: { buckets: [] } }));
+    await saving;
+    expect(controller.getSnapshot().screen).toBe('settlement');
+    expect(controller.getSnapshot().settlement).toEqual(reopened);
   });
 
   it('persists the exact actual payment before recording, then closes onto refreshed Balances', async () => {
