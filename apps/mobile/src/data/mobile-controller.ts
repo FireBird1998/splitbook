@@ -122,6 +122,7 @@ import type {
   MobileDependencies,
   MobileGroup,
   MobileSnapshot,
+  Route,
 } from './types';
 
 export { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
@@ -222,6 +223,15 @@ function emptyFinancial(): GroupFinancialState {
     expenses: emptyExpenses(),
     balances: { status: 'idle', data: null, message: null, refreshedAt: null, stale: false },
   };
+}
+
+/** Home, where every session starts and ends. */
+const home: Route = { screen: 'groups' };
+type GroupRoute = Extract<Route, { screen: 'group' }>;
+
+/** No Group shown: Home's, and every fresh session's. */
+function noGroup(): MobileSnapshot['detail'] {
+  return { status: 'idle', id: null, data: null, message: null, refreshedAt: null };
 }
 
 function emptyHome(): HomeFinancialState {
@@ -350,7 +360,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
     invitation: { code: null, status: 'idle', preview: null, message: null },
     share: { status: 'idle', url: null, message: null },
     groups: { status: 'idle', data: [], message: null, loaded: false },
-    detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
+    detail: noGroup(),
   };
 }
 
@@ -432,10 +442,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let listedGroups: Set<string> | null = null;
   let unlistedGroups = new Set<string>();
   let cacheEpoch = 0;
-  // Set by returnToGroup: the next read of that Group and Month reads this many pages.
-  let returnPages: { groupId: string; month: string | null; pages: number } | null = null;
-  // Likewise for Activity, when the task began there.
-  let returnActivityPages: { groupId: string; pages: number } | null = null;
+  /** Where the member is (ADR 0006, M8-2). Only `navigate` changes it. */
+  let route: Route = home;
+  /** The pages of a return (`GroupReread`) that a read has already shown again. */
+  const rereadsShown = new WeakSet<object>();
   let offlineSession = false;
   const staleReads = new Map<string, number | null>();
   const freshness = dependencies.displayFreshnessMs ?? DISPLAY_FRESHNESS_MS;
@@ -525,12 +535,27 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (code && !pendingCode) await savePending(null);
   };
 
+  /**
+   * The screen and its parameters come from the route, whatever `next` says: a Group's
+   * destination and the scroll position a return asks for, and on Home no Group.
+   */
+  const placed = (next: MobileSnapshot): MobileSnapshot => {
+    const at = route;
+    const destination = at.screen === 'group' ? at.destination : next.destination;
+    const restoreScroll = at.screen === 'group' ? at.restoreScroll : null;
+    const detail = at.screen === 'groups' && next.detail.id !== null ? noGroup() : next.detail;
+    return next.screen === at.screen &&
+      next.destination === destination &&
+      next.restoreScroll === restoreScroll &&
+      next.detail === detail
+      ? next
+      : { ...next, screen: at.screen, destination, restoreScroll, detail };
+  };
   const publish = (next: MobileSnapshot) => {
+    next = placed(next);
     // Return feedback belongs to the Group view it was made for; leaving that view ends it.
     const showing = (groupId: string) => next.screen === 'group' && next.detail.id === groupId;
     if (next.snackbar && !showing(next.snackbar.groupId)) next = { ...next, snackbar: null };
-    if (next.restoreScroll && !showing(next.restoreScroll.groupId))
-      next = { ...next, restoreScroll: null };
     // Likewise Home's, and the Leave Group sheet belongs to Members and Group details.
     if (next.homeSnackbar && next.screen !== 'groups') next = { ...next, homeSnackbar: null };
     if (next.leave.status !== 'closed' && next.screen !== 'members')
@@ -538,6 +563,26 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     snapshot = next;
     listeners.forEach((listener) => listener());
   };
+  /**
+   * The route's one writer (ADR 0006, M8-2): moves the member to `to` and publishes it, with
+   * what that screen starts from (`start`). Only the member's own commands, and the end of a
+   * session, call it; reads never do.
+   */
+  const navigate = (to: Route, start: Partial<MobileSnapshot> = {}) => {
+    route = to;
+    publish({ ...snapshot, ...start });
+  };
+  /** Home with nothing of any account, where each session starts and ends. */
+  const cleanHome = (auth: MobileSnapshot['auth']) => navigate(home, cleanSnapshot(auth));
+  /** A return's pending re-read of this Group: kept on the Group view and what opens over it. */
+  const rereadOf = (groupId: string) =>
+    'reread' in route && route.groupId === groupId ? route.reread : null;
+  /** A Group view on `destination`, which keeps a return's pending re-read of that Group. */
+  const groupAt = (
+    groupId: string,
+    destination: GroupDestination,
+    reread = rereadOf(groupId),
+  ): GroupRoute => ({ screen: 'group', groupId, destination, restoreScroll: null, reread });
   const current = (owner: number) => owner === generation;
   /** The snapshot now, after an await that TypeScript's earlier narrowing doesn't see. */
   const latest = (): MobileSnapshot => snapshot;
@@ -547,7 +592,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const invalidate = () => {
     generation += 1;
     cacheEpoch += 1;
-    returnPages = returnActivityPages = null;
     offlineSession = false;
     staleReads.clear();
     versions.clear();
@@ -809,7 +853,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       user: null,
       message: unconfirmedSignOut,
     });
-    publish({ ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
+    navigate(home, { ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
   };
 
   const failSession = async (
@@ -837,7 +881,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     const next = invalidate();
     const cleared = cleanSnapshot({ status, user: null, message });
-    publish({ ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
+    navigate(home, { ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
     let confirmed = true;
     if (unsaved) {
       revoking = unsaved;
@@ -848,13 +892,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await clearSaved(next);
     } catch {
       if (current(next)) {
-        publish(
-          cleanSnapshot({
-            status: 'error',
-            user: null,
-            message: 'Could not remove the saved session. Try signing out again.',
-          }),
-        );
+        cleanHome({
+          status: 'error',
+          user: null,
+          message: 'Could not remove the saved session. Try signing out again.',
+        });
       }
       return;
     }
@@ -1457,7 +1499,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return false;
       const recovered = await storedCreation(owner, session.user.id);
       offlineSession = true;
-      publish({
+      navigate(home, {
         ...cleanSnapshot({ status: 'authenticated', user: session.user, message: null }),
         ...savedHome(session.user.id),
         ...recovered,
@@ -1484,9 +1526,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const rereadGroups = (owner: number) =>
     groupsUnanswered && current(owner) ? loadGroups(owner, true) : Promise.resolve();
   /**
-   * Shows Home and reads the Groups list. The read has its own token, so it publishes its
-   * answer (the list or a failure) whatever screen the member has moved to; only a newer list
-   * read supersedes it. A read that ends with no answer leaves Home to read the list again.
+   * Reads the Groups list; it never moves the member, so whoever shows Home navigates there
+   * first. The read has its own token, so it publishes its answer (the list or a failure)
+   * whatever screen the member has moved to; only a newer list read supersedes it. A read that
+   * ends with no answer leaves Home to read the list again.
    */
   const listGroups = async (owner: number, reuse: boolean): Promise<void> => {
     assertCurrent(owner);
@@ -1496,12 +1539,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const key = groupsKey(account()),
       path = queryKeyPath(key);
     startReadView();
-    publish({
-      ...snapshot,
-      screen: 'groups',
-      groups: { ...snapshot.groups, status: 'loading', message: null },
-      detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
-    });
+    publish({ ...snapshot, groups: { ...snapshot.groups, status: 'loading', message: null } });
     try {
       const fresh = reuse ? freshRead(key) : null;
       const reading = fresh
@@ -1616,7 +1654,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     // A saved Home of another account goes before that account's data is cleared.
     if (snapshot.auth.user && snapshot.auth.user.id !== session.user.id)
-      publish(cleanSnapshot({ status: 'restoring', user: null, message: null }));
+      cleanHome({ status: 'restoring', user: null, message: null });
     if (dependencies.accountLocal) {
       try {
         const savedOwner = await dependencies.accountLocal.owner.load();
@@ -1637,7 +1675,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     await recordCookieAccount(owner, session.user.id);
     // A Group submission stored on this device reopens before anything else can be created.
     const recovered = await storedCreation(owner, session.user.id);
-    publish({
+    navigate(home, {
       ...cleanSnapshot({ status: 'authenticated', user: session.user, message: null }),
       ...savedHome(session.user.id),
       ...recovered,
@@ -1647,10 +1685,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (current(owner)) await refreshHome();
     if (!current(owner)) return;
     if (creationRecovery?.ownerId === session.user.id) {
-      publish({
-        ...snapshot,
+      navigate(creationRecovery.creation.status === 'uncertain' ? home : { screen: 'create' }, {
         creation: creationRecovery.creation,
-        screen: creationRecovery.creation.status === 'uncertain' ? 'groups' : 'create',
       });
     }
     creationRecovery = null;
@@ -1767,7 +1803,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   const restore = async (quiet = false) => {
     const owner = invalidate();
-    if (!quiet) publish(cleanSnapshot({ status: 'restoring', user: null, message: null }));
+    if (!quiet) cleanHome({ status: 'restoring', user: null, message: null });
     try {
       // A pending sign-out is finished first. Its cookie is only ever sent to revoke it: never
       // read with, restored offline or previewed with its saved Home.
@@ -1779,7 +1815,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       if (!config.developmentPersonaEnabled && !googleEnabled) {
         await clearSaved(owner);
-        publish(cleanSnapshot({ status: 'signed-out', user: null, message: disabledMessage }));
+        cleanHome({ status: 'signed-out', user: null, message: disabledMessage });
         return;
       }
       if (cleanupRequired) await clearSaved(owner);
@@ -1791,7 +1827,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       assertCurrent(owner);
       const saved = await store(owner, () => dependencies.credentials.load());
       if (!saved) {
-        publish(cleanSnapshot({ status: 'signed-out', user: null, message: null }));
+        cleanHome({ status: 'signed-out', user: null, message: null });
         if (pendingCode) await previewInvitation(pendingCode);
         return;
       }
@@ -1815,7 +1851,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           showUnconfirmedSignOut(owner);
           return;
         }
-        publish(cleanSnapshot({ status: 'signed-out', user: null, message: unrestorableMessage }));
+        cleanHome({ status: 'signed-out', user: null, message: unrestorableMessage });
         return;
       }
       cookie = session.cookie;
@@ -1834,25 +1870,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // out, which would remove that data, so the member connects once instead.
       const unverifiedOffline =
         error instanceof RequestError && error.networkFailure && cookie !== null && !cookieAccount;
-      publish(
-        cleanSnapshot({
-          status: 'error',
-          user: null,
-          message: unverifiedOffline ? `${message} ${keptUntilConfirmedMessage}` : message,
-        }),
-      );
+      cleanHome({
+        status: 'error',
+        user: null,
+        message: unverifiedOffline ? `${message} ${keptUntilConfirmedMessage}` : message,
+      });
     }
   };
 
   const signIn = async (personaId: string) => {
     const owner = invalidate();
-    publish(cleanSnapshot({ status: 'signing-in', user: null, message: null }));
+    cleanHome({ status: 'signing-in', user: null, message: null });
     try {
       // A pending sign-out's revoke is sent once before its saved cookie goes.
       await finishSignOut(owner, true);
       await clearSaved(owner);
       if (!config.developmentPersonaEnabled) {
-        publish(cleanSnapshot({ status: 'signed-out', user: null, message: disabledMessage }));
+        cleanHome({ status: 'signed-out', user: null, message: disabledMessage });
         return;
       }
       if (!['alex', 'sam', 'priya'].includes(personaId))
@@ -1890,7 +1924,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (googlePending) return;
     googlePending = true;
     const owner = invalidate();
-    publish(cleanSnapshot({ status: 'signing-in', user: null, message: null }));
+    cleanHome({ status: 'signing-in', user: null, message: null });
     try {
       await finishSignOut(owner, true);
       await clearSaved(owner);
@@ -2019,7 +2053,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /**
    * The same Group reopens on the destination already shown (an Expense task's return sets
    * it) and another Group starts on Expenses, unless `requested` names one. Only the shown
-   * destination is read; the other is read when the member switches to it.
+   * destination is read; the other is read when the member switches to it. The Group view on
+   * screen (a refresh, or the read after a return) is read where it is, without navigating.
    */
   const showGroup = async (id: string, reuse: boolean, requested?: GroupDestination) => {
     if (snapshot.auth.status !== 'authenticated') return;
@@ -2032,10 +2067,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       requested ?? (snapshot.detail.id === id ? snapshot.destination : 'expenses');
     const view = ++viewRequest;
     startReadView();
-    publish({
-      ...snapshot,
-      screen: 'group',
-      destination,
+    const start: Partial<MobileSnapshot> = {
       share: { status: 'idle', url: null, message: null },
       detail: {
         status: 'loading',
@@ -2058,7 +2090,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               message: null,
             }
           : { ...emptyActivity(), groupId: id },
-    });
+    };
+    const at = route,
+      shown = at.screen === 'group' && at.groupId === id;
+    if (shown && at.destination === destination) publish({ ...snapshot, ...start });
+    // Still on this Group's view, a return's scroll position still applies.
+    else
+      navigate(
+        { ...groupAt(id, destination), restoreScroll: shown ? at.restoreScroll : null },
+        start,
+      );
     const kept = loadKeptDraft(id);
     try {
       if (!objectId.safeParse(id).success)
@@ -2400,27 +2441,28 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     explicitly([`group:${snapshot.detail.data?.id}`], () => loadBalances(false));
 
   const selectMonth = async (month: string | null) => {
+    const at = route;
     if (
       snapshot.auth.status !== 'authenticated' ||
-      snapshot.screen !== 'group' ||
+      at.screen !== 'group' ||
       snapshot.detail.data?.category !== 'home'
     )
       return;
     if (month !== null) getLocalMonthIsoRange(month);
     const { financial } = snapshot;
-    returnPages = null;
-    publish({
-      ...snapshot,
-      // The member chose another view: an earlier position or offer no longer applies.
-      restoreScroll: null,
-      snackbar: null,
-      financial: {
-        ...financial,
-        month,
-        // A different Month never shows the previous Month's Expenses under its label.
-        expenses: month === financial.month ? financial.expenses : emptyExpenses(month),
+    // The member chose another view: an earlier position, offer or Expense range no longer applies.
+    navigate(
+      { ...at, restoreScroll: null, reread: at.reread && { ...at.reread, expenses: null } },
+      {
+        snackbar: null,
+        financial: {
+          ...financial,
+          month,
+          // A different Month never shows the previous Month's Expenses under its label.
+          expenses: month === financial.month ? financial.expenses : emptyExpenses(month),
+        },
       },
-    });
+    );
     await readExpenses(false, true);
   };
 
@@ -2459,9 +2501,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const parse = (value: unknown) => parseExpensePage(value, group.id, group.defaultCurrency);
     // A return reads the page range it left until that range is shown, even when a later
     // read, such as a foreground refresh, supersedes the first one.
-    if (returnPages && returnPages.groupId !== group.id) returnPages = null;
-    const through =
-      !append && returnPages?.month === snapshot.financial.month ? returnPages.pages : 1;
+    const reread = append ? null : rereadOf(group.id)?.expenses;
+    const range =
+      reread && reread.month === snapshot.financial.month && !rereadsShown.has(reread)
+        ? reread
+        : null;
+    const through = range?.pages ?? 1;
     // A reused first page alone would drop the rest of the range a return needs.
     const fresh =
       !append && reuse && through === 1
@@ -2609,7 +2654,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         },
       });
       // The range a return needed is shown; later refreshes start from the first page.
-      if (!append && returnPages?.month === month) returnPages = null;
+      if (range) rereadsShown.add(range);
       await loadBalances(false);
     } catch (error) {
       if (!current(owner) || (error instanceof Superseded && !(error instanceof Obsolete))) return;
@@ -2679,8 +2724,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return;
     const pageNumber = append ? pagination!.page + 1 : 1;
     // A return reads the pages it left until they're shown, so its position still exists.
-    if (returnActivityPages && returnActivityPages.groupId !== groupId) returnActivityPages = null;
-    const through = append ? pageNumber : (returnActivityPages?.pages ?? 1);
+    const reread = append ? null : rereadOf(groupId)?.activity;
+    const range = reread && !rereadsShown.has(reread) ? reread : null;
+    const through = append ? pageNumber : (range?.pages ?? 1);
     if (!append) activityDetailRequest += 1;
     const owner = generation,
       view = viewRequest,
@@ -2738,7 +2784,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           refreshedAt: append ? snapshot.activity.refreshedAt : readAt(activityKey(groupId, 1)),
         },
       });
-      if (!append) returnActivityPages = null;
+      if (range) rereadsShown.add(range);
     } catch (error) {
       if (
         !current(owner) ||
@@ -2775,21 +2821,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * Expenses and Balances share one read, because Balances follow the Expense read.
    */
   const selectDestination = async (destination: GroupDestination) => {
+    const at = route;
     if (
       snapshot.auth.status !== 'authenticated' ||
-      snapshot.screen !== 'group' ||
-      destination === snapshot.destination
+      at.screen !== 'group' ||
+      destination === at.destination
     )
       return;
     const groupId = snapshot.detail.id;
-    publish({
-      ...snapshot,
-      destination,
-      activity:
-        groupId && snapshot.activity.groupId !== groupId
-          ? { ...emptyActivity(), groupId }
-          : snapshot.activity,
-    });
+    navigate(
+      { ...at, destination },
+      {
+        activity:
+          groupId && snapshot.activity.groupId !== groupId
+            ? { ...emptyActivity(), groupId }
+            : snapshot.activity,
+      },
+    );
     // A Group read still in flight reads the destination shown when it completes.
     if (snapshot.detail.status === 'loading' || !snapshot.detail.data) return;
     if (destination === 'activity') {
@@ -2976,10 +3024,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** Opening from the Group's own view records where to return; other entry is direct. */
   const expenseReturn = (groupId: string, scrollY = 0): GroupReturnContext | null => {
     // Retry, Discard and Use saved version reopen the same task, which keeps its origin.
-    if (snapshot.screen === 'expense' && snapshot.expense.groupId === groupId)
-      return snapshot.expense.returnTo;
+    if (route.screen === 'expense' && route.groupId === groupId) return route.returnTo;
     if (
-      snapshot.screen !== 'group' ||
+      route.screen !== 'group' ||
       snapshot.detail.id !== groupId ||
       snapshot.financial.groupId !== groupId
     )
@@ -3010,19 +3057,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const accountId = snapshot.auth.user.id;
     const month = snapshot.financial.groupId === groupId ? snapshot.financial.month : null;
     const returnTo = expenseReturn(groupId, origin.scrollY);
-    returnPages = returnActivityPages = null;
     startReadView();
-    publish({
-      ...snapshot,
-      screen: 'expense',
-      expense: {
-        ...emptyExpenseEditor(),
-        groupId,
-        requestedExpenseId: expenseId ?? null,
-        status: 'loading',
-        returnTo,
+    navigate(
+      { screen: 'expense', groupId, expenseId: expenseId ?? null, returnTo },
+      {
+        expense: {
+          ...emptyExpenseEditor(),
+          groupId,
+          requestedExpenseId: expenseId ?? null,
+          status: 'loading',
+          returnTo,
+        },
       },
-    });
+    );
     try {
       const lease = accountStorage();
       if (!lease || !dependencies.expenseDrafts) throw new Error('Draft storage is unavailable.');
@@ -3564,33 +3611,49 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /** After a confirmed change: every affected view reads again; earlier responses cannot return. */
-  const refreshLedgerViews = async (groupId: string, owner: number, navigate: boolean) => {
+  const refreshLedgerViews = async (groupId: string, owner: number, returned: boolean) => {
     ledgerChanged(groupId);
-    if (navigate || (snapshot.screen === 'group' && snapshot.detail.id === groupId))
+    if (returned || (snapshot.screen === 'group' && snapshot.detail.id === groupId))
       await openGroup(groupId, false);
     if (current(owner)) await refreshHome();
   };
 
   let scrollRequests = 0;
   /**
-   * Show the Group view an Expense task returns to; the caller then reads it. A known origin
-   * keeps its Month and asks for its scroll position; direct entry uses the default Month.
-   * Back returns to the destination the task opened from; a confirmed change (with its
-   * snackbar) returns to Expenses, where the change shows.
+   * The Group view a task over it returns to, on `destination`. With the view as it was when
+   * the task opened (`origin`), it asks to scroll back there and reads the pages it had again:
+   * the Expense pages of its Month, and Activity's when it returns to Activity.
    */
-  const returnToGroup = (groupId: string, snackbar: GroupSnackbar | null = null) => {
-    const origin =
-      snapshot.expense.returnTo?.groupId === groupId ? snapshot.expense.returnTo : null;
-    const { detail, financial } = snapshot;
-    returnPages = origin && { groupId, month: origin.month, pages: origin.pages };
-    returnActivityPages =
-      origin?.destination === 'activity' && !snackbar
-        ? { groupId, pages: origin.activityPages }
-        : null;
-    publish({
-      ...snapshot,
-      screen: 'group',
-      destination: snackbar ? 'expenses' : (origin?.destination ?? 'expenses'),
+  const returnView = (
+    groupId: string,
+    destination: GroupDestination,
+    origin: GroupReturnContext | null,
+  ): GroupRoute => ({
+    screen: 'group',
+    groupId,
+    destination,
+    restoreScroll: origin && { groupId, y: origin.scrollY, request: ++scrollRequests },
+    reread: origin && {
+      groupId,
+      expenses: { month: origin.month, pages: origin.pages },
+      activity: destination === 'activity' ? { pages: origin.activityPages } : null,
+    },
+  });
+  /** Where the Expense task on screen began, when it opened from this Group's view. */
+  const expenseOrigin = (groupId: string) =>
+    route.screen === 'expense' && route.returnTo?.groupId === groupId ? route.returnTo : null;
+  /** A confirmed change returns to Expenses, where the change shows, whatever the task began on. */
+  const savedReturn = (groupId: string) => returnView(groupId, 'expenses', expenseOrigin(groupId));
+
+  /**
+   * Show the Group view an Expense task returns to (`to`); the caller then reads it. A known
+   * origin keeps its Month; direct entry uses the default Month.
+   */
+  const returnToGroup = (to: GroupRoute, snackbar: GroupSnackbar | null = null) => {
+    const { groupId } = to,
+      { detail, financial } = snapshot,
+      origin = to.reread?.expenses;
+    navigate(to, {
       detail:
         detail.id === groupId
           ? detail
@@ -3600,7 +3663,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         : financial.groupId === groupId && financial.month === origin.month
           ? financial
           : { ...emptyFinancial(), groupId, month: origin.month },
-      restoreScroll: origin ? { groupId, y: origin.scrollY, request: ++scrollRequests } : null,
       snackbar,
     });
   };
@@ -3612,8 +3674,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     context: ExpenseContext,
     date?: string,
   ): GroupSnackbar => {
-    const origin =
-      snapshot.expense.returnTo?.groupId === groupId ? snapshot.expense.returnTo : null;
+    const origin = expenseOrigin(groupId);
     const shown =
       context.group.category !== 'home'
         ? null
@@ -3633,13 +3694,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const showHome = () => {
     viewRequest += 1;
-    returnPages = returnActivityPages = null;
-    publish({
-      ...snapshot,
-      screen: 'groups',
-      detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
-      financial: emptyFinancial(),
-    });
+    navigate(home, { financial: emptyFinancial() });
     return settleHome();
   };
   /**
@@ -3656,7 +3711,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   /** Android Back and close keep the draft on this device and return where the task began. */
   const closeExpense = async () => {
-    if (snapshot.screen !== 'expense' || expenseNavigationBlocked()) return;
+    if (route.screen !== 'expense' || expenseNavigationBlocked()) return;
     if (snapshot.expense.status === 'delete-review') return cancelExpenseDeletion();
     // Leaving waits for the latest entries to be stored; if that fails, the form stays open.
     if (snapshot.expense.persistence === 'saving') {
@@ -3666,22 +3721,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         !(await draftWritten()) ||
         view !== viewRequest ||
         close !== closeRequest ||
-        snapshot.screen !== 'expense' ||
+        route.screen !== 'expense' ||
         expenseNavigationBlocked()
       )
         return;
     }
-    const editor = snapshot.expense;
-    const { detail } = snapshot;
-    const groupId = editor.groupId;
-    // A Group removed after denial has nothing to return to.
-    if (
-      !groupId ||
-      (detail.id === groupId && !detail.data && ['denied', 'error'].includes(detail.status))
-    )
-      return showHome();
-    returnToGroup(groupId);
-    await openGroup(groupId);
+    const to = parent(route);
+    if (to.screen !== 'group') return showHome();
+    returnToGroup(to);
+    await openGroup(to.groupId);
   };
 
   const viewSnackbarMonth = async () => {
@@ -3968,7 +4016,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       refreshed = true;
       returnToGroup(
-        groupId,
+        savedReturn(groupId),
         kind === 'delete'
           ? ledgerSnackbar(groupId, `Expense deleted · ${original.description}`, context)
           : ledgerSnackbar(
@@ -4170,7 +4218,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       successHandled = true;
       returnToGroup(
-        groupId,
+        savedReturn(groupId),
         ledgerSnackbar(groupId, `Expense saved · ${draft.description.trim()}`, context, draft.date),
       );
       await refreshLedgerViews(groupId, owner, true);
@@ -4299,11 +4347,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       lease = accountStorage(),
       storage = dependencies.settlementAttempts;
     const stale = () => !current(owner) || view !== viewRequest || request !== settlementRequest;
-    publish({
-      ...snapshot,
-      screen: 'settlement',
-      settlement: { ...emptySettlement(), groupId, status: 'loading' },
-    });
+    navigate(
+      { screen: 'settlement', groupId, reread: rereadOf(groupId) },
+      { settlement: { ...emptySettlement(), groupId, status: 'loading' } },
+    );
     try {
       if (!lease || !storage) throw new DeviceStorageError(recoveryStorageMissing);
       let recovery: ReturnType<typeof parseSettlementAttempt> | null;
@@ -4577,7 +4624,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       if (!current(owner) || view !== viewRequest) return;
       // The sheet closes onto Balances, which the refresh below reads again.
-      showSettlementGroup(groupId, { groupId, message: 'Payment recorded', viewMonth: null }, null);
+      showSettlementGroup(
+        groupAt(groupId, 'balances'),
+        { groupId, message: 'Payment recorded', viewMonth: null },
+        null,
+      );
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;
       const correctionCodes: Record<string, string> = {
@@ -4724,24 +4775,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /**
-   * Show the Group's Balances under a closing sheet; late sheet reads can't reopen it.
+   * Show the Group's Balances (`to`) under a closing sheet; late sheet reads can't reopen it.
    * `pending` is the unconfirmed payment Balances offers afterwards.
    */
   const showSettlementGroup = (
-    groupId: string,
+    to: GroupRoute,
     snackbar: GroupSnackbar | null,
     pending: PendingPayment | null,
   ) => {
     settlementRequest += 1;
     pendingRequest += 1;
-    publish({
-      ...snapshot,
-      screen: 'group',
-      destination: 'balances',
+    navigate(to, {
       detail:
-        snapshot.detail.id === groupId
+        snapshot.detail.id === to.groupId
           ? snapshot.detail
-          : { status: 'loading', id: groupId, data: null, message: null, refreshedAt: null },
+          : { status: 'loading', id: to.groupId, data: null, message: null, refreshedAt: null },
       settlement: emptySettlement(),
       pendingPayment: pending,
       snackbar,
@@ -4754,9 +4802,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * outcome is unknown.
    */
   const closeSettlement = async () => {
-    const { groupId, group, balances, attempt, draft } = snapshot.settlement;
-    if (snapshot.screen !== 'settlement' || expenseNavigationBlocked()) return;
-    if (!groupId) return showHome();
+    const { group, balances, attempt, draft } = snapshot.settlement;
+    if (route.screen !== 'settlement' || expenseNavigationBlocked()) return;
+    const to = parent(route);
+    if (to.screen !== 'group') return showHome();
+    const { groupId } = to;
     const shown = snapshot.detail.id === groupId && snapshot.detail.data !== null;
     const newer =
       attempt !== null ||
@@ -4767,7 +4817,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       : snapshot.pendingPayment?.groupId === groupId
         ? snapshot.pendingPayment
         : null;
-    showSettlementGroup(groupId, null, pending);
+    showSettlementGroup(to, null, pending);
     if (!shown) await openGroup(groupId, true, 'balances');
     else if (newer) await loadBalances(false);
     else await loadPendingPayment(groupId);
@@ -4776,42 +4826,38 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const startCreate = () => {
     if (snapshot.auth.status !== 'authenticated') return;
     viewRequest += 1;
-    publish({ ...snapshot, screen: 'create' });
+    navigate({ screen: 'create' });
   };
 
   const openSettings = () => {
     if (snapshot.auth.status !== 'authenticated' || expenseNavigationBlocked()) return;
     viewRequest += 1;
-    publish({ ...snapshot, screen: 'settings' });
+    navigate({ screen: 'settings' });
   };
 
-  /** Where Members and Group details returns: the Group view, Month and scroll it opened from. */
-  let membersReturn: GroupReturnContext | null = null;
-  /** Shows the Group as known so far; a Group read still in flight updates the page. */
+  /**
+   * Shows the Group as known so far; a Group read still in flight updates the page. The route
+   * keeps where it returns: the Group view, Month and scroll it opened from.
+   */
   const openMembers = (origin: { scrollY?: number } = {}) => {
     const groupId = shownGroup(snapshot)?.id;
-    if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'group' || !groupId) return;
-    membersReturn = expenseReturn(groupId, origin.scrollY);
-    publish({ ...snapshot, screen: 'members' });
+    if (snapshot.auth.status !== 'authenticated' || route.screen !== 'group' || !groupId) return;
+    navigate({
+      screen: 'members',
+      groupId,
+      destination: route.destination,
+      returnTo: expenseReturn(groupId, origin.scrollY),
+      reread: rereadOf(groupId),
+    });
   };
   /** Android Back and the arrow return to the destination, Month and scroll it opened from. */
   const closeMembers = async () => {
-    if (snapshot.screen !== 'members' || snapshot.leave.status === 'leaving') return;
-    const { id } = snapshot.detail;
-    const origin = membersReturn?.groupId === id ? membersReturn : null;
-    membersReturn = null;
-    if (!id || !shownGroup(snapshot)) return showHome();
-    returnPages = origin && { groupId: id, month: origin.month, pages: origin.pages };
-    // Activity's older events are read again too, as on return from an Expense.
-    returnActivityPages =
-      origin?.destination === 'activity' ? { groupId: id, pages: origin.activityPages } : null;
-    publish({
-      ...snapshot,
-      screen: 'group',
-      restoreScroll: origin ? { groupId: id, y: origin.scrollY, request: ++scrollRequests } : null,
-    });
+    if (route.screen !== 'members' || snapshot.leave.status === 'leaving') return;
+    const to = parent(route);
+    if (to.screen !== 'group') return showHome();
+    navigate(to);
     // Reads what the Group view missed while the page was open; recent reads are reused.
-    await openGroup(id);
+    await openGroup(to.groupId);
   };
 
   /** Changes whenever the Leave Group sheet opens or closes, so a late answer can't reopen it. */
@@ -5004,13 +5050,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // Home opens before the Group is forgotten, so the page just left never shows the
       // "no longer have access" notice that a lost membership would.
       viewRequest += 1;
-      returnPages = returnActivityPages = null;
-      membersReturn = null;
-      publish({
-        ...snapshot,
+      navigate(home, {
         ...kept,
-        screen: 'groups',
-        detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
         financial: emptyFinancial(),
         leave: closedLeave(),
         homeSnackbar: {
@@ -5048,8 +5089,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     leaveRequest += 1;
-    membersReturn = null;
-    publish({ ...snapshot, screen: 'group', destination: check, leave: closedLeave() });
+    navigate(groupAt(groupId, check), { leave: closedLeave() });
     await openGroup(groupId, true, check);
   };
 
@@ -5114,14 +5154,26 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  const previewInvitation = async (code: string) => {
+  /** The invitation screen, for the code it shows. */
+  const showInvitation = (invitation: MobileSnapshot['invitation']) =>
+    navigate({ screen: 'invite', code: invitation.code }, { invitation });
+  const loadingInvitation = (code: string) =>
+    ({ code, status: 'loading', preview: null, message: null }) as const;
+  /** Shows the invitation, loading, and reads it. */
+  const previewInvitation = (code: string) => {
+    showInvitation(loadingInvitation(code));
+    return readInvitation(code);
+  };
+  /** Retry reads the invitation on screen again, where it is. */
+  const retryInvitation = () => {
+    if (!pendingCode) return Promise.resolve();
+    publish({ ...snapshot, invitation: loadingInvitation(pendingCode) });
+    return readInvitation(pendingCode);
+  };
+  /** Reads the invitation shown loading; it never moves the member. */
+  const readInvitation = async (code: string) => {
     const owner = generation;
     const view = ++viewRequest;
-    publish({
-      ...snapshot,
-      screen: 'invite',
-      invitation: { code, status: 'loading', preview: null, message: null },
-    });
     try {
       const preview = parseInvitationPreview(await request(`/api/join/${code}`, owner));
       assertCurrent(owner);
@@ -5158,31 +5210,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await savePending(code);
     } catch {
       if (!current(owner)) return;
-      publish({
-        ...snapshot,
-        screen: 'invite',
-        invitation: {
-          code,
-          status: 'error',
-          preview: null,
-          message: 'Could not save this invitation on the device. Open the link again to retry.',
-        },
+      showInvitation({
+        code,
+        status: 'error',
+        preview: null,
+        message: 'Could not save this invitation on the device. Open the link again to retry.',
       });
       return;
     }
     if (!current(owner) || pendingCode !== code) return;
     if (!code) {
       viewRequest += 1;
-      publish({
-        ...snapshot,
-        screen: 'invite',
-        invitation: {
-          code: null,
-          status: 'invalid',
-          preview: null,
-          message:
-            'This link does not belong to this SplitBook environment, or is not a valid invitation.',
-        },
+      showInvitation({
+        code: null,
+        status: 'invalid',
+        preview: null,
+        message:
+          'This link does not belong to this SplitBook environment, or is not a valid invitation.',
       });
       return;
     }
@@ -5214,10 +5258,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await savePending(null);
       assertCurrent(owner);
       if (view !== viewRequest) return;
-      publish({
-        ...snapshot,
-        invitation: { code: null, status: 'idle', preview: null, message: null },
-      });
+      // Home, while the Groups list is read again with the joined Group; then that Group.
+      navigate(home, { invitation: { code: null, status: 'idle', preview: null, message: null } });
       const loadingGroups = loadGroups(owner);
       const loadingView = viewRequest;
       await loadingGroups;
@@ -5245,9 +5287,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  const retryInvitation = () => (pendingCode ? previewInvitation(pendingCode) : Promise.resolve());
-
-  const invitationSignIn = () => publish({ ...snapshot, screen: 'groups' });
+  const invitationSignIn = () => navigate(home);
 
   const openInvitationGroup = async () => {
     const id = snapshot.invitation.preview?.id;
@@ -5272,10 +5312,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.invitation.status === 'joining') return;
     const view = ++viewRequest;
     const owner = generation;
-    publish({
-      ...snapshot,
-      screen: 'groups',
-      detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
+    navigate(home, {
       financial: emptyFinancial(),
       invitation: { code: null, status: 'idle', preview: null, message: null },
     });
@@ -5284,15 +5321,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (current(owner) && view === viewRequest) await settleHome();
     } catch {
       if (!current(owner) || view !== viewRequest) return;
-      publish({
-        ...snapshot,
-        screen: 'invite',
-        invitation: {
-          code: null,
-          status: 'error',
-          preview: null,
-          message: 'Could not remove the saved invitation. Please cancel again.',
-        },
+      showInvitation({
+        code: null,
+        status: 'error',
+        preview: null,
+        message: 'Could not remove the saved invitation. Please cancel again.',
       });
     }
   };
@@ -5455,16 +5488,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     if (!current(owner)) return;
     if (missed) {
-      publish({
-        ...snapshot,
-        creation: {
-          ...snapshot.creation,
-          ...missed,
-          status: 'uncertain',
-          message: unconfirmedGroup,
-        },
-      });
-      if (view === viewRequest) await loadGroups(owner);
+      const creation: GroupCreation = {
+        ...snapshot.creation,
+        ...missed,
+        status: 'uncertain',
+        message: unconfirmedGroup,
+      };
+      // Home, where the Groups list read again shows whether it was created.
+      if (view !== viewRequest) publish({ ...snapshot, creation });
+      else {
+        navigate(home, { creation });
+        await loadGroups(owner);
+      }
       return;
     }
     let created: string | null = null;
@@ -5513,27 +5548,32 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;
       const definite = error instanceof RequestError && error.status >= 400 && error.status < 500;
-      publish({
-        ...snapshot,
-        creation: {
-          ...snapshot.creation,
-          status: definite ? 'error' : 'uncertain',
-          message: definite
-            ? error.status === 422
-              ? 'Check the Group information and try again.'
-              : error.message
-            : 'The Group may have been created. Check your Groups before creating another.',
-        },
-      });
-      if (!definite && view === viewRequest) await loadGroups(owner);
+      const creation: GroupCreation = {
+        ...snapshot.creation,
+        status: definite ? 'error' : 'uncertain',
+        message: definite
+          ? error.status === 422
+            ? 'Check the Group information and try again.'
+            : error.message
+          : 'The Group may have been created. Check your Groups before creating another.',
+      };
+      if (definite || view !== viewRequest) publish({ ...snapshot, creation });
+      else {
+        navigate(home, { creation });
+        await loadGroups(owner);
+      }
     }
     // A confirmed Group opens the way Home opens one, so its Expenses, Balances and Month are
     // read like any other Group's. A member who moved on before the confirmation stays there.
     if (created && view === viewRequest) await openGroup(created);
   };
 
-  const checkCreatedGroups = () =>
-    snapshot.auth.status === 'authenticated' ? loadGroups(generation) : Promise.resolve();
+  /** Check Groups, on New Group or Home: Home, with the Groups list read again. */
+  const checkCreatedGroups = () => {
+    if (snapshot.auth.status !== 'authenticated') return Promise.resolve();
+    if (route.screen !== 'groups') navigate(home);
+    return loadGroups(generation);
+  };
 
   const resumeCreationAfterCheck = () => {
     if (
@@ -5542,11 +5582,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.creation.status !== 'uncertain'
     )
       return;
-    publish({
-      ...snapshot,
-      screen: 'create',
-      creation: { ...snapshot.creation, status: 'editing', message: null },
-    });
+    navigate(
+      { screen: 'create' },
+      { creation: { ...snapshot.creation, status: 'editing', message: null } },
+    );
   };
 
   /** Discard removes the Group form, and any submission of it stored on this device. */
@@ -5572,26 +5611,67 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (!current(owner) || latest().creation.status === 'saving') return;
     }
     // Leaving New Group (not Home's own Discard) settles Home the way Back does.
-    const returning = snapshot.screen !== 'groups';
-    publish({ ...snapshot, screen: 'groups', creation: cleanSnapshot(snapshot.auth).creation });
+    const returning = route.screen !== 'groups';
+    navigate(home, { creation: cleanSnapshot(snapshot.auth).creation });
     if (returning) return settleHome();
   };
 
+  /**
+   * Back's table (ADR 0006, M8-2): where Back goes from `from`, the route on screen, once nothing
+   * holds it. An Expense returns to the Group view it opened from, or to its Group's Expenses
+   * after direct entry; Members to the Group view it opened from; the Record payment sheet to
+   * the Group's Balances. An Expense whose Group refused the member, Members whose Group is no
+   * longer shown, and everything else go Home.
+   */
+  const parent = (from: Route): Route => {
+    const { detail } = snapshot;
+    switch (from.screen) {
+      case 'expense': {
+        // A Group removed after denial has nothing to return to.
+        if (
+          detail.id === from.groupId &&
+          !detail.data &&
+          ['denied', 'error'].includes(detail.status)
+        )
+          return home;
+        const origin = from.returnTo?.groupId === from.groupId ? from.returnTo : null;
+        return returnView(from.groupId, origin?.destination ?? 'expenses', origin);
+      }
+      case 'members':
+        return shownGroup(snapshot)
+          ? returnView(from.groupId, from.destination, from.returnTo)
+          : home;
+      case 'settlement':
+        return groupAt(from.groupId, 'balances', from.reread);
+      default:
+        return home;
+    }
+  };
+
+  /**
+   * Android Back and the top bar's arrow: the holds, in order, then the route's `parent`. An open
+   * Activity event closes first; an invitation is cancelled (a join in progress holds it);
+   * nothing happens while a Group, Expense or payment is saving, or while a draft couldn't be
+   * stored; Members' Leave Group sheet closes first, and holds while leaving. An Expense's
+   * delete review is cancelled first (`closeExpense`).
+   */
   const back = () => {
-    // An open event detail closes first; from any Group destination, Back returns Home.
     if (showingActivity() && snapshot.activity.selected) return closeActivityDetail();
-    if (snapshot.screen === 'invite') {
+    if (route.screen === 'invite') {
       void cancelInvitation();
       return;
     }
     if (snapshot.creation.status === 'saving' || expenseNavigationBlocked()) return;
-    if (snapshot.screen === 'expense') return closeExpense();
-    if (snapshot.screen === 'settlement') return closeSettlement();
-    // The Leave Group sheet closes first; while leaving, Back waits for the answer.
-    if (snapshot.screen === 'members' && snapshot.leave.status !== 'closed')
-      return cancelLeaveGroup();
-    if (snapshot.screen === 'members') return closeMembers();
-    return showHome();
+    switch (route.screen) {
+      case 'expense':
+        return closeExpense();
+      case 'settlement':
+        return closeSettlement();
+      case 'members':
+        return snapshot.leave.status === 'closed' ? closeMembers() : cancelLeaveGroup();
+      default:
+        return showHome();
+    }
   };
 
   /**
@@ -5779,7 +5859,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       invitationCleared = false;
     }
     const owner = invalidate();
-    publish(cleanSnapshot({ status: 'signed-out', user: null, message: null }));
+    cleanHome({ status: 'signed-out', user: null, message: null });
     // Independent stores must both be purged. Wait for both attempts before
     // exposing recovery so a failed invitation clear cannot preserve a session.
     let confirmed: boolean;
@@ -5787,13 +5867,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       confirmed = await clearAccount(owner, 'sign-out');
     } catch {
       if (current(owner)) {
-        publish(
-          cleanSnapshot({
-            status: 'error',
-            user: null,
-            message: 'Could not remove this account from the device. Try signing out again.',
-          }),
-        );
+        cleanHome({
+          status: 'error',
+          user: null,
+          message: 'Could not remove this account from the device. Try signing out again.',
+        });
       }
       return;
     }
@@ -5809,7 +5887,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     revoking = null;
     invalidate();
     const cleared = cleanSnapshot({ status: 'signed-out', user: null, message: null });
-    publish({ ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
+    navigate(home, { ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
   };
 
   return {
@@ -5895,7 +5973,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     dispose: () => {
       invalidate();
       listeners.clear();
-      snapshot = cleanSnapshot({ status: 'signed-out', user: null, message: null });
+      cleanHome({ status: 'signed-out', user: null, message: null });
     },
   };
 }
