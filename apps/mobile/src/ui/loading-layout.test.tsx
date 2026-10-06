@@ -354,6 +354,7 @@ describe('A Household’s Balances', () => {
   // Its note about Months takes two lines on a phone: the skeleton has both.
   it.each([
     [360, 1],
+    [360, 1.3],
     [412, 1],
     [412, 1.3],
   ])('the balance card takes its skeleton’s place, %sdp wide at %s× text', (width, fontScale) => {

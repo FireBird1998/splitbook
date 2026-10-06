@@ -60,27 +60,44 @@ export function layoutHeight(node: Node | string | null, fontScale = 1, width?: 
     );
   };
   const row = style.flexDirection === 'row';
-  if (row && style.flexWrap === 'wrap' && inner !== undefined) {
-    // Lines of children, each as wide as it would be on its own; a flexible child (flex: 1)
-    // starts at nothing, so it never starts a line.
-    const across = number(style.columnGap ?? style.gap);
-    const down = number(style.rowGap ?? style.gap);
-    const lines: number[] = [];
+  const across = number(style.columnGap ?? style.gap);
+  /** A child that takes what its line leaves (flex: 1), starting from nothing. */
+  const flexible = (child: Node) => number(flatten(child.props.style).flex) > 0;
+  /** A child's own width in a row: fixed, a percentage, or as wide as its content. */
+  const span = (child: Node) =>
+    flexible(child) ? 0 : Math.min(inner!, childWidth(child, true, inner, fontScale)!);
+  /** Children on one line of a row: each flexible one gets an equal part of what's left. */
+  const line = (members: Node[]) => {
+    const fixed = members.filter((child) => !flexible(child));
+    const left =
+      inner! -
+      fixed.reduce((sum, child) => sum + span(child), 0) -
+      across * Math.max(0, members.length - 1);
+    const share = Math.max(0, left) / Math.max(1, members.length - fixed.length);
+    return Math.max(
+      0,
+      ...members.map((child) => outer(child, flexible(child) ? share : span(child))),
+    );
+  };
+  if (row && inner !== undefined) {
+    if (style.flexWrap !== 'wrap') return box(line(children));
+    // Lines of children, each as wide as it would be on its own; a flexible child starts at
+    // nothing, so it never starts a line.
+    const lines: Node[][] = [];
     let used = -1;
     for (const child of children) {
-      const own = flatten(child.props.style);
-      const span = number(own.flex) > 0 ? 0 : layoutWidth(child, fontScale, inner);
-      const height = outer(child, Math.min(span, inner));
-      if (used < 0 || used + across + span > inner) {
-        lines.push(height);
-        used = span;
+      const width = span(child);
+      if (used < 0 || used + across + width > inner) {
+        lines.push([child]);
+        used = width;
       } else {
-        lines[lines.length - 1] = Math.max(lines[lines.length - 1]!, height);
-        used += across + span;
+        lines[lines.length - 1]!.push(child);
+        used += across + width;
       }
     }
+    const down = number(style.rowGap ?? style.gap);
     return box(
-      lines.reduce((sum, height) => sum + height, 0) + down * Math.max(0, lines.length - 1),
+      lines.reduce((sum, members) => sum + line(members), 0) + down * Math.max(0, lines.length - 1),
     );
   }
   const heights = children.map((child) => outer(child, childWidth(child, row, inner, fontScale)));

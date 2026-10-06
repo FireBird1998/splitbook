@@ -14,6 +14,7 @@ import {
   Money,
   RowAmount,
   SectionHeader,
+  SkeletonOf,
   SkeletonText,
 } from './compact';
 import { Freshness, RetainedNotice } from './financial-views';
@@ -429,18 +430,34 @@ export function GroupBalancesView({
         {notice}
         <View accessibilityLabel="Loading balances" accessibilityState={{ busy: true }}>
           <Card padded>
-            {/* The balance card's lines, as MemberBalanceCard lays them out; a Household's
-                note about Months wraps onto two lines. */}
-            <SkeletonText
-              gap={4}
-              lines={[
-                { width: '45%', line: 'caption' },
-                { width: '70%', line: 'form' },
-                ...(group.category === 'home'
-                  ? [{ width: '90%' as const, line: 'small' as const, count: 2 }]
-                  : []),
-              ]}
-            />
+            {/* The balance card's lines, as MemberBalanceCard lays them out: its heading and a
+                typical "Updated" time wrap where the card's do, and a Household's note about
+                Months takes two lines. */}
+            <View style={{ gap: 4 }}>
+              <View
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
+              >
+                <View style={{ flex: 1 }}>
+                  <SkeletonOf bar>
+                    <CompactText variant="overline">
+                      All-time balance · {group.defaultCurrency}
+                    </CompactText>
+                  </SkeletonOf>
+                </View>
+                <SkeletonOf bar>
+                  <CompactText variant="caption">Updated 10:42 AM</CompactText>
+                </SkeletonOf>
+              </View>
+              <SkeletonText
+                gap={4}
+                lines={[
+                  { width: '70%', line: 'form' },
+                  ...(group.category === 'home'
+                    ? [{ width: '90%' as const, line: 'small' as const, count: 2 }]
+                    : []),
+                ]}
+              />
+            </View>
           </Card>
         </View>
       </View>
