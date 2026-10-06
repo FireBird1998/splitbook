@@ -432,6 +432,16 @@ export interface AccountLocalStorage {
     mark(record: { invitationCleared: boolean }): Promise<void>;
     clear(): Promise<void>;
   };
+  /**
+   * Saved copies this device couldn't remove (#212), kept outside the stores that failed: each
+   * scope with when. The next start deletes them before anything reads a saved copy. One of
+   * `stores` too, so the purge removes it with them.
+   */
+  untrustedCopies?: {
+    load(): Promise<unknown>;
+    save(record: { accountId: string; scopes: Record<string, number> }): Promise<void>;
+    clear(): Promise<void>;
+  };
   /** Register at startup. Each store clears all its account keys for this backend. */
   stores: readonly { clear(): Promise<void> }[];
 }

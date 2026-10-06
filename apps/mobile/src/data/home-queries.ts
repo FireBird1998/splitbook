@@ -240,8 +240,8 @@ export interface HomeSession {
   listed(listed: Set<string>, lost: Set<string>): void;
   /** The older saved-copy store keeps only these Groups' copies (inside a lease write). */
   retain(accountId: string, listed: string[]): Promise<void> | undefined;
-  /** Saved copies in these scopes couldn't be removed: never shown again this session. */
-  distrust(scopes: string[]): void;
+  /** This account's saved copies in these scopes couldn't be removed: never shown again. */
+  distrust(accountId: string, scopes: string[]): void;
   /** Reads in these scopes are obsolete, and their saved copies before now are never shown. */
   invalidate(...scopes: string[]): void;
   now(): number;
@@ -249,6 +249,8 @@ export interface HomeSession {
 
 /** Each of Home's reads: whether its request answered, and when it ends. */
 type HomeRead = { answered: boolean; ended?: boolean; reading: Promise<Envelope> };
+/** Checks an answer, and returns what it sets off, which runs only if it is still current. */
+type Accept = (value: unknown, owner: number) => (() => Promise<void>) | void;
 
 /**
  * Home's two queries (ADR 0006, M1-1): the Groups list and Home's figures. The current screen
@@ -276,6 +278,14 @@ export function createHomeQueries(session: HomeSession) {
       group.members.some((member) => member.user.id === session.snapshot().auth.user?.id),
     );
   const held = (key: QueryKey) => client.getQueryCache().get<Envelope, Error>(hashKey(key))?.state;
+  /** A saved copy shows only if its decoder reads it, and a Groups list lists the member. */
+  const readable = (key: QueryKey, value: unknown) => {
+    try {
+      return key[0] === 'groups' ? memberOfAll(listOf(value)) : Boolean(figuresOf(value));
+    } catch {
+      return false;
+    }
+  };
   /** The persister's row for `path`, read on the account queue, checked like every saved copy. */
   const savedRow = async (lease: AccountStorageLease, path: string) =>
     cachedRead(
@@ -312,7 +322,8 @@ export function createHomeQueries(session: HomeSession) {
   };
   /**
    * While a query is first read, the row this device saved for it shows, with its own time. Never
-   * one a change, a denial or a failed removal made obsolete, and never once the read answered.
+   * one a change, a denial or a failed removal made obsolete, one it can't read, and never once
+   * the read answered.
    */
   const restoreRow = async (key: QueryKey, owner: number) => {
     const lease = session.lease(),
@@ -327,20 +338,21 @@ export function createHomeQueries(session: HomeSession) {
       state?.fetchStatus !== 'fetching' ||
       state.data !== undefined ||
       row.refreshedAt <= session.distrusted(key, true) ||
-      (key[0] === 'groups' && !memberOfAll(parseGroups(row.value)))
+      !readable(key, row.value)
     )
       return;
     client.setQueryData(key, { source: 'saved', refreshedAt: row.refreshedAt, value: row.value });
   };
 
   /**
-   * One read of a query. The answer is checked by `accept` and saved as its row; when SplitBook
-   * can't be reached, the row saved here answers with its own time, offline (M4-5). It takes no
-   * signal, so leaving Home never cancels it: its answer shows wherever it lands (#190).
+   * One read of a query. An answer still current is checked by `accept`, then what it sets off
+   * runs, and it is saved as its row; when SplitBook can't be reached, the row saved here answers
+   * with its own time, offline (M4-5). It takes no signal, so leaving Home never cancels it: its
+   * answer shows wherever it lands (#190).
    */
   const readHome = async (
     key: QueryKey,
-    accept: (value: unknown, owner: number) => unknown,
+    accept: Accept,
     shown: () => boolean,
     read: HomeRead,
     before?: Promise<unknown>,
@@ -362,13 +374,18 @@ export function createHomeQueries(session: HomeSession) {
       const row = obsolete() ? null : await savedRow(lease, path).catch(() => null);
       // Overtaken by a change, a denial or a Groups list: it was read again, not shown.
       if (obsolete()) throw new Superseded();
-      const saved = row && row.refreshedAt > session.distrusted(key, false) ? row : null;
+      const saved =
+        row && row.refreshedAt > session.distrusted(key, false) && readable(key, row.value)
+          ? row
+          : null;
       session.answered(path, saved?.refreshedAt ?? null);
       if (!saved)
         throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
       return { source: 'saved', refreshedAt: saved.refreshedAt, value: saved.value };
     }
-    await accept(value, owner);
+    // An answer a change, a denial or a newer Groups list overtook sets off nothing.
+    if (obsolete()) throw new Superseded();
+    await accept(value, owner)?.();
     const verified: Envelope = { source: 'network', refreshedAt: Date.now(), value };
     if (obsolete()) throw new Superseded();
     session.answered(path);
@@ -376,7 +393,7 @@ export function createHomeQueries(session: HomeSession) {
     return verified;
   };
   const queryFn =
-    (accept: (value: unknown, owner: number) => unknown, shown: () => boolean) =>
+    (accept: Accept, shown: () => boolean) =>
     ({ queryKey }: QueryFunctionContext): Promise<Envelope> => {
       const key = queryKey as QueryKey,
         path = queryKeyPath(key),
@@ -396,12 +413,15 @@ export function createHomeQueries(session: HomeSession) {
    * Home's figures with them; a removal that fails leaves those copies untrusted, and never signs
    * the member out (#212).
    */
-  const acceptList = async (value: unknown, owner: number) => {
-    const groups = parseGroups(value),
-      { snapshot } = session;
+  const acceptList: Accept = (value, owner) => {
+    const groups = listOf(value);
     if (!memberOfAll(groups))
       throw new RequestError('The server returned invalid group membership. Please refresh.');
-    const listed = new Set(groups.map((group) => group.id)),
+    return () => trim(groups, owner);
+  };
+  const trim = async (groups: MobileGroup[], owner: number) => {
+    const { snapshot } = session,
+      listed = new Set(groups.map((group) => group.id)),
       lost = new Set<string>();
     const reading = client.getQueryCache().findAll({
       predicate: ({ state }) => state.data !== undefined || state.fetchStatus === 'fetching',
@@ -425,10 +445,10 @@ export function createHomeQueries(session: HomeSession) {
       });
     } catch (error) {
       if (!session.current(owner) || error instanceof Superseded) throw new Superseded();
-      session.distrust(
-        [...lost].flatMap((id) => [`group:${id}`, `ledger:${id}`, `balances:${id}`]),
-      );
-      session.distrust(['home']);
+      session.distrust(lease.accountId, [
+        ...[...lost].flatMap((id) => [`group:${id}`, `ledger:${id}`, `balances:${id}`]),
+        'home',
+      ]);
     }
   };
   const options = (): QueryObserverOptions<Envelope, Error, Envelope, Envelope, QueryKey>[] => [
@@ -440,7 +460,10 @@ export function createHomeQueries(session: HomeSession) {
     },
     {
       queryKey: keys()[1],
-      queryFn: queryFn(parseHomeBalances, () => session.snapshot().home.data !== null),
+      queryFn: queryFn(
+        (value) => void figuresOf(value),
+        () => session.snapshot().home.data !== null,
+      ),
       enabled: !figuresWait,
     },
   ];
@@ -616,16 +639,21 @@ export function createHomeQueries(session: HomeSession) {
      * Cold start: `accountId`'s saved Home, from the persister's rows, with this device's drafts
      * (`drafts`), every part at once and outside the account queue, so nothing waits on the network
      * or on another account write. Null without a readable saved list that lists the account.
+     * A row this device couldn't remove is never shown.
      */
     async preview(accountId: string, drafts: Promise<{ groupId: string; value: unknown }[]>) {
       if (!rows) return null;
-      const saved = async <T>(path: string, parse: (value: unknown) => T) => {
-        const read = cachedRead(await rows.load(accountId, path), accountId, path, session.now());
-        return read && { value: parse(read.value), refreshedAt: read.refreshedAt };
+      const at = { environment: session.environment, accountId };
+      const saved = async <T>(key: QueryKey, parse: (value: unknown) => T) => {
+        const path = queryKeyPath(key),
+          read = cachedRead(await rows.load(accountId, path), accountId, path, session.now());
+        return read && read.refreshedAt > session.distrusted(key, false)
+          ? { value: parse(read.value), refreshedAt: read.refreshedAt }
+          : null;
       };
       const [list, figures, records] = await Promise.all([
-        saved(listPath, parseGroups),
-        saved(homePath, parseHomeBalances).catch(() => null),
+        saved(groupsKey(at), parseGroups),
+        saved(homeBalancesKey(at), parseHomeBalances).catch(() => null),
         drafts.catch(() => []),
       ]);
       if (!list?.value.every(({ members }) => members.some(({ user }) => user.id === accountId)))

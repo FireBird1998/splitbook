@@ -104,6 +104,7 @@ import {
 import { parseInvitationLink } from './invitation-links';
 import { parseExpensePage, parseGroupBalances } from './financial-dto';
 import { createHomeQueries, emptyHome, homePath, notSaved, type Envelope } from './home-queries';
+import { untrustedCopies } from './untrusted-copies';
 import {
   createTransport,
   expiredMessage,
@@ -449,10 +450,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const versions = new Map<string, number>();
   const invalidatedAt = new Map<string, number>();
   /**
-   * Scopes whose saved copies a ledger change made obsolete but this device could not remove,
-   * with when: a saved copy from before then is never shown again this session.
+   * Scopes whose saved copies a change, a denial or a Groups list made obsolete but this device
+   * could not remove, with when: never shown again, and deleted at the next start (#212).
    */
-  const untrusted = new Map<string, number>();
+  const untrusted = untrustedCopies(dependencies);
   /** Groups this session lost, with the refusal and when (`losses` counts them). */
   const lostGroups = new Map<string, { status: number; at: number }>();
   let losses = 0;
@@ -966,7 +967,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         invalidateReads(`group:${id}`, `ledger:${id}`, `balances:${id}`, 'home');
     },
     retain: (accountId, listed) => dependencies.readCache?.retainGroups(accountId, listed),
-    distrust: (scopes) => scopes.forEach((scope) => untrusted.set(scope, now())),
+    distrust: (accountId, scopes) => untrusted.mark(accountId, scopes, now()),
     invalidate: (...scopes) => invalidateReads(...scopes),
     now,
   });
@@ -1125,8 +1126,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
     } catch (error) {
       if (current(owner) && !(error instanceof Superseded))
-        for (const scope of [`ledger:${groupId}`, `balances:${groupId}`, 'home'])
-          untrusted.set(scope, time);
+        untrusted.mark(lease.accountId, [`ledger:${groupId}`, `balances:${groupId}`, 'home'], time);
     }
   };
 
@@ -1233,7 +1233,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         !current(owner) ||
         epoch !== cacheEpoch ||
         version !== versionOf(key) ||
-        stored.refreshedAt <= (scoped(invalidatedAt, key) ?? -Infinity)
+        stored.refreshedAt <= (scoped(invalidatedAt, key) ?? -Infinity) ||
+        stored.refreshedAt <= (scoped(untrusted, key) ?? -Infinity)
       )
         return null;
       return { value: parse(stored.value), refreshedAt: stored.refreshedAt };
@@ -1556,6 +1557,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
     }
     await recordCookieAccount(owner, session.user.id);
+    await queueAccount(() => untrusted.drop());
     // A Group submission stored on this device reopens before anything else can be created.
     openHome(session.user, await storedCreation(owner, session.user.id));
     await saveVerifiedIdentity(session, owner);
@@ -1603,8 +1605,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return;
       }
       if (cleanupRequired) await clearSaved(owner);
-      // Any pending sign-out cleanup has finished, so this device's saved Home can be read,
-      // alongside the session cookie and before anything is sent.
+      // Any pending sign-out cleanup has finished, and saved copies this device couldn't remove
+      // are gone, so its saved Home can be read, alongside the session cookie, before any request.
+      await queueAccount(() => untrusted.drop());
       const device = readDeviceAccount();
       const deviceHome = readSavedHome(device);
       await loadPending();
@@ -2053,7 +2056,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) throw error;
       // A saved copy that can't be removed is never shown again; the member stays signed in (#212).
-      for (const scope of scopes) untrusted.set(scope, time);
+      untrusted.mark(lease.accountId, scopes, time);
     }
   };
 

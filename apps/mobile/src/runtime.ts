@@ -54,6 +54,13 @@ const groupCreations = createGroupCreationStore(controllerConfig.apiBaseUrl);
 const readCache = createFinancialReadStore(controllerConfig.apiBaseUrl);
 // The persister's rows (ADR 0006, M3-1), in the same database as the older saved copies.
 const savedQueries = createAccountGroupRecordStore(controllerConfig.apiBaseUrl, 'saved');
+// Saved copies this device couldn't remove (#212): kept apart from the database that failed.
+const untrustedKey = storageKey.replace('splitbook.session.', 'splitbook.untrusted-copies.');
+const untrustedCopies = {
+  load: async () => JSON.parse((await SecureStore.getItemAsync(untrustedKey)) ?? 'null'),
+  save: (record: unknown) => SecureStore.setItemAsync(untrustedKey, JSON.stringify(record)),
+  clear: () => SecureStore.deleteItemAsync(untrustedKey),
+};
 const offlineIdentityKey = storageKey.replace('splitbook.session.', 'splitbook.offline-identity.');
 const offlineIdentity = {
   load: async () => {
@@ -97,6 +104,7 @@ export const controller = createMobileController(controllerConfig, {
       clear: () => SecureStore.deleteItemAsync(cleanupKey),
     },
     signOutRecord: createSignOutRecord(controllerConfig.apiBaseUrl),
+    untrustedCopies,
     owner: {
       load: () => SecureStore.getItemAsync(ownerKey),
       save: (accountId) => SecureStore.setItemAsync(ownerKey, accountId),
@@ -108,6 +116,7 @@ export const controller = createMobileController(controllerConfig, {
       groupCreations,
       readCache,
       savedQueries,
+      untrustedCopies,
       offlineIdentity,
       ...(googleSignInEnabled
         ? [

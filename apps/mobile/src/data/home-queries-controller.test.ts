@@ -39,6 +39,8 @@ const groupOf = (_id: string, name: string, category: string) => ({
 });
 const maple = groupOf(mapleId, 'Maple House', 'trip');
 const cabin = groupOf(cabinId, 'Cabin Weekend', 'trip');
+const zedId = 'b00000000000000000000003';
+const zed = groupOf(zedId, 'Zed Club', 'trip');
 const listPath = '/api/groups';
 const homePath = '/api/user/balances';
 const maplePath = `/api/groups/${mapleId}`;
@@ -109,6 +111,16 @@ function fixture() {
       map.clear();
     },
   });
+  /** Saved copies this device couldn't remove, recorded outside their stores. */
+  const untrustedCopies = {
+    load: async () => structuredClone(untrusted.value),
+    save: async (value: unknown) => {
+      untrusted.value = structuredClone(value);
+    },
+    clear: async () => {
+      untrusted.value = null;
+    },
+  };
   const savedQueries = {
     ...records(rows),
     save: async (account: string, key: string, value: unknown) => {
@@ -170,7 +182,7 @@ function fixture() {
         },
       });
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
-    const group = [maple, cabin].find(({ _id }) => _id === id);
+    const group = [maple, cabin, zed].find(({ _id }) => _id === id);
     if (!id || !group) return json({}, 404);
     if (server.revoked.has(id)) return json({}, 403);
     if (path === `/api/groups/${id}`)
@@ -276,7 +288,8 @@ function fixture() {
               cleanup = false;
             },
           },
-          stores: [savedQueries, readCache, records(drafts), records(attempts)],
+          untrustedCopies,
+          stores: [savedQueries, readCache, records(drafts), records(attempts), untrustedCopies],
         },
         fetch: async (url, init) => {
           const path = new URL(url).pathname + new URL(url).search;
@@ -297,7 +310,8 @@ function fixture() {
         },
       },
     );
-  const identity = { value: null as unknown };
+  const identity = { value: null as unknown },
+    untrusted = { value: null as unknown };
   return {
     create,
     server,
@@ -507,6 +521,46 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
       home: { status: 'ready', refreshedAt: start + 31_000 },
     });
   });
+
+  it.each([
+    ['Home’s figures', homePath],
+    ['the Groups list', listPath],
+  ])(
+    'counts a saved copy of %s it can’t read as not saved, offline, and keeps the member signed in',
+    async (_, path) => {
+      const f = fixture();
+      const first = f.create();
+      await first.signIn('alex');
+      await settle();
+      first.dispose();
+      // The row is whole, but what it holds isn't what SplitBook sends.
+      (f.rows.get(alex.id + path) as { value: unknown }).value = { status: 200, data: { a: 1 } };
+      f.connect(false);
+      const restarted = f.create();
+      await restarted.restore();
+      await settle();
+      const notSaved = {
+        status: 'error',
+        message: 'This view was not saved on this device. Connect to load it.',
+      };
+      expect(restarted.getSnapshot()).toMatchObject({
+        auth: { status: 'authenticated', user: { id: alex.id } },
+        screen: 'groups',
+        ...(path === homePath
+          ? {
+              groups: {
+                status: 'ready',
+                data: [{ name: 'Maple House' }, { name: 'Cabin Weekend' }],
+              },
+              home: { ...notSaved, data: null },
+            }
+          : {
+              groups: { ...notSaved, data: [] },
+              home: { status: 'ready', data: [{ youOwe: 30 }] },
+            }),
+      });
+    },
+  );
 });
 
 describe('sessions and late answers (#173 gates)', () => {
@@ -711,6 +765,90 @@ describe('losing access and leaving the list (#217)', () => {
     // Its reads went with it: opening it reads it again, though it was read seconds ago.
     await controller.openGroup(cabinId);
     expect(f.reads(`/api/groups/${cabinId}`, sent)).toBe(1);
+  });
+
+  it('changes nothing with a Groups list that answers after a newer one', async () => {
+    const f = fixture();
+    f.server.listed = [maple, zed];
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    later(31_000);
+    // Back in the foreground, the list is read; its answer, Maple House and Zed Club, is late.
+    const stale = f.hold(listPath);
+    const foregrounding = controller.refresh('foreground');
+    await stale.reached;
+    // Meanwhile Zed Club refuses Alex, and Alex joins Cabin Weekend: the list read after that
+    // holds it, and Alex opens it.
+    f.server.revoked.add(zedId);
+    f.server.listed = [maple, zed, cabin];
+    await controller.openGroup(zedId);
+    await controller.back();
+    await settle();
+    expect(names(controller.getSnapshot())).toEqual(['Maple House', 'Cabin Weekend']);
+    await controller.openGroup(cabinId);
+    await controller.back();
+    await settle();
+    const saved = [...f.disk.keys()].filter((key) => key.includes(cabinId));
+    expect(saved.length).toBeGreaterThan(0);
+    const sent = f.calls.length;
+    stale.release();
+    await foregrounding;
+    await settle();
+    // The older list is no answer: Cabin Weekend keeps its saved copies and its reads.
+    expect(names(controller.getSnapshot())).toEqual(['Maple House', 'Cabin Weekend']);
+    expect([...f.disk.keys()].filter((key) => key.includes(cabinId))).toEqual(saved);
+    expect(f.row(listPath)).toMatchObject({
+      value: { data: [{ name: 'Maple House' }, { name: 'Cabin Weekend' }] },
+    });
+    expect(f.row(homePath)).not.toBeNull();
+    await controller.openGroup(cabinId);
+    expect(f.reads(`/api/groups/${cabinId}`, sent)).toBe(0);
+  });
+
+  it('never shows a lost Group’s saved copies it couldn’t remove, after an offline restart too, and removes them once it can', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(mapleId);
+    await settle();
+    expect(f.row(listPath)).toMatchObject({ value: { data: [{ name: 'Maple House' }, {}] } });
+    // Alex loses Maple House, and this device can't remove its saved copies.
+    f.device.failRemoval = true;
+    f.server.revoked.add(mapleId);
+    await controller.refresh();
+    await settle();
+    expect(controller.getSnapshot().auth.status).toBe('authenticated');
+    expect(names(controller.getSnapshot())).toEqual(['Cabin Weekend']);
+    expect(f.row(listPath)).toMatchObject({ value: { data: [{ name: 'Maple House' }, {}] } });
+    controller.dispose();
+
+    // The app restarts offline, and still can't remove them: none of it shows.
+    f.connect(false);
+    let restarted = f.create();
+    let published = record(restarted);
+    await restarted.restore();
+    await settle();
+    expect(restarted.getSnapshot()).toMatchObject({
+      auth: { status: 'authenticated', user: { id: alex.id } },
+      groups: { status: 'error', data: [] },
+      home: { status: 'error', data: null },
+    });
+    expect(published.some((state) => names(state).includes('Maple House'))).toBe(false);
+    expect(published.some((state) => owes(state) !== null)).toBe(false);
+    restarted.dispose();
+
+    // Once it can, the next start removes them before anything reads them.
+    f.device.failRemoval = false;
+    restarted = f.create();
+    published = record(restarted);
+    await restarted.restore();
+    await settle();
+    expect(f.row(listPath)).toBeNull();
+    expect(f.row(homePath)).toBeNull();
+    expect([...f.disk.keys()].some((key) => key.includes(mapleId))).toBe(false);
+    expect(published.some((state) => names(state).includes('Maple House'))).toBe(false);
+    expect(restarted.getSnapshot().auth.status).toBe('authenticated');
   });
 });
 

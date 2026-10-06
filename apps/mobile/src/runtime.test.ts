@@ -49,4 +49,18 @@ describe('runtime storage wiring', () => {
     });
     expect(accountLocal.stores).not.toContain(accountLocal.signOutRecord);
   });
+
+  it('records saved copies it couldn’t remove outside their database, and purges that record with the account (#212)', async () => {
+    const accountLocal = wired.dependencies!.accountLocal as {
+      untrustedCopies?: { save(record: unknown): Promise<void> };
+      stores: unknown[];
+    };
+    const SecureStore = await import('expo-secure-store');
+    await accountLocal.untrustedCopies!.save({ accountId: 'a1', scopes: { home: 1 } });
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith(
+      expect.stringMatching(/^splitbook\.untrusted-copies\./),
+      JSON.stringify({ accountId: 'a1', scopes: { home: 1 } }),
+    );
+    expect(accountLocal.stores).toContain(accountLocal.untrustedCopies);
+  });
 });
