@@ -196,8 +196,6 @@ export type Route =
   | {
       screen: 'expense';
       groupId: string;
-      /** The saved Expense asked for; null for a new one. */
-      expenseId: string | null;
       /** Where Back and a confirmed change return; null after direct entry. */
       returnTo: GroupReturnContext | null;
     }
@@ -210,7 +208,7 @@ export type Route =
       reread: GroupReread | null;
     }
   | { screen: 'settlement'; groupId: string; reread: GroupReread | null }
-  | { screen: 'invite'; code: string | null }
+  | { screen: 'invite' }
   | { screen: 'create' }
   | { screen: 'settings' };
 

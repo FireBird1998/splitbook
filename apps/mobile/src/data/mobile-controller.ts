@@ -229,6 +229,19 @@ function emptyFinancial(): GroupFinancialState {
 const home: Route = { screen: 'groups' };
 type GroupRoute = Extract<Route, { screen: 'group' }>;
 
+/** Marks a fresh session's snapshot (`cleanSnapshot`), which only the route's writer publishes. */
+declare const freshSession: unique symbol;
+/** The snapshot's fields that the route decides. */
+type RouteFields = 'screen' | 'destination' | 'restoreScroll';
+/** A fresh session's snapshot: Home, with nothing of any account. */
+export type FreshSnapshot = MobileSnapshot & { readonly [freshSession]?: true };
+/**
+ * What the controller publishes, other than through the route's writer: never the screen, a
+ * Group's destination or the scroll a return asks for, which come from the route (ADR 0006,
+ * M8-2), and never a fresh session, which `cleanHome` publishes. Passing one fails typecheck.
+ */
+export type Unrouted = Omit<MobileSnapshot, RouteFields> & { readonly [freshSession]?: never };
+
 /** No Group shown: Home's, and every fresh session's. */
 function noGroup(): MobileSnapshot['detail'] {
   return { status: 'idle', id: null, data: null, message: null, refreshedAt: null };
@@ -323,7 +336,7 @@ const unconfirmedPaymentBeforeLeaving =
 const keptWorkUnreadable =
   'Couldn’t check this device for drafts or unconfirmed saves in this Group, so you haven’t left. Close this and try again.';
 
-function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
+function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
   return {
     auth,
     offline: { active: false, refreshedAt: null, message: null },
@@ -413,7 +426,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let googlePending = false;
   const now = dependencies.now ?? Date.now;
   const listeners = new Set<() => void>();
-  let snapshot = cleanSnapshot({ status: 'restoring', user: null, message: null });
+  let snapshot: MobileSnapshot = cleanSnapshot({ status: 'restoring', user: null, message: null });
   let cookie: string | null = null;
   /**
    * The account `get-session` confirmed `cookie` for, stored beside it. Null while unverified: a
@@ -444,6 +457,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let cacheEpoch = 0;
   /** Where the member is (ADR 0006, M8-2). Only `navigate` changes it. */
   let route: Route = home;
+  /** The latest return's request to scroll back (`restoreScroll`); the next return asks anew. */
+  let scrollRequests = 0;
   /** The pages of a return (`GroupReread`) that a read has already shown again. */
   const rereadsShown = new WeakSet<object>();
   let offlineSession = false;
@@ -536,23 +551,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /**
-   * The screen and its parameters come from the route, whatever `next` says: a Group's
-   * destination and the scroll position a return asks for, and on Home no Group.
+   * The screen and its parameters come from the route: a Group's destination and the scroll
+   * position a return asks for, and on Home no Group. Elsewhere the destination stays the last.
    */
-  const placed = (next: MobileSnapshot): MobileSnapshot => {
-    const at = route;
-    const destination = at.screen === 'group' ? at.destination : next.destination;
-    const restoreScroll = at.screen === 'group' ? at.restoreScroll : null;
-    const detail = at.screen === 'groups' && next.detail.id !== null ? noGroup() : next.detail;
-    return next.screen === at.screen &&
-      next.destination === destination &&
-      next.restoreScroll === restoreScroll &&
-      next.detail === detail
-      ? next
-      : { ...next, screen: at.screen, destination, restoreScroll, detail };
+  const placed = (next: Unrouted): MobileSnapshot => {
+    const at = route,
+      given: Partial<MobileSnapshot> = next;
+    return {
+      ...next,
+      screen: at.screen,
+      destination:
+        at.screen === 'group' ? at.destination : (given.destination ?? snapshot.destination),
+      restoreScroll: at.screen === 'group' ? at.restoreScroll : null,
+      detail: at.screen === 'groups' && next.detail.id !== null ? noGroup() : next.detail,
+    };
   };
-  const publish = (next: MobileSnapshot) => {
-    next = placed(next);
+  const publish = (unrouted: Unrouted) => {
+    let next = placed(unrouted);
     // Return feedback belongs to the Group view it was made for; leaving that view ends it.
     const showing = (groupId: string) => next.screen === 'group' && next.detail.id === groupId;
     if (next.snackbar && !showing(next.snackbar.groupId)) next = { ...next, snackbar: null };
@@ -568,8 +583,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * what that screen starts from (`start`). Only the member's own commands, and the end of a
    * session, call it; reads never do.
    */
-  const navigate = (to: Route, start: Partial<MobileSnapshot> = {}) => {
+  const navigate = (to: Route, start: Partial<Omit<MobileSnapshot, RouteFields>> = {}) => {
     route = to;
+    // A return's request to scroll is used up, so the next return asks again.
+    if (to.screen === 'group' && to.restoreScroll)
+      scrollRequests = Math.max(scrollRequests, to.restoreScroll.request);
     publish({ ...snapshot, ...start });
   };
   /** Home with nothing of any account, where each session starts and ends. */
@@ -1519,19 +1537,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       group.members.some((member) => member.user.id === snapshot.auth.user?.id),
     );
 
-  /** `reuse` accepts a list verified within the display freshness window. */
-  const loadGroups = (owner: number, reuse = false) =>
-    reuse ? listGroups(owner, true) : explicitly(['groups'], () => listGroups(owner, false));
+  /** `reuse` accepts a list verified within the display freshness window. `to`: see listGroups. */
+  const loadGroups = (owner: number, reuse = false, to?: Route) =>
+    reuse
+      ? listGroups(owner, true, to)
+      : explicitly(['groups'], () => listGroups(owner, false, to));
   /** Home's Groups list is read again when its latest read ended without an answer. */
   const rereadGroups = (owner: number) =>
     groupsUnanswered && current(owner) ? loadGroups(owner, true) : Promise.resolve();
   /**
-   * Reads the Groups list; it never moves the member, so whoever shows Home navigates there
-   * first. The read has its own token, so it publishes its answer (the list or a failure)
-   * whatever screen the member has moved to; only a newer list read supersedes it. A read that
-   * ends with no answer leaves Home to read the list again.
+   * Reads the Groups list. It never moves the member on its own: a command that shows Home with
+   * the list names it (`to`), and goes there in the publish that shows the list loading. The
+   * read has its own token, so it publishes its answer (the list or a failure) whatever screen
+   * the member has moved to; only a newer list read supersedes it. A read that ends with no
+   * answer leaves Home to read the list again.
    */
-  const listGroups = async (owner: number, reuse: boolean): Promise<void> => {
+  const listGroups = async (owner: number, reuse: boolean, to?: Route): Promise<void> => {
     assertCurrent(owner);
     viewRequest += 1;
     const listRead = ++groupsRequest;
@@ -1539,7 +1560,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const key = groupsKey(account()),
       path = queryKeyPath(key);
     startReadView();
-    publish({ ...snapshot, groups: { ...snapshot.groups, status: 'loading', message: null } });
+    const loading = { groups: { ...snapshot.groups, status: 'loading' as const, message: null } };
+    if (to) navigate(to, loading);
+    else publish({ ...snapshot, ...loading });
     try {
       const fresh = reuse ? freshRead(key) : null;
       const reading = fresh
@@ -3059,7 +3082,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const returnTo = expenseReturn(groupId, origin.scrollY);
     startReadView();
     navigate(
-      { screen: 'expense', groupId, expenseId: expenseId ?? null, returnTo },
+      { screen: 'expense', groupId, returnTo },
       {
         expense: {
           ...emptyExpenseEditor(),
@@ -3618,11 +3641,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (current(owner)) await refreshHome();
   };
 
-  let scrollRequests = 0;
   /**
    * The Group view a task over it returns to, on `destination`. With the view as it was when
-   * the task opened (`origin`), it asks to scroll back there and reads the pages it had again:
-   * the Expense pages of its Month, and Activity's when it returns to Activity.
+   * the task opened (`origin`), it asks to scroll back there, with the next request, and reads
+   * the pages it had again: the Expense pages of its Month, and Activity's on Activity.
    */
   const returnView = (
     groupId: string,
@@ -3632,7 +3654,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     screen: 'group',
     groupId,
     destination,
-    restoreScroll: origin && { groupId, y: origin.scrollY, request: ++scrollRequests },
+    restoreScroll: origin && { groupId, y: origin.scrollY, request: scrollRequests + 1 },
     reread: origin && {
       groupId,
       expenses: { month: origin.month, pages: origin.pages },
@@ -4796,6 +4818,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
   };
 
+  /** The Group view under the Record payment sheet, which it closes onto: Balances. */
+  const underSheet = ({ groupId, reread }: Extract<Route, { screen: 'settlement' }>) =>
+    groupAt(groupId, 'balances', reread);
   /**
    * Close and Android Back return to Balances; nothing is recorded. An unconfirmed payment stays
    * on Balances, which reads again when the sheet's live read found newer balances or a payment's
@@ -4804,8 +4829,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const closeSettlement = async () => {
     const { group, balances, attempt, draft } = snapshot.settlement;
     if (route.screen !== 'settlement' || expenseNavigationBlocked()) return;
-    const to = parent(route);
-    if (to.screen !== 'group') return showHome();
+    const to = underSheet(route);
     const { groupId } = to;
     const shown = snapshot.detail.id === groupId && snapshot.detail.data !== null;
     const newer =
@@ -5154,9 +5178,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  /** The invitation screen, for the code it shows. */
+  /** The invitation screen, showing `invitation`. */
   const showInvitation = (invitation: MobileSnapshot['invitation']) =>
-    navigate({ screen: 'invite', code: invitation.code }, { invitation });
+    navigate({ screen: 'invite' }, { invitation });
   const loadingInvitation = (code: string) =>
     ({ code, status: 'loading', preview: null, message: null }) as const;
   /** Shows the invitation, loading, and reads it. */
@@ -5258,9 +5282,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await savePending(null);
       assertCurrent(owner);
       if (view !== viewRequest) return;
+      publish({
+        ...snapshot,
+        invitation: { code: null, status: 'idle', preview: null, message: null },
+      });
       // Home, while the Groups list is read again with the joined Group; then that Group.
-      navigate(home, { invitation: { code: null, status: 'idle', preview: null, message: null } });
-      const loadingGroups = loadGroups(owner);
+      const loadingGroups = loadGroups(owner, false, home);
       const loadingView = viewRequest;
       await loadingGroups;
       if (current(owner) && viewRequest === loadingView) await openGroup(id);
@@ -5488,18 +5515,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     if (!current(owner)) return;
     if (missed) {
-      const creation: GroupCreation = {
-        ...snapshot.creation,
-        ...missed,
-        status: 'uncertain',
-        message: unconfirmedGroup,
-      };
+      publish({
+        ...snapshot,
+        creation: {
+          ...snapshot.creation,
+          ...missed,
+          status: 'uncertain',
+          message: unconfirmedGroup,
+        },
+      });
       // Home, where the Groups list read again shows whether it was created.
-      if (view !== viewRequest) publish({ ...snapshot, creation });
-      else {
-        navigate(home, { creation });
-        await loadGroups(owner);
-      }
+      if (view === viewRequest) await loadGroups(owner, false, home);
       return;
     }
     let created: string | null = null;
@@ -5548,20 +5574,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;
       const definite = error instanceof RequestError && error.status >= 400 && error.status < 500;
-      const creation: GroupCreation = {
-        ...snapshot.creation,
-        status: definite ? 'error' : 'uncertain',
-        message: definite
-          ? error.status === 422
-            ? 'Check the Group information and try again.'
-            : error.message
-          : 'The Group may have been created. Check your Groups before creating another.',
-      };
-      if (definite || view !== viewRequest) publish({ ...snapshot, creation });
-      else {
-        navigate(home, { creation });
-        await loadGroups(owner);
-      }
+      publish({
+        ...snapshot,
+        creation: {
+          ...snapshot.creation,
+          status: definite ? 'error' : 'uncertain',
+          message: definite
+            ? error.status === 422
+              ? 'Check the Group information and try again.'
+              : error.message
+            : 'The Group may have been created. Check your Groups before creating another.',
+        },
+      });
+      if (!definite && view === viewRequest) await loadGroups(owner, false, home);
     }
     // A confirmed Group opens the way Home opens one, so its Expenses, Balances and Month are
     // read like any other Group's. A member who moved on before the confirmation stays there.
@@ -5569,11 +5594,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /** Check Groups, on New Group or Home: Home, with the Groups list read again. */
-  const checkCreatedGroups = () => {
-    if (snapshot.auth.status !== 'authenticated') return Promise.resolve();
-    if (route.screen !== 'groups') navigate(home);
-    return loadGroups(generation);
-  };
+  const checkCreatedGroups = () =>
+    snapshot.auth.status === 'authenticated'
+      ? loadGroups(generation, false, home)
+      : Promise.resolve();
 
   const resumeCreationAfterCheck = () => {
     if (
@@ -5642,7 +5666,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ? returnView(from.groupId, from.destination, from.returnTo)
           : home;
       case 'settlement':
-        return groupAt(from.groupId, 'balances', from.reread);
+        return underSheet(from);
       default:
         return home;
     }

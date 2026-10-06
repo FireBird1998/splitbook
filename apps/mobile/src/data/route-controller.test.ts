@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMobileController } from './mobile-controller';
+import type { FreshSnapshot, Unrouted } from './mobile-controller';
 import type { FetchResponse, MobileSnapshot } from './types';
 
 // The route as a member meets it (ADR 0006, M8-2, #216): where Back goes from every screen and
@@ -119,15 +120,28 @@ interface Hold {
   release: () => void;
 }
 
-/** One phone, its storage and a fictional server. */
-function world() {
+const googleClient = 'route-test.apps.example';
+
+/** One phone, its storage and a fictional server. `google`: a staging build with Google sign-in. */
+function world({ google = false } = {}) {
   const clock = { now: Date.parse(iso) };
   const server = {
     sessions: new Map<string, Person>(),
     /** Groups whose reads are refused (403), as when the member loses access. */
     refused: new Set<string>(),
+    /** Groups that are gone (404). */
+    gone: new Set<string>(),
+    /** Groups whose own read fails with a server error (500). */
+    failing: new Set<string>(),
+    /** Every Expense page read fails with a server error (500). */
+    failExpenses: false,
     /** Every signed-in request is answered 401, as when the session ends on the server. */
     expired: false,
+  };
+  /** The Google account chooser: who the next one picks, and a hook for when it opens. */
+  const chooser: { next: Promise<Person>; opened: () => void } = {
+    next: Promise.resolve(alex),
+    opened: () => undefined,
   };
   const requests: { method: string; path: string }[] = [];
   const holds: { method: string; match: RegExp; wait: Promise<void>; arrive: () => void }[] = [];
@@ -147,7 +161,9 @@ function world() {
 
   const respond = (method: string, url: URL, init: RequestInit, cookie: string | null) => {
     const path = url.pathname;
-    if (path === '/api/auth/demo-persona/sign-in') {
+    if (path === '/.well-known/splitbook-mobile.json')
+      return json({ environment: 'staging', googleWebClientId: googleClient });
+    if (path === '/api/auth/demo-persona/sign-in' || path === '/api/auth/sign-in/social') {
       const user = String(init.body).includes('sam') ? sam : alex;
       const issued = `better-auth.session_token=${user === sam ? 'sam' : 'alex'}-${server.sessions.size + 1}.signature`;
       server.sessions.set(issued, user);
@@ -171,9 +187,10 @@ function world() {
             data: { _id: tripId, name: 'Goa trip', category: 'trip', memberCount: 2 },
           });
     const target = groups.find(({ _id }) => path.startsWith(`/api/groups/${_id}`));
-    if (!target) return json({ status: 404 }, 404);
+    if (!target || server.gone.has(target._id)) return json({ status: 404 }, 404);
     if (server.refused.has(target._id)) return json({ error: 'Forbidden', status: 403 }, 403);
     const base = `/api/groups/${target._id}`;
+    if (path === base && server.failing.has(target._id)) return json({ status: 500 }, 500);
     if (path === base) return json({ status: 200, data: target });
     if (path === `${base}/balances`)
       return json({
@@ -230,6 +247,7 @@ function world() {
         { status: 201, data: { _id: 'e20000000000000000000001', group: target._id } },
         201,
       );
+    if (path === `${base}/expenses` && server.failExpenses) return json({ status: 500 }, 500);
     if (path === `${base}/expenses`) {
       const from = url.searchParams.get('dateFrom'),
         to = url.searchParams.get('dateTo'),
@@ -283,13 +301,20 @@ function world() {
         .map(([key, value]) => ({ groupId: key.split(':')[1], value: structuredClone(value) })),
   });
 
+  const origin = google ? 'https://staging.splitbook.test' : 'http://localhost:4150';
   const controller = createMobileController(
     {
-      apiBaseUrl: 'http://localhost:4150',
-      authOrigin: 'http://localhost:4150',
+      apiBaseUrl: origin,
+      authOrigin: origin,
       developmentPersonaEnabled: true,
+      ...(google && { googleWebClientId: googleClient }),
     },
     {
+      googleSignIn: async () => {
+        chooser.opened();
+        const user = await chooser.next;
+        return { status: 'success', idToken: `${user === sam ? 'sam' : 'alex'}-id`, nonce: 'n' };
+      },
       now: () => clock.now,
       newSubmissionKey: () => `route-key-${String(++keys).padStart(4, '0')}`,
       credentials: {
@@ -404,6 +429,7 @@ function world() {
     server,
     device,
     requests,
+    chooser,
     /** Holds the next matching request until released. */
     hold(method: string, match: RegExp): Hold {
       let arrive!: () => void, release!: () => void;
@@ -429,8 +455,8 @@ function world() {
 type World = ReturnType<typeof world>;
 type Controller = World['controller'];
 
-async function signedIn(as: 'alex' | 'sam' = 'alex') {
-  const w = world();
+async function signedIn(as: 'alex' | 'sam' = 'alex', options: { google?: boolean } = {}) {
+  const w = world(options);
   await w.controller.signIn(as);
   expect(w.controller.getSnapshot().auth.status).toBe('authenticated');
   return w;
@@ -1047,5 +1073,163 @@ describe('The end of a session leaves nothing of where the member was (#216)', (
       financial: { expenses: { pagination: { page: 1 } } },
     });
     expect(w.pagesSince(sent)).toEqual([1]);
+  });
+});
+
+/** Every snapshot published while `run` runs. */
+async function publishedDuring(controller: Controller, run: () => Promise<unknown>) {
+  const published: MobileSnapshot[] = [];
+  const stop = controller.subscribe(() => published.push(controller.getSnapshot()));
+  await run();
+  stop();
+  return published;
+}
+
+describe('Check Groups (#216)', () => {
+  it('on New Group, shows Home in the publish that shows the list loading, as before', async () => {
+    const { controller } = await signedIn();
+    controller.startCreate();
+    const published = await publishedDuring(controller, () => controller.checkCreatedGroups());
+    expect(published.map(({ screen, groups }) => `${screen} ${groups.status}`)).toEqual([
+      'create ready',
+      'groups loading',
+      'groups loading',
+      'groups ready',
+    ]);
+  });
+});
+
+describe('Back, the rest of its table (#216)', () => {
+  it('goes Home from an Expense whose Group is gone (404)', async () => {
+    const { controller, server } = await signedIn();
+    await controller.openGroup(householdId);
+    await controller.openExpense(householdId);
+    server.gone.add(householdId);
+    await controller.refresh('retry');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'expense',
+      detail: { id: householdId, status: 'error', data: null },
+    });
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('groups');
+  });
+
+  it('returns from an Expense to its Group while the Group shows, after its read failed', async () => {
+    const { controller, server } = await signedIn();
+    await controller.openGroup(householdId);
+    server.failing.add(householdId);
+    await controller.refresh('pull');
+    expect(controller.getSnapshot().detail).toMatchObject({ id: householdId, status: 'error' });
+    expect(controller.getSnapshot().detail.data).not.toBeNull();
+    await controller.openExpense(householdId, undefined, { scrollY: 70 });
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { id: householdId },
+      restoreScroll: { groupId: householdId, y: 70 },
+    });
+  });
+
+  it('asks no other Group to scroll back to where a return left the first', async () => {
+    const { controller } = await signedIn();
+    await controller.openGroup(householdId);
+    await controller.openExpense(householdId, undefined, { scrollY: 410 });
+    await controller.back();
+    expect(controller.getSnapshot().restoreScroll).toMatchObject({ y: 410 });
+    await controller.openGroup(tripId);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { id: tripId },
+      restoreScroll: null,
+    });
+  });
+
+  it('keeps a return’s pages to read again across the Record payment sheet', async () => {
+    const w = await signedIn();
+    const { controller, server } = w;
+    await controller.openGroup(householdId);
+    await controller.loadMoreExpenses();
+    await controller.selectDestination('balances');
+    await controller.openExpense(householdId, undefined, { scrollY: 900 });
+    // The return's read of both pages fails, so they are still to be read again.
+    server.failExpenses = true;
+    await controller.back();
+    expect(controller.getSnapshot()).toMatchObject({ screen: 'group', destination: 'balances' });
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    expect(controller.getSnapshot().screen).toBe('settlement');
+    await controller.back();
+    server.failExpenses = false;
+    const sent = w.requests.length;
+    await controller.refresh('pull');
+    expect(w.pagesSince(sent)).toEqual([1, 2]);
+  });
+});
+
+describe('A session starts and ends on Home, also while its request is on its way (#216)', () => {
+  it('a sign-in as another persona', async () => {
+    const { controller, hold } = await signedIn();
+    await controller.openGroup(householdId);
+    controller.openMembers({ scrollY: 30 });
+    const posted = hold('POST', /\/demo-persona\/sign-in$/);
+    const signing = controller.signIn('sam');
+    await posted.reached;
+    expect(controller.getSnapshot().auth.status).toBe('signing-in');
+    expect(where(controller.getSnapshot())).toEqual(nowhere);
+    posted.release();
+    await signing;
+    expect(controller.getSnapshot().auth.user?.id).toBe(sam.id);
+    expect(where(controller.getSnapshot())).toEqual(nowhere);
+  });
+
+  it('a sign-out', async () => {
+    const { controller, hold } = await signedIn();
+    await controller.openGroup(householdId);
+    controller.openMembers({ scrollY: 30 });
+    const revoking = hold('POST', /\/api\/auth\/sign-out$/);
+    const signingOut = controller.signOut();
+    await revoking.reached;
+    expect(controller.getSnapshot().auth.status).toBe('signed-out');
+    expect(where(controller.getSnapshot())).toEqual(nowhere);
+    revoking.release();
+    await signingOut;
+    expect(where(controller.getSnapshot())).toEqual(nowhere);
+  });
+
+  it('a Google sign-in, while the account chooser is open', async () => {
+    const { controller, chooser } = await signedIn('alex', { google: true });
+    await controller.openGroup(householdId);
+    controller.openMembers({ scrollY: 30 });
+    expect(controller.getSnapshot().screen).toBe('members');
+    let opened!: () => void, pick!: (user: Person) => void;
+    const open = new Promise<void>((resolve) => (opened = resolve));
+    chooser.opened = opened;
+    chooser.next = new Promise((resolve) => (pick = resolve));
+    const signing = controller.signInWithGoogle();
+    await open;
+    expect(controller.getSnapshot().auth.status).toBe('signing-in');
+    expect(where(controller.getSnapshot())).toEqual(nowhere);
+    pick(sam);
+    await signing;
+    expect(controller.getSnapshot().auth.user?.id).toBe(sam.id);
+    expect(where(controller.getSnapshot())).toEqual(nowhere);
+  });
+});
+
+describe('Only the route’s writer changes where the member is (#216)', () => {
+  it('publishing refuses a screen, a destination, a scroll and a fresh session', () => {
+    // Type checks only: each refusal fails `pnpm typecheck` if the guard ever loosens.
+    const published = (shown: MobileSnapshot, fresh: FreshSnapshot): Unrouted[] => [
+      // @ts-expect-error The screen comes from the route: navigate().
+      { ...shown, screen: 'groups' },
+      // @ts-expect-error A Group's destination comes from the route.
+      { ...shown, destination: 'balances' },
+      // @ts-expect-error The scroll a return asks for comes from the route.
+      { ...shown, restoreScroll: null },
+      // @ts-expect-error A fresh session goes Home through the writer: cleanHome().
+      fresh,
+      // Anything else a read shows is published as it is.
+      { ...shown, groups: shown.groups },
+    ];
+    expect(published).toBeTypeOf('function');
   });
 });
