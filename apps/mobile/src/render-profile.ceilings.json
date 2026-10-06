@@ -97,6 +97,18 @@
       "commits": 2,
       "renders": 572
     },
+    "Load the 6th Expense page (pages 2 to 6)": {
+      "requests": 2,
+      "publishes": 5,
+      "commits": 3,
+      "renders": 891
+    },
+    "Load newer Expenses (pages 1 to 5)": {
+      "requests": 2,
+      "publishes": 5,
+      "commits": 3,
+      "renders": 891
+    },
     "Type 20 characters into Description": {
       "requests": 0,
       "publishes": 40,
