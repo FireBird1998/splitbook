@@ -165,6 +165,53 @@ export interface GroupReturnContext {
   activityPages: number;
 }
 
+/**
+ * The pages a return to a Group view reads again until a read has shown them, so the position
+ * it scrolls back to still exists: the Expense pages of the Month it left, and Activity's pages
+ * when it returns to Activity.
+ */
+export interface GroupReread {
+  groupId: string;
+  expenses: { month: string | null; pages: number } | null;
+  activity: { pages: number } | null;
+}
+
+/**
+ * Where the member is: the screen and its parameters (ADR 0006, M8-2). The controller's
+ * `navigate` is its only writer, so reads never move the member, and the end of a session clears
+ * all of it. The snapshot's `screen`, a Group's `destination` and `restoreScroll` are derived
+ * from it.
+ */
+export type Route =
+  | { screen: 'groups' }
+  | {
+      screen: 'group';
+      groupId: string;
+      destination: GroupDestination;
+      /** Set by a return from a task over the Group: where its view scrolls back to. */
+      restoreScroll: { groupId: string; y: number; request: number } | null;
+      /** Kept on Members and the Record payment sheet over this Group too. */
+      reread: GroupReread | null;
+    }
+  | {
+      screen: 'expense';
+      groupId: string;
+      /** Where Back and a confirmed change return; null after direct entry. */
+      returnTo: GroupReturnContext | null;
+    }
+  | {
+      screen: 'members';
+      groupId: string;
+      /** The Group destination underneath, which Back returns to. */
+      destination: GroupDestination;
+      returnTo: GroupReturnContext | null;
+      reread: GroupReread | null;
+    }
+  | { screen: 'settlement'; groupId: string; reread: GroupReread | null }
+  | { screen: 'invite' }
+  | { screen: 'create' }
+  | { screen: 'settings' };
+
 /** Confirms a ledger change on the Group view it returned to. */
 export interface GroupSnackbar {
   groupId: string;
@@ -283,15 +330,7 @@ export interface MobileSnapshot {
     message: string | null;
   };
   /** 'members' is the Group's Members and Group details page; Back returns to the Group. */
-  screen:
-    | 'groups'
-    | 'group'
-    | 'create'
-    | 'invite'
-    | 'settings'
-    | 'expense'
-    | 'settlement'
-    | 'members';
+  screen: Route['screen'];
   /**
    * The Group destination shown while `screen` is 'group'. Back from an Expense task returns
    * to the destination it opened from; a confirmed change returns to Expenses.
@@ -302,7 +341,7 @@ export interface MobileSnapshot {
    * Asks the Group view to scroll back to where the member was after a full-screen task
    * returns to it. `request` changes once per return.
    */
-  restoreScroll: { groupId: string; y: number; request: number } | null;
+  restoreScroll: Extract<Route, { screen: 'group' }>['restoreScroll'];
   snackbar: GroupSnackbar | null;
   homeSnackbar: HomeSnackbar | null;
   /** Leave Group, a sheet over Members and Group details. */
@@ -393,6 +432,16 @@ export interface AccountLocalStorage {
     mark(record: { invitationCleared: boolean }): Promise<void>;
     clear(): Promise<void>;
   };
+  /**
+   * Saved copies this device couldn't remove (#212), kept outside the stores that failed: each
+   * scope with when. The next start deletes them before anything reads a saved copy. One of
+   * `stores` too, so the purge removes it with them.
+   */
+  untrustedCopies?: {
+    load(): Promise<unknown>;
+    save(record: { accountId: string; scopes: Record<string, number> }): Promise<void>;
+    clear(): Promise<void>;
+  };
   /** Register at startup. Each store clears all its account keys for this backend. */
   stores: readonly { clear(): Promise<void> }[];
 }
@@ -436,22 +485,39 @@ export type GoogleIdentityResult =
   | { status: 'cancelled' }
   | { status: 'error'; message: string };
 
+/** What NetInfo tells the app: only whether the device has a connection (ADR 0006, M1-4). */
+export interface NetworkState {
+  addEventListener(listener: (state: { isConnected: boolean | null }) => void): () => void;
+}
+
 export interface MobileDependencies {
   /** Native identity acquisition only. The controller owns the app session. */
   googleSignIn?: () => Promise<GoogleIdentityResult>;
   readCache?: FinancialReadStore;
+  /**
+   * The persister's rows (ADR 0006, M3-1): one saved copy per query, keyed by its path, for the
+   * Groups list and Home's figures. Register it in `accountLocal.stores` too.
+   */
+  savedQueries?: AccountGroupRecordStore;
+  /** Reconnecting reads the screen's queries again (M1-4); NetInfo, or a fake in tests. */
+  netInfo?: NetworkState;
   offlineIdentity?: OfflineIdentityStore;
   fetch: MobileFetch;
   credentials: CredentialStore;
   pendingInvitation?: PendingInvitationStore;
   accountLocal?: AccountLocalStorage;
+  /**
+   * The controller's clock: Months, dates, session expiry and saved copies' ages. Display reads
+   * are verified, and stay fresh, on TanStack Query's clock, `Date.now` (ADR 0006, AMEND-2).
+   */
   now?: () => number;
   /** Runs each request's 20-second timeout. Defaults to the platform's own `setTimeout`. */
   timer?: MobileTimer;
   /**
    * How long a verified read is shown again without another request when navigating
-   * or returning to the foreground. Defaults to `DISPLAY_FRESHNESS_MS`. Pull-to-refresh,
-   * Retry and confirmed changes always read again; it never extends session or access.
+   * or returning to the foreground: the query cache's stale time. Defaults to
+   * `DISPLAY_FRESHNESS_MS`. Pull-to-refresh, Retry and confirmed changes always read again;
+   * it never extends session or access.
    */
   displayFreshnessMs?: number;
   expenseDrafts?: ExpenseDraftStore;

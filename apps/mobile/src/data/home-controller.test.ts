@@ -3,6 +3,7 @@ import { createMobileController } from './mobile-controller';
 import { buildExpenseBody, draftFromExpense, type ExpenseDraft } from './expense-draft';
 import { expenseRecordSchema } from './expense-record';
 import type { MobileGroup } from './types';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // #126: Home keeps each Group's balance from the Home response and lists every Expense draft.
 const accountId = 'a00000000000000000000001',
@@ -107,6 +108,7 @@ function fixture() {
             identity = null;
           },
         },
+        savedQueries: savedQueriesIn(cache),
         readCache: {
           retainGroups: async () => undefined,
           invalidateGroup: async () => undefined,

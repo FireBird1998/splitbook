@@ -178,8 +178,6 @@ describe('a caller’s own cancel', () => {
     // Its code is in the body the caller cancelled, so it is never read.
     [503, `/api/groups/${groupId}/expenses`, []],
     [429, `/api/groups/${groupId}/expenses`, []],
-    // The headers already said denied, so the Group is still purged first.
-    [403, `/api/groups/${groupId}/expenses`, [`denied: ${groupId} 403`]],
   ])(
     'ends a %i as cancelled when the caller aborts while its body is read',
     async (status, path, hooks) => {
@@ -207,6 +205,46 @@ describe('a caller’s own cancel', () => {
         serverMessage: null,
       });
       expect(t.hooks).toEqual(hooks);
+      expect(t.sent).toHaveLength(1);
+    },
+  );
+
+  // A denial is the read's own answer, not a cancel. Its headers already said denied, so the
+  // Group is purged first, and on the query engine that purge is what cancels the Group's reads,
+  // this one included (#214). Ending it as cancelled would have its caller read the Group again,
+  // be refused again, and so on for ever; it ends as access denied whatever cancelled its body.
+  it.each([
+    [403, `/api/groups/${groupId}/expenses`, 'You no longer have access to this group.'],
+    [404, `/api/groups/${groupId}`, 'This group is no longer available.'],
+  ])(
+    'ends a denial (%i on %s) as access denied, not cancelled, when the caller aborts while its body is read',
+    async (status, path, message) => {
+      let reading = false;
+      const t = setup((init) =>
+        hangUntilAborted(init, 'body', status).then((response) => ({
+          ...response,
+          json: () => {
+            reading = true;
+            return response.json();
+          },
+        })),
+      );
+      const caller = new AbortController();
+      const error = caught(t.request(path, 1, { signal: caller.signal }));
+      await vi.waitFor(() => expect(reading).toBe(true));
+      caller.abort();
+      const denied = await within(error);
+      expect(denied).toBeInstanceOf(RequestError);
+      expect(denied).toMatchObject({
+        kind: 'access-denied',
+        networkFailure: false,
+        status,
+        message,
+        // Its body was cancelled, so it carries no code or server message.
+        code: null,
+        serverMessage: null,
+      });
+      expect(t.hooks).toEqual([`denied: ${groupId} ${status}`]);
       expect(t.sent).toHaveLength(1);
     },
   );

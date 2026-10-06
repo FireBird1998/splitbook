@@ -13,6 +13,7 @@ const phone: Window = { width: 412, height: 915, scale: 2, fontScale: 1 };
 let fileWindow: Window = { ...phone };
 const currentWindow: Window = { ...phone };
 const appStateListeners: ((state: string) => void)[] = [];
+const connectionListeners: ((state: { isConnected: boolean | null }) => void)[] = [];
 const backListeners: (() => boolean)[] = [];
 
 /**
@@ -32,6 +33,11 @@ export function setWindow(size: Partial<Window>) {
 /** Android reports a new app state, e.g. 'active' when the app returns to the foreground. */
 export function emitAppState(state: string) {
   for (const listener of [...appStateListeners]) listener(state);
+}
+
+/** NetInfo reports the device's connection: false when it drops, true when it's back. */
+export function emitConnection(isConnected: boolean) {
+  for (const listener of [...connectionListeners]) listener({ isConnected });
 }
 
 /** Android's hardware or gesture Back; returns whether a listener handled it. */
@@ -69,6 +75,7 @@ function listen<Listener>(listeners: Listener[], listener: Listener) {
 export function resetNative() {
   Object.assign(currentWindow, fileWindow);
   appStateListeners.length = 0;
+  connectionListeners.length = 0;
   backListeners.length = 0;
   spring.mockClear();
   for (const spy of Object.values(spies)) spy.mockClear();
@@ -122,6 +129,14 @@ export const reactNative = {
   View: 'View',
   useColorScheme: () => 'light',
   useWindowDimensions: () => ({ ...currentWindow }),
+};
+
+/** `@react-native-community/netinfo`: its listeners hear `emitConnection`. */
+export const netInfo = {
+  default: {
+    addEventListener: (listener: (state: { isConnected: boolean | null }) => void) =>
+      listen(connectionListeners, listener).remove,
+  },
 };
 
 export const safeAreaContext = {

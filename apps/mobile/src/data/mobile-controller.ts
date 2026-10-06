@@ -1,3 +1,22 @@
+import {
+  CancelledError,
+  focusManager,
+  onlineManager,
+  QueryClient,
+  type QueryFunctionContext,
+} from '@tanstack/query-core';
+import {
+  activityPageKey,
+  expensePageKey,
+  expenseRecordKey,
+  groupBalancesKey,
+  groupKey,
+  matchGroup,
+  matchScope,
+  queryKeyPath,
+  type QueryKey,
+  type QueryScope,
+} from '@splitbook/shared/query-keys';
 import { cachedRead } from './offline-cache';
 import {
   activityExpenseId,
@@ -75,7 +94,6 @@ import {
   objectId,
   parseCreatedGroup,
   parseGroup,
-  parseGroups,
   parseInvitationPreview,
   parseInviteLink,
   parseJoinedGroup,
@@ -84,31 +102,33 @@ import {
   parseSignIn,
 } from './dto';
 import { parseInvitationLink } from './invitation-links';
-import { parseExpensePage, parseGroupBalances, parseHomeBalances } from './financial-dto';
+import { parseExpensePage, parseGroupBalances } from './financial-dto';
+import { createHomeQueries, emptyHome, homePath, notSaved, type Envelope } from './home-queries';
+import { untrustedCopies } from './untrusted-copies';
 import {
   createTransport,
   expiredMessage,
   RequestError,
   storageMessage,
+  groupRefused,
+  singleFlight,
   Superseded,
   type RequestOptions,
 } from './transport';
 import type {
   AccountStorageLease,
-  ExpenseDraftSummary,
   GroupCreation,
   GroupDestination,
   GroupDraft,
   GroupFinancialState,
   GroupReturnContext,
   GroupSnackbar,
-  HomeFinancialState,
   KeptDraft,
   LeaveGroupState,
   MobileConfig,
   MobileDependencies,
-  MobileGroup,
   MobileSnapshot,
+  Route,
 } from './types';
 
 export { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
@@ -120,21 +140,24 @@ export { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
 export const DISPLAY_FRESHNESS_MS = 30_000;
 
 /**
- * What a display read describes, for invalidation: the Groups list, Home, one Group's
- * details, its running Balances, or the rest of its ledger (Expense pages and records,
- * Month summaries and Activity).
+ * Whether a display read is in this invalidation scope: the Groups list ('groups'), Home
+ * ('home'), or for one Group its details, its running Balances or the rest of its ledger
+ * (Expense pages and records, Month summaries and Activity): 'group:<id>', 'balances:<id>',
+ * 'ledger:<id>'. The shared key matchers decide it.
  */
-function readScope(path: string) {
-  if (path === '/api/groups') return 'groups';
-  if (path === '/api/user/balances') return 'home';
-  const [, groupId, rest] = /^\/api\/groups\/([a-f\d]{24})(.*)$/i.exec(path) ?? [];
-  if (!groupId) return path;
-  return rest === ''
-    ? `group:${groupId}`
-    : rest === '/balances'
-      ? `balances:${groupId}`
-      : `ledger:${groupId}`;
-}
+const inScope = (scope: string) => {
+  const [name, groupId] = scope.split(':') as [QueryScope, string?];
+  return (key: unknown) =>
+    matchScope(name)(key) && (groupId === undefined || matchGroup(groupId)(key));
+};
+/** What a map of scopes holds for this read's scope. */
+const scoped = <T>(map: Map<string, T>, key: QueryKey) =>
+  [...map].find(([scope]) => inScope(scope)(key))?.[1];
+
+/** A read a change, a denial or a Groups list made obsolete, which its caller no longer shows. */
+class Obsolete extends Superseded {}
+/** A Group's refusal, in the transport's words. */
+const refusal = (status: number) => new RequestError(groupRefused(status), status);
 
 /** The view on screen, which a pull or an automatic refresh belongs to. */
 export function shownView({
@@ -148,43 +171,6 @@ export function shownView({
 /** The open Group: as read, or from the saved Groups list until it has been. */
 export function shownGroup({ detail, groups }: Pick<MobileSnapshot, 'detail' | 'groups'>) {
   return detail.data ?? groups.data.find((group) => group.id === detail.id) ?? null;
-}
-
-/**
- * Home's Expense drafts in this account's listed Groups. A draft with a submission or change
- * pending may already be recorded, so it's first; an unreadable one is left to its Group's form.
- */
-function draftSummaries(
-  records: { groupId: string; value: unknown }[],
-  accountId: string,
-  groups: MobileGroup[],
-): ExpenseDraftSummary[] {
-  const position = (groupId: string) => groups.findIndex((group) => group.id === groupId);
-  return records
-    .flatMap(({ groupId, value }) => {
-      const group = groups.find((item) => item.id === groupId);
-      if (!group) return [];
-      try {
-        const { draft, attempt, mutation } = parseStoredExpenseDraft(value, accountId, groupId);
-        return [
-          {
-            groupId,
-            groupName: group.name,
-            expenseId: draft.original?._id ?? null,
-            description: draft.description,
-            amount: draft.amount,
-            currency: draft.currency,
-            unconfirmed: attempt !== null || mutation !== null,
-          },
-        ];
-      } catch {
-        return [];
-      }
-    })
-    .sort(
-      (a, b) =>
-        Number(b.unconfirmed) - Number(a.unconfirmed) || position(a.groupId) - position(b.groupId),
-    );
 }
 
 function emptyExpenses(month: string | null = null): GroupFinancialState['expenses'] {
@@ -210,15 +196,26 @@ function emptyFinancial(): GroupFinancialState {
   };
 }
 
-function emptyHome(): HomeFinancialState {
-  return {
-    status: 'idle',
-    data: null,
-    byGroup: {},
-    message: null,
-    refreshedAt: null,
-    stale: false,
-  };
+/** Home, where every session starts and ends. */
+const home: Route = { screen: 'groups' };
+type GroupRoute = Extract<Route, { screen: 'group' }>;
+
+/** Marks a fresh session's snapshot (`cleanSnapshot`), which only the route's writer publishes. */
+declare const freshSession: unique symbol;
+/** The snapshot's fields that the route decides. */
+type RouteFields = 'screen' | 'destination' | 'restoreScroll';
+/** A fresh session's snapshot: Home, with nothing of any account. */
+export type FreshSnapshot = MobileSnapshot & { readonly [freshSession]?: true };
+/**
+ * What the controller publishes, other than through the route's writer: never the screen, a
+ * Group's destination or the scroll a return asks for, which come from the route (ADR 0006,
+ * M8-2), and never a fresh session, which `cleanHome` publishes. Passing one fails typecheck.
+ */
+export type Unrouted = Omit<MobileSnapshot, RouteFields> & { readonly [freshSession]?: never };
+
+/** No Group shown: Home's, and every fresh session's. */
+function noGroup(): MobileSnapshot['detail'] {
+  return { status: 'idle', id: null, data: null, message: null, refreshedAt: null };
 }
 
 const unrestorableMessage = 'Your saved session could not be restored. Please sign in again.';
@@ -299,7 +296,7 @@ const unconfirmedPaymentBeforeLeaving =
 const keptWorkUnreadable =
   'Couldn’t check this device for drafts or unconfirmed saves in this Group, so you haven’t left. Close this and try again.';
 
-function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
+function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
   return {
     auth,
     offline: { active: false, refreshedAt: null, message: null },
@@ -336,7 +333,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): MobileSnapshot {
     invitation: { code: null, status: 'idle', preview: null, message: null },
     share: { status: 'idle', url: null, message: null },
     groups: { status: 'idle', data: [], message: null, loaded: false },
-    detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
+    detail: noGroup(),
   };
 }
 
@@ -394,7 +391,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let googleAttempt: { owner: number; choosing: boolean } | null = null;
   const now = dependencies.now ?? Date.now;
   const listeners = new Set<() => void>();
-  let snapshot = cleanSnapshot({ status: 'restoring', user: null, message: null });
+  let snapshot: MobileSnapshot = cleanSnapshot({ status: 'restoring', user: null, message: null });
   let cookie: string | null = null;
   /**
    * The account `get-session` confirmed `cookie` for, stored beside it. Null while unverified: a
@@ -403,7 +400,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let cookieAccount: string | null = null;
   let generation = 0;
   let viewRequest = 0;
-  let homeRequest = 0;
   let financialRequest = 0;
   let balancesRequest = 0;
   let settlementRequest = 0;
@@ -412,10 +408,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let activityRequest = 0;
   let activityDetailRequest = 0;
   let historyRequest = 0;
-  /** The Groups list's own read token: only a newer list read supersedes a list read. */
-  let groupsRequest = 0;
-  /** The latest Groups list read ended without an answer to show, so Home reads it again. */
-  let groupsUnanswered = false;
   /**
    * The Groups the latest verified Groups list holds (null until one is read this session), and
    * those it left out. Saved copies are kept only for listed Groups and ones added since.
@@ -423,29 +415,53 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let listedGroups: Set<string> | null = null;
   let unlistedGroups = new Set<string>();
   let cacheEpoch = 0;
-  // Set by returnToGroup: the next read of that Group and Month reads this many pages.
-  let returnPages: { groupId: string; month: string | null; pages: number } | null = null;
-  // Likewise for Activity, when the task began there.
-  let returnActivityPages: { groupId: string; pages: number } | null = null;
+  /** Where the member is (ADR 0006, M8-2). Only `navigate` changes it. */
+  let route: Route = home;
+  /** The latest return's request to scroll back (`restoreScroll`); the next return asks anew. */
+  let scrollRequests = 0;
+  /** The pages of a return (`GroupReread`) that a read has already shown again. */
+  const rereadsShown = new WeakSet<object>();
   let offlineSession = false;
   const staleReads = new Map<string, number | null>();
   const freshness = dependencies.displayFreshnessMs ?? DISPLAY_FRESHNESS_MS;
-  type Verified = { value: unknown; refreshedAt: number; version: number };
-  /** This session's verified responses by path, with when each was received. */
-  const reads = new Map<string, Omit<Verified, 'version'>>();
-  /** At most one network read per path; later identical reads share it. */
-  const inflight = new Map<string, { owner: number; version: number; read: Promise<Verified> }>();
+  /** A saved copy is never fresh (ADR 0006, AMEND-2). */
+  const staleTime = ({ state }: { state: { data?: unknown } }) =>
+    (state.data as Envelope | undefined)?.source === 'saved' ? 0 : freshness;
+  /**
+   * The one owner of this controller's display reads (ADR 0006, M1-1): it fetches, joins and
+   * keeps every server response a view shows, under the shared query keys (#210). No automatic
+   * retries, so a failed read falls back to the saved copy at once; structural sharing on; fresh
+   * for the display freshness window on TanStack's own clock, `Date.now`; never paused (M1-4,
+   * M1-6). A read stays until a change, a denial or the session's end removes it.
+   */
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        structuralSharing: true,
+        staleTime,
+        networkMode: 'always',
+        // Never paused, yet a reconnect still reads again what a screen observes (M1-4).
+        refetchOnReconnect: true,
+        gcTime: Infinity,
+      },
+    },
+  });
   /** Bumped when a confirmed change, denial or newer ledger read makes a scope's responses obsolete. */
   const versions = new Map<string, number>();
   const invalidatedAt = new Map<string, number>();
   /**
-   * Scopes whose saved copies a ledger change made obsolete but this device could not remove,
-   * with when: a saved copy from before then is never shown again this session.
+   * Scopes whose saved copies a change, a denial or a Groups list made obsolete but this device
+   * could not remove, with when: never shown again, and deleted at the next start (#212).
    */
-  const untrusted = new Map<string, number>();
+  const untrusted = untrustedCopies(dependencies);
+  /** Groups this session lost, with the refusal and when (`losses` counts them). */
+  const lostGroups = new Map<string, { status: number; at: number }>();
+  let losses = 0;
   /**
-   * Views ('groups', 'home', 'group:<id>') with an explicit refresh still running: a pull,
-   * Retry or confirmed change. Overlapping calls for those views never accept freshness.
+   * Group views ('group:<id>') with an explicit refresh still running: a pull, Retry or a
+   * confirmed change. Overlapping calls for those views never accept freshness (Home's queries
+   * join a read in flight on their own).
    */
   let explicit = new Map<string, number>();
   /** Expense reads in flight, by Group: each may materialize recurring Expenses on the server. */
@@ -496,19 +512,58 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (code && !pendingCode) await savePending(null);
   };
 
-  const publish = (next: MobileSnapshot) => {
+  /**
+   * The screen and its parameters come from the route: a Group's destination and the scroll
+   * position a return asks for, and on Home no Group. Elsewhere the destination stays the last.
+   */
+  const placed = (next: Unrouted): MobileSnapshot => {
+    const at = route,
+      given: Partial<MobileSnapshot> = next;
+    return {
+      ...next,
+      screen: at.screen,
+      destination:
+        at.screen === 'group' ? at.destination : (given.destination ?? snapshot.destination),
+      restoreScroll: at.screen === 'group' ? at.restoreScroll : null,
+      detail: at.screen === 'groups' && next.detail.id !== null ? noGroup() : next.detail,
+    };
+  };
+  const publish = (unrouted: Unrouted) => {
+    let next = homeQueries.project(placed(unrouted));
     // Return feedback belongs to the Group view it was made for; leaving that view ends it.
     const showing = (groupId: string) => next.screen === 'group' && next.detail.id === groupId;
     if (next.snackbar && !showing(next.snackbar.groupId)) next = { ...next, snackbar: null };
-    if (next.restoreScroll && !showing(next.restoreScroll.groupId))
-      next = { ...next, restoreScroll: null };
     // Likewise Home's, and the Leave Group sheet belongs to Members and Group details.
     if (next.homeSnackbar && next.screen !== 'groups') next = { ...next, homeSnackbar: null };
     if (next.leave.status !== 'closed' && next.screen !== 'members')
       next = { ...next, leave: closedLeave() };
     snapshot = next;
     listeners.forEach((listener) => listener());
+    homeQueries.bindLater();
   };
+  /**
+   * The route's one writer (ADR 0006, M8-2): moves the member to `to` and publishes it, with
+   * what that screen starts from (`start`). Only the member's own commands, and the end of a
+   * session, call it; reads never do.
+   */
+  const navigate = (to: Route, start: Partial<Omit<MobileSnapshot, RouteFields>> = {}) => {
+    route = to;
+    // A return's request to scroll is used up, so the next return asks again.
+    if (to.screen === 'group' && to.restoreScroll)
+      scrollRequests = Math.max(scrollRequests, to.restoreScroll.request);
+    publish({ ...snapshot, ...start });
+  };
+  /** Home with nothing of any account, where each session starts and ends. */
+  const cleanHome = (auth: MobileSnapshot['auth']) => navigate(home, cleanSnapshot(auth));
+  /** A return's pending re-read of this Group: kept on the Group view and what opens over it. */
+  const rereadOf = (groupId: string) =>
+    'reread' in route && route.groupId === groupId ? route.reread : null;
+  /** A Group view on `destination`, which keeps a return's pending re-read of that Group. */
+  const groupAt = (
+    groupId: string,
+    destination: GroupDestination,
+    reread = rereadOf(groupId),
+  ): GroupRoute => ({ screen: 'group', groupId, destination, restoreScroll: null, reread });
   const current = (owner: number) => owner === generation;
   /** The snapshot now, after an await that TypeScript's earlier narrowing doesn't see. */
   const latest = (): MobileSnapshot => snapshot;
@@ -518,11 +573,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const invalidate = () => {
     generation += 1;
     cacheEpoch += 1;
-    returnPages = returnActivityPages = null;
     offlineSession = false;
     staleReads.clear();
-    reads.clear();
-    inflight.clear();
     versions.clear();
     invalidatedAt.clear();
     untrusted.clear();
@@ -530,9 +582,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     materializing = new Map();
     running = { pull: [], automatic: [] };
     viewRequest += 1;
-    groupsUnanswered = false;
     listedGroups = null;
     unlistedGroups = new Set();
+    lostGroups.clear();
+    // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
+    homeQueries.reset();
+    queryClient.clear();
     transport.abortAll();
     cookie = null;
     cookieAccount = null;
@@ -696,6 +751,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     ]);
     const purged = queueAccount(async () => {
       assertCurrent(owner);
+      // A saved copy being written finishes first; those waiting were cancelled (M3-2).
+      await homeQueries.idle();
       const cleanup = await Promise.allSettled([
         Promise.resolve().then(() => dependencies.accountLocal?.owner.clear()),
         ...(dependencies.accountLocal?.stores.map((storage) =>
@@ -795,7 +852,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       user: null,
       message: unconfirmedSignOut,
     });
-    publish({ ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
+    navigate(home, { ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
   };
 
   const failSession = async (
@@ -823,7 +880,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     const next = invalidate();
     const cleared = cleanSnapshot({ status, user: null, message });
-    publish({ ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
+    navigate(home, { ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
     let confirmed = true;
     if (unsaved) {
       revoking = unsaved;
@@ -834,13 +891,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await clearSaved(next);
     } catch {
       if (current(next)) {
-        publish(
-          cleanSnapshot({
-            status: 'error',
-            user: null,
-            message: 'Could not remove the saved session. Try signing out again.',
-          }),
-        );
+        cleanHome({
+          status: 'error',
+          user: null,
+          message: 'Could not remove the saved session. Try signing out again.',
+        });
       }
       return;
     }
@@ -871,8 +926,53 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     onExpired: failSession,
     // Today's denial purge: its reads, saved copies and content on screen go.
     onGroupDenied: (groupId, status, owner) => forgetGroup(groupId, status, owner),
+    // Balances and Home follow every read of a Group or its Expenses (M1-5, AMEND-1); an Expense
+    // list read also leaves their saved copies from before it unshown (#191).
+    onLedgerRead: (groupId, owner, expenses) => {
+      if (current(owner)) (expenses ? invalidateReads : outdate)(`balances:${groupId}`, 'home');
+    },
   });
   const { request, verifyGoogleBackend, revokeDetached } = transport;
+
+  /** Home's two queries and their saved copies (ADR 0006, M1-1, M3-1). */
+  const homeQueries = createHomeQueries({
+    client: queryClient,
+    environment: apiBase,
+    rows: dependencies.savedQueries,
+    drafts: dependencies.expenseDrafts,
+    account: () => account(),
+    generation: () => generation,
+    current,
+    snapshot: latest,
+    // Its reads publish their answer wherever the member is (#190): the snapshot follows them.
+    publish: (next) => publish({ ...snapshot, ...next }),
+    shows: () => route.screen === 'groups' && snapshot.auth.status === 'authenticated',
+    lease: () => accountStorage(),
+    owns: (accountId) => accountStorage()?.accountId === accountId,
+    versionOf: (key) => versionOf(key),
+    distrusted: (key, early) =>
+      Math.max(scoped(untrusted, key) ?? -Infinity, early ? (scoped(invalidatedAt, key) ?? 0) : 0),
+    read: async (path, owner) => {
+      if (offlineSession || snapshot.offline.active) await revalidateSession(owner);
+      return request(path, owner);
+    },
+    answered: (path, saved) => {
+      offlineSession ||= saved !== undefined;
+      if (saved === undefined) staleReads.delete(path);
+      else staleReads.set(path, saved);
+      publishReadFreshness();
+    },
+    listed: (listed, lost) => {
+      [listedGroups, unlistedGroups] = [listed, lost];
+      for (const id of lost)
+        invalidateReads(`group:${id}`, `ledger:${id}`, `balances:${id}`, 'home');
+    },
+    retain: (accountId, listed) => dependencies.readCache?.retainGroups(accountId, listed),
+    distrust: (accountId, scopes) => untrusted.mark(accountId, scopes, now()),
+    invalidate: (...scopes) => invalidateReads(...scopes),
+    now,
+  });
+  const disconnect = homeQueries.listen(focusManager, onlineManager, dependencies.netInfo);
 
   /**
    * Records the cookie, on disk, for the account `get-session` just confirmed. Only a recorded
@@ -936,7 +1036,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  const revalidateSession = async (owner: number) => {
+  /** Reads that need the session checked first, as on a reconnect, share one check. */
+  const revalidateSession = singleFlight(async (owner: number) => {
     await verifyGoogleBackend(owner);
     const session = parseSession(await request('/api/auth/get-session', owner));
     assertCurrent(owner);
@@ -950,17 +1051,35 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     offlineSession = false;
     await saveVerifiedIdentity(session, owner);
-  };
+  });
 
-  const versionOf = (path: string) => versions.get(readScope(path)) ?? 0;
+  /** The signed-in account in the environment the app reads from: every query key holds both. */
+  const account = () => {
+    if (!snapshot.auth.user) throw new Superseded();
+    return { environment: apiBase, accountId: snapshot.auth.user.id };
+  };
+  /** A page of 20 Expenses with the member's breakdown, by Month in a Household. */
+  const expenseKey = (groupId: string, category: string, month: string | null, page: number) =>
+    expensePageKey(account(), groupId, {
+      page,
+      limit: 20,
+      // Every Theme's summary shows the member's own share and paid amount.
+      includeMemberBreakdown: true,
+      ...(category === 'home' && month ? getLocalMonthIsoRange(month) : {}),
+    });
+  /** A page of 20 Activity events: the Group's, or one Expense's history. */
+  const activityKey = (groupId: string, page: number, expenseId?: string) =>
+    activityPageKey(account(), groupId, { page, limit: 20, ...(expenseId && { expenseId }) });
+
+  const versionOf = (key: QueryKey) => scoped(versions, key) ?? 0;
 
   /**
    * Saved copies are kept only for Groups the latest Groups list holds, or that Home has gained
    * since (a Group just created). One the list leaves out, such as an archived Group the member
    * can still open, is shown but never saved.
    */
-  const savable = (path: string) => {
-    const id = /^\/api\/groups\/([a-f\d]{24})/i.exec(path)?.[1];
+  const savable = (key: QueryKey) => {
+    const id = key.length === 5 ? key[3] : null;
     return (
       !id ||
       !listedGroups ||
@@ -975,41 +1094,46 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   const invalidateReads = (...scopes: string[]) => {
     const time = now();
-    for (const scope of scopes) {
-      versions.set(scope, (versions.get(scope) ?? 0) + 1);
-      invalidatedAt.set(scope, time);
-    }
-    for (const path of [...reads.keys()]) if (scopes.includes(readScope(path))) reads.delete(path);
+    for (const scope of scopes) invalidatedAt.set(scope, time);
+    outdate(...scopes);
+  };
+  /**
+   * Reads in these scopes are out of date: not reused, joined or saved. Their queries go, and a read
+   * of them still in flight is cancelled: whoever still shows it, Home's observers too, reads again.
+   */
+  const outdate = (...scopes: string[]) => {
+    for (const scope of scopes) versions.set(scope, (versions.get(scope) ?? 0) + 1);
+    queryClient.removeQueries({
+      predicate: ({ queryKey }) => scopes.some((scope) => inScope(scope)(queryKey)),
+    });
+    homeQueries.rebind();
   };
   /** A confirmed Expense or Settlement change affects every page, Month, Balance, Home and Activity view. */
   const ledgerChanged = (groupId: string) =>
     invalidateReads(`ledger:${groupId}`, `balances:${groupId}`, 'home');
   /**
-   * Their saved copies on this device go too, including each record and its history. The removal
-   * is queued ahead of every later save or load of a saved copy, so none of them sees an older
-   * one. A copy that can't be removed is no longer trusted this session; the member is never
-   * signed out for it.
+   * Their saved copies on this device go too, including each record and its history, and Home's
+   * totals (M2-2). The removal is queued ahead of every later save or load of a saved copy, so
+   * none of them sees an older one. A copy that can't be removed is no longer trusted this
+   * session; the member is never signed out for it.
    */
   const removeLedgerCopies = async (groupId: string, owner: number) => {
     const lease = accountStorage(),
       time = now();
-    if (!lease || !dependencies.readCache) return;
+    if (!lease) return;
     try {
-      await lease.write(() => dependencies.readCache!.invalidateLedger(lease.accountId, groupId));
+      await lease.write(async () => {
+        await dependencies.readCache?.invalidateLedger(lease.accountId, groupId);
+        await homeQueries.forget(lease.accountId, [homePath]);
+      });
     } catch (error) {
       if (current(owner) && !(error instanceof Superseded))
-        for (const scope of [`ledger:${groupId}`, `balances:${groupId}`, 'home'])
-          untrusted.set(scope, time);
+        untrusted.mark(lease.accountId, [`ledger:${groupId}`, `balances:${groupId}`, 'home'], time);
     }
   };
 
   /** The view a display read belongs to, for explicit refresh intent. */
-  const viewOf = (path: string) =>
-    path === '/api/groups' || path === '/api/user/balances'
-      ? path === '/api/groups'
-        ? 'groups'
-        : 'home'
-      : `group:${/^\/api\/groups\/([a-f\d]{24})/i.exec(path)?.[1]}`;
+  const viewOf = (key: QueryKey) => (key.length === 5 ? `group:${key[3]}` : key[0]);
 
   /** Runs an explicit refresh; while it runs, overlapping reads of these views read again too. */
   const explicitly = async <T>(views: string[], run: () => Promise<T>): Promise<T> => {
@@ -1027,26 +1151,25 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /** Reusable without a request: verified this session, recently, and never while offline. */
-  const freshRead = (path: string) => {
-    const saved = reads.get(path);
-    const age = saved ? now() - saved.refreshedAt : Infinity;
-    return saved &&
+  const freshRead = (key: QueryKey) => {
+    const query = queryClient.getQueryCache().find<Envelope>({ queryKey: key, exact: true });
+    return query?.state.data &&
       !offlineSession &&
       !snapshot.offline.active &&
       // An explicit refresh of this view is still running: join it instead.
-      !explicit.has(viewOf(path)) &&
-      age >= 0 &&
-      age < freshness
-      ? saved
+      !explicit.has(viewOf(key)) &&
+      // The clock moved back past it: how old it is can't be known, so it isn't reused.
+      query.state.dataUpdatedAt <= Date.now() &&
+      !query.isStaleByTime(staleTime(query))
+      ? query.state.data
       : null;
   };
 
   /**
-   * An Expense read may materialize recurring Expenses whenever it reaches the server,
-   * even after its view moved on. When it settles, Balances and Home read before then are
-   * obsolete: they are not reused, and a read of them still in flight is read again.
+   * An Expense read may materialize recurring Expenses whenever it reaches the server, even after
+   * its view moved on, so Balances wait for it (and `onLedgerRead` makes older ones obsolete).
    */
-  const trackExpenseRead = (groupId: string, owner: number, read: Promise<unknown>) => {
+  const trackExpenseRead = (groupId: string, read: Promise<unknown>) => {
     const running = materializing;
     const pending = running.get(groupId) ?? new Set<Promise<unknown>>();
     running.set(groupId, pending);
@@ -1054,7 +1177,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const settle = () => {
       pending.delete(read);
       if (!pending.size && running.get(groupId) === pending) running.delete(groupId);
-      if (current(owner)) invalidateReads(`balances:${groupId}`, 'home');
     };
     read.then(settle, settle);
   };
@@ -1090,17 +1212,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * this device's saved copy for the same account and path. Never a substitute for the read.
    */
   const peek = async <T>(
-    path: string,
+    key: QueryKey,
     owner: number,
     parse: (value: unknown) => T,
   ): Promise<{ value: T; refreshedAt: number } | null> => {
     try {
-      const saved = reads.get(path);
+      const path = queryKeyPath(key);
+      const saved = queryClient.getQueryData<Envelope>(key);
       if (saved) return { value: parse(saved.value), refreshedAt: saved.refreshedAt };
       const lease = accountStorage();
       if (!lease || !dependencies.readCache) return null;
       const epoch = cacheEpoch,
-        version = versionOf(path);
+        version = versionOf(key);
       const stored = cachedRead(
         await lease.write(() => dependencies.readCache!.load(lease.accountId, path)),
         lease.accountId,
@@ -1111,8 +1234,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         !stored ||
         !current(owner) ||
         epoch !== cacheEpoch ||
-        version !== versionOf(path) ||
-        stored.refreshedAt <= (invalidatedAt.get(readScope(path)) ?? -Infinity)
+        version !== versionOf(key) ||
+        stored.refreshedAt <= (scoped(invalidatedAt, key) ?? -Infinity) ||
+        stored.refreshedAt <= (scoped(untrusted, key) ?? -Infinity)
       )
         return null;
       return { value: parse(stored.value), refreshedAt: stored.refreshedAt };
@@ -1123,60 +1247,69 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /**
-   * One network read per path. A caller joins a read already in flight unless a confirmed
-   * change or denial since it started made it obsolete. `validate` runs before anything is
-   * kept, so a malformed response is never reused or saved.
+   * The request behind each query's latest read. When the query cache cancels a read, whoever
+   * sent or joined it waits for that request, and takes a refusal it answered with.
    */
-  const sharedRead = (path: string, owner: number, validate: (value: unknown) => unknown) => {
-    const version = versionOf(path);
-    const pending = inflight.get(path);
-    if (pending?.owner === owner && pending.version === version) return pending.read;
-    const lease = accountStorage(),
-      epoch = cacheEpoch;
-    const read = (async (): Promise<Verified> => {
+  const requests = new WeakMap<object, Promise<Envelope>>();
+
+  /**
+   * One network read through the query cache: a read of the same key already in flight is
+   * joined, never sent twice, and a confirmed change or denial cancels one it made obsolete.
+   * `validate` runs before anything is kept, so a malformed response is never reused or saved.
+   * The answer is saved on this device for offline use, unless it is obsolete by then.
+   */
+  const fetchRead = (key: QueryKey, owner: number, validate: (value: unknown) => unknown) => {
+    let started: Promise<Envelope> | undefined;
+    const read = async ({ signal }: QueryFunctionContext): Promise<Envelope> => {
+      const path = queryKeyPath(key),
+        version = versionOf(key),
+        lease = accountStorage(),
+        epoch = cacheEpoch;
       if (offlineSession || snapshot.offline.active) await revalidateSession(owner);
-      const value = await request(path, owner);
+      // A cancel ends it as cancelled, never as a network failure: it is never offline.
+      const value = await request(path, owner, { signal });
       validate(value);
-      const refreshedAt = now();
-      // An obsolete response still reaches its callers, which read again; it is never kept.
-      if (!current(owner) || version !== versionOf(path)) return { value, refreshedAt, version };
-      reads.set(path, { value, refreshedAt });
-      if (lease && dependencies.readCache) {
-        try {
-          await lease.write(async () => {
-            if (epoch !== cacheEpoch || version !== versionOf(path) || !savable(path))
-              throw new Superseded();
-            await dependencies.readCache!.save(lease.accountId, path, {
-              version: 1,
-              accountId: lease.accountId,
-              path,
-              refreshedAt,
-              value,
-            });
+      // Verified on the query cache's clock, which decides its freshness too.
+      const verified: Envelope = { source: 'network', refreshedAt: Date.now(), value };
+      if (!current(owner) || version !== versionOf(key) || !lease || !dependencies.readCache)
+        return verified;
+      try {
+        await lease.write(async () => {
+          if (epoch !== cacheEpoch || version !== versionOf(key) || !savable(key))
+            throw new Superseded();
+          await dependencies.readCache!.save(lease.accountId, path, {
+            version: 1,
+            accountId: lease.accountId,
+            path,
+            refreshedAt: verified.refreshedAt,
+            value,
           });
-        } catch (error) {
-          if (!current(owner)) throw new Superseded();
-          // A newer cache epoch only means this response isn't saved; it still answers its
-          // callers. A response for a Group since lost is obsolete by version and read again.
-          if (!(error instanceof Superseded) && epoch === cacheEpoch)
-            publish({
-              ...snapshot,
-              offline: {
-                ...snapshot.offline,
-                message:
-                  'Could not save this view for offline use. Online data is still available.',
-              },
-            });
-        }
+        });
+      } catch (error) {
+        if (!current(owner)) throw new Superseded();
+        // A newer cache epoch only means this response isn't saved; it still answers its
+        // callers. A response for a Group since lost is obsolete by version and read again.
+        if (!(error instanceof Superseded) && epoch === cacheEpoch)
+          publish({
+            ...snapshot,
+            offline: {
+              ...snapshot.offline,
+              message: 'Could not save this view for offline use. Online data is still available.',
+            },
+          });
       }
-      return { value, refreshedAt, version };
-    })();
-    inflight.set(path, { owner, version, read });
-    const settle = () => {
-      if (inflight.get(path)?.read === read) inflight.delete(path);
+      return verified;
     };
-    read.then(settle, settle);
-    return read;
+    const options = queryClient.defaultQueryOptions({
+      queryKey: key,
+      queryFn: (context: QueryFunctionContext) => (started = read(context)),
+    });
+    // Always a read: whether a verified one may be reused instead is the caller's (freshRead).
+    const query = queryClient.getQueryCache().build(queryClient, options);
+    const fetching = query.fetch(options);
+    if (started) requests.set(query, started);
+    // The request behind the read, whether this call sent it or joined it.
+    return { fetching, request: requests.get(query) };
   };
 
   /**
@@ -1185,31 +1318,47 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * response read again.
    */
   const readCached = async <T>(
-    path: string,
+    key: QueryKey,
     owner: number,
     parse: (value: unknown) => T,
     wanted?: () => boolean,
   ): Promise<T> => {
-    const lease = accountStorage(),
+    const path = queryKeyPath(key),
+      lease = accountStorage(),
       view = viewRequest,
       epoch = cacheEpoch,
-      startVersion = versionOf(path),
+      startVersion = versionOf(key),
       shown = wanted ?? (() => view === viewRequest),
-      // Home's Groups list keeps its provenance while another view is open (startReadView),
-      // so its read records where its answer came from on whatever screen it lands.
-      recorded = path === '/api/groups' ? shown : () => view === viewRequest;
+      lostBefore = losses;
     try {
-      let result = await sharedRead(path, owner, parse);
-      // A confirmed change during the read made its response obsolete: read once more,
-      // joining the read that change already started where there is one.
-      for (
-        let attempt = 0;
-        attempt < 2 && result.version !== versionOf(path) && current(owner) && shown();
-        attempt += 1
-      )
-        result = await sharedRead(path, owner, parse);
+      let result: Envelope | null = null;
+      // A confirmed change or denial during the read cancelled it, as obsolete: while the caller
+      // still shows it, read again, joining the read that change already started where there is
+      // one. Each cancel takes a change of its own, so this ends; an obsolete answer is never
+      // shown. A cancel is never a failure to reach the server, so it never falls back to the
+      // saved copy.
+      while (!result) {
+        const read = fetchRead(key, owner, parse);
+        try {
+          result = await read.fetching;
+        } catch (error) {
+          if (!(error instanceof CancelledError)) throw error;
+          // The request ends first, so whatever its answer set off has finished: a session
+          // that ended, or a Group whose refusal is this read's answer.
+          const answer = await read.request?.then(
+            () => null,
+            (failure: unknown) => failure,
+          );
+          if (!current(owner) || answer instanceof Superseded) throw new Superseded();
+          if (answer instanceof RequestError && answer.kind !== 'cancelled') throw answer;
+          // Losing its Group cancelled it: that refusal is its answer, so it's never sent again.
+          const loss = key.length === 5 ? lostGroups.get(key[3]) : undefined;
+          if (loss && loss.at > lostBefore) throw refusal(loss.status);
+          if (!shown()) throw new Obsolete();
+        }
+      }
       const parsed = parse(result.value);
-      if (recorded() && current(owner)) {
+      if (view === viewRequest && current(owner)) {
         staleReads.delete(path);
         publishReadFreshness();
       }
@@ -1224,34 +1373,26 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         throw error;
       // A newer cache epoch, or a change, denial or Groups list that made this path obsolete,
       // may have dropped the saved copy read here: read again, while the caller still shows it.
-      const overtaken = () => epoch !== cacheEpoch || startVersion !== versionOf(path);
+      const overtaken = () => epoch !== cacheEpoch || startVersion !== versionOf(key);
       const again = () => {
         if (!current(owner) || !shown()) throw new Superseded();
-        return readCached(path, owner, parse, wanted);
+        return readCached(key, owner, parse, wanted);
       };
       if (overtaken()) return again();
       const stored = await lease.write(() => dependencies.readCache!.load(lease.accountId, path));
       const copy = cachedRead(stored, lease.accountId, path, now());
       // As in peek, a saved copy older than a change it couldn't be removed for is never shown.
-      const cached =
-        copy && copy.refreshedAt > (untrusted.get(readScope(path)) ?? -Infinity) ? copy : null;
+      const cached = copy && copy.refreshedAt > (scoped(untrusted, key) ?? -Infinity) ? copy : null;
       if (!current(owner)) throw new Superseded();
       if (overtaken()) return again();
-      if (view === viewRequest) offlineSession = true;
-      if (recorded()) {
+      if (view === viewRequest) {
+        offlineSession = true;
         staleReads.set(path, cached?.refreshedAt ?? null);
         publishReadFreshness();
       }
       // The server couldn't be reached, and this read already fell back: nothing more to try.
       if (!cached)
-        throw new RequestError(
-          'This view was not saved on this device. Connect to load it.',
-          0,
-          'OFFLINE_UNAVAILABLE',
-          false,
-          null,
-          'network',
-        );
+        throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
       return parse(cached.value);
     }
   };
@@ -1281,43 +1422,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /**
-   * Cold start: the saved Home of the account that last signed in on this device. Read straight
-   * from this device, every part at once and outside the account queue, so nothing waits on the
-   * network or on another account write. Null without a readable saved Groups list.
+   * Cold start: the saved Home of the account that last signed in on this device, from the
+   * persister's rows and this device's drafts (`homeQueries.preview`). Null without one.
    */
   const readSavedHome = async (device: ReturnType<typeof readDeviceAccount>) => {
-    const cache = dependencies.readCache;
-    if (!dependencies.offlineIdentity || !cache) return null;
+    if (!dependencies.offlineIdentity) return null;
     try {
       const { accountId = null, identity: session = null } = (await device) ?? {};
-      if (
-        !accountId ||
-        !session ||
-        session.user.id !== accountId ||
-        session.expiresAt.getTime() <= now()
-      )
-        return null;
-      const saved = async <T>(path: string, parse: (value: unknown) => T) => {
-        const read = cachedRead(await cache.load(accountId, path), accountId, path, now());
-        return read && { value: parse(read.value), refreshedAt: read.refreshedAt };
-      };
-      const [groups, home, drafts] = await Promise.all([
-        saved('/api/groups', parseGroups),
-        saved('/api/user/balances', parseHomeBalances).catch(() => null),
-        (async () => (await dependencies.expenseDrafts?.list?.(accountId)) ?? [])().catch(() => []),
-      ]);
-      if (
-        !groups?.value.every((group) =>
-          group.members.some((member) => member.user.id === accountId),
-        )
-      )
-        return null;
-      return {
-        user: session.user,
-        groups: groups.value,
-        home,
-        drafts: draftSummaries(drafts, accountId, groups.value),
-      };
+      if (!accountId || !session || session.user.id !== accountId) return null;
+      if (session.expiresAt.getTime() <= now()) return null;
+      const drafts = (async () => (await dependencies.expenseDrafts?.list?.(accountId)) ?? [])();
+      const saved = await homeQueries.preview(accountId, drafts);
+      return saved && { ...saved, auth: { status: 'restoring' as const, user: session.user } };
     } catch {
       // Without a readable saved copy, the session check shows on its own.
       return null;
@@ -1330,23 +1446,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * nothing is sent and every action waits for the check.
    */
   const showSavedHome = (owner: number, saved: Awaited<ReturnType<typeof readSavedHome>>) => {
-    if (!saved || !current(owner) || accountCleanupRequired || saved.user.id !== cookieAccount)
+    if (!saved || !current(owner) || accountCleanupRequired || saved.auth.user.id !== cookieAccount)
       return;
-    publish({
-      ...snapshot,
-      auth: { status: 'restoring', user: saved.user, message: null },
-      groups: { status: 'loading', data: saved.groups, message: null, loaded: true },
-      home: saved.home
-        ? {
-            ...emptyHome(),
-            status: 'loading',
-            data: saved.home.value.buckets,
-            byGroup: saved.home.value.byGroup,
-            refreshedAt: saved.home.refreshedAt,
-          }
-        : emptyHome(),
-      drafts: saved.drafts,
-    });
+    publish({ ...snapshot, ...saved, auth: { ...saved.auth, message: null } });
   };
 
   /**
@@ -1386,7 +1488,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !cookieAccount ||
       !dependencies.accountLocal ||
       !dependencies.offlineIdentity ||
-      !dependencies.readCache
+      !dependencies.savedQueries
     )
       return false;
     try {
@@ -1402,14 +1504,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return false;
       const recovered = await storedCreation(owner, session.user.id);
       offlineSession = true;
-      publish({
-        ...cleanSnapshot({ status: 'authenticated', user: session.user, message: null }),
-        ...savedHome(session.user.id),
+      openHome(session.user, {
         ...recovered,
         offline: { active: true, refreshedAt: null, message: null },
       });
-      await loadGroups(owner);
-      if (current(owner)) await refreshHome();
+      await homeQueries.settle(owner);
       return true;
     } catch (error) {
       if (error instanceof Superseded) throw error;
@@ -1417,132 +1516,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  const memberOfAll = (groups: MobileGroup[]) =>
-    groups.every((group) =>
-      group.members.some((member) => member.user.id === snapshot.auth.user?.id),
-    );
-
-  /** `reuse` accepts a list verified within the display freshness window. */
-  const loadGroups = (owner: number, reuse = false) =>
-    reuse ? listGroups(owner, true) : explicitly(['groups'], () => listGroups(owner, false));
-  /** Home's Groups list is read again when its latest read ended without an answer. */
-  const rereadGroups = (owner: number) =>
-    groupsUnanswered && current(owner) ? loadGroups(owner, true) : Promise.resolve();
-  /**
-   * Shows Home and reads the Groups list. The read has its own token, so it publishes its
-   * answer (the list or a failure) whatever screen the member has moved to; only a newer list
-   * read supersedes it. A read that ends with no answer leaves Home to read the list again.
-   */
-  const listGroups = async (owner: number, reuse: boolean): Promise<void> => {
-    assertCurrent(owner);
-    viewRequest += 1;
-    const listRead = ++groupsRequest;
-    groupsUnanswered = false;
-    const path = '/api/groups';
-    startReadView();
-    publish({
-      ...snapshot,
-      screen: 'groups',
-      groups: { ...snapshot.groups, status: 'loading', message: null },
-      detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
-    });
-    try {
-      const fresh = reuse ? freshRead(path) : null;
-      const reading = fresh
-        ? null
-        : readCached(path, owner, parseGroups, () => listRead === groupsRequest);
-      reading?.catch(() => undefined);
-      // The version current just after the answer settles. readCached already reads again for a
-      // change during the read; the checks below catch one between the answer and its use.
-      const answered = reading?.then(() => versionOf(path));
-      answered?.catch(() => undefined);
-      if (reading && !snapshot.groups.data.length) {
-        const saved = await peek(path, owner, parseGroups);
-        if (
-          saved &&
-          current(owner) &&
-          listRead === groupsRequest &&
-          !snapshot.groups.data.length &&
-          memberOfAll(saved.value)
-        )
-          publish({ ...snapshot, groups: { ...snapshot.groups, data: saved.value, loaded: true } });
-      }
-      const groups = fresh ? parseGroups(fresh.value) : await reading!;
-      const version = answered ? await answered : versionOf(path);
-      assertCurrent(owner);
-      if (listRead !== groupsRequest) return;
-      if (version !== versionOf(path)) throw new Superseded();
-      // Do not display a malformed server response as somebody else's groups.
-      if (!memberOfAll(groups)) {
-        throw new RequestError('The server returned invalid group membership. Please refresh.');
-      }
-      // Groups this session shows, has read or is reading that the list leaves out.
-      const lost = new Set<string>();
-      if (reading && !staleReads.has(path)) {
-        const listed = new Set(groups.map((group) => group.id));
-        for (const key of [
-          ...snapshot.groups.data.map(({ id }) => `/api/groups/${id}`),
-          ...reads.keys(),
-          ...inflight.keys(),
-        ]) {
-          const id = /^\/api\/groups\/([a-f\d]{24})/i.exec(key)?.[1];
-          if (id && !listed.has(id)) lost.add(id);
-        }
-        listedGroups = listed;
-        unlistedGroups = lost;
-        // They lose everything read for them, and Home with them. A read of one still running
-        // is obsolete, so it is never kept or saved, and a view still showing it reads again.
-        for (const id of lost)
-          invalidateReads(`group:${id}`, `ledger:${id}`, `balances:${id}`, 'home');
-        // With no list known yet, this device may hold Groups the trim drops, and Home's saved
-        // figures with them: figures still being read are read again after it.
-        if (!snapshot.groups.loaded && inflight.has('/api/user/balances')) invalidateReads('home');
-      }
-      const lease = accountStorage();
-      if (reading && lease && dependencies.readCache && !staleReads.has(path)) {
-        // The lost Groups' reads are already obsolete by version, so the trim moves no cache epoch:
-        // reads running for another view or for Home go on and are saved.
-        try {
-          await lease.write(() =>
-            dependencies.readCache!.retainGroups(
-              lease.accountId,
-              groups.map((group) => group.id),
-            ),
-          );
-        } catch (error) {
-          if (!current(owner) || error instanceof Superseded) throw error;
-          await signOut();
-          throw new Superseded();
-        }
-        if (!current(owner) || listRead !== groupsRequest) return;
-        if (version !== versionOf(path)) throw new Superseded();
-      }
-      publish({
-        ...snapshot,
-        groups: { status: 'ready', data: groups, message: null, loaded: true },
-      });
-    } catch (error) {
-      if (!current(owner) || listRead !== groupsRequest) return;
-      if (error instanceof Superseded) {
-        // No answer to show: Home reads the list again, at once if it's showing.
-        groupsUnanswered = true;
-        if (snapshot.screen === 'groups') await rereadGroups(owner);
-        return;
-      }
-      publish({
-        ...snapshot,
-        groups: {
-          ...snapshot.groups,
-          status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
-          data: error instanceof RequestError && error.status === 403 ? [] : snapshot.groups.data,
-          message:
-            error instanceof RequestError
-              ? error.message
-              : 'The server returned invalid group data. Please refresh.',
-        },
-      });
-    }
+  /** Home in a session just confirmed or restored offline: its figures wait for its first list. */
+  const openHome = (user: NonNullable<MobileSnapshot['auth']['user']>, start = {}) => {
+    homeQueries.hold();
+    const signedIn = cleanSnapshot({ status: 'authenticated', user, message: null });
+    navigate(home, { ...signedIn, ...savedHome(user.id), ...start });
   };
+  /** Home, with the Groups list read again now (Check Groups, joining): it shows it loading. */
+  const listOnHome = (owner: number) => {
+    startReadView();
+    return homeQueries.listFirst(owner, () => navigate(home));
+  };
+  /** Every way back to Home, whose content shows where it came from, even a list read elsewhere. */
+  const backHome = () => homeQueries.back(publishReadFreshness);
 
   const verifyAndLoad = async (owner: number) => {
     await verifyGoogleBackend(owner);
@@ -1554,7 +1540,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     // A saved Home of another account goes before that account's data is cleared.
     if (snapshot.auth.user && snapshot.auth.user.id !== session.user.id)
-      publish(cleanSnapshot({ status: 'restoring', user: null, message: null }));
+      cleanHome({ status: 'restoring', user: null, message: null });
     if (dependencies.accountLocal) {
       try {
         const savedOwner = await dependencies.accountLocal.owner.load();
@@ -1573,22 +1559,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
     }
     await recordCookieAccount(owner, session.user.id);
+    await queueAccount(() => untrusted.drop());
     // A Group submission stored on this device reopens before anything else can be created.
-    const recovered = await storedCreation(owner, session.user.id);
-    publish({
-      ...cleanSnapshot({ status: 'authenticated', user: session.user, message: null }),
-      ...savedHome(session.user.id),
-      ...recovered,
-    });
+    openHome(session.user, await storedCreation(owner, session.user.id));
     await saveVerifiedIdentity(session, owner);
-    await loadGroups(owner);
-    if (current(owner)) await refreshHome();
+    await homeQueries.settle(owner);
     if (!current(owner)) return;
     if (creationRecovery?.ownerId === session.user.id) {
-      publish({
-        ...snapshot,
+      navigate(creationRecovery.creation.status === 'uncertain' ? home : { screen: 'create' }, {
         creation: creationRecovery.creation,
-        screen: creationRecovery.creation.status === 'uncertain' ? 'groups' : 'create',
       });
     }
     creationRecovery = null;
@@ -1596,104 +1575,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /** Offline fallbacks and reused reads keep their original time. */
-  const readAt = (path: string) =>
-    staleReads.has(path) ? (staleReads.get(path) ?? null) : (reads.get(path)?.refreshedAt ?? now());
+  const readAt = (key: QueryKey) => {
+    const path = queryKeyPath(key);
+    return staleReads.has(path)
+      ? (staleReads.get(path) ?? null)
+      : (queryClient.getQueryData<Envelope>(key)?.refreshedAt ?? Date.now());
+  };
 
-  /** `reuse` accepts figures verified within the display freshness window. */
-  const readHome = async (reuse: boolean) => {
-    if (snapshot.auth.status !== 'authenticated') return;
-    const owner = generation;
-    const read = ++homeRequest;
-    const path = '/api/user/balances';
-    const fresh = reuse ? freshRead(path) : null;
-    if (fresh) {
-      const { buckets, byGroup } = parseHomeBalances(fresh.value);
-      publish({
-        ...snapshot,
-        home: {
-          status: 'ready',
-          data: buckets,
-          byGroup,
-          message: null,
-          refreshedAt: fresh.refreshedAt,
-          stale: false,
-        },
-      });
-      return;
-    }
-    // The same account's figures stay readable, and keep their time, until replaced.
-    publish({ ...snapshot, home: { ...snapshot.home, status: 'loading', message: null } });
-    try {
-      const reading = readCached(path, owner, parseHomeBalances, () => read === homeRequest);
-      reading.catch(() => undefined);
-      if (snapshot.home.data === null) {
-        const saved = await peek(path, owner, parseHomeBalances);
-        if (saved && current(owner) && read === homeRequest && snapshot.home.data === null)
-          publish({
-            ...snapshot,
-            home: {
-              ...snapshot.home,
-              data: saved.value.buckets,
-              byGroup: saved.value.byGroup,
-              refreshedAt: saved.refreshedAt,
-            },
-          });
-      }
-      const { buckets, byGroup } = await reading;
-      if (!current(owner) || read !== homeRequest) return;
-      publish({
-        ...snapshot,
-        home: {
-          status: 'ready',
-          data: buckets,
-          byGroup,
-          message: null,
-          refreshedAt: readAt(path),
-          stale: false,
-        },
-      });
-    } catch (error) {
-      if (!current(owner) || read !== homeRequest || error instanceof Superseded) return;
-      const denied = error instanceof RequestError && error.status === 403;
-      publish({
-        ...snapshot,
-        home: {
-          ...(denied ? emptyHome() : snapshot.home),
-          status: denied ? 'denied' : 'error',
-          message:
-            error instanceof RequestError
-              ? error.message
-              : 'Could not load your balances. Please try again.',
-        },
-      });
-    }
-  };
-  /** Home's Expense drafts (`draftSummaries`), read from this device whenever Home loads. */
-  const listDrafts = async () => {
-    const lease = accountStorage();
-    const storage = dependencies.expenseDrafts;
-    if (!lease || !storage?.list) return;
-    const owner = generation;
-    try {
-      const records = await lease.write(() => storage.list!(lease.accountId));
-      if (!current(owner)) return;
-      publish({
-        ...snapshot,
-        drafts: draftSummaries(records, lease.accountId, snapshot.groups.data),
-      });
-    } catch {
-      // Home keeps the drafts it lists; each one is still in its Group.
-    }
-  };
-  /** `reuse` accepts figures verified within the display freshness window. */
-  const loadHome = async (reuse: boolean) => {
-    await Promise.all([
-      listDrafts(),
-      reuse ? readHome(true) : explicitly(['home'], () => readHome(false)),
-    ]);
-  };
   /** Refresh and Retry always read again. */
-  const refreshHome = () => loadHome(false);
+  const refreshHome = () => homeQueries.refresh();
 
   /**
    * `quiet`: a return to the foreground after Continue. It retries a pending revoke but stays on
@@ -1701,7 +1591,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   const restore = async (quiet = false) => {
     const owner = invalidate();
-    if (!quiet) publish(cleanSnapshot({ status: 'restoring', user: null, message: null }));
+    if (!quiet) cleanHome({ status: 'restoring', user: null, message: null });
     try {
       // A pending sign-out is finished first. Its cookie is only ever sent to revoke it: never
       // read with, restored offline or previewed with its saved Home.
@@ -1713,19 +1603,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       if (!config.developmentPersonaEnabled && !googleEnabled) {
         await clearSaved(owner);
-        publish(cleanSnapshot({ status: 'signed-out', user: null, message: disabledMessage }));
+        cleanHome({ status: 'signed-out', user: null, message: disabledMessage });
         return;
       }
       if (cleanupRequired) await clearSaved(owner);
-      // Any pending sign-out cleanup has finished, so this device's saved Home can be read,
-      // alongside the session cookie and before anything is sent.
+      // Any pending sign-out cleanup has finished, and saved copies this device couldn't remove
+      // are gone, so its saved Home can be read, alongside the session cookie, before any request.
+      await queueAccount(() => untrusted.drop());
       const device = readDeviceAccount();
       const deviceHome = readSavedHome(device);
       await loadPending();
       assertCurrent(owner);
       const saved = await store(owner, () => dependencies.credentials.load());
       if (!saved) {
-        publish(cleanSnapshot({ status: 'signed-out', user: null, message: null }));
+        cleanHome({ status: 'signed-out', user: null, message: null });
         if (pendingCode) await previewInvitation(pendingCode);
         return;
       }
@@ -1749,7 +1640,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           showUnconfirmedSignOut(owner);
           return;
         }
-        publish(cleanSnapshot({ status: 'signed-out', user: null, message: unrestorableMessage }));
+        cleanHome({ status: 'signed-out', user: null, message: unrestorableMessage });
         return;
       }
       cookie = session.cookie;
@@ -1768,13 +1659,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // out, which would remove that data, so the member connects once instead.
       const unverifiedOffline =
         error instanceof RequestError && error.networkFailure && cookie !== null && !cookieAccount;
-      publish(
-        cleanSnapshot({
-          status: 'error',
-          user: null,
-          message: unverifiedOffline ? `${message} ${keptUntilConfirmedMessage}` : message,
-        }),
-      );
+      cleanHome({
+        status: 'error',
+        user: null,
+        message: unverifiedOffline ? `${message} ${keptUntilConfirmedMessage}` : message,
+      });
     }
   };
 
@@ -1782,7 +1671,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // A sign-in this one replaces may already have its session, saved here.
     const replacing = snapshot.auth.status === 'signing-in';
     const owner = invalidate();
-    publish(cleanSnapshot({ status: 'signing-in', user: null, message: null }));
+    cleanHome({ status: 'signing-in', user: null, message: null });
     try {
       // A pending sign-out's revoke is sent once before its saved cookie goes, and so is the
       // session of a sign-in this one replaced.
@@ -1790,7 +1679,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (replacing) await revokeSession(owner, true);
       await clearSaved(owner);
       if (!config.developmentPersonaEnabled) {
-        publish(cleanSnapshot({ status: 'signed-out', user: null, message: disabledMessage }));
+        cleanHome({ status: 'signed-out', user: null, message: disabledMessage });
         return;
       }
       if (!['alex', 'sam', 'priya'].includes(personaId))
@@ -1834,7 +1723,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const owner = invalidate();
     const attempt = { owner, choosing: false };
     googleAttempt = attempt;
-    publish(cleanSnapshot({ status: 'signing-in', user: null, message: null }));
+    cleanHome({ status: 'signing-in', user: null, message: null });
     try {
       await finishSignOut(owner, true);
       if (replacing) await revokeSession(owner, true);
@@ -1904,7 +1793,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     view: number,
     previousMonth: string | null | undefined,
   ) => {
-    const saved = await peek(`/api/groups/${id}`, owner, parseGroup);
+    const saved = await peek(groupKey(account(), id), owner, parseGroup);
     const group = saved?.value;
     if (
       !saved ||
@@ -1920,10 +1809,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ? currentMonthKey(new Date(now()))
           : previousMonth;
     const [expenses, balances] = await Promise.all([
-      peek(expensePath(id, group.category, month, 1), owner, (value) =>
+      peek(expenseKey(id, group.category, month, 1), owner, (value) =>
         parseExpensePage(value, id, group.defaultCurrency),
       ),
-      peek(`/api/groups/${id}/balances`, owner, parseGroupBalances),
+      peek(groupBalancesKey(account(), id), owner, parseGroupBalances),
     ]);
     if (!current(owner) || view !== viewRequest || snapshot.detail.id !== id) return false;
     publish({
@@ -1968,7 +1857,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /**
    * The same Group reopens on the destination already shown (an Expense task's return sets
    * it) and another Group starts on Expenses, unless `requested` names one. Only the shown
-   * destination is read; the other is read when the member switches to it.
+   * destination is read; the other is read when the member switches to it. The Group view on
+   * screen (a refresh, or the read after a return) is read where it is, without navigating.
    */
   const showGroup = async (id: string, reuse: boolean, requested?: GroupDestination) => {
     if (snapshot.auth.status !== 'authenticated') return;
@@ -1980,12 +1870,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const destination =
       requested ?? (snapshot.detail.id === id ? snapshot.destination : 'expenses');
     const view = ++viewRequest;
-    const path = `/api/groups/${id}`;
     startReadView();
-    publish({
-      ...snapshot,
-      screen: 'group',
-      destination,
+    const start: Partial<MobileSnapshot> = {
       share: { status: 'idle', url: null, message: null },
       detail: {
         status: 'loading',
@@ -2008,13 +1894,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               message: null,
             }
           : { ...emptyActivity(), groupId: id },
-    });
+    };
+    const at = route,
+      shown = at.screen === 'group' && at.groupId === id;
+    if (shown && at.destination === destination) publish({ ...snapshot, ...start });
+    // Still on this Group's view, a return's scroll position still applies.
+    else
+      navigate(
+        { ...groupAt(id, destination), restoreScroll: shown ? at.restoreScroll : null },
+        start,
+      );
     const kept = loadKeptDraft(id);
     try {
       if (!objectId.safeParse(id).success)
         throw new RequestError('This group is no longer available.', 404);
-      const fresh = reuse ? freshRead(path) : null;
-      const reading = fresh ? null : readCached(path, owner, parseGroup);
+      const key = groupKey(account(), id);
+      const fresh = reuse ? freshRead(key) : null;
+      const reading = fresh ? null : readCached(key, owner, parseGroup);
       reading?.catch(() => undefined);
       // The saved copy follows the same Month rule as figures retained on screen.
       if (!retained) retained = await showSavedGroup(id, owner, view, previousMonth);
@@ -2031,7 +1927,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       publish({
         ...snapshot,
-        detail: { status: 'ready', id, data: group, message: null, refreshedAt: readAt(path) },
+        detail: { status: 'ready', id, data: group, message: null, refreshedAt: readAt(key) },
         financial: {
           ...snapshot.financial,
           // While a refresh reads the Group, the member can still choose another Month:
@@ -2102,11 +1998,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const evictGroupContent = (id: string, status: number) => {
-    const message =
-      status === 403
-        ? 'You no longer have access to this group.'
-        : 'This group is no longer available.';
-    homeRequest += 1;
+    const message = groupRefused(status);
     const expense = snapshot.expense.groupId === id ? withdrawExpense(message) : snapshot.expense;
     publish({
       ...snapshot,
@@ -2141,32 +2033,40 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   const forgetGroup = async (groupId: string, status: number, owner: number) => {
     cacheEpoch += 1;
-    invalidateReads(
+    lostGroups.set(groupId, { status, at: ++losses });
+    const scopes = [
       `group:${groupId}`,
       `ledger:${groupId}`,
       `balances:${groupId}`,
       'groups',
       'home',
-    );
-    evictGroupContent(groupId, status);
-    const lease = accountStorage();
-    if (lease && dependencies.readCache) {
-      try {
-        await lease.write(() => dependencies.readCache!.invalidateGroup(lease.accountId, groupId));
-      } catch (error) {
-        if (!current(owner) || error instanceof Superseded) throw error;
-        await signOut();
-        throw new Superseded();
-      }
+    ];
+    // The Group leaves the screen in the publish that shows Home's queries reading again.
+    homeQueries.quietly(() => {
+      invalidateReads(...scopes);
+      evictGroupContent(groupId, status);
+    });
+    const lease = accountStorage(),
+      time = now();
+    if (!lease) return;
+    try {
+      // In both stores: the older one's copies of the Group, and the persister's list and Home.
+      await lease.write(async () => {
+        await dependencies.readCache?.invalidateGroup(lease.accountId, groupId);
+        await homeQueries.forget(lease.accountId);
+      });
+    } catch (error) {
+      if (!current(owner) || error instanceof Superseded) throw error;
+      // A saved copy that can't be removed is never shown again; the member stays signed in (#212).
+      untrusted.mark(lease.accountId, scopes, time);
     }
   };
 
   const dropDeniedGroup = (id: string, error: unknown): boolean => {
     if (!(error instanceof RequestError) || ![403, 404].includes(error.status)) return false;
     viewRequest += 1;
-    homeRequest += 1;
     // A Groups list or Home figures read before this, still running or not, never bring it back.
-    invalidateReads('groups', 'home');
+    homeQueries.quietly(() => invalidateReads('groups', 'home'));
     publish({
       ...snapshot,
       groups: { ...snapshot.groups, data: snapshot.groups.data.filter((group) => group.id !== id) },
@@ -2206,8 +2106,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     const read = ++balancesRequest;
-    const path = `/api/groups/${group.id}/balances`;
-    const fresh = reuse ? freshRead(path) : null;
+    const key = groupBalancesKey(account(), group.id);
+    const fresh = reuse ? freshRead(key) : null;
     if (fresh) {
       publish({
         ...snapshot,
@@ -2233,7 +2133,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     try {
       const data = await readCached(
-        path,
+        key,
         owner,
         parseGroupBalances,
         () => view === viewRequest && read === balancesRequest,
@@ -2247,7 +2147,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             status: 'ready',
             data,
             message: null,
-            refreshedAt: readAt(path),
+            refreshedAt: readAt(key),
             stale: false,
           },
         },
@@ -2348,43 +2248,29 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const refreshBalances = () =>
     explicitly([`group:${snapshot.detail.data?.id}`], () => loadBalances(false));
 
-  const expensePath = (groupId: string, category: string, month: string | null, page: number) => {
-    // Every Theme's summary shows the member's own share and paid amount.
-    const params = new URLSearchParams({
-      page: String(page),
-      limit: '20',
-      includeMemberBreakdown: '1',
-    });
-    if (category === 'home' && month) {
-      const { dateFrom, dateTo } = getLocalMonthIsoRange(month);
-      params.set('dateFrom', dateFrom);
-      params.set('dateTo', dateTo);
-    }
-    return `/api/groups/${groupId}/expenses?${params}`;
-  };
-
   const selectMonth = async (month: string | null) => {
+    const at = route;
     if (
       snapshot.auth.status !== 'authenticated' ||
-      snapshot.screen !== 'group' ||
+      at.screen !== 'group' ||
       snapshot.detail.data?.category !== 'home'
     )
       return;
     if (month !== null) getLocalMonthIsoRange(month);
     const { financial } = snapshot;
-    returnPages = null;
-    publish({
-      ...snapshot,
-      // The member chose another view: an earlier position or offer no longer applies.
-      restoreScroll: null,
-      snackbar: null,
-      financial: {
-        ...financial,
-        month,
-        // A different Month never shows the previous Month's Expenses under its label.
-        expenses: month === financial.month ? financial.expenses : emptyExpenses(month),
+    // The member chose another view: an earlier position, offer or Expense range no longer applies.
+    navigate(
+      { ...at, restoreScroll: null, reread: at.reread && { ...at.reread, expenses: null } },
+      {
+        snackbar: null,
+        financial: {
+          ...financial,
+          month,
+          // A different Month never shows the previous Month's Expenses under its label.
+          expenses: month === financial.month ? financial.expenses : emptyExpenses(month),
+        },
       },
-    });
+    );
     await readExpenses(false, true);
   };
 
@@ -2393,7 +2279,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // responses no longer describe the same ledger, even while the Group read is
     // pending. Their figures stay visible but unverified until read again afterwards,
     // and are never reused or saved from a read that started before this one.
-    homeRequest += 1;
     balancesRequest += 1;
     invalidateReads(`balances:${groupId}`, 'home');
     const { home, financial } = snapshot;
@@ -2423,13 +2308,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const parse = (value: unknown) => parseExpensePage(value, group.id, group.defaultCurrency);
     // A return reads the page range it left until that range is shown, even when a later
     // read, such as a foreground refresh, supersedes the first one.
-    if (returnPages && returnPages.groupId !== group.id) returnPages = null;
-    const through =
-      !append && returnPages?.month === snapshot.financial.month ? returnPages.pages : 1;
+    const reread = append ? null : rereadOf(group.id)?.expenses;
+    const range =
+      reread && reread.month === snapshot.financial.month && !rereadsShown.has(reread)
+        ? reread
+        : null;
+    const through = range?.pages ?? 1;
     // A reused first page alone would drop the rest of the range a return needs.
     const fresh =
       !append && reuse && through === 1
-        ? freshRead(expensePath(group.id, group.category, snapshot.financial.month, 1))
+        ? freshRead(expenseKey(group.id, group.category, snapshot.financial.month, 1))
         : null;
     if (fresh) {
       const page = parse(fresh.value);
@@ -2474,7 +2362,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const view = viewRequest;
     const read = ++financialRequest;
     const month = snapshot.financial.month;
-    const path = expensePath(group.id, group.category, month, pageNumber);
+    const key = expenseKey(group.id, group.category, month, pageNumber);
     const shown = expenses.month === month ? expenses : emptyExpenses(month);
     beginExpenseRead(group.id);
     // A refresh keeps Expenses readable only when they belong to the Month being read.
@@ -2490,13 +2378,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const wanted = () => current(owner) && view === viewRequest && read === financialRequest;
     const readPage = (number: number) => {
       const reading = readCached(
-        expensePath(group.id, group.category, month, number),
+        expenseKey(group.id, group.category, month, number),
         owner,
         parse,
         wanted,
       );
       // Even if this view moves on, Balances and Home read before it settles are replaced.
-      trackExpenseRead(group.id, owner, reading);
+      trackExpenseRead(group.id, reading);
       reading.catch(() => undefined);
       return reading;
     };
@@ -2504,7 +2392,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const reading = readPage(pageNumber);
       // A Month not on screen shows its saved copy, with its own time, while it is read again.
       if (!append && !shown.data.length && shown.summary === null) {
-        const saved = await peek(path, owner, parse);
+        const saved = await peek(key, owner, parse);
         if (saved && wanted())
           publish({
             ...snapshot,
@@ -2523,7 +2411,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const first = await reading;
       if (!wanted()) return await followSupersededExpenseRead(group.id, owner);
       if (first.pagination.page !== pageNumber) throw new Error('Unexpected expense page.');
-      const refreshedAt = append ? expenses.refreshedAt : readAt(path);
+      const refreshedAt = append ? expenses.refreshedAt : readAt(key);
       const rows = [...(append ? expenses.data : []), ...first.expenses];
       let last = first;
       let more: { status: 'idle' | 'error'; message: string | null } = {
@@ -2573,12 +2461,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         },
       });
       // The range a return needed is shown; later refreshes start from the first page.
-      if (!append && returnPages?.month === month) returnPages = null;
+      if (range) rereadsShown.add(range);
       await loadBalances(false);
     } catch (error) {
-      if (!current(owner) || error instanceof Superseded) return;
-      // A superseded read that failed may still have reached the server.
-      if (view !== viewRequest || read !== financialRequest)
+      if (!current(owner) || (error instanceof Superseded && !(error instanceof Obsolete))) return;
+      // A superseded read that failed, or that a change cancelled, may still have reached the
+      // server.
+      if (error instanceof Obsolete || view !== viewRequest || read !== financialRequest)
         return await followSupersededExpenseRead(group.id, owner);
       if (dropDeniedGroup(group.id, error)) return;
       const unavailableOffline =
@@ -2642,8 +2531,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return;
     const pageNumber = append ? pagination!.page + 1 : 1;
     // A return reads the pages it left until they're shown, so its position still exists.
-    if (returnActivityPages && returnActivityPages.groupId !== groupId) returnActivityPages = null;
-    const through = append ? pageNumber : (returnActivityPages?.pages ?? 1);
+    const reread = append ? null : rereadOf(groupId)?.activity;
+    const range = reread && !rereadsShown.has(reread) ? reread : null;
+    const through = append ? pageNumber : (range?.pages ?? 1);
     if (!append) activityDetailRequest += 1;
     const owner = generation,
       view = viewRequest,
@@ -2662,11 +2552,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (!objectId.safeParse(groupId).success)
         throw new RequestError('This Group is unavailable.', 404);
       const wanted = () => current(owner) && view === viewRequest && read === activityRequest;
-      const pagePath = (number: number) =>
-        `/api/groups/${groupId}/activity?page=${number}&limit=20`;
       const readPage = (number: number) =>
         readCached(
-          pagePath(number),
+          activityKey(groupId, number),
           owner,
           (value) => parseActivityPage(value, groupId, number),
           wanted,
@@ -2700,10 +2588,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           status: 'ready',
           moreStatus,
           message: null,
-          refreshedAt: append ? snapshot.activity.refreshedAt : readAt(pagePath(1)),
+          refreshedAt: append ? snapshot.activity.refreshedAt : readAt(activityKey(groupId, 1)),
         },
       });
-      if (!append) returnActivityPages = null;
+      if (range) rereadsShown.add(range);
     } catch (error) {
       if (
         !current(owner) ||
@@ -2740,21 +2628,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * Expenses and Balances share one read, because Balances follow the Expense read.
    */
   const selectDestination = async (destination: GroupDestination) => {
+    const at = route;
     if (
       snapshot.auth.status !== 'authenticated' ||
-      snapshot.screen !== 'group' ||
-      destination === snapshot.destination
+      at.screen !== 'group' ||
+      destination === at.destination
     )
       return;
     const groupId = snapshot.detail.id;
-    publish({
-      ...snapshot,
-      destination,
-      activity:
-        groupId && snapshot.activity.groupId !== groupId
-          ? { ...emptyActivity(), groupId }
-          : snapshot.activity,
-    });
+    navigate(
+      { ...at, destination },
+      {
+        activity:
+          groupId && snapshot.activity.groupId !== groupId
+            ? { ...emptyActivity(), groupId }
+            : snapshot.activity,
+      },
+    );
     // A Group read still in flight reads the destination shown when it completes.
     if (snapshot.detail.status === 'loading' || !snapshot.detail.data) return;
     if (destination === 'activity') {
@@ -2796,7 +2686,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     });
     let targetRequested = false;
     try {
-      const group = await readCached(`/api/groups/${groupId}`, owner, parseGroup);
+      const group = await readCached(groupKey(account(), groupId), owner, parseGroup);
       if (!current(owner) || view !== viewRequest || read !== activityDetailRequest) return;
       if (
         group.id !== groupId ||
@@ -2807,7 +2697,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       let target: typeof activity.target = { status: 'none' };
       if (expenseId) {
         targetRequested = true;
-        target = await readCached(`/api/groups/${groupId}/expenses/${expenseId}`, owner, (value) =>
+        target = await readCached(expenseRecordKey(account(), groupId, expenseId), owner, (value) =>
           parseActivityExpense(value, groupId, expenseId),
         );
       }
@@ -2941,10 +2831,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** Opening from the Group's own view records where to return; other entry is direct. */
   const expenseReturn = (groupId: string, scrollY = 0): GroupReturnContext | null => {
     // Retry, Discard and Use saved version reopen the same task, which keeps its origin.
-    if (snapshot.screen === 'expense' && snapshot.expense.groupId === groupId)
-      return snapshot.expense.returnTo;
+    if (route.screen === 'expense' && route.groupId === groupId) return route.returnTo;
     if (
-      snapshot.screen !== 'group' ||
+      route.screen !== 'group' ||
       snapshot.detail.id !== groupId ||
       snapshot.financial.groupId !== groupId
     )
@@ -2975,19 +2864,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const accountId = snapshot.auth.user.id;
     const month = snapshot.financial.groupId === groupId ? snapshot.financial.month : null;
     const returnTo = expenseReturn(groupId, origin.scrollY);
-    returnPages = returnActivityPages = null;
     startReadView();
-    publish({
-      ...snapshot,
-      screen: 'expense',
-      expense: {
-        ...emptyExpenseEditor(),
-        groupId,
-        requestedExpenseId: expenseId ?? null,
-        status: 'loading',
-        returnTo,
+    navigate(
+      { screen: 'expense', groupId, returnTo },
+      {
+        expense: {
+          ...emptyExpenseEditor(),
+          groupId,
+          requestedExpenseId: expenseId ?? null,
+          status: 'loading',
+          returnTo,
+        },
       },
-    });
+    );
     try {
       const lease = accountStorage();
       if (!lease || !dependencies.expenseDrafts) throw new Error('Draft storage is unavailable.');
@@ -3017,7 +2906,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             blank: record.blank,
           },
         });
-      const context = await readCached(`/api/groups/${groupId}`, owner, parseExpenseContext);
+      const context = await readCached(groupKey(account(), groupId), owner, parseExpenseContext);
       if (!current(owner) || view !== viewRequest) return;
       if (
         context.group.id !== groupId ||
@@ -3058,7 +2947,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       const original =
         (record === null || held) && expenseId
-          ? await readCached(`/api/groups/${groupId}/expenses/${expenseId}`, owner, (value) =>
+          ? await readCached(expenseRecordKey(account(), groupId, expenseId), owner, (value) =>
               parseExpenseRecord(value, groupId, expenseId),
             ).catch((error: unknown) => {
               // The Group was just read: what's missing is this Expense.
@@ -3167,7 +3056,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     );
     try {
       const page = await readCached(
-        `/api/groups/${groupId}/activity?expenseId=${expenseId}&page=${pageNumber}&limit=20`,
+        activityKey(groupId, pageNumber, expenseId),
         owner,
         (value) => parseActivityPage(value, groupId, pageNumber, expenseId),
         wanted,
@@ -3218,7 +3107,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const groupId = snapshot.expense.groupId,
       expenseId = snapshot.expense.draft?.original?._id;
     if (snapshot.screen !== 'expense' || !onRecord() || !groupId || !expenseId) return;
-    const path = `/api/groups/${groupId}/expenses/${expenseId}`;
+    const key = expenseRecordKey(account(), groupId, expenseId),
+      path = queryKeyPath(key);
     const showing = () =>
       current(owner) &&
       view === viewRequest &&
@@ -3227,7 +3117,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.expense.groupId === groupId &&
       snapshot.expense.draft?.original?._id === expenseId;
     try {
-      const original = await readCached(path, owner, (value) =>
+      const original = await readCached(key, owner, (value) =>
         parseExpenseRecord(value, groupId, expenseId),
       );
       if (!showing()) return;
@@ -3528,33 +3418,48 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /** After a confirmed change: every affected view reads again; earlier responses cannot return. */
-  const refreshLedgerViews = async (groupId: string, owner: number, navigate: boolean) => {
+  const refreshLedgerViews = async (groupId: string, owner: number, returned: boolean) => {
     ledgerChanged(groupId);
-    if (navigate || (snapshot.screen === 'group' && snapshot.detail.id === groupId))
+    if (returned || (snapshot.screen === 'group' && snapshot.detail.id === groupId))
       await openGroup(groupId, false);
     if (current(owner)) await refreshHome();
   };
 
-  let scrollRequests = 0;
   /**
-   * Show the Group view an Expense task returns to; the caller then reads it. A known origin
-   * keeps its Month and asks for its scroll position; direct entry uses the default Month.
-   * Back returns to the destination the task opened from; a confirmed change (with its
-   * snackbar) returns to Expenses, where the change shows.
+   * The Group view a task over it returns to, on `destination`. With the view as it was when
+   * the task opened (`origin`), it asks to scroll back there, with the next request, and reads
+   * the pages it had again: the Expense pages of its Month, and Activity's on Activity.
    */
-  const returnToGroup = (groupId: string, snackbar: GroupSnackbar | null = null) => {
-    const origin =
-      snapshot.expense.returnTo?.groupId === groupId ? snapshot.expense.returnTo : null;
-    const { detail, financial } = snapshot;
-    returnPages = origin && { groupId, month: origin.month, pages: origin.pages };
-    returnActivityPages =
-      origin?.destination === 'activity' && !snackbar
-        ? { groupId, pages: origin.activityPages }
-        : null;
-    publish({
-      ...snapshot,
-      screen: 'group',
-      destination: snackbar ? 'expenses' : (origin?.destination ?? 'expenses'),
+  const returnView = (
+    groupId: string,
+    destination: GroupDestination,
+    origin: GroupReturnContext | null,
+  ): GroupRoute => ({
+    screen: 'group',
+    groupId,
+    destination,
+    restoreScroll: origin && { groupId, y: origin.scrollY, request: scrollRequests + 1 },
+    reread: origin && {
+      groupId,
+      expenses: { month: origin.month, pages: origin.pages },
+      activity: destination === 'activity' ? { pages: origin.activityPages } : null,
+    },
+  });
+  /** Where the Expense task on screen began, when it opened from this Group's view. */
+  const expenseOrigin = (groupId: string) =>
+    route.screen === 'expense' && route.returnTo?.groupId === groupId ? route.returnTo : null;
+  /** A confirmed change returns to Expenses, where the change shows, whatever the task began on. */
+  const savedReturn = (groupId: string) => returnView(groupId, 'expenses', expenseOrigin(groupId));
+
+  /**
+   * Show the Group view an Expense task returns to (`to`); the caller then reads it. A known
+   * origin keeps its Month; direct entry uses the default Month.
+   */
+  const returnToGroup = (to: GroupRoute, snackbar: GroupSnackbar | null = null) => {
+    const { groupId } = to,
+      { detail, financial } = snapshot,
+      origin = to.reread?.expenses;
+    navigate(to, {
       detail:
         detail.id === groupId
           ? detail
@@ -3564,7 +3469,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         : financial.groupId === groupId && financial.month === origin.month
           ? financial
           : { ...emptyFinancial(), groupId, month: origin.month },
-      restoreScroll: origin ? { groupId, y: origin.scrollY, request: ++scrollRequests } : null,
       snackbar,
     });
   };
@@ -3576,8 +3480,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     context: ExpenseContext | null,
     date?: string,
   ): GroupSnackbar => {
-    const origin =
-      snapshot.expense.returnTo?.groupId === groupId ? snapshot.expense.returnTo : null;
+    const origin = expenseOrigin(groupId);
     // A Group not yet read here offers no other Month.
     const shown =
       context?.group.category !== 'home'
@@ -3598,30 +3501,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const showHome = () => {
     viewRequest += 1;
-    returnPages = returnActivityPages = null;
-    publish({
-      ...snapshot,
-      screen: 'groups',
-      detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
-      financial: emptyFinancial(),
-    });
-    return settleHome();
-  };
-  /**
-   * Every way back to Home ends here. Home's content shows where it came from, including a list
-   * read that landed elsewhere; a Groups list read that ended without an answer is read again,
-   * then the figures.
-   */
-  const settleHome = () => {
-    publishReadFreshness();
-    if (!groupsUnanswered) return loadHome(true);
-    const owner = generation;
-    return rereadGroups(owner).then(() => (current(owner) ? loadHome(true) : undefined));
+    navigate(home, { financial: emptyFinancial() });
+    return backHome();
   };
 
   /** Android Back and close keep the draft on this device and return where the task began. */
   const closeExpense = async () => {
-    if (snapshot.screen !== 'expense' || expenseNavigationBlocked()) return;
+    if (route.screen !== 'expense' || expenseNavigationBlocked()) return;
     if (snapshot.expense.status === 'delete-review') return cancelExpenseDeletion();
     // Leaving waits for the latest entries to be stored; if that fails, the form stays open.
     if (snapshot.expense.persistence === 'saving') {
@@ -3631,22 +3517,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         !(await draftWritten()) ||
         view !== viewRequest ||
         close !== closeRequest ||
-        snapshot.screen !== 'expense' ||
+        route.screen !== 'expense' ||
         expenseNavigationBlocked()
       )
         return;
     }
-    const editor = snapshot.expense;
-    const { detail } = snapshot;
-    const groupId = editor.groupId;
-    // A Group removed after denial has nothing to return to.
-    if (
-      !groupId ||
-      (detail.id === groupId && !detail.data && ['denied', 'error'].includes(detail.status))
-    )
-      return showHome();
-    returnToGroup(groupId);
-    await openGroup(groupId);
+    const to = parent(route);
+    if (to.screen !== 'group') return showHome();
+    returnToGroup(to);
+    await openGroup(to.groupId);
   };
 
   const viewSnackbarMonth = async () => {
@@ -3716,7 +3595,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       },
     });
     returnToGroup(
-      groupId,
+      savedReturn(groupId),
       kind === 'delete'
         ? ledgerSnackbar(groupId, `Expense deleted · ${original.description}`, context)
         : ledgerSnackbar(
@@ -4182,7 +4061,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       successHandled = true;
       returnToGroup(
-        groupId,
+        savedReturn(groupId),
         ledgerSnackbar(groupId, `Expense saved · ${draft.description.trim()}`, context, draft.date),
       );
       await refreshLedgerViews(groupId, owner, true);
@@ -4311,11 +4190,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       lease = accountStorage(),
       storage = dependencies.settlementAttempts;
     const stale = () => !current(owner) || view !== viewRequest || request !== settlementRequest;
-    publish({
-      ...snapshot,
-      screen: 'settlement',
-      settlement: { ...emptySettlement(), groupId, status: 'loading' },
-    });
+    navigate(
+      { screen: 'settlement', groupId, reread: rereadOf(groupId) },
+      { settlement: { ...emptySettlement(), groupId, status: 'loading' } },
+    );
     try {
       if (!lease || !storage) throw new DeviceStorageError(recoveryStorageMissing);
       let recovery: ReturnType<typeof parseSettlementAttempt> | null;
@@ -4589,7 +4467,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       if (!current(owner) || view !== viewRequest) return;
       // The sheet closes onto Balances, which the refresh below reads again.
-      showSettlementGroup(groupId, { groupId, message: 'Payment recorded', viewMonth: null }, null);
+      showSettlementGroup(
+        groupAt(groupId, 'balances'),
+        { groupId, message: 'Payment recorded', viewMonth: null },
+        null,
+      );
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;
       const correctionCodes: Record<string, string> = {
@@ -4736,39 +4618,40 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /**
-   * Show the Group's Balances under a closing sheet; late sheet reads can't reopen it.
+   * Show the Group's Balances (`to`) under a closing sheet; late sheet reads can't reopen it.
    * `pending` is the unconfirmed payment Balances offers afterwards.
    */
   const showSettlementGroup = (
-    groupId: string,
+    to: GroupRoute,
     snackbar: GroupSnackbar | null,
     pending: PendingPayment | null,
   ) => {
     settlementRequest += 1;
     pendingRequest += 1;
-    publish({
-      ...snapshot,
-      screen: 'group',
-      destination: 'balances',
+    navigate(to, {
       detail:
-        snapshot.detail.id === groupId
+        snapshot.detail.id === to.groupId
           ? snapshot.detail
-          : { status: 'loading', id: groupId, data: null, message: null, refreshedAt: null },
+          : { status: 'loading', id: to.groupId, data: null, message: null, refreshedAt: null },
       settlement: emptySettlement(),
       pendingPayment: pending,
       snackbar,
     });
   };
 
+  /** The Group view under the Record payment sheet, which it closes onto: Balances. */
+  const underSheet = ({ groupId, reread }: Extract<Route, { screen: 'settlement' }>) =>
+    groupAt(groupId, 'balances', reread);
   /**
    * Close and Android Back return to Balances; nothing is recorded. An unconfirmed payment stays
    * on Balances, which reads again when the sheet's live read found newer balances or a payment's
    * outcome is unknown.
    */
   const closeSettlement = async () => {
-    const { groupId, group, balances, attempt, draft } = snapshot.settlement;
-    if (snapshot.screen !== 'settlement' || expenseNavigationBlocked()) return;
-    if (!groupId) return showHome();
+    const { group, balances, attempt, draft } = snapshot.settlement;
+    if (route.screen !== 'settlement' || expenseNavigationBlocked()) return;
+    const to = underSheet(route);
+    const { groupId } = to;
     const shown = snapshot.detail.id === groupId && snapshot.detail.data !== null;
     const newer =
       attempt !== null ||
@@ -4779,7 +4662,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       : snapshot.pendingPayment?.groupId === groupId
         ? snapshot.pendingPayment
         : null;
-    showSettlementGroup(groupId, null, pending);
+    showSettlementGroup(to, null, pending);
     if (!shown) await openGroup(groupId, true, 'balances');
     else if (newer) await loadBalances(false);
     else await loadPendingPayment(groupId);
@@ -4788,42 +4671,38 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const startCreate = () => {
     if (snapshot.auth.status !== 'authenticated') return;
     viewRequest += 1;
-    publish({ ...snapshot, screen: 'create' });
+    navigate({ screen: 'create' });
   };
 
   const openSettings = () => {
     if (snapshot.auth.status !== 'authenticated' || expenseNavigationBlocked()) return;
     viewRequest += 1;
-    publish({ ...snapshot, screen: 'settings' });
+    navigate({ screen: 'settings' });
   };
 
-  /** Where Members and Group details returns: the Group view, Month and scroll it opened from. */
-  let membersReturn: GroupReturnContext | null = null;
-  /** Shows the Group as known so far; a Group read still in flight updates the page. */
+  /**
+   * Shows the Group as known so far; a Group read still in flight updates the page. The route
+   * keeps where it returns: the Group view, Month and scroll it opened from.
+   */
   const openMembers = (origin: { scrollY?: number } = {}) => {
     const groupId = shownGroup(snapshot)?.id;
-    if (snapshot.auth.status !== 'authenticated' || snapshot.screen !== 'group' || !groupId) return;
-    membersReturn = expenseReturn(groupId, origin.scrollY);
-    publish({ ...snapshot, screen: 'members' });
+    if (snapshot.auth.status !== 'authenticated' || route.screen !== 'group' || !groupId) return;
+    navigate({
+      screen: 'members',
+      groupId,
+      destination: route.destination,
+      returnTo: expenseReturn(groupId, origin.scrollY),
+      reread: rereadOf(groupId),
+    });
   };
   /** Android Back and the arrow return to the destination, Month and scroll it opened from. */
   const closeMembers = async () => {
-    if (snapshot.screen !== 'members' || snapshot.leave.status === 'leaving') return;
-    const { id } = snapshot.detail;
-    const origin = membersReturn?.groupId === id ? membersReturn : null;
-    membersReturn = null;
-    if (!id || !shownGroup(snapshot)) return showHome();
-    returnPages = origin && { groupId: id, month: origin.month, pages: origin.pages };
-    // Activity's older events are read again too, as on return from an Expense.
-    returnActivityPages =
-      origin?.destination === 'activity' ? { groupId: id, pages: origin.activityPages } : null;
-    publish({
-      ...snapshot,
-      screen: 'group',
-      restoreScroll: origin ? { groupId: id, y: origin.scrollY, request: ++scrollRequests } : null,
-    });
+    if (route.screen !== 'members' || snapshot.leave.status === 'leaving') return;
+    const to = parent(route);
+    if (to.screen !== 'group') return showHome();
+    navigate(to);
     // Reads what the Group view missed while the page was open; recent reads are reused.
-    await openGroup(id);
+    await openGroup(to.groupId);
   };
 
   /** Changes whenever the Leave Group sheet opens or closes, so a late answer can't reopen it. */
@@ -5016,13 +4895,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // Home opens before the Group is forgotten, so the page just left never shows the
       // "no longer have access" notice that a lost membership would.
       viewRequest += 1;
-      returnPages = returnActivityPages = null;
-      membersReturn = null;
-      publish({
-        ...snapshot,
+      navigate(home, {
         ...kept,
-        screen: 'groups',
-        detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
         financial: emptyFinancial(),
         leave: closedLeave(),
         homeSnackbar: {
@@ -5041,8 +4915,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     // Something else opened while the request ran; it stays, and its Groups list is already updated.
     if (!showingLeave || !current(owner)) return;
-    await loadGroups(owner);
-    if (current(owner)) await refreshHome();
+    // Forgetting the Group made Home read its list and figures again: wait for both.
+    await homeQueries.settle(owner, { list: true });
   };
 
   /**
@@ -5060,8 +4934,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     leaveRequest += 1;
-    membersReturn = null;
-    publish({ ...snapshot, screen: 'group', destination: check, leave: closedLeave() });
+    navigate(groupAt(groupId, check), { leave: closedLeave() });
     await openGroup(groupId, true, check);
   };
 
@@ -5126,14 +4999,26 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  const previewInvitation = async (code: string) => {
+  /** The invitation screen, showing `invitation`. */
+  const showInvitation = (invitation: MobileSnapshot['invitation']) =>
+    navigate({ screen: 'invite' }, { invitation });
+  const loadingInvitation = (code: string) =>
+    ({ code, status: 'loading', preview: null, message: null }) as const;
+  /** Shows the invitation, loading, and reads it. */
+  const previewInvitation = (code: string) => {
+    showInvitation(loadingInvitation(code));
+    return readInvitation(code);
+  };
+  /** Retry reads the invitation on screen again, where it is. */
+  const retryInvitation = () => {
+    if (!pendingCode) return Promise.resolve();
+    publish({ ...snapshot, invitation: loadingInvitation(pendingCode) });
+    return readInvitation(pendingCode);
+  };
+  /** Reads the invitation shown loading; it never moves the member. */
+  const readInvitation = async (code: string) => {
     const owner = generation;
     const view = ++viewRequest;
-    publish({
-      ...snapshot,
-      screen: 'invite',
-      invitation: { code, status: 'loading', preview: null, message: null },
-    });
     try {
       const preview = parseInvitationPreview(await request(`/api/join/${code}`, owner));
       assertCurrent(owner);
@@ -5170,31 +5055,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await savePending(code);
     } catch {
       if (!current(owner)) return;
-      publish({
-        ...snapshot,
-        screen: 'invite',
-        invitation: {
-          code,
-          status: 'error',
-          preview: null,
-          message: 'Could not save this invitation on the device. Open the link again to retry.',
-        },
+      showInvitation({
+        code,
+        status: 'error',
+        preview: null,
+        message: 'Could not save this invitation on the device. Open the link again to retry.',
       });
       return;
     }
     if (!current(owner) || pendingCode !== code) return;
     if (!code) {
       viewRequest += 1;
-      publish({
-        ...snapshot,
-        screen: 'invite',
-        invitation: {
-          code: null,
-          status: 'invalid',
-          preview: null,
-          message:
-            'This link does not belong to this SplitBook environment, or is not a valid invitation.',
-        },
+      showInvitation({
+        code: null,
+        status: 'invalid',
+        preview: null,
+        message:
+          'This link does not belong to this SplitBook environment, or is not a valid invitation.',
       });
       return;
     }
@@ -5230,7 +5107,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ...snapshot,
         invitation: { code: null, status: 'idle', preview: null, message: null },
       });
-      const loadingGroups = loadGroups(owner);
+      // Home, while the Groups list is read again with the joined Group; then that Group.
+      const loadingGroups = listOnHome(owner);
       const loadingView = viewRequest;
       await loadingGroups;
       if (current(owner) && viewRequest === loadingView) await openGroup(id);
@@ -5257,9 +5135,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  const retryInvitation = () => (pendingCode ? previewInvitation(pendingCode) : Promise.resolve());
-
-  const invitationSignIn = () => publish({ ...snapshot, screen: 'groups' });
+  const invitationSignIn = () => navigate(home);
 
   const openInvitationGroup = async () => {
     const id = snapshot.invitation.preview?.id;
@@ -5284,27 +5160,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.invitation.status === 'joining') return;
     const view = ++viewRequest;
     const owner = generation;
-    publish({
-      ...snapshot,
-      screen: 'groups',
-      detail: { status: 'idle', id: null, data: null, message: null, refreshedAt: null },
+    navigate(home, {
       financial: emptyFinancial(),
       invitation: { code: null, status: 'idle', preview: null, message: null },
     });
     try {
       await savePending(null);
-      if (current(owner) && view === viewRequest) await settleHome();
+      if (current(owner) && view === viewRequest) await backHome();
     } catch {
       if (!current(owner) || view !== viewRequest) return;
-      publish({
-        ...snapshot,
-        screen: 'invite',
-        invitation: {
-          code: null,
-          status: 'error',
-          preview: null,
-          message: 'Could not remove the saved invitation. Please cancel again.',
-        },
+      showInvitation({
+        code: null,
+        status: 'error',
+        preview: null,
+        message: 'Could not remove the saved invitation. Please cancel again.',
       });
     }
   };
@@ -5476,7 +5345,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           message: unconfirmedGroup,
         },
       });
-      if (view === viewRequest) await loadGroups(owner);
+      // Home, where the Groups list read again shows whether it was created.
+      if (view === viewRequest) await listOnHome(owner);
       return;
     }
     let created: string | null = null;
@@ -5537,15 +5407,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             : 'The Group may have been created. Check your Groups before creating another.',
         },
       });
-      if (!definite && view === viewRequest) await loadGroups(owner);
+      if (!definite && view === viewRequest) await listOnHome(owner);
     }
     // A confirmed Group opens the way Home opens one, so its Expenses, Balances and Month are
     // read like any other Group's. A member who moved on before the confirmation stays there.
     if (created && view === viewRequest) await openGroup(created);
   };
 
+  /** Check Groups, on New Group or Home: Home, with the Groups list read again. */
   const checkCreatedGroups = () =>
-    snapshot.auth.status === 'authenticated' ? loadGroups(generation) : Promise.resolve();
+    snapshot.auth.status === 'authenticated' ? listOnHome(generation) : Promise.resolve();
 
   const resumeCreationAfterCheck = () => {
     if (
@@ -5554,11 +5425,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.creation.status !== 'uncertain'
     )
       return;
-    publish({
-      ...snapshot,
-      screen: 'create',
-      creation: { ...snapshot.creation, status: 'editing', message: null },
-    });
+    navigate(
+      { screen: 'create' },
+      { creation: { ...snapshot.creation, status: 'editing', message: null } },
+    );
   };
 
   /** Discard removes the Group form, and any submission of it stored on this device. */
@@ -5584,26 +5454,67 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (!current(owner) || latest().creation.status === 'saving') return;
     }
     // Leaving New Group (not Home's own Discard) settles Home the way Back does.
-    const returning = snapshot.screen !== 'groups';
-    publish({ ...snapshot, screen: 'groups', creation: cleanSnapshot(snapshot.auth).creation });
-    if (returning) return settleHome();
+    const returning = route.screen !== 'groups';
+    navigate(home, { creation: cleanSnapshot(snapshot.auth).creation });
+    if (returning) return backHome();
   };
 
+  /**
+   * Back's table (ADR 0006, M8-2): where Back goes from `from`, the route on screen, once nothing
+   * holds it. An Expense returns to the Group view it opened from, or to its Group's Expenses
+   * after direct entry; Members to the Group view it opened from; the Record payment sheet to
+   * the Group's Balances. An Expense whose Group refused the member, Members whose Group is no
+   * longer shown, and everything else go Home.
+   */
+  const parent = (from: Route): Route => {
+    const { detail } = snapshot;
+    switch (from.screen) {
+      case 'expense': {
+        // A Group removed after denial has nothing to return to.
+        if (
+          detail.id === from.groupId &&
+          !detail.data &&
+          ['denied', 'error'].includes(detail.status)
+        )
+          return home;
+        const origin = from.returnTo?.groupId === from.groupId ? from.returnTo : null;
+        return returnView(from.groupId, origin?.destination ?? 'expenses', origin);
+      }
+      case 'members':
+        return shownGroup(snapshot)
+          ? returnView(from.groupId, from.destination, from.returnTo)
+          : home;
+      case 'settlement':
+        return underSheet(from);
+      default:
+        return home;
+    }
+  };
+
+  /**
+   * Android Back and the top bar's arrow: the holds, in order, then the route's `parent`. An open
+   * Activity event closes first; an invitation is cancelled (a join in progress holds it);
+   * nothing happens while a Group, Expense or payment is saving, or while a draft couldn't be
+   * stored; Members' Leave Group sheet closes first, and holds while leaving. An Expense's
+   * delete review is cancelled first (`closeExpense`).
+   */
   const back = () => {
-    // An open event detail closes first; from any Group destination, Back returns Home.
     if (showingActivity() && snapshot.activity.selected) return closeActivityDetail();
-    if (snapshot.screen === 'invite') {
+    if (route.screen === 'invite') {
       void cancelInvitation();
       return;
     }
     if (snapshot.creation.status === 'saving' || expenseNavigationBlocked()) return;
-    if (snapshot.screen === 'expense') return closeExpense();
-    if (snapshot.screen === 'settlement') return closeSettlement();
-    // The Leave Group sheet closes first; while leaving, Back waits for the answer.
-    if (snapshot.screen === 'members' && snapshot.leave.status !== 'closed')
-      return cancelLeaveGroup();
-    if (snapshot.screen === 'members') return closeMembers();
-    return showHome();
+    switch (route.screen) {
+      case 'expense':
+        return closeExpense();
+      case 'settlement':
+        return closeSettlement();
+      case 'members':
+        return snapshot.leave.status === 'closed' ? closeMembers() : cancelLeaveGroup();
+      default:
+        return showHome();
+    }
   };
 
   /**
@@ -5623,6 +5534,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const view = shownView(snapshot);
     views.push(view);
     mark(view);
+    // Returning to the foreground is TanStack's focus event (M1-6): it reaches the queries the
+    // screen observes, and those past their stale time read again.
+    if (origin === 'foreground') focusManager.onFocus();
     try {
       await refreshView(origin === 'foreground');
     } finally {
@@ -5677,9 +5591,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         readingGroup = true;
         if (screen === 'members' && groupId) {
           // Read as on the Group view: a foreground refresh reuses a recently verified read.
-          const path = `/api/groups/${groupId}`;
-          const fresh = reuse ? freshRead(path) : null;
-          const group = fresh ? parseGroup(fresh.value) : await readCached(path, owner, parseGroup);
+          const key = groupKey(account(), groupId);
+          const fresh = reuse ? freshRead(key) : null;
+          const group = fresh ? parseGroup(fresh.value) : await readCached(key, owner, parseGroup);
           if (!current(owner) || view !== viewRequest || snapshot.screen !== 'members') return;
           if (
             group.id !== groupId ||
@@ -5696,11 +5610,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               id: groupId,
               data: group,
               message: null,
-              refreshedAt: readAt(path),
+              refreshedAt: readAt(key),
             },
           });
         } else if (dependencies.readCache && groupId) {
-          const context = await readCached(`/api/groups/${groupId}`, owner, parseExpenseContext);
+          const context = await readCached(
+            groupKey(account(), groupId),
+            owner,
+            parseExpenseContext,
+          );
           if (!current(owner) || view !== viewRequest) return;
           if (
             context.group.id !== groupId ||
@@ -5769,13 +5687,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     if (snapshot.screen === 'group' && snapshot.detail.id)
       return openGroup(snapshot.detail.id, reuse);
-    const owner = generation;
-    const groupsThenHome = async () => {
-      await loadGroups(owner, reuse);
-      if (current(owner)) await loadHome(reuse);
-    };
-    // An explicit refresh keeps both views explicit until Home has been read too.
-    return reuse ? groupsThenHome() : explicitly(['groups', 'home'], groupsThenHome);
+    // A pull or Retry reads Home's Groups list, then its figures; a return to the foreground has
+    // already reached them through TanStack's focus event (M1-6), and waits for what it started.
+    return homeQueries.settle(generation, reuse ? { list: true } : { fresh: true });
   };
 
   const signOut = async () => {
@@ -5787,7 +5701,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       invitationCleared = false;
     }
     const owner = invalidate();
-    publish(cleanSnapshot({ status: 'signed-out', user: null, message: null }));
+    cleanHome({ status: 'signed-out', user: null, message: null });
     // Independent stores must both be purged. Wait for both attempts before
     // exposing recovery so a failed invitation clear cannot preserve a session.
     let confirmed: boolean;
@@ -5795,13 +5709,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       confirmed = await clearAccount(owner, 'sign-out');
     } catch {
       if (current(owner)) {
-        publish(
-          cleanSnapshot({
-            status: 'error',
-            user: null,
-            message: 'Could not remove this account from the device. Try signing out again.',
-          }),
-        );
+        cleanHome({
+          status: 'error',
+          user: null,
+          message: 'Could not remove this account from the device. Try signing out again.',
+        });
       }
       return;
     }
@@ -5817,7 +5729,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     revoking = null;
     invalidate();
     const cleared = cleanSnapshot({ status: 'signed-out', user: null, message: null });
-    publish({ ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
+    navigate(home, { ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
   };
 
   return {
@@ -5902,8 +5814,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     },
     dispose: () => {
       invalidate();
+      disconnect();
       listeners.clear();
-      snapshot = cleanSnapshot({ status: 'signed-out', user: null, message: null });
+      cleanHome({ status: 'signed-out', user: null, message: null });
     },
   };
 }

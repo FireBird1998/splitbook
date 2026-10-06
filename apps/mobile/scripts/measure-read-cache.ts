@@ -73,6 +73,8 @@ async function run() {
   ).data._id;
   // Persisted (disk-like) stores survive a controller restart; the session cookie too.
   const cache = memoryStore(),
+    // The persister's rows: the Groups list and Home (#217).
+    savedRows = memoryStore(),
     drafts = memoryStore(),
     attempts = memoryStore();
   let cookie: string | null = null,
@@ -80,12 +82,16 @@ async function run() {
     cleanup = false,
     skew = 0,
     log: string[] = [];
+  // Display freshness runs on TanStack Query's clock, Date.now (#214), so skipping ahead moves
+  // Date.now itself, and the controller's clock with it.
+  const platformNow = Date.now.bind(Date);
+  Date.now = () => platformNow() + skew;
   let controller: MobileController | null = null;
   const create = () =>
     createMobileController(
       { apiBaseUrl: origin, authOrigin: origin, developmentPersonaEnabled: true },
       {
-        now: () => Date.now() + skew,
+        now: () => Date.now(),
         credentials: {
           load: async () => cookie,
           save: async (value) => {
@@ -95,6 +101,7 @@ async function run() {
             cookie = null;
           },
         },
+        savedQueries: savedRows,
         readCache: {
           load: (account, path) => cache.load(account, path),
           save: (account, path, value) => cache.save(account, path, value),
@@ -146,7 +153,7 @@ async function run() {
               cleanup = false;
             },
           },
-          stores: [cache, drafts, attempts],
+          stores: [cache, savedRows, drafts, attempts],
         },
         fetch: async (url, init) => {
           const target = new URL(url);

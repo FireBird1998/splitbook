@@ -6,6 +6,11 @@ export const storageMessage = 'Could not safely save your session. Please try si
 
 /** How long a request may take, from sending it until its whole body is read. */
 const REQUEST_TIMEOUT_MS = 20_000;
+/**
+ * How long losing a Group waits for its refusal's body, whose code and message it keeps: the
+ * Group's content goes at once, never after a reply that stalls (#214).
+ */
+const DENIAL_BODY_MS = 1_000;
 
 /** The platform's own timer: the default for `MobileDependencies.timer`. */
 const platformTimer: MobileTimer = (run, ms) => {
@@ -25,7 +30,8 @@ export class Superseded extends Error {}
  * - `network`: SplitBook couldn't be reached: no reply arrived, its body stopped arriving, or a
  *   gateway in front of SplitBook answered 502, 503 or 504 without a SplitBook error code;
  * - `timeout`: the 20-second limit passed, before or after the headers;
- * - `cancelled`: the caller's own signal ended it. It is never a reason to show a saved copy;
+ * - `cancelled`: the caller's own signal ended it. It is never a reason to show a saved copy. A
+ *   denial whose headers arrived stays `access-denied`, even when its body read is cancelled;
  * - `signed-out`: a 401 that doesn't end the session here (sign-out, the staging check, Google
  *   sign-in);
  * - `access-denied`: a 403, or a 404: the member can't see it, or it's gone;
@@ -71,6 +77,22 @@ export class RequestError extends Error {
     super(message);
     this.kind = kind ?? failureKind(status, code, networkFailure);
   }
+}
+
+/** What the member is told when a Group refuses them (403) or is gone (404). */
+export const groupRefused = (status: number) =>
+  status === 403
+    ? 'You no longer have access to this group.'
+    : 'This group is no longer available.';
+
+/** `run` once at a time for each key (a session): calls made while it runs share its result. */
+export function singleFlight<K, T>(run: (key: K) => Promise<T>) {
+  const running = new Map<K, Promise<T>>();
+  return (key: K) => {
+    const shared = running.get(key) ?? run(key).finally(() => running.delete(key));
+    running.set(key, shared);
+    return shared;
+  };
 }
 
 /** The caller's own signal ended the request. */
@@ -171,6 +193,13 @@ export interface TransportDependencies {
    * `/api/groups/:id`. It finishes before the caller gets the error.
    */
   onGroupDenied(groupId: string, status: number, owner: number): Promise<void>;
+  /**
+   * A read of a Group or of its Expense list ended: answered, failed or cancelled once sent. The
+   * server may have created due recurring Expenses for it, so that Group's Balances and Home are
+   * out of date (ADR 0006, M1-5, AMEND-1). Every such GET comes here, the checks a save or a
+   * payment makes before it is sent included.
+   */
+  onLedgerRead?(groupId: string, owner: number, expenses: boolean): void;
 }
 
 /** What aborted a request first: a session change, the timeout, or the caller. */
@@ -196,6 +225,7 @@ export function createTransport({
   session,
   onExpired,
   onGroupDenied,
+  onLedgerRead,
 }: TransportDependencies) {
   /** Requests in flight, each by what aborts it. */
   const requests = new Set<(source: AbortSource) => void>();
@@ -278,6 +308,16 @@ export function createTransport({
     let received = false;
     /** The headers arrived and the body is being read. */
     let reading = false;
+    const ledger =
+      (options.method ?? 'GET') === 'GET'
+        ? /^\/api\/groups\/([a-f\d]{24})(\/expenses)?(?:\?|$)/i.exec(path)
+        : null;
+    // Once, as soon as the server has answered, so before a refusal's purge; or when it ends.
+    let noted = !ledger;
+    const ledgerRead = () => {
+      if (!noted) onLedgerRead?.(ledger![1], owner, !!ledger![2]);
+      noted = true;
+    };
     try {
       const outgoingCookie =
         options.sessionCookie === undefined ? session.cookie() : options.sessionCookie;
@@ -307,6 +347,7 @@ export function createTransport({
           : { body: options.serializedBody }),
       });
       received = true;
+      ledgerRead();
       if (options.onAbandoned && !live()) await abandon(response, options.onAbandoned);
       assertLive();
       // Logout responses must never reinstall a cookie, even a surprising one.
@@ -325,21 +366,29 @@ export function createTransport({
         // The path decides the denial purge, never the failure's kind: a 404 under a Group's
         // Expenses is access-denied too, but purges nothing.
         const deniedGroup = /^\/api\/groups\/([a-f\d]{24})(?:\/|\?|$)/i.exec(path)?.[1];
-        if (
+        const denied =
           (response.status === 403 ||
             (response.status === 404 && path === `/api/groups/${deniedGroup}`)) &&
-          deniedGroup
-        )
-          await onGroupDenied(deniedGroup, response.status, owner);
+          deniedGroup;
+        const reading = response.json().catch(() => null);
+        let endWait = () => {};
+        // Read before losing the Group, which aborts its reads: a reply can't be read after that.
+        // A denial waits for it only briefly, then goes on without its code and message.
+        const details: unknown = denied
+          ? await Promise.race([
+              reading,
+              new Promise<null>((resolve) => {
+                endWait = timer(() => resolve(null), DENIAL_BODY_MS);
+              }),
+            ]).finally(() => endWait())
+          : await reading;
+        if (denied) await onGroupDenied(denied, response.status, owner);
         const message =
-          response.status === 403
-            ? 'You no longer have access to this group.'
-            : response.status === 404
-              ? 'This group is no longer available.'
-              : response.status === 429
-                ? 'Too many attempts. Wait a moment and try again.'
-                : 'The server could not complete this request. Please try again.';
-        const details: unknown = await response.json().catch(() => null);
+          response.status === 403 || response.status === 404
+            ? groupRefused(response.status)
+            : response.status === 429
+              ? 'Too many attempts. Wait a moment and try again.'
+              : 'The server could not complete this request. Please try again.';
         const code =
           details &&
           typeof details === 'object' &&
@@ -354,9 +403,12 @@ export function createTransport({
           typeof details.error === 'string'
             ? details.error
             : null;
-        // The caller cancelled while the body was read. A denial has already been purged above;
-        // only the error the caller gets is its own.
-        if (aborted === 'caller') throw cancelled();
+        // The caller cancelled while the body was read: the error it gets is its own. A denial is
+        // the exception. Its headers already said denied and the Group is purged above, and that
+        // purge cancels the Group's reads, this one included. The denial is still this read's
+        // answer, so it never ends as cancelled, or a caller that still shows the read would
+        // read the Group again, and be refused again, for ever.
+        if (aborted === 'caller' && !denied) throw cancelled();
         // SplitBook's own errors carry a code, so a gateway answered: SplitBook wasn't reached.
         if (gatewayStatuses.includes(response.status) && code === null)
           throw unreachable(aborted === 'timeout' ? 'timeout' : 'network');
@@ -386,6 +438,7 @@ export function createTransport({
       endTimeout();
       requests.delete(stop);
       options.signal?.removeEventListener('abort', cancel);
+      ledgerRead();
     }
   };
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse } from './types';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // #192: Try again on an Expense record opened from its saved copy. Fictional people and Groups only.
 const sam = { id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@example.test' };
@@ -211,6 +212,7 @@ function fixture() {
             identity = null;
           },
         },
+        savedQueries: savedQueriesIn(cache),
         readCache: {
           load: async (account, path) => structuredClone(cache.get(account + path) ?? null),
           save: async (account, path, value) => {

@@ -26,6 +26,8 @@ async function run() {
   });
   const identity = record('identity'),
     cache = record('cache'),
+    // The persister's rows (#217): the Groups list and Home, in a file of their own.
+    rows = record('rows'),
     draft = record('draft');
   const credentials = record('credentials'),
     accountOwner = record('owner');
@@ -38,7 +40,8 @@ async function run() {
     save: accountOwner.save,
     clear: accountOwner.clear,
   };
-  const entries = async () => z.record(z.string(), z.unknown()).parse((await cache.load()) ?? {});
+  const entries = async (file = cache) =>
+    z.record(z.string(), z.unknown()).parse((await file.load()) ?? {});
   let offline = false,
     writes = 0,
     cleanup = false;
@@ -55,6 +58,20 @@ async function run() {
               .parse(await credentials.load()),
         },
         offlineIdentity: identity,
+        savedQueries: {
+          load: async (account, path) => (await entries(rows))[account + path] ?? null,
+          save: async (account, path, value) => {
+            const saved = await entries(rows);
+            saved[account + path] = value;
+            await rows.save(saved);
+          },
+          remove: async (account, path) => {
+            const saved = await entries(rows);
+            delete saved[account + path];
+            await rows.save(saved);
+          },
+          clear: rows.clear,
+        },
         readCache: {
           load: async (account, path) => (await entries())[account + path] ?? null,
           save: async (account, path, value) => {
@@ -116,7 +133,7 @@ async function run() {
               cleanup = false;
             },
           },
-          stores: [identity, cache, draft],
+          stores: [identity, cache, rows, draft],
         },
         fetch: async (url, init) => {
           assert.equal(new URL(url).origin, origin);

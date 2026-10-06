@@ -188,8 +188,9 @@ full suite nightly (#277). [tools/swarm](../tools/swarm/README.md#in-ci) says
 what runs where, how to ask for the full suite on a pull request, and who hears
 about a failure.
 
-- **PR checks** (`pr-checks`) — every pull request, every push to `main`, and
-  with the full suite.
+- **PR checks** (`pr-checks`) — every pull request, every push to `main` or to
+  `pilot/tanstack-reads` (the TanStack pilot's integration branch), and with the
+  full suite.
   The one check branch protection requires. Install, format check, lint,
   typecheck, design-system style policy, `pnpm test:unit` in UTC, then every
   mobile HTTP verifier against a production backend that `pnpm swarm up` starts
