@@ -711,4 +711,37 @@ describe('reads cancelled, refused or out of date (#214)', () => {
       expect(f.calls).toHaveLength(settled);
     },
   );
+
+  // #217: a Group read that another read's refusal cancels before its own reply ends with that
+  // refusal. It used to read the Group once more: a second request and a second purge.
+  it('ends a Group read cancelled by losing the Group with that refusal, never reading it again', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    const before = f.reads(groupPath);
+    // Retry reads the Group again, and its reply doesn't come until the request is aborted.
+    let retried = 0;
+    f.answer((path, method, init) =>
+      path === groupPath && method === 'GET' && ++retried === 1
+        ? hangUntilAborted(init, 'headers')
+        : null,
+    );
+    const retrying = controller.refresh();
+    await until(() => retried === 1);
+    // Meanwhile Alex loses the Group, and a Month change's Expense read is refused.
+    f.state.revoked = true;
+    await controller.selectMonth('2026-08');
+    await retrying;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    expect(f.reads(groupPath) - before).toBe(1);
+    expect(f.purges()).toBe(1);
+    expect(controller.getSnapshot()).toMatchObject({
+      detail: { status: 'denied', id: groupId, data: null },
+      financial: { groupId: null, expenses: { data: [] }, balances: { data: null } },
+    });
+    expect(controller.getSnapshot().groups.data.map(({ id }) => id)).not.toContain(groupId);
+    expect(f.savedOfGroup()).toEqual([]);
+  });
 });

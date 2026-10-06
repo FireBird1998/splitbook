@@ -154,6 +154,8 @@ const scoped = <T>(map: Map<string, T>, key: QueryKey) =>
 
 /** A read a change, a denial or a Groups list made obsolete, which its caller no longer shows. */
 class Obsolete extends Superseded {}
+/** A Group's refusal, in the transport's words. */
+const refusal = (status: number) => new RequestError(groupRefused(status), status);
 
 /** The view on screen, which a pull or an automatic refresh belongs to. */
 export function shownView({
@@ -451,6 +453,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * with when: a saved copy from before then is never shown again this session.
    */
   const untrusted = new Map<string, number>();
+  /** Groups this session lost, with the refusal and when (`losses` counts them). */
+  const lostGroups = new Map<string, { status: number; at: number }>();
+  let losses = 0;
   /**
    * Group views ('group:<id>') with an explicit refresh still running: a pull, Retry or a
    * confirmed change. Overlapping calls for those views never accept freshness (Home's queries
@@ -577,6 +582,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     viewRequest += 1;
     listedGroups = null;
     unlistedGroups = new Set();
+    lostGroups.clear();
     // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
     homeQueries.reset();
     queryClient.clear();
@@ -1319,7 +1325,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       view = viewRequest,
       epoch = cacheEpoch,
       startVersion = versionOf(key),
-      shown = wanted ?? (() => view === viewRequest);
+      shown = wanted ?? (() => view === viewRequest),
+      lostBefore = losses;
     try {
       let result: Envelope | null = null;
       // A confirmed change or denial during the read cancelled it, as obsolete: while the caller
@@ -1341,6 +1348,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           );
           if (!current(owner) || answer instanceof Superseded) throw new Superseded();
           if (answer instanceof RequestError && answer.kind !== 'cancelled') throw answer;
+          // Losing its Group cancelled it: that refusal is its answer, so it's never sent again.
+          const loss = key.length === 5 ? lostGroups.get(key[3]) : undefined;
+          if (loss && loss.at > lostBefore) throw refusal(loss.status);
           if (!shown()) throw new Obsolete();
         }
       }
@@ -2018,6 +2028,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   const forgetGroup = async (groupId: string, status: number, owner: number) => {
     cacheEpoch += 1;
+    lostGroups.set(groupId, { status, at: ++losses });
     const scopes = [
       `group:${groupId}`,
       `ledger:${groupId}`,
