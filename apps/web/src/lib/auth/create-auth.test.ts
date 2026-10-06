@@ -1,8 +1,9 @@
 /**
  * The Better Auth instance options and the behaviours they drive, exercised
  * against the memory adapter: session policy, rate-limit storage, the demo
- * plugin guard, and the Google ID-token path (approved, denied, re-linked
- * to an existing user) through the test verifier override.
+ * plugin guard, the Google ID-token path (approved, denied, re-linked to an
+ * existing user) through the test verifier override, and sign-out, which
+ * answers success only once the session is gone (#285).
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -51,10 +52,40 @@ function memoryDb(seedPersonas = false): MemoryDB {
   };
 }
 
+/**
+ * Session-store faults the memory adapter can't produce on its own: `delete`
+ * throws, as a write to an unreachable database does; `lookup` fails the
+ * `findMany` Better Auth runs before a delete, which it swallows and then
+ * deletes nothing, without an error.
+ */
+interface SessionFaults {
+  delete: boolean;
+  lookup: boolean;
+}
+
+function withSessionFaults(db: MemoryDB, faults: SessionFaults) {
+  const base = memoryAdapter(db);
+  return ((options) => {
+    const adapter = base(options);
+    const unavailable = () => Promise.reject(new Error('Session store unavailable'));
+    return {
+      ...adapter,
+      delete: (args) =>
+        faults.delete && args.model === 'session' ? unavailable() : adapter.delete(args),
+      findMany: (args) =>
+        faults.lookup && args.model === 'session' ? unavailable() : adapter.findMany(args),
+    };
+  }) satisfies typeof base;
+}
+
 function createAuth(env: Partial<AuthEnv> = {}, seedPersonas = false) {
   const db = memoryDb(seedPersonas);
-  const auth = createSplitbookAuth({ database: memoryAdapter(db), env: { ...baseEnv, ...env } });
-  return { auth, db };
+  const faults: SessionFaults = { delete: false, lookup: false };
+  const auth = createSplitbookAuth({
+    database: withSessionFaults(db, faults),
+    env: { ...baseEnv, ...env },
+  });
+  return { auth, db, faults };
 }
 
 async function idTokenSignIn(
@@ -305,5 +336,141 @@ describe('demo persona route through the full instance', () => {
       }),
     );
     expect(missing.status).toBe(404);
+  });
+});
+
+describe('sign-out', () => {
+  const withOverride = { AUTH_TEST_ID_TOKEN_SECRET: TEST_SECRET };
+  const approved = { sub: 'google-approved', email: 'approved@example.com', name: 'Tester' };
+
+  /** The session token alone: without the cookie cache, get-session reads the database. */
+  function sessionCookie(response: Response) {
+    const cookie = response.headers
+      .getSetCookie()
+      .find((header) => header.startsWith('better-auth.session_token='));
+    if (!cookie) throw new Error('The sign-in set no session cookie');
+    return cookie.split(';')[0];
+  }
+
+  async function signedIn() {
+    const test = createAuth(withOverride);
+    const response = await idTokenSignIn(test.auth, approved);
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(test.db.session).toHaveLength(1);
+    return { ...test, cookie: sessionCookie(response) };
+  }
+
+  function signOut(auth: ReturnType<typeof createAuth>['auth'], cookie?: string) {
+    return auth.handler(
+      new Request(`${BASE_URL}/api/auth/sign-out`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          origin: BASE_URL,
+          ...(cookie ? { cookie } : {}),
+        },
+        body: '{}',
+      }),
+    );
+  }
+
+  async function currentSession(auth: ReturnType<typeof createAuth>['auth'], cookie: string) {
+    const response = await auth.handler(
+      new Request(`${BASE_URL}/api/auth/get-session`, { headers: { cookie } }),
+    );
+    expect(response.status).toBe(200);
+    return response.json();
+  }
+
+  it('ends the session and clears its cookies when the delete works', async () => {
+    const { auth, db, cookie } = await signedIn();
+
+    const response = await signOut(auth, cookie);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ success: true });
+    const cleared = response.headers.getSetCookie();
+    expect(cleared).toContainEqual(
+      expect.stringMatching(/^better-auth\.session_token=;.*Max-Age=0/),
+    );
+    expect(cleared).toContainEqual(
+      expect.stringMatching(/^better-auth\.session_data=;.*Max-Age=0/),
+    );
+    expect(db.session).toHaveLength(0);
+    await expect(currentSession(auth, cookie)).resolves.toBeNull();
+
+    // A retry whose first answer was lost has nothing left to end: still success.
+    expect((await signOut(auth, cookie)).status).toBe(200);
+  });
+
+  it('answers 500 and keeps the session and its cookie when the delete fails', async () => {
+    const { auth, db, faults, cookie } = await signedIn();
+    faults.delete = true;
+
+    const response = await signOut(auth, cookie);
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toMatchObject({ code: 'SESSION_NOT_ENDED' });
+    expect(response.headers.getSetCookie()).toEqual([]);
+    expect(db.session).toHaveLength(1);
+    await expect(currentSession(auth, cookie)).resolves.toMatchObject({
+      user: { email: approved.email },
+    });
+
+    // Once the store recovers, the same cookie signs out.
+    faults.delete = false;
+    expect((await signOut(auth, cookie)).status).toBe(200);
+    await expect(currentSession(auth, cookie)).resolves.toBeNull();
+  });
+
+  it('answers 500 when the delete reports no error but the session remains', async () => {
+    const { auth, db, faults, cookie } = await signedIn();
+    faults.lookup = true;
+
+    const response = await signOut(auth, cookie);
+    expect(response.status).toBe(500);
+    expect(response.headers.getSetCookie()).toEqual([]);
+    expect(db.session).toHaveLength(1);
+    await expect(currentSession(auth, cookie)).resolves.toMatchObject({
+      user: { email: approved.email },
+    });
+  });
+
+  it('answers 200 to a sign-out with no readable session cookie, touching no session', async () => {
+    const { auth, db, faults } = await signedIn();
+    faults.delete = true;
+    faults.lookup = true;
+
+    expect((await signOut(auth)).status).toBe(200);
+    expect((await signOut(auth, 'better-auth.session_token=forged.unsigned')).status).toBe(200);
+    expect(db.session).toHaveLength(1);
+  });
+
+  it("ends no session for a real token without that token's own signature", async () => {
+    const { auth, db } = createAuth(withOverride);
+    const signedToken = async (claims: Parameters<typeof idTokenSignIn>[1]) => {
+      const response = await idTokenSignIn(auth, claims);
+      expect(response.status).toBe(200);
+      const cookie = sessionCookie(response);
+      const [token, signature] = decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1)).split(
+        '.',
+      );
+      return { token, signature };
+    };
+    const a = await signedToken(approved);
+    const b = await signedToken({
+      sub: 'google-existing',
+      email: 'existing@example.com',
+      name: 'Other Tester',
+    });
+    expect(db.session).toHaveLength(2);
+
+    // A's token bare, then carrying B's signature: neither is A's signed cookie.
+    for (const forged of [a.token, `${a.token}.${b.signature}`]) {
+      const response = await signOut(
+        auth,
+        `better-auth.session_token=${encodeURIComponent(forged)}`,
+      );
+      expect(response.status, forged).toBe(200);
+    }
+    expect(db.session.map((session) => session.token).sort()).toEqual([a.token, b.token].sort());
   });
 });
