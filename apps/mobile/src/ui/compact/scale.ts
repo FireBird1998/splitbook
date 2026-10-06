@@ -36,6 +36,24 @@ export const moneySizes: Record<MoneySize, TextStyle> = {
   table: { fontSize: 13, lineHeight: 17, letterSpacing: -0.2 },
 };
 
+/** A text style a skeleton line stands in for: a text variant or a money size. */
+export type LineKind = TextVariant | MoneySize;
+
+/**
+ * The height one line of `kind` takes at this font scale (Android scales line heights with the
+ * text), and the thickness of a skeleton bar drawn in it, a little under the font size.
+ */
+export function lineBox(kind: LineKind, fontScale: number) {
+  const style =
+    kind in textVariants ? textVariants[kind as TextVariant] : moneySizes[kind as MoneySize];
+  const lineHeight = style.lineHeight as number;
+  const fontSize = style.fontSize as number;
+  return {
+    height: lineHeight * fontScale,
+    bar: Math.max(6, Math.round(fontSize * fontScale * 0.72)),
+  };
+}
+
 /** At or above this Android font scale, tile grids and summary stats use one column. */
 export const LARGE_TEXT_SCALE = 1.3;
 // Android reports the scale as a 32-bit float (130% arrives as 1.2999999523…), so compare
