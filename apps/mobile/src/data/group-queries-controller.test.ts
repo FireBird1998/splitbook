@@ -103,8 +103,8 @@ function fixture() {
     disk = new Map<string, unknown>(),
     drafts = new Map<string, unknown>(),
     attempts = new Map<string, unknown>();
-  /** What the saved-copy databases can't do. */
-  const device = { failRemoval: false };
+  /** What the saved-copy databases can't do: remove a row, or read one of them. */
+  const device = { failRemoval: false, unreadableRow: false };
   /** Writes of rows held part-way, as on a slow disk, by path. */
   const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [];
   const pause = async (path: string) => {
@@ -158,6 +158,16 @@ function fixture() {
   };
   const savedQueries = {
     ...records(rows),
+    // One row that can't be read fails every read of all rows, as parsing it would; listing the
+    // keys reads none of them.
+    list: async (account: string) => {
+      if (device.unreadableRow) throw new SyntaxError('Unexpected token in a saved row');
+      return records(rows).list(account);
+    },
+    keys: async (account: string) =>
+      [...rows.keys()]
+        .filter((key) => key.startsWith(account))
+        .map((key) => key.slice(account.length)),
     save: async (account: string, key: string, value: unknown) => {
       await pause(key);
       rows.set(account + key, structuredClone(value));
@@ -832,6 +842,18 @@ describe('after a write (M2-2)', () => {
     },
   );
 
+  it('removes another Month’s rows after a write though one saved row can’t be read', async () => {
+    const f = fixture();
+    const controller = await readyToSave(f);
+    f.device.unreadableRow = true;
+    await controller.saveExpense();
+    await settle();
+    // Removing needs only the rows' keys: nothing is left behind, or marked untrusted.
+    expect(
+      f.savedRows(`${maplePath}/expenses?`).filter(({ path }) => monthOf(path) === '2026-08'),
+    ).toEqual([]);
+    expect(f.untrusted()).toBeNull();
+  });
   it('never shows a saved copy it could not remove after a write, and keeps the member signed in', async () => {
     const f = fixture();
     const controller = await readyToSave(f);

@@ -29,6 +29,10 @@ export function savedQueriesIn(
           groupId: entry.slice(key(account, '').length),
           value: structuredClone(value),
         })),
+    keys: async (account) =>
+      [...map.keys()]
+        .filter((entry) => entry.startsWith(key(account, '/api/')))
+        .map((entry) => entry.slice(key(account, '').length)),
     ...store,
   };
 }

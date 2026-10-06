@@ -9,6 +9,11 @@ export interface AccountGroupRecordStore {
    * persister's rows, each by its query's path.
    */
   list?(accountId: string): Promise<{ groupId: string; value: unknown }[]>;
+  /**
+   * The keys of every record this account has in this environment, without reading any: one
+   * that can't be read never stops a removal that only needs its key (#219).
+   */
+  keys?(accountId: string): Promise<string[]>;
 }
 
 /**
@@ -93,6 +98,16 @@ export function createAccountGroupRecordStore(
         accountId,
       );
       return rows.map((row) => ({ groupId: row.id, value: JSON.parse(row.value) }));
+    },
+    async keys(accountId) {
+      const rows = await (
+        await database()
+      ).getAllAsync<{ id: string }>(
+        `SELECT ${column} AS id FROM ${table} WHERE environment = ? AND account_id = ?`,
+        environment,
+        accountId,
+      );
+      return rows.map((row) => row.id);
     },
   };
 }

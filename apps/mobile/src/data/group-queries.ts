@@ -128,7 +128,8 @@ const inRows = (path: string, groupId: string, scope: GroupRows) => {
 };
 /**
  * The paths of the persister's rows for this account: those it lists, so rows saved before this
- * session count too, and those named in `known`, for a store that can't list its rows.
+ * session count too, and those named in `known`, for a store that can't list its rows. Only the
+ * keys are read where the store can, so a row that can't be read never stops a removal.
  */
 const rowPaths = async (
   rows: AccountGroupRecordStore,
@@ -136,7 +137,10 @@ const rowPaths = async (
   known: Iterable<string> = [],
 ) => {
   const paths = new Set(known);
-  for (const { groupId: path } of (await rows.list?.(accountId)) ?? []) paths.add(path);
+  const listed = rows.keys
+    ? await rows.keys(accountId)
+    : ((await rows.list?.(accountId)) ?? []).map(({ groupId }) => groupId);
+  for (const path of listed) paths.add(path);
   return paths;
 };
 /**
