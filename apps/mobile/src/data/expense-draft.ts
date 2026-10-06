@@ -608,11 +608,13 @@ export function savedAsSent(mutation: ExpenseMutation, saved: ExpenseRecord): bo
   if (mutation.kind === 'delete') return saved.isDeleted;
   if (saved.isDeleted || saved.revision !== mutation.revision + 1) return false;
   try {
-    const body = z.record(z.string(), z.unknown()).parse(JSON.parse(mutation.body));
-    const fields = Object.keys(body);
+    const body: unknown = JSON.parse(mutation.body);
+    // The schema refuses anything but an object. The keys come from the body as parsed, so
+    // none of them, `__proto__` included, is dropped before it is checked.
+    const sent = updateExpenseSchema.parse(body);
+    const fields = Object.keys(body as object);
     if (!fields.length || fields.some((field) => !editFields.has(field))) return false;
     if (fields.includes('tag') && !fields.includes('tagId')) return false;
-    const sent = updateExpenseSchema.parse(body);
     const kept = (value: unknown, savedValue: unknown) =>
       value === undefined || value === savedValue;
     return (

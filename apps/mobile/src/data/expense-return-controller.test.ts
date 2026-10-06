@@ -1308,6 +1308,7 @@ describe('An edit or delete whose answer was lost (#232)', () => {
     ['only predefinedItem', '{"predefinedItem":null}'],
     ['part of the money', '{"amount":45}'],
     ['a Tag’s name without its identity', '{"tag":"Groceries"}'],
+    ['a __proto__ key', '{"description":"Electricity bill","__proto__":{"amount":1}}'],
   ])(
     'keeps a conflict when the stored edit carries %s, even at the next revision',
     async (_carried, body) => {
