@@ -443,4 +443,34 @@ describe('sign-out', () => {
     expect((await signOut(auth, 'better-auth.session_token=forged.unsigned')).status).toBe(200);
     expect(db.session).toHaveLength(1);
   });
+
+  it("ends no session for a real token without that token's own signature", async () => {
+    const { auth, db } = createAuth(withOverride);
+    const signedToken = async (claims: Parameters<typeof idTokenSignIn>[1]) => {
+      const response = await idTokenSignIn(auth, claims);
+      expect(response.status).toBe(200);
+      const cookie = sessionCookie(response);
+      const [token, signature] = decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1)).split(
+        '.',
+      );
+      return { token, signature };
+    };
+    const a = await signedToken(approved);
+    const b = await signedToken({
+      sub: 'google-existing',
+      email: 'existing@example.com',
+      name: 'Other Tester',
+    });
+    expect(db.session).toHaveLength(2);
+
+    // A's token bare, then carrying B's signature: neither is A's signed cookie.
+    for (const forged of [a.token, `${a.token}.${b.signature}`]) {
+      const response = await signOut(
+        auth,
+        `better-auth.session_token=${encodeURIComponent(forged)}`,
+      );
+      expect(response.status, forged).toBe(200);
+    }
+    expect(db.session.map((session) => session.token).sort()).toEqual([a.token, b.token].sort());
+  });
 });

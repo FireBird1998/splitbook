@@ -47,6 +47,7 @@ function setup(email: string) {
   let saved: string | null = null;
   let owner: string | null = null;
   let cleanupPending = false;
+  let signOutRecord: { invitationCleared: boolean } | null = null;
   const controller = createMobileController(
     {
       apiBaseUrl: origin,
@@ -78,9 +79,18 @@ function setup(email: string) {
           saved = null;
         },
       },
-      // As the Android runtime wires it: the cleanup marker keeps the saved cookie until the
-      // server confirms the sign-out.
+      // As the Android runtime wires it: the cleanup marker and the sign-out record keep the
+      // saved cookie, and the sign-out, until the server confirms it.
       accountLocal: {
+        signOutRecord: {
+          load: async () => signOutRecord,
+          mark: async (record) => {
+            signOutRecord = record;
+          },
+          clear: async () => {
+            signOutRecord = null;
+          },
+        },
         owner: {
           load: async () => owner,
           save: async (accountId) => {
@@ -114,7 +124,13 @@ function setup(email: string) {
       },
     },
   );
-  return { controller, db, faults, saved: () => saved };
+  return {
+    controller,
+    db,
+    faults,
+    saved: () => saved,
+    pendingSignOut: () => ({ marker: cleanupPending, record: signOutRecord }),
+  };
 }
 describe('Android token exchange through Better Auth', () => {
   it('admits an approved identity, restores its secure cookie, and revokes it on logout', async () => {
@@ -151,6 +167,10 @@ describe('Android token exchange through Better Auth', () => {
     });
     expect(test.saved()).toBe(kept);
     expect(test.db.session).toHaveLength(1);
+    expect(test.pendingSignOut()).toEqual({
+      marker: true,
+      record: { invitationCleared: expect.any(Boolean) },
+    });
 
     // Try again, once the server can delete the session.
     test.faults.deleteSession = false;
@@ -162,6 +182,7 @@ describe('Android token exchange through Better Auth', () => {
     });
     expect(test.db.session).toHaveLength(0);
     expect(test.saved()).toBeNull();
+    expect(test.pendingSignOut()).toEqual({ marker: false, record: null });
   });
   it('surfaces the actual allowlist denial and creates no account or session', async () => {
     const test = setup('not-invited@example.com');
