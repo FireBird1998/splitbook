@@ -14,9 +14,10 @@ import type {
   MobileExpense,
   MobileGroup,
 } from '../data/types';
-import { flatten, layoutHeight } from '../test-utils/layout';
+import { findHosts, flatten, layoutHeight } from '../test-utils/layout';
 import { setFileWindow, setWindow, timing } from '../test-utils/native';
 import { motion } from './compact';
+import { GroupBalancesView } from './group-balances';
 import { GroupExpensesView } from './group-expenses';
 import { HomeBalances, HomeGroups } from './home';
 
@@ -289,4 +290,82 @@ describe('A Group’s Expenses', () => {
       expect(Math.abs(after - before)).toBeLessThan(1);
     },
   );
+});
+
+describe('A Household’s Balances', () => {
+  const owing = {
+    currency: 'INR',
+    balances: [
+      { user: person(you, 'Alex Rivera'), balance: -1060 },
+      { user: person('a00000000000000000000002', 'Sam Chen'), balance: 1060 },
+    ],
+    debts: [
+      {
+        from: person(you, 'Alex Rivera'),
+        to: person('a00000000000000000000002', 'Sam Chen'),
+        amount: 1060,
+      },
+    ],
+  };
+  const view = (loading: boolean) => (
+    <GroupBalancesView
+      group={maple}
+      currentUserId={you}
+      state={{
+        groupId: maple.id,
+        month: '2026-09',
+        expenses: {
+          status: 'ready',
+          data: [],
+          summary: null,
+          pagination: null,
+          message: null,
+          moreStatus: 'idle',
+          moreMessage: null,
+          month: '2026-09',
+          refreshedAt: at.getTime(),
+        },
+        balances: loading
+          ? { status: 'loading', data: null, message: null, refreshedAt: null, stale: false }
+          : {
+              status: 'ready',
+              data: [owing],
+              message: null,
+              refreshedAt: at.getTime(),
+              stale: false,
+            },
+      }}
+      pending={null}
+      offline={false}
+      onRecord={vi.fn()}
+      onCheckPayment={vi.fn()}
+      onRefreshBalances={vi.fn()}
+    />
+  );
+  /** The first card: the balance, or its skeleton. */
+  const card = () => {
+    const [first] = findHosts(renderer!.toJSON(), (props) => {
+      const style = flatten(props.style);
+      return style.borderRadius === 14 && style.overflow === 'hidden';
+    });
+    return first!;
+  };
+
+  // Its note about Months takes two lines on a phone: the skeleton has both.
+  it.each([
+    [360, 1],
+    [412, 1],
+    [412, 1.3],
+  ])('the balance card takes its skeleton’s place, %sdp wide at %s× text', (width, fontScale) => {
+    setWindow({ width, fontScale });
+    const room = width - 32;
+    act(() => {
+      renderer = create(view(true));
+    });
+    const skeleton = layoutHeight(card(), fontScale, room);
+    act(() => renderer!.update(view(false)));
+    expect(layoutHeight(card(), fontScale, room)).toBe(skeleton);
+    act(() => renderer!.unmount());
+    renderer = undefined;
+  });
 });

@@ -6,14 +6,15 @@ type Style = Record<string, unknown>;
 /**
  * How tall a rendered host tree lays out, worked out from its styles as Yoga stacks boxes:
  * fixed heights, minimum heights, padding, borders, margins and gaps, columns summed and rows
- * taking their tallest child. Text is one line of its line height, which Android scales with
- * the text size (`fontScale`); an icon is its size. Absolutely positioned children take no room.
+ * taking their tallest child. A line of text is its line height, which Android scales with the
+ * text size (`fontScale`); an icon is its size. Absolutely positioned children take no room.
  *
- * Given the `width` the tree lays out in, a row that wraps (`flexWrap: 'wrap'`) breaks into
- * lines where its children no longer fit, by their estimated widths (`layoutWidth`): enough to
- * see that an amount and a badge go onto two lines on a narrow phone or at large text. Text
- * itself never wraps here, so keep text in a comparison to one line, and check anything that
- * wraps on a device too.
+ * Without a `width`, text is one line and rows never wrap. Given the width the tree lays out
+ * in, text wraps onto as many lines as its estimated width needs (up to `numberOfLines`), and a
+ * row that wraps (`flexWrap: 'wrap'`) breaks into lines where its children no longer fit, by
+ * their estimated widths (`layoutWidth`): enough to see that a note takes two lines, or that an
+ * amount and a badge go onto two lines on a narrow phone or at large text. The widths are
+ * estimates from character counts, so check anything close to a line's end on a device too.
  *
  * Enough to show that content takes its skeleton's place at the same height (#331).
  */
@@ -33,8 +34,13 @@ export function layoutHeight(node: Node | string | null, fontScale = 1, width?: 
   };
   switch (node.type) {
     case 'Text':
-    case 'AnimatedText':
-      return box(number(style.lineHeight) * fontScale);
+    case 'AnimatedText': {
+      // Wrapped onto as many lines as its estimated width needs, up to `numberOfLines`.
+      const room = width === undefined ? 0 : width - horizontal(style);
+      const needed = room > 0 ? Math.max(1, Math.ceil(textWidth(node, fontScale) / room)) : 1;
+      const limit = Number(node.props.numberOfLines) || Infinity;
+      return box(number(style.lineHeight) * fontScale * Math.min(needed, limit));
+    }
     case 'Ionicons':
       return box(number(node.props.size));
     case 'ActivityIndicator':
@@ -99,13 +105,9 @@ export function layoutWidth(node: Node | string | null, fontScale = 1, room = 0)
   let content: number;
   switch (node.type) {
     case 'Text':
-    case 'AnimatedText': {
-      const characters = text(node).length;
-      const advance = String(style.fontFamily ?? '').includes('Mono') ? 0.6 : 0.55;
-      content =
-        characters * (number(style.fontSize) * fontScale * advance + number(style.letterSpacing));
+    case 'AnimatedText':
+      content = textWidth(node, fontScale);
       break;
-    }
     case 'Ionicons':
       content = number(node.props.size);
       break;
@@ -153,6 +155,18 @@ const inFlow = (node: Node) =>
     (child): child is Node =>
       typeof child !== 'string' && flatten(child.props.style).position !== 'absolute',
   );
+
+/**
+ * One line of a text node's characters, estimated: IBM Plex Mono's advance is 0.6 of the font
+ * size; Outfit's is taken as 0.55. Letter spacing adds to each character.
+ */
+function textWidth(node: Node, fontScale: number) {
+  const style = flatten(node.props.style);
+  const advance = String(style.fontFamily ?? '').includes('Mono') ? 0.6 : 0.55;
+  return (
+    text(node).length * (number(style.fontSize) * fontScale * advance + number(style.letterSpacing))
+  );
+}
 
 /** All the text in a node, its nested runs included. */
 const text = (node: Node | string): string =>

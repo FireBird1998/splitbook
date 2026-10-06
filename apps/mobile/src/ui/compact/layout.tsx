@@ -329,21 +329,33 @@ export function Skeleton({
   );
 }
 
-/** Lines of placeholder text, one under another; see `Skeleton`'s `line`. */
+/**
+ * Lines of placeholder text, one under another, `gap` apart; see `Skeleton`'s `line`. A line
+ * with a `count` stands for a paragraph that wraps onto that many lines: they sit together with
+ * no gap, as a wrapped paragraph's lines do, and the last is shorter.
+ */
 export function SkeletonText({
   lines,
   gap = 0,
   style,
 }: {
-  lines: { width: DimensionValue; line: LineKind }[];
+  lines: { width: DimensionValue; line: LineKind; count?: number }[];
   gap?: number;
   style?: StyleProp<ViewStyle>;
 }) {
   return (
     <View {...hiddenFromReaders} style={[{ gap }, style]}>
-      {lines.map((line, index) => (
-        <Skeleton key={index} width={line.width} line={line.line} />
-      ))}
+      {lines.map(({ width, line, count = 1 }, index) =>
+        count === 1 ? (
+          <Skeleton key={index} width={width} line={line} />
+        ) : (
+          <View key={index}>
+            {Array.from({ length: count }, (_, row) => (
+              <Skeleton key={row} width={row === count - 1 ? '55%' : width} line={line} />
+            ))}
+          </View>
+        ),
+      )}
     </View>
   );
 }

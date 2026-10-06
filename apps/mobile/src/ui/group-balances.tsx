@@ -429,14 +429,15 @@ export function GroupBalancesView({
         {notice}
         <View accessibilityLabel="Loading balances" accessibilityState={{ busy: true }}>
           <Card padded>
-            {/* The balance card's lines, as MemberBalanceCard lays them out. */}
+            {/* The balance card's lines, as MemberBalanceCard lays them out; a Household's
+                note about Months wraps onto two lines. */}
             <SkeletonText
               gap={4}
               lines={[
                 { width: '45%', line: 'caption' },
                 { width: '70%', line: 'form' },
                 ...(group.category === 'home'
-                  ? [{ width: '90%' as const, line: 'small' as const }]
+                  ? [{ width: '90%' as const, line: 'small' as const, count: 2 }]
                   : []),
               ]}
             />
