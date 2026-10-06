@@ -16,6 +16,7 @@ import AddIcon from '@mui/icons-material/Add';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import GroupCard from '@/components/groups/GroupCard';
 import InvitationCard from '@/components/dashboard/InvitationCard';
+import LatestChangesCard from '@/components/dashboard/LatestChangesCard';
 import MoneyText from '@/components/common/MoneyText';
 import ErrorState from '@/components/common/ErrorState';
 import EmptyState from '@/components/common/EmptyState';
@@ -479,6 +480,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
             </Stack>
           )}
         </Box>
+        <LatestChangesCard userId={userId} />
       </Stack>
     </Container>
   );

@@ -56,12 +56,47 @@ export const groupBalances = {
   hasMixedCurrencies: false,
 };
 
+/** Home's latest changes (#309): the trip's dinner, entered, then corrected. */
+const latestChanges = {
+  limit: 10,
+  activities: [
+    {
+      _id: 'e00000000000000000000002',
+      type: 'expense_updated',
+      createdAt: '2026-09-06T08:40:00.000Z',
+      group: { _id: DEMO_GROUP_ID, name: group.name },
+      actor: { _id: sam._id, name: sam.name },
+      currency: 'INR',
+      metadata: {
+        expenseId: 'c00000000000000000000001',
+        description: 'Beach shack dinner',
+        changes: { amount: { old: 2400, new: 2500 }, amountMinor: { old: 240000, new: 250000 } },
+      },
+    },
+    {
+      _id: 'e00000000000000000000001',
+      type: 'expense_added',
+      createdAt: '2026-09-05T15:30:00.000Z',
+      group: { _id: DEMO_GROUP_ID, name: group.name },
+      actor: { _id: alex._id, name: alex.name },
+      currency: 'INR',
+      metadata: {
+        expenseId: 'c00000000000000000000001',
+        description: 'Beach shack dinner',
+        amount: 2400,
+        currency: 'INR',
+      },
+    },
+  ],
+};
+
 /** Fixture only public HTTP responses; real demo authentication stays in place. */
 export async function installPilotFixtures(page: Page, overrides: Record<string, unknown> = {}) {
   await page.clock.setFixedTime(new Date(FIXED_TIME));
   const responses: Record<string, unknown> = {
     '/api/groups': [group],
     '/api/user/balances': summary,
+    '/api/user/activity': latestChanges,
     '/api/invitations': [],
     [`/api/groups/${DEMO_GROUP_ID}`]: group,
     [`/api/groups/${DEMO_GROUP_ID}/balances`]: groupBalances,

@@ -15,14 +15,17 @@ import {
   invitationsPath,
   recurringExpensesPath,
   settlementsPath,
+  userActivityPath,
   type ActivityPageQuery,
+  type UserActivityQuery,
 } from './api-paths';
 import type { ExpenseFilters } from './types';
 
 /**
- * Which follow-ups must reach a read: the Groups list, Home's totals, one Group's details,
- * its running Balances, or the rest of its ledger (Expense pages and records, Activity,
- * Settlements and recurring Expenses). Invitations belong to no Group.
+ * Which follow-ups must reach a read: the Groups list, Home's reads across the member's
+ * Groups (its totals and latest changes), one Group's details, its running Balances, or the
+ * rest of its ledger (Expense pages and records, Activity, Settlements and recurring
+ * Expenses). Invitations belong to no Group.
  */
 export type QueryScope = AccountScope | GroupScope;
 export type AccountScope = 'groups' | 'home' | 'invitations';
@@ -92,6 +95,10 @@ export const groupsKey = (account: QueryAccount) => accountKey('groups', account
 
 export const homeBalancesKey = (account: QueryAccount) =>
   accountKey('home', account, homeBalancesPath());
+
+/** Home's latest changes: every Group's writes reach it, as they reach Home's totals. */
+export const userActivityKey = (account: QueryAccount, activity?: UserActivityQuery) =>
+  accountKey('home', account, userActivityPath(activity));
 
 export const invitationsKey = (account: QueryAccount) =>
   accountKey('invitations', account, invitationsPath());

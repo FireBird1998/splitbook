@@ -695,9 +695,10 @@ with the group's default currency.
 
 ## Activity Feed
 
-| Method | Path                        | Description       |
-| ------ | --------------------------- | ----------------- |
-| GET    | `/api/groups/[id]/activity` | Get activity feed |
+| Method | Path                        | Description                                |
+| ------ | --------------------------- | ------------------------------------------ |
+| GET    | `/api/groups/[id]/activity` | Get activity feed                          |
+| GET    | `/api/user/activity`        | Latest Activity across the member's Groups |
 
 ### GET /api/groups/[id]/activity
 
@@ -739,6 +740,58 @@ Expenses generated from a recurring template log with `recurring: true`,
 Activity writes are on the critical path — every mutation `await`s the log, and
 there are no transactions, so a logging failure fails the request after the
 primary write has already committed.
+
+### GET /api/user/activity
+
+Home's "Latest changes" (#309): the latest Activity across the Groups the
+member belongs to today, newest first (`createdAt`, then `_id`). A Group the
+member has left or never joined, and an archived Group, contributes nothing.
+
+**Query params:** `?limit=10`. 10 when absent and at most 50: a larger number
+is cut to 50, and anything but a whole number of at least 1 is a 422
+validation error.
+
+People appear by name only: `actor` is `{ _id, name }`, or `null` when the
+account no longer exists, and a payment's sides are `paidByName` and
+`paidToName`. `metadata` carries only what the card uses; an Expense edit keeps
+only its money `changes` (`amount`, `amountMinor`, `currency`), before and
+after. `currency` is the currency of the event's amounts: the recorded one, or,
+for an edit, the Expense's currency at the time. The shared path, query key
+and decoder are `userActivityPath`, `userActivityKey` and
+`parseUserActivityResponse` (`@splitbook/shared/user-activity-read`).
+
+The read only reads. Unlike a Group's Activity read, it doesn't publish events
+whose publication failed: those appear once that Group's Activity is read, or
+the next write to the same Expense or Settlement publishes them.
+
+**Response:**
+
+```json
+{
+  "data": {
+    "activities": [
+      {
+        "_id": "...",
+        "type": "expense_updated",
+        "createdAt": "2026-10-06T14:10:00.000Z",
+        "group": { "_id": "...", "name": "Maple House" },
+        "actor": { "_id": "...", "name": "Priya Shah" },
+        "currency": "INR",
+        "metadata": {
+          "expenseId": "...",
+          "description": "Wi-Fi",
+          "changes": {
+            "amount": { "old": 899, "new": 999 },
+            "amountMinor": { "old": 89900, "new": 99900 }
+          }
+        }
+      }
+    ],
+    "limit": 10
+  },
+  "status": 200
+}
+```
 
 ---
 

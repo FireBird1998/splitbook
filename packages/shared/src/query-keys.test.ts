@@ -10,6 +10,7 @@ import {
   invitationsPath,
   recurringExpensesPath,
   settlementsPath,
+  userActivityPath,
 } from './api-paths';
 import {
   activityPageKey,
@@ -27,6 +28,7 @@ import {
   queryKeyPath,
   recurringExpensesKey,
   settlementsKey,
+  userActivityKey,
   type QueryAccount,
   type QueryKey,
 } from './query-keys';
@@ -44,6 +46,11 @@ describe('key factories', () => {
   it.each([
     ['the Groups list', groupsKey(alex), ['groups', environment, alex.accountId, '/api/groups']],
     ['Home', homeBalancesKey(alex), ['home', environment, alex.accountId, '/api/user/balances']],
+    [
+      "Home's latest changes",
+      userActivityKey(alex, { limit: 10 }),
+      ['home', environment, alex.accountId, userActivityPath({ limit: 10 })],
+    ],
     [
       'invitations',
       invitationsKey(alex),
@@ -149,6 +156,8 @@ describe('keys differ', () => {
       activityPageKey(alex, maple, { expenseId, page: 1, limit: 20 }),
     );
     expect(expenseRecordKey(alex, maple, expenseId)).not.toEqual(settlementsKey(alex, maple));
+    expect(userActivityKey(alex, { limit: 10 })).not.toEqual(homeBalancesKey(alex));
+    expect(userActivityKey(alex, { limit: 10 })).not.toEqual(userActivityKey(alex, { limit: 50 }));
   });
 
   it('never between an account and a Group that share an id', () => {
@@ -161,6 +170,7 @@ describe('keys differ', () => {
 const reads: ((account: QueryAccount, groupId: string) => QueryKey)[] = [
   (account) => groupsKey(account),
   (account) => homeBalancesKey(account),
+  (account) => userActivityKey(account, { limit: 10 }),
   (account) => invitationsKey(account),
   (account, groupId) => groupKey(account, groupId),
   (account, groupId) => groupBalancesKey(account, groupId),
@@ -193,7 +203,12 @@ describe('matchers', () => {
 
   it('never select the Groups list, Home or invitations for a Group, even one named like an account', () => {
     const twin: QueryAccount = { environment, accountId: maple };
-    for (const key of [groupsKey(twin), homeBalancesKey(twin), invitationsKey(twin)])
+    for (const key of [
+      groupsKey(twin),
+      homeBalancesKey(twin),
+      userActivityKey(twin),
+      invitationsKey(twin),
+    ])
       expect(matchGroup(maple)(key)).toBe(false);
   });
 
@@ -203,7 +218,7 @@ describe('matchers', () => {
     expect(keys.filter(matchGroup(maple.slice(1)))).toEqual([]);
   });
 
-  it.each([groupsPath(), homeBalancesPath(), invitationsPath()])(
+  it.each([groupsPath(), homeBalancesPath(), userActivityPath({ limit: 10 }), invitationsPath()])(
     'never select an account read for a Group id equal to its path, %s',
     (path) => {
       expect(keys.filter(matchGroup(path))).toEqual([]);
@@ -212,7 +227,7 @@ describe('matchers', () => {
 
   it("select only this account's keys in this environment", () => {
     const selected = keys.filter(matchAccount(alex));
-    expect(selected).toHaveLength(2 * 10);
+    expect(selected).toHaveLength(2 * 11);
     expect(selected).toEqual(
       expect.arrayContaining([...everyKey(alex, maple), ...everyKey(alex, goa)]),
     );
