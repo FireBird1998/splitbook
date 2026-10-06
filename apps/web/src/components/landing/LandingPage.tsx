@@ -7,41 +7,48 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import Button from '@mui/material/Button';
 import GoogleIcon from '@mui/icons-material/Google';
+import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
+import PieChartOutlineIcon from '@mui/icons-material/PieChartOutline';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
+import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
+import TollOutlinedIcon from '@mui/icons-material/TollOutlined';
+import BrandLogo from '@/components/layout/BrandLogo';
 import BrandMark from '@/components/layout/BrandMark';
 import { PRODUCT_NAME } from '@/lib/product';
 import { signInWithGoogle } from '@/lib/auth-client';
 
 const features = [
   {
-    icon: '👥',
+    Icon: GroupsOutlinedIcon,
     title: 'Trips & Groups',
     description: 'Create a trip, invite friends with a link, and start splitting in minutes.',
   },
   {
-    icon: '💸',
+    Icon: PieChartOutlineIcon,
     title: 'Smart Split',
     description: 'Equal, percentage, shares, or exact — split any way you want.',
   },
   {
-    icon: '💰',
+    Icon: SwapHorizIcon,
     title: 'Settle Up',
     description:
       'See who pays whom with minimal transactions, and record settlements either side can confirm.',
   },
   {
-    icon: '📊',
+    Icon: DashboardOutlinedIcon,
     title: 'Money-first Dashboard',
     description:
       'Your balance by currency, the next best action, and recent trip activity at a glance.',
   },
   {
-    icon: '🧾',
+    Icon: HistoryOutlinedIcon,
     title: 'Activity Audit Trail',
     description:
       'Every expense edit and settlement is logged, so the group can always see what changed.',
   },
   {
-    icon: '💱',
+    Icon: TollOutlinedIcon,
     title: 'One Currency per Trip',
     description:
       'Each trip keeps a single currency, and balances never mix currencies into one number.',
@@ -66,20 +73,7 @@ export default function LandingPage() {
           justifyContent="space-between"
           sx={{ py: 2 }}
         >
-          <Stack direction="row" alignItems="center" spacing={1.25}>
-            <BrandMark size={30} fontSize={14} />
-            <Typography
-              component="span"
-              sx={{
-                fontSize: '1.25rem',
-                fontWeight: 700,
-                letterSpacing: '-0.02em',
-                color: 'text.primary',
-              }}
-            >
-              {PRODUCT_NAME}
-            </Typography>
-          </Stack>
+          <BrandLogo height={32} href="/" />
           <Button
             variant="outlined"
             size="small"
@@ -156,9 +150,23 @@ export default function LandingPage() {
                 '&:hover': { boxShadow: 3 },
               }}
             >
-              <Typography component="span" sx={{ fontSize: '2.5rem', display: 'block', mb: 2 }}>
-                {feature.icon}
-              </Typography>
+              <Box
+                component="span"
+                aria-hidden="true"
+                sx={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: '12px',
+                  bgcolor: 'tint.brand',
+                  color: 'primary.main',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  mb: 2,
+                }}
+              >
+                <feature.Icon />
+              </Box>
               <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 1 }}>
                 {feature.title}
               </Typography>
@@ -169,7 +177,20 @@ export default function LandingPage() {
       </Container>
 
       {/* Footer */}
-      <Box sx={{ textAlign: 'center', py: 4 }}>
+      <Box
+        component="footer"
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 1.25,
+          px: 2,
+          py: 4,
+          borderTop: 1,
+          borderColor: 'divider',
+        }}
+      >
+        <BrandMark size={24} />
         <Typography variant="body2" color="text.secondary">
           {PRODUCT_NAME} — shared expenses, settled fairly.
         </Typography>

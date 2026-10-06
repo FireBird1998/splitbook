@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
@@ -8,8 +8,10 @@ import Typography from '@mui/material/Typography';
 import Stack from '@mui/material/Stack';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
+import Divider from '@mui/material/Divider';
 import GoogleIcon from '@mui/icons-material/Google';
-import BrandMark from '@/components/layout/BrandMark';
+import BrandLogo from '@/components/layout/BrandLogo';
+import { PRODUCT_NAME } from '@/lib/product';
 import type { AuthMode } from '@/lib/auth-mode';
 import { authClient, signInWithGoogle } from '@/lib/auth-client';
 import DemoPersonaPicker from '@/components/demo/DemoPersonaPicker';
@@ -90,31 +92,15 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
 
   if (loading) {
     return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          bgcolor: 'background.default',
-        }}
-      >
+      <JoinPage>
         <CircularProgress />
-      </Box>
+      </JoinPage>
     );
   }
 
   if (error && !group) {
     return (
-      <Box
-        sx={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          bgcolor: 'background.default',
-        }}
-      >
+      <JoinPage>
         <Stack spacing={2} alignItems="center">
           <Typography component="span" sx={{ fontSize: '3rem' }}>
             😕
@@ -127,32 +113,23 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
             Go Home
           </Button>
         </Stack>
-      </Box>
+      </JoinPage>
     );
   }
 
   return (
-    <Box
-      sx={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        bgcolor: 'background.default',
-      }}
-    >
+    <JoinPage>
       <Paper
         variant="outlined"
         sx={{
           textAlign: 'center',
           p: 4,
           borderRadius: '16px',
+          width: '100%',
           maxWidth: 384,
-          mx: 2,
         }}
       >
         <Stack spacing={3} alignItems="center">
-          <BrandMark size={44} fontSize={20} />
           <Box>
             <Typography color="text.secondary" sx={{ mb: 1 }}>
               You&apos;ve been invited to join:
@@ -196,8 +173,47 @@ export default function JoinGroupClient({ code, authMode }: JoinGroupClientProps
               {authMode === 'demo' ? 'Sign in to Join' : 'Sign in with Google to Join'}
             </Button>
           )}
+
+          <Box sx={{ width: '100%' }}>
+            <Divider sx={{ mb: 2 }} />
+            <Typography variant="body2" color="text.secondary">
+              {PRODUCT_NAME} keeps a shared record of what the Group spends and who owes whom.
+            </Typography>
+          </Box>
         </Stack>
       </Paper>
+    </JoinPage>
+  );
+}
+
+/** The invite page: the logo, linking home, above the centred content. */
+function JoinPage({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      sx={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        bgcolor: 'background.default',
+      }}
+    >
+      <Box component="header" sx={{ display: 'flex', px: { xs: 2, sm: 5 }, py: 2.5 }}>
+        <BrandLogo height={32} href="/" />
+      </Box>
+      <Box
+        component="main"
+        sx={{
+          flex: '1 1 auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          px: 2,
+          pt: 3,
+          pb: 7,
+        }}
+      >
+        {children}
+      </Box>
     </Box>
   );
 }

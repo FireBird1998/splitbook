@@ -10,8 +10,7 @@ import { DEMO_PERSONAS, type DemoPersonaKey } from '@/lib/demo-personas';
 import { authClient } from '@/lib/auth-client';
 import { resolveCallbackUrl } from '@/lib/auth/callback-url';
 import DemoModeBadge from '@/components/demo/DemoModeBadge';
-import BrandMark from '@/components/layout/BrandMark';
-import { PRODUCT_NAME } from '@/lib/product';
+import BrandLogo from '@/components/layout/BrandLogo';
 
 interface DemoPersonaPickerProps {
   callbackUrl?: string;
@@ -71,20 +70,7 @@ export default function DemoPersonaPicker({
         }}
       >
         <Stack alignItems="center" spacing={1.5} sx={{ textAlign: 'center', mb: 6 }}>
-          <Stack direction="row" alignItems="center" spacing={1.25}>
-            <BrandMark size={40} fontSize={18} />
-            <Typography
-              component="span"
-              sx={{
-                fontSize: '1.75rem',
-                fontWeight: 700,
-                letterSpacing: '-0.02em',
-                color: 'text.primary',
-              }}
-            >
-              {PRODUCT_NAME}
-            </Typography>
-          </Stack>
+          <BrandLogo height={40} />
           <DemoModeBadge />
           <Typography
             variant="h4"

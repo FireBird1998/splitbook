@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type TestInfo } from '@playwright/test';
 import {
   DEMO_GROUP_ID,
   enterAsPersona,
@@ -10,14 +10,34 @@ import {
 
 /**
  * Visual + accessibility matrix. Every project (desktop/mobile × light/dark)
- * renders persona entry, login, dashboard, trip workspace, and Settings;
- * axe-core rejects serious/critical findings, with screenshots for review.
+ * renders persona entry, login, the invite page, dashboard, trip workspace,
+ * and Settings; axe-core rejects serious/critical findings, with screenshots
+ * for review.
  */
+
+/** The brand kit's logo artwork for the project's theme (docs/design/brand). */
+function logoArtwork(testInfo: TestInfo): string {
+  return `/brand/logo-${expectedTheme(testInfo)}.svg`;
+}
 
 test('persona entry respects the project theme and is accessible', async ({ page }, testInfo) => {
   await page.goto('/');
 
-  await expect(page.getByText('Splitbook', { exact: true })).toBeVisible();
+  const logo = page.getByRole('img', { name: 'Splitbook', exact: true });
+  await expect(logo).toBeVisible();
+  await expect(logo).toHaveAttribute('src', logoArtwork(testInfo));
+  // Browser tabs show the brand favicon, not the Next.js default.
+  await expect(page.locator('link[rel="icon"][type="image/svg+xml"]')).toHaveAttribute(
+    'href',
+    '/brand/favicon.svg',
+  );
+  await expect(page.locator('link[rel="apple-touch-icon"]')).toHaveAttribute(
+    'href',
+    '/brand/icon-180.png',
+  );
+  const favicon = await page.request.get('/brand/favicon.svg');
+  expect(favicon.status()).toBe(200);
+  expect(favicon.headers()['content-type']).toContain('image/svg+xml');
 
   // Persona cards are keyboard-focusable buttons with accessible names.
   const alexCard = page.getByRole('button', { name: /Enter as Alex Rivera/ });
@@ -34,15 +54,51 @@ test('login respects the project theme and is accessible', async ({ page }, test
   await page.goto('/login');
   await expect(page.getByRole('heading', { name: 'Continue as a demo persona' })).toBeVisible();
   await expectThemeApplied(page, testInfo);
+  await expect(page.getByRole('img', { name: 'Splitbook', exact: true })).toHaveAttribute(
+    'src',
+    logoArtwork(testInfo),
+  );
   await expectNoSeriousA11yViolations(page, testInfo, 'login');
   await reviewScreenshot(page, testInfo, 'login');
+});
+
+test('the invite page respects the project theme and is accessible', async ({ page }, testInfo) => {
+  // A synthetic invite: the preview read is public, so only its answer is fixed here.
+  await page.route('**/api/join/synthetic-invite', (route) =>
+    route.fulfill({
+      json: {
+        data: { name: 'Synthetic Lakeview Flat', category: 'home', memberCount: 3 },
+        status: 200,
+      },
+    }),
+  );
+  await page.goto('/join/synthetic-invite');
+  await expect(page.getByText('Synthetic Lakeview Flat')).toBeVisible();
+  await expectThemeApplied(page, testInfo);
+
+  const home = page.getByRole('banner').getByRole('link', { name: 'Splitbook home' });
+  await expect(home).toHaveAttribute('href', '/');
+  await expect(home.getByRole('img')).toHaveAttribute('src', logoArtwork(testInfo));
+  // The card is the Group's own: its icon, name and member count, and no brand artwork.
+  const card = page.getByRole('main');
+  await expect(card.getByRole('img')).toHaveCount(0);
+  await expect(card.getByText('3 members')).toBeVisible();
+  await expect(card.getByRole('button', { name: 'Sign in to Join' })).toBeVisible();
+  await expect(
+    card.getByText('Splitbook keeps a shared record of what the Group spends and who owes whom.'),
+  ).toBeVisible();
+
+  await expectNoSeriousA11yViolations(page, testInfo, 'invite');
+  await reviewScreenshot(page, testInfo, 'invite');
 });
 
 test('dashboard respects the project theme and is accessible', async ({ page }, testInfo) => {
   await enterAsPersona(page, 'alex');
   await expectThemeApplied(page, testInfo);
 
-  await expect(page.getByText('Splitbook', { exact: true })).toBeVisible();
+  const home = page.getByRole('link', { name: 'Splitbook home' });
+  await expect(home).toHaveAttribute('href', '/dashboard');
+  await expect(home.getByRole('img')).toHaveAttribute('src', logoArtwork(testInfo));
   await expect(page.getByText('Current balance')).toBeVisible();
   await expect(page.getByText('Next best action')).toBeVisible();
 
