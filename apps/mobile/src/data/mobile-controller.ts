@@ -25,7 +25,7 @@ import {
   assertSettlementAuthorization,
   assertGroupCurrency,
 } from '@splitbook/shared/expense-validation';
-import { canEditExpense, parseExpenseRecord } from './expense-record';
+import { canEditExpense, parseExpenseRecord, type ExpenseRecord } from './expense-record';
 import {
   parseAmountMinor,
   MoneyValidationError,
@@ -47,12 +47,15 @@ import {
   refusedRetryNotice,
   rebaseExpenseDraft,
   sameExpenseDraft,
+  savedAsSent,
   validateExpenseDraft,
   visibleExpenseErrors,
   type ExpenseContext,
   type ExpenseDraft,
+  type ExpenseDraftStore,
   type ExpenseEditor,
   type ExpenseField,
+  type ExpenseMutation,
   type ExpenseValidation,
 } from './expense-draft';
 import { decodeStoredSession, encodeStoredSession } from './cookies';
@@ -3535,13 +3538,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const ledgerSnackbar = (
     groupId: string,
     message: string,
-    context: ExpenseContext,
+    context: ExpenseContext | null,
     date?: string,
   ): GroupSnackbar => {
     const origin =
       snapshot.expense.returnTo?.groupId === groupId ? snapshot.expense.returnTo : null;
+    // A Group not yet read here offers no other Month.
     const shown =
-      context.group.category !== 'home'
+      context?.group.category !== 'home'
         ? null
         : origin
           ? origin.month
@@ -3633,12 +3637,77 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({ ...snapshot, expense: { ...editor, status: 'editing' } });
   };
 
+  /**
+   * An edit or delete is confirmed: its answer arrived, or the saved Expense shows it. Its stored
+   * change leaves this device, only while the device still holds that same change.
+   */
+  const forgetConfirmedChange = (
+    lease: AccountStorageLease,
+    storage: ExpenseDraftStore,
+    groupId: string,
+    expenseId: string,
+    mutation: ExpenseMutation,
+  ) =>
+    lease.write(async () => {
+      const value = await storage.load(lease.accountId, groupId);
+      if (value === null) return;
+      const stored = parseStoredExpenseDraft(value, lease.accountId, groupId);
+      if (
+        stored.draft.original?._id === expenseId &&
+        stored.mutation?.kind === mutation.kind &&
+        stored.mutation.revision === mutation.revision &&
+        stored.mutation.body === mutation.body
+      )
+        await storage.remove(lease.accountId, groupId);
+    });
+  /** The form shows a confirmed edit or delete saved, then returns to its Group, which says so. */
+  const showConfirmedChange = (
+    groupId: string,
+    kind: ExpenseMutation['kind'],
+    draft: ExpenseDraft,
+    original: ExpenseRecord,
+    context: ExpenseContext | null,
+  ) => {
+    publish({
+      ...snapshot,
+      expense: {
+        ...snapshot.expense,
+        draft: null,
+        preview: null,
+        mutation: null,
+        status: 'saved',
+        receiptId: original._id,
+        message: kind === 'delete' ? 'Expense deleted.' : 'Expense updated.',
+      },
+    });
+    returnToGroup(
+      groupId,
+      kind === 'delete'
+        ? ledgerSnackbar(groupId, `Expense deleted · ${original.description}`, context)
+        : ledgerSnackbar(
+            groupId,
+            `Expense updated · ${draft.description.trim()}`,
+            context,
+            draft.date,
+          ),
+    );
+  };
+
+  /**
+   * Check the saved Expense for an edit or delete that may not have been recorded. When it shows
+   * the member's own change, whose answer was lost, the change finishes as if the answer had
+   * arrived. Otherwise the member compares the versions, or the draft stays blocked. Checking only
+   * reads: nothing is sent again.
+   */
   const reconcileExpense = async () => {
     const editor = snapshot.expense;
+    const { draft, groupId, mutation } = editor;
+    const original = draft?.original;
     if (
       snapshot.screen !== 'expense' ||
-      !editor.draft?.original ||
-      !editor.groupId ||
+      !draft ||
+      !original ||
+      !groupId ||
       editor.status === 'saving'
     )
       return;
@@ -3647,11 +3716,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({ ...snapshot, expense: { ...editor, status: 'loading', latest: null } });
     try {
       const latest = parseExpenseRecord(
-        await request(`/api/groups/${editor.groupId}/expenses/${editor.draft.original._id}`, owner),
-        editor.groupId,
-        editor.draft.original._id,
+        await request(`/api/groups/${groupId}/expenses/${original._id}`, owner),
+        groupId,
+        original._id,
       );
       if (!current(owner) || view !== viewRequest) return;
+      if (mutation && savedAsSent(mutation, latest)) {
+        const lease = accountStorage(),
+          storage = dependencies.expenseDrafts;
+        if (!lease || !storage) throw new Error('Draft storage is unavailable.');
+        await forgetConfirmedChange(lease, storage, groupId, original._id, mutation);
+        if (!current(owner)) return;
+        if (view === viewRequest)
+          showConfirmedChange(groupId, mutation.kind, draft, original, snapshot.expense.context);
+        await refreshLedgerViews(groupId, owner, view === viewRequest);
+        return;
+      }
       publish({
         ...snapshot,
         expense: {
@@ -3866,44 +3946,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         );
         if (!deleted.isDeleted) throw new Error('Could not confirm deletion.');
       }
-      await lease.write(async () => {
-        const value = await storage.load(lease.accountId, groupId);
-        if (value === null) return;
-        const stored = parseStoredExpenseDraft(value, lease.accountId, groupId);
-        if (
-          stored.draft.original?._id === original._id &&
-          stored.mutation?.kind === mutation!.kind &&
-          stored.mutation.revision === mutation!.revision &&
-          stored.mutation.body === mutation!.body
-        )
-          await storage.remove(lease.accountId, groupId);
-      });
+      await forgetConfirmedChange(lease, storage, groupId, original._id, mutation);
       completed = true;
       if (!current(owner) || view !== viewRequest) return;
-      publish({
-        ...snapshot,
-        expense: {
-          ...snapshot.expense,
-          draft: null,
-          preview: null,
-          mutation: null,
-          status: 'saved',
-          receiptId: original._id,
-          message: kind === 'delete' ? 'Expense deleted.' : 'Expense updated.',
-        },
-      });
       refreshed = true;
-      returnToGroup(
-        groupId,
-        kind === 'delete'
-          ? ledgerSnackbar(groupId, `Expense deleted · ${original.description}`, context)
-          : ledgerSnackbar(
-              groupId,
-              `Expense updated · ${draft.description.trim()}`,
-              context,
-              draft.date,
-            ),
-      );
+      showConfirmedChange(groupId, kind, draft, original, context);
       await refreshLedgerViews(groupId, owner, true);
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;

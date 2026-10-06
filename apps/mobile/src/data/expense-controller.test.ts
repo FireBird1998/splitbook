@@ -182,7 +182,7 @@ const savedExpense = {
 };
 
 describe('native Expense creation and editing', () => {
-  it('recovers a deleted historical Expense with missing member identities after restart', async () => {
+  it('confirms a lost delete of a historical Expense with missing member identities after restart', async () => {
     let deleted = false,
       offline = false,
       writes = 0;
@@ -219,8 +219,12 @@ describe('native Expense creation and editing', () => {
     expect(restarted.getSnapshot().expense.status).toBe('resume');
     restarted.resumeExpenseDraft();
     await restarted.reconcileExpense();
-    expect(restarted.getSnapshot().expense.latest?.isDeleted).toBe(true);
-    await restarted.acceptCurrentExpense();
+    // The saved Expense reads deleted: the member's own delete, confirmed as if its reply came.
+    expect(restarted.getSnapshot()).toMatchObject({
+      screen: 'group',
+      expense: { status: 'saved', mutation: null, draft: null, message: 'Expense deleted.' },
+      snackbar: { message: 'Expense deleted · Original dinner' },
+    });
     expect(records.size).toBe(0);
     expect(writes).toBe(1);
   });
@@ -275,7 +279,7 @@ describe('native Expense creation and editing', () => {
   });
 
   it.each(['edit', 'delete'] as const)(
-    'reads the current record after a lost %s response and never repeats the mutation on restart',
+    'confirms a lost %s response as the member’s own when checked after a restart, and never repeats it',
     async (kind) => {
       let changed = false,
         offline = false,
@@ -320,17 +324,57 @@ describe('native Expense creation and editing', () => {
       restarted.resumeExpenseDraft();
       await restarted.refresh();
       expect(writes).toBe(1);
+      // Revision 3 + 1, holding the description sent, or deleted: the member's own change.
       await restarted.reconcileExpense();
+      expect(restarted.getSnapshot()).toMatchObject({
+        screen: 'group',
+        expense: {
+          status: 'saved',
+          mutation: null,
+          draft: null,
+          message: kind === 'delete' ? 'Expense deleted.' : 'Expense updated.',
+        },
+        snackbar: {
+          message:
+            kind === 'delete'
+              ? 'Expense deleted · Original dinner'
+              : 'Expense updated · Saved correction',
+        },
+      });
+      expect(records.size).toBe(0);
       await restarted.saveExpense();
       await restarted.deleteExpense();
       expect(writes).toBe(1);
-      expect(restarted.getSnapshot().expense.latest?.revision).toBe(4);
-      expect(restarted.getSnapshot().expense.status).toBe(
-        kind === 'delete' ? 'blocked' : 'conflict',
-      );
-      await restarted.acceptCurrentExpense();
-      expect(records.size).toBe(0);
-      expect(restarted.getSnapshot().expense.status).toBe('detail');
+    },
+  );
+
+  it.each([403, 404])(
+    'keeps today’s blocked state when the check after a lost edit answer is refused with %s',
+    async (status) => {
+      let committed = false,
+        writes = 0;
+      const { controller } = setup((path, init) => {
+        if (!path.endsWith(`/${expenseId}`)) return;
+        if (init.method === 'PATCH') {
+          writes++;
+          committed = true;
+          return Promise.reject(new Error('Committed response lost'));
+        }
+        // The edit committed at revision 3 + 1 with the description sent, but this read is refused.
+        if (committed) return Promise.resolve(json({ status, error: 'Unavailable' }, status));
+        return Promise.resolve(json({ status: 200, data: savedExpense }));
+      });
+      await controller.signIn('alex');
+      await controller.openExpense(groupId, expenseId);
+      await controller.editExpense();
+      await controller.updateExpenseDraft({ description: 'Saved correction' });
+      await controller.saveExpense();
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'blocked',
+        mutation: { kind: 'edit', revision: 3 },
+        message: expect.stringContaining('This Expense is unavailable'),
+      });
+      expect(writes).toBe(1);
     },
   );
 

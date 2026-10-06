@@ -50,17 +50,20 @@ interface Held {
 /**
  * A fictional ledger with the backend's recovery rules: a create commits before its
  * response can be lost, a repeated submission key returns the Expense it already created,
- * and an edit must carry the current revision.
+ * and an edit or a delete must carry the current revision, which each one it applies bumps once.
  */
 function ledger() {
   const requests: { method: string; path: string; key: string | null; body: string }[] = [];
   const records = new Map<string, Record<string, unknown>>();
   const created = new Map<string, string>();
   const drafts = new Map<string, unknown>();
+  /** What the ledger answered each edit and delete it received, delivered or not. */
+  const answers: string[] = [];
   let cookie: string | null = null;
   let account: string | null = null;
   let cleanup = false;
   let loseResponses = 0;
+  let writeFault: 'request' | 'reply' | 'resend' | null = null;
   let failPage: number | null = null;
   let nextId = 2;
   const holds: { match: (method: string, path: string) => boolean; wait: Promise<void> }[] = [];
@@ -164,6 +167,7 @@ function ledger() {
         .filter(
           (row) =>
             row.group === target._id &&
+            !row.isDeleted &&
             (month === 'all' || String(row.date) >= getLocalMonthIsoRange(month).dateFrom) &&
             (month === 'all' || String(row.date) <= getLocalMonthIsoRange(month).dateTo),
         )
@@ -198,6 +202,10 @@ function ledger() {
         Object.entries(patch).map(([field, value]) => [field, { old: record[field], new: value }]),
       );
       Object.assign(record, patch, {
+        // Money is kept in minor units too, as the ledger keeps it.
+        ...('amount' in patch ? { amountMinor: Math.round(Number(patch.amount) * 100) } : {}),
+        ...('paidBy' in patch ? { paidBy: minor(patch.paidBy) } : {}),
+        ...('splitBetween' in patch ? { splitBetween: minor(patch.splitBetween) } : {}),
         revision: Number(record.revision) + 1,
         editHistory: [
           ...(record.editHistory as unknown[]),
@@ -209,7 +217,26 @@ function ledger() {
         throw new Error('The response was lost after the server committed the edit');
       }
     }
+    if (method === 'DELETE') {
+      if (new Headers(init.headers).get('X-Splitbook-Revision') !== String(record.revision))
+        return json({ code: 'STALE_REVISION', status: 409 }, 409);
+      // A soft delete: the record stays readable, marked deleted.
+      if (!record.isDeleted)
+        Object.assign(record, {
+          isDeleted: true,
+          deletedAt: iso,
+          revision: Number(record.revision) + 1,
+        });
+      return json({ status: 200, data: { message: 'Expense deleted', revision: record.revision } });
+    }
     return json({ status: 200, data: populated(record) });
+  };
+
+  /** An edit or a delete, as the ledger answers it, noted whether or not the answer arrives. */
+  const answer = async (method: string, path: string, init: RequestInit) => {
+    const response = await respond(method, path, init);
+    answers.push(`${method} ${response.status}`);
+    return response;
   };
 
   const fetch: MobileFetch = async (url, init) => {
@@ -226,7 +253,16 @@ function ledger() {
       holds.splice(holds.indexOf(held), 1);
       await held.wait;
     }
-    return respond(method, pathname + search, init);
+    if (method !== 'PATCH' && method !== 'DELETE') return respond(method, pathname + search, init);
+    const fault = writeFault;
+    writeFault = null;
+    if (fault === 'request') throw new Error('The connection dropped before the request arrived');
+    const first = await answer(method, pathname + search, init);
+    if (fault === 'reply') throw new Error('The connection dropped the answer');
+    // Android's OkHttp sends the identical request again when a pooled connection drops its
+    // answer. The ledger applies the first; only the second's answer reaches the app.
+    if (fault === 'resend') return answer(method, pathname + search, init);
+    return first;
   };
 
   const create = (now = Date.parse(iso)) =>
@@ -334,6 +370,15 @@ function ledger() {
         .map((request) => Number(new URL(request.path, 'http://local').searchParams.get('page'))),
     loseNextResponse: () => {
       loseResponses += 1;
+    },
+    answers,
+    /**
+     * The next edit or delete never arrives (`request`), arrives but its answer is lost
+     * (`reply`), or is sent twice by the transport with only the second answer arriving
+     * (`resend`). The app calls fetch once either way.
+     */
+    faultNextWrite: (fault: 'request' | 'reply' | 'resend') => {
+      writeFault = fault;
     },
     /** Hold the next matching request until released. */
     hold(method: string, route: RegExp): Held {
@@ -893,6 +938,213 @@ describe('Draft and save recovery', () => {
       financial: { month: '2026-08' },
       restoreScroll: { y: 30 },
     });
+  });
+});
+
+describe('An edit or delete whose answer was lost (#232)', () => {
+  const recordPath = new RegExp(`/expenses/${expenseId}$`);
+  const sent = (server: ReturnType<typeof ledger>) =>
+    server.writes().map(({ method, path }) => `${method} ${path}`);
+  const ledgerWrite = (method: string) =>
+    `${method} /api/groups/${householdId}/expenses/${expenseId}`;
+  /** Alex edits the amount to 45 and splits it with Sam only. */
+  const editMoney = async (controller: ReturnType<typeof createMobileController>) => {
+    await controller.openGroup(householdId);
+    await controller.openExpense(householdId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({
+      amount: '45',
+      participantIds: [people[0].id, people[1].id],
+    });
+  };
+
+  it.each(['reply', 'resend'] as const)(
+    'confirms the member’s own edit after a lost answer (%s), from one PATCH and one edit',
+    async (fault) => {
+      const server = ledger();
+      const { controller } = await signedIn(server);
+      await controller.openGroup(householdId);
+      await controller.selectMonth('2026-08');
+      await controller.openExpense(householdId, expenseId, { scrollY: 75 });
+      await controller.editExpense();
+      await controller.updateExpenseDraft({ description: 'Electricity bill' });
+      server.faultNextWrite(fault);
+      await controller.saveExpense();
+
+      // The app sent it once. A resend reached the ledger twice; it applied the first only.
+      expect(sent(server)).toEqual([ledgerWrite('PATCH')]);
+      expect(server.answers).toEqual(
+        fault === 'resend' ? ['PATCH 200', 'PATCH 409'] : ['PATCH 200'],
+      );
+      expect(server.records.get(expenseId)).toMatchObject({
+        description: 'Electricity bill',
+        revision: 1,
+        editHistory: [expect.anything()],
+      });
+      // Finished as if the answer had arrived: nothing is left to check or send.
+      expect(server.drafts.size).toBe(0);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        financial: { month: '2026-08' },
+        restoreScroll: { y: 75 },
+        expense: { status: 'saved', mutation: null, draft: null, message: 'Expense updated.' },
+        snackbar: { message: 'Expense updated · Electricity bill', viewMonth: null },
+      });
+      // The Group's Expenses were read again and show the change.
+      expect(
+        controller.getSnapshot().financial.expenses.data.map((row) => row.description),
+      ).toEqual(['Electricity bill']);
+    },
+  );
+
+  it.each(['reply', 'resend'] as const)(
+    'confirms the member’s own delete after a lost answer (%s), from one DELETE',
+    async (fault) => {
+      const server = ledger();
+      const { controller } = await signedIn(server);
+      await controller.openGroup(householdId);
+      await controller.selectMonth('2026-08');
+      await controller.openExpense(householdId, expenseId);
+      controller.reviewExpenseDeletion();
+      server.faultNextWrite(fault);
+      await controller.deleteExpense();
+
+      expect(sent(server)).toEqual([ledgerWrite('DELETE')]);
+      expect(server.answers).toEqual(
+        fault === 'resend' ? ['DELETE 200', 'DELETE 409'] : ['DELETE 200'],
+      );
+      expect(server.records.get(expenseId)).toMatchObject({ isDeleted: true, revision: 1 });
+      expect(server.drafts.size).toBe(0);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        financial: { month: '2026-08' },
+        expense: { status: 'saved', mutation: null, draft: null, message: 'Expense deleted.' },
+        snackbar: { message: 'Expense deleted · Electricity' },
+      });
+      expect(controller.getSnapshot().financial.expenses.data).toEqual([]);
+    },
+  );
+
+  it('confirms a lost answer to an edit of the amount and the split when the saved values match', async () => {
+    const server = ledger();
+    const { controller } = await signedIn(server);
+    await editMoney(controller);
+    server.faultNextWrite('reply');
+    await controller.saveExpense();
+
+    expect(sent(server)).toEqual([ledgerWrite('PATCH')]);
+    expect(JSON.parse(server.writes()[0].body)).toMatchObject({
+      amount: 45,
+      paidBy: [{ user: people[0].id, amount: 45 }],
+      splitBetween: [
+        { user: people[0].id, amount: 22.5 },
+        { user: people[1].id, amount: 22.5 },
+      ],
+    });
+    expect(server.records.get(expenseId)).toMatchObject({ amountMinor: 4500, revision: 1 });
+    expect(server.drafts.size).toBe(0);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      expense: { status: 'saved', mutation: null, message: 'Expense updated.' },
+      snackbar: { message: 'Expense updated · Electricity' },
+    });
+  });
+
+  it.each([
+    [
+      'amount',
+      {
+        amount: 50,
+        amountMinor: 5000,
+        paidBy: [{ user: people[0].id, amount: 50, amountMinor: 5000 }],
+        splitBetween: [people[0], people[1]].map(({ id }) => ({
+          user: id,
+          amount: 25,
+          amountMinor: 2500,
+        })),
+      },
+    ],
+    [
+      'split',
+      {
+        amount: 45,
+        amountMinor: 4500,
+        paidBy: [{ user: people[0].id, amount: 45, amountMinor: 4500 }],
+        splitBetween: people.map(({ id }) => ({ user: id, amount: 15, amountMinor: 1500 })),
+      },
+    ],
+  ])(
+    'keeps a conflict when another member saved a different %s at the next revision',
+    async (_field, theirs) => {
+      const server = ledger();
+      const { controller } = await signedIn(server);
+      await editMoney(controller);
+      // Sam saved first, at revision 0 + 1. Alex's edit is refused as stale, and that answer is lost.
+      Object.assign(server.records.get(expenseId)!, theirs, { revision: 1 });
+      server.faultNextWrite('reply');
+      await controller.saveExpense();
+
+      expect(sent(server)).toEqual([ledgerWrite('PATCH')]);
+      expect(server.answers).toEqual(['PATCH 409']);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'expense',
+        expense: {
+          status: 'conflict',
+          latest: { revision: 1, amountMinor: theirs.amountMinor },
+          mutation: { kind: 'edit', revision: 0 },
+          message: expect.stringContaining('Compare your version with the saved one'),
+        },
+      });
+      expect([...server.drafts.values()]).toEqual([
+        expect.objectContaining({
+          mutation: expect.objectContaining({ kind: 'edit', revision: 0 }),
+        }),
+      ]);
+    },
+  );
+
+  it('keeps a conflict when the saved Expense is more than one revision on, even holding what was sent', async () => {
+    const server = ledger();
+    const { controller } = await signedIn(server);
+    await controller.openGroup(householdId);
+    await controller.openExpense(householdId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Electricity bill' });
+    server.faultNextWrite('reply');
+    const check = server.hold('GET', recordPath);
+    const saving = controller.saveExpense();
+    await check.reached;
+    // Sam saves a note before the check reads the Expense: revision 0 + 2.
+    Object.assign(server.records.get(expenseId)!, { notes: 'Meter read on the 20th', revision: 2 });
+    check.release();
+    await saving;
+
+    expect(sent(server)).toEqual([ledgerWrite('PATCH')]);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'conflict',
+      latest: { revision: 2, description: 'Electricity bill' },
+      mutation: { kind: 'edit', revision: 0 },
+    });
+    expect(server.drafts.size).toBe(1);
+  });
+
+  it('keeps a delete for review when the Expense still exists', async () => {
+    const server = ledger();
+    const { controller } = await signedIn(server);
+    await controller.openGroup(householdId);
+    await controller.openExpense(householdId, expenseId);
+    controller.reviewExpenseDeletion();
+    server.faultNextWrite('request');
+    await controller.deleteExpense();
+
+    expect(sent(server)).toEqual([ledgerWrite('DELETE')]);
+    expect(server.answers).toEqual([]);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'conflict',
+      latest: { isDeleted: false, revision: 0 },
+      mutation: { kind: 'delete', revision: 0 },
+    });
+    expect(server.drafts.size).toBe(1);
   });
 });
 
