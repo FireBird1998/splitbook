@@ -778,19 +778,32 @@ describe('compact Expense record, opening', () => {
     requestedExpenseId: ids.dinner,
   });
 
-  it.each([1, 1.3])(
-    'its summary takes the place of the skeleton’s at the same height, at %s× text',
-    async (fontScale) => {
-      setWindow({ fontScale });
+  // The amount and its badge share a wrapping row: on a 360dp phone this one's don't fit on one
+  // line even at 100% text, on a 412dp phone they do until 130%. The skeleton stacks to match.
+  it.each([
+    [360, 1, 'wraps'],
+    [360, 1.3, 'wraps'],
+    [412, 1, 'fits'],
+    [412, 1.3, 'wraps'],
+  ] as const)(
+    'its summary takes the place of the skeleton’s at the same height, %sdp wide at %s× text (%s)',
+    async (width, fontScale, row) => {
+      setWindow({ width, fontScale });
+      // The card's width: the screen less the scrolling content's 16 each side.
+      const card = width - 32;
       await act(async () => {
         screen = create(opening);
       });
-      const skeleton = layoutHeight(summaryCard(), fontScale);
+      const skeleton = layoutHeight(summaryCard(), fontScale, card);
       act(() => screen?.unmount());
       await render(open(ids.dinner));
       expect(text(screen!.root)).toContain('Sunday dinner');
+      // The fixture's amount and badge do wrap where the case says, so the comparison means it.
+      expect(layoutHeight(summaryCard(), fontScale, card) - layoutHeight(summaryCard(), fontScale))[
+        row === 'wraps' ? 'toBeGreaterThan' : 'toBe'
+      ](0);
       expect(skeleton).toBeGreaterThan(100);
-      expect(layoutHeight(summaryCard(), fontScale)).toBe(skeleton);
+      expect(layoutHeight(summaryCard(), fontScale, card)).toBe(skeleton);
     },
   );
 

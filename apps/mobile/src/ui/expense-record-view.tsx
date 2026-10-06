@@ -393,6 +393,9 @@ export function ExpenseRecordSkeleton({ label }: { label: string }) {
   const { width } = useWindowDimensions();
   // As Who owes what decides: amounts sit under each name at large text or on a narrow screen.
   const stacked = large || width < 360;
+  // The amount and its badge share a row that wraps: a typical pair, about 300dp, needs about a
+  // 370dp screen at 100% text, and none fits at large text. The badge moves down where they would.
+  const wraps = large || width < 380;
   const badge = useLineBox('caption').height + 6;
   return (
     <View
@@ -415,8 +418,8 @@ export function ExpenseRecordSkeleton({ label }: { label: string }) {
         </View>
         <View
           style={{
-            flexDirection: 'row',
-            alignItems: 'center',
+            flexDirection: wraps ? 'column' : 'row',
+            alignItems: wraps ? 'flex-start' : 'center',
             justifyContent: 'space-between',
             gap: 8,
             marginTop: 12,
