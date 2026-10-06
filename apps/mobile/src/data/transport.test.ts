@@ -113,13 +113,10 @@ describe('a caller’s own cancel', () => {
     expect(t.started).toEqual([]);
   });
 
-  it.each([
-    ['headers', true],
-    // #231: a timeout after the headers counts as can't reach the server too.
-    ['body', true],
-  ] as const)(
-    'keeps today’s timeout while waiting for the %s, even when the caller aborts after it',
-    async (stage, networkFailure) => {
+  // #231: a timeout after the headers counts as can't reach the server too.
+  it.each(['headers', 'body'] as const)(
+    'times out as can’t reach the server while waiting for the %s, even when the caller aborts after it',
+    async (stage) => {
       const t = setup((init) => hangUntilAborted(init, stage));
       const caller = new AbortController();
       const error = caught(t.request(`/api/groups/${groupId}`, 1, { signal: caller.signal }));
@@ -132,7 +129,7 @@ describe('a caller’s own cancel', () => {
         message: unreachable,
         status: 0,
         code: null,
-        networkFailure,
+        networkFailure: true,
       });
     },
   );
@@ -175,6 +172,44 @@ describe('a caller’s own cancel', () => {
     expect(await within(error)).toMatchObject({ kind: 'cancelled', networkFailure: false });
     expect(t.sent).toHaveLength(1);
   });
+
+  it.each([
+    [500, `/api/groups/${groupId}/expenses`, []],
+    // Its code is in the body the caller cancelled, so it is never read.
+    [503, `/api/groups/${groupId}/expenses`, []],
+    [429, `/api/groups/${groupId}/expenses`, []],
+    // The headers already said denied, so the Group is still purged first.
+    [403, `/api/groups/${groupId}/expenses`, [`denied: ${groupId} 403`]],
+  ])(
+    'ends a %i as cancelled when the caller aborts while its body is read',
+    async (status, path, hooks) => {
+      let reading = false;
+      const t = setup((init) =>
+        hangUntilAborted(init, 'body', status).then((response) => ({
+          ...response,
+          json: () => {
+            reading = true;
+            return response.json();
+          },
+        })),
+      );
+      const caller = new AbortController();
+      const error = caught(t.request(path, 1, { signal: caller.signal }));
+      await vi.waitFor(() => expect(reading).toBe(true));
+      caller.abort();
+      const cancelled = await within(error);
+      expect(cancelled).toBeInstanceOf(RequestError);
+      expect(cancelled).toMatchObject({
+        kind: 'cancelled',
+        networkFailure: false,
+        status: 0,
+        code: null,
+        serverMessage: null,
+      });
+      expect(t.hooks).toEqual(hooks);
+      expect(t.sent).toHaveLength(1);
+    },
+  );
 });
 
 describe('failure kinds (#208)', () => {

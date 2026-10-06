@@ -320,11 +320,12 @@ export function createTransport({
           typeof details.error === 'string'
             ? details.error
             : null;
+        // The caller cancelled while the body was read. A denial has already been purged above;
+        // only the error the caller gets is its own.
+        if (aborted === 'caller') throw cancelled();
         // SplitBook's own errors carry a code, so a gateway answered: SplitBook wasn't reached.
-        if (gatewayStatuses.includes(response.status) && code === null) {
-          if (aborted === 'caller') throw cancelled();
+        if (gatewayStatuses.includes(response.status) && code === null)
           throw unreachable(aborted === 'timeout' ? 'timeout' : 'network');
-        }
         throw new RequestError(message, response.status, code, false, serverMessage);
       }
       reading = true;

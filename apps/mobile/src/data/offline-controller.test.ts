@@ -752,7 +752,7 @@ describe('account-scoped offline financial views', () => {
       verifiedEarlier(f);
       fail(f);
       const before = f.requests().length;
-      await controller.refresh();
+      await controller.refresh('retry');
       return { snapshot: controller.getSnapshot(), sent: f.requests().slice(before) };
     }
 
