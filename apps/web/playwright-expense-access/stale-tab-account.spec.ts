@@ -100,11 +100,16 @@ async function giveSamDistinctFigures(ledger: Ledger): Promise<Marker[]> {
     (await dataOf(await actor.get('/api/user/balances'))).buckets;
   const samRupees = (await buckets(ledger.sam)).find((bucket) => bucket.currency === 'INR')!;
   const samTotals = [money(samRupees.youOwe), money(samRupees.youAreOwed)];
-  const alexTotals = (await buckets(ledger.alex)).flatMap((bucket) => [
+  // Every figure Alex's balances card shows (You owe, Owed to you and Net, #306). The watch
+  // below matches text inside the card, so none of them may even contain one of Sam's.
+  const alexFigures = (await buckets(ledger.alex)).flatMap((bucket) => [
     money(bucket.youOwe),
     money(bucket.youAreOwed),
+    money(Math.abs(bucket.youAreOwed - bucket.youOwe)),
   ]);
-  expect(alexTotals.filter((total) => samTotals.includes(total))).toEqual([]);
+  expect(alexFigures.filter((figure) => samTotals.some((total) => figure.includes(total)))).toEqual(
+    [],
+  );
   const invitedTo = async (actor: Ledger['alex']) =>
     (await dataOf(await actor.get('/api/invitations'))).map(
       (invitation: { group: { name: string } }) => invitation.group.name,
@@ -112,12 +117,13 @@ async function giveSamDistinctFigures(ledger: Ledger): Promise<Marker[]> {
   expect(await invitedTo(ledger.sam)).toContain(INVITATION_GROUP);
   expect(await invitedTo(ledger.alex)).not.toContain(INVITATION_GROUP);
 
-  const totals = 'section[aria-labelledby="current-balance-heading"]';
+  const totals = 'section[aria-labelledby="home-balances-heading"]';
   const sharedGroupCard = `.MuiPaper-root:has(a[href="/groups/${ledger.groupA}"])`;
   return [
     ...samTotals.map((text) => ({ within: totals, text })),
     { within: sharedGroupCard, text: money(633.33) }, // Sam's balance in the Group they share
-    { within: 'body', text: 'Settle with Priya' }, // Sam's next action (Alex's is to pay Sam)
+    // Sam's suggested payment to Priya in Needs you: Record opens a Group Alex isn't in.
+    { within: `a[href="/groups/${ledger.groupB}?tab=balances"]` },
     { within: 'body', text: INVITATION_GROUP }, // Sam's invitation
     { within: `a[href="/groups/${ledger.groupB}"]` }, // a Group only Sam belongs to
   ];
@@ -263,11 +269,29 @@ async function expectSessionFor(page: Page, userId: string) {
   expect(session?.user?.id).toBe(userId);
 }
 
-async function expectAlexDashboard(page: Page) {
-  await expect(page.getByRole('heading', { level: 1, name: /, Alex$/ })).toBeVisible();
+/**
+ * Home, rendered for this account: the page's heading, and the signed-in account at the foot of
+ * the sidebar, which the server renders with the page.
+ */
+async function expectHomeFor(page: Page, name: 'Alex Rivera' | 'Sam Chen') {
+  await expect(page.getByRole('heading', { level: 1, name: 'Home', exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('complementary', { name: 'Splitbook' })
+      .getByRole('button', { name: `${name}, account menu`, exact: true }),
+  ).toBeVisible();
+}
+
+async function expectAlexDashboard(page: Page, ledger: Ledger) {
+  await expectHomeFor(page, 'Alex Rivera');
   await expect(page.getByText('Alex Rivera', { exact: true }).first()).toBeVisible();
-  // Alex's own figures have loaded: his next action is to pay Sam.
-  await expect(page.getByText('Settle with Sam Chen', { exact: true })).toBeVisible();
+  // Alex's own figures have loaded: Needs you has his payment to Sam in the Group they share.
+  // (The Group's card links to its Balances too, so the link is found inside Needs you.)
+  await expect(
+    page
+      .getByRole('region', { name: 'Needs you' })
+      .locator(`a[href="/groups/${ledger.groupA}?tab=balances"]`),
+  ).toHaveAccessibleName(/^Record payment: You pay Sam Chen, ₹300\.00, in /);
 }
 
 async function waitForReload(api: ApiRecord, lastAlexDocument: number) {
@@ -315,7 +339,7 @@ async function staleSignIn(page: Page, ledger: Ledger, options?: { passDuplicate
   await page.goto(appURL('/'));
   await enterAs(page, 'Alex Rivera');
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expectAlexDashboard(page);
+  await expectAlexDashboard(page, ledger);
   return {
     api,
     samOnly,
@@ -335,19 +359,19 @@ test('sign-out path: a hidden Alex tab never shows Sam’s figures and ends on a
   await page.goto(appURL('/'));
   await enterAs(page, 'Alex Rivera');
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expectAlexDashboard(page);
+  await expectAlexDashboard(page, ledger);
   const lastAlexDocument = api.document;
   const rendered = await watchCurrentDocument(page, samOnly);
 
   const other = await page.context().newPage();
   await other.goto(appURL('/dashboard'));
-  await expectAlexDashboard(other);
+  await expectAlexDashboard(other, ledger);
   await setVisibility(page, 'hidden');
   await other.getByRole('button', { name: 'Account menu' }).click();
   await other.getByRole('menuitem', { name: 'Sign Out' }).click();
   await expect(other).toHaveURL(appURL('/'));
   await enterAs(other, 'Sam Chen');
-  await expect(other.getByRole('heading', { level: 1, name: /, Sam$/ })).toBeVisible();
+  await expectHomeFor(other, 'Sam Chen');
   await expectSamFigures(other, samOnly);
 
   // Show tab 1 again, unless the sign-out broadcast has already reloaded it.
@@ -360,7 +384,7 @@ test('sign-out path: a hidden Alex tab never shows Sam’s figures and ends on a
     expect(await page.evaluate(() => '__renderedForAlex' in window)).toBe(false);
   } else {
     await expect(page).toHaveURL(/\/dashboard$/);
-    await expect(page.getByRole('heading', { level: 1, name: /, Sam$/ })).toBeVisible();
+    await expectHomeFor(page, 'Sam Chen');
     await expectFreshPageForSam(page);
   }
   expect(rendered).toEqual([]);
@@ -381,7 +405,7 @@ test('stale sign-in path, hidden tab: shown again, it reloads for Sam without sh
   await setVisibility(page, 'visible');
   await waitForReload(api, lastAlexDocument);
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByRole('heading', { level: 1, name: /, Sam$/ })).toBeVisible();
+  await expectHomeFor(page, 'Sam Chen');
   await expectFreshPageForSam(page);
   await expectSamFigures(page, samOnly);
   expect(rendered).toEqual([]);
@@ -404,7 +428,7 @@ test('stale sign-in path, visible tab: the next poll is answered 419 ACCOUNT_CHA
   for (const answer of accountChangedAnswers(api, lastAlexDocument))
     expect(answer).toMatchObject({ method: 'GET', code: 'ACCOUNT_CHANGED', data: false });
   await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByRole('heading', { level: 1, name: /, Sam$/ })).toBeVisible();
+  await expectHomeFor(page, 'Sam Chen');
   await expectFreshPageForSam(page);
   await expectSamFigures(page, samOnly);
   expect(rendered).toEqual([]);

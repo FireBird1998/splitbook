@@ -80,8 +80,12 @@ test.describe('google auth mode', () => {
 
     await expect(page).toHaveURL(/\/dashboard$/);
     await expect(page.getByRole('link', { name: 'Splitbook home' })).toBeVisible();
+    // Home, for the approved identity: its heading, and the account at the foot of the sidebar.
+    await expect(page.getByRole('heading', { level: 1, name: 'Home', exact: true })).toBeVisible();
     await expect(
-      page.getByRole('heading', { name: /good (morning|afternoon|evening)/i }),
+      page
+        .getByRole('complementary', { name: 'Splitbook' })
+        .getByRole('button', { name: 'Approved Playwright User, account menu', exact: true }),
     ).toBeVisible();
     // A signed-in visit to /login goes straight back to the app.
     await page.goto('/login');

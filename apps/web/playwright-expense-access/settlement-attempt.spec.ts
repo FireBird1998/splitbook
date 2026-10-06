@@ -545,7 +545,13 @@ test('another account signing in removes the previous account’s payments on it
   const other = await page.context().newPage();
   await page.close();
   await other.goto(appURL('/dashboard'));
-  await expect(other.getByRole('heading', { level: 1, name: /, Priya$/ })).toBeVisible();
+  // Priya's Home: its heading, with Priya signed in at the foot of the sidebar.
+  await expect(other.getByRole('heading', { level: 1, name: 'Home', exact: true })).toBeVisible();
+  await expect(
+    other
+      .getByRole('complementary', { name: 'Splitbook' })
+      .getByRole('button', { name: 'Priya Shah, account menu', exact: true }),
+  ).toBeVisible();
   await expect.poll(() => storedAttempts(other)).toEqual([]);
 
   await other.goto(balancesURL(ledger));

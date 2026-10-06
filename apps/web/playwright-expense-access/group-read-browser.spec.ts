@@ -50,7 +50,8 @@ for (const viewport of [
       await expect(error).toBeVisible();
       await expect(page.getByText(validName, { exact: true })).toHaveCount(0);
       await expect(page.getByText('No groups yet', { exact: true })).toHaveCount(0);
-      await expect(page.getByText('No recent activity or pending actions.')).toHaveCount(0);
+      // Home's heading counts the Groups only from a list it could read (#306).
+      await expect(page.getByText(/\b0 Groups\b/)).toHaveCount(0);
       await expect(error).not.toContainText('members');
       // Inspect the settled error UI, after the dashboard entrance animation.
       await page.evaluate(async () => {
@@ -587,7 +588,7 @@ test('the Dashboard after a loss shows none of the lost Group, even when its ref
   });
   const main = page.getByRole('main');
   const card = main.locator(`a[href="/groups/${groupId}"]`);
-  const totals = main.locator('section[aria-labelledby="current-balance-heading"]');
+  const totals = main.locator('section[aria-labelledby="home-balances-heading"]');
 
   await page.clock.install();
   await enter(page, ledger, '/dashboard');
