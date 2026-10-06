@@ -342,6 +342,19 @@ describe('A busy button', () => {
     expect(style(button(root)).opacity).toBe(1);
   });
 
+  it('can’t be pressed while busy, even when nothing else disables it', async () => {
+    const onPress = vi.fn();
+    const root = await render(
+      <CompactButton label="Join Group" busy="Joining Group…" onPress={onPress} />,
+    );
+    expect(button(root).props.disabled).toBe(true);
+    expect(button(root).props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(button(root).props.accessibilityLabel).toBe('Joining Group…');
+    update(<CompactButton label="Join Group" onPress={onPress} />);
+    expect(button(root).props.disabled).toBe(false);
+    expect(button(root).props.accessibilityState).toEqual({ disabled: false });
+  });
+
   it('keeps its size: the label stays laid out underneath, unseen and unread', async () => {
     const root = await render(save());
     const idle = layoutHeight(json());
@@ -384,5 +397,19 @@ describe('A status change cross-fades', () => {
     expect(fade.value.value).toBe(0);
     // Both run off the one fade: the outgoing copy takes its reverse.
     expect((style(outgoing).opacity as { of: unknown }).of).toBe(fade.value);
+  });
+
+  it('stops a fade when the text changes again, or the line goes', async () => {
+    await render(<StatusText>Updated 10:42</StatusText>);
+    update(<StatusText>Saved 10:42 · refreshing</StatusText>);
+    const [first] = timings();
+    expect(first.stop).not.toHaveBeenCalled();
+    update(<StatusText>Updated 10:43</StatusText>);
+    expect(first.stop).toHaveBeenCalledOnce();
+    const [, second] = timings();
+    expect(second.start).toHaveBeenCalledOnce();
+    act(() => renderer!.unmount());
+    renderer = undefined;
+    expect(second.stop).toHaveBeenCalledOnce();
   });
 });
