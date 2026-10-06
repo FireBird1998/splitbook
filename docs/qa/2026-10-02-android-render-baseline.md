@@ -46,7 +46,7 @@ pnpm mobile ceilings:compare --base "$(git merge-base HEAD origin/main)"        
    - ask an approver for the `re-record-ceilings` label. It must be on the pull request and applied by an account in the repository variable `CEILINGS_APPROVERS` (default: the repository owner). If anyone else applies it, the check stays red and names who applied it, and an approver removes the label and applies it again. Adding the label reruns PR checks, which then pass;
    - an approver approves each re-record on its own pull request, so a later pull request needs the label again.
 
-Re-records already planned: a refresh re-reads the loaded pages, up to 5 (ADR 0006), so the refresh journeys will send more requests in #219 (Expenses), #220 (an Expense's history) and #222 (Activity).
+Re-records already planned: a refresh re-reads the loaded pages, up to 5 (ADR 0006), so the refresh journeys send more requests. #219 did it for Expenses ([below](#re-recorded-for-219)); #220 (an Expense's history) and #222 (Activity) still will.
 
 ## Baseline
 
@@ -71,6 +71,28 @@ Re-records already planned: a refresh re-reads the loaded pages, up to 5 (ADR 00
 | Pull to refresh with 5 Activity pages         |        1 |         5 |       2 |               572 |                  17 | CompactText 393, CompactAvatar 120, Icon 16 |
 | Foreground after 30 s with 5 Activity pages   |        1 |         5 |       2 |               572 |                  17 | CompactText 393, CompactAvatar 120, Icon 16 |
 | Type 20 characters into Description           |        0 |        40 |      21 |             3,241 |                  29 | CompactText 1,700, Icon 300, FieldError 180 |
+
+### Re-recorded for #219
+
+**Build:** `swarm/219-group-queries`, rebased on `main` (7 October 2026), recorded three times with `RENDER_PROFILE=record`; the three runs gave identical counts. A Group's Expenses and Balances moved to declarative queries (ADR 0006): a refresh re-reads the loaded Expense pages (M1-3), a list slides past 5 pages (M7-2), each Expense row renders again only when its Expense changes, and the Group view publishes only when what it shows changes. The "after 30 s" journeys move both the harness clock and, with fake timers, `Date.now`, which the Group view's queries follow.
+
+Publishes / commits / component renders, and requests, for every journey whose count moved, and the two journeys #219 added. Every other journey counts as in the table above.
+
+| Journey                                      | Requests | Before (`d506f6e`) |         #219 | Why                                                                      |
+| -------------------------------------------- | -------: | -----------------: | -----------: | ------------------------------------------------------------------------ |
+| Open a Group on Expenses                     |        3 |       11 / 4 / 512 |  9 / 3 / 312 | rows render once; the Group and its Expenses are read together           |
+| Change Month                                 |        2 |        8 / 3 / 468 |  5 / 3 / 328 | the view publishes only what changed                                     |
+| Load the 5th Expense page (80 → 100 rows)    |        2 |      7 / 3 / 2,147 |  5 / 3 / 327 | only the new page's 20 rows render                                       |
+| Foreground within 30 s after 5 Expense pages |        0 |        7 / 1 / 204 |   2 / 1 / 62 | the 100 rows stay, and none renders again                                |
+| Reopen the Group within 30 s                 |        0 |        6 / 1 / 204 |  4 / 1 / 204 | the view publishes only what changed                                     |
+| Pull to refresh with 5 Expense pages         |    3 → 7 |     13 / 4 / 1,932 | 10 / 4 / 248 | **re-record:** re-reads the 5 loaded pages and keeps the rows (M1-3)     |
+| Foreground after 30 s with 5 Expense pages   |    3 → 7 |     13 / 4 / 1,932 |  8 / 4 / 248 | **re-record:** re-reads the 5 loaded pages and keeps the rows (M1-3)     |
+| Load the 6th Expense page (pages 2 to 6)     |        2 |              (new) |  5 / 3 / 331 | Load more past 5 pages drops the newest; pages keep their rows by number |
+| Load newer Expenses (pages 1 to 5)           |        2 |              (new) |  5 / 3 / 331 | Load newer reads page 1 and drops page 6                                 |
+
+**The two request ceilings that rose** are the re-record ADR 0006 planned: a pull, and a foreground after 30 s, with 5 Expense pages loaded each send the Group and Expenses page 1 together, then Expenses pages 2 to 5, then Balances, 7 requests instead of 3. The owner applies `re-record-ceilings` on #219's pull request. Every other change lowers a ceiling.
+
+The two journeys #219 added send, in order: Expenses page 6 then Balances, and Expenses page 1 then Balances (Balances follow every Expense read, finding 6).
 
 ### Requests per journey
 
@@ -136,11 +158,13 @@ Line numbers are at `7e69be8`.
    - The cost grows with every page loaded. There is no `memo` in `App.tsx` or `src/ui`. Memoized rows (#178) address it first; #179 moves the lists to `FlatList` only if the memoized build misses the device budget in #194.
 3. **A refresh that changes nothing still redraws Home.** A foreground event on Home within the freshness window publishes 6 times (2 of them #127's automatic-refresh cue) and renders 146 components, all 20 Group rows included, although nothing changed (#178).
 4. **An automatic refresh shrinks a long list back to its first page.** After 5 pages, a foreground event within 30 s shows only the first 20 Expenses again (22 `ListRow`s). This follows #104's rule that a refresh starts from the first page. ADR 0006 (#195) decided it: a refresh re-reads the pages already loaded, up to 5 (#215). It lands per list, in #219 for Expenses and #222 for Activity, and those tickets re-record the two foreground-after-pages journeys.
+   - **Fixed for Expenses in #219.** A foreground within 30 s keeps the 100 rows and reads nothing (62 renders); one after 30 s re-reads the 5 loaded pages and keeps the rows. Activity still shrinks until #222.
 5. **Switching destination is cheap.** Balances costs 57 renders, and Activity costs 173 with its first page.
 6. **Every Expense read also re-reads Balances.** Opening a Group, changing Month and loading the 5th page each end with `GET /api/groups/:id/balances`, because Balances follow Expense reads (ADR 0006). The page load costs 2 requests, not 1.
-7. **Activity re-reads its first page on a foreground within 30 s; Expenses don't.** After 5 pages, a foreground within the window sends nothing on Expenses but `GET …/activity?page=1` on Activity, the same request as a pull or a foreground after 30 s. Expenses within 30 s still shrink back to their first page, from memory, without a request (finding 4).
+7. **Activity re-reads its first page on a foreground within 30 s; Expenses don't.** After 5 pages, a foreground within the window sends nothing on Expenses but `GET …/activity?page=1` on Activity, the same request as a pull or a foreground after 30 s. Expenses within 30 s still shrink back to their first page, from memory, without a request (finding 4). Since #219 they keep their 5 pages.
 8. **Going back to Home re-reads Home's totals.** Back from a Group sends `GET /api/user/balances` (the Group's Expense reads marked them stale) and redraws Home: 294 renders. Reopening the Group within 30 s sends nothing.
 9. **A refresh of 5 loaded pages reads only the first page.** A pull and a foreground after 30 s each send 3 requests on Expenses (Group, Expenses page 1, Balances) and 1 on Activity, and both shrink the list to 20 rows: 1,932 renders on Expenses, 572 on Activity. When a refresh re-reads the loaded pages (#215), these journeys send more; #219 and #222 re-record them.
+   - **Re-recorded for Expenses in #219.** A pull and a foreground after 30 s each send 7 requests: the Group and Expenses page 1 together, then pages 2 to 5, then Balances. They keep all 100 rows, and render 248 components, because each row renders again only when its Expense changes. Activity is unchanged until #222.
 
 ## Proposed budget
 
@@ -172,4 +196,4 @@ The owner confirms or changes this budget in [#194](https://github.com/FireBird1
 
 - Each #178 pull request lowers the ceilings to its new numbers and updates the baseline table.
 - #206 added request counts per journey, the six journeys above, the data file and the ratchet. #214 moves the "after 30 s" journeys to fake timers once freshness follows `Date.now`.
-- #219, #220 and #222 re-record the refresh journeys, with an approver's `re-record-ceilings` label, when a refresh re-reads the loaded pages.
+- #220 and #222 re-record their refresh journeys, with an approver's `re-record-ceilings` label, when a refresh re-reads the loaded pages; #219 did it for Expenses.
