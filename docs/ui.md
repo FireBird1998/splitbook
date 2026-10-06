@@ -121,41 +121,55 @@ All styling uses MUI's `sx` prop. Key patterns:
 
 ## Layout
 
+The frame comes from the design canvas ("Web portal", #303) and lives in
+`src/components/layout/AppShell.tsx`. Its sizes are tokens in
+`packages/shared/src/design-tokens.ts`: `SIDEBAR_WIDTH` 248, `TOPBAR_HEIGHT` 68
+and `CONTENT_MAX_WIDTH` 1320.
+
 ### Desktop (≥1200px — MUI lg breakpoint)
 
 ```
-┌──────────────────────────────────────────────┐
-│ Navbar (fixed top, 56px)           [User Menu]│
-├────────┬─────────────────────────────────────┤
-│        │                                     │
-│ Side-  │         Main Content                │
-│ bar    │         (ml: 240px)                 │
-│ (240px)│                                     │
-│ fixed  │                                     │
-│        │                                     │
-│ - Dash │                                     │
-│ - Groups│                                    │
-│ - Settings│                                  │
-│        │                                     │
-└────────┴─────────────────────────────────────┘
+┌────────────┬─────────────────────────────────────────┐
+│ [logo]     │ Top bar  (search)     Demo  ☾  (Add exp)│
+│ Home       ├─────────────────────────────────────────┤
+│            │                                         │
+│ GROUPS  [+]│        Main content                     │
+│ ⌂ Maple    │        (up to 1320 px, centred)         │
+│   you owe… │                                         │
+│ ✈ Goa      │                                         │
+│   owed …+1 │                                         │
+│ …          │                                         │
+│────────────│                                         │
+│ Settings   │                                         │
+│ (AR) Alex  │                                         │
+└────────────┴─────────────────────────────────────────┘
+  248 px, full height, sticky
 ```
+
+- The sidebar holds the 32 px logo (linking Home), the main navigation (Home;
+  Export arrives with #317), the "Groups" header (a link to the `/groups` list)
+  with New Group, every Group with its Theme's line icon and the member's
+  balance line, and Settings and the account menu at the foot.
+- A balance line reads "you owe ₹1,480.00" (negative status colour), "owed
+  ₹620.00" (positive) or "Settled up" (secondary). A legacy Group with balances
+  in several currencies shows its own currency first and "· +N".
+- The current page has `aria-current="page"`; the Group a page belongs to is
+  highlighted too.
 
 ### Mobile (<1200px)
 
 ```
 ┌─────────────────────┐
-│ [☰] Navbar    [User]│  ← fixed top
+│ ☰ logo   Demo  ☾    │  ← sticky top bar
 ├─────────────────────┤
 │                     │
-│   Main Content      │
+│   Main content      │
 │   (full width)      │
 │                     │
-│                     │
-│                     │
-│               [FAB] │  ← floating action button
 └─────────────────────┘
 
-☰ opens a Drawer with navigation
+☰ opens the sidebar as a drawer: the same items, Group list included, with
+44 px targets. It traps focus, closes on Escape and closes when you navigate.
 ```
 
 ---
@@ -176,11 +190,15 @@ xl: 1536px    — Large desktop
 
 ### Layout (`src/components/layout/`)
 
-| Component   | Description                                                   |
-| ----------- | ------------------------------------------------------------- |
-| `Navbar`    | Fixed top bar with hamburger (mobile), logo, user avatar menu |
-| `Sidebar`   | Fixed sidebar (lg+) with nav links; hidden on mobile          |
-| `BrandMark` | Wordmark / logo                                               |
+| Component       | Description                                                      |
+| --------------- | ---------------------------------------------------------------- |
+| `AppShell`      | Sidebar (lg+) or drawer, the top bar and `main`                  |
+| `Sidebar`       | Logo, main navigation, Group list, Settings and the account      |
+| `SidebarGroups` | The live Group list: Theme icon, name and balance line per Group |
+| `TopBar`        | Menu button and logo on phones, demo badge, theme switch         |
+| `AccountMenu`   | Avatar and name at the sidebar's foot; Settings and Sign out     |
+| `BrandLogo`     | The logo artwork, light or dark                                  |
+| `BrandMark`     | The mark beside a name                                           |
 
 ### Groups (`src/components/groups/`)
 
@@ -239,12 +257,12 @@ unit-tested logic extracted from the dialog.
 
 ### Auth & demo
 
-| Component           | Description                                  |
-| ------------------- | -------------------------------------------- |
-| `LoginForm`         | Google sign-in button                        |
-| `DemoLoginClient`   | Demo persona sign-in                         |
-| `DemoPersonaPicker` | Persona cards (Alex, Sam, Priya)             |
-| `DemoModeBadge`     | Navbar badge shown while demo auth is active |
+| Component           | Description                                   |
+| ------------------- | --------------------------------------------- |
+| `LoginForm`         | Google sign-in button                         |
+| `DemoLoginClient`   | Demo persona sign-in                          |
+| `DemoPersonaPicker` | Persona cards (Alex, Sam, Priya)              |
+| `DemoModeBadge`     | Top bar badge shown while demo auth is active |
 
 ### Common
 

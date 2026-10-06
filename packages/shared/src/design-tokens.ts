@@ -23,6 +23,8 @@ export interface SemanticTokens {
   bgElevated: string;
   surface: string;
   surfaceMuted: string;
+  /** Hover fill for rows and navigation items on elevated surfaces (the web sidebar). */
+  surfaceHover: string;
   border: string;
   borderStrong: string;
   text: string;
@@ -56,6 +58,7 @@ export const lightTokens: SemanticTokens = {
   bgElevated: '#ffffff',
   surface: '#ffffff',
   surfaceMuted: '#eef0f6',
+  surfaceHover: '#f6f7fb',
   border: '#dce0ec',
   borderStrong: '#c5cbdb',
   text: '#151828',
@@ -88,6 +91,7 @@ export const darkTokens: SemanticTokens = {
   bgElevated: '#161922',
   surface: '#181b26',
   surfaceMuted: '#222634',
+  surfaceHover: '#1d2130',
   border: '#2c3142',
   borderStrong: '#3d445a',
   text: '#f0f2f8',
@@ -116,7 +120,9 @@ export function getSemanticTokens(mode: ThemeMode): SemanticTokens {
 export const FONT_UI = 'var(--font-outfit), "Segoe UI", sans-serif';
 export const FONT_MONO = 'var(--font-plex-mono), "SFMono-Regular", ui-monospace, monospace';
 
-export const NAV_HEIGHT = 56;
-export const SIDEBAR_WIDTH = 240;
+/** The web shell (design canvas "Web portal"): full-height sidebar, top bar, content width. */
+export const SIDEBAR_WIDTH = 248;
+export const TOPBAR_HEIGHT = 68;
+export const CONTENT_MAX_WIDTH = 1320;
 
 export const RADIUS = { sm: 8, md: 12, lg: 16 } as const;

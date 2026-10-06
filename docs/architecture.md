@@ -46,9 +46,9 @@ src/
 │   │   └── login/
 │   │       └── page.tsx
 │   ├── (main)/                     # Authenticated route group (with sidebar)
-│   │   ├── layout.tsx              # Fixed navbar + sidebar + main layout
+│   │   ├── layout.tsx              # Session guards + AppShell (sidebar, top bar, main)
 │   │   ├── dashboard/
-│   │   │   └── page.tsx            # Home dashboard
+│   │   │   └── page.tsx            # Home (the route stays /dashboard)
 │   │   ├── groups/
 │   │   │   ├── page.tsx            # List all groups
 │   │   │   ├── new/
@@ -114,8 +114,12 @@ src/
 │   └── globals.css                 # Minimal (body margin reset only)
 ├── components/
 │   ├── layout/
-│   │   ├── Sidebar.tsx             # Fixed sidebar (lg+), MUI Box
-│   │   ├── Navbar.tsx              # Fixed navbar + mobile drawer
+│   │   ├── AppShell.tsx            # Sidebar (lg+) or drawer, top bar, main up to 1320 px
+│   │   ├── Sidebar.tsx             # Logo, Home, Group list, Settings, account
+│   │   ├── SidebarGroups.tsx       # Live Group list with each Group's balance line
+│   │   ├── TopBar.tsx              # Menu button + logo (phones), demo badge, theme switch
+│   │   ├── AccountMenu.tsx         # Avatar + name; Settings and Sign out
+│   │   ├── BrandLogo.tsx
 │   │   └── BrandMark.tsx
 │   ├── landing/
 │   │   └── LandingPage.tsx         # Public landing page
@@ -123,7 +127,7 @@ src/
 │   │   ├── LoginForm.tsx           # Google button
 │   │   └── DemoLoginClient.tsx     # Demo persona sign-in
 │   ├── demo/
-│   │   ├── DemoModeBadge.tsx       # Navbar badge while demo auth is active
+│   │   ├── DemoModeBadge.tsx       # Top bar badge while demo auth is active
 │   │   └── DemoPersonaPicker.tsx
 │   ├── trip/
 │   │   └── TripStrip.tsx           # Boarding-pass header — trip theme only

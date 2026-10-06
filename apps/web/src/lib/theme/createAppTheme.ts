@@ -4,7 +4,7 @@ import { FONT_MONO, FONT_UI, RADIUS, getSemanticTokens, type ThemeMode } from '.
 declare module '@mui/material/styles' {
   interface Palette {
     status: { positive: string; negative: string; warning: string; info: string };
-    surface: { muted: string; elevated: string };
+    surface: { muted: string; elevated: string; hover: string };
     border: { strong: string };
     tint: {
       brand: string;
@@ -25,7 +25,7 @@ declare module '@mui/material/styles' {
 
   interface PaletteOptions {
     status?: { positive?: string; negative?: string; warning?: string; info?: string };
-    surface?: { muted?: string; elevated?: string };
+    surface?: { muted?: string; elevated?: string; hover?: string };
     border?: { strong?: string };
     tint?: {
       brand?: string;
@@ -95,7 +95,11 @@ export function createAppTheme(mode: ThemeMode): Theme {
         disabled: tokens.textMuted,
       },
       divider: tokens.border,
-      surface: { muted: tokens.surfaceMuted, elevated: tokens.bgElevated },
+      surface: {
+        muted: tokens.surfaceMuted,
+        elevated: tokens.bgElevated,
+        hover: tokens.surfaceHover,
+      },
       border: { strong: tokens.borderStrong },
       tint: {
         brand: tokens.brand.bg,

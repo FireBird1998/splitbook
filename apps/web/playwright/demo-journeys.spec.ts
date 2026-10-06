@@ -57,7 +57,7 @@ test('alex: creates a trip that is ready for a first expense', async ({ page }, 
   qaTripUrl = new URL(page.url()).pathname;
 
   // Trip strip shows the new trip; checklist guides the first expense.
-  await expect(page.getByText(qaTripName)).toBeVisible();
+  await expect(page.getByRole('main').getByText(qaTripName)).toBeVisible();
   await expect(page.getByText('Get this trip going')).toBeVisible();
 
   await reviewScreenshot(page, testInfo, 'alex-new-trip');

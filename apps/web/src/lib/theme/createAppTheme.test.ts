@@ -19,4 +19,20 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
       }
     }
   });
+
+  it('keeps the shell sidebar readable on its hover and current fills', () => {
+    const { palette } = createAppTheme(mode);
+    const pairs = {
+      'link on the sidebar': [palette.text.secondary, palette.surface.elevated],
+      'hovered link': [palette.text.primary, palette.surface.hover],
+      'current link': [palette.primary.main, palette.tint.brand],
+      'current Group, you owe': [palette.status.negative, palette.tint.brand],
+      'current Group, owed': [palette.status.positive, palette.tint.brand],
+      'current Group, settled': [palette.text.secondary, palette.tint.brand],
+      'hovered Group, you owe': [palette.status.negative, palette.surface.hover],
+      'hovered Group, owed': [palette.status.positive, palette.surface.hover],
+    };
+    for (const [pair, [foreground, background]] of Object.entries(pairs))
+      expect(getContrastRatio(foreground, background), pair).toBeGreaterThanOrEqual(4.5);
+  });
 });

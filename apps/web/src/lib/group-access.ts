@@ -95,6 +95,23 @@ function reopenGroup(groupId: string) {
   void mutate((key) => isGroupContentKey(key, groupPath), undefined);
 }
 
+/** Writes that can change the account's Groups, or its balance in one of them. */
+const ACCOUNT_GROUPS_WRITE = /^\/api\/(?:groups|invitations|join)(?=[/?]|$)/;
+
+/**
+ * Whether a response is a write that went through and may have changed the account's Group
+ * list or balances: a Group created, edited or left, an Expense or Settlement recorded, an
+ * invitation answered. Reads, refusals and failures change nothing.
+ */
+export function changesAccountGroups(method: string, path: string, status: number): boolean {
+  return (
+    method.toUpperCase() !== 'GET' &&
+    status >= 200 &&
+    status < 300 &&
+    ACCOUNT_GROUPS_WRITE.test(path)
+  );
+}
+
 export interface GroupAccessResponse {
   method: string;
   path: string;
@@ -110,6 +127,9 @@ export function noteGroupAccess({ method, path, status, accountId, ticket }: Gro
   if (typeof window === 'undefined') return;
   const lost = lostGroupId(method, path, status);
   if (lost) return forgetGroup(lost, accountId);
+  // The shell's sidebar keeps the Group list and balances on screen across pages (#303):
+  // refetch them after a write rather than waiting for their next poll.
+  if (changesAccountGroups(method, path, status)) void mutate(isAccountGroupsKey);
   const groupId = GROUP_PATH.exec(path)?.[1];
   const lostAt = groupId ? lostGroups.get(groupId) : undefined;
   if (

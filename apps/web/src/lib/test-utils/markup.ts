@@ -36,6 +36,15 @@ export function links(html: string): string[] {
   );
 }
 
+/** Every link in document order: its href, aria-current (null when absent) and text. */
+export function anchors(html: string) {
+  return [...html.matchAll(/<a\b([^>]*)>([\s\S]*?)<\/a>/g)].map(([, attributes, inner]) => ({
+    href: attribute(attributes, 'href') ?? '',
+    current: attribute(attributes, 'aria-current'),
+    text: text(inner),
+  }));
+}
+
 /** The markup's text, tags removed and whitespace collapsed. */
 export function text(html: string): string {
   return html

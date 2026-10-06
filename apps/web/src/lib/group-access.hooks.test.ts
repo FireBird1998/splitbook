@@ -223,3 +223,87 @@ describe('losing a Group, with the Group page’s reads mounted', () => {
     await page.until(page.loaded);
   });
 });
+
+describe('a write, with the shell sidebar’s reads mounted (#303)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('refetches the Group list and the balances once a write goes through, and not after a refusal', async () => {
+    nextGroup();
+    const sent: string[] = [];
+    let writeStatus = 403;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: string, init?: RequestInit) => {
+        const method = init?.method ?? 'GET';
+        sent.push(`${method} ${input}`);
+        if (method !== 'GET') return reply(writeStatus, { data: {}, status: writeStatus });
+        if (input === '/api/groups')
+          return reply(200, { data: [groupPayload().data], status: 200 });
+        if (input === '/api/user/balances')
+          return reply(200, { data: { buckets: [], groups: [] }, status: 200 });
+        return reply(404, { error: 'Not found' });
+      }),
+    );
+    vi.resetModules();
+    vi.stubGlobal('window', {
+      location: { pathname: groupPath, search: '', reload: vi.fn(), assign: vi.fn() },
+    });
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    const { createElement, useLayoutEffect } = await import('react');
+    const { act, create } = await import('react-test-renderer');
+    const swr = await import('swr');
+    const { useGroups } = await import('./hooks/use-groups');
+    const { fetcher } = await import('./utils/fetcher');
+    const { apiFetch } = await import('./utils/api-fetch');
+    const seen: { groups?: unknown; balances?: unknown } = {};
+    /** The two reads the sidebar mounts on every page. */
+    function SidebarReads({ onRender }: { onRender: (next: typeof seen) => void }) {
+      const groups = useGroups(ACTOR).data;
+      const balances = swr.default('/api/user/balances', fetcher).data;
+      useLayoutEffect(() => {
+        onRender({ groups, balances });
+      });
+      return null;
+    }
+    let renderer!: ReactTestRenderer;
+    await act(async () => {
+      renderer = create(
+        createElement(SidebarReads, { onRender: (next) => Object.assign(seen, next) }),
+      );
+    });
+    const until = async (check: () => boolean) => {
+      for (let turn = 0; turn < 100 && !check(); turn += 1)
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 2));
+        });
+      expect(check()).toBe(true);
+    };
+    const accountReads = () =>
+      sent.filter((request) => ['GET /api/groups', 'GET /api/user/balances'].includes(request));
+    try {
+      await until(() => Boolean(seen.groups && seen.balances));
+
+      // Refused: nothing changed, so nothing is read again.
+      sent.length = 0;
+      await act(async () => {
+        await apiFetch(`${groupPath}/expenses`, { method: 'POST' });
+      });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      });
+      expect(accountReads()).toEqual([]);
+
+      writeStatus = 201;
+      sent.length = 0;
+      await act(async () => {
+        await apiFetch(`${groupPath}/settlements`, { method: 'POST' });
+      });
+      await until(() => accountReads().length === 2);
+      expect(accountReads().sort()).toEqual(['GET /api/groups', 'GET /api/user/balances']);
+    } finally {
+      await act(async () => renderer.unmount());
+    }
+  });
+});

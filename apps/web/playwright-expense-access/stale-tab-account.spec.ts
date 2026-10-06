@@ -395,7 +395,7 @@ test('stale sign-in path, visible tab: the next poll is answered 419 ACCOUNT_CHA
   expectOnlyAlexRequests(api, lastAlexDocument);
 });
 
-test('stale sign-in path, visible tab: following the Groups link never shows Sam’s Groups under Alex’s navbar', async ({
+test('stale sign-in path, visible tab: following the Groups link never shows Sam’s Groups under Alex’s sidebar', async ({
   page,
   ledger,
 }) => {
@@ -404,7 +404,7 @@ test('stale sign-in path, visible tab: following the Groups link never shows Sam
   const rendered = await watchCurrentDocument(page, samOnly);
   await switchToSam();
   await page
-    .getByRole('navigation', { name: 'Primary', exact: true })
+    .getByRole('complementary', { name: 'Splitbook' })
     .getByRole('link', { name: 'Groups', exact: true })
     .click();
   await waitForReload(api, lastAlexDocument);

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { darkTokens, getSemanticTokens, lightTokens, type SemanticTokens } from './tokens';
+import {
+  CONTENT_MAX_WIDTH,
+  SIDEBAR_WIDTH,
+  TOPBAR_HEIGHT,
+  darkTokens,
+  getSemanticTokens,
+  lightTokens,
+  type SemanticTokens,
+} from './tokens';
 
 function leafKeys(value: Record<string, unknown>, prefix = ''): string[] {
   return Object.entries(value).flatMap(([key, val]) => {
@@ -38,6 +46,16 @@ describe('semantic design tokens', () => {
     expect(darkTokens.surface).toBe('#181b26');
     expect(darkTokens.border).toBe('#2c3142');
     expect(darkTokens.text).toBe('#f0f2f8');
+  });
+
+  it('pins the web shell from the design canvas', () => {
+    expect(lightTokens.surfaceHover).toBe('#f6f7fb');
+    expect(darkTokens.surfaceHover).toBe('#1d2130');
+    expect({ SIDEBAR_WIDTH, TOPBAR_HEIGHT, CONTENT_MAX_WIDTH }).toEqual({
+      SIDEBAR_WIDTH: 248,
+      TOPBAR_HEIGHT: 68,
+      CONTENT_MAX_WIDTH: 1320,
+    });
   });
 
   it('uses light-on-dark text for contained buttons in dark mode', () => {

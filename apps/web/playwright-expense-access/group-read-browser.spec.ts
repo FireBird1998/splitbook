@@ -145,7 +145,7 @@ test('sign-out clears Group cards and a late prior-account refresh cannot popula
   );
   await page.clock.install();
   await enter(page, ledger, '/groups');
-  await expect(page.getByText(privateName, { exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByText(privateName, { exact: true })).toBeVisible();
   let release!: () => void;
   const pending = new Promise<void>((resolve) => {
     release = resolve;
@@ -197,7 +197,9 @@ for (const width of [1280, 390]) {
         await enter(page, ledger, pagePath, 'priya');
         const error = page.getByRole('alert').filter({ hasText: 'Group could not be loaded.' });
         await expect(error).toBeVisible();
-        await expect(page.getByText(group.name, { exact: true })).toHaveCount(0);
+        // The page's own content. The sidebar still lists the Group: its name comes from the
+        // Groups list, a separate read that verified it (#303).
+        await expect(page.getByRole('main').getByText(group.name, { exact: true })).toHaveCount(0);
         await expect(page.getByLabel('Group Name', { exact: true })).toHaveCount(0);
         const accessibility = await new AxeBuilder({ page })
           .include('[role="alert"]')
@@ -209,7 +211,10 @@ for (const width of [1280, 390]) {
         await expect(error).toHaveCount(0);
         if (surface === 'settings')
           await expect(page.getByLabel('Group Name', { exact: true })).toHaveValue(group.name);
-        else await expect(page.getByText(group.name, { exact: true }).first()).toBeVisible();
+        else
+          await expect(
+            page.getByRole('main').getByText(group.name, { exact: true }).first(),
+          ).toBeVisible();
       });
     }
   }
@@ -223,10 +228,11 @@ for (const surface of ['detail', 'settings']) {
     const apiPath = `/api/groups/${ledger.groupB}`;
     const pagePath = `/groups/${ledger.groupB}${surface === 'settings' ? '/settings' : ''}`;
     const group = await dataOf(await ledger.priya.get(apiPath));
+    // The Group page's own content; the sidebar's Group list is a separate read (#303).
     const content =
       surface === 'settings'
         ? page.getByLabel('Group Name', { exact: true })
-        : page.getByText(group.name, { exact: true }).first();
+        : page.getByRole('main').getByText(group.name, { exact: true }).first();
     await page.clock.install();
     const loaded = page.waitForResponse(
       (response) =>
@@ -541,6 +547,18 @@ test('the Dashboard after a loss shows none of the lost Group, even when its ref
     { timeout: 30_000 },
   );
 
+  // Every refetch of the account's Groups and balances now fails: the sidebar's, as the loss
+  // clears them (#303), and the Dashboard's.
+  for (const path of ['/api/groups', '/api/user/balances'])
+    await page.route(
+      (url) => url.pathname === path,
+      (route) => route.fulfill(outage),
+    );
+  const refetched = ['/api/groups', '/api/user/balances'].map((path) =>
+    page.waitForResponse(
+      (response) => new URL(response.url()).pathname === path && response.status() === 503,
+    ),
+  );
   await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
   await dataOf(await ledger.priya.delete(`${groupPath}/members/${SAM}`));
   const refused = page.waitForResponse(
@@ -552,25 +570,14 @@ test('the Dashboard after a loss shows none of the lost Group, even when its ref
   await expect(
     main.getByRole('alert').filter({ hasText: 'Group could not be loaded.' }),
   ).toBeVisible();
+  await Promise.all(refetched);
 
-  // Every refetch the Dashboard makes now fails.
-  for (const path of ['/api/groups', '/api/user/balances'])
-    await page.route(
-      (url) => url.pathname === path,
-      (route) => route.fulfill(outage),
-    );
   await page.clock.resume();
-  const refetched = ['/api/groups', '/api/user/balances'].map((path) =>
-    page.waitForResponse(
-      (response) => new URL(response.url()).pathname === path && response.status() === 503,
-    ),
-  );
   await page
-    .getByRole('navigation', { name: 'Primary', exact: true })
-    .getByRole('link', { name: 'Dashboard', exact: true })
+    .getByRole('navigation', { name: 'Main', exact: true })
+    .getByRole('link', { name: 'Home', exact: true })
     .click();
   await expect(page).toHaveURL(/\/dashboard$/);
-  await Promise.all(refetched);
   await expect(card).toHaveCount(0);
   for (const text of [name, balance, owed]) await expect(main).not.toContainText(text);
 });
@@ -615,18 +622,27 @@ test('saving Group settings preserves fields and updates the list, dashboard The
     tags: before.tags,
   });
 
-  const navigation = page.getByRole('navigation', { name: 'Primary', exact: true });
-  await navigation.getByRole('link', { name: 'Groups', exact: true }).click();
+  // The shell's sidebar (#303): its Group list follows the save, Theme icon included.
+  const sidebar = page.getByRole('complementary', { name: 'Splitbook' });
+  const row = sidebar
+    .getByRole('navigation', { name: 'Your Groups' })
+    .getByRole('link', { name: new RegExp(`^${name}( |$)`) });
+  await expect(row).toBeVisible();
+  await expect(row.locator('[data-group-theme="trip"]')).toHaveCount(1);
+  await sidebar.getByRole('link', { name: 'Groups', exact: true }).click();
   await expect(page).toHaveURL(/\/groups$/);
-  await expect(page.getByRole('link', { name, exact: true })).toBeVisible();
+  await expect(page.getByRole('main').getByRole('link', { name, exact: true })).toBeVisible();
   await expect(page.getByText('Apr 10, 2032 – Apr 14, 2032', { exact: true })).toBeVisible();
-  await navigation.getByRole('link', { name: 'Dashboard', exact: true }).click();
+  await sidebar
+    .getByRole('navigation', { name: 'Main', exact: true })
+    .getByRole('link', { name: 'Home', exact: true })
+    .click();
   await expect(page).toHaveURL(/\/dashboard$/);
   // The Trip-specific link label proves the saved Theme reached the dashboard adapter.
   const trip = page.getByRole('link', { name: /^Shared contract spring trip trip,/ });
   await expect(trip).toBeVisible();
   await expect(trip).toHaveAccessibleName(/Apr 10, 2032 – Apr 14, 2032/);
-  await navigation.getByRole('link', { name: 'Groups', exact: true }).click();
+  await sidebar.getByRole('link', { name: 'Groups', exact: true }).click();
   await page.locator(`a[href="${settingsPath}"]`).click();
   await expect(page.getByLabel('Group Name', { exact: true })).toHaveValue(name);
   await expect(page.getByRole('combobox', { name: /^Category / })).toContainText('Trip');

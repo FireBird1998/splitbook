@@ -177,10 +177,15 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   any mutation), creates a trip, adds and edits an expense; Sam switches in
   and records a settlement, verified by the debt shrinking exactly; Priya
   verifies her untouched seeded balance.
+- **Shell** (`shell.spec.ts`): the desktop sidebar (logo, Home, the Group
+  list with each balance line checked against the balances read, the open
+  Group highlighted, Settings, the Groups list link), the phone drawer
+  (opens from the top bar, traps focus, 44 px targets, closes on Escape and
+  on navigation), Sign out from the account at the foot, and axe on each.
 - **Theme + a11y matrix** (`theme-a11y.spec.ts`): persona entry, dashboard,
   and trip workspace at **desktop 1280×800** and **mobile 390×844**, each in
   **light and dark** (driven by `prefers-color-scheme` emulation), plus the
-  navbar theme toggle with persistence. axe-core fails the test on critical
+  top bar theme toggle with persistence. axe-core fails the test on critical
   violations; the full report attaches to the test.
 - Review screenshots are saved to `apps/web/playwright/artifacts/<project>/`
   (gitignored, uploaded as CI artifacts).
