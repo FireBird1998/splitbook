@@ -37,6 +37,16 @@ describe('serverError', () => {
     expect(await response.json()).toEqual({ error: 'Forbidden', code: 'FORBIDDEN', status: 403 });
   });
 
+  it('answers recurring Expenses being switched off as 409 RECURRING_EXPENSES_OFF', async () => {
+    const response = serverError(new Error('RECURRING_EXPENSES_OFF'));
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({
+      error: 'Recurring Expenses are turned off.',
+      code: 'RECURRING_EXPENSES_OFF',
+      status: 409,
+    });
+  });
+
   it('keeps unknown failures as a generic 500', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     const response = serverError(new Error('Something unexpected'));

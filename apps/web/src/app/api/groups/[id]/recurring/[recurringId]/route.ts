@@ -11,6 +11,7 @@ import {
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { updateRecurringExpenseSchema } from '@splitbook/shared/validators/recurring-expense';
 import { requestRevision } from '@/lib/ledger-revision';
+import { assertRecurringExpensesOn } from '@/lib/recurring-expenses-switch';
 
 const recurringValidationMessages: Record<string, string> = {
   INVALID_MEMBERS: 'All payers and split participants must be group members',
@@ -29,7 +30,8 @@ function mapServiceError(err: unknown) {
   return serverError(err);
 }
 
-// PATCH /api/groups/[id]/recurring/[recurringId] — Edit or pause a template (admin only)
+// PATCH /api/groups/[id]/recurring/[recurringId] — Edit, pause or resume a template (admin
+// only). While recurring Expenses are off: 409 RECURRING_EXPENSES_OFF, before the body is read.
 export async function PATCH(
   req: Request,
   { params }: { params: Promise<{ id: string; recurringId: string }> },
@@ -37,6 +39,7 @@ export async function PATCH(
   try {
     const user = await getAuthUser();
     if (!user) return unauthorized();
+    assertRecurringExpensesOn();
 
     const { id, recurringId } = await params;
     const body = await req.json();
@@ -59,7 +62,8 @@ export async function PATCH(
 }
 
 // DELETE /api/groups/[id]/recurring/[recurringId] — Delete a template (admin only).
-// Expenses the template already generated are never touched.
+// Expenses the template already generated are never touched. While recurring Expenses are
+// off: 409 RECURRING_EXPENSES_OFF, and the template stays.
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string; recurringId: string }> },
@@ -67,6 +71,7 @@ export async function DELETE(
   try {
     const user = await getAuthUser();
     if (!user) return unauthorized();
+    assertRecurringExpensesOn();
 
     const { id, recurringId } = await params;
 

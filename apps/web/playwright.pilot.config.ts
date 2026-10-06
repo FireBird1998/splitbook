@@ -25,5 +25,10 @@ export default defineConfig({
         }
       : {}),
   },
-  webServer: { ...webServer, reuseExistingServer: false },
+  webServer: {
+    ...webServer,
+    reuseExistingServer: false,
+    // Recurring Expenses are off by default (#289); the shared-theme smoke opens their dialog.
+    env: { ...webServer.env, RECURRING_EXPENSES_ENABLED: 'true' },
+  },
 });

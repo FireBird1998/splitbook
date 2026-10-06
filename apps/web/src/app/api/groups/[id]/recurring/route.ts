@@ -11,6 +11,7 @@ import {
 import { groupService } from '@/lib/services/group.service';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
 import { createRecurringExpenseSchema } from '@splitbook/shared/validators/recurring-expense';
+import { assertRecurringExpensesOn } from '@/lib/recurring-expenses-switch';
 
 const recurringValidationMessages: Record<string, string> = {
   INVALID_MEMBERS: 'All payers and split participants must be group members',
@@ -30,11 +31,13 @@ function mapServiceError(err: unknown) {
   return serverError(err);
 }
 
-// POST /api/groups/[id]/recurring — Create a recurring template (admin only)
+// POST /api/groups/[id]/recurring — Create a recurring template (admin only).
+// While recurring Expenses are off: 409 RECURRING_EXPENSES_OFF, before the body is read.
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser();
     if (!user) return unauthorized();
+    assertRecurringExpensesOn();
 
     const { id } = await params;
     const body = await req.json();
@@ -50,7 +53,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 }
 
-// GET /api/groups/[id]/recurring — List recurring templates (any member)
+// GET /api/groups/[id]/recurring — List recurring templates (any member).
+// While recurring Expenses are off a member gets an empty list, never a refusal: a 403 from a
+// read under a Group tells the web app the reader lost the Group.
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser();
