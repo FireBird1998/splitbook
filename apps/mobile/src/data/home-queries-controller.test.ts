@@ -93,8 +93,9 @@ function fixture() {
     attempts = new Map<string, unknown>();
   /** What the saved-copy databases can't do: remove copies, save a row, or keep listed Groups. */
   const device = { failRemoval: false, failSave: false, failRetain: false };
-  /** Writes of rows held part-way, as on a slow disk, by path. */
-  const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [];
+  /** Writes and removals of rows held part-way, as on a slow disk, by path. */
+  const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [],
+    removals: typeof writes = [];
   /** Every request sent, answered or not. */
   const calls: { method: string; path: string; account: string }[] = [];
   /** Requests held until released, by path. */
@@ -136,6 +137,12 @@ function fixture() {
     },
     remove: async (account: string, key: string) => {
       if (device.failRemoval) throw new Error('The device storage is full');
+      const index = removals.findIndex((removal) => removal.path === key);
+      if (index >= 0) {
+        const [removal] = removals.splice(index, 1);
+        removal.arrive();
+        await removal.released;
+      }
       rows.delete(account + key);
     },
   };
@@ -340,6 +347,18 @@ function fixture() {
     );
   const identity = { value: null as unknown },
     untrusted = { value: null as unknown };
+  const holdRow = (held: typeof writes, path: string) => {
+    let arrive!: () => void;
+    let release!: () => void;
+    const reached = new Promise<void>((resolve) => {
+      arrive = resolve;
+    });
+    const released = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    held.push({ path, arrive, released });
+    return { reached, release };
+  };
   return {
     create,
     server,
@@ -370,18 +389,9 @@ function fixture() {
       return { reached, release };
     },
     /** The next write of this path's row waits until released. */
-    holdWrite(path: string) {
-      let arrive!: () => void;
-      let release!: () => void;
-      const reached = new Promise<void>((resolve) => {
-        arrive = resolve;
-      });
-      const released = new Promise<void>((resolve) => {
-        release = resolve;
-      });
-      writes.push({ path, arrive, released });
-      return { reached, release };
-    },
+    holdWrite: (path: string) => holdRow(writes, path),
+    /** The next removal of this path's row waits until released. */
+    holdRemoval: (path: string) => holdRow(removals, path),
     /** NetInfo reports the device's connection. */
     connect(isConnected: boolean) {
       server.offline = !isConnected;
@@ -1114,6 +1124,35 @@ describe('a lost Group never returns from the saved Groups list (#323)', () => {
         { groupName: 'Zed Club', description: 'Club dues', unconfirmed: false },
       ],
     });
+  });
+
+  it('never writes an older list still waiting when a list loses a Group, though the new list can’t be saved', async () => {
+    const f = fixture();
+    const controller = await savedWithMaple(f);
+    later(31_000);
+    // A pull: Home's figures are being written, slowly, and the next pull's list, which still
+    // holds Maple House, waits behind them.
+    const figures = f.holdWrite(homePath);
+    await controller.refresh('pull');
+    await figures.reached;
+    await controller.refresh('pull');
+    // Alex loses Maple House. The list that leaves it out removes the saved list, then Home's
+    // figures; while that removal runs, the figures land and the queue moves on.
+    f.server.revoked.add(mapleId);
+    const removal = f.holdRemoval(homePath);
+    const pulling = controller.refresh('pull');
+    await removal.reached;
+    figures.release();
+    await settle();
+    f.device.failSave = true;
+    removal.release();
+    await pulling;
+    await settle();
+    expect(names(controller.getSnapshot())).toEqual(['Cabin Weekend']);
+
+    const { published } = await restartOffline(f, controller);
+    expect(published.some(withMaple)).toBe(false);
+    expect(JSON.stringify(f.row(listPath))).not.toContain('Maple House');
   });
 
   // Every combination of the trim's device writes failing: the older store's trim to the listed

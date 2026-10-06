@@ -201,6 +201,8 @@ export function createSavedCopyQueue() {
       });
     },
     cancel: () => waiting.clear(),
+    /** A write for `key` still waiting is never made. */
+    drop: (key: string) => void waiting.delete(key),
     /** Settles once the write running now, and every one still waiting, has. */
     idle: () => tail,
   };
@@ -442,6 +444,8 @@ export function createHomeQueries(session: HomeSession) {
     ])
       if (!listed.has(id)) lost.add(id);
     session.listed(listed, lost);
+    // An older list still waiting to be saved would list them again, and moved no version.
+    if (lost.size) queue.drop(listPath);
     // With no list known yet, this device may hold Groups the trim drops, and Home's saved
     // figures with them: figures still being read are read again after it.
     if (!snapshot().groups.loaded && held(keys()[1])?.fetchStatus === 'fetching')
@@ -540,7 +544,8 @@ export function createHomeQueries(session: HomeSession) {
    * Removes these rows (both, unless named), inside a lease write: a lost Group, a shorter Groups
    * list or a write (M2-2). It never waits for the saved-copy queue, so a confirmed change never
    * waits on a saved copy: one being written goes once it lands (`saveRow`), and any still waiting
-   * is refused, since what made these obsolete has already moved their version.
+   * is refused, since what made these obsolete has already moved their version (or, for a list
+   * that lost a Group, `trim` dropped it).
    */
   const forget = async (accountId: string, paths = [listPath, homePath]) => {
     if (!rows) return;
