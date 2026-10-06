@@ -310,9 +310,10 @@ test('the payment survives Cancel, a Group tab switch, a reload and a closed win
   const pending = page.getByText(/Your payment of ₹250\.25 to Priya Shah may already be recorded/);
   await expect(pending).toBeVisible();
 
-  await page.getByRole('tab', { name: 'Expenses' }).click();
+  const sections = page.getByRole('navigation', { name: 'Synthetic access household sections' });
+  await sections.getByRole('link', { name: 'Expenses' }).click();
   await expect(pending).toBeHidden();
-  await page.getByRole('tab', { name: 'Balances' }).click();
+  await sections.getByRole('link', { name: 'Balances' }).click();
   await expect(pending).toBeVisible();
 
   await page.reload();

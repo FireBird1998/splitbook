@@ -238,7 +238,10 @@ test('legacy currencies are individually visible and never combined into one bal
     animations: 'disabled',
   });
 
-  await page.getByRole('tab', { name: 'Expenses', exact: true }).click();
+  await page
+    .getByRole('navigation', { name: 'Synthetic access household sections' })
+    .getByRole('link', { name: 'Expenses', exact: true })
+    .click();
   const historical = page.getByRole('button', { name: /Historical euro allocation, €60\.00/ });
   await historical.getByLabel('Expense actions').click();
   await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();

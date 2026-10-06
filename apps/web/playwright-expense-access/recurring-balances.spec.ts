@@ -134,11 +134,25 @@ test('opening a Household shows Balances with the recurring Rent the same visit 
 }) => {
   const templateId = await rentDueThisMonth(ledger);
 
-  const balanceReads = await openAsSam(page, ledger, { balancesFirst: true });
+  // The Household's own balance shows on its Balances tab (#305). The tab's own Balances read
+  // may follow the page's first one, so the first answer itself must already hold the Rent.
+  const firstBalances = page.waitForResponse(
+    (response) =>
+      response.request().method() === 'GET' &&
+      new URL(response.url()).pathname === `/api/groups/${ledger.groupB}/balances`,
+  );
+  const balanceReads = await openAsSam(page, ledger, { balancesFirst: true, query: '/balances' });
 
-  const header = page.getByRole('region', { name: /^Synthetic access household, Household/ });
-  await expect(header).toHaveAccessibleName(/You owe ₹30,000\.00\.$/);
-  expect(balanceReads).toHaveLength(1);
+  const first = await (await firstBalances).json();
+  expect(
+    first.data.balances.find(
+      (row: { user: { _id: string } }) => row.user._id === DEMO_PERSONA_IDS.sam,
+    ).balance,
+  ).toBe(-30000);
+  const own = page.getByText('Your balance', { exact: true }).locator('..');
+  await expect(own).toContainText('30,000.00');
+  await expect(own).toContainText('You owe others');
+  expect(balanceReads.length).toBeGreaterThanOrEqual(1);
   expect(await rentRows(ledger, templateId)).toHaveLength(2);
 });
 

@@ -110,13 +110,17 @@ Shows at the top of all tabs:
 ## URL Structure
 
 ```
-/groups/abc123                          → Expenses tab (default)
-/groups/abc123?tab=balances             → Balances tab
-/groups/abc123?tab=activity             → Activity tab
-/groups/abc123?quickFilter=thisWeek     → Expenses with filter
+/groups/abc123                          → redirects to /groups/abc123/expenses
+/groups/abc123/expenses                 → Expenses tab
+/groups/abc123/balances                 → Balances tab
+/groups/abc123/activity                 → Activity tab
+/groups/abc123/members                  → Members tab (read-only roster)
+/groups/abc123?tab=balances             → old link: redirects to /balances
+/groups/abc123?action=add-expense       → old link: Expenses, with the form open
 ```
 
-Tab state stored in URL for deep linking and back-button support.
+Each tab is its own route (#305), so deep links, reload and Back work. Insights
+joins the tabs with #314.
 
 ---
 

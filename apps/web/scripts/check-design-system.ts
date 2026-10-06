@@ -19,6 +19,11 @@ const adoptedFiles = [
   'src/components/layout/TopBar.tsx',
   'src/components/layout/AccountMenu.tsx',
   'src/components/layout/BrandLogo.tsx',
+  'src/components/groups/GroupDetailView.tsx',
+  'src/components/groups/GroupPageHeader.tsx',
+  'src/components/groups/GroupTabs.tsx',
+  'src/components/groups/GroupMembersView.tsx',
+  'src/components/groups/GroupExpensesTab.tsx',
 ];
 
 let failed = false;

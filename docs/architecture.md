@@ -54,7 +54,13 @@ src/
 │   │   │   ├── new/
 │   │   │   │   └── page.tsx        # Create group form (theme picker first)
 │   │   │   └── [id]/
-│   │   │       ├── page.tsx        # Group detail (expenses tab)
+│   │   │       ├── page.tsx        # Redirect: lands on Expenses; old ?tab= and ?action= links
+│   │   │       ├── (tabs)/         # One route per tab (#305)
+│   │   │       │   ├── layout.tsx  # Group read, header, trip strip, tabs, dialogs
+│   │   │       │   ├── expenses/page.tsx
+│   │   │       │   ├── balances/page.tsx
+│   │   │       │   ├── activity/page.tsx
+│   │   │       │   └── members/page.tsx
 │   │   │       └── settings/
 │   │   │           └── page.tsx    # Group settings (admin)
 │   │   └── settings/
@@ -134,8 +140,14 @@ src/
 │   ├── groups/
 │   │   ├── GroupCard.tsx
 │   │   ├── GroupsListView.tsx
-│   │   ├── GroupDetailView.tsx     # Tabs: expenses, balances, activity
-│   │   ├── GroupHeader.tsx         # Neutral header — non-trip themes
+│   │   ├── GroupDetailView.tsx     # The Group page's layout around its tabs
+│   │   ├── GroupPageHeader.tsx     # Icon, name, Theme · members · currency, avatars, Invite
+│   │   ├── GroupTabs.tsx           # Tabs as links: Expenses, Balances, Activity, Members
+│   │   ├── group-tabs.ts           # Tab addresses, old-link redirect, roster (pure)
+│   │   ├── GroupExpensesTab.tsx    # Month bar (Household) + Expense list
+│   │   ├── GroupTabPanels.tsx      # Balances, Activity and Members tabs
+│   │   ├── GroupMembersView.tsx    # Read-only roster with roles and Invite
+│   │   ├── GroupHeader.tsx         # Neutral header — non-trip Group cards
 │   │   ├── GroupSettingsView.tsx   # Admin settings (info, currency, members, tags)
 │   │   ├── MonthCycleBar.tsx       # Household month switcher
 │   │   ├── MonthMemberTable.tsx    # Per-member fronted/share/net for the month

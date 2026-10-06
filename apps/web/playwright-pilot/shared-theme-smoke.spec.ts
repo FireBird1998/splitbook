@@ -13,7 +13,11 @@ test('shared theme preserves Household header, Settings, and Recurring dialog', 
   });
   await enterAsPersona(page, 'alex');
   await page.goto(`/groups/${DEMO_GROUP_ID}`);
-  await expect(page.getByRole('region', { name: /Goa Friends Trip, Household/ })).toBeVisible();
+  // The Group header from the design canvas (#305) names the Household Theme.
+  const main = page.getByRole('main');
+  await expect(main.getByRole('heading', { level: 1, name: 'Goa Friends Trip' })).toBeVisible();
+  await expect(main.getByText('Household · 2 members · INR', { exact: true })).toBeVisible();
+  await expect(main.locator('[data-group-theme="home"]')).toBeVisible();
   await page.goto(`/groups/${DEMO_GROUP_ID}/settings`);
   await expect(page.getByRole('heading', { name: 'Group Settings' })).toBeVisible();
   await expect(page.getByText('Recurring', { exact: true })).toBeVisible();

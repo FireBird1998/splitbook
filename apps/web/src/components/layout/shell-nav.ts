@@ -3,6 +3,8 @@
  * phone drawer share these, so both always mark the same item.
  */
 
+import { groupTabFromPath } from '@/components/groups/group-tabs';
+
 /** Home is the existing `/dashboard` route; only its label changed (#303). */
 export const HOME_HREF = '/dashboard';
 export const GROUPS_HREF = '/groups';
@@ -28,11 +30,12 @@ export function groupsListCurrent(pathname: string): 'page' | undefined {
 }
 
 /**
- * `aria-current` for a Group in the sidebar: "page" on the Group's own page, and "true" on a
- * page inside it (its settings), where the Group is still the current one but not the page.
+ * `aria-current` for a Group in the sidebar: "page" on the Group's own page, which is any of
+ * its tabs (#305), and "true" on a page inside it (its settings), where the Group is still the
+ * current one but not the page.
  */
 export function groupCurrent(pathname: string, groupId: string): 'page' | 'true' | undefined {
   const match = GROUP_PATH.exec(pathname);
   if (!match || match[1].toLowerCase() !== groupId.toLowerCase()) return undefined;
-  return match[2] ? 'true' : 'page';
+  return !match[2] || groupTabFromPath(pathname) ? 'page' : 'true';
 }
