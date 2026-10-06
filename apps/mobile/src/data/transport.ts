@@ -27,7 +27,8 @@ export class Superseded extends Error {}
 
 /**
  * What a failed request means, for callers to branch on instead of messages or codes (ADR 0006):
- * - `network`: no reply arrived;
+ * - `network`: SplitBook couldn't be reached: no reply arrived, its body stopped arriving, or a
+ *   gateway in front of SplitBook answered 502, 503 or 504 without a SplitBook error code;
  * - `timeout`: the 20-second limit passed, before or after the headers;
  * - `cancelled`: the caller's own signal ended it. It is never a reason to show a saved copy;
  * - `signed-out`: a 401 that doesn't end the session here (sign-out, the staging check, Google
@@ -36,8 +37,8 @@ export class Superseded extends Error {}
  * - `stale-revision`: a 409 `STALE_REVISION`: someone saved a newer revision first;
  * - `rejected`: any other definite 4xx, so any 4xx but 401, 403, 404, 408 and 429: the server
  *   refused this request as sent;
- * - `malformed`: a 2xx whose body can't be read;
- * - `server-error`: a 5xx, 408 or 429, or an answer the app can't use.
+ * - `malformed`: a 2xx whose body arrived whole but isn't JSON;
+ * - `server-error`: any other 5xx, a 408 or 429, or an answer the app can't use.
  */
 export type FailureKind =
   | 'network'
@@ -81,6 +82,23 @@ export class RequestError extends Error {
 const cancelled = () =>
   new RequestError('This request was cancelled.', 0, null, false, null, 'cancelled');
 
+/**
+ * SplitBook couldn't be reached, so callers treat it as being offline: the saved copy, with the
+ * time it was last verified. It carries no status, so nothing takes it for SplitBook's answer.
+ */
+const unreachable = (kind: 'network' | 'timeout') =>
+  new RequestError(
+    'Could not reach SplitBook. Check your connection and try again.',
+    0,
+    null,
+    true,
+    null,
+    kind,
+  );
+
+/** The statuses a gateway in front of SplitBook answers with when it can't reach SplitBook. */
+const gatewayStatuses = [502, 503, 504];
+
 export interface RequestOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
   /** Sent as `X-Splitbook-Revision`: the revision an edit or delete was made against. */
@@ -100,6 +118,17 @@ export interface RequestOptions {
    * network failure. Only reads take one: writes stay explicit and are never cancelled.
    */
   signal?: AbortSignal;
+  /**
+   * Sign-in only. The server may start a session as soon as the request arrives, so a session
+   * change doesn't abort it. A session its reply sets after a session change is handed here to
+   * be revoked, never adopted or saved, and the caller then gets `Superseded`.
+   */
+  onAbandoned?: (cookie: string) => Promise<void>;
+  /**
+   * Sent for no session (`revokeDetached` only): no session change ends it or makes its answer
+   * `Superseded`, and it changes no session state.
+   */
+  detached?: boolean;
 }
 
 export interface TransportDependencies {
@@ -157,7 +186,8 @@ type AbortSource = 'session' | 'timeout' | 'caller';
  * each reply sets, checks the staging backend on Google builds, runs the 20-second timeout, and
  * turns every failure into a `RequestError` with a kind. It holds no session state and never
  * retries or queues: the controller keeps the session and its reads, and hears of an ended
- * session or a lost Group through `onExpired` and `onGroupDenied`.
+ * session or a lost Group through `onExpired` and `onGroupDenied`, and of a replaced sign-in's
+ * session through that sign-in's `onAbandoned`.
  */
 export function createTransport({
   apiBase,
@@ -204,16 +234,36 @@ export function createTransport({
     }
   };
 
+  /** A replaced sign-in's reply: the session it sets, if any, goes to be revoked. */
+  const abandon = async (
+    response: FetchResponse,
+    onAbandoned: (cookie: string) => Promise<void>,
+  ) => {
+    let abandoned: string | null | undefined;
+    try {
+      abandoned = readSessionCookie(response.headers, secureTransport, now());
+    } catch {
+      // A cookie this device can't read can't be sent to revoke either.
+      return;
+    }
+    if (abandoned) await onAbandoned(abandoned);
+  };
+
   const request = async (
     path: string,
     owner: number,
     options: RequestOptions = {},
   ): Promise<unknown> => {
-    assertCurrent(owner);
+    const live = () => options.detached === true || session.current(owner);
+    const assertLive = () => {
+      if (!live()) throw new Superseded();
+    };
+    assertLive();
     // Invitations can open even after restoration fails. Every ordinary request
     // must verify staging before it can send or adopt a session cookie.
-    if (path !== '/.well-known/splitbook-mobile.json') await verifyGoogleBackend(owner);
-    assertCurrent(owner);
+    if (path !== '/.well-known/splitbook-mobile.json')
+      await verifyGoogleBackend(owner, options.detached);
+    assertLive();
     // A request its caller has already cancelled is never sent.
     if (options.signal?.aborted) throw cancelled();
     const abort = new AbortController();
@@ -224,12 +274,15 @@ export function createTransport({
       aborted ??= source;
       abort.abort();
     };
-    requests.add(stop);
+    // A sign-in outlives a session change: its reply is the only way to learn its session.
+    if (!options.onAbandoned && !options.detached) requests.add(stop);
     const endTimeout = timer(() => stop('timeout'), REQUEST_TIMEOUT_MS);
     // Linked with a listener of its own, not AbortSignal.any, so a cancel is told apart.
     const cancel = () => stop('caller');
     options.signal?.addEventListener('abort', cancel);
     let received = false;
+    /** The headers arrived and the body is being read. */
+    let reading = false;
     try {
       const outgoingCookie =
         options.sessionCookie === undefined ? session.cookie() : options.sessionCookie;
@@ -259,10 +312,11 @@ export function createTransport({
           : { body: options.serializedBody }),
       });
       received = true;
-      assertCurrent(owner);
+      if (options.onAbandoned && !live()) await abandon(response, options.onAbandoned);
+      assertLive();
       // Logout responses must never reinstall a cookie, even a surprising one.
       if (!options.logout && options.adoptSession !== false) await adoptCookie(response, owner);
-      assertCurrent(owner);
+      assertLive();
       if (
         response.status === 401 &&
         !options.logout &&
@@ -315,23 +369,34 @@ export function createTransport({
           typeof details.error === 'string'
             ? details.error
             : null;
+        // The caller cancelled while the body was read. A denial has already been purged above;
+        // only the error the caller gets is its own.
+        if (aborted === 'caller') throw cancelled();
+        // SplitBook's own errors carry a code, so a gateway answered: SplitBook wasn't reached.
+        if (gatewayStatuses.includes(response.status) && code === null)
+          throw unreachable(aborted === 'timeout' ? 'timeout' : 'network');
         throw new RequestError(message, response.status, code, false, serverMessage);
       }
+      reading = true;
       const body = await response.json();
-      assertCurrent(owner);
+      assertLive();
       return body;
     } catch (error) {
-      if (!session.current(owner) || aborted === 'session') throw new Superseded();
+      if (!live() || aborted === 'session') throw new Superseded();
       if (error instanceof RequestError || error instanceof Superseded) throw error;
       if (aborted === 'caller') throw cancelled();
-      throw new RequestError(
-        'Could not reach SplitBook. Check your connection and try again.',
-        0,
-        null,
-        !received,
-        null,
-        aborted === 'timeout' ? 'timeout' : received ? 'malformed' : 'network',
-      );
+      // Only a body that arrived whole, but isn't JSON, is malformed; so is a failure after the
+      // headers that isn't the body's. A body that stopped arriving, or timed out, never arrived.
+      if (received && aborted !== 'timeout' && (!reading || error instanceof SyntaxError))
+        throw new RequestError(
+          'Could not reach SplitBook. Check your connection and try again.',
+          0,
+          null,
+          false,
+          null,
+          'malformed',
+        );
+      throw unreachable(aborted === 'timeout' ? 'timeout' : 'network');
     } finally {
       endTimeout();
       requests.delete(stop);
@@ -339,13 +404,15 @@ export function createTransport({
     }
   };
 
-  const verifyGoogleBackend = async (owner: number) => {
-    if (!googleEnabled || verifiedGoogleBackend === owner) return;
+  /** `detached`: checked for a detached request, every time, and kept for no session. */
+  const verifyGoogleBackend = async (owner: number, detached = false) => {
+    if (!googleEnabled || (!detached && verifiedGoogleBackend === owner)) return;
     let value: unknown;
     try {
       value = await request('/.well-known/splitbook-mobile.json', owner, {
         sessionCookie: null,
         adoptSession: false,
+        detached,
       });
     } catch (error) {
       if (error instanceof RequestError && error.status) {
@@ -367,15 +434,42 @@ export function createTransport({
         'This build does not match the staging login configuration. Please contact the beta organizer.',
       );
     }
+    if (detached) return;
     assertCurrent(owner);
     verifiedGoogleBackend = owner;
   };
 
-  /** A session change: every request in flight ends, and its caller gets `Superseded`. */
+  /**
+   * Revokes a session nothing here holds any more, such as one a replaced sign-in's reply set.
+   * It is sent once, with its own cookie and only to `/api/auth/sign-out`, after the backend
+   * passes the Google check. It belongs to no session, so no session change ends it, and it
+   * changes nothing here. Resolves whether the server confirmed it.
+   */
+  const revokeDetached = async (cookie: string) => {
+    try {
+      // No session sends it, so no generation is current or stale for it.
+      await request('/api/auth/sign-out', Number.NaN, {
+        method: 'POST',
+        body: {},
+        sessionCookie: cookie,
+        logout: true,
+        detached: true,
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  /**
+   * A session change: every request in flight but a sign-in or a detached one ends, and its
+   * caller gets `Superseded`. A sign-in's caller gets it once the reply lands (see
+   * `onAbandoned`); a detached request belongs to no session.
+   */
   const abortAll = () => {
     requests.forEach((stop) => stop('session'));
     requests.clear();
   };
 
-  return { request, verifyGoogleBackend, abortAll };
+  return { request, verifyGoogleBackend, revokeDetached, abortAll };
 }

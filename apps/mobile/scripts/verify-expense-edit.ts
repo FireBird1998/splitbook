@@ -1,4 +1,7 @@
-/** #55: authorized edit/delete reads, revision races, and disk-backed interruption recovery. */
+/**
+ * #55: authorized edit/delete reads, revision races, and disk-backed interruption recovery.
+ * #232: a lost or resent edit or delete is confirmed by revision when the member checks it.
+ */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { mkdtemp, readFile, writeFile, rename, rm } from 'node:fs/promises';
@@ -139,7 +142,10 @@ async function run() {
       account: string | null = null,
       cleanup = false;
     let lose: 'PATCH' | 'DELETE' | null = null,
+      resend: 'PATCH' | null = null,
       offline = false;
+    // The server's answers to a resent request: the first, which is lost, then the resend's.
+    const resent: { status: number; code: string | null }[] = [];
     const writes: { method: string; revision: string | null; body: string }[] = [];
     const file = join(directory, 'draft.json');
     const drafts = {
@@ -177,6 +183,22 @@ async function run() {
           revision: headers.get('X-Splitbook-Revision'),
           body: String(init.body ?? ''),
         });
+      }
+      if (mutation && resend === init.method) {
+        // Android's OkHttp sends an identical request again when a pooled connection drops its
+        // answer. The first really commits; only the resend's answer reaches the controller.
+        resend = null;
+        const send = async () => {
+          const answer = await fetch(url, { ...init, redirect: 'error' });
+          const body: unknown = await answer.clone().json();
+          resent.push({
+            status: answer.status,
+            code: z.object({ code: z.string() }).safeParse(body).data?.code ?? null,
+          });
+          return answer;
+        };
+        await (await send()).arrayBuffer();
+        return send();
       }
       const response = await fetch(url, { ...init, redirect: 'error' });
       if (mutation && lose === init.method) {
@@ -297,14 +319,40 @@ async function run() {
       controller.resumeExpenseDraft();
       await controller.refresh();
       assert.equal(writes.length, count);
+      // #232: the saved Expense is one revision on and holds the note sent: Alex's own edit.
       await controller.reconcileExpense();
-      assert.equal(controller.getSnapshot().expense.latest?.notes, 'Committed recovery note');
-      await controller.acceptCurrentExpense();
+      assert.equal(controller.getSnapshot().expense.status, 'saved');
+      assert.equal(controller.getSnapshot().expense.message, 'Expense updated.');
+      assert.equal(controller.getSnapshot().screen, 'group');
       assert.equal(writes.length, count);
       assert.equal(await drafts.load(), null);
+      assert.equal((await read()).notes, 'Committed recovery note');
       console.log(
-        'PASS: committed edit response loss, persistent recovery and read-only acceptance.',
+        'PASS: committed edit response loss, persistent recovery, confirmed by revision on checking.',
       );
+      await controller.openExpense(groupId, expenseId);
+      await controller.editExpense();
+      await controller.updateExpenseDraft({ notes: 'Resent note' });
+      const beforeResend = await read();
+      count = writes.length;
+      resend = 'PATCH';
+      await controller.saveExpense();
+      assert.equal(writes.length, count + 1);
+      assert.deepEqual(resent, [
+        { status: 200, code: null },
+        { status: 409, code: 'STALE_REVISION' },
+      ]);
+      assert.equal(controller.getSnapshot().expense.status, 'saved');
+      assert.equal(controller.getSnapshot().expense.message, 'Expense updated.');
+      assert.equal(await drafts.load(), null);
+      const afterResend = await read();
+      assert.equal(afterResend.notes, 'Resent note');
+      assert.equal(afterResend.revision, beforeResend.revision + 1);
+      assert.equal(afterResend.editHistory.length, beforeResend.editHistory.length + 1);
+      console.log(
+        'PASS: a transport-level resend of a committed edit is confirmed as the member’s own, with one edit on the server.',
+      );
+      await controller.openExpense(groupId, expenseId);
       controller.reviewExpenseDeletion();
       current = await read();
       await sam.request(
@@ -331,13 +379,15 @@ async function run() {
       await controller.restore();
       await controller.openExpense(groupId, expenseId);
       controller.resumeExpenseDraft();
+      // #232: the saved Expense reads deleted: Alex's own delete.
       await controller.reconcileExpense();
-      assert.equal(controller.getSnapshot().expense.latest?.isDeleted, true);
-      assert.equal(controller.getSnapshot().expense.status, 'blocked');
+      assert.equal(controller.getSnapshot().expense.status, 'saved');
+      assert.equal(controller.getSnapshot().expense.message, 'Expense deleted.');
+      assert.equal(controller.getSnapshot().screen, 'group');
+      assert.equal((await read()).isDeleted, true);
       await controller.deleteExpense();
       await controller.saveExpense();
       assert.equal(writes.length, count);
-      await controller.acceptCurrentExpense();
       assert.equal(await drafts.load(), null);
       const activities = z
         .object({
@@ -355,7 +405,7 @@ async function run() {
         1,
       );
       console.log(
-        'PASS: stale delete refusal; committed deletion loss; authorized deleted read; one deletion Activity, no replay.',
+        'PASS: stale delete refusal; committed deletion loss, confirmed on checking; one deletion Activity, no replay.',
       );
     } finally {
       await controller.signOut();
