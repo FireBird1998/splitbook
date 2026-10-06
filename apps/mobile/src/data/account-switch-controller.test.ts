@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { decodeStoredSession } from './cookies';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse, MobileSnapshot } from './types';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // #200: the app dies partway through an account switch and restarts over the same storage.
 // Fictional people and Groups only.
@@ -239,6 +240,7 @@ function phone() {
             stored.identity = null;
           },
         },
+        savedQueries: savedQueriesIn(stored.cache),
         readCache: {
           retainGroups: async () => undefined,
           invalidateGroup: async (account, id) => {

@@ -5,6 +5,7 @@ import { createMobileController, type MobileController } from './data/mobile-con
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
 import { setFileWindow } from './test-utils/native';
+import { savedQueriesIn } from './test-utils/saved-queries';
 
 // #127: the App's loading, refreshing, offline and cold-start states, rendered through the real
 // App tree and controller. Only native modules are replaced.
@@ -210,6 +211,7 @@ function device() {
             identity = null;
           },
         },
+        savedQueries: savedQueriesIn(cache),
         readCache: {
           retainGroups: async () => undefined,
           invalidateGroup: async () => undefined,

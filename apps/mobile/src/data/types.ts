@@ -479,6 +479,11 @@ export interface MobileDependencies {
   /** Native identity acquisition only. The controller owns the app session. */
   googleSignIn?: () => Promise<GoogleIdentityResult>;
   readCache?: FinancialReadStore;
+  /**
+   * The persister's rows (ADR 0006, M3-1): one saved copy per query, keyed by its path, for the
+   * Groups list and Home's figures. Register it in `accountLocal.stores` too.
+   */
+  savedQueries?: AccountGroupRecordStore;
   offlineIdentity?: OfflineIdentityStore;
   fetch: MobileFetch;
   credentials: CredentialStore;

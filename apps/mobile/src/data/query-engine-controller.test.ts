@@ -3,6 +3,7 @@ import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse } from './types';
 import { hangUntilAborted } from '../test-utils/transport-faults';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // #214: TanStack Query owns the display reads under the controller. These checks drive the
 // controller's public commands, as the app does, and look only at the requests sent, the
@@ -194,6 +195,7 @@ function fixture(options: { freshness?: number } = {}) {
             cookie = null;
           },
         },
+        savedQueries: savedQueriesIn(disk),
         readCache: {
           ...records(disk),
           invalidateGroup: async (account, id) => {

@@ -11,6 +11,7 @@ import {
 } from '../test-utils/transport-faults';
 import { createMobileController } from './mobile-controller';
 import type { MobileTimer } from './types';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 const accountId = 'a00000000000000000000001',
   groupId = 'b00000000000000000000001';
 const iso = '2026-09-28T12:00:00.000Z',
@@ -105,6 +106,7 @@ function fixture(options: { timer?: MobileTimer } = {}) {
             identity = null;
           },
         },
+        savedQueries: savedQueriesIn(cache),
         readCache: {
           retainGroups: async (account, ids) => {
             for (const key of cache.keys()) {
