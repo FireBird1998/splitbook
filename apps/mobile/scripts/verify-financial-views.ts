@@ -244,11 +244,12 @@ async function verifyController(
       24,
       'All-time pagination lost records.',
     );
+    // A refresh reads the loaded pages again, and keeps them (#219, M1-3).
     await controller.refreshExpenses();
-    assert.equal(
-      controller.getSnapshot().financial.expenses.data.length,
-      20,
-      'Refresh did not replace pagination with the fresh first page.',
+    assert.ok(
+      controller.getSnapshot().financial.expenses.data.length === 24 &&
+        controller.getSnapshot().financial.expenses.pagination?.page === 2,
+      'Refresh did not read the loaded pages again.',
     );
     await controller.refreshBalances();
     assert.equal(
