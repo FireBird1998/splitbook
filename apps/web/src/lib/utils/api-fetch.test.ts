@@ -149,4 +149,27 @@ describe('fetcher through apiFetch', () => {
     expect(doc.assign).toHaveBeenCalledWith('/login?callbackUrl=%2Fdashboard');
     expect(doc.reload).not.toHaveBeenCalled();
   });
+
+  it('notes when a read last answered, for Home’s "Updated" time, and only when it succeeded', async () => {
+    const times = await import('./read-times');
+    const heard = vi.fn();
+    const stop = times.subscribeToAnswers(heard);
+    expect(times.lastAnswered('/api/user/balances')).toBeNull();
+
+    answer(500, { error: 'Internal diagnostic' });
+    await expect(doc.fetcher('/api/user/balances')).rejects.toThrow();
+    expect(times.lastAnswered('/api/user/balances')).toBeNull();
+    expect(heard).not.toHaveBeenCalled();
+
+    const before = Date.now();
+    answer(200, { data: { buckets: [] } });
+    await doc.fetcher('/api/user/balances');
+    expect(times.lastAnswered('/api/user/balances')).toBeGreaterThanOrEqual(before);
+    expect(times.lastAnswered('/api/invitations')).toBeNull();
+    expect(heard).toHaveBeenCalledTimes(1);
+
+    stop();
+    await doc.fetcher('/api/user/balances');
+    expect(heard).toHaveBeenCalledTimes(1);
+  });
 });

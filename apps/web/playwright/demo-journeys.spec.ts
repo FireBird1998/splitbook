@@ -1,4 +1,7 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
+import { formatCurrency } from '@splitbook/shared/currency';
+import { formatSignedCurrency } from '@splitbook/shared/money';
+import type { CurrencyBalanceBucket, HomeSuggestedPayment } from '@splitbook/shared/types';
 import {
   DEMO_GROUP_ID,
   DEMO_TRIP_NAME,
@@ -17,9 +20,51 @@ import {
  *
  * Every project (desktop/mobile × light/dark) runs the same journeys, so
  * assertions on mutable balances are relative to what the journey observed.
+ * Home's figures and suggested payments are checked against the balances read (#306),
+ * since the Household's recurring bills follow the run date.
  */
 
 test.describe.configure({ mode: 'serial' });
+
+const balancesCard = (page: Page) => page.getByRole('region', { name: 'Your balances' });
+const needsYouCard = (page: Page) => page.getByRole('region', { name: 'Needs you' });
+
+/** An amount in the seed's currencies (two decimals), from exact minor units. */
+const formatAmount = (amountMinor: number, currency = 'INR') =>
+  formatCurrency(amountMinor / 100, currency);
+
+/** The signed-in member's balances read, as Home reads it. */
+async function balancesRead(page: Page) {
+  const response = await page.request.get('/api/user/balances');
+  expect(response.ok()).toBe(true);
+  const { data } = await response.json();
+  return data as { buckets: CurrencyBalanceBucket[]; suggestedPayments: HomeSuggestedPayment[] };
+}
+
+/** Home shows each currency's figures and every suggested payment, as the read has them. */
+async function expectHomeMatchesBalancesRead(page: Page) {
+  const { buckets, suggestedPayments } = await balancesRead(page);
+  for (const { currency, youOwe, youAreOwed, net } of buckets) {
+    const figures = balancesCard(page).getByRole('group', { name: currency, exact: true });
+    for (const amount of [
+      formatSignedCurrency(net, currency),
+      formatCurrency(youOwe, currency),
+      formatCurrency(youAreOwed, currency),
+    ])
+      await expect(figures.getByText(amount, { exact: true }).first()).toBeVisible();
+  }
+  const records = needsYouCard(page).getByRole('link', { name: /^Record payment: / });
+  await expect(records).toHaveCount(suggestedPayments.length);
+  for (const [index, payment] of suggestedPayments.entries()) {
+    const title =
+      payment.direction === 'pay'
+        ? `You pay ${payment.counterpartyName}`
+        : `${payment.counterpartyName} pays you`;
+    await expect(records.nth(index)).toHaveAccessibleName(
+      `Record payment: ${title}, ${formatAmount(payment.amountMinor, payment.currency)}, in ${payment.groupName}`,
+    );
+  }
+}
 
 // State handed from the create-trip journey to the edit journey.
 let qaTripUrl = '';
@@ -29,21 +74,45 @@ test('alex: enters the demo and inspects her balance', async ({ page }, testInfo
   await enterAsPersona(page, 'alex');
   await expectThemeApplied(page, testInfo);
 
-  // Money-first dashboard: balance bucket in INR with a non-zero owed amount.
-  await expect(page.getByText('Current balance')).toBeVisible();
-  const balancePanel = page.locator('section', { hasText: 'Current balance' });
-  await expect(balancePanel.getByText('INR').first()).toBeVisible();
-  await expect(balancePanel.getByText("You're owed")).toBeVisible();
+  // Money-first Home: the INR balance, with Net, what she owes and what she is owed.
+  const balancePanel = balancesCard(page);
+  await expect(balancePanel.getByText('INR', { exact: true })).toBeVisible();
+  await expect(balancePanel.getByText('Net', { exact: true })).toBeVisible();
+  await expect(balancePanel.getByText('Owed to you', { exact: true })).toBeVisible();
 
   // The seeded trip appears with Alex's positive balance.
   await expect(page.getByText(DEMO_TRIP_NAME).first()).toBeVisible();
 
   if (testInfo.project.name === 'desktop-light') {
-    // Exact seeded amount — asserted once, before any journey mutates it.
-    await expect(balancePanel.getByText('₹6,160.00')).toBeVisible();
+    // Exact seeded amount — asserted once, before any journey mutates it: only Goa owes her.
+    await expect(balancePanel.getByText('₹6,160.00', { exact: true })).toBeVisible();
   }
 
+  await expectHomeMatchesBalancesRead(page);
   await reviewScreenshot(page, testInfo, 'alex-dashboard');
+});
+
+test('alex: Needs you → Record opens the payment’s Group on its Balances', async ({
+  page,
+}, testInfo) => {
+  await enterAsPersona(page, 'alex');
+  const { suggestedPayments } = await balancesRead(page);
+  const payment = suggestedPayments.find(({ direction }) => direction === 'pay');
+  expect(payment, 'the seed leaves Alex payments to make').toBeDefined();
+  const amount = formatAmount(payment!.amountMinor);
+
+  const record = needsYouCard(page).getByRole('link', {
+    name: `Record payment: You pay ${payment!.counterpartyName}, ${amount}, in ${payment!.groupName}`,
+  });
+  await expect(record).toHaveAttribute('href', `/groups/${payment!.groupId}?tab=balances`);
+  await record.click();
+
+  await page.waitForURL((url) => url.pathname.startsWith(`/groups/${payment!.groupId}`));
+  const main = page.getByRole('main');
+  await expect(main.getByText('Who pays whom')).toBeVisible();
+  // The same payment, as the Group's Balances suggests it.
+  await expect(main.getByText(amount, { exact: true }).first()).toBeVisible();
+  await reviewScreenshot(page, testInfo, 'alex-needs-you-record');
 });
 
 test('alex: creates a trip that is ready for a first expense', async ({ page }, testInfo) => {
@@ -111,9 +180,10 @@ test('sam: switches persona and records a settlement; balances update', async ({
   await enterAsPersona(page, 'alex');
   await switchPersona(page, 'sam');
 
-  // Sam owes on the seeded trip; the dashboard shows a payable INR balance.
-  const balancePanel = page.locator('section', { hasText: 'Current balance' });
-  await expect(balancePanel.getByText('You owe')).toBeVisible();
+  // Sam owes on the seeded trip; Home shows a payable INR balance and every suggested payment.
+  await expect(balancesCard(page).getByText('You owe', { exact: true })).toBeVisible();
+  await expectHomeMatchesBalancesRead(page);
+  await reviewScreenshot(page, testInfo, 'sam-dashboard');
 
   await page.goto(`/groups/${DEMO_GROUP_ID}`);
   await page
@@ -153,10 +223,21 @@ test('priya: switches persona and verifies her seeded balance', async ({ page },
   await enterAsPersona(page, 'alex');
   await switchPersona(page, 'priya');
 
-  // Priya owes ₹4,680.00 to Alex from the seeded trip; untouched by journeys.
-  const balancePanel = page.locator('section', { hasText: 'Current balance' });
-  await expect(balancePanel.getByText('You owe')).toBeVisible();
-  await expect(balancePanel.getByText('₹4,680.00')).toBeVisible();
+  // Priya owes ₹4,680.00 to Alex from the seeded trip; untouched by journeys. She owes
+  // nothing elsewhere, so it is all she owes.
+  const balancePanel = balancesCard(page);
+  await expect(balancePanel.getByText('You owe', { exact: true })).toBeVisible();
+  await expect(balancePanel.getByText('₹4,680.00', { exact: true })).toBeVisible();
+
+  // Alex has invited her to the Studio Lunch Club: answered from Needs you.
+  const invitation = needsYouCard(page)
+    .getByRole('listitem')
+    .filter({ hasText: 'Studio Lunch Club' });
+  await expect(invitation).toContainText('Invitation from Alex Rivera · Work');
+  await expect(invitation.getByRole('button', { name: 'Join Studio Lunch Club' })).toBeVisible();
+  await expect(invitation.getByRole('button', { name: 'Decline Studio Lunch Club' })).toBeVisible();
+  await expectHomeMatchesBalancesRead(page);
+  await reviewScreenshot(page, testInfo, 'priya-dashboard');
 
   await page.goto(`/groups/${DEMO_GROUP_ID}`);
   await page

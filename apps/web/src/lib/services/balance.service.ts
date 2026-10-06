@@ -11,12 +11,23 @@ import {
   calculateNetBalances,
   calculateNetBalancesMinor,
   simplifyDebts,
+  simplifyDebtsMinor,
   type BalanceExpense,
   type BalanceSettlement,
 } from '@splitbook/shared/debt-simplifier';
-import { aggregateCurrencyBalances } from '@splitbook/shared/dashboard';
-import { assertStoredExpenseMoney } from '@splitbook/shared/exact-money';
-import type { DashboardGroupBalance, GroupCategory } from '@splitbook/shared/types';
+import {
+  aggregateCurrencyBalances,
+  memberSuggestedPayments,
+  orderSuggestedPayments,
+} from '@splitbook/shared/dashboard';
+import { assertStoredExpenseMoney, toMajorAmount } from '@splitbook/shared/exact-money';
+import type {
+  DashboardGroupBalance,
+  GroupCategory,
+  HomeSuggestedPayment,
+  UserBalancesResponse,
+} from '@splitbook/shared/types';
+import { recurringExpenseService } from './recurring-expense.service';
 
 export class BalanceService {
   /**
@@ -157,9 +168,19 @@ export class BalanceService {
   }
 
   /**
-   * Get a user's net balance across all groups.
+   * The member's balances across their Groups (Home and the sidebar, and Android's Home).
+   *
+   * Like a Group's own reads, it first adds the recurring Expenses that have fallen due in each
+   * of the member's Groups (#306), so the figures match each Group's page.
+   *
+   * `suggestedPayments` (#306, additive) lists every payment the Group's Balances suggests
+   * where the member pays or receives, across their Groups, in exact minor units and Needs
+   * you's order. The other person is named from the Group's members, or from their account
+   * when they have left the Group with a balance open, as Balances does; never by email. The
+   * fields before it are unchanged: each Group's `settlement` still holds only the largest
+   * payment in its currency.
    */
-  async getUserBalances(userId: string) {
+  async getUserBalances(userId: string, now: Date = new Date()) {
     await connectDB();
 
     const groups = await Group.find({
@@ -168,6 +189,11 @@ export class BalanceService {
     })
       .populate('members.user', 'name email image')
       .lean();
+
+    await recurringExpenseService.generateDueExpensesForGroups(
+      groups.map((group) => group._id.toString()),
+      now,
+    );
 
     const groupIds = groups.map((group) => group._id);
     const [allExpenses, allSettlements] = await Promise.all([
@@ -197,6 +223,9 @@ export class BalanceService {
     }
 
     const groupBalances: DashboardGroupBalance[] = [];
+    const suggested: HomeSuggestedPayment[] = [];
+    /** People in a suggested payment who are no longer members of its Group. */
+    const formerIds = new Set<string>();
 
     for (const group of groups) {
       const groupId = group._id.toString();
@@ -244,34 +273,38 @@ export class BalanceService {
             paidTo: settlement.paidTo.toString(),
             amount: settlement.amount,
           }));
-        const netBalances = calculateNetBalances(expenseData, settlementData, currency);
-        const userBalance = netBalances.find((balance) => balance.userId === userId);
+        // The Group's Balances simplifies the same exact balances, so both suggest the same payments.
+        const netMinor = calculateNetBalancesMinor(expenseData, settlementData, currency);
+        const userBalance = netMinor.find((balance) => balance.userId === userId);
 
-        if (!userBalance || userBalance.amount === 0) return [];
+        if (!userBalance || userBalance.amountMinor === 0) return [];
 
-        const settlement = simplifyDebts(netBalances, currency)
-          .filter(
-            (debt) =>
-              (userBalance.amount < 0 && debt.from === userId) ||
-              (userBalance.amount > 0 && debt.to === userId),
-          )
-          .sort((a, b) => b.amount - a.amount)[0];
-        const counterpartyId = settlement
-          ? settlement.from === userId
-            ? settlement.to
-            : settlement.from
-          : undefined;
+        const payments = memberSuggestedPayments(simplifyDebtsMinor(netMinor), userId);
+        for (const payment of payments) {
+          const name = memberNames.get(payment.counterpartyId);
+          if (name === undefined) formerIds.add(payment.counterpartyId);
+          suggested.push({
+            groupId,
+            groupName: group.name,
+            currency,
+            ...payment,
+            counterpartyName: name ?? '',
+          });
+        }
+
+        // Unchanged for Android: only the largest payment, with a former member named Unknown.
+        const settlement = [...payments].sort((a, b) => b.amountMinor - a.amountMinor)[0];
 
         return [
           {
             currency,
-            balance: userBalance.amount,
-            ...(settlement && counterpartyId
+            balance: toMajorAmount(userBalance.amountMinor, currency),
+            ...(settlement
               ? {
                   settlement: {
-                    counterpartyId,
-                    counterpartyName: memberNames.get(counterpartyId) || 'Unknown',
-                    amount: settlement.amount,
+                    counterpartyId: settlement.counterpartyId,
+                    counterpartyName: memberNames.get(settlement.counterpartyId) || 'Unknown',
+                    amount: toMajorAmount(settlement.amountMinor, currency),
                   },
                 }
               : {}),
@@ -289,11 +322,28 @@ export class BalanceService {
       });
     }
 
+    // Someone who left a Group with a balance open is named from their account, as Balances does.
+    const formerNames = new Map<string, string>();
+    if (formerIds.size > 0) {
+      const former = await User.find({ _id: { $in: [...formerIds] } })
+        .select('name')
+        .lean();
+      for (const user of former) formerNames.set(String(user._id), user.name);
+    }
+    const suggestedPayments = orderSuggestedPayments(
+      suggested.map((payment) => ({
+        ...payment,
+        counterpartyName:
+          payment.counterpartyName || formerNames.get(payment.counterpartyId) || 'Unknown',
+      })),
+    );
+
     return {
       buckets: aggregateCurrencyBalances(groupBalances),
       groups: groupBalances,
       hasMixedCurrencies: groupBalances.some((group) => group.hasMixedCurrencies),
-    };
+      suggestedPayments,
+    } satisfies UserBalancesResponse;
   }
 }
 

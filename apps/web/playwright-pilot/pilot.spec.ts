@@ -1,9 +1,9 @@
 import { expect, test } from '@playwright/test';
 import { DEMO_GROUP_ID, enterAsPersona, expectThemeApplied } from '../playwright/fixtures';
-import { installPilotFixtures, expectAccessible, groupBalances } from './fixtures';
+import { installPilotFixtures, expectAccessible, groupBalances, settledSummary } from './fixtures';
 
-test('pending invitations do not claim there are no pending actions', async ({ page }) => {
-  await installPilotFixtures(page, { '/api/groups': [] });
+test('pending invitations do not claim nothing needs you', async ({ page }) => {
+  await installPilotFixtures(page, { '/api/groups': [], '/api/user/balances': settledSummary });
   await enterAsPersona(page, 'alex');
   let release!: () => void;
   const pending = new Promise<void>((resolve) => {
@@ -16,12 +16,12 @@ test('pending invitations do not claim there are no pending actions', async ({ p
   try {
     await page.reload();
     await expect(page.getByRole('heading', { name: 'No groups yet' })).toBeVisible();
-    await expect(page.getByRole('status', { name: 'Loading pending actions' })).toBeVisible();
-    await expect(page.getByText('No recent activity or pending actions.')).toHaveCount(0);
+    await expect(page.getByRole('status', { name: 'Loading invitations' })).toBeVisible();
+    await expect(page.getByText('Nothing needs you')).toHaveCount(0);
   } finally {
     release();
   }
-  await expect(page.getByText('No recent activity or pending actions.')).toBeVisible();
+  await expect(page.getByText('Nothing needs you')).toBeVisible();
 });
 
 test('pending settlement history is loading, not an empty result', async ({ page }) => {
@@ -49,8 +49,8 @@ test('pending settlement history is loading, not an empty result', async ({ page
 });
 
 for (const section of [
-  { path: '/api/groups', message: 'Groups could not be loaded.' },
-  { path: '/api/invitations', message: 'Pending actions could not be loaded.' },
+  { path: '/api/groups', message: 'Groups could not be loaded.', retry: 'Retry' },
+  { path: '/api/invitations', message: 'Invitations could not be loaded.', retry: 'Try again' },
 ]) {
   test(`dashboard recovers ${section.path} without losing loaded balances`, async ({ page }) => {
     await installPilotFixtures(page);
@@ -63,10 +63,16 @@ for (const section of [
     const error = page.getByRole('alert').filter({ hasText: section.message });
     await expect(error).toBeVisible();
     await expect(
-      page.getByRole('region', { name: 'Current balance' }).getByText('₹1,480.00'),
+      page.getByRole('region', { name: 'Your balances' }).getByText('₹1,480.00', { exact: true }),
+    ).toBeVisible();
+    // The suggested payment stays in Needs you whichever read failed beside it.
+    await expect(
+      page
+        .getByRole('region', { name: 'Needs you' })
+        .getByRole('link', { name: /^Record payment: You pay Sam Chen/ }),
     ).toBeVisible();
     failing = false;
-    await error.getByRole('button', { name: 'Retry' }).click();
+    await error.getByRole('button', { name: section.retry }).click();
     await expect(error).toHaveCount(0);
   });
 }
@@ -111,21 +117,31 @@ test('dashboard keeps loaded groups visible and retries a safe balance error', a
   await expect(page.getByText('Settled', { exact: true })).toHaveCount(0);
   await expect(page.getByText('Balance unavailable', { exact: true }).first()).toBeVisible();
   await expect(page.getByText('Create your first group', { exact: true })).toHaveCount(0);
+  // Needs you can't list payments without the read, and never says nothing needs you.
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'Suggested payments could not be loaded.' }),
+  ).toBeVisible();
+  await expect(page.getByText('Nothing needs you')).toHaveCount(0);
   failing = false;
-  await error.getByRole('button', { name: 'Retry' }).click();
+  await error.getByRole('button', { name: 'Try again' }).click();
   await expect(error).toHaveCount(0);
+  // In the page: Next's route announcer is an alert of its own, outside main.
+  await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
 });
 
 test('empty dashboard and settled balances remain distinct from errors', async ({ page }) => {
   await installPilotFixtures(page, {
     '/api/groups': [],
-    '/api/user/balances': { buckets: [], groups: [], hasMixedCurrencies: false },
+    '/api/user/balances': settledSummary,
     [`/api/groups/${DEMO_GROUP_ID}/balances`]: { balances: [], debts: [], currency: 'INR' },
     [`/api/groups/${DEMO_GROUP_ID}/settlements`]: [],
   });
   await enterAsPersona(page, 'alex');
   await expect(page.getByRole('heading', { name: 'No groups yet' })).toBeVisible();
   await expect(page.getByRole('link', { name: 'Create your first group' })).toBeVisible();
+  await expect(page.getByText('No balances yet')).toBeVisible();
+  await expect(page.getByText('Nothing needs you')).toBeVisible();
+  await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
   await page.goto(`/groups/${DEMO_GROUP_ID}?tab=balances`);
   await expect(page.getByRole('heading', { name: 'All settled up' })).toBeVisible();
   await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
@@ -178,11 +194,16 @@ test('initial dashboard loading is announced until requests finish', async ({ pa
   }
   try {
     await page.reload();
-    await expect(page.getByRole('status', { name: 'Loading dashboard' })).toBeVisible();
+    // Each card announces its own loading.
+    await expect(page.getByRole('status', { name: 'Loading your balances' })).toBeVisible();
+    await expect(page.getByRole('status', { name: 'Loading what needs you' })).toBeVisible();
   } finally {
     release();
   }
-  await expect(page.getByText('Current balance', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Your balances' }).getByText('Net', { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole('status', { name: /^Loading/ })).toHaveCount(0);
 });
 
 test('narrow and breakpoint layouts keep settlement controls reachable and return dialog focus', async ({
@@ -245,9 +266,14 @@ for (const screen of ['dashboard', 'balances'] as const) {
     await installPilotFixtures(page);
     await enterAsPersona(page, 'alex');
     if (screen === 'balances') await page.goto(`/groups/${DEMO_GROUP_ID}?tab=balances`);
-    await expect(
-      page.getByText(screen === 'balances' ? 'Who pays whom' : 'Current balance', { exact: true }),
-    ).toBeVisible();
+    if (screen === 'balances')
+      await expect(page.getByText('Who pays whom', { exact: true })).toBeVisible();
+    else
+      await expect(
+        page
+          .getByRole('region', { name: 'Needs you' })
+          .getByRole('link', { name: /^Record payment/ }),
+      ).toBeVisible();
     await expectThemeApplied(page, testInfo);
     await expectAccessible(page, testInfo);
     await page.evaluate(() => document.fonts.ready);

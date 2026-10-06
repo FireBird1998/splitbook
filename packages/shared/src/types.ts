@@ -321,8 +321,29 @@ export type DashboardNextAction =
       groupId: string;
     };
 
+/** Whether the member makes a suggested payment or receives it. */
+export type SuggestedPaymentDirection = 'pay' | 'receive';
+
+/**
+ * One payment Splitbook suggests in a Group, where the member pays or receives (#306): the same
+ * payment the Group's Balances lists under "Who pays whom".
+ */
+export interface HomeSuggestedPayment {
+  groupId: string;
+  groupName: string;
+  currency: string;
+  direction: SuggestedPaymentDirection;
+  /** The other person: the one the member pays, or the one who pays the member. */
+  counterpartyId: string;
+  counterpartyName: string;
+  /** Exact, in the currency's minor units (paise, cents), and always above zero. */
+  amountMinor: number;
+}
+
 export interface UserBalancesResponse {
   buckets: CurrencyBalanceBucket[];
   groups: DashboardGroupBalance[];
   hasMixedCurrencies: boolean;
+  /** Every suggested payment involving the member, across their Groups, in Needs you's order. */
+  suggestedPayments: HomeSuggestedPayment[];
 }

@@ -45,6 +45,24 @@ const summary: UserBalancesResponse = {
       ],
     },
   ],
+  suggestedPayments: [
+    {
+      groupId: DEMO_GROUP_ID,
+      groupName: group.name,
+      currency: 'INR',
+      direction: 'pay',
+      counterpartyId: sam._id,
+      counterpartyName: sam.name,
+      amountMinor: 148_000,
+    },
+  ],
+};
+/** A member in no Group with an open balance: nothing owed, nothing to pay or receive. */
+export const settledSummary: UserBalancesResponse = {
+  buckets: [],
+  groups: [],
+  hasMixedCurrencies: false,
+  suggestedPayments: [],
 };
 export const groupBalances = {
   balances: [

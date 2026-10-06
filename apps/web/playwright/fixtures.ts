@@ -15,14 +15,12 @@ export type PersonaKey = keyof typeof PERSONAS;
 export const DEMO_GROUP_ID = 'a00000000000000000000010';
 export const DEMO_TRIP_NAME = 'Goa Friends Trip';
 
-/** Enter the demo as a persona and land on a loaded dashboard. */
+/** Enter the demo as a persona and land on Home. */
 export async function enterAsPersona(page: Page, persona: PersonaKey): Promise<void> {
   await page.goto('/');
   await page.getByRole('button', { name: `Enter as ${PERSONAS[persona]}` }).click();
   await page.waitForURL((url) => url.pathname === '/dashboard');
-  await expect(
-    page.getByRole('heading', { name: /good (morning|afternoon|evening)/i }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Home', level: 1, exact: true })).toBeVisible();
 }
 
 /** Whether the project runs at phone width, where the sidebar is a drawer. */
