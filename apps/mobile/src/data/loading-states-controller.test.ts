@@ -1598,13 +1598,27 @@ describe('Home after navigating while the Groups list loads (#190)', () => {
     await controller.signIn('alex');
     controller.startCreate();
     controller.updateCreation({ name: 'Cabin Weekend' });
-    await controller.createGroup();
-    const created = controller.getSnapshot().detail.id;
-    // Reading the new Group again saves it for offline use, as its reads did when it opened,
-    // before the list read after the create listed it (#283).
+    // The list read after the create (#283) waits, so no list lists the new Group yet. Its
+    // Balances, its last read before that list, are held first, to know when the list is next.
+    const opening = f.hold('/api/groups/b');
+    const creating = controller.createGroup();
+    await opening.reached;
+    const [{ _id: created }] = f.state.created;
+    const balances = f.hold(`/api/groups/${created}/balances`);
+    opening.release();
+    await balances.reached;
+    const list = f.hold('/api/groups');
+    balances.release();
+    await list.reached;
+    // Reading the new Group again, before any list read lists it, saves it for offline use. What
+    // its opening saved goes first, so this is the refresh's own save.
+    f.unsave(`/api/groups/${created}`);
     await controller.refresh();
     expect(controller.getSnapshot().detail).toMatchObject({ status: 'ready', id: created });
     expect(f.saved(`/api/groups/${created}`)).not.toBeNull();
+    list.release();
+    await creating;
+    expect(controller.getSnapshot().groups.data.map(({ id }) => id)).toContain(created);
   });
 
   it('keeps a Group left while the list loads off Home, whichever answers first', async () => {

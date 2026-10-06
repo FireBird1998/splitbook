@@ -1530,8 +1530,17 @@ describe('Home after Create Group (#283)', () => {
       (state) => state.auth.status === 'restoring' && state.auth.user !== null,
     );
     expect(checking && names(checking)).toEqual(['Maple House', 'Cabin Weekend', 'Zed Club']);
-    // Offline, Home lists it with the others, as saved: never as read now. Home's time is the
-    // older of its two saved copies, its figures' from the sign-in.
+    // Offline, Home lists it with the others from the saved list. The list is restored before
+    // Home's figures, so Home first shows the list's own saved time alone, offline: not now's.
+    const listed = published.find(
+      (state) => state.auth.status === 'authenticated' && state.groups.status === 'ready',
+    );
+    expect(listed).toMatchObject({
+      screen: 'groups',
+      offline: { active: true, refreshedAt: start + 10_000 },
+    });
+    expect(listed && names(listed)).toEqual(['Maple House', 'Cabin Weekend', 'Zed Club']);
+    // Then Home's time is the older of its two saved copies, its figures' from the sign-in.
     expect(restarted.getSnapshot()).toMatchObject({
       auth: { status: 'authenticated', user: { id: alex.id } },
       screen: 'groups',
@@ -1548,6 +1557,20 @@ describe('Home after Create Group (#283)', () => {
       financial: { groupId: zedId, expenses: { data: [{ description: 'Rent' }] } },
       offline: { active: true },
     });
+
+    // The saved list is never current: back on Home and reconnected, it's read again, though it
+    // was verified five seconds ago, well inside the 30-second window.
+    await restarted.back();
+    const sent = f.calls.length;
+    f.connect(true);
+    await settle();
+    expect(f.reads(listPath, sent)).toBe(1);
+    expect(restarted.getSnapshot()).toMatchObject({
+      screen: 'groups',
+      groups: { status: 'ready' },
+      offline: { active: false, refreshedAt: null },
+    });
+    expect(names(restarted.getSnapshot())).toEqual(['Maple House', 'Cabin Weekend', 'Zed Club']);
   });
 
   it('reads the list once when Alex goes back to Home while the new Group is still being read', async () => {
@@ -1567,6 +1590,36 @@ describe('Home after Create Group (#283)', () => {
     await settle();
     expect(f.reads(listPath, sent)).toBe(1);
     expect(controller.getSnapshot().screen).toBe('groups');
+    expect(names(controller.getSnapshot())).toEqual(['Maple House', 'Cabin Weekend', 'Zed Club']);
+    expect(f.row(listPath)).toMatchObject({
+      value: { data: [{ _id: mapleId }, { _id: cabinId }, { _id: zedId }] },
+    });
+  });
+
+  it('reads the list from the server when Home’s read during the new Group’s reads answered with the saved copy', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    controller.startCreate();
+    controller.updateCreation({ name: 'Zed Club' });
+    const balances = f.hold(`/api/groups/${zedId}/balances`);
+    const sent = f.calls.length;
+    const creating = controller.createGroup();
+    await balances.reached;
+    // Back on Home, its list read loses its reply: the list saved before the create stands in.
+    const lost = f.hold(listPath, { lost: true });
+    const back = controller.back();
+    await lost.reached;
+    lost.release();
+    await back;
+    expect(controller.getSnapshot()).toMatchObject({ screen: 'groups', offline: { active: true } });
+    expect(names(controller.getSnapshot())).toEqual(['Maple House', 'Cabin Weekend']);
+    // The create's own list read never keeps a saved copy: it reads the server, which lists it.
+    balances.release();
+    await creating;
+    await settle();
+    expect(f.reads(listPath, sent)).toBe(2);
     expect(names(controller.getSnapshot())).toEqual(['Maple House', 'Cabin Weekend', 'Zed Club']);
     expect(f.row(listPath)).toMatchObject({
       value: { data: [{ _id: mapleId }, { _id: cabinId }, { _id: zedId }] },

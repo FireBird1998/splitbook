@@ -248,7 +248,11 @@ function fixture(options: { timer?: MobileTimer } = {}) {
           if (path === '/api/groups')
             return Response.json({
               status: 200,
-              data: revoked || activeUser.id !== accountId ? [] : [group],
+              // As on the real server, a Group created here is listed from then on.
+              data:
+                activeUser.id !== accountId
+                  ? []
+                  : [...(revoked ? [] : [group]), ...(created ? [created] : [])],
             });
           if (path === '/api/user/balances')
             return Response.json({
@@ -544,6 +548,11 @@ describe('account-scoped offline financial views', () => {
       screen: 'group',
       detail: { data: { name: 'Cabin Weekend' } },
     });
+    // The list read after the create lists it beside the Group already there (#283).
+    expect(restarted.getSnapshot().groups.data.map(({ name }) => name)).toEqual([
+      'Offline home',
+      'Cabin Weekend',
+    ]);
   });
   it('removes denied cached Group data so it cannot return on a later offline restart', async () => {
     const f = fixture(),
