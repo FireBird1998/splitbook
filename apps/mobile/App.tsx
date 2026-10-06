@@ -713,6 +713,15 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     shownScrollKey.current = scrollKey;
     scrollY.current = 0;
   }
+  // Where the view was when the newest Expense page dropped, before Android clamps the offset to
+  // the shorter list: the shift that keeps the row on screen starts from there (#219).
+  const firstPage = state.financial.expenses.firstPage ?? 1;
+  const shownFirstPage = useRef(firstPage);
+  const slideFrom = useRef<number | null>(null);
+  if (shownFirstPage.current !== firstPage) {
+    slideFrom.current = firstPage > shownFirstPage.current ? scrollY.current : null;
+    shownFirstPage.current = firstPage;
+  }
   if (!state.restoreScroll) pendingScroll.current = null;
   else if (state.restoreScroll.request !== restoreRequest.current) {
     restoreRequest.current = state.restoreScroll.request;
@@ -911,7 +920,9 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                 onLoadNewer={() => void controller.loadNewerExpenses()}
                 // The newest page dropped: the row on screen keeps its place (#219).
                 onShift={(dy) => {
-                  scrollY.current = Math.max(0, scrollY.current + dy);
+                  const from = slideFrom.current ?? scrollY.current;
+                  slideFrom.current = null;
+                  scrollY.current = Math.max(0, from + dy);
                   scroll.current?.scrollTo({ y: scrollY.current, animated: false });
                 }}
                 onOpenExpense={(expenseId) => openExpense(group.id, expenseId)}

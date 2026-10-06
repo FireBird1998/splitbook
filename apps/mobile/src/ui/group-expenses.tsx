@@ -489,8 +489,10 @@ export function GroupExpensesView({
     expenses.status === 'ready' &&
     expenses.pagination !== null &&
     expenses.pagination.page < expenses.pagination.totalPages;
-  // The list has slid past its newest page: the pages before it are read with Load newer.
-  const newer = listed && expenses.status === 'ready' && (expenses.firstPage ?? 1) > 1;
+  // The list has slid past its newest page: the pages before it are read with Load newer. It stays
+  // in place, disabled, while the window is read again, so the rows below it never move (#219).
+  const newer = listed && (expenses.firstPage ?? 1) > 1;
+
   const scope = state.month ? monthLabel(state.month) : 'all-time';
   return (
     <View style={{ gap: 12 }}>
@@ -524,6 +526,7 @@ export function GroupExpensesView({
         ? pageControl({
             which: 'newer',
             status: expenses.newerStatus ?? 'idle',
+            disabled: expenses.status !== 'ready',
             message: expenses.newerMessage ?? null,
             color: theme.brand.main,
             onPress: onLoadNewer,
@@ -621,12 +624,15 @@ function pageControl({
   status,
   message,
   color,
+  disabled = false,
   onPress,
 }: {
   which: 'more' | 'newer';
   status: 'idle' | 'loading' | 'error';
   message: string | null;
   color: string;
+  /** Shown but not offered: the list it adds to is being read again. */
+  disabled?: boolean;
   onPress: () => void;
 }) {
   if (status === 'loading')
@@ -659,6 +665,7 @@ function pageControl({
         }
         variant="tonal"
         block
+        disabled={disabled}
         onPress={onPress}
       />
     </>

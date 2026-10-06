@@ -339,6 +339,50 @@ describe('Expense rows', () => {
     expect(failed.onLoadMore).toHaveBeenCalledOnce();
   });
 
+  it('renders a row again when its Expense changes, and when it stops being just saved (#219)', () => {
+    const props = {
+      group: group(),
+      currentUserId: you,
+      kept: null,
+      now,
+      onSelectMonth: vi.fn(),
+      onRefreshExpenses: vi.fn(),
+      onLoadMore: vi.fn(),
+      onLoadNewer: vi.fn(),
+      onOpenExpense: vi.fn(),
+      onResumeDraft: vi.fn(),
+      onDiscardDraft: vi.fn(),
+    };
+    act(() => {
+      screen = create(
+        <GroupExpensesView {...props} state={financial()} savedExpenseId={groceries.id} />,
+      );
+    });
+    const rows = () => buttons(screen!.root).filter((label) => label?.includes('₹'));
+    expect(rows()).toContain(
+      'Weekly groceries, ₹1,249.50, You paid, Groceries, you lent ₹833.00, just saved',
+    );
+    // A read changed one row, and the save is no longer just made; the other rows are as they were.
+    const corrected = {
+      ...electricity,
+      description: 'Electricity bill, corrected',
+    };
+    act(() =>
+      screen!.update(
+        <GroupExpensesView
+          {...props}
+          state={financial({ data: [groceries, corrected, lunch, villa] })}
+          savedExpenseId={null}
+        />,
+      ),
+    );
+    expect(rows()).toContain('Weekly groceries, ₹1,249.50, You paid, Groceries, you lent ₹833.00');
+    expect(rows().filter((label) => label?.endsWith('just saved'))).toEqual([]);
+    expect(
+      rows().filter((label) => label?.startsWith('Electricity bill, corrected, ')),
+    ).toHaveLength(1);
+    expect(rows().filter((label) => label?.startsWith('Electricity bill, ₹'))).toEqual([]);
+  });
   it('has no Load more on the last page', () => {
     expect(buttons(view().root)).not.toContain('Load more expenses');
   });
@@ -467,6 +511,48 @@ describe('Expense rows', () => {
       expect(onShift).toHaveBeenCalledOnce();
     });
 
+    it('shows Load newer, above the rows, once Load more slides the list past its newest page', () => {
+      const slide = render(1, vi.fn());
+      expect(buttons(screen!.root)).not.toContain('Load newer expenses');
+      slide(2);
+      const order = buttons(screen!.root);
+      expect(order.indexOf('Load newer expenses')).toBeGreaterThanOrEqual(0);
+      expect(order.indexOf('Load newer expenses')).toBeLessThan(
+        order.findIndex((label) => label?.startsWith('Fictional row 21,')),
+      );
+    });
+
+    it('keeps Load newer in place, disabled, while the slid window is read again', () => {
+      const slide = render(2, vi.fn());
+      const refreshing = window(2);
+      refreshing.expenses = { ...refreshing.expenses, status: 'loading' };
+      act(() =>
+        screen!.update(
+          <GroupExpensesView
+            group={group()}
+            currentUserId={you}
+            kept={null}
+            savedExpenseId={null}
+            now={now}
+            state={refreshing}
+            onSelectMonth={vi.fn()}
+            onRefreshExpenses={vi.fn()}
+            onLoadMore={vi.fn()}
+            onLoadNewer={vi.fn()}
+            onOpenExpense={vi.fn()}
+            onResumeDraft={vi.fn()}
+            onDiscardDraft={vi.fn()}
+          />,
+        ),
+      );
+      const newer = labelled(screen!.root, 'Load newer expenses');
+      expect(newer).toHaveLength(1);
+      expect(newer[0].props.accessibilityState).toEqual({ disabled: true });
+      slide(2);
+      expect(labelled(screen!.root, 'Load newer expenses')[0].props.accessibilityState).toEqual({
+        disabled: false,
+      });
+    });
     it('moves nothing when Load newer brings the newest page back', async () => {
       const onShift = vi.fn();
       const slide = render(2, onShift);

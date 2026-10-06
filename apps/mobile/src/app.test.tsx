@@ -13,6 +13,7 @@ import { createMobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
 import { emitAppState, pressBack } from './test-utils/native';
+import { GroupExpensesView } from './ui/group-expenses';
 
 // The real App tree renders through the shared host stand-ins; only native modules are replaced.
 // What the mocked `./runtime` serves: the controller under test and the appearance.
@@ -1128,6 +1129,53 @@ describe('App return from an Expense', () => {
   });
 });
 
+describe('App Expense window (#219)', () => {
+  // September has 6 pages of 20 fictional Expenses.
+  const septemberPage = (number: number) => ({
+    ...page(
+      Array.from({ length: 20 }, (_, row) =>
+        expense(
+          `e${String(number * 100 + row).padStart(23, '0')}`,
+          `Fictional row ${number}-${row + 1}`,
+        ),
+      ),
+    ),
+  });
+  const sixPages = (path: string) => {
+    if (!path.includes('/expenses?')) return undefined;
+    const number = Number(new URL(path, 'http://local').searchParams.get('page'));
+    const answer = septemberPage(number);
+    answer.data.pagination = { page: number, limit: 20, total: 120, totalPages: 6 };
+    answer.data.summary = { ...answer.data.summary, count: 120 };
+    return json(answer);
+  };
+
+  it('keeps the row on screen when the newest page drops: it scrolls from where the slide began', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    for (let number = 2; number <= 5; number += 1) await app.press('Load more expenses');
+    await app.scrollTo(5000);
+    native.scrollTo.mockClear();
+    await app.press('Load more expenses');
+    expect(app.text()).toContain('Fictional row 6-20');
+    expect(app.text()).not.toContain('Fictional row 1-1');
+    // The list is shorter now, so Android has already clamped the offset before the shift lands.
+    await app.scrollTo(4200);
+    const view = screen!.root.findByType(GroupExpensesView);
+    act(() => view.props.onShift(-1140));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({
+      y: 5000 - 1140,
+      animated: false,
+    });
+    // Only the slide's own shift starts from there.
+    act(() => view.props.onShift(-60));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({
+      y: 5000 - 1140 - 60,
+      animated: false,
+    });
+  });
+});
 describe('App invitation', () => {
   it('stays on the invitation while Joining Group…, then opens the joined Group', async () => {
     const app = await renderApp();
