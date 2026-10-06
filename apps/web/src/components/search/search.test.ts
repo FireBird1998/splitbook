@@ -2,6 +2,7 @@ import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ThemeProvider } from '@mui/material/styles';
 import { describe, expect, it, vi } from 'vitest';
+import { formatDate } from '@splitbook/shared/date';
 import type { SearchRead } from '@splitbook/shared/search-read';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { anchors, text } from '@/lib/test-utils/markup';
@@ -65,6 +66,12 @@ const READ: SearchRead = {
   ],
   more: { groups: false, people: false, expenses: true },
 };
+
+/**
+ * An Expense's date as the dialog shows it: the Expense list's formatter, in the zone the tests
+ * run in, so the expected labels hold in every zone the CI matrix runs (#227).
+ */
+const shownDate = (index: number) => formatDate(READ.expenses[index].date);
 
 const ids: SearchPanelProps['ids'] = {
   title: 'search-title',
@@ -179,13 +186,13 @@ describe('the search dialog’s states', () => {
       },
       {
         id: 'search-option-2',
-        name: 'Goa beach shack dinner &amp; drinks, Goa Friends Trip · Sep 12, 2026, ₹2,400.50',
+        name: `Goa beach shack dinner &amp; drinks, Goa Friends Trip · ${shownDate(0)}, ₹2,400.50`,
         selected: 'false',
         tabIndex: '-1',
       },
       {
         id: 'search-option-3',
-        name: 'Goa ferry, Goa Friends Trip · Sep 11, 2026',
+        name: `Goa ferry, Goa Friends Trip · ${shownDate(1)}`,
         selected: 'false',
         tabIndex: '-1',
       },
@@ -209,12 +216,12 @@ describe('the search dialog’s states', () => {
       {
         href: `/groups/${goa}?search=Goa%20beach%20shack%20dinner%20%26%20drinks`,
         current: null,
-        text: 'Goa beach shack dinner & drinks Goa Friends Trip · Sep 12, 2026 ₹2,400.50',
+        text: `Goa beach shack dinner & drinks Goa Friends Trip · ${shownDate(0)} ₹2,400.50`,
       },
       {
         href: `/groups/${goa}?search=Goa%20ferry`,
         current: null,
-        text: 'Goa ferry Goa Friends Trip · Sep 11, 2026',
+        text: `Goa ferry Goa Friends Trip · ${shownDate(1)}`,
       },
     ]);
   });
