@@ -301,6 +301,16 @@ export function createHomeQueries(session: HomeSession) {
       path,
       session.now(),
     );
+  /** The Groups this device's saved list lists, inside a lease write: null if it can't be read. */
+  const savedIds = async (accountId: string) => {
+    try {
+      const row = await rows?.load(accountId, listPath),
+        read = cachedRead(row, accountId, listPath, session.now());
+      return read ? listOf(read.value).map(({ id }) => id) : [];
+    } catch {
+      return null;
+    }
+  };
   /**
    * Saves an answer as its row on the saved-copy queue, where a newer answer replaces it. The
    * session, the account and the read's version are checked at write time, so nothing lands
@@ -444,24 +454,32 @@ export function createHomeQueries(session: HomeSession) {
     ])
       if (!listed.has(id)) lost.add(id);
     session.listed(listed, lost);
-    // An older list still waiting to be saved would list them again, and moved no version.
-    if (lost.size) queue.drop(listPath);
     // With no list known yet, this device may hold Groups the trim drops, and Home's saved
     // figures with them: figures still being read are read again after it.
     if (!snapshot().groups.loaded && held(keys()[1])?.fetchStatus === 'fetching')
       session.invalidate('home');
     const lease = session.lease();
     if (!lease) return;
+    let unchecked = false;
     try {
       await lease.write(async () => {
+        // The saved list may list a Group lost while it wasn't on screen: lost too (#323). One
+        // this device can't read goes as well, since it may.
+        const saved = await savedIds(lease.accountId);
+        for (const id of saved ?? []) if (!listed.has(id)) lost.add(id);
+        unchecked = !saved;
         await session.retain(lease.accountId, [...listed]);
-        if (lost.size) await forget(lease.accountId);
+        if (!lost.size && saved) return;
+        // An older list still waiting to be saved would list them again: this list moves no
+        // version, so nothing else refuses it.
+        queue.drop(listPath);
+        await forget(lease.accountId);
       });
     } catch (error) {
       if (!session.current(owner) || error instanceof Superseded) throw new Superseded();
       session.distrust(lease.accountId, [
         ...[...lost].flatMap((id) => [`group:${id}`, `ledger:${id}`, `balances:${id}`]),
-        ...(lost.size ? ['groups'] : []),
+        ...(lost.size || unchecked ? ['groups'] : []),
         'home',
       ]);
     }

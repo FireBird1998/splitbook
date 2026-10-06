@@ -91,11 +91,23 @@ function fixture() {
     disk = new Map<string, unknown>(),
     drafts = new Map<string, unknown>(),
     attempts = new Map<string, unknown>();
-  /** What the saved-copy databases can't do: remove copies, save a row, or keep listed Groups. */
-  const device = { failRemoval: false, failSave: false, failRetain: false };
-  /** Writes and removals of rows held part-way, as on a slow disk, by path. */
+  /**
+   * What the saved-copy databases can't do: remove copies, save a row, keep listed Groups, or
+   * read a row.
+   */
+  const device = { failRemoval: false, failSave: false, failRetain: false, failLoad: false };
+  /** Loads, writes and removals of rows held part-way, as on a slow disk, by path. */
   const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [],
-    removals: typeof writes = [];
+    removals: typeof writes = [],
+    loads: typeof writes = [];
+  /** Waits while the next step of this kind for `path` is held. */
+  const pause = async (steps: typeof writes, path: string) => {
+    const index = steps.findIndex((step) => step.path === path);
+    if (index < 0) return;
+    const [step] = steps.splice(index, 1);
+    step.arrive();
+    await step.released;
+  };
   /** Every request sent, answered or not. */
   const calls: { method: string; path: string; account: string }[] = [];
   /** Requests held until released, by path. */
@@ -125,24 +137,19 @@ function fixture() {
   };
   const savedQueries = {
     ...records(rows),
+    load: async (account: string, key: string) => {
+      if (device.failLoad) throw new Error('The device storage can’t be read');
+      await pause(loads, key);
+      return structuredClone(rows.get(account + key) ?? null);
+    },
     save: async (account: string, key: string, value: unknown) => {
       if (device.failSave) throw new Error('The device storage is full');
-      const index = writes.findIndex((write) => write.path === key);
-      if (index >= 0) {
-        const [write] = writes.splice(index, 1);
-        write.arrive();
-        await write.released;
-      }
+      await pause(writes, key);
       rows.set(account + key, structuredClone(value));
     },
     remove: async (account: string, key: string) => {
       if (device.failRemoval) throw new Error('The device storage is full');
-      const index = removals.findIndex((removal) => removal.path === key);
-      if (index >= 0) {
-        const [removal] = removals.splice(index, 1);
-        removal.arrive();
-        await removal.released;
-      }
+      await pause(removals, key);
       rows.delete(account + key);
     },
   };
@@ -392,6 +399,8 @@ function fixture() {
     holdWrite: (path: string) => holdRow(writes, path),
     /** The next removal of this path's row waits until released. */
     holdRemoval: (path: string) => holdRow(removals, path),
+    /** The next load of this path's row waits until released. */
+    holdLoad: (path: string) => holdRow(loads, path),
     /** NetInfo reports the device's connection. */
     connect(isConnected: boolean) {
       server.offline = !isConnected;
@@ -937,6 +946,12 @@ describe('a lost Group never returns from the saved Groups list (#323)', () => {
   const notSaved = 'This view was not saved on this device. Connect to load it.';
   const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
   const withMaple = (state: MobileSnapshot) => names(state).includes('Maple House');
+  /** Maple House anywhere: in the list, or its Group, Expenses or Balances. */
+  const showsMaple = (state: MobileSnapshot) =>
+    withMaple(state) ||
+    (state.detail.id === mapleId && state.detail.data !== null) ||
+    (state.financial.groupId === mapleId &&
+      (state.financial.expenses.data.length > 0 || state.financial.balances.data !== null));
   /** The saved-copy databases become read-only, or writable again. */
   const readOnly = (f: Fixture, on: boolean) =>
     Object.assign(f.device, { failRemoval: on, failSave: on, failRetain: on });
@@ -963,6 +978,15 @@ describe('a lost Group never returns from the saved Groups list (#323)', () => {
       groups: { status: 'ready' },
     });
     expect(withMaple(controller.getSnapshot())).toBe(false);
+  }
+  /** The session ends with a 401, which keeps this device's data; meanwhile Alex loses Maple. */
+  async function loseMapleSignedOut(f: Fixture, controller: Controller) {
+    later(31_000);
+    f.server.expired = true;
+    await controller.refreshHome();
+    expect(controller.getSnapshot().auth.status).toBe('signed-out');
+    f.server.expired = false;
+    f.server.revoked.add(mapleId);
   }
   /** Force-stop, then a cold start without a connection: every snapshot it publishes. */
   async function restartOffline(f: Fixture, controller: Controller) {
@@ -1153,6 +1177,66 @@ describe('a lost Group never returns from the saved Groups list (#323)', () => {
     const { published } = await restartOffline(f, controller);
     expect(published.some(withMaple)).toBe(false);
     expect(JSON.stringify(f.row(listPath))).not.toContain('Maple House');
+  });
+
+  it.each(['still failing', 'working again'] as const)(
+    'never shows a Group lost while its list was off screen, once a sign-in’s list beat the saved one, after an offline restart with storage %s',
+    async (storage) => {
+      const f = fixture();
+      const controller = await savedWithMaple(f);
+      await loseMapleSignedOut(f, controller);
+      readOnly(f, true);
+      // Alex signs in again: the list answers before this device has read its saved list.
+      const load = f.holdLoad(listPath);
+      const signingIn = controller.signIn('alex');
+      await load.reached;
+      await settle();
+      load.release();
+      await signingIn;
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        auth: { status: 'authenticated', user: { id: alex.id } },
+        groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+      });
+
+      readOnly(f, storage === 'still failing');
+      const { restarted, published } = await restartOffline(f, controller);
+      await restarted.openGroup(mapleId);
+      await settle();
+      // Neither the list nor Maple House, its Expenses or its Balances, from any saved copy.
+      expect(published.some(showsMaple)).toBe(false);
+      expect(restarted.getSnapshot()).toMatchObject({
+        auth: { status: 'authenticated', user: { id: alex.id } },
+        detail: { id: mapleId, status: 'error', data: null },
+      });
+      if (storage === 'working again') {
+        expect(f.row(listPath)).toBeNull();
+        expect([...f.disk.keys()].some((key) => key.includes(mapleId))).toBe(false);
+        expect(f.untrusted()).toBeNull();
+      }
+    },
+  );
+
+  it('never shows a Group lost while its list was off screen when this device can’t read its saved list then', async () => {
+    const f = fixture();
+    const controller = await savedWithMaple(f);
+    await loseMapleSignedOut(f, controller);
+    // Alex signs in again while this device can neither read its saved list nor save the new one.
+    Object.assign(f.device, { failLoad: true, failSave: true });
+    await controller.signIn('alex');
+    await settle();
+    expect(names(controller.getSnapshot())).toEqual(['Cabin Weekend']);
+
+    f.device.failLoad = false;
+    const { restarted, published } = await restartOffline(f, controller);
+    await restarted.openGroup(mapleId);
+    await settle();
+    expect(published.some(showsMaple)).toBe(false);
+    expect(restarted.getSnapshot()).toMatchObject({
+      auth: { status: 'authenticated', user: { id: alex.id } },
+      groups: { status: 'error', message: notSaved, data: [] },
+      detail: { id: mapleId, status: 'error', data: null },
+    });
   });
 
   // Every combination of the trim's device writes failing: the older store's trim to the listed
