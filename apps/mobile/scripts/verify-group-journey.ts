@@ -272,8 +272,11 @@ async function verify() {
         `GET ${householdPath}`,
         `GET ${householdPath}/expenses`,
         `GET ${householdPath}/balances`,
+        // Then the Groups list, on purpose: the create made the saved list obsolete, so it is read
+        // again once the Group has opened, as after a join, and an offline restart lists it (#283).
+        'GET /api/groups',
       ],
-      'The created Household was not read, then its Expenses, then its Balances.',
+      'The created Household was not read, then its Expenses, then its Balances, then the Groups list.',
     );
     const { financial } = opened;
     assert.ok(
