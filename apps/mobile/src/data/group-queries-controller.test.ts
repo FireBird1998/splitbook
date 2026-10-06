@@ -685,6 +685,61 @@ describe('one query of up to 5 pages per Month (#219, M1-3, M7-2)', () => {
       'expenses 2026-09 p1',
     ]);
   });
+
+  it('reads a slid window again from its first page: the Group, pages 2 to 6, then Balances', async () => {
+    const f = fixture();
+    const controller = await withPages(f, 6);
+    const sent = f.calls.length;
+    await controller.refresh('pull');
+    expect(f.gets(sent)).toEqual([
+      'group',
+      'expenses 2026-09 p2',
+      'expenses 2026-09 p3',
+      'expenses 2026-09 p4',
+      'expenses 2026-09 p5',
+      'expenses 2026-09 p6',
+      'balances',
+    ]);
+    expect(controller.getSnapshot().financial.expenses).toMatchObject({
+      status: 'ready',
+      firstPage: 2,
+      pagination: { page: 6 },
+    });
+    expect(listed(controller.getSnapshot())).toEqual(septemberRows(21, 120));
+  });
+
+  // The rule: a Month shown again while the Group stays open shows the window it had, and reads
+  // it again only once it is past the freshness window. A new open lists each Month from its
+  // newest page (#215).
+  it('shows a slid window again when the member changes Month and comes back', async () => {
+    const f = fixture();
+    const controller = await withPages(f, 6);
+    await controller.selectMonth('2026-08');
+    expect(listed(controller.getSnapshot())).toEqual(
+      Array.from({ length: 20 }, (_, index) => `2026-08 expense ${index + 1}`),
+    );
+    let sent = f.calls.length;
+    await controller.selectMonth('2026-09');
+    expect(f.gets(sent)).toEqual([]);
+    expect(controller.getSnapshot().financial.expenses).toMatchObject({
+      firstPage: 2,
+      pagination: { page: 6 },
+    });
+    expect(listed(controller.getSnapshot())).toEqual(septemberRows(21, 120));
+    // Past the window, it is read again where it is.
+    await controller.selectMonth('2026-08');
+    later(31_000);
+    sent = f.calls.length;
+    await controller.selectMonth('2026-09');
+    expect(f.gets(sent).filter((read) => read.startsWith('expenses'))).toEqual([
+      'expenses 2026-09 p2',
+      'expenses 2026-09 p3',
+      'expenses 2026-09 p4',
+      'expenses 2026-09 p5',
+      'expenses 2026-09 p6',
+    ]);
+    expect(listed(controller.getSnapshot())).toEqual(septemberRows(21, 120));
+  });
 });
 
 describe('Balances follow every read of the Group or its Expense list (M1-5, AMEND-1)', () => {

@@ -459,11 +459,11 @@ describe('query defaults (#214, M1-6)', () => {
     // The Group and its Expenses are read together, once each (#219), then their saved copies
     // stand in, with their original time. Offline now, Balances check the session first, once,
     // and fall back too.
-    expect(
-      f.calls
-        .slice(before)
-        .map((call) => (call.path.startsWith(expensesPath) ? expensesPath : call.path)),
-    ).toEqual([groupPath, expensesPath, '/api/auth/get-session']);
+    expect(f.calls.slice(before).map((call) => call.path)).toEqual([
+      groupPath,
+      expect.stringMatching(new RegExp(`^${expensesPath.replace('?', '\\?')}page=1&limit=20&`)),
+      '/api/auth/get-session',
+    ]);
     expect(controller.getSnapshot()).toMatchObject({
       offline: { active: true, refreshedAt: start },
       detail: { status: 'ready', data: { id: groupId }, refreshedAt: start },

@@ -481,11 +481,12 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
     expect(controller.getSnapshot().expense.status).toBe('saved');
     await controller.back();
     await settle();
-    // Maple House's own view has its rows too since #219: its Group, Expenses and Balances.
-    expect([...f.rows.keys()].filter((key) => !key.includes(mapleId)).sort()).toEqual([
-      `${alex.id}${listPath}`,
-      `${alex.id}${homePath}`,
-    ]);
+    // Maple House's own view has its rows too since #219: its Group, its Month's first page of
+    // Expenses and its Balances.
+    const paths = [...f.rows.keys()].map((key) => key.slice(alex.id.length).split('?')[0]);
+    expect(paths.sort()).toEqual(
+      [listPath, maplePath, `${maplePath}/balances`, `${maplePath}/expenses`, homePath].sort(),
+    );
     expect(JSON.stringify([...f.rows.values()])).not.toContain('home-queries-attempt-0001');
     expect(JSON.stringify([...f.rows.values()])).not.toContain('Groceries');
   });
@@ -552,8 +553,8 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
       `GET ${homePath}`,
     ]);
 
-    // On a Group, nothing Home shows is active, so a reconnect reads nothing of it. (The Group's
-    // own view reads again since #219, M1-4.)
+    // On a Group, nothing Home shows is active, so a reconnect reads nothing of it; the Group's own
+    // view reads again, since #219 (M1-4).
     await controller.openGroup(mapleId);
     later(31_000);
     sent = f.calls.length;
@@ -561,8 +562,8 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
     f.connect(true);
     await settle();
     expect(
-      f.calls.slice(sent).filter(({ path }) => path === listPath || path === homePath),
-    ).toEqual([]);
+      f.calls.slice(sent).map(({ method, path }) => `${method} ${path.split('?')[0]}`),
+    ).toEqual([`GET ${maplePath}`, `GET ${maplePath}/expenses`, `GET ${maplePath}/balances`]);
   });
 
   it('reads nothing on return to the foreground within the window, and after it only what Home shows', async () => {

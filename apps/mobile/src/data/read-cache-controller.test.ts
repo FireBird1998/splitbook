@@ -650,9 +650,11 @@ describe('cached views and coalesced reads (#103)', () => {
     await controller.back();
     const before = f.calls.length;
     await controller.openGroup(groupId);
-    // The newer reads are reused. Balances may be read again: the pre-save Expense read, sent
-    // beside the Group (#219), can finish after them, once the member has left (AMEND-1).
-    expect(f.calls.slice(before).filter(({ path }) => path !== balanceReads)).toEqual([]);
+    // The newer reads are reused. Balances are read again, once: the pre-save Expense read, sent
+    // beside the Group (#219), finished after them, once the member had left (AMEND-1).
+    expect(f.calls.slice(before).map(({ method, path }) => `${method} ${path}`)).toEqual([
+      `GET ${balanceReads}`,
+    ]);
     expect(controller.getSnapshot().financial.expenses.data).toMatchObject([
       { description: '2026-09 rent, ledger 1' },
     ]);
