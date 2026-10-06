@@ -8,6 +8,7 @@ import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import MenuIcon from '@mui/icons-material/Menu';
 import { useThemeMode } from '@/providers/ThemeProvider';
 import DemoModeBadge from '@/components/demo/DemoModeBadge';
+import AddExpenseLauncher from '@/components/expenses/AddExpenseLauncher';
 import { TOPBAR_HEIGHT } from '@/lib/theme/tokens';
 import BrandLogo from './BrandLogo';
 import { HOME_HREF } from './shell-nav';
@@ -23,6 +24,7 @@ const iconButtonSx = {
 } as const;
 
 interface TopBarProps {
+  userId: string;
   demoMode: boolean;
   menuOpen: boolean;
   onOpenMenu: () => void;
@@ -30,9 +32,9 @@ interface TopBarProps {
 
 /**
  * The bar across the top of the main column: on phones the menu button and the logo, then
- * the demo badge in demo mode and the theme switch.
+ * the demo badge in demo mode, the theme switch and Add expense.
  */
-export default function TopBar({ demoMode, menuOpen, onOpenMenu }: TopBarProps) {
+export default function TopBar({ userId, demoMode, menuOpen, onOpenMenu }: TopBarProps) {
   const { mode, toggleTheme } = useThemeMode();
   const themeLabel = mode === 'light' ? 'Switch to dark mode' : 'Switch to light mode';
 
@@ -79,7 +81,7 @@ export default function TopBar({ demoMode, menuOpen, onOpenMenu }: TopBarProps) 
           {mode === 'light' ? <DarkModeOutlinedIcon /> : <LightModeOutlinedIcon />}
         </IconButton>
       </Tooltip>
-      {/* #304 adds the Add expense button here, at the end of the bar. */}
+      <AddExpenseLauncher userId={userId} />
     </Box>
   );
 }

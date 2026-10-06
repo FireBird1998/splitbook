@@ -125,7 +125,7 @@ src/
 │   │   ├── AppShell.tsx            # Sidebar (lg+) or drawer, top bar, main up to 1320 px
 │   │   ├── Sidebar.tsx             # Logo, Home, Group list, Settings, account
 │   │   ├── SidebarGroups.tsx       # Live Group list with each Group's balance line
-│   │   ├── TopBar.tsx              # Menu button + logo (phones), demo badge, theme switch
+│   │   ├── TopBar.tsx              # Menu button + logo (phones), demo badge, theme switch, Add expense
 │   │   ├── AccountMenu.tsx         # Avatar + name; Settings and Sign out
 │   │   ├── BrandLogo.tsx
 │   │   └── BrandMark.tsx
@@ -160,6 +160,9 @@ src/
 │   │   ├── ExpenseCard.tsx         # Expandable card with inline detail
 │   │   ├── ExpenseFormDialog.tsx   # Create + edit (two-tier form)
 │   │   ├── DeleteExpenseDialog.tsx
+│   │   ├── AddExpenseLauncher.tsx  # Top bar Add expense: the Group's form, or choose a Group first
+│   │   ├── GroupChooserDialog.tsx  # "Choose a Group": active Groups only
+│   │   ├── add-expense.ts          # Pure, unit-tested
 │   │   ├── expense-form-helpers.ts # Pure, unit-tested
 │   │   └── expense-duplicate-check.ts
 │   ├── settlements/

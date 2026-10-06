@@ -189,6 +189,10 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   and roles, no emails) with Invite, and axe on every tab. Until #310 rebuilds
   Expenses, its rows and two summary captions are left out of that tab's axe
   check.
+- **Add expense** (`add-expense.spec.ts`): the top bar's Add expense from Home
+  through "Choose a Group" (axe on the chooser; the save keeps Home in place,
+  confirms with the Group's name and rereads the balances), from inside a Group
+  (no chooser), the old `?action=add-expense` link, and the no-Groups state.
 - **Theme + a11y matrix** (`theme-a11y.spec.ts`): persona entry, dashboard,
   and trip workspace at **desktop 1280×800** and **mobile 390×844**, each in
   **light and dark** (driven by `prefers-color-scheme` emulation), plus the

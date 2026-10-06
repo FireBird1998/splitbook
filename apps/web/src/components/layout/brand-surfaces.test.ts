@@ -76,7 +76,12 @@ describe('the shell', () => {
     for (const mode of MODES) {
       const html = render(
         mode,
-        createElement(TopBar, { demoMode: false, menuOpen: false, onOpenMenu: vi.fn() }),
+        createElement(TopBar, {
+          userId: 'a00000000000000000000001',
+          demoMode: false,
+          menuOpen: false,
+          onOpenMenu: vi.fn(),
+        }),
       );
       expect(brand(html)).toEqual([{ src: logo(mode), alt: 'Splitbook home', height: '32px' }]);
       expect(links(html)).toEqual(['/dashboard']);

@@ -65,7 +65,8 @@ for (const colorScheme of ['light', 'dark'] as const) {
         .toBe(true);
     }
     await page.screenshot({ path: testInfo.outputPath(`balances-${colorScheme}.png`) });
-    await page.getByRole('button', { name: 'Add expense', exact: true }).click();
+    // The page's own Add action; the top bar has one too (#304).
+    await page.getByRole('main').getByRole('button', { name: 'Add expense', exact: true }).click();
     await expect(page.getByRole('dialog', { name: /Add expense/i })).toBeVisible();
   });
 }

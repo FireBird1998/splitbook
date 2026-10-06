@@ -25,6 +25,8 @@ const adoptedFiles = [
   'src/components/groups/GroupTabs.tsx',
   'src/components/groups/GroupMembersView.tsx',
   'src/components/groups/GroupExpensesTab.tsx',
+  'src/components/expenses/AddExpenseLauncher.tsx',
+  'src/components/expenses/GroupChooserDialog.tsx',
 ];
 
 let failed = false;

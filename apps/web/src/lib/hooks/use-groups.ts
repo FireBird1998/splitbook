@@ -19,6 +19,11 @@ async function fetchGroup([, actorId, path]: GroupReadKey) {
 const readOptions = { refreshInterval: 30_000, keepPreviousData: false };
 const deniedError = new Error('Group access could not be verified. Please retry.');
 
+/** Whether a read's error is a refusal (the account can't read the Group), not an outage. */
+export function isGroupReadDenied(error: unknown): boolean {
+  return error === deniedError;
+}
+
 export function useGroups(actorId: string) {
   // A response completing after an account switch remains confined to its original key.
   const result = useSWR(
