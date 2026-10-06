@@ -289,8 +289,16 @@ async function staleSignIn(page: Page, ledger: Ledger, options?: { passDuplicate
   const samOnly = await giveSamDistinctFigures(ledger);
   // A local dev server compiles a route on its first visit and then refreshes open pages;
   // a refreshed picker would follow Alex's session to his Dashboard. Compile them first.
+  // A Group's own address redirects to its Expenses tab, and each tab is a route (#305).
   const group = `/groups/${ledger.groupA}`;
-  for (const path of ['/dashboard', '/groups', group, `${group}/settings`])
+  for (const path of [
+    '/dashboard',
+    '/groups',
+    group,
+    `${group}/expenses`,
+    `${group}/balances`,
+    `${group}/settings`,
+  ])
     expect((await ledger.alex.get(path)).status()).toBe(200);
   const picker = await page.context().newPage();
   await picker.goto(appURL('/'));
