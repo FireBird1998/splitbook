@@ -64,11 +64,8 @@ function phone() {
       });
     if (path.endsWith('/get-session'))
       return json({ user: alex, session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00Z' } });
-    if (path === '/api/groups')
-      return json({
-        status: 200,
-        data: joined ? [cedarFlat, mapleHouse] : [cedarFlat],
-      });
+    const groups = joined ? [cedarFlat, mapleHouse] : [cedarFlat];
+    if (path === '/api/groups') return json({ status: 200, data: groups });
     if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
     if (path === `/api/join/${code}` && method === 'POST') {
       joined = true;
@@ -79,8 +76,12 @@ function phone() {
         status: 200,
         data: { _id: maple, name: 'Maple House', category: 'home', memberCount: 1 },
       });
-    if (path === `/api/groups/${maple}` && joined) return json({ status: 200, data: mapleHouse });
-    if (path === `/api/groups/${maple}/expenses` && joined)
+    // Each Group Alex is in, with no Expenses yet.
+    const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
+    const found = groups.find((group) => group._id === id);
+    if (!found) return json({}, 404);
+    if (path === `/api/groups/${id}`) return json({ status: 200, data: found });
+    if (path === `/api/groups/${id}/expenses`)
       return json({
         status: 200,
         data: {
@@ -89,7 +90,7 @@ function phone() {
           summary: { count: 0, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
         },
       });
-    if (path === `/api/groups/${maple}/balances` && joined)
+    if (path === `/api/groups/${id}/balances`)
       return json({ status: 200, data: { byCurrency: [] } });
     return json({}, 404);
   };
@@ -280,6 +281,74 @@ describe('Join waits for a connection (#286)', () => {
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'invite',
       invitation: { code, status: 'ready', message: null },
+    });
+
+    // A pull on the invitation checks the session, then reads it again: Join works.
+    const pull = f.sent.length;
+    await controller.refresh('pull');
+    expect(f.sent.slice(pull)).toEqual([
+      'GET /api/auth/get-session 200',
+      `GET /api/join/${code} 200`,
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false },
+      invitation: { code, status: 'ready' },
+    });
+    await controller.joinInvitation();
+    expect(f.sent.filter((request) => request.startsWith('POST /api/join/'))).toEqual([
+      `POST /api/join/${code} 201`,
+    ]);
+  });
+
+  it('checks the session again over a Group’s saved copies, so a pull on the invitation offers Join', async () => {
+    const f = phone();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(cedar);
+    // Offline, a pull on Cedar Flat shows its saved copies; then Sam's invitation can't load.
+    f.network.online = false;
+    await controller.refresh('pull');
+    await controller.openInvitation(link);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      offline: { active: true },
+      invitation: { code, status: 'error' },
+    });
+
+    // Back online, a pull confirms the session. The Group's saved copies still say offline, so
+    // the invitation's own read checks the session too, and nothing saved is shown any more.
+    f.network.online = true;
+    await controller.refresh('pull');
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false },
+      invitation: { code, status: 'ready' },
+    });
+    const join = f.sent.length;
+    await controller.joinInvitation();
+    expect(f.sent[join]).toBe(`POST /api/join/${code} 201`);
+  });
+
+  it('reads nothing more for an invitation closed while its session was checked', async () => {
+    const f = phone();
+    const first = f.create();
+    await first.signIn('alex');
+    first.dispose();
+    f.network.online = false;
+    const controller = f.create();
+    await controller.restore();
+    // Back online, Alex opens Sam's invitation, then goes back while the session is checked.
+    f.network.online = true;
+    const check = f.hold('GET /api/auth/get-session');
+    const opening = controller.openInvitation(link);
+    await check.reached;
+    const closing = controller.cancelInvitation();
+    check.answer();
+    await Promise.all([opening, closing]);
+    expect(f.sent.filter((request) => request.includes('/api/join/'))).toEqual([]);
+    expect(f.invitation()).toBeNull();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'groups',
+      invitation: { code: null, status: 'idle' },
     });
   });
 
