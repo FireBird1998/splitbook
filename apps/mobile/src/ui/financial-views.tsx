@@ -134,31 +134,6 @@ export function readTime({
 }
 
 /**
- * Activity's freshness slot (#222 moves it): "Updated hh:mm", "Saved hh:mm · refreshing" while
- * it is read again, or a "Saved hh:mm" badge when its events come from this device offline.
- */
-export function Freshness({
-  refreshedAt,
-  refreshing = false,
-  offline = false,
-  tone = 'secondary',
-}: {
-  refreshedAt: number | null;
-  refreshing?: boolean;
-  offline?: boolean;
-  tone?: TextTone;
-}) {
-  if (refreshedAt === null) return null;
-  const time = refreshedLabel(refreshedAt);
-  if (offline) return <Badge label={`Saved ${time}`} />;
-  return (
-    <StatusText tone={tone}>
-      {refreshing ? `Saved ${time} · refreshing` : `Updated ${time}`}
-    </StatusText>
-  );
-}
-
-/**
  * A Group whose details couldn't be read, though its Expenses were, in this open (owner decision
  * 2A, #219): it says what failed and what is current, with a retry. Nothing is out of date, so it
  * shows no time, and the failure isn't the connection's.

@@ -6,9 +6,8 @@ export interface RefreshFeedback {
   pull: boolean;
   /**
    * Visible content is re-read or retried: Home's top bar says so, and in a Group the progress
-   * bar under its top bar does (Activity's slot also reads "Saved hh:mm · refreshing", until
-   * #222). Neither gives a time: what is shown says itself when it was read, "Saved" only for
-   * this device's copy (#332, #219).
+   * bar under its top bar does. Neither gives a time: what is shown says itself when it was read,
+   * "Saved" only for this device's copy (#332, #219, #222).
    */
   quiet: boolean;
   /** An automatic refresh of this view is running: nothing says so, not even an updating label. */
