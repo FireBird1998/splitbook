@@ -166,19 +166,29 @@ and `CONTENT_MAX_WIDTH` 1320.
 ### Mobile (<1200px)
 
 ```
-┌─────────────────────┐
-│ ☰ logo  Demo  ☾  [+]│  ← sticky top bar
-├─────────────────────┤
-│                     │
-│   Main content      │
-│   (full width)      │
-│                     │
-└─────────────────────┘
+┌──────────────────────────┐
+│ ☰ logo   ⌕  Demo  ☾  [+] │  ← sticky top bar
+├──────────────────────────┤
+│                          │
+│   Main content           │
+│   (full width)           │
+│                          │
+└──────────────────────────┘
 
 ☰ opens the sidebar as a drawer: the same items, Group list included, with
 44 px targets. It traps focus, closes on Escape and closes when you navigate.
+Below 900 px, search is a 44 px icon button ⌕, named like the field.
 Below 600 px, Add expense is a 44 px icon button [+], still named "Add expense".
 ```
+
+The bar stays on one line from 320 px up, in demo mode or not
+(`src/components/layout/phone-top-bar.ts`):
+
+- Below 430 px the theme switch ☾ leaves the bar for the drawer's foot, between
+  Settings and the account, with the same name ("Switch to dark mode").
+- Below 375 px the bar's gaps tighten to 4 px.
+- Below 360 px the logo gives way to the 32 px brand mark, still the link
+  "Splitbook home".
 
 ---
 
@@ -212,7 +222,7 @@ xl: 1536px    — Large desktop
 
 | Component        | Description                                                               |
 | ---------------- | ------------------------------------------------------------------------- |
-| `SearchLauncher` | The top bar's search field (an icon button on phones) and ⌘K / Ctrl+K     |
+| `SearchLauncher` | The top bar's search field (an icon button below 900 px) and ⌘K / Ctrl+K  |
 | `SearchDialog`   | The search dialog: query, debounced read, arrow keys, Enter and Escape    |
 | `SearchPanel`    | Its content: empty, loading, error, no-results and grouped results states |
 

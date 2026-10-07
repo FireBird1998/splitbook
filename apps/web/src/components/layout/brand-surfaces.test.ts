@@ -72,7 +72,7 @@ describe('the shell', () => {
     }
   });
 
-  it('shows the same logo in the top bar, where phones see it', () => {
+  it('shows the same logo in the top bar, where phones see it, and the mark on the narrowest', () => {
     for (const mode of MODES) {
       const html = render(
         mode,
@@ -83,8 +83,16 @@ describe('the shell', () => {
           onOpenMenu: vi.fn(),
         }),
       );
-      expect(brand(html)).toEqual([{ src: logo(mode), alt: 'Splitbook home', height: '32px' }]);
-      expect(links(html)).toEqual(['/dashboard']);
+      // Below 360 px CSS shows the 32 px mark in the logo's place (phone-top-bar.ts): a
+      // decorative image in a link that carries the name.
+      expect(brand(html)).toEqual([
+        { src: logo(mode), alt: 'Splitbook home', height: '32px' },
+        { src: mark(mode), alt: '', height: '32px' },
+      ]);
+      expect(links(html)).toEqual(['/dashboard', '/dashboard']);
+      expect(html).toMatch(
+        /<a\b(?=[^>]*href="\/dashboard")(?=[^>]*aria-label="Splitbook home")[^>]*>/,
+      );
     }
   });
 });

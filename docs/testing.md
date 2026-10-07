@@ -181,7 +181,10 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   list with each balance line checked against the balances read, the open
   Group highlighted, Settings, the Groups list link), the phone drawer
   (opens from the top bar, traps focus, 44 px targets, closes on Escape and
-  on navigation), Sign out from the account at the foot, and axe on each.
+  on navigation), the phone top bar on one line at 320, 360, 375, 390, 429
+  and 430 px with and without the demo badge, the theme switch in the drawer
+  below 430 px and in the bar from 430 px, Sign out from the account at the
+  foot, and axe on each.
 - **Group page** (`group-page.spec.ts`, read-only): the header (Theme icon,
   name, "Theme · N members · currency", avatars, Invite, settings), the tabs
   as links with their own addresses through Back, Forward and reload, the old

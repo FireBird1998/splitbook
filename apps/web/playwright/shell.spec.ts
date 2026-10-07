@@ -8,6 +8,7 @@ import {
   isPhone,
   openNavigation,
   reviewScreenshot,
+  THEME_SWITCH_NAME,
 } from './fixtures';
 
 /**
@@ -196,6 +197,70 @@ test('phone: the drawer opens from the top bar with the same items, traps focus 
   await expectNoSeriousA11yViolations(page, testInfo, 'shell-drawer-group');
   await drawer.getByRole('button', { name: 'Close navigation menu' }).click();
   await expect(drawer).toHaveCount(0);
+});
+
+test('phone: the top bar stays on one line from 320 px, and below 430 px the theme switch is in the drawer', async ({
+  page,
+}, testInfo) => {
+  test.skip(!isPhone(testInfo), 'Desktop has the sidebar and room to spare.');
+  await enterAsPersona(page, 'alex');
+  await expectThemeApplied(page, testInfo);
+  const header = page.getByRole('banner');
+
+  /** Every item the bar shows sits on its one line, inside the screen. */
+  async function expectOneLine(width: number, label: string) {
+    await page.setViewportSize({ width, height: 844 });
+    await expect
+      .poll(
+        () =>
+          header.evaluate((bar) => {
+            const shown = [...bar.children]
+              .map((item) => item.getBoundingClientRect())
+              .filter((box) => box.width > 0);
+            return {
+              height: Math.round(bar.getBoundingClientRect().height),
+              oneLine:
+                Math.max(...shown.map((box) => box.top)) <
+                Math.min(...shown.map((box) => box.bottom)),
+              inside: shown.every((box) => box.left >= 0 && box.right <= window.innerWidth),
+            };
+          }),
+        `${label} at ${width} px`,
+      )
+      .toEqual({ height: 68, oneLine: true, inside: true });
+  }
+
+  const widths = [320, 360, 375, 390, 429, 430];
+  // In demo mode, with the demo badge, the fullest the bar gets.
+  await expect(header.getByText('Demo', { exact: true })).toBeVisible();
+  for (const width of widths) await expectOneLine(width, 'demo mode');
+  // Outside demo mode the badge isn't there.
+  const badge = header.locator('.MuiChip-root');
+  await badge.evaluate((chip) => ((chip as HTMLElement).style.display = 'none'));
+  for (const width of widths) await expectOneLine(width, 'without the demo badge');
+  await badge.evaluate((chip) => ((chip as HTMLElement).style.display = ''));
+
+  // Below 430 px the switch is at the drawer's foot, with the same name and the same effect.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(header.getByRole('button', { name: THEME_SWITCH_NAME })).toBeHidden();
+  const drawer = await openNavigation(page);
+  const toggle = drawer.getByRole('button', { name: THEME_SWITCH_NAME });
+  const initial = testInfo.project.name.endsWith('-dark') ? 'dark' : 'light';
+  const target = initial === 'light' ? 'dark' : 'light';
+  await expect(toggle).toHaveAccessibleName(`Switch to ${target} mode`);
+  await toggle.click();
+  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe(target);
+  await expect(toggle).toHaveAccessibleName(`Switch to ${initial} mode`);
+  // Switching the theme isn't navigation: the drawer stays open.
+  await expect(drawer).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(drawer).toHaveCount(0);
+
+  // From 430 px the bar keeps it, and the drawer has none.
+  await page.setViewportSize({ width: 430, height: 844 });
+  await expect(header.getByRole('button', { name: THEME_SWITCH_NAME })).toBeVisible();
+  await openNavigation(page);
+  await expect(drawer.getByRole('button', { name: THEME_SWITCH_NAME })).toHaveCount(0);
 });
 
 test('sign out from the account at the foot of the sidebar', async ({ page }) => {

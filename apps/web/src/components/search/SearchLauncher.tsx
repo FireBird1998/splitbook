@@ -28,9 +28,10 @@ const isPrintable = (event: KeyboardEvent) =>
   event.key.length === 1 && event.key !== ' ' && !event.ctrlKey && !event.metaKey && !event.altKey;
 
 /**
- * Search in the top bar (#321): a field on wider screens and an icon button on phones, each
- * opening the search dialog, which ⌘K (Ctrl+K off Apple devices) also opens from anywhere,
- * except while the member is typing in another field. Fills the space at the start of the bar.
+ * Search in the top bar (#321): a field from MUI's md breakpoint (900 px) up, and an icon button
+ * below it, where the bar also holds the menu button, the logo and Add expense; each opens the
+ * search dialog, which ⌘K (Ctrl+K off Apple devices) also opens from anywhere, except while the
+ * member is typing in another field. Fills the space at the start of the bar.
  */
 export default function SearchLauncher() {
   const apple = useApplePlatform();
@@ -65,7 +66,7 @@ export default function SearchLauncher() {
         flex: '1 1 auto',
         minWidth: 0,
         display: 'flex',
-        justifyContent: { xs: 'flex-end', sm: 'flex-start' },
+        justifyContent: { xs: 'flex-end', md: 'flex-start' },
       }}
     >
       <ButtonBase
@@ -81,7 +82,7 @@ export default function SearchLauncher() {
         aria-expanded={open}
         aria-keyshortcuts={shortcut}
         sx={{
-          display: { xs: 'none', sm: 'flex' },
+          display: { xs: 'none', md: 'flex' },
           flex: '1 1 320px',
           minWidth: 0,
           maxWidth: 560,
@@ -132,7 +133,7 @@ export default function SearchLauncher() {
         aria-expanded={open}
         aria-keyshortcuts={shortcut}
         sx={{
-          display: { xs: 'inline-flex', sm: 'none' },
+          display: { xs: 'inline-flex', md: 'none' },
           width: 44,
           height: 44,
           flex: 'none',

@@ -298,6 +298,31 @@ describe('the sidebar', () => {
   });
 });
 
+describe('the theme switch on a narrow phone', () => {
+  /** The opening tags of the sidebar's buttons named for the theme. */
+  const themeSwitches = (html: string) =>
+    [...html.matchAll(/<button\b[^>]*>(?:(?!<\/button>)[\s\S])*?<\/button>/g)]
+      .map(([button]) => button)
+      .filter((button) => /Switch to (dark|light) mode/.test(text(button)));
+
+  it('sits at the drawer’s foot, after Settings and before the account, named for the mode it moves to', () => {
+    const html = render(
+      createElement(Sidebar, { user: USER, pathname: '/dashboard', variant: 'drawer' }),
+      { groups: GROUPS, balances: BALANCES },
+    );
+    const [button] = themeSwitches(html);
+    // The theme context starts light.
+    expect(text(button)).toBe('Switch to dark mode');
+    expect(button).toMatch(/^<button\b[^>]*type="button"/);
+    const foot = text(html).slice(text(html).indexOf('Settings'));
+    expect(foot).toMatch(/^Settings Switch to dark mode .*Alex Rivera/);
+  });
+
+  it('is not in the desktop sidebar, where the top bar always has it', () => {
+    expect(themeSwitches(sidebar('/dashboard'))).toEqual([]);
+  });
+});
+
 describe('the frame', () => {
   const shell = (demoMode: boolean, mode: 'light' | 'dark' = 'light') =>
     render(
@@ -325,8 +350,11 @@ describe('the frame', () => {
       // The switch names the mode it moves to; the theme context starts light.
       expect(header).toContain('aria-label="Switch to dark mode"');
       expect(text(header)).toContain('Demo');
-      // On phones the logo shows in the top bar too, linking Home.
-      expect(anchors(header)).toEqual([{ href: '/dashboard', current: null, text: '' }]);
+      // On phones the logo shows in the top bar too, linking Home; below 360 px, the mark.
+      expect(anchors(header)).toEqual([
+        { href: '/dashboard', current: null, text: '' },
+        { href: '/dashboard', current: null, text: '' },
+      ]);
     }
     expect(text(/<header\b[\s\S]*?<\/header>/.exec(shell(false))?.[0] ?? '')).not.toContain('Demo');
   });
