@@ -201,13 +201,13 @@ test('the Balances tab with Record payment is accessible', async ({ page }, test
   await expectNoSeriousA11yViolations(page, testInfo, 'record-payment');
   await reviewScreenshot(page, testInfo, 'record-payment');
 
-  // On a phone the form comes straight after Settle up, before net positions; on a computer it
-  // sits beside them, with net positions under Settle up.
+  // On a phone the form comes straight after Settle up, before Everyone; on a computer it sits
+  // beside them, with Everyone under Settle up.
   const box = async (name: string) =>
     (await page.getByRole('region', { name, exact: true }).boundingBox())!;
   const settleUp = await box('Settle up');
   const form = await box('Record payment');
-  const positions = await box('Net positions');
+  const positions = await box('Everyone');
   if (isPhone(testInfo)) {
     expect(form.y).toBeGreaterThanOrEqual(settleUp.y + settleUp.height);
     expect(positions.y).toBeGreaterThanOrEqual(form.y + form.height);

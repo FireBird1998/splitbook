@@ -242,6 +242,20 @@ test('legacy currencies are individually visible and never combined into one bal
   await expect(page.getByRole('listbox')).toBeHidden();
   await expect(ownBalance.getByText(/€60\.00/)).toBeVisible();
   await expect(page.getByText(/Historical balances in EUR/)).toBeVisible();
+  // Everyone (#313) follows the same switch: the EUR positions alone, exact, never converted.
+  const everyone = page.getByRole('region', { name: 'Everyone', exact: true });
+  await expect(everyone.getByText('All-time net · EUR', { exact: true })).toBeVisible();
+  await expect(everyone.getByTestId('everyone-amount')).toHaveText([
+    /^\+€60\.00\s*gets back$/,
+    /^−€60\.00\s*owes$/,
+  ]);
+  await everyone.getByRole('button', { name: 'Table', exact: true }).click();
+  await expect(everyone.getByRole('table').getByRole('row')).toHaveText([
+    /Member/,
+    /You\s*\+€60\.00\s*Gets back\s*Gets €60\.00 from Priya$/,
+    /Priya Shah\s*−€60\.00\s*Owes\s*Pays you €60\.00$/,
+  ]);
+  await expect(everyone).not.toContainText('₹');
   // Historical balances in another currency suggest payments, but none is recorded from them.
   await expect(
     page
