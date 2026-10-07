@@ -289,6 +289,7 @@ airport codes are derived from the group name and become noise off a trip.
 | `DeleteExpenseDialog` | Confirmation dialog with undo snackbar                              |
 | `AddExpenseLauncher`  | Top bar Add expense: the current Group's form, or choose one first  |
 | `GroupChooserDialog`  | "Choose a Group": the member's active Groups, or create one first   |
+| `QuickAddExpense`     | Quick add above the Expenses: one line read into chips, Enter adds  |
 
 `expense-form-helpers.ts` and `expense-duplicate-check.ts` hold the pure,
 unit-tested logic extracted from the dialog; `add-expense.ts` holds the top bar
@@ -315,6 +316,24 @@ link, `/groups/[id]?search=…`, fills the search.
   the list as filtered, with "You owe" and "You get back".
 - A failed load says "Expenses could not be loaded." with Try again; a failed
   refresh keeps the list and says so.
+
+**Quick add (#320).** A field above the toolbar, on computers and phones. The
+shared `@splitbook/shared/quick-add` reads a line such as "Dinner 2400 paid by
+me" on the page (nothing is sent while typing) into chips: description, amount
+in exact minor units, who paid, the split, the date and a Tag.
+
+- The Tag is suggested only from the Group's active Tags: one the description
+  names, else the Group's most-used Tag for its latest Expenses with a word in
+  common, else a common word ("dinner" → Food, Dining or Meals). When none
+  fits, Enter does nothing until the member picks one. The Category stays the
+  form's default.
+- Enter saves through `use-expense-draft-save.ts`, the form's own save: the
+  same request, idempotency key and unconfirmed save. A lost reply keeps the
+  line and its request, so Enter sends the same record again.
+- "More options" opens `ExpenseFormDialog` with the draft read so far.
+- Refused amounts (decimals, zero, over the maximum, another currency) and
+  names that fit nobody or several members mark the field invalid, and the
+  reason is its description.
 
 ### Balances & Settlements
 

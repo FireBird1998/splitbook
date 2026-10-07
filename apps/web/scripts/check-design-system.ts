@@ -53,6 +53,7 @@ const adoptedFiles = [
   'src/components/expenses/ExpenseDetails.tsx',
   'src/components/expenses/ExpenseStats.tsx',
   'src/components/expenses/expense-row-parts.tsx',
+  'src/components/expenses/QuickAddExpense.tsx',
 ];
 
 let failed = false;

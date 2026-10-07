@@ -13,6 +13,7 @@ import MonthCycleBar, {
 } from '@/components/groups/MonthCycleBar';
 import MonthMemberTable from '@/components/groups/MonthMemberTable';
 import ExpenseListView from '@/components/expenses/ExpenseListView';
+import QuickAddExpense from '@/components/expenses/QuickAddExpense';
 import { expensePagePath } from '@splitbook/shared/api-paths';
 import { parseExpensePageResponse } from '@splitbook/shared/expense-page-read';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -136,6 +137,9 @@ export default function GroupExpensesTab({
           </Button>
         </Box>
       )}
+
+      {/* Quick add (#320), above the list's toolbar. */}
+      <QuickAddExpense groupId={groupId} userId={userId} group={group} />
 
       <ExpenseListView
         groupId={groupId}
