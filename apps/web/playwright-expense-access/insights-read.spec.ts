@@ -1,7 +1,12 @@
 import type { APIRequestContext } from '@playwright/test';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { groupInsightsPath, groupBalancesPath } from '@splitbook/shared/api-paths';
-import { parseGroupInsightsResponse } from '@splitbook/shared/group-insights-read';
+import {
+  parseGroupInsightsResponse,
+  readGroupInsightsByTag,
+  readGroupInsightsRecurring,
+  readGroupInsightsWhoPaid,
+} from '@splitbook/shared/group-insights-read';
 import {
   test,
   expect,
@@ -43,6 +48,19 @@ test('insights read: a member reads their Group’s Month, exact, including a re
   expect(read.recurringExpenses).toBe(true);
   expect(month.recurringCount).toBe(1);
   expect(read.biggestExpense?.paidBy).toEqual([{ id: DEMO_PERSONA_IDS.priya, name: 'Priya Shah' }]);
+  // The Month in detail (#315): by Tag, who paid against their share, and the template.
+  const byTag = readGroupInsightsByTag(read);
+  expect(byTag.ok && byTag.value.tags.reduce((sum, tag) => sum + tag.spentMinor, 0)).toBe(240000);
+  const whoPaid = readGroupInsightsWhoPaid(read);
+  expect(whoPaid.ok && whoPaid.value.members.find((member) => member.paidMinor > 0)).toMatchObject({
+    id: DEMO_PERSONA_IDS.priya,
+    name: 'Priya Shah',
+    paidMinor: 240000,
+    shareMinor: 240000,
+  });
+  const recurring = readGroupInsightsRecurring(read);
+  expect(recurring?.ok && recurring.value.addedInMonth).toEqual({ count: 1, spentMinor: 120000 });
+  expect(recurring?.ok && recurring.value.templates).toHaveLength(1);
   // Names only: never a member's email.
   expect(JSON.stringify(read)).not.toContain('@');
 });

@@ -4,6 +4,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import type { GroupInsightsRead } from '@splitbook/shared/group-insights-read';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
+import { SEPTEMBER_DETAIL } from '@/lib/test-utils/insights-month-detail';
 import { anchors, text } from '@/lib/test-utils/markup';
 import GroupInsightsView, { type GroupInsightsViewProps } from './GroupInsightsView';
 
@@ -61,6 +62,8 @@ const READ: GroupInsightsRead = {
   otherCurrencies: [],
   recurringExpenses: true,
   hasExpenses: true,
+  // The Month in detail (#315): By Tag, Who paid and the recurring templates.
+  ...SEPTEMBER_DETAIL,
 };
 
 /** A Month as the read gives it while recurring Expenses are off: no recurring count. */
@@ -207,7 +210,9 @@ describe('monthly spending', () => {
       ['6-month average', '₹17,377.50', '₹5,000.00'],
     ]);
     expect(html).toMatch(/<tfoot>[\s\S]*6-month average[\s\S]*<\/tfoot>/);
-    expect(html.match(/scope="row"/g)).toHaveLength(8);
+    // Monthly spending's table is the page's first; By Tag and Who paid have their own.
+    const monthly = /<table\b[\s\S]*?<\/table>/.exec(html)?.[0] ?? '';
+    expect(monthly.match(/scope="row"/g)).toHaveLength(8);
     expect(text(html)).toContain(
       'The whole Group’s spending in INR, by month, with your share and the 6-month average',
     );
@@ -255,10 +260,12 @@ describe('the tab’s states', () => {
 
   it('explains a failed read safely, with Try again on each card', () => {
     const html = render({ read: undefined, failed: true });
-    expect(html.match(/role="alert"/g)).toHaveLength(2);
+    expect(html.match(/role="alert"/g)).toHaveLength(4);
     expect(text(html)).toContain('The figures for September 2026 could not be loaded.');
     expect(text(html)).toContain('Monthly spending could not be loaded.');
-    expect(text(html).match(/Try again/g)).toHaveLength(2);
+    expect(text(html)).toContain('Spending by Tag could not be loaded.');
+    expect(text(html)).toContain('Who paid this month could not be loaded.');
+    expect(text(html).match(/Try again/g)).toHaveLength(4);
     expect(html).not.toContain('<table');
   });
 
@@ -286,9 +293,12 @@ describe('the tab’s states', () => {
       average: null,
       change: null,
       biggestExpense: null,
+      byTag: { earlierMonths: [], tags: [] },
+      whoPaid: { members: [] },
     };
     const html = render({ read: empty });
-    expect(text(html).match(/No Expenses yet/g)).toHaveLength(2);
+    // The figures, Monthly spending, By Tag and Who paid.
+    expect(text(html).match(/No Expenses yet/g)).toHaveLength(4);
     expect(html).not.toContain('role="alert"');
     expect(html).not.toContain('role="status"');
     expect(html).not.toContain('<table');

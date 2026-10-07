@@ -8,6 +8,8 @@ import {
   groupTabHref,
   memberRoster,
   membersLabel,
+  RECURRING_SECTION_ID,
+  recurringSettingsHref,
 } from './group-tabs';
 
 /*
@@ -43,6 +45,9 @@ describe('the Group page’s tabs', () => {
       `/groups/${GROUP}/expenses?month=2026-08`,
     );
     expect(groupSettingsHref(GROUP)).toBe(`/groups/${GROUP}/settings`);
+    // The Insights tab's Manage (#315): the Recurring section of the settings.
+    expect(recurringSettingsHref(GROUP)).toBe(`/groups/${GROUP}/settings#${RECURRING_SECTION_ID}`);
+    expect(RECURRING_SECTION_ID).toBe('recurring-expenses');
   });
 
   it('are read back from a path, and nothing else is a tab', () => {

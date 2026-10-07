@@ -19,7 +19,10 @@ import { HomeRow } from '@/components/dashboard/HomeCard';
 import { monthLabel } from '@/components/dashboard/spending-chart';
 import { RADIUS } from '@/lib/theme/tokens';
 import { visuallyHidden } from './a11y';
+import ByTagCard from './ByTagCard';
 import MonthlySpendingCard, { type MonthlyView } from './MonthlySpendingCard';
+import RecurringExpensesCard from './RecurringExpensesCard';
+import WhoPaidCard from './WhoPaidCard';
 import {
   COMPARE_CHOICES,
   compareLabel,
@@ -36,7 +39,7 @@ import {
 /*
  * A Group's Insights tab (#314, design canvas "Web portal", Group insights): Month navigation
  * and the range in the address, the Month's stat cards, and monthly spending with the average
- * of the months before it. By Tag, Who paid and the recurring Expenses card come with #315; a
+ * of the months before it; then By Tag, Who paid this month and Recurring Expenses (#315). A
  * Trip shows this same Month view until its Trip summary (#316).
  */
 
@@ -48,6 +51,10 @@ export interface GroupInsightsViewProps {
   currentMonth: string;
   /** Whether the Group's Theme has recurring Expenses at all (a Household's does). */
   recurringTheme: boolean;
+  /** The server's product-wide recurring Expenses switch (#289); off when not given. */
+  recurringExpensesEnabled?: boolean;
+  /** The viewer is one of the Group's admins, who alone change recurring Expenses. */
+  isAdmin?: boolean;
   /** The read for this address; undefined while it loads. */
   read: GroupInsightsRead | undefined;
   failed: boolean;
@@ -68,6 +75,8 @@ export default function GroupInsightsView({
   address,
   currentMonth,
   recurringTheme,
+  recurringExpensesEnabled = false,
+  isAdmin = false,
   read,
   failed,
   onRetry,
@@ -163,6 +172,29 @@ export default function GroupInsightsView({
           onRetry={onRetry}
           initialView={initialView}
         />
+        <ByTagCard read={shown} state={state} onRetry={onRetry} />
+      </HomeRow>
+
+      <HomeRow>
+        <WhoPaidCard
+          groupId={groupId}
+          userId={userId}
+          read={shown}
+          state={state}
+          onRetry={onRetry}
+        />
+        {/* One product-wide switch (#289): while it is off, no card, heading or empty state. */}
+        {recurringExpensesEnabled && recurringTheme && (!shown || shown.recurringExpenses) ? (
+          <RecurringExpensesCard
+            groupId={groupId}
+            userId={userId}
+            currentMonth={currentMonth}
+            canManage={isAdmin}
+            read={shown}
+            state={state}
+            onRetry={onRetry}
+          />
+        ) : null}
       </HomeRow>
     </Box>
   );
