@@ -1,7 +1,7 @@
 import { mutate } from 'swr';
 import { isGroupReadKey } from '@/lib/group-read-key';
 import { forgetBrowserGroupSettlementAttempts } from '@/lib/settlement-attempts';
-import { userActivityPath } from '@splitbook/shared/api-paths';
+import { userActivityPath, userSpendingPath } from '@splitbook/shared/api-paths';
 
 /**
  * Losing access to a Group (removed, or the Group deleted) removes what the
@@ -49,10 +49,17 @@ function isGroupContentKey(key: unknown, groupPath: string) {
   return path !== null && (path.startsWith(`${groupPath}/`) || path.startsWith(`${groupPath}?`));
 }
 
-/** Account-wide reads that list every Group the account is in, or Home's latest changes in them. */
+/** The spending read's path without its query, from the shared builder. */
+const USER_SPENDING_PATH = userSpendingPath({ months: 1, timeZone: 'UTC' }).split('?')[0];
+
+/**
+ * Account-wide reads that list every Group the account is in, or Home's latest changes and
+ * spending chart across them (the chart whatever Months and time zone it asked for).
+ */
 const isAccountGroupsKey = (key: unknown) =>
   key === '/api/user/balances' ||
   (typeof key === 'string' && key.split('?')[0] === userActivityPath()) ||
+  (typeof key === 'string' && key.split('?')[0] === USER_SPENDING_PATH) ||
   (isGroupReadKey(key) && key[2] === '/api/groups');
 
 /**
@@ -64,9 +71,9 @@ const isAccountGroupsKey = (key: unknown) =>
  * - The Group's other entries are deleted, data and error alike, so nothing
  *   from before can reappear if access returns; a request already in flight
  *   for them is discarded by SWR.
- * - The Groups list, the account's balances and Home's latest changes list the
- *   Group too, so they are cleared and refetched rather than only refetched: a page that mounts
- *   them later, or whose refetch fails, never shows the Group from them.
+ * - The Groups list, the account's balances, and Home's latest changes and spending chart
+ *   list the Group too, so they are cleared and refetched rather than only refetched: a page
+ *   that mounts them later, or whose refetch fails, never shows the Group from them.
  * - The account's unconfirmed payments in the Group are forgotten (#198):
  *   they can no longer be resent there.
  */

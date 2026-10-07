@@ -6,6 +6,7 @@ import GroupCardGrid from '@/components/dashboard/GroupCardGrid';
 import HomeHeader from '@/components/dashboard/HomeHeader';
 import LatestChangesCard from '@/components/dashboard/LatestChangesCard';
 import NeedsYouCard from '@/components/dashboard/NeedsYouCard';
+import SpendingChartCard from '@/components/dashboard/SpendingChartCard';
 import { HomeRow, HomeSlot } from '@/components/dashboard/HomeCard';
 
 interface DashboardViewProps {
@@ -27,7 +28,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
         <NeedsYouCard memberName={userName} />
       </HomeRow>
       <HomeRow>
-        {/* #307: "Your share of spending", the six-month chart (wide). */}
+        <SpendingChartCard />
         {/* #308: "Where it went", spending by Category (narrow). */}
       </HomeRow>
       <HomeRow>

@@ -58,6 +58,21 @@ describe('semantic design tokens', () => {
     });
   });
 
+  it('pins the chart tokens from the design canvas: one series colour, a grid, an inverse tooltip', () => {
+    expect(lightTokens.chart).toEqual({
+      series: '#3d4fcf',
+      seriesSoft: '#c9cff7',
+      grid: '#e6e9f2',
+    });
+    expect(darkTokens.chart).toEqual({
+      series: '#6f80f5',
+      seriesSoft: '#343c6e',
+      grid: '#262a39',
+    });
+    expect(lightTokens.inverse).toEqual({ bg: '#151828', text: '#f4f5f9' });
+    expect(darkTokens.inverse).toEqual({ bg: '#f0f2f8', text: '#151828' });
+  });
+
   it('uses light-on-dark text for contained buttons in dark mode', () => {
     expect(lightTokens.brand.contrastText).toBe('#ffffff');
     expect(darkTokens.brand.contrastText).toBe('#0e1016');

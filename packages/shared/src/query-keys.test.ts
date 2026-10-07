@@ -12,6 +12,7 @@ import {
   searchPath,
   settlementsPath,
   userActivityPath,
+  userSpendingPath,
 } from './api-paths';
 import {
   activityPageKey,
@@ -31,6 +32,7 @@ import {
   searchKey,
   settlementsKey,
   userActivityKey,
+  userSpendingKey,
   type QueryAccount,
   type QueryKey,
 } from './query-keys';
@@ -43,6 +45,7 @@ const maple = 'b00000000000000000000001';
 const goa = 'b00000000000000000000002';
 const expenseId = 'c00000000000000000000001';
 const monthPage = { page: 1, limit: 20, includeMemberBreakdown: true, dateFrom: '2026-09-01' };
+const spending = { months: 6, timeZone: 'Asia/Kolkata' };
 
 describe('key factories', () => {
   it.each([
@@ -52,6 +55,11 @@ describe('key factories', () => {
       "Home's latest changes",
       userActivityKey(alex, { limit: 10 }),
       ['home', environment, alex.accountId, userActivityPath({ limit: 10 })],
+    ],
+    [
+      "Home's spending chart",
+      userSpendingKey(alex, spending),
+      ['home', environment, alex.accountId, userSpendingPath(spending)],
     ],
     [
       'invitations',
@@ -145,6 +153,7 @@ describe('keys differ', () => {
 
   it('by environment', () => {
     expect(homeBalancesKey(alex)).not.toEqual(homeBalancesKey(alexOnStaging));
+    expect(userSpendingKey(alex, spending)).not.toEqual(userSpendingKey(alexOnStaging, spending));
     expect(expenseRecordKey(alex, maple, expenseId)).not.toEqual(
       expenseRecordKey(alexOnStaging, maple, expenseId),
     );
@@ -165,6 +174,14 @@ describe('keys differ', () => {
     expect(expenseRecordKey(alex, maple, expenseId)).not.toEqual(settlementsKey(alex, maple));
     expect(userActivityKey(alex, { limit: 10 })).not.toEqual(homeBalancesKey(alex));
     expect(userActivityKey(alex, { limit: 10 })).not.toEqual(userActivityKey(alex, { limit: 50 }));
+    expect(userSpendingKey(alex, spending)).not.toEqual(homeBalancesKey(alex));
+    expect(userSpendingKey(alex, spending)).not.toEqual(userActivityKey(alex, { limit: 10 }));
+    expect(userSpendingKey(alex, spending)).not.toEqual(
+      userSpendingKey(alex, { ...spending, timeZone: 'America/New_York' }),
+    );
+    expect(userSpendingKey(alex, spending)).not.toEqual(
+      userSpendingKey(alex, { ...spending, months: 12 }),
+    );
   });
 
   it('by search, but not by how the search is spaced', () => {
@@ -184,6 +201,7 @@ const reads: ((account: QueryAccount, groupId: string) => QueryKey)[] = [
   (account) => groupsKey(account),
   (account) => homeBalancesKey(account),
   (account) => userActivityKey(account, { limit: 10 }),
+  (account) => userSpendingKey(account, spending),
   (account) => invitationsKey(account),
   (account) => searchKey(account, 'goa'),
   (account, groupId) => groupKey(account, groupId),
@@ -225,6 +243,7 @@ describe('matchers', () => {
       groupsKey(twin),
       homeBalancesKey(twin),
       userActivityKey(twin),
+      userSpendingKey(twin, spending),
       invitationsKey(twin),
       searchKey(twin, maple),
     ])
@@ -241,6 +260,7 @@ describe('matchers', () => {
     groupsPath(),
     homeBalancesPath(),
     userActivityPath({ limit: 10 }),
+    userSpendingPath(spending),
     invitationsPath(),
     searchPath('goa'),
   ])('never select an account read for a Group id equal to its path, %s', (path) => {
@@ -249,7 +269,7 @@ describe('matchers', () => {
 
   it("select only this account's keys in this environment", () => {
     const selected = keys.filter(matchAccount(alex));
-    expect(selected).toHaveLength(2 * 12);
+    expect(selected).toHaveLength(2 * 13);
     expect(selected).toEqual(
       expect.arrayContaining([...everyKey(alex, maple), ...everyKey(alex, goa)]),
     );

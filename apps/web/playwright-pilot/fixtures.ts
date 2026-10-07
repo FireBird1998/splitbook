@@ -64,6 +64,28 @@ export const settledSummary: UserBalancesResponse = {
   hasMixedCurrencies: false,
   suggestedPayments: [],
 };
+/** Home's spending read (#307): six Months to the fixed time in Asia/Kolkata, the Goa trip only. */
+const spending = {
+  timeZone: 'Asia/Kolkata',
+  months: ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'],
+  window: { from: '2026-04-01', to: '2026-09-30' },
+  groups: [{ groupId: DEMO_GROUP_ID, name: group.name }],
+  currencies: [
+    {
+      currency: 'INR',
+      totalMinor: 416000,
+      expenseCount: 4,
+      months: ['2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09'].map((month) => {
+        const shareMinor = month === '2026-08' ? 120000 : month === '2026-09' ? 296000 : 0;
+        return {
+          month,
+          shareMinor,
+          byGroup: shareMinor ? [{ groupId: DEMO_GROUP_ID, shareMinor }] : [],
+        };
+      }),
+    },
+  ],
+};
 export const groupBalances = {
   balances: [
     { user: alex, balance: -1480 },
@@ -115,6 +137,7 @@ export async function installPilotFixtures(page: Page, overrides: Record<string,
     '/api/groups': [group],
     '/api/user/balances': summary,
     '/api/user/activity': latestChanges,
+    '/api/user/spending': spending,
     '/api/invitations': [],
     [`/api/groups/${DEMO_GROUP_ID}`]: group,
     [`/api/groups/${DEMO_GROUP_ID}/balances`]: groupBalances,
