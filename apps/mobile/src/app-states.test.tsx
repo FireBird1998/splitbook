@@ -1065,7 +1065,8 @@ describe('Home says what is true, without jumps (#332)', () => {
       `Couldn’t refresh your balances. They aren’t saved on this phone. Showing your balances from ${readAt}.`,
     );
     expect(app.text()).not.toContain('This view was not saved');
-    // Nothing shown is this phone's copy, so no banner says it was saved.
+    // Home says it's offline, but nothing shown is this phone's copy, so not that it was saved.
+    expect(app.text()).toContain('You’re offlineConnect to load the latest.');
     expect(app.text()).not.toContain('What’s shown was saved');
   });
 
@@ -1093,7 +1094,7 @@ describe('Home says what is true, without jumps (#332)', () => {
     await settle();
     expect(app.text()).toContain('A shared space starts here.');
     expect(app.text()).toContain('Nothing outstanding in your Groups');
-    expect(app.text()).toContain('You’re offline');
+    expect(app.text()).toContain('You’re offlineWhat’s shown was saved on this device');
   });
 
   it('says the balances and Groups aren’t saved, offline after a sign-out cleared them', async () => {
@@ -1115,7 +1116,8 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(app.text()).toContain(notSaved.balances);
     expect(app.text()).toContain(notSaved.groups);
     expect(app.text()).not.toContain('yet');
-    // Nothing shown was saved on this phone, so nothing says it was.
+    // Home says it's offline; nothing shown was saved on this phone, so nothing says it was.
+    expect(app.text()).toContain('You’re offlineConnect to load the latest.');
     expect(app.text()).not.toContain('What’s shown was saved');
   });
 
@@ -1147,7 +1149,7 @@ describe('Home says what is true, without jumps (#332)', () => {
 
     const app = await start(phone);
     await settle();
-    expect(app.text()).toContain('You’re offline');
+    expect(app.text()).toContain('You’re offlineWhat’s shown was saved on this device');
     expect(app.text()).toContain('Maple House');
     expect(app.text()).toContain(notSaved.balances);
     expect(app.text()).not.toContain('yet');
