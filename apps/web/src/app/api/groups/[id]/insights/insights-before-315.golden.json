@@ -1,0 +1,489 @@
+{
+  "household-alice": {
+    "data": {
+      "timeZone": "Asia/Kolkata",
+      "month": "2026-09",
+      "compare": 6,
+      "firstMonth": "2026-03",
+      "currency": "INR",
+      "window": {
+        "from": "2026-03-01",
+        "to": "2026-09-30"
+      },
+      "months": [
+        {
+          "month": "2026-03",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        },
+        {
+          "month": "2026-04",
+          "spentMinor": 90000,
+          "expenseCount": 1,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        },
+        {
+          "month": "2026-05",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        },
+        {
+          "month": "2026-06",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        },
+        {
+          "month": "2026-07",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        },
+        {
+          "month": "2026-08",
+          "spentMinor": 3,
+          "expenseCount": 1,
+          "yourShareMinor": 1,
+          "youPaidMinor": 3
+        },
+        {
+          "month": "2026-09",
+          "spentMinor": 401000,
+          "expenseCount": 3,
+          "yourShareMinor": 133833,
+          "youPaidMinor": 100000
+        }
+      ],
+      "average": {
+        "monthCount": 6,
+        "spentMinor": 15001,
+        "yourShareMinor": 0,
+        "youPaidMinor": 1
+      },
+      "change": {
+        "direction": "up",
+        "differenceMinor": 385999,
+        "changePercent": 2573.2
+      },
+      "biggestExpense": {
+        "id": "<expense:Cook (September)@2026-09-05>",
+        "description": "Cook (September)",
+        "amountMinor": 300000,
+        "date": "2026-09-05T06:00:00.000Z",
+        "paidBy": [
+          {
+            "id": "b00000000000000000000003",
+            "name": "Carol Tester"
+          },
+          {
+            "id": "b00000000000000000000001",
+            "name": "Alice Tester"
+          }
+        ]
+      },
+      "otherCurrencies": [],
+      "recurringExpenses": false,
+      "hasExpenses": true
+    },
+    "status": 200
+  },
+  "household-bob-one-month": {
+    "data": {
+      "timeZone": "UTC",
+      "month": "2026-09",
+      "compare": 1,
+      "firstMonth": "2026-03",
+      "currency": "INR",
+      "window": {
+        "from": "2026-08-01",
+        "to": "2026-09-30"
+      },
+      "months": [
+        {
+          "month": "2026-08",
+          "spentMinor": 3,
+          "expenseCount": 1,
+          "yourShareMinor": 2,
+          "youPaidMinor": 0
+        },
+        {
+          "month": "2026-09",
+          "spentMinor": 401000,
+          "expenseCount": 3,
+          "yourShareMinor": 133834,
+          "youPaidMinor": 101000
+        }
+      ],
+      "average": {
+        "monthCount": 1,
+        "spentMinor": 3,
+        "yourShareMinor": 2,
+        "youPaidMinor": 0
+      },
+      "change": {
+        "direction": "up",
+        "differenceMinor": 400997,
+        "changePercent": 13366566.7
+      },
+      "biggestExpense": {
+        "id": "<expense:Cook (September)@2026-09-05>",
+        "description": "Cook (September)",
+        "amountMinor": 300000,
+        "date": "2026-09-05T06:00:00.000Z",
+        "paidBy": [
+          {
+            "id": "b00000000000000000000003",
+            "name": "Carol Tester"
+          },
+          {
+            "id": "b00000000000000000000001",
+            "name": "Alice Tester"
+          }
+        ]
+      },
+      "otherCurrencies": [],
+      "recurringExpenses": false,
+      "hasExpenses": true
+    },
+    "status": 200
+  },
+  "household-carol-august": {
+    "data": {
+      "timeZone": "America/New_York",
+      "month": "2026-08",
+      "compare": 12,
+      "firstMonth": "2026-03",
+      "currency": "INR",
+      "window": {
+        "from": "2026-03-01",
+        "to": "2026-08-31"
+      },
+      "months": [
+        {
+          "month": "2026-03",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        },
+        {
+          "month": "2026-04",
+          "spentMinor": 90000,
+          "expenseCount": 1,
+          "yourShareMinor": 90000,
+          "youPaidMinor": 90000
+        },
+        {
+          "month": "2026-05",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        },
+        {
+          "month": "2026-06",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        },
+        {
+          "month": "2026-07",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        },
+        {
+          "month": "2026-08",
+          "spentMinor": 3,
+          "expenseCount": 1,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        }
+      ],
+      "average": {
+        "monthCount": 5,
+        "spentMinor": 18000,
+        "yourShareMinor": 18000,
+        "youPaidMinor": 18000
+      },
+      "change": {
+        "direction": "down",
+        "differenceMinor": -17997,
+        "changePercent": -100
+      },
+      "biggestExpense": {
+        "id": "<expense:Fuse@2026-08-11>",
+        "description": "Fuse",
+        "amountMinor": 3,
+        "date": "2026-08-11T06:00:00.000Z",
+        "paidBy": [
+          {
+            "id": "b00000000000000000000001",
+            "name": "Alice Tester"
+          }
+        ]
+      },
+      "otherCurrencies": [],
+      "recurringExpenses": false,
+      "hasExpenses": true
+    },
+    "status": 200
+  },
+  "legacy-two-currencies": {
+    "data": {
+      "timeZone": "UTC",
+      "month": "2026-09",
+      "compare": 1,
+      "firstMonth": "2026-09",
+      "currency": "EUR",
+      "window": {
+        "from": "2026-09-01",
+        "to": "2026-09-30"
+      },
+      "months": [
+        {
+          "month": "2026-09",
+          "spentMinor": 2550,
+          "expenseCount": 1,
+          "yourShareMinor": 1275,
+          "youPaidMinor": 2550
+        }
+      ],
+      "average": null,
+      "change": null,
+      "biggestExpense": {
+        "id": "<expense:Pastries@2026-09-05>",
+        "description": "Pastries",
+        "amountMinor": 2550,
+        "date": "2026-09-05T12:00:00.000Z",
+        "paidBy": [
+          {
+            "id": "b00000000000000000000001",
+            "name": "Alice Tester"
+          }
+        ]
+      },
+      "otherCurrencies": [
+        {
+          "currency": "INR",
+          "spentMinor": 300000,
+          "expenseCount": 1
+        }
+      ],
+      "recurringExpenses": false,
+      "hasExpenses": true
+    },
+    "status": 200
+  },
+  "recurring-on": {
+    "data": {
+      "timeZone": "Asia/Kolkata",
+      "month": "2026-09",
+      "compare": 6,
+      "firstMonth": "2026-06",
+      "currency": "INR",
+      "window": {
+        "from": "2026-06-01",
+        "to": "2026-09-30"
+      },
+      "months": [
+        {
+          "month": "2026-06",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0,
+          "recurringCount": 0
+        },
+        {
+          "month": "2026-07",
+          "spentMinor": 300000,
+          "expenseCount": 1,
+          "yourShareMinor": 100000,
+          "youPaidMinor": 300000,
+          "recurringCount": 1
+        },
+        {
+          "month": "2026-08",
+          "spentMinor": 300000,
+          "expenseCount": 1,
+          "yourShareMinor": 100000,
+          "youPaidMinor": 300000,
+          "recurringCount": 1
+        },
+        {
+          "month": "2026-09",
+          "spentMinor": 302000,
+          "expenseCount": 2,
+          "yourShareMinor": 100000,
+          "youPaidMinor": 300000,
+          "recurringCount": 1
+        }
+      ],
+      "average": {
+        "monthCount": 3,
+        "spentMinor": 200000,
+        "yourShareMinor": 66667,
+        "youPaidMinor": 200000
+      },
+      "change": {
+        "direction": "up",
+        "differenceMinor": 102000,
+        "changePercent": 51
+      },
+      "biggestExpense": {
+        "id": "<expense:Rent@2026-09-05>",
+        "description": "Rent",
+        "amountMinor": 300000,
+        "date": "2026-09-05T00:00:00.000Z",
+        "paidBy": [
+          {
+            "id": "b00000000000000000000001",
+            "name": "Alice Tester"
+          }
+        ]
+      },
+      "otherCurrencies": [],
+      "recurringExpenses": true,
+      "hasExpenses": true
+    },
+    "status": 200
+  },
+  "recurring-off": {
+    "data": {
+      "timeZone": "Asia/Kolkata",
+      "month": "2026-09",
+      "compare": 6,
+      "firstMonth": "2026-06",
+      "currency": "INR",
+      "window": {
+        "from": "2026-06-01",
+        "to": "2026-09-30"
+      },
+      "months": [
+        {
+          "month": "2026-06",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        },
+        {
+          "month": "2026-07",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        },
+        {
+          "month": "2026-08",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        },
+        {
+          "month": "2026-09",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        }
+      ],
+      "average": {
+        "monthCount": 3,
+        "spentMinor": 0,
+        "yourShareMinor": 0,
+        "youPaidMinor": 0
+      },
+      "change": {
+        "direction": "level",
+        "differenceMinor": 0,
+        "changePercent": null
+      },
+      "biggestExpense": null,
+      "otherCurrencies": [],
+      "recurringExpenses": false,
+      "hasExpenses": false
+    },
+    "status": 200
+  },
+  "first-month": {
+    "data": {
+      "timeZone": "UTC",
+      "month": "2026-07",
+      "compare": 12,
+      "firstMonth": "2026-07",
+      "currency": "INR",
+      "window": {
+        "from": "2026-07-01",
+        "to": "2026-07-31"
+      },
+      "months": [
+        {
+          "month": "2026-07",
+          "spentMinor": 1500,
+          "expenseCount": 1,
+          "yourShareMinor": 1500,
+          "youPaidMinor": 1500
+        }
+      ],
+      "average": null,
+      "change": null,
+      "biggestExpense": {
+        "id": "<expense:Mop@2026-07-21>",
+        "description": "Mop",
+        "amountMinor": 1500,
+        "date": "2026-07-21T06:00:00.000Z",
+        "paidBy": [
+          {
+            "id": "b00000000000000000000001",
+            "name": "Alice Tester"
+          }
+        ]
+      },
+      "otherCurrencies": [],
+      "recurringExpenses": false,
+      "hasExpenses": true
+    },
+    "status": 200
+  },
+  "new-group": {
+    "data": {
+      "timeZone": "Asia/Kolkata",
+      "month": "2026-09",
+      "compare": 6,
+      "firstMonth": "2026-09",
+      "currency": "INR",
+      "window": {
+        "from": "2026-09-01",
+        "to": "2026-09-30"
+      },
+      "months": [
+        {
+          "month": "2026-09",
+          "spentMinor": 0,
+          "expenseCount": 0,
+          "yourShareMinor": 0,
+          "youPaidMinor": 0
+        }
+      ],
+      "average": null,
+      "change": null,
+      "biggestExpense": null,
+      "otherCurrencies": [],
+      "recurringExpenses": false,
+      "hasExpenses": false
+    },
+    "status": 200
+  }
+}
