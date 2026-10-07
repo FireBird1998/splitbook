@@ -44,6 +44,11 @@ const adoptedFiles = [
   'src/components/insights/ByTagCard.tsx',
   'src/components/insights/WhoPaidCard.tsx',
   'src/components/insights/RecurringExpensesCard.tsx',
+  'src/components/trip-summary/TripSummaryTab.tsx',
+  'src/components/trip-summary/TripSummaryView.tsx',
+  'src/components/trip-summary/TripDayChartCard.tsx',
+  'src/components/trip-summary/TripTagsCard.tsx',
+  'src/components/trip-summary/TripWrapUpCard.tsx',
   'src/components/expenses/AddExpenseLauncher.tsx',
   'src/components/expenses/GroupChooserDialog.tsx',
   'src/components/search/SearchLauncher.tsx',
@@ -60,6 +65,7 @@ const adoptedFiles = [
   'src/components/expenses/expense-row-parts.tsx',
   'src/components/expenses/QuickAddExpense.tsx',
   'src/components/export/ExportView.tsx',
+  'src/components/expenses/TripDayRow.tsx',
 ];
 
 let failed = false;

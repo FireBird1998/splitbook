@@ -749,6 +749,60 @@ with the group's default currency.
 
 ---
 
+## Trip summary
+
+| Method | Path                                    | Description                                   |
+| ------ | --------------------------------------- | --------------------------------------------- |
+| GET    | `/api/groups/[id]/trip-summary?tz=IANA` | A Trip's whole-trip summary, its Insights tab |
+
+### GET /api/groups/[id]/trip-summary
+
+What a whole Trip cost (#316), built by `@splitbook/shared/trip-summary` and
+decoded by `@splitbook/shared/trip-summary-read` (path and query key in
+`api-paths` and `query-keys`, in the `ledger` scope).
+
+- **Members only**, with the Group reads' refusal: `403` for a non-member, a
+  member who has left, or a Group that isn't there, before the query is read.
+- `tz` is **required**: days are calendar days in the viewer's named IANA zone,
+  never the server's. A missing, unknown or fixed-offset zone is `400`
+  `INVALID_TIME_ZONE`.
+- **Only a Trip has one.** A Group of another Theme is `409` `NOT_A_TRIP`
+  (`Only a Trip has a Trip summary.`), before anything is generated.
+- **Side effect:** due recurring templates are generated first, as the Group's
+  other reads do, respecting the product-wide switch (#289) and the Theme; a
+  Trip's Theme has none, so on a Trip nothing is added either way.
+
+Amounts are exact minor units of the Group's currency. The response holds:
+
+- `spentMinor`, `expenseCount`, `yourShareMinor`, `youPaidMinor`,
+  `yourExpenseCount`, `peopleCount` (everyone with a share), and
+  `perPersonPerDayMinor` (Spent ÷ (people × days), rounded half up);
+- `tripDates` (`start`, `end`: the Trip's own days in the zone), `window` (the
+  days the series covers), `dayCount`, and `days`: each day's `spentMinor`,
+  `expenseCount`, `yourShareMinor` and its two `biggest` Expenses (largest, then
+  latest, then highest id);
+- `dailyAverageMinor`: Spent on the window's days ÷ its days, rounded half up;
+- `beforeTrip` / `afterTrip`: Expenses dated outside the window, summed;
+- `byTag`: each Tag (by identity; `tagId` is null for a legacy name no Tag
+  matches) with `spentMinor`, `expenseCount`, `yourShareMinor` and `percent`
+  of the Trip's Spent (whole percent, half up);
+- `suggestedPayments`: `{ from, to, amountMinor }`, people as `{ id, name }`,
+  exactly the payments Balances suggests in the Group's currency;
+- `otherCurrencies` (legacy Groups only: listed, never converted) and
+  `hasExpenses` (any Expense at all).
+
+**Expenses outside the Trip's dates** count in every whole-trip figure (Spent,
+shares, per person per day, By Tag), as the trip strip's total and the Expenses
+tab do, but are never drawn as days: they are summed in `beforeTrip` and
+`afterTrip`, and the daily average covers only the Trip's own days.
+
+**The window:** the Trip's first to last day; without an end date, the first day
+to the last day an Expense falls on; without a start date, the first Expense's
+day to the last day; without either, the days its Expenses fall on. A window
+longer than 120 days is counted but not listed (`tooManyDays`, `days: []`).
+
+---
+
 ## Activity Feed
 
 | Method | Path                        | Description                                |

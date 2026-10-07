@@ -136,7 +136,8 @@ Shows at the top of all tabs:
 ```
 
 Each tab is its own route (#305), so deep links, reload and Back work. Insights
-joins the tabs with #314.
+joins the tabs with #314; a Trip's Insights is its Trip summary (#316), and a
+Trip's Expenses sit under trip-day headings with day totals.
 
 ---
 

@@ -35,8 +35,10 @@ import {
   parseExpenseRecordResponse,
   type ExpenseRecordRead,
 } from '@splitbook/shared/expense-record-read';
+import { hasTripSummary } from '@splitbook/shared/trip-summary';
 import { fetcher, HttpResponseError } from '@/lib/utils/fetcher';
 import { apiFetch } from '@/lib/utils/api-fetch';
+import { useViewerTimeZone } from '@/lib/hooks/use-viewer-time-zone';
 import { RADIUS, TOPBAR_HEIGHT } from '@/lib/theme/tokens';
 import ExpenseCard from './ExpenseCard';
 import ExpenseDetails, { type ExpenseDetailsRecord } from './ExpenseDetails';
@@ -45,6 +47,8 @@ import ExpensePanel, { type ExpensePanelState, type PanelExpense } from './Expen
 import DeleteExpenseDialog from './DeleteExpenseDialog';
 import ExpenseStats, { StatCount } from './ExpenseStats';
 import ExpenseTable from './ExpenseTable';
+import { TripDayTotals } from './TripDayRow';
+import { tripDayHeadings, type TripDayHeading } from './expense-trip-days';
 import ExpenseToolbar, { type ToolbarOption } from './ExpenseToolbar';
 import { getDefaultExpenseTag } from './expense-form-helpers';
 import {
@@ -204,6 +208,24 @@ export default function ExpenseListView({
   const expenses = data?.expenses ?? [];
   const pagination = data?.pagination;
   const nouns = getGroupTheme(group.category).nouns;
+
+  // A Trip's Expenses in date order sit under their trip day, with its total (#316). The day
+  // is the viewer's, in their time zone, which only the browser knows.
+  const viewerTimeZone = useViewerTimeZone();
+  const byTripDay =
+    hasTripSummary(group.category) && (query.sort === 'newest' || query.sort === 'oldest');
+  const dayHeadings = useMemo(
+    () =>
+      byTripDay && viewerTimeZone && data
+        ? tripDayHeadings(data.expenses, {
+            timeZone: viewerTimeZone,
+            startDate: group.startDate,
+            endDate: group.endDate,
+            currency,
+          })
+        : null,
+    [byTripDay, viewerTimeZone, data, group.startDate, group.endDate, currency],
+  );
 
   // ── The open Expense, kept in the address (#311) ──
   const openId = readOpenExpense(searchParams);
@@ -400,7 +422,8 @@ export default function ExpenseListView({
   const sortLabel = EXPENSE_SORTS.find(({ id }) => id === query.sort)?.label ?? 'Newest first';
   const listLabel = month ? `Expenses, ${month.label}` : 'Expenses';
   const caption =
-    `${month ? `Expenses in ${month.label}` : 'Expenses'}, ${sortLabel.toLowerCase()}. ` +
+    `${month ? `Expenses in ${month.label}` : 'Expenses'}, ${sortLabel.toLowerCase()}` +
+    `${dayHeadings ? ', under each trip day with its total' : ''}. ` +
     'Select an Expense to see its details.';
 
   const list = rangeProblem ? (
@@ -482,11 +505,13 @@ export default function ExpenseListView({
       onToggle={toggle}
       panelId={EXPENSE_PANEL_ID}
       stale={changing}
+      dayHeadings={dayHeadings}
     />
   ) : (
     <ExpenseCards
       expenses={expenses}
       byDay={query.sort === 'newest' || query.sort === 'oldest'}
+      dayHeadings={dayHeadings}
       label={listLabel}
       render={(expense) => (
         <ExpenseCard
@@ -649,20 +674,32 @@ export default function ExpenseListView({
 
 const detailsId = (expenseId: string) => `expense-${expenseId}-details`;
 
-/** The phone list: cards, under day headings while the list is in date order. */
+/**
+ * The phone list: cards, under day headings while the list is in date order; on a Trip, under
+ * its trip days with their totals (#316).
+ */
 function ExpenseCards({
   expenses,
   byDay,
+  dayHeadings = null,
   label,
   render,
 }: {
   expenses: ExpenseRead[];
   byDay: boolean;
+  dayHeadings?: ReadonlyMap<string, TripDayHeading> | null;
   label: string;
   render: (expense: ExpenseRead) => React.ReactNode;
 }) {
-  const days: Array<{ day: string; expenses: ExpenseRead[] }> = [];
+  const days: Array<{ day: string; expenses: ExpenseRead[]; trip?: TripDayHeading }> = [];
   for (const expense of expenses) {
+    const trip = dayHeadings?.get(expense._id);
+    if (dayHeadings) {
+      if (trip || days.length === 0)
+        days.push({ day: trip?.label ?? '', expenses: [expense], trip });
+      else days.at(-1)!.expenses.push(expense);
+      continue;
+    }
     const day = byDay ? formatDate(expense.date) : '';
     const last = days.at(-1);
     if (last && last.day === day) last.expenses.push(expense);
@@ -670,7 +707,7 @@ function ExpenseCards({
   }
   return (
     <Stack component="section" aria-label={label} spacing={2.5}>
-      {days.map(({ day, expenses: dayExpenses }, index) => (
+      {days.map(({ day, expenses: dayExpenses, trip }, index) => (
         <Box key={`${day}-${index}`}>
           {day && (
             <Typography
@@ -678,9 +715,10 @@ function ExpenseCards({
               variant="body2"
               fontWeight={500}
               color="text.secondary"
-              sx={{ mb: 1 }}
+              sx={{ mb: 1, display: 'flex', justifyContent: 'space-between', gap: 1 }}
             >
-              {day}
+              <span>{day}</span>
+              {trip ? <TripDayTotals totals={trip.totals} /> : null}
             </Typography>
           )}
           <Stack spacing={1}>{dayExpenses.map(render)}</Stack>

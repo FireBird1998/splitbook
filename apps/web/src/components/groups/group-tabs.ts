@@ -8,8 +8,7 @@
 export const GROUP_TABS = [
   { slug: 'expenses', label: 'Expenses' },
   { slug: 'balances', label: 'Balances' },
-  // The Month against the Months before it (#314). A Trip shows the same Month view until its
-  // Trip summary replaces it (#316).
+  // The Month against the Months before it (#314); a Trip's is its Trip summary (#316).
   { slug: 'insights', label: 'Insights' },
   { slug: 'activity', label: 'Activity' },
   { slug: 'members', label: 'Members' },

@@ -1,5 +1,6 @@
 'use client';
 
+import { Fragment } from 'react';
 import Box from '@mui/material/Box';
 import { format } from 'date-fns';
 import MoneyText from '@/components/common/MoneyText';
@@ -12,6 +13,8 @@ import {
   listedExpensePosition,
 } from '@splitbook/shared/expense-row';
 import { ExpenseTag, PayerLabel, PositionText, RepeatsIcon } from './expense-row-parts';
+import TripDayRow from './TripDayRow';
+import type { TripDayHeading } from './expense-trip-days';
 
 /** The table's columns, as the design canvas ("GroupExpenses") lays them out. */
 export const EXPENSE_TABLE_COLUMNS = [
@@ -45,6 +48,11 @@ interface ExpenseTableProps {
   panelId: string;
   /** Dim the rows while a newer page loads. */
   stale?: boolean;
+  /**
+   * A Trip's day headings (#316), keyed by the id of each day's first Expense: a heading row
+   * with the day's total goes above it. Heading rows open nothing.
+   */
+  dayHeadings?: ReadonlyMap<string, TripDayHeading> | null;
 }
 
 const cell = {
@@ -76,6 +84,7 @@ export default function ExpenseTable({
   onToggle,
   panelId,
   stale = false,
+  dayHeadings = null,
 }: ExpenseTableProps) {
   const now = new Date();
   return (
@@ -137,91 +146,96 @@ export default function ExpenseTable({
             {expenses.map((expense) => {
               const open = expense._id === openId;
               const repeats = recurringExpensesEnabled && Boolean(expense.recurringExpense);
+              const heading = dayHeadings?.get(expense._id);
               return (
-                <Box
-                  component="tr"
-                  key={expense._id}
-                  data-expense-id={expense._id}
-                  onClick={() => onToggle(expense._id)}
-                  sx={{
-                    cursor: 'pointer',
-                    '& > td': { bgcolor: open ? 'tint.brand' : undefined },
-                    '&:hover > td': { bgcolor: open ? 'tint.brand' : 'surface.hover' },
-                  }}
-                >
+                <Fragment key={expense._id}>
+                  {heading ? (
+                    <TripDayRow heading={heading} columns={EXPENSE_TABLE_COLUMNS.length} />
+                  ) : null}
                   <Box
-                    component="td"
+                    component="tr"
+                    data-expense-id={expense._id}
+                    onClick={() => onToggle(expense._id)}
                     sx={{
-                      ...cell,
-                      whiteSpace: 'nowrap',
-                      fontSize: '0.8125rem',
-                      color: 'text.secondary',
+                      cursor: 'pointer',
+                      '& > td': { bgcolor: open ? 'tint.brand' : undefined },
+                      '&:hover > td': { bgcolor: open ? 'tint.brand' : 'surface.hover' },
                     }}
                   >
-                    {expenseDay(expense.date, now)}
-                  </Box>
-                  <Box component="td" sx={cell}>
-                    {/* The row's click opens it; the button is how a keyboard does. */}
                     <Box
-                      component="button"
-                      type="button"
-                      aria-expanded={open}
-                      aria-controls={open ? panelId : undefined}
+                      component="td"
                       sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'flex-start',
-                        justifyContent: 'center',
-                        gap: '3px',
-                        minHeight: 44,
-                        p: 0,
-                        border: 0,
-                        bgcolor: 'transparent',
-                        textAlign: 'left',
-                        color: 'text.primary',
-                        font: 'inherit',
-                        cursor: 'pointer',
+                        ...cell,
+                        whiteSpace: 'nowrap',
+                        fontSize: '0.8125rem',
+                        color: 'text.secondary',
                       }}
                     >
+                      {expenseDay(expense.date, now)}
+                    </Box>
+                    <Box component="td" sx={cell}>
+                      {/* The row's click opens it; the button is how a keyboard does. */}
                       <Box
-                        component="span"
+                        component="button"
+                        type="button"
+                        aria-expanded={open}
+                        aria-controls={open ? panelId : undefined}
                         sx={{
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          fontWeight: 600,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'flex-start',
+                          justifyContent: 'center',
+                          gap: '3px',
+                          minHeight: 44,
+                          p: 0,
+                          border: 0,
+                          bgcolor: 'transparent',
+                          textAlign: 'left',
+                          color: 'text.primary',
+                          font: 'inherit',
+                          cursor: 'pointer',
                         }}
                       >
-                        {expense.description}
-                        {repeats && <RepeatsIcon />}
+                        <Box
+                          component="span"
+                          sx={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {expense.description}
+                          {repeats && <RepeatsIcon />}
+                        </Box>
+                        {expense.tag && <ExpenseTag name={expense.tag} />}
                       </Box>
-                      {expense.tag && <ExpenseTag name={expense.tag} />}
+                    </Box>
+                    <Box component="td" sx={cell}>
+                      <PayerLabel payer={expensePayerSummary(expense, userId)} />
+                    </Box>
+                    <Box
+                      component="td"
+                      sx={{ ...cell, fontSize: '0.8125rem', color: 'text.secondary' }}
+                    >
+                      {expenseSplitSummary(expense)}
+                    </Box>
+                    <Box component="td" sx={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                      <MoneyText
+                        amount={expense.amount}
+                        currency={expense.currency}
+                        tone="neutral"
+                        variant="body2"
+                      />
+                    </Box>
+                    <Box component="td" sx={{ ...cell, textAlign: 'right' }}>
+                      <PositionText
+                        position={listedExpensePosition(expense, userId)}
+                        currency={expense.currency}
+                      />
                     </Box>
                   </Box>
-                  <Box component="td" sx={cell}>
-                    <PayerLabel payer={expensePayerSummary(expense, userId)} />
-                  </Box>
-                  <Box
-                    component="td"
-                    sx={{ ...cell, fontSize: '0.8125rem', color: 'text.secondary' }}
-                  >
-                    {expenseSplitSummary(expense)}
-                  </Box>
-                  <Box component="td" sx={{ ...cell, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <MoneyText
-                      amount={expense.amount}
-                      currency={expense.currency}
-                      tone="neutral"
-                      variant="body2"
-                    />
-                  </Box>
-                  <Box component="td" sx={{ ...cell, textAlign: 'right' }}>
-                    <PositionText
-                      position={listedExpensePosition(expense, userId)}
-                      currency={expense.currency}
-                    />
-                  </Box>
-                </Box>
+                </Fragment>
               );
             })}
           </tbody>

@@ -249,8 +249,8 @@ Expense opens `/groups/[id]/expenses?search=…`, which fills the Expense list's
 
 **The Group page (#305).** Each tab is its own route under the Group:
 `/groups/[id]/expenses`, `/balances`, `/activity` and `/members`, so reloading,
-Back and a shared link land on the tab. Insights joins them with #314; until
-then it is hidden, and `GROUP_TABS` in `group-tabs.ts` is where it goes.
+Back and a shared link land on the tab. Insights joins them with #314 (a Trip's
+is its Trip summary, #316); `GROUP_TABS` in `group-tabs.ts` lists them.
 
 - `/groups/[id]` redirects to Expenses. The old `?tab=balances` link redirects
   to Balances, and `?action=add-expense` (with `?month=`) goes along to the tab,
@@ -274,6 +274,27 @@ then it is hidden, and `GROUP_TABS` in `group-tabs.ts` is where it goes.
 
 Gated on `theme.header === 'strip'`. Never render it for other themes: the
 airport codes are derived from the group name and become noise off a trip.
+
+### Trip summary (`src/components/trip-summary/`)
+
+A Trip's Insights tab is its Trip summary (#316): `insights/page.tsx` renders both
+tabs on the server and `InsightsForTheme` picks one with
+`hasTripSummary(group.category)`; every other Theme keeps the Month view.
+
+| Component          | Description                                                               |
+| ------------------ | ------------------------------------------------------------------------- |
+| `InsightsForTheme` | The one switch on the Theme: the Trip summary or the Month view           |
+| `TripSummaryTab`   | The read for the viewer's time zone, and today in it                      |
+| `TripSummaryView`  | Whole trip in figures, then Day by day beside the wrap-up and By Tag      |
+| `TripDayChartCard` | One column per day, the daily average as a line, tooltip, Chart/Table     |
+| `TripWrapUpCard`   | Suggested payments; Record (to Balances, pair filled in) only on your own |
+| `TripTagsCard`     | Each Tag's Spent, share and count, linking to `/expenses?tag=<id>`        |
+
+`trip-summary.ts` holds the wording and figures, `trip-days.ts` the day labels
+("Day 2 · Fri 18 Sep", the Expense table's date pattern). Each card has its own
+loading, empty and failed (Try again) state; a Trip has one currency, so there is
+no second-currency row. On the Expenses tab, a Trip's rows in date order sit under
+trip-day headings with the day's total (`expense-trip-days.ts`, `TripDayRow`).
 
 ### Expenses (`src/components/expenses/`)
 

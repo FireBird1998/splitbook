@@ -139,6 +139,15 @@ export const groupInsightsPath = (
     ['tz', timeZone],
   ])}`;
 
+export interface TripSummaryQuery {
+  /** The viewer's named IANA time zone, such as `Asia/Kolkata`: it decides each day. */
+  timeZone: string;
+}
+
+/** A Trip's whole-trip summary: a Trip's Insights tab (#316). */
+export const tripSummaryPath = (groupId: string, { timeZone }: TripSummaryQuery) =>
+  `${group(groupId)}/trip-summary${query([['tz', timeZone]])}`;
+
 export const invitationsPath = () => '/api/invitations';
 export const settlementsPath = (groupId: string) => `${group(groupId)}/settlements`;
 export const recurringExpensesPath = (groupId: string) => `${group(groupId)}/recurring`;
