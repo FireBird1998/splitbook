@@ -6,7 +6,6 @@ import {
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
 import { findHosts, layoutHeight } from './test-utils/layout';
-import { unshared } from './ui/compact';
 import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
@@ -1016,10 +1015,9 @@ describe('App return from an Expense', () => {
     const laidOut = opening[0]
       .findAll((node) => (node.type as unknown) === 'Text')
       .flatMap((node) => node.children.filter((child) => typeof child === 'string'));
-    // Its texts are laid out, unseen, under the skeleton: the row's, not a stand-in's, and never
-    // the same strings as the record's own.
-    expect(laidOut).toContain(unshared('September groceries'));
-    expect(laidOut).toContain(unshared('₹10.00'));
+    // Its texts are laid out, unseen, under the skeleton: the row's, not a stand-in's.
+    expect(laidOut).toContain('September groceries');
+    expect(laidOut).toContain('₹10.00');
     expect(opening[0].props.accessibilityState).toEqual({ busy: true });
     read.release(json({ status: 200, data: { ...september, revision: 0, isDeleted: false } }));
     await settle();

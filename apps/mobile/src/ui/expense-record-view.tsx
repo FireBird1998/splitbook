@@ -47,7 +47,6 @@ import {
   SkeletonOf,
   SkeletonText,
   TopBar,
-  unshared,
   useLargeText,
   type BadgeTone,
   type Reveal,
@@ -530,10 +529,10 @@ export function ExpenseRecordSkeleton({
           <Skeleton width={40} height={40} rounded={12} />
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
             <SkeletonOf bar>
-              <CompactText variant="heading">{unshared(record.description)}</CompactText>
+              <CompactText variant="heading">{record.description}</CompactText>
             </SkeletonOf>
             <SkeletonOf bar>
-              <CompactText variant="small">{unshared(record.meta)}</CompactText>
+              <CompactText variant="small">{record.meta}</CompactText>
             </SkeletonOf>
           </View>
         </View>
@@ -548,11 +547,11 @@ export function ExpenseRecordSkeleton({
           }}
         >
           <SkeletonOf bar align="center">
-            <Money size="form">{unshared(record.amount)}</Money>
+            <Money size="form">{record.amount}</Money>
           </SkeletonOf>
           {record.badge ? (
             <SkeletonOf rounded={999} align="center">
-              <Badge label={unshared(record.badge)} />
+              <Badge label={record.badge} />
             </SkeletonOf>
           ) : null}
         </View>
@@ -619,12 +618,12 @@ export function ExpenseRecordSkeleton({
                 ).map(([label, amount]) => (
                   <SkeletonOf key={label} bar>
                     <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
-                      <CompactText variant="caption">{unshared(label)}</CompactText>
+                      <CompactText variant="caption">{label}</CompactText>
                       {amount === null ? (
-                        <CompactText>{unshared('–')}</CompactText>
+                        <CompactText>–</CompactText>
                       ) : (
                         <Money size="table" numberOfLines={0}>
-                          {unshared(amount)}
+                          {amount}
                         </Money>
                       )}
                     </View>
@@ -646,7 +645,7 @@ export function ExpenseRecordSkeleton({
             }}
           >
             <SkeletonOf bar>
-              <CompactText variant="caption">{unshared(sharesDifferNote)}</CompactText>
+              <CompactText variant="caption">{sharesDifferNote}</CompactText>
             </SkeletonOf>
           </View>
         ) : (

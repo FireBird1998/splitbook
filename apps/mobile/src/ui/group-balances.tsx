@@ -16,7 +16,6 @@ import {
   SectionHeader,
   SkeletonOf,
   SkeletonText,
-  unshared,
 } from './compact';
 import { Freshness, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
@@ -454,12 +453,12 @@ export function GroupBalancesView({
                 <View style={{ flex: 1 }}>
                   <SkeletonOf bar>
                     <CompactText variant="overline">
-                      {unshared(`All-time balance · ${group.defaultCurrency}`)}
+                      All-time balance · {group.defaultCurrency}
                     </CompactText>
                   </SkeletonOf>
                 </View>
                 <SkeletonOf bar>
-                  <CompactText variant="caption">{unshared('Updated 10:42 AM')}</CompactText>
+                  <CompactText variant="caption">Updated 10:42 AM</CompactText>
                 </SkeletonOf>
               </View>
               <SkeletonText
