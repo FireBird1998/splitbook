@@ -25,6 +25,7 @@ declare module '@mui/material/styles' {
     focus: { main: string; ring: string };
     chart: { series: string; seriesSoft: string; grid: string };
     inverse: { bg: string; text: string };
+    diverging: { positive: string; negative: string };
   }
 
   interface PaletteOptions {
@@ -48,6 +49,7 @@ declare module '@mui/material/styles' {
     focus?: { main?: string; ring?: string };
     chart?: { series?: string; seriesSoft?: string; grid?: string };
     inverse?: { bg?: string; text?: string };
+    diverging?: { positive?: string; negative?: string };
   }
 
   interface TypographyVariants {
@@ -119,6 +121,7 @@ export function createAppTheme(mode: ThemeMode): Theme {
       status: { ...tokens.status },
       chart: { ...tokens.chart },
       inverse: { ...tokens.inverse },
+      diverging: { ...tokens.diverging },
     },
     typography: {
       fontFamily: FONT_UI,

@@ -24,6 +24,7 @@ const adoptedFiles = [
   'src/components/balances/BalancesView.tsx',
   'src/components/balances/TabCard.tsx',
   'src/components/balances/PaymentsTable.tsx',
+  'src/components/balances/EveryoneCard.tsx',
   'src/components/settlements/RecordPaymentForm.tsx',
   'src/app/(main)/layout.tsx',
   'src/components/layout/AppShell.tsx',
