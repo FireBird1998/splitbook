@@ -1232,7 +1232,12 @@ export function createGroupQueries(session: GroupSession) {
     }
     const known =
       group && group.id === opened.groupId && lists(group)
-        ? { data: group, refreshedAt: state.data!.refreshedAt }
+        ? {
+            data: group,
+            refreshedAt: state.data!.refreshedAt,
+            // This device's copy: the offline banner says what's shown was saved (#219).
+            restored: state.data!.source === 'saved',
+          }
         : {};
     if (state.fetchStatus === 'fetching' || (!opened.checked && opened.reading))
       return same(shown, { ...shown, ...known, status: 'loading', message: null });

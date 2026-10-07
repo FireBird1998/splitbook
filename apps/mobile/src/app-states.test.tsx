@@ -1621,6 +1621,8 @@ describe('A Group says what is true, without jumps (#219)', () => {
       await settle();
       await app.press(open[groupId]);
       expect(app.content().inside).toContain(expenses);
+      // The Group itself is this phone's copy: the banner says what was saved (#219).
+      expect(app.text()).toContain('You’re offlineWhat’s shown was saved on this device at');
       await app.press('Balances');
       expect(app.content().inside).toContain(
         'These balances aren’t saved on this phone. Connect to load them.',
@@ -1629,6 +1631,48 @@ describe('A Group says what is true, without jumps (#219)', () => {
       expect(app.text()).not.toContain('yet');
     },
   );
+
+  // Item 2: the offline banner.
+  it('says what was saved only over a Group restored from this phone, and nothing once SplitBook answers', async () => {
+    const phone = device();
+    const savedAt = await usedBefore(phone);
+    phone.network.online = false;
+    const app = await start(phone);
+    await settle();
+    // Maple House shows this phone's copy: the banner says when it was saved, as its badge does.
+    await app.press(open[maple]);
+    expect(app.text()).toContain(
+      `You’re offlineWhat’s shown was saved on this device at ${refreshedLabel(savedAt)}`,
+    );
+    expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}\u200a`);
+    await app.press('Back to Home');
+
+    // The connection is back. Lisbon Offsite was never opened here: its read checks the session
+    // first, with nothing of it saved on screen.
+    phone.network.online = true;
+    const check = phone.hold('/api/auth/get-session');
+    app.tap(open[lisbon]);
+    await check.reached;
+    await settle();
+    expect(app.text()).toContain('You’re offlineConnect to load the latest.');
+    expect(app.text()).not.toContain('What’s shown was saved');
+
+    // SplitBook answered the check: the app is online while the Group and its Expenses are
+    // still read.
+    const expenses = phone.hold(`/api/groups/${lisbon}/expenses?`);
+    const read = phone.hold(`/api/groups/${lisbon}`);
+    check.release();
+    await Promise.all([read.reached, expenses.reached]);
+    await settle();
+    expect(app.text()).not.toContain('You’re offline');
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual([
+      'Opening Lisbon Offsite',
+    ]);
+    read.release();
+    expenses.release();
+    await settle();
+    expect(app.text()).not.toContain('You’re offline');
+  });
 
   // Item 3: the summary card's label.
   it('says “Updated” of figures read in this session while they are read again, on Expenses and Balances', async () => {

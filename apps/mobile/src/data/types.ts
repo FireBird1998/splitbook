@@ -433,6 +433,8 @@ export interface MobileSnapshot {
     data: MobileGroup | null;
     message: string | null;
     refreshedAt: number | null;
+    /** The Group shown is this device's saved copy, as a Group's figures can be (#219). */
+    restored?: boolean;
   };
 }
 

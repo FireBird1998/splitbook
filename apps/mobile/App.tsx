@@ -851,7 +851,24 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         </>
       }
     >
-      {unavailable ? null : <OfflineNotice state={state.offline} />}
+      {/* Offline, the banner says so; that what's shown was saved on this device, only while some
+          of it is: the Group's details, or the destination's own content (#219, as Home since
+          #332). Activity's events are taken as saved until #222 says which are. */}
+      {unavailable ? null : (
+        <OfflineNotice
+          state={state.offline}
+          savedShown={
+            (!!state.detail.data && state.detail.restored === true) ||
+            (state.destination === 'expenses'
+              ? state.financial.expenses.month === state.financial.month &&
+                state.financial.expenses.restored === true
+              : state.destination === 'balances'
+                ? state.financial.balances.data !== null &&
+                  state.financial.balances.restored === true
+                : state.activity.events.length > 0)
+          }
+        />
+      )}
       {state.detail.status === 'denied' ? (
         <Notice
           title="This Group isn’t available"
