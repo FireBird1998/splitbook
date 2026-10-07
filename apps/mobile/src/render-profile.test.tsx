@@ -350,9 +350,12 @@ function backend({ expensePages = pages } = {}) {
           return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
         if (path === '/api/groups') return json({ data: groups, status: 200 });
         if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
+        // Home's figures say which Groups they cover, as SplitBook's do (#333): none here, so no
+        // Group the list leaves out, and each row's balance stays unknown, as this profile has
+        // always measured it.
         if (path === '/api/user/balances')
           return json({
-            data: { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }] },
+            data: { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }], groups: [] },
             status: 200,
           });
         if (path.startsWith(`/api/groups/${groupId}/expenses?`))

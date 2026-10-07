@@ -124,11 +124,13 @@ function fixture() {
     if (path === '/api/groups') return json({ status: 200, data: listed() });
     // As Better Auth does: 200, even for a session already gone (#202).
     if (path === '/api/auth/sign-out' && init.method === 'POST') return json({ success: true });
+    // Like SplitBook's, Home's figures name the Groups they were worked out over (#333).
     if (path === '/api/user/balances')
       return json({
         status: 200,
         data: {
           buckets: state.noGroups ? [] : [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }],
+          groups: listed().map(({ _id }) => ({ groupId: _id, balances: [] })),
         },
       });
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];

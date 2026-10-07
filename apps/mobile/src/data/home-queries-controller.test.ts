@@ -85,7 +85,7 @@ function fixture() {
     /** A status Create Group answers with, instead of the new Group. */
     refuseCreate: 0,
     /** Home's figures name the Groups they were worked out over, as SplitBook's server does. */
-    groupFigures: false,
+    groupFigures: true,
   };
   let cookie: string | null = null,
     owner: string | null = null,
@@ -479,7 +479,16 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
       path: homePath,
       groupId: null,
       refreshedAt: start,
-      value: { status: 200, data: { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }] } },
+      value: {
+        status: 200,
+        data: {
+          buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }],
+          groups: [
+            { groupId: mapleId, balances: [] },
+            { groupId: cabinId, balances: [] },
+          ],
+        },
+      },
     });
     // The older store keeps neither.
     expect(
@@ -1929,6 +1938,85 @@ describe('Home reads its Groups and its figures together (#333)', () => {
         ),
       ).toBe(false);
       expect(f.row(homePath)).toMatchObject({ value: { data: { buckets: [{ youOwe: 20 }] } } });
+    },
+  );
+
+  it('removes figures that cover a lost Group from this phone too, so a lost read again or an offline start never shows them', async () => {
+    const f = fixture();
+    const controller = f.create();
+    const published = record(controller);
+    // The figures are worked out while Alex is still in Maple House, the list once Alex has
+    // lost it.
+    const list = f.hold(listPath, { late: true }),
+      figures = f.hold(homePath);
+    const signingIn = controller.signIn('alex');
+    await list.reached;
+    await figures.reached;
+    f.server.revoked.add(mapleId);
+    // The figures land first, and are saved here.
+    figures.release();
+    await settle();
+    expect(f.row(homePath)).toMatchObject({ value: { data: { buckets: [{ youOwe: 30 }] } } });
+    // The list leaves Maple House out; the figures' read again never answers.
+    const again = f.hold(homePath, { lost: true });
+    const landed = published.length;
+    list.release();
+    await again.reached;
+    again.release();
+    await signingIn;
+    await settle();
+    expect(f.reads(homePath)).toBe(2);
+    expect(f.row(homePath)).toBeNull();
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+      home: { status: 'error', data: null, restored: false },
+    });
+    expect(published.slice(landed).some((state) => owes(state) !== null)).toBe(false);
+
+    // Started again offline, Home shows the list it saved, and no figures from before.
+    controller.dispose();
+    f.connect(false);
+    const restarted = f.create();
+    const after = record(restarted);
+    await restarted.restore();
+    await settle();
+    expect(restarted.getSnapshot()).toMatchObject({
+      auth: { status: 'authenticated', user: { id: alex.id } },
+      groups: { data: [{ name: 'Cabin Weekend' }] },
+      home: { data: null },
+    });
+    expect(after.some((state) => owes(state) !== null)).toBe(false);
+  });
+
+  it.each(['before', 'after'] as const)(
+    'reads figures that don’t say which Groups they cover again, once, landing %s the list beside them',
+    async (order) => {
+      const f = fixture();
+      f.server.groupFigures = false;
+      const controller = f.create();
+      const list = f.hold(listPath),
+        figures = f.hold(homePath);
+      const signingIn = controller.signIn('alex');
+      await list.reached;
+      await figures.reached;
+      if (order === 'before') {
+        figures.release();
+        await settle();
+        list.release();
+      } else {
+        list.release();
+        await settle();
+        figures.release();
+      }
+      await signingIn;
+      await settle();
+      // They may cover a Group the list leaves out: read again after it, they stand.
+      expect(f.reads(listPath)).toBe(1);
+      expect(f.reads(homePath)).toBe(2);
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', data: [{}, {}] },
+        home: { status: 'ready', data: [{ youOwe: 30 }] },
+      });
     },
   );
 

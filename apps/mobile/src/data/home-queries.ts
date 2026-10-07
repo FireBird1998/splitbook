@@ -20,6 +20,7 @@ import type { AccountGroupRecordStore } from './account-record-storage';
 import { parseStoredExpenseDraft } from './expense-draft';
 import { parseGroups } from './dto';
 import { parseHomeBalances } from './financial-dto';
+import { parseHomeBalancesResponse } from '@splitbook/shared/home-balances-read';
 import { cachedRead } from './offline-cache';
 import { RequestError, Superseded } from './transport';
 import type {
@@ -129,6 +130,10 @@ const memo = <T>(parse: (value: unknown) => T) => {
 };
 const listOf = memo(parseGroups);
 const figuresOf = memo(parseHomeBalances);
+/** The Groups Home's figures were worked out over, or null when they don't say. */
+const namedOf = memo(
+  (value: unknown) => parseHomeBalancesResponse(value).groups?.map(({ groupId }) => groupId) ?? null,
+);
 
 /** `shown` again when nothing in `next` differs from it, so an unchanged read publishes nothing. */
 const same = <T extends object>(shown: T, next: T): T =>
@@ -498,19 +503,47 @@ export function createHomeQueries(session: HomeSession) {
   };
   /**
    * Home's figures name the Groups they were worked out over. Figures that name one the latest
-   * Groups list leaves out were worked out before it, when the member still had that Group.
+   * Groups list leaves out were worked out before it, when the member still had that Group;
+   * figures that don't say which Groups they cover may cover such a Group too.
    */
-  const coverUnlisted = (value: unknown) =>
-    latest !== null && Object.keys(figuresOf(value).byGroup).some((id) => !latest!.has(id));
+  const coverUnlisted = (value: unknown) => {
+    if (latest === null) return false;
+    void figuresOf(value);
+    const named = namedOf(value);
+    return named === null || named.some((id) => !latest!.has(id));
+  };
+  /**
+   * Figures that may cover a Group the latest list leaves out are out of date, on screen and on
+   * this device: they leave Home, their saved row goes (or is never trusted again), and they are
+   * read again, so neither the read again nor an offline start brings that Group's balance back
+   * (#323).
+   */
+  const outdated = async (owner: number) => {
+    // Their query goes, its read again starting unpublished; then Home shows none of them.
+    quiet += 1;
+    try {
+      session.invalidate('home');
+    } finally {
+      quiet -= 1;
+    }
+    session.publish({ home: emptyHome() });
+    const lease = session.lease();
+    if (!lease || !rows) return;
+    try {
+      await lease.write(() => forget(lease.accountId, [homePath]));
+    } catch (error) {
+      if (session.current(owner) && !(error instanceof Superseded))
+        session.distrust(lease.accountId, ['home']);
+    }
+  };
   /**
    * Home's figures, read beside the Groups list rather than after it (#333). Figures sent before
-   * a list answered, that cover a Group it leaves out, are read again, after it: so a lost Group
-   * never counts in Home's figures beside the list that left it out (#323). Figures read after
-   * the list stand, so they are read again at most once.
+   * a list answered, that may cover a Group it leaves out, are out of date (`outdated`) and read
+   * again, after it: so a lost Group never counts in Home's figures beside the list that left it
+   * out (#323). Figures read after the list stand, so they are read again at most once.
    */
-  const acceptFigures: Accept = (value, _owner, read) => {
-    if ((read.since ?? answers) < answers && coverUnlisted(value))
-      return () => session.invalidate('home');
+  const acceptFigures: Accept = (value, owner, read) => {
+    if ((read.since ?? answers) < answers && coverUnlisted(value)) return () => outdated(owner);
     void figuresOf(value);
   };
   const trim = async (groups: MobileGroup[], owner: number) => {
@@ -536,7 +569,7 @@ export function createHomeQueries(session: HomeSession) {
       figures?.data?.source === 'network' &&
       coverUnlisted(figures.data.value)
     )
-      session.invalidate('home');
+      await outdated(owner);
     const lease = session.lease();
     if (!lease) return;
     let unchecked = false;
