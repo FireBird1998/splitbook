@@ -451,7 +451,8 @@ export default function RecurringExpensesSection({
   };
 
   return (
-    <Paper variant="outlined" sx={{ p: 3 }}>
+    // The Insights tab's Recurring Expenses card links here, to `#recurring-expenses` (#315).
+    <Paper id="recurring-expenses" variant="outlined" sx={{ p: 3, scrollMarginTop: 80 }}>
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" sx={{ mb: 2 }}>
         <Box>
           <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 0.5 }}>

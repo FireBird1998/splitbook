@@ -82,6 +82,12 @@ through the actual service layer (no mocked models):
   and off, refusals, and every request Android and the web made before #310
   answering byte for byte as `list-before-310.golden.json` recorded it on
   `main` (2c37639).
+- `app/api/groups/[id]/insights/month-detail.integration.test.ts` — what #315
+  added to the Group insights read: spending by Tag against each Tag's average
+  (the Month left out), who paid against their share, the recurring templates
+  only while recurring Expenses are on, and the refusals; the fields #314 sent
+  answering byte for byte as `insights-before-315.golden.json` recorded them on
+  `main` (6d81817), with the new fields after them.
 - `services/recurring-expense.integration.test.ts` — due-period materialization,
   pause/resume, problem-state skipping, and that two concurrent generations
   produce exactly one expense. Note this suite forces `Expense.createIndexes()`
@@ -208,6 +214,13 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   reload; the stat cards, the columns, the average line and the table with its
   average row, all checked against the insights read for the browser's own
   time zone; the tooltip; a Trip's Month view; and axe in both views.
+- **Insights in detail** (`group-insights-detail.spec.ts`, read-only, #315): By
+  Tag's bars and average ticks and its Chart/Table switch (the table in a region
+  the keyboard can scroll), and Who paid this month's Paid and Share, each
+  checked against the insights read; no Recurring Expenses card while recurring
+  Expenses are off; axe in both views. The pilot suite, which runs with them on,
+  checks the card itself (`playwright-pilot/insights-recurring.spec.ts`): each
+  template's amount and next date, Manage for an admin, and axe.
 - **Add expense** (`add-expense.spec.ts`): the top bar's Add expense from Home
   through "Choose a Group" (axe on the chooser; the save keeps Home in place,
   confirms with the Group's name and rereads the balances), from inside a Group
