@@ -2020,6 +2020,73 @@ describe('Home reads its Groups and its figures together (#333)', () => {
     },
   );
 
+  describe('the payment sheet reuses only a Group its view verified from SplitBook', () => {
+    const sheetReads = [`GET ${maplePath}`, `GET ${maplePath}/balances`];
+
+    it('reads the Group, then the Balances, over the view’s saved copy of the Group', async () => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(mapleId, true, 'balances');
+      later(5_000);
+      // A pull on the view: the Group's reply is lost, so its saved copy, from 5 s ago, stands
+      // in for it.
+      const group = f.hold(maplePath, { lost: true });
+      const pulling = controller.refresh('pull');
+      await group.reached;
+      group.release();
+      await pulling;
+      expect(controller.getSnapshot()).toMatchObject({
+        detail: { id: mapleId, refreshedAt: start },
+        offline: { active: true },
+      });
+      // Home's figures are read again from SplitBook, which clears offline.
+      await controller.back();
+      await controller.refreshHome();
+      expect(controller.getSnapshot().offline.active).toBe(false);
+      const sent = f.calls.length;
+      await controller.openSettlements(mapleId);
+      expect(sentSince(f, sent)).toEqual(sheetReads);
+      expect(controller.getSnapshot().settlement).toMatchObject({ status: 'ready' });
+    });
+
+    it('reads the Group, then the Balances, while the app is offline', async () => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(mapleId, true, 'balances');
+      await controller.back();
+      // Home's pull can't reach SplitBook, though the Group the view read is still recent.
+      f.server.offline = true;
+      await controller.refresh('pull');
+      expect(controller.getSnapshot().offline.active).toBe(true);
+      f.server.offline = false;
+      const sent = f.calls.length;
+      await controller.openSettlements(mapleId);
+      expect(sentSince(f, sent)).toEqual(sheetReads);
+      expect(controller.getSnapshot().settlement).toMatchObject({ status: 'ready' });
+    });
+
+    it('reads the Group, then the Balances, while the view reads the Group again', async () => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(mapleId, true, 'balances');
+      // A pull reads the Group again; its answer is late.
+      const group = f.hold(maplePath);
+      const pulling = controller.refresh('pull');
+      await group.reached;
+      // Its Expenses are read beside it; its Balances wait for it.
+      await settle();
+      const sent = f.calls.length;
+      await controller.openRecordPayment(alex.id, sam.id, 'INR');
+      expect(sentSince(f, sent)).toEqual(sheetReads);
+      expect(controller.getSnapshot().settlement).toMatchObject({ status: 'editing' });
+      group.release();
+      await pulling;
+    });
+  });
+
   it('reads Home’s figures again after the payment sheet saw newer Balances, and only then', async () => {
     const f = fixture();
     const controller = f.create();

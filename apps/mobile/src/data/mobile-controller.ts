@@ -3791,18 +3791,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /**
-   * The Group as its view verified it within the display freshness window: never a saved copy,
-   * never while offline, never while it is being read again. Null otherwise.
+   * The Group as its view verified it from SplitBook within the display freshness window, timed
+   * from that answer: never a saved copy (restoring or falling back to one moves the query's own
+   * time, not the answer's), never while offline, never while it is being read again. Null
+   * otherwise.
    */
   const verifiedGroup = (groupId: string) => {
     if (offlineSession || snapshot.offline.active) return null;
     const state = queryClient.getQueryState<Envelope>(groupKey(account(), groupId));
-    const at = state?.dataUpdatedAt ?? 0;
-    return state?.data?.source === 'network' &&
-      state.fetchStatus !== 'fetching' &&
-      at <= Date.now() &&
-      Date.now() - at < freshness
-      ? state.data.value
+    const answer = state?.data;
+    return answer?.source === 'network' &&
+      state!.fetchStatus !== 'fetching' &&
+      answer.refreshedAt <= Date.now() &&
+      Date.now() - answer.refreshedAt < freshness
+      ? answer.value
       : null;
   };
   /**
