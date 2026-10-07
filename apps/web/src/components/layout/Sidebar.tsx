@@ -6,6 +6,7 @@ import IconButton from '@mui/material/IconButton';
 import CloseIcon from '@mui/icons-material/Close';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
+import IosShareOutlinedIcon from '@mui/icons-material/IosShareOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import { useThemeMode } from '@/providers/ThemeProvider';
@@ -13,9 +14,12 @@ import BrandLogo from './BrandLogo';
 import AccountMenu, { type ShellUser } from './AccountMenu';
 import { THEME_IN_BAR, themeSwitchLabel } from './phone-top-bar';
 import SidebarGroups from './SidebarGroups';
-import { HOME_HREF, MAIN_NAV, SETTINGS_HREF, navCurrent } from './shell-nav';
+import { EXPORT_HREF, HOME_HREF, MAIN_NAV, SETTINGS_HREF, navCurrent } from './shell-nav';
 
-const NAV_ICONS = { [HOME_HREF]: DashboardOutlinedIcon } as const;
+const NAV_ICONS = {
+  [HOME_HREF]: DashboardOutlinedIcon,
+  [EXPORT_HREF]: IosShareOutlinedIcon,
+} as const;
 
 /** A sidebar link (web.css: .nav-a): 44 px high, and tinted brand when it is the current page. */
 const navLinkSx = {
@@ -101,7 +105,6 @@ export default function Sidebar({
         aria-label="Main"
         sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}
       >
-        {/* #317 adds Export here, after Home. */}
         {MAIN_NAV.map((item) => {
           const Icon = NAV_ICONS[item.href];
           return (

@@ -104,19 +104,24 @@ describe('the Group header', () => {
         members,
         userId: ALEX,
         settingsHref: `/groups/${GROUP}/settings`,
+        exportHref: `/export?group=${GROUP}`,
         onInvite: vi.fn(),
       }),
     );
 
-  it('shows the Theme’s line icon, the name, "Theme · N members · currency", the avatars, Invite and settings', () => {
+  it('shows the Theme’s line icon, the name, "Theme · N members · currency", the avatars, Invite, Export and settings', () => {
     const html = header();
     expect(html).toMatch(/<h1\b[^>]*>Maple House<\/h1>/);
     expect(text(html)).toContain('Household · 3 members · INR');
     expect(html).toMatch(/data-group-theme="home"[^>]*>[\s\S]*?data-testid="HomeOutlinedIcon"/);
     expect(html).not.toMatch(/\p{Extended_Pictographic}/u);
     expect(html).toContain('role="img" aria-label="Members: you, Sam Chen and Priya Shah"');
-    expect(text(html)).toMatch(/AR SC PS Invite/);
-    expect(anchors(html)).toEqual([{ href: `/groups/${GROUP}/settings`, current: null, text: '' }]);
+    expect(text(html)).toMatch(/AR SC PS Invite Export/);
+    // Export opens the Export page with this Group picked (#317).
+    expect(anchors(html)).toEqual([
+      { href: `/export?group=${GROUP}`, current: null, text: 'Export' },
+      { href: `/groups/${GROUP}/settings`, current: null, text: '' },
+    ]);
     expect(html).toContain('aria-label="Maple House settings"');
   });
 

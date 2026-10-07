@@ -40,7 +40,7 @@ const TABS = [
   { label: 'Members', slug: 'members', shows: 'Priya Shah' },
 ] as const;
 
-test('the header shows the Group’s icon, name, Theme, members, currency, Invite and settings', async ({
+test('the header shows the Group’s icon, name, Theme, members, currency, Invite, Export and settings', async ({
   page,
 }, testInfo) => {
   await enterAsPersona(page, 'alex');
@@ -61,6 +61,10 @@ test('the header shows the Group’s icon, name, Theme, members, currency, Invit
     main.getByRole('img', { name: 'Members: you, Sam Chen and Priya Shah' }),
   ).toBeVisible();
   await expect(main.getByRole('button', { name: 'Invite', exact: true })).toBeVisible();
+  await expect(main.getByRole('link', { name: 'Export', exact: true })).toHaveAttribute(
+    'href',
+    `/export?group=${DEMO_GROUP_ID}`,
+  );
   await expect(main.getByRole('link', { name: `${DEMO_TRIP_NAME} settings` })).toHaveAttribute(
     'href',
     `${GROUP}/settings`,

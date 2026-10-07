@@ -61,9 +61,10 @@ test('desktop: a full-height sidebar holds the logo, Home, the live Group list a
     '/dashboard',
   );
   const main = sidebar.getByRole('navigation', { name: 'Main' });
-  await expect(main.getByRole('link')).toHaveText(['Home']);
+  await expect(main.getByRole('link')).toHaveText(['Home', 'Export']);
   await expect(main.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page');
-  await expect(sidebar.getByText(/Dashboard|Receipts|Export/)).toHaveCount(0);
+  await expect(main.getByRole('link', { name: 'Export' })).toHaveAttribute('href', '/export');
+  await expect(sidebar.getByText(/Dashboard|Receipts/)).toHaveCount(0);
 
   // The seeded trip, with its Theme's line icon and Alex's balance, exactly as the read has it.
   const trip = tripRow(sidebar);

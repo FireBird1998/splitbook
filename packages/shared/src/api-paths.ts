@@ -6,6 +6,7 @@
  * builds them today, so its saved copies and path-based invalidation still match.
  */
 import { normalizeSearchQuery } from './search';
+import type { ExportRequest } from './export-request';
 import type { ExpenseFilters } from './types';
 
 /**
@@ -147,3 +148,17 @@ export const recurringExpensesPath = (groupId: string) => `${group(groupId)}/rec
  */
 export const searchPath = (searchQuery: string) =>
   `/api/search${query([['q', normalizeSearchQuery(searchQuery)]])}`;
+
+/**
+ * An export's files (#317): `groups` as ids joined by commas, the window's two days (left out
+ * for all time), the includes joined by commas, the format and the viewer's time zone.
+ */
+export const exportPath = ({ groupIds, from, to, include, format, timeZone }: ExportRequest) =>
+  `/api/export${query([
+    ['groups', groupIds.join(',')],
+    ['from', from],
+    ['to', to],
+    ['include', include.join(',')],
+    ['format', format],
+    ['tz', timeZone],
+  ])}`;
