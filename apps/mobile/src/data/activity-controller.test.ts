@@ -152,11 +152,13 @@ describe('native Group Activity', () => {
     ]);
     repaired = true;
     await controller.refreshActivity();
+    // #222, M1-3: a refresh reads both loaded pages again, and keeps them.
     expect(controller.getSnapshot().activity.events.map((e) => e._id)).toEqual([
       recovered._id,
       eventId,
+      older._id,
     ]);
-    expect(controller.getSnapshot().activity.pagination?.page).toBe(1);
+    expect(controller.getSnapshot().activity.pagination?.page).toBe(2);
   });
 
   it('rechecks membership on foreground and clears event content when access is revoked', async () => {

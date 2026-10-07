@@ -22,7 +22,8 @@ vi.mock('./account-record-storage', () => ({
         structuredClone(device.records.get(key(accountId, id)) ?? null),
       save: async (accountId: string, id: string, value: unknown) => {
         const stall = device.stall;
-        if (kind === 'cache' && stall?.environment === environment) {
+        // Saved copies: the older document's, and the persister's rows since #222 moved Activity.
+        if ((kind === 'cache' || kind === 'saved') && stall?.environment === environment) {
           device.stall = null;
           stall.arrive();
           await stall.released;
@@ -706,6 +707,8 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
     const f = fixture();
     const controller = await visitEverything(f);
     await controller.openGroup(mapleId);
+    // Past the display freshness window, so Activity is read again when shown (#222, M1-6).
+    f.clock.now += 31_000;
     // Activity is read before the edit; its answer is still on its way when the edit is confirmed.
     const activity = f.hold((path) => path.startsWith(`/api/groups/${mapleId}/activity?page=`));
     const reading = controller.openActivity(mapleId);
@@ -798,6 +801,8 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
     const f = fixture();
     const controller = await visitEverything(f);
     await controller.openGroup(mapleId);
+    // Past the display freshness window, so Activity is read again when shown (#222, M1-6).
+    f.clock.now += 31_000;
     const activity = f.hold((path) => path.startsWith(`/api/groups/${mapleId}/activity?page=`));
     const reading = controller.openActivity(mapleId);
     await activity.arrived;

@@ -1,12 +1,5 @@
+import { focusManager, onlineManager, QueryClient } from '@tanstack/query-core';
 import {
-  CancelledError,
-  focusManager,
-  onlineManager,
-  QueryClient,
-  type QueryFunctionContext,
-} from '@tanstack/query-core';
-import {
-  activityPageKey,
   groupKey,
   matchGroup,
   matchScope,
@@ -14,14 +7,7 @@ import {
   type QueryKey,
   type QueryScope,
 } from '@splitbook/shared/query-keys';
-import { cachedRead } from './offline-cache';
-import {
-  activityExpenseId,
-  emptyActivity,
-  emptyExpenseHistory,
-  parseActivityPage,
-  parseActivityExpense,
-} from './activity';
+import { activityExpenseId, emptyActivity, emptyExpenseHistory } from './activity';
 import {
   emptySettlement,
   parseRecordedSettlement,
@@ -101,9 +87,10 @@ import {
 } from './dto';
 import { parseInvitationLink } from './invitation-links';
 import { parseGroupBalances } from './financial-dto';
-import { createHomeQueries, emptyHome, homePath, notSaved, type Envelope } from './home-queries';
+import { createHomeQueries, emptyHome, homePath, type Envelope } from './home-queries';
 import { createGroupQueries, emptyExpenses } from './group-queries';
 import { createExpenseQueries } from './expense-queries';
+import { createActivityQueries } from './activity-queries';
 import { untrustedCopies } from './untrusted-copies';
 import {
   createTransport,
@@ -155,10 +142,6 @@ const inScope = (scope: string) => {
 const scoped = <T>(map: Map<string, T>, key: QueryKey) =>
   [...map].find(([scope]) => inScope(scope)(key))?.[1];
 
-/** A read a change, a denial or a Groups list made obsolete, which its caller no longer shows. */
-class Obsolete extends Superseded {}
-/** A Group's refusal, in the transport's words. */
-const refusal = (status: number) => new RequestError(groupRefused(status), status);
 /**
  * A confirmed change's message (#219): `snackbar` as the change confirmed it, with the saved row
  * to highlight; `shown`, as it shows now; and `change`, the change's count once the Group's view
@@ -406,15 +389,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let settlementRequest = 0;
   let pendingRequest = 0;
   let keptDraftRequest = 0;
-  let activityRequest = 0;
-  let activityDetailRequest = 0;
   /**
    * The Groups the latest verified Groups list holds (null until one is read this session), and
    * those it left out. Saved copies are kept only for listed Groups and ones added since.
    */
   let listedGroups: Set<string> | null = null;
   let unlistedGroups = new Set<string>();
-  let cacheEpoch = 0;
   /** Where the member is (ADR 0006, M8-2). Only `navigate` changes it. */
   let route: Route = home;
   /** The latest return's request to scroll back (`restoreScroll`); the next return asks anew. */
@@ -424,8 +404,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * is confirmed; `confirmed` keeps it true to the Group's view as its reads land (#219).
    */
   let confirmation: Confirmation | null = null;
-  /** The Activity pages of a return (`GroupReread`) that a read has already shown again. */
-  const rereadsShown = new WeakSet<object>();
   let offlineSession = false;
   const staleReads = new Map<string, number | null>();
   const freshness = dependencies.displayFreshnessMs ?? DISPLAY_FRESHNESS_MS;
@@ -460,9 +438,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * could not remove, with when: never shown again, and deleted at the next start (#212).
    */
   const untrusted = untrustedCopies(dependencies);
-  /** Groups this session lost, with the refusal and when (`losses` counts them). */
-  const lostGroups = new Map<string, { status: number; at: number }>();
-  let losses = 0;
   let storeQueue: Promise<unknown> = Promise.resolve();
   let cleanupRequired = false;
   let accountCleanupRequired = false;
@@ -556,7 +531,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     return made.shown;
   };
   const publish = (unrouted: Unrouted) => {
-    let next = expenseQueries.project(groupQueries.project(homeQueries.project(placed(unrouted))));
+    let next = activityQueries.project(
+      expenseQueries.project(groupQueries.project(homeQueries.project(placed(unrouted)))),
+    );
     // Return feedback belongs to the Group view it was made for; leaving that view ends it.
     const showing = (groupId: string) => next.screen === 'group' && next.detail.id === groupId;
     if (next.snackbar && !showing(next.snackbar.groupId)) next = { ...next, snackbar: null };
@@ -572,6 +549,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     homeQueries.bindLater();
     groupQueries.bindLater();
     expenseQueries.bindLater();
+    activityQueries.bindLater();
   };
   /**
    * The route's one writer (ADR 0006, M8-2): moves the member to `to` and publishes it, with
@@ -604,7 +582,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   const invalidate = () => {
     generation += 1;
-    cacheEpoch += 1;
     offlineSession = false;
     staleReads.clear();
     versions.clear();
@@ -615,11 +592,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     listedGroups = null;
     unlistedGroups = new Set();
     confirmation = null;
-    lostGroups.clear();
     // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
     homeQueries.reset();
     groupQueries.reset();
     expenseQueries.reset();
+    activityQueries.reset();
     queryClient.clear();
     transport.abortAll();
     cookie = null;
@@ -785,7 +762,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const purged = queueAccount(async () => {
       assertCurrent(owner);
       // A saved copy being written finishes first; those waiting were cancelled (M3-2).
-      await Promise.all([homeQueries.idle(), groupQueries.idle(), expenseQueries.idle()]);
+      await Promise.all([
+        homeQueries.idle(),
+        groupQueries.idle(),
+        expenseQueries.idle(),
+        activityQueries.idle(),
+      ]);
       const cleanup = await Promise.allSettled([
         Promise.resolve().then(() => dependencies.accountLocal?.owner.clear()),
         ...(dependencies.accountLocal?.stores.map((storage) =>
@@ -1024,6 +1006,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       await dependencies.readCache?.retainGroups(accountId, listed);
       await groupQueries.retain(accountId, listed);
       await expenseQueries.retain(accountId, listed);
+      await activityQueries.retain(accountId, listed);
     },
     distrust: (accountId, scopes) => untrusted.mark(accountId, scopes, now()),
     invalidate: (...scopes) => invalidateReads(...scopes),
@@ -1100,10 +1083,25 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         publish({ ...snapshot, expense: withdrawExpense('This Expense isn’t available.') });
     },
   });
+  /** A Group's Activity, and an event's detail (ADR 0006, M1-1, #222). */
+  const activityQueries = createActivityQueries({
+    ...session,
+    answered: (path, saved) => answered(path, saved, true),
+    route: () => route,
+    savable: (key) => savable(key),
+    freshness,
+    offline: () => offlineSession || snapshot.offline.active,
+    checked: (groupId) => groupQueries.checked(groupId),
+    readGroup: (groupId, owner, options) => groupQueries.readGroup(groupId, owner, options),
+    readRecord: (groupId, expenseId, owner, wanted) =>
+      expenseQueries.recordOf(groupId, expenseId, owner, wanted),
+    refused: (groupId, error) => void dropDeniedGroup(groupId, error),
+  });
   const listening = [
     homeQueries.listen(focusManager, onlineManager, dependencies.netInfo),
     groupQueries.listen(focusManager, onlineManager),
     expenseQueries.listen(focusManager, onlineManager),
+    activityQueries.listen(focusManager, onlineManager),
   ];
   const disconnect = () => listening.forEach((stop) => stop());
 
@@ -1202,9 +1200,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (!snapshot.auth.user) throw new Superseded();
     return { environment: apiBase, accountId: snapshot.auth.user.id };
   };
-  /** A page of 20 of the Group's Activity events. */
-  const activityKey = (groupId: string, page: number) =>
-    activityPageKey(account(), groupId, { page, limit: 20 });
 
   const versionOf = (key: QueryKey) => scoped(versions, key) ?? 0;
 
@@ -1244,6 +1239,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     homeQueries.rebind();
     groupQueries.rebind();
     expenseQueries.rebind();
+    activityQueries.rebind();
   };
   /** A confirmed Expense or Settlement change affects every page, Month, Balance, Home and Activity view. */
   const ledgerChanged = (groupId: string) =>
@@ -1263,162 +1259,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         await dependencies.readCache?.invalidateLedger(lease.accountId, groupId);
         await groupQueries.forget(lease.accountId, groupId, 'ledger');
         await expenseQueries.forget(lease.accountId, groupId);
+        await activityQueries.forget(lease.accountId, groupId);
         await homeQueries.forget(lease.accountId, [homePath]);
       });
     } catch (error) {
       if (current(owner) && !(error instanceof Superseded))
         untrusted.mark(lease.accountId, [`ledger:${groupId}`, `balances:${groupId}`, 'home'], time);
-    }
-  };
-
-  /**
-   * The request behind each query's latest read. When the query cache cancels a read, whoever
-   * sent or joined it waits for that request, and takes a refusal it answered with.
-   */
-  const requests = new WeakMap<object, Promise<Envelope>>();
-
-  /**
-   * One network read through the query cache: a read of the same key already in flight is
-   * joined, never sent twice, and a confirmed change or denial cancels one it made obsolete.
-   * `validate` runs before anything is kept, so a malformed response is never reused or saved.
-   * The answer is saved on this device for offline use, unless it is obsolete by then.
-   */
-  const fetchRead = (key: QueryKey, owner: number, validate: (value: unknown) => unknown) => {
-    let started: Promise<Envelope> | undefined;
-    const read = async ({ signal }: QueryFunctionContext): Promise<Envelope> => {
-      const path = queryKeyPath(key),
-        version = versionOf(key),
-        lease = accountStorage(),
-        epoch = cacheEpoch;
-      if (offlineSession || snapshot.offline.active) await revalidateSession(owner);
-      // A cancel ends it as cancelled, never as a network failure: it is never offline.
-      const value = await request(path, owner, { signal });
-      validate(value);
-      // Verified on the query cache's clock, which decides its freshness too.
-      const verified: Envelope = { source: 'network', refreshedAt: Date.now(), value };
-      if (!current(owner) || version !== versionOf(key) || !lease || !dependencies.readCache)
-        return verified;
-      try {
-        await lease.write(async () => {
-          if (epoch !== cacheEpoch || version !== versionOf(key) || !savable(key))
-            throw new Superseded();
-          await dependencies.readCache!.save(lease.accountId, path, {
-            version: 1,
-            accountId: lease.accountId,
-            path,
-            refreshedAt: verified.refreshedAt,
-            value,
-          });
-        });
-      } catch (error) {
-        if (!current(owner)) throw new Superseded();
-        // A newer cache epoch only means this response isn't saved; it still answers its
-        // callers. A response for a Group since lost is obsolete by version and read again.
-        if (!(error instanceof Superseded) && epoch === cacheEpoch)
-          publish({
-            ...snapshot,
-            offline: {
-              ...snapshot.offline,
-              message: 'Could not save this view for offline use. Online data is still available.',
-            },
-          });
-      }
-      return verified;
-    };
-    const options = queryClient.defaultQueryOptions({
-      queryKey: key,
-      queryFn: (context: QueryFunctionContext) => (started = read(context)),
-    });
-    // Always a read: whether a verified one may be reused instead is the caller's (freshRead).
-    const query = queryClient.getQueryCache().build(queryClient, options);
-    const fetching = query.fetch(options);
-    if (started) requests.set(query, started);
-    // The request behind the read, whether this call sent it or joined it.
-    return { fetching, request: requests.get(query) };
-  };
-
-  /**
-   * Explicitly opt in display reads only; request() and every mutation stay live.
-   * `wanted` says whether the caller still shows this read; only then is an obsolete
-   * response read again.
-   */
-  const readCached = async <T>(
-    key: QueryKey,
-    owner: number,
-    parse: (value: unknown) => T,
-    wanted?: () => boolean,
-  ): Promise<T> => {
-    const path = queryKeyPath(key),
-      lease = accountStorage(),
-      view = viewRequest,
-      epoch = cacheEpoch,
-      startVersion = versionOf(key),
-      shown = wanted ?? (() => view === viewRequest),
-      lostBefore = losses;
-    try {
-      let result: Envelope | null = null;
-      // A confirmed change or denial during the read cancelled it, as obsolete: while the caller
-      // still shows it, read again, joining the read that change already started where there is
-      // one. Each cancel takes a change of its own, so this ends; an obsolete answer is never
-      // shown. A cancel is never a failure to reach the server, so it never falls back to the
-      // saved copy.
-      while (!result) {
-        const read = fetchRead(key, owner, parse);
-        try {
-          result = await read.fetching;
-        } catch (error) {
-          if (!(error instanceof CancelledError)) throw error;
-          // The request ends first, so whatever its answer set off has finished: a session
-          // that ended, or a Group whose refusal is this read's answer.
-          const answer = await read.request?.then(
-            () => null,
-            (failure: unknown) => failure,
-          );
-          if (!current(owner) || answer instanceof Superseded) throw new Superseded();
-          if (answer instanceof RequestError && answer.kind !== 'cancelled') throw answer;
-          // Losing its Group cancelled it: that refusal is its answer, so it's never sent again.
-          const loss = key.length === 5 ? lostGroups.get(key[3]) : undefined;
-          if (loss && loss.at > lostBefore) throw refusal(loss.status);
-          if (!shown()) throw new Obsolete();
-        }
-      }
-      const parsed = parse(result.value);
-      if (view === viewRequest && current(owner)) {
-        staleReads.delete(path);
-        publishReadFreshness();
-      }
-      return parsed;
-    } catch (error) {
-      if (
-        !(error instanceof RequestError) ||
-        !error.networkFailure ||
-        !lease ||
-        !dependencies.readCache
-      )
-        throw error;
-      // A newer cache epoch, or a change, denial or Groups list that made this path obsolete,
-      // may have dropped the saved copy read here: read again, while the caller still shows it.
-      const overtaken = () => epoch !== cacheEpoch || startVersion !== versionOf(key);
-      const again = () => {
-        if (!current(owner) || !shown()) throw new Superseded();
-        return readCached(key, owner, parse, wanted);
-      };
-      if (overtaken()) return again();
-      const stored = await lease.write(() => dependencies.readCache!.load(lease.accountId, path));
-      const copy = cachedRead(stored, lease.accountId, path, now());
-      // As in peek, a saved copy older than a change it couldn't be removed for is never shown.
-      const cached = copy && copy.refreshedAt > (scoped(untrusted, key) ?? -Infinity) ? copy : null;
-      if (!current(owner)) throw new Superseded();
-      if (overtaken()) return again();
-      if (view === viewRequest) {
-        offlineSession = true;
-        staleReads.set(path, cached?.refreshedAt ?? null);
-        publishReadFreshness();
-      }
-      // The server couldn't be reached, and this read already fell back: nothing more to try.
-      if (!cached)
-        throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
-      return parse(cached.value);
     }
   };
 
@@ -1870,11 +1716,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       );
     // The view on screen, with its figures, is read again; anything else opens it anew.
     groupQueries.open(id, { again: shown && retained, previousMonth });
+    activityQueries.open(id, { again: shown && retained, fresh: !reuse });
     const kept = loadKeptDraft(id);
     try {
       if (!objectId.safeParse(id).success)
         throw new RequestError('This group is no longer available.', 404);
-      await groupQueries.read(owner, { fresh: !reuse });
+      const reading = groupQueries.read(owner, { fresh: !reuse });
+      // Activity on screen is read with its Group (owner decision, 2026-10-06): beside it, and shown
+      // once the Group's check passes. A Household's follows its Group read, which can add a due
+      // recurring Expense and its event, as does a Group not known yet.
+      const known = shownGroup(snapshot);
+      const activity = showingActivity()
+        ? activityQueries.read(owner, {
+            fresh: !reuse,
+            ...(known && known.category !== 'home' ? {} : { after: reading }),
+          })
+        : null;
+      await reading;
       if (
         !current(owner) ||
         view !== viewRequest ||
@@ -1883,7 +1741,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       )
         return;
       // The member may have switched destination while the Group was read.
-      if (showingActivity()) await readActivity(false);
+      if (showingActivity()) await (activity ?? activityQueries.read(owner, { fresh: !reuse }));
       else if (overGroup()) await loadPendingPayment(id);
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
@@ -1954,8 +1812,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   const forgetting = new Map<string, { owner: number; removal: Promise<void> }>();
   const removeGroup = async (groupId: string, status: number, owner: number) => {
-    cacheEpoch += 1;
-    lostGroups.set(groupId, { status, at: ++losses });
     const scopes = [
       `group:${groupId}`,
       `ledger:${groupId}`,
@@ -1966,6 +1822,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // Its views observe nothing more, so their removed queries are never read back (F5).
     groupQueries.lose(groupId);
     expenseQueries.lose(groupId);
+    activityQueries.lose(groupId);
     // A Groups list read before this could list it again, unless the latest one already leaves it
     // out: that list, still being saved perhaps, stands (#219, a read beside the Group's).
     const listed = !listedGroups || listedGroups.has(groupId);
@@ -1984,6 +1841,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         await dependencies.readCache?.invalidateGroup(lease.accountId, groupId);
         await groupQueries.forget(lease.accountId, groupId, 'group');
         await expenseQueries.forget(lease.accountId, groupId);
+        await activityQueries.forget(lease.accountId, groupId);
         await homeQueries.forget(lease.accountId);
       });
     } catch (error) {
@@ -1998,6 +1856,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     viewRequest += 1;
     groupQueries.lose(id);
     expenseQueries.lose(id);
+    activityQueries.lose(id);
     // A Groups list or Home figures read before this, still running or not, never bring it back.
     homeQueries.quietly(() => invalidateReads('groups', 'home'));
     publish({
@@ -2144,110 +2003,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** The page before the list once it has slid: the oldest page drops (M7-2). */
   const loadNewerExpenses = () => groupQueries.loadNewer(generation);
 
-  const readActivity = async (append: boolean) => {
-    const previous = snapshot.activity,
-      groupId = previous.groupId;
-    if (snapshot.auth.status !== 'authenticated' || !showingActivity() || !groupId) return;
-    const pagination = previous.pagination;
-    if (
-      append &&
-      (previous.status !== 'ready' ||
-        previous.moreStatus === 'loading' ||
-        !pagination ||
-        pagination.page >= pagination.totalPages)
-    )
-      return;
-    const pageNumber = append ? pagination!.page + 1 : 1;
-    // A return reads the pages it left until they're shown, so its position still exists.
-    const reread = append ? null : rereadOf(groupId)?.activity;
-    const range = reread && !rereadsShown.has(reread) ? reread : null;
-    const through = append ? pageNumber : (range?.pages ?? 1);
-    if (!append) activityDetailRequest += 1;
-    const owner = generation,
-      view = viewRequest,
-      read = ++activityRequest;
-    publish({
-      ...snapshot,
-      activity: {
-        ...previous,
-        ...(!append ? { selected: null, target: { status: 'none' as const } } : {}),
-        status: append ? 'ready' : 'loading',
-        moreStatus: append ? 'loading' : 'idle',
-        message: null,
-      },
-    });
-    try {
-      if (!objectId.safeParse(groupId).success)
-        throw new RequestError('This Group is unavailable.', 404);
-      const wanted = () => current(owner) && view === viewRequest && read === activityRequest;
-      const readPage = (number: number) =>
-        readCached(
-          activityKey(groupId, number),
-          owner,
-          (value) => parseActivityPage(value, groupId, number),
-          wanted,
-        );
-      let page = await readPage(pageNumber);
-      if (!wanted()) return;
-      const events = [...(append ? previous.events : []), ...page.events];
-      let moreStatus: 'idle' | 'error' = 'idle';
-      try {
-        while (page.pagination.page < Math.min(through, page.pagination.totalPages)) {
-          page = await readPage(page.pagination.page + 1);
-          if (!wanted()) return;
-          events.push(...page.events);
-        }
-      } catch (error) {
-        // Losing access or this view moving on is handled below; otherwise keep what was read.
-        if (
-          error instanceof Superseded ||
-          !wanted() ||
-          (error instanceof RequestError && [403, 404].includes(error.status))
-        )
-          throw error;
-        moreStatus = 'error';
-      }
-      publish({
-        ...snapshot,
-        activity: {
-          ...snapshot.activity,
-          events: [...new Map(events.map((event) => [event._id, event])).values()],
-          pagination: page.pagination,
-          status: 'ready',
-          moreStatus,
-          message: null,
-          refreshedAt: append ? snapshot.activity.refreshedAt : readAt(activityKey(groupId, 1)),
-        },
-      });
-      if (range) rereadsShown.add(range);
-    } catch (error) {
-      if (
-        !current(owner) ||
-        view !== viewRequest ||
-        read !== activityRequest ||
-        error instanceof Superseded
-      )
-        return;
-      const denied = error instanceof RequestError && [403, 404].includes(error.status);
-      if (denied) dropDeniedGroup(groupId, error);
-      publish({
-        ...snapshot,
-        activity: denied
-          ? { ...emptyActivity(), groupId, status: 'denied', message: error.message }
-          : {
-              ...previous,
-              selected: null,
-              target: { status: 'none' },
-              status: append ? 'ready' : 'error',
-              moreStatus: append ? 'error' : 'idle',
-              message:
-                error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE'
-                  ? error.message
-                  : 'Could not refresh Activity. Previously loaded events may be stale. A missing event does not mean the ledger change failed.',
-            },
-      });
-    }
-  };
   const showingActivity = () => snapshot.screen === 'group' && snapshot.destination === 'activity';
 
   /**
@@ -2275,9 +2030,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     );
     // A Group read still in flight reads the destination shown when it completes.
     if (snapshot.detail.status === 'loading' || !snapshot.detail.data) return;
-    if (destination === 'activity') {
-      if (snapshot.activity.status === 'idle') await readActivity(false);
-    } else if (
+    // Read unless verified within the freshness window (#181, M1-6).
+    if (destination === 'activity') await activityQueries.read(generation);
+    else if (
       snapshot.financial.groupId === groupId &&
       (at.destination === 'activity' || snapshot.financial.expenses.status === 'idle')
     )
@@ -2292,83 +2047,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return selectDestination('activity');
     await openGroup(groupId, true, 'activity');
   };
-  const refreshActivity = () => readActivity(false);
-  const loadMoreActivity = () => readActivity(true);
-
-  const selectActivity = async (eventId: string) => {
-    const activity = snapshot.activity;
-    if (
-      !showingActivity() ||
-      snapshot.auth.status !== 'authenticated' ||
-      activity.status !== 'ready'
-    )
-      return;
-    const event = activity.events.find((item) => item._id === eventId),
-      groupId = activity.groupId;
-    if (!event || !groupId) return;
-    const owner = generation,
-      view = viewRequest,
-      read = ++activityDetailRequest;
-    publish({
-      ...snapshot,
-      activity: { ...activity, selected: event, target: { status: 'loading' } },
-    });
-    let targetRequested = false;
-    try {
-      const group = parseGroup(
-        await groupQueries.readGroup(groupId, owner, { wanted: () => view === viewRequest }),
-      );
-      if (!current(owner) || view !== viewRequest || read !== activityDetailRequest) return;
-      if (
-        group.id !== groupId ||
-        !group.members.some((member) => member.user.id === snapshot.auth.user?.id)
-      )
-        throw new RequestError('You no longer have access to this Group.', 403);
-      const expenseId = activityExpenseId(event);
-      let target: typeof activity.target = { status: 'none' };
-      if (expenseId) {
-        targetRequested = true;
-        target = parseActivityExpense(
-          await expenseQueries.recordOf(groupId, expenseId, owner, () => view === viewRequest),
-          groupId,
-          expenseId,
-        );
-      }
-      if (!current(owner) || view !== viewRequest || read !== activityDetailRequest) return;
-      publish({ ...snapshot, activity: { ...snapshot.activity, target } });
-    } catch (error) {
-      if (
-        !current(owner) ||
-        view !== viewRequest ||
-        read !== activityDetailRequest ||
-        error instanceof Superseded
-      )
-        return;
-      if (
-        error instanceof RequestError &&
-        (error.status === 403 || (!targetRequested && error.status === 404))
-      ) {
-        dropDeniedGroup(groupId, error);
-        return;
-      }
-      publish({
-        ...snapshot,
-        activity: {
-          ...snapshot.activity,
-          target: {
-            status: error instanceof RequestError && error.status === 404 ? 'unavailable' : 'error',
-          },
-        },
-      });
-    }
-  };
-  const closeActivityDetail = () => {
-    activityDetailRequest += 1;
-    publish({
-      ...snapshot,
-      activity: { ...snapshot.activity, selected: null, target: { status: 'none' } },
-    });
-  };
+  /** Pull or Retry: every page loaded is read again (M1-3). */
+  const refreshActivity = () => activityQueries.refresh(generation);
+  /** The next older page; past 5 pages Activity slides, and the newest page drops (M7-2). */
+  const loadMoreActivity = () => activityQueries.loadOlder(generation);
+  /** The page before Activity's window once it has slid: the oldest page drops (M7-2). */
+  const loadNewerActivity = () => activityQueries.loadNewer(generation);
+  /** Opens an event: what was recorded, and the Expense it names as it is now (#219, #220). */
+  const selectActivity = (eventId: string) => activityQueries.select(eventId, generation);
+  const closeActivityDetail = () => activityQueries.close();
   /**
    * An event about an Expense opens that Expense's record, and Back returns to Activity;
    * any other event, such as a payment, opens what was recorded.
@@ -5305,8 +4992,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // After Continue, a pending revoke is retried without leaving the sign-in screen.
     if (snapshot.auth.status !== 'authenticated')
       return restore(snapshot.auth.status === 'signed-out' && accountCleanupRequired);
-    // Pulling on Activity re-reads Activity only; a Group that failed to load is read again.
-    if (showingActivity() && snapshot.detail.status === 'ready') return refreshActivity();
+    // A pull or Retry on Activity reads its loaded pages again, and a Group that failed to load is
+    // read again. The foreground reached Activity through TanStack's focus event, its only
+    // foreground trigger (M1-6), and waits for what that started.
+    if (showingActivity() && snapshot.detail.status === 'ready')
+      return reuse ? activityQueries.settle(generation) : refreshActivity();
     if (snapshot.screen === 'expense') return refreshExpense(reuse);
     if (['create', 'invite', 'settings', 'settlement', 'members'].includes(snapshot.screen)) {
       const owner = generation,
@@ -5494,6 +5184,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     closeActivityDetail,
     refreshActivity,
     loadMoreActivity,
+    loadNewerActivity,
     refreshExpenseHistory,
     loadOlderExpenseHistory,
     loadNewerExpenseHistory,

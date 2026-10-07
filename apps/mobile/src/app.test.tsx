@@ -14,6 +14,7 @@ import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
 import { emitAppState, pressBack } from './test-utils/native';
 import { GroupExpensesView } from './ui/group-expenses';
+import { GroupActivity } from './ui/group-activity';
 
 // The real App tree renders through the shared host stand-ins; only native modules are replaced.
 // What the mocked `./runtime` serves: the controller under test and the appearance.
@@ -767,6 +768,8 @@ describe('App Group Activity refresh', () => {
     const app = await onActivity();
     const read = hold();
     app.use((path) => (path.includes('/activity?') ? read.respond() : undefined));
+    // Past the display freshness window: inside it, the foreground reads nothing (#222, M1-6).
+    app.clock.now += 31_000;
     app.foreground();
     await read.reached;
     await settle();
@@ -783,7 +786,8 @@ describe('App Group Activity refresh', () => {
     app.pressable('Refresh').props.onPress();
     await retried.reached;
     await settle();
-    expect(app.text()).toMatch(/Saved .+ · refreshing/);
+    // Read in this session: "Updated", and the progress bar says it is read again (#222).
+    expect(app.text()).toMatch(/Updated \d/);
     expect(app.progressbars()).toBe(1);
     app.use(() => undefined);
     retried.release(json(activityPage));
@@ -1339,6 +1343,64 @@ describe('App Expense window (#219)', () => {
     expect(await app.androidBack()).toBe(true);
     await app.layout(700, 2600);
     expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 240, animated: false });
+  });
+});
+describe('App Activity window (#222)', () => {
+  // Maple House has 6 pages of 20 fictional events.
+  const sixPages = (path: string) => {
+    if (!path.startsWith(`/api/groups/${groupId}/activity?`)) return undefined;
+    const number = Number(new URL(path, 'http://local').searchParams.get('page'));
+    const [event] = activityPage.data.activities;
+    return json({
+      status: 200,
+      data: {
+        activities: Array.from({ length: 20 }, (_, row) => ({
+          ...event,
+          _id: `d${String(number * 100 + row).padStart(23, '0')}`,
+          metadata: { ...event.metadata, description: `Fictional event ${number}-${row + 1}` },
+        })),
+        pagination: { page: number, limit: 20, total: 120, totalPages: 6 },
+      },
+    });
+  };
+
+  it('keeps the event on screen when the newest page drops: it scrolls from where the slide began', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    await app.press('Activity');
+    for (let number = 2; number <= 5; number += 1) await app.press('Load older activity');
+    await app.scrollTo(4968);
+    await app.scrollEnd(5000, 'fling');
+    native.scrollTo.mockClear();
+    await app.press('Load older activity');
+    expect(app.text()).toContain('Fictional event 6-20');
+    expect(app.text()).not.toContain('Fictional event 1-1');
+    expect(app.pressable('Load newer activity')).toBeTruthy();
+    // The list is shorter now, so Android has already clamped the offset before the shift lands.
+    await app.scrollTo(4200);
+    const view = screen!.root.findByType(GroupActivity);
+    act(() => view.props.onShift(-1140));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000 - 1140, animated: false });
+    // Only the slide's own shift starts from there.
+    act(() => view.props.onShift(-60));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000 - 1140 - 60, animated: false });
+  });
+
+  it('moves the view down by the events Load newer brings back above the one on screen', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    await app.press('Activity');
+    for (let number = 2; number <= 6; number += 1) await app.press('Load older activity');
+    await app.scrollTo(40);
+    await app.scrollEnd(60, 'drag');
+    native.scrollTo.mockClear();
+    await app.press('Load newer activity');
+    expect(app.text()).toContain('Fictional event 1-1');
+    const view = screen!.root.findByType(GroupActivity);
+    act(() => view.props.onShift(1140));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 60 + 1140, animated: false });
   });
 });
 describe('App invitation', () => {

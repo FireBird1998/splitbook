@@ -241,9 +241,9 @@ describe('Opening an Expense record', () => {
     expect(activityPages()).toEqual([1, 2]);
     expect(shown.activity.events.map((event) => event._id)).toEqual(events.map((e) => e._id));
 
-    // A later refresh starts from the first page again.
+    // A later refresh reads both pages loaded again (#222, M1-3).
     await controller.refreshActivity();
-    expect(activityPages()).toEqual([1]);
+    expect(activityPages()).toEqual([1, 2]);
   });
 
   it('returns to Activity from the form after Edit on a record opened there', async () => {

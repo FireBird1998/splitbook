@@ -50,8 +50,17 @@ export interface ActivityState {
   pagination: { page: number; limit: number; total: number; totalPages: number } | null;
   message: string | null;
   moreStatus: 'idle' | 'loading' | 'error';
-  /** When the events shown were read: the first page's time, which a saved copy keeps. */
+  /** The oldest verification time among the pages shown (#215): a saved copy keeps its own. */
   refreshedAt: number | null;
+  /**
+   * The first page shown: past 1 once Activity has slid past 5 pages, when Load newer reads the
+   * page before it (#222, M7-2). `pagination` is the last page shown.
+   */
+  firstPage?: number;
+  /** Load newer, above the events: reading the page before the window, or failed to. */
+  newerStatus?: 'idle' | 'loading' | 'error';
+  /** A page shown is this device's saved copy, not a read in this session: "Saved", not "Updated". */
+  restored?: boolean;
 }
 export function emptyActivity(): ActivityState {
   return {
@@ -64,6 +73,9 @@ export function emptyActivity(): ActivityState {
     message: null,
     moreStatus: 'idle',
     refreshedAt: null,
+    firstPage: 1,
+    newerStatus: 'idle',
+    restored: false,
   };
 }
 /** A saved Expense's own events: its Group's Activity, filtered to that Expense. */

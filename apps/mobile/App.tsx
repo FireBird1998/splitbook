@@ -733,14 +733,12 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     state.financial.groupId === state.detail.id &&
     state.financial.expenses.status === 'ready';
   const group = state.detail.data ?? (proven ? known : null);
-  // While the Group is first read, Expenses and Balances show their own placeholders for it as
-  // Home lists it, so they keep their shape when it answers (#219); nothing of it is read yet.
-  // One Home doesn't list yet takes an all-time Group's shape. Activity keeps its rows (#222).
+  // While the Group is first read, each destination shows its own placeholders for it as Home
+  // lists it, so they keep their shape when it answers (#219); nothing of it is read yet, but
+  // Activity shows this phone's saved copy at once (#222). One Home doesn't list yet takes an
+  // all-time Group's shape.
   const opening =
-    !group &&
-    state.detail.status === 'loading' &&
-    state.detail.id &&
-    state.destination !== 'activity'
+    !group && state.detail.status === 'loading' && state.detail.id
       ? (known ?? unlistedGroup(state.detail.id))
       : null;
   const shown = group ?? opening;
@@ -756,17 +754,23 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
   const restoreRequest = useRef<number | null>(null);
   const shownScrollKey = useRef<string | null>(null);
   const scrollKey = `${state.detail.id}:${state.destination}:${state.activity.selected?._id ?? ''}`;
+  // Where the view was when the list's window moved (the newest page dropped, or came back),
+  // before Android clamps the offset to a shorter list: the shift that keeps the row on screen
+  // starts from there (#219). The list is the Month's Expenses, or Activity's events (#222).
+  const firstPage =
+    (state.destination === 'activity'
+      ? state.activity.firstPage
+      : state.financial.expenses.firstPage) ?? 1;
+  const shownFirstPage = useRef(firstPage);
+  const slideFrom = useRef<number | null>(null);
   // Synced during render, before the remounted ScrollView can report its content size.
   if (shownScrollKey.current !== scrollKey) {
     shownScrollKey.current = scrollKey;
     scrollY.current = 0;
+    // Another view: where its window starts is no slide.
+    shownFirstPage.current = firstPage;
+    slideFrom.current = null;
   }
-  // Where the view was when the Expense window moved (the newest page dropped, or came back),
-  // before Android clamps the offset to a shorter list: the shift that keeps the row on screen
-  // starts from there (#219).
-  const firstPage = state.financial.expenses.firstPage ?? 1;
-  const shownFirstPage = useRef(firstPage);
-  const slideFrom = useRef<number | null>(null);
   if (shownFirstPage.current !== firstPage) {
     slideFrom.current = scrollY.current;
     shownFirstPage.current = firstPage;
@@ -786,6 +790,13 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     const shown = controller.getSnapshot();
     const { status } = shown.destination === 'activity' ? shown.activity : shown.financial.expenses;
     if (reachable >= y || status === 'ready' || status === 'error') pendingScroll.current = null;
+  };
+  /** The window moved: the view scrolls by `dy` from where it was then, so the row stays put. */
+  const shift = (dy: number) => {
+    const from = slideFrom.current ?? scrollY.current;
+    slideFrom.current = null;
+    scrollY.current = Math.max(0, from + dy);
+    scroll.current?.scrollTo({ y: scrollY.current, animated: false });
   };
   const openExpense = (groupId: string, expenseId?: string) =>
     void controller.openExpense(groupId, expenseId, { scrollY: scrollY.current });
@@ -882,8 +893,8 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
       }
     >
       {/* Offline, the banner says so; that what's shown was saved on this device, only while some
-          of it is: the Group's details, or the destination's own content (#219, as Home since
-          #332). Activity's events are taken as saved until #222 says which are. */}
+          of it is: the Group's details, or the destination's own content (#219, #222, as Home
+          since #332). */}
       {unavailable ? null : (
         <OfflineNotice
           state={state.offline}
@@ -895,7 +906,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               : state.destination === 'balances'
                 ? state.financial.balances.data !== null &&
                   state.financial.balances.restored === true
-                : state.activity.events.length > 0)
+                : state.activity.restored === true && state.activity.events.length > 0)
           }
         />
       )}
@@ -955,10 +966,12 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               currency={shown.defaultCurrency}
               members={shown.members.map(({ user }) => ({ id: user.id, name: user.name }))}
               offline={state.offline.active}
-              refreshing={feedback.quiet}
               now={Date.now()}
               onRetry={() => void controller.refreshActivity()}
               onMore={() => void controller.loadMoreActivity()}
+              onLoadNewer={() => void controller.loadNewerActivity()}
+              // The newest page dropped, or came back: the event on screen keeps its place.
+              onShift={shift}
               onSelect={(id) => void controller.openActivityEvent(id, { scrollY: scrollY.current })}
               onClose={controller.closeActivityDetail}
             />
@@ -1004,12 +1017,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                 onLoadMore={() => void controller.loadMoreExpenses()}
                 onLoadNewer={() => void controller.loadNewerExpenses()}
                 // The newest page dropped: the row on screen keeps its place (#219).
-                onShift={(dy) => {
-                  const from = slideFrom.current ?? scrollY.current;
-                  slideFrom.current = null;
-                  scrollY.current = Math.max(0, from + dy);
-                  scroll.current?.scrollTo({ y: scrollY.current, animated: false });
-                }}
+                onShift={shift}
                 onOpenExpense={(expenseId) => openExpense(shown.id, expenseId)}
                 onResumeDraft={resumeDraft}
                 onDiscardDraft={discardDraft}
