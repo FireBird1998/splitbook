@@ -1910,6 +1910,27 @@ describe('Home reads its Groups and its figures together (#333)', () => {
     });
   });
 
+  it('reads this phone’s saved figures beside its saved list when a list lands, so the check adds no wait before the list shows', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    later(31_000);
+    const savedList = f.holdLoad(listPath),
+      savedFigures = f.holdLoad(homePath);
+    let both = false;
+    void Promise.all([savedList.reached, savedFigures.reached]).then(() => (both = true));
+    const pulling = controller.refresh('pull');
+    await savedList.reached;
+    await settle();
+    // Both rows are being read before either answers.
+    expect(both).toBe(true);
+    savedList.release();
+    savedFigures.release();
+    await pulling;
+    expect(controller.getSnapshot().groups).toMatchObject({ status: 'ready' });
+  });
+
   it('reads the list beside the figures on Retry when the list’s last read failed', async () => {
     const f = fixture();
     const controller = f.create();

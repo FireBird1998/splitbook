@@ -624,8 +624,12 @@ export function createHomeQueries(session: HomeSession) {
     try {
       await lease.write(async () => {
         // The saved list may list a Group lost while it wasn't on screen: lost too (#323). One
-        // this device can't read goes as well, since it may.
-        const saved = await savedIds(lease.accountId);
+        // this device can't read goes as well, since it may. The saved figures are read beside
+        // it, so checking them adds no wait before the list shows (#333).
+        const [saved, figuresCover] = await Promise.all([
+          savedIds(lease.accountId),
+          savedFiguresCover(lease.accountId, listed),
+        ]);
         // They join the Set the session holds as this list's unlisted Groups, which only keeps
         // them unsaved, as Groups off screen already are.
         for (const id of saved ?? []) if (!listed.has(id)) lost.add(id);
@@ -634,8 +638,7 @@ export function createHomeQueries(session: HomeSession) {
         if (!lost.size && saved) {
           // Saved figures that name a Group this list leaves out go too, whatever the saved list
           // says, so no fallback or offline start counts that Group again (#323).
-          if (await savedFiguresCover(lease.accountId, listed))
-            await forget(lease.accountId, [homePath]);
+          if (figuresCover) await forget(lease.accountId, [homePath]);
           return;
         }
         // An older list still waiting to be saved would list them again: this list moves no
