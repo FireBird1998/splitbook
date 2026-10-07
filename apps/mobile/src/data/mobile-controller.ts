@@ -2063,30 +2063,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const loadNewerActivity = () => activityQueries.loadNewer(generation);
   /** Opens an event: what was recorded, and the Expense it names as it is now (#219, #220). */
   const selectActivity = (eventId: string) => activityQueries.select(eventId, generation);
-  /**
-   * Where Activity's list was when an event opened in its place, such as a payment: the detail
-   * replaces the list, so Android clamps the offset, and Back scrolls the list back there, as a
-   * return from an Expense's record does (device check of 99f96d6, A11j-l).
-   */
-  let eventOrigin: { groupId: string; eventId: string; scrollY: number } | null = null;
-  const closeActivityDetail = () => {
-    const at = route,
-      origin = eventOrigin;
-    eventOrigin = null;
-    if (
-      origin &&
-      at.screen === 'group' &&
-      at.destination === 'activity' &&
-      at.groupId === origin.groupId &&
-      snapshot.activity.selected?._id === origin.eventId
-    )
-      // Asked before the list returns, so its first layout scrolls there.
-      navigate({
-        ...at,
-        restoreScroll: { groupId: at.groupId, y: origin.scrollY, request: scrollRequests + 1 },
-      });
-    activityQueries.close();
-  };
+  /** Back to the list from an open event, which the App shows over it, at its place (#222). */
+  const closeActivityDetail = () => activityQueries.close();
   /**
    * An event about an Expense opens that Expense's record, and Back returns to Activity;
    * any other event, such as a payment, opens what was recorded.
@@ -2095,13 +2073,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const { activity } = snapshot;
     const event = activity.events.find((item) => item._id === eventId);
     const expenseId = event && activityExpenseId(event);
-    if (!expenseId || !showingActivity() || activity.status !== 'ready' || !activity.groupId) {
-      eventOrigin =
-        origin.scrollY !== undefined && activity.groupId
-          ? { groupId: activity.groupId, eventId, scrollY: origin.scrollY }
-          : null;
+    if (!expenseId || !showingActivity() || activity.status !== 'ready' || !activity.groupId)
       return selectActivity(eventId);
-    }
     await openExpense(activity.groupId, expenseId, origin);
   };
 

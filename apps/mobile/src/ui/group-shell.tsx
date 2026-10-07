@@ -1,4 +1,4 @@
-import { useState, type ReactNode, type Ref } from 'react';
+import { useRef, useState, type ReactNode, type Ref } from 'react';
 import { RefreshControl, ScrollView, View, type ScrollViewProps } from 'react-native';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupDestination, MobileGroup } from '../data/types';
@@ -52,6 +52,12 @@ interface GroupShellProps {
   >;
   /** Floats above the bottom navigation, such as the save snackbar. */
   overlay?: ReactNode;
+  /**
+   * Shown over the destination's content in its own scroll view, such as an open Activity event:
+   * the content stays mounted underneath, hidden from TalkBack, never shortened or scrolled, so
+   * closing the cover finds it at the same place (#222's device check).
+   */
+  cover?: ReactNode;
   /** A floating action shows over the content, which leaves room to scroll clear of it. */
   floating?: boolean;
   children: ReactNode;
@@ -74,11 +80,20 @@ export function GroupShell({
   scrollRef,
   scroll,
   overlay,
+  cover,
   floating = false,
   children,
 }: GroupShellProps) {
   const theme = useTheme();
   const [options, setOptions] = useState(false);
+  /** Where the destination's scroll view lies, as it last laid out: a cover takes its place. */
+  const area = useRef({ y: 0, height: 0 });
+  const content = {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: floating ? floatingRoom : 24,
+    gap: 12,
+  };
   const close = () => setOptions(false);
   return (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -113,13 +128,15 @@ export function GroupShell({
         key={destination}
         ref={scrollRef}
         {...scroll}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{
-          paddingHorizontal: 16,
-          paddingTop: 4,
-          paddingBottom: floating ? floatingRoom : 24,
-          gap: 12,
+        onLayout={(event) => {
+          area.current = event.nativeEvent.layout;
+          scroll?.onLayout?.(event);
         }}
+        // Under a cover it keeps its content and its offset, out of TalkBack's reach.
+        importantForAccessibility={cover ? 'no-hide-descendants' : 'auto'}
+        accessibilityElementsHidden={!!cover}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={content}
         refreshControl={
           <RefreshControl
             refreshing={pull.refreshing}
@@ -131,6 +148,23 @@ export function GroupShell({
       >
         {children}
       </ScrollView>
+      {cover ? (
+        <ScrollView
+          // From its own top, over the content, which stays as it was underneath.
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: area.current.y,
+            height: area.current.height,
+            backgroundColor: theme.bg,
+          }}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={{ ...content, paddingBottom: 24 }}
+        >
+          {cover}
+        </ScrollView>
+      ) : null}
       <GroupNavBar
         groupName={group?.name ?? 'Group'}
         value={destination}

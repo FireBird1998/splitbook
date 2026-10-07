@@ -1412,10 +1412,11 @@ describe('App Activity window (#222)', () => {
     });
   });
 
-  // The device check of 99f96d6 (A11j-l): a payment recorded on page 2 opened in place, and
-  // every Back returned to the top of Activity, not to the payment.
+  // The device checks of 99f96d6 (A11j-l) and 048bf59 (R2): a payment recorded on page 2 opened
+  // in the list's place, and Back returned to the list's top, every time once the same event was
+  // opened again without scrolling (R2b, R2h, R2j, R2l). It opens over the list instead.
   it.each(['the top bar', 'the detail', 'Android'] as const)(
-    'returns to the payment it opened from Back on %s, where the list was',
+    'returns to the payment it opened from Back on %s, opened twice without scrolling',
     async (by) => {
       const app = await renderApp();
       app.use((path) => {
@@ -1437,22 +1438,43 @@ describe('App Activity window (#222)', () => {
       await app.press('Load older activity');
       await app.scrollTo(1700);
       await app.scrollEnd(1700, 'fling');
-      await app.press('You recorded a payment');
-      expect(app.text()).toContain('This records a payment made outside Splitbook.');
+      const scrollViews = () =>
+        app.root().findAll((node) => (node.type as unknown) === 'ScrollView');
+      const textOf = (node: ReactTestInstance) =>
+        node
+          .findAll((child) => (child.type as unknown) === 'Text')
+          .flatMap((child) => child.children.filter((part) => typeof part === 'string'))
+          .join('');
       native.scrollTo.mockClear();
-      const backs = app
-        .root()
-        .findAll(
-          (node) =>
-            (node.type as unknown) === 'Pressable' &&
-            node.props.accessibilityLabel === 'Back to Activity',
+      for (let round = 1; round <= 2; round += 1) {
+        await app.press('You recorded a payment');
+        const [under, ...others] = scrollViews();
+        const cover = others.find((view) =>
+          textOf(view).includes('This records a payment made outside Splitbook.'),
         );
-      if (by === 'Android') expect(await app.androidBack()).toBe(true);
-      else await settle(Promise.resolve(backs[by === 'the top bar' ? 0 : 1].props.onPress()));
-      expect(app.text()).toContain('Fictional event 2-20');
-      // Laid out again, the list returns to where it was when the payment opened.
-      app.layout(800, 5000);
-      expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 1700, animated: false });
+        expect(cover).toBeDefined();
+        // The list stays mounted under it with every row, out of TalkBack's reach.
+        expect(under.props.importantForAccessibility).toBe('no-hide-descendants');
+        expect(textOf(under)).toContain('Fictional event 2-20');
+        const backs = app
+          .root()
+          .findAll(
+            (node) =>
+              (node.type as unknown) === 'Pressable' &&
+              node.props.accessibilityLabel === 'Back to Activity',
+          );
+        if (by === 'Android') expect(await app.androidBack()).toBe(true);
+        else await settle(Promise.resolve(backs[by === 'the top bar' ? 0 : 1].props.onPress()));
+        const [shown, ...rest] = scrollViews();
+        expect(rest.some((view) => textOf(view).includes('This records a payment'))).toBe(false);
+        expect(shown.props.importantForAccessibility).toBe('auto');
+        expect(textOf(shown)).toContain('Fictional event 2-20');
+        // Never shortened or scrolled, it is where the member left it.
+        expect(native.scrollTo).not.toHaveBeenCalled();
+      }
+      // And the App still knows where that is: a slide moves the view from there.
+      act(() => screen!.root.findByType(GroupActivity).props.onShift(10));
+      expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 1710, animated: false });
     },
   );
 
