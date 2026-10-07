@@ -1988,6 +1988,55 @@ describe('Home reads its Groups and its figures together (#333)', () => {
     expect(after.some((state) => owes(state) !== null)).toBe(false);
   });
 
+  it.each(['still failing', 'working again'] as const)(
+    'never shows figures that cover a lost Group when this phone can’t remove them, after an offline restart with storage %s',
+    async (storage) => {
+      const f = fixture();
+      const controller = f.create();
+      const list = f.hold(listPath, { late: true }),
+        figures = f.hold(homePath);
+      const signingIn = controller.signIn('alex');
+      await list.reached;
+      await figures.reached;
+      f.server.revoked.add(mapleId);
+      // The figures, worked out while Alex was in Maple House, land first and are saved here.
+      figures.release();
+      await settle();
+      expect(f.row(homePath)).toMatchObject({ value: { data: { buckets: [{ youOwe: 30 }] } } });
+      // The list leaves Maple House out; this phone can't remove the figures' row, and their
+      // read again never answers.
+      later(1_000);
+      f.device.failRemoval = true;
+      const again = f.hold(homePath, { lost: true });
+      list.release();
+      await again.reached;
+      again.release();
+      await signingIn;
+      await settle();
+      expect(f.row(homePath)).toMatchObject({ value: { data: { buckets: [{ youOwe: 30 }] } } });
+      expect(controller.getSnapshot()).toMatchObject({
+        auth: { status: 'authenticated', user: { id: alex.id } },
+        home: { data: null },
+      });
+
+      controller.dispose();
+      if (storage === 'working again') f.device.failRemoval = false;
+      f.connect(false);
+      const restarted = f.create();
+      const after = record(restarted);
+      await restarted.restore();
+      await settle();
+      expect(restarted.getSnapshot()).toMatchObject({
+        auth: { status: 'authenticated', user: { id: alex.id } },
+        groups: { data: [{ name: 'Cabin Weekend' }] },
+        home: { data: null },
+      });
+      expect(after.some((state) => owes(state) !== null)).toBe(false);
+      // Once this phone can, the row goes before anything reads it.
+      if (storage === 'working again') expect(f.row(homePath)).toBeNull();
+    },
+  );
+
   it.each(['before', 'after'] as const)(
     'reads figures that don’t say which Groups they cover again, once, landing %s the list beside them',
     async (order) => {
