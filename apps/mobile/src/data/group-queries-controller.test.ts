@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { focusManager } from '@tanstack/query-core';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
+import type { AccountGroupRecordStore, FindableRecordStore } from './account-record-storage';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse, MobileSnapshot } from './types';
 
@@ -896,6 +897,21 @@ describe('after a write (M2-2)', () => {
       expect(f.gets(sent)).toContain('expenses 2026-08 p1');
     },
   );
+
+  it('takes only rows that can be found by their keys, or listed', () => {
+    // Type checks only: `pnpm typecheck` fails if the persister's rows ever take a store that
+    // can't find a Group's rows to remove them.
+    const stores = (
+      store: Omit<AccountGroupRecordStore, 'keys' | 'list'>,
+    ): FindableRecordStore[] => [
+      { ...store, keys: async () => [] },
+      { ...store, list: async () => [] },
+      { ...store, keys: async () => [], list: async () => [] },
+      // @ts-expect-error Neither its keys nor a list of its rows.
+      store,
+    ];
+    expect(stores).toBeTypeOf('function');
+  });
 
   it('removes another Month’s rows after a write though one saved row can’t be read', async () => {
     const f = fixture();

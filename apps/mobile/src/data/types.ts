@@ -1,6 +1,6 @@
 import type { FinancialReadStore, OfflineIdentityStore } from './offline-cache';
 import type { ActivityState } from './activity';
-import type { AccountGroupRecordStore } from './account-record-storage';
+import type { AccountGroupRecordStore, FindableRecordStore } from './account-record-storage';
 import type { PendingPayment, SettlementState } from './settlement';
 import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
 import type { GroupValidation } from './group-draft';
@@ -522,7 +522,7 @@ export interface MobileDependencies {
    * its path, for the Groups list, Home's figures and each Group's view. Its `list` finds a
    * Group's rows to remove them together. Register it in `accountLocal.stores` too.
    */
-  savedQueries?: AccountGroupRecordStore;
+  savedQueries?: FindableRecordStore;
   /** Reconnecting reads the screen's queries again (M1-4); NetInfo, or a fake in tests. */
   netInfo?: NetworkState;
   offlineIdentity?: OfflineIdentityStore;

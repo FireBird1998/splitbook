@@ -36,6 +36,11 @@ vi.mock('./account-record-storage', () => ({
         for (const stored of [...device.records.keys()])
           if (stored.startsWith(`${environment}|${kind}|`)) device.records.delete(stored);
       },
+      // As the real store finds its rows: by their keys, without reading any (#219).
+      keys: async (accountId: string) =>
+        [...device.records.keys()]
+          .filter((stored) => stored.startsWith(key(accountId, '')))
+          .map((stored) => stored.slice(key(accountId, '').length)),
     };
   },
 }));

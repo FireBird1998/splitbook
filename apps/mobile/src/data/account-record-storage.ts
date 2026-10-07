@@ -15,6 +15,15 @@ export interface AccountGroupRecordStore {
    */
   keys?(accountId: string): Promise<string[]>;
 }
+/**
+ * A store that finds its records without knowing their keys, by `keys`, `list` or both, as the
+ * persister's rows must, to remove every row of a Group (#219).
+ */
+export type FindableRecordStore = Omit<AccountGroupRecordStore, 'keys' | 'list'> &
+  (
+    | (Required<Pick<AccountGroupRecordStore, 'keys'>> & Pick<AccountGroupRecordStore, 'list'>)
+    | ({ keys?: undefined } & Required<Pick<AccountGroupRecordStore, 'list'>>)
+  );
 
 /**
  * Atomic account/Group JSON records. The two existing on-disk stores keep their identities.
@@ -24,7 +33,7 @@ export interface AccountGroupRecordStore {
 export function createAccountGroupRecordStore(
   environment: string,
   kind: 'expense' | 'settlement' | 'cache' | 'saved' | 'group-creation' | 'sign-out',
-): AccountGroupRecordStore {
+): AccountGroupRecordStore & Required<Pick<AccountGroupRecordStore, 'keys' | 'list'>> {
   const {
     file,
     table,

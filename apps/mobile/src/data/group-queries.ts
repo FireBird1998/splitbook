@@ -21,7 +21,7 @@ import {
   type QueryAccount,
   type QueryKey,
 } from '@splitbook/shared/query-keys';
-import type { AccountGroupRecordStore } from './account-record-storage';
+import type { FindableRecordStore } from './account-record-storage';
 import { objectId, parseGroup } from './dto';
 import { parseExpensePage, parseGroupBalances } from './financial-dto';
 import { createSavedCopyQueue, notSaved, type Envelope } from './home-queries';
@@ -153,14 +153,14 @@ const inRows = (path: string, groupId: string, scope: GroupRows) => {
  * keys are read where the store can, so a row that can't be read never stops a removal.
  */
 const rowPaths = async (
-  rows: AccountGroupRecordStore,
+  rows: FindableRecordStore,
   accountId: string,
   known: Iterable<string> = [],
 ) => {
   const paths = new Set(known);
   const listed = rows.keys
     ? await rows.keys(accountId)
-    : ((await rows.list?.(accountId)) ?? []).map(({ groupId }) => groupId);
+    : (await rows.list(accountId)).map(({ groupId }) => groupId);
   for (const path of listed) paths.add(path);
   return paths;
 };
@@ -169,7 +169,7 @@ const rowPaths = async (
  * only those a ledger change makes obsolete (each Month's Expenses and its Balances).
  */
 export async function removeGroupRows(
-  rows: AccountGroupRecordStore | undefined,
+  rows: FindableRecordStore | undefined,
   accountId: string,
   groupId: string,
   scope: GroupRows,
@@ -188,7 +188,7 @@ export async function removeGroupRows(
 export interface GroupSession {
   client: QueryClient;
   /** The persister's rows (M3-1); without them nothing is saved or restored. */
-  rows?: AccountGroupRecordStore;
+  rows?: FindableRecordStore;
   /** The signed-in account in this environment; throws `Superseded` when there is none. */
   account(): QueryAccount;
   generation(): number;

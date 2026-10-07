@@ -1,4 +1,4 @@
-import type { AccountGroupRecordStore } from '../data/account-record-storage';
+import type { AccountGroupRecordStore, FindableRecordStore } from '../data/account-record-storage';
 
 /**
  * The persister's rows (ADR 0006, M3-1) for a fixture whose saved copies live in one map: each
@@ -10,7 +10,7 @@ export function savedQueriesIn(
   map: Map<string, unknown>,
   store: Partial<AccountGroupRecordStore> = {},
   separator = '',
-): AccountGroupRecordStore {
+): FindableRecordStore {
   const key = (account: string, path: string) => account + separator + path;
   return {
     load: async (account, path) => structuredClone(map.get(key(account, path)) ?? null),
