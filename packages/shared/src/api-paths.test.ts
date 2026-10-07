@@ -12,6 +12,7 @@ import {
   recurringExpensesPath,
   searchPath,
   settlementsPath,
+  tripSummaryPath,
   userActivityPath,
   userSpendingPath,
 } from './api-paths';
@@ -184,6 +185,26 @@ describe("a Group's insights (#314)", () => {
   it('refuses a Group id that would change the route', () => {
     expect(() => groupInsightsPath('..', { timeZone: 'UTC' })).toThrow(RangeError);
     expect(groupInsightsPath('a/b', { timeZone: 'UTC' })).toBe('/api/groups/a%2Fb/insights?tz=UTC');
+  });
+});
+
+describe("a Trip's summary (#316)", () => {
+  const groupId = 'b00000000000000000000001';
+
+  it('sends the time zone, encoded', () => {
+    const path = tripSummaryPath(groupId, { timeZone: 'Asia/Kolkata' });
+    expect(path).toBe(`/api/groups/${groupId}/trip-summary?tz=Asia%2FKolkata`);
+    expect(queryOf(path)).toEqual([['tz', 'Asia/Kolkata']]);
+    expect(tripSummaryPath(groupId, { timeZone: 'Etc/GMT+5' })).toBe(
+      `/api/groups/${groupId}/trip-summary?tz=Etc%2FGMT%2B5`,
+    );
+  });
+
+  it('refuses a Group id that would change the route', () => {
+    expect(() => tripSummaryPath('..', { timeZone: 'UTC' })).toThrow(RangeError);
+    expect(tripSummaryPath('a/b', { timeZone: 'UTC' })).toBe(
+      '/api/groups/a%2Fb/trip-summary?tz=UTC',
+    );
   });
 });
 

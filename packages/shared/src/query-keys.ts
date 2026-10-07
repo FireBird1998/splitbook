@@ -17,10 +17,12 @@ import {
   recurringExpensesPath,
   searchPath,
   settlementsPath,
+  tripSummaryPath,
   userActivityPath,
   userSpendingPath,
   type ActivityPageQuery,
   type GroupInsightsQuery,
+  type TripSummaryQuery,
   type UserActivityQuery,
   type UserSpendingQuery,
 } from './api-paths';
@@ -142,6 +144,13 @@ export const groupInsightsKey = (
   groupId: string,
   insights: GroupInsightsQuery,
 ) => groupScopedKey('ledger', account, groupId, groupInsightsPath(groupId, insights));
+
+/**
+ * A Trip's summary (#316). In the `ledger` scope: every Expense and Settlement write that must
+ * reach the Group's ledger reaches its totals, days and suggested payments too.
+ */
+export const tripSummaryKey = (account: QueryAccount, groupId: string, trip: TripSummaryQuery) =>
+  groupScopedKey('ledger', account, groupId, tripSummaryPath(groupId, trip));
 
 export const settlementsKey = (account: QueryAccount, groupId: string) =>
   groupScopedKey('ledger', account, groupId, settlementsPath(groupId));
