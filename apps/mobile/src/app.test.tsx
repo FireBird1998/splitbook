@@ -536,7 +536,9 @@ describe('App refresh rendering', () => {
     await app.press('Open Maple House');
     await groupRead.reached;
     await settle();
-    expect(app.text()).toContain(`Saved ${verifiedAt} · refreshing`);
+    // Read in this session: they say so while they're read again, as the progress bar does (#219).
+    expect(app.text()).toContain(`Updated ${verifiedAt}`);
+    expect(app.text()).not.toContain('Saved');
     expect(app.text()).toContain('September groceries');
     await app.press('Balances');
     // The Expenses, read beside the Group (#219), have answered: Balances wait to follow them,

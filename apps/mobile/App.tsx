@@ -921,7 +921,6 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               state={state.financial}
               pending={state.pendingPayment}
               offline={state.offline.active}
-              refreshing={feedback.quiet}
               knownSettled={settledIn(state.home.byGroup[group.id])}
               // The sheet needs the Group's details, which 2A can't show (#219).
               recordUnavailable={state.detail.data ? null : recordWaitsForDetails(group.name)}
@@ -950,7 +949,6 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                   state.snackbar?.groupId === group.id ? (state.snackbar.expenseId ?? null) : null
                 }
                 offline={state.offline.active}
-                refreshing={feedback.quiet}
                 now={Date.now()}
                 onSelectMonth={(month) => void controller.selectMonth(month)}
                 onRefreshExpenses={() => void controller.refreshExpenses()}

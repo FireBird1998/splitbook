@@ -40,8 +40,33 @@ export function RefreshStatus({
 }
 
 /**
- * A view's own freshness slot: "Updated hh:mm", "Saved hh:mm · refreshing" while it is read
- * again, or a "Saved hh:mm" badge when its figures come from this device offline.
+ * When a Group's Expenses or Balances shown were read, in their own slot: "Updated hh:mm" for
+ * the server's answer in this session, offline too; this device's restored copy says "Saved
+ * hh:mm", never presented as fresh (ADR 0006), and offline it is the badge every saved view
+ * shows. It says nothing of a read under way, which the screen's one progress cue says, so the
+ * slot never grows into a second line and nothing below it moves (#219, as Home's since #332).
+ */
+export function ReadTime({
+  refreshedAt,
+  restored = false,
+  offline = false,
+  tone = 'secondary',
+}: {
+  refreshedAt: number | null;
+  /** The figures are this device's saved copy. */
+  restored?: boolean;
+  offline?: boolean;
+  tone?: TextTone;
+}) {
+  if (refreshedAt === null) return null;
+  const time = refreshedLabel(refreshedAt);
+  if (restored && offline) return <Badge label={`Saved ${time}`} />;
+  return <StatusText tone={tone}>{`${restored ? 'Saved' : 'Updated'} ${time}`}</StatusText>;
+}
+
+/**
+ * Activity's freshness slot (#222 moves it): "Updated hh:mm", "Saved hh:mm · refreshing" while
+ * it is read again, or a "Saved hh:mm" badge when its events come from this device offline.
  */
 export function Freshness({
   refreshedAt,

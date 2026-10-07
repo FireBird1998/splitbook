@@ -5,9 +5,10 @@ export interface RefreshFeedback {
   /** The native pull indicator: only while a pull that started on this view runs. */
   pull: boolean;
   /**
-   * Visible content is re-read or retried: Home's top bar says so, and in a Group each
-   * destination's own freshness slot reads "Saved hh:mm · refreshing". The top bar gives no
-   * time: what Home shows says itself when it was read (#332).
+   * Visible content is re-read or retried: Home's top bar says so, and in a Group the progress
+   * bar under its top bar does (Activity's slot also reads "Saved hh:mm · refreshing", until
+   * #222). Neither gives a time: what is shown says itself when it was read, "Saved" only for
+   * this device's copy (#332, #219).
    */
   quiet: boolean;
   /** An automatic refresh of this view is running: nothing says so, not even an updating label. */

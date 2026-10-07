@@ -782,13 +782,14 @@ describe('first load and refresh', () => {
     await settle();
   });
 
-  it('keeps the top bar whole while refreshing, saying so in each destination’s own slot', async () => {
+  it('keeps the top bar whole while refreshing, with one progress bar over each destination’s time', async () => {
     const phone = device();
     await usedBefore(phone);
     const app = await start(phone);
     await settle();
     await app.press('Open Maple House, Household · 2 members');
-    const refresh = async (path: string, destination: string, cue = /Saved .+ · refreshing/) => {
+    // Expenses and Balances keep when they were read; the progress bar says they're read (#219).
+    const refresh = async (path: string, destination: string, cue = /Updated \d/) => {
       if (destination !== 'Expenses') await app.press(destination);
       const read = phone.hold(path);
       await app.press('Group options');
@@ -809,7 +810,8 @@ describe('first load and refresh', () => {
     // The Expenses, read beside the Group (#219), have answered: Balances wait to follow them,
     // with their time, in their place.
     await refresh(`/api/groups/${maple}`, 'Balances', /Updated \d/);
-    await refresh(`/api/groups/${maple}/activity?`, 'Activity');
+    // Activity's own slot still says so, until #222.
+    await refresh(`/api/groups/${maple}/activity?`, 'Activity', /Saved .+ · refreshing/);
   });
 
   it('keeps an empty Home on screen while it refreshes automatically', async () => {
@@ -869,7 +871,7 @@ describe('first load and refresh', () => {
     app.tap('Refresh, Check for the latest changes');
     await read.reached;
     await settle();
-    expect(app.text()).toMatch(/Saved .+ · refreshing/);
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Refreshing']);
     expect(app.disabled('Invite people')).toBe(false);
     read.release();
     await settle();
@@ -1627,6 +1629,57 @@ describe('A Group says what is true, without jumps (#219)', () => {
       expect(app.text()).not.toContain('yet');
     },
   );
+
+  // Item 3: the summary card's label.
+  it('says “Updated” of figures read in this session while they are read again, on Expenses and Balances', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[maple]);
+    for (const destination of ['Expenses', 'Balances']) {
+      if (destination === 'Balances') await app.press('Balances');
+      const readAt = refreshedLabel(phone.clock.now);
+      phone.clock.now += 5 * 60_000;
+      const read = phone.hold(`/api/groups/${maple}/expenses?`);
+      await refresh(app);
+      await read.reached;
+      await settle();
+      expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Refreshing']);
+      expect(app.content().inside).toContain(`Updated ${readAt}`);
+      expect(app.text()).not.toContain('Saved');
+      read.release();
+      await settle();
+      expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+    }
+  });
+
+  it('labels this phone’s copy of a Group “Saved” while it is read again, then “Updated”', async () => {
+    const phone = device();
+    const savedAt = refreshedLabel(await usedBefore(phone));
+    phone.clock.now += 60 * 60_000;
+    const app = await start(phone);
+    await settle();
+    const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
+    const read = phone.hold(`/api/groups/${maple}`);
+    app.tap(open[maple]);
+    await Promise.all([read.reached, expenses.reached]);
+    await settle();
+    expect(app.content().inside).toContain(`Saved ${savedAt}`);
+    expect(app.text()).not.toContain('refreshing');
+    expect(app.text()).not.toContain('Updated');
+    await app.press('Balances');
+    expect(app.content().inside).toContain(`Saved ${savedAt}`);
+    expect(app.text()).not.toContain('Updated');
+    read.release();
+    expenses.release();
+    await settle();
+    expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+    expect(app.text()).not.toContain('Saved');
+    await app.press('Expenses');
+    expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+    expect(app.text()).not.toContain('Saved');
+  });
 
   it.each([1, 1.3])(
     'keeps Balances where they are while they wait for the Expenses to be read again, at %s× text',

@@ -26,7 +26,7 @@ import {
   type SummaryStat,
   useLargeText,
 } from './compact';
-import { Freshness, RetainedNotice } from './financial-views';
+import { ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
 import { useTheme } from './theme';
@@ -210,7 +210,7 @@ function ExpenseSummary({
   summary,
   currentUserId,
   refreshedAt,
-  refreshing,
+  restored,
   offline,
   loading,
   now,
@@ -221,9 +221,8 @@ function ExpenseSummary({
   summary: ExpenseWindowSummary | null;
   currentUserId: string;
   refreshedAt: number | null;
-  /** Read again while they stay on screen. */
-  refreshing: boolean;
-  /** The figures come from this device: "Saved", not "Updated". */
+  /** The figures are this device's saved copy: "Saved", not "Updated". */
+  restored: boolean;
   offline: boolean;
   loading: boolean;
   now: number;
@@ -231,7 +230,7 @@ function ExpenseSummary({
 }) {
   const figures = summary ? summaryStats(summary, currentUserId) : null;
   const large = useLargeText();
-  const updated = <Freshness refreshedAt={refreshedAt} refreshing={refreshing} offline={offline} />;
+  const updated = <ReadTime refreshedAt={refreshedAt} restored={restored} offline={offline} />;
   const count = summary ? `${summary.count} ${summary.count === 1 ? 'expense' : 'expenses'}` : '';
   const within = !month
     ? ''
@@ -391,7 +390,6 @@ export function GroupExpensesView({
   state,
   kept,
   savedExpenseId,
-  refreshing = false,
   offline = false,
   now,
   onSelectMonth,
@@ -410,9 +408,7 @@ export function GroupExpensesView({
   kept: KeptDraft | null;
   /** Highlighted after a save while its confirmation shows. */
   savedExpenseId: string | null;
-  /** Shown Expenses are read again: their freshness says so. */
-  refreshing?: boolean;
-  /** Figures come from this device's saved copy. */
+  /** The app can't reach SplitBook: this device's saved copy shows its badge. */
   offline?: boolean;
   now: number;
   onSelectMonth: (month: string | null) => void;
@@ -515,7 +511,7 @@ export function GroupExpensesView({
         summary={summary}
         currentUserId={currentUserId}
         refreshedAt={listed ? expenses.refreshedAt : null}
-        refreshing={refreshing}
+        restored={expenses.restored === true}
         offline={offline}
         loading={!listed && expenses.status !== 'error'}
         now={now}

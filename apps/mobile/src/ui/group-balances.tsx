@@ -17,7 +17,7 @@ import {
   SkeletonOf,
   SkeletonText,
 } from './compact';
-import { Freshness, RetainedNotice } from './financial-views';
+import { ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
 import { useTheme } from './theme';
@@ -137,16 +137,15 @@ function MemberBalanceCard({
   bucket,
   currentUserId,
   refreshedAt,
-  refreshing,
+  restored,
   offline,
   monthLens,
 }: {
   bucket: GroupCurrencyBalance;
   currentUserId: string;
   refreshedAt: number | null;
-  /** Read again while they stay on screen. */
-  refreshing: boolean;
-  /** The figures come from this device: "Saved", not "Updated". */
+  /** The figures are this device's saved copy: "Saved", not "Updated". */
+  restored: boolean;
   offline: boolean;
   monthLens: boolean;
 }) {
@@ -160,12 +159,7 @@ function MemberBalanceCard({
           <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
             All-time balance · {bucket.currency}
           </CompactText>
-          <Freshness
-            refreshedAt={refreshedAt}
-            refreshing={refreshing}
-            offline={offline}
-            tone="muted"
-          />
+          <ReadTime refreshedAt={refreshedAt} restored={restored} offline={offline} tone="muted" />
         </View>
         {label ? (
           <View
@@ -397,7 +391,6 @@ export function GroupBalancesView({
   state,
   pending,
   offline,
-  refreshing = false,
   knownSettled = false,
   recordUnavailable = null,
   onRecord,
@@ -410,8 +403,6 @@ export function GroupBalancesView({
   /** This Group's unconfirmed payment, if one is stored on the device. */
   pending: PendingPayment | null;
   offline: boolean;
-  /** Shown Balances are read again: their freshness says so. */
-  refreshing?: boolean;
   /**
    * The member's last-known balance in this Group is settled (as Home last read it): while the
    * Balances load, their placeholder takes the settled card's shape, with no amount.
@@ -527,8 +518,7 @@ export function GroupBalancesView({
             bucket={bucket}
             currentUserId={currentUserId}
             refreshedAt={balances.refreshedAt}
-            // Unverified Balances already say they're updating.
-            refreshing={refreshing && !balances.stale}
+            restored={balances.restored === true}
             offline={offline}
             monthLens={group.category === 'home'}
           />

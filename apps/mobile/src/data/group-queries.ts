@@ -1074,6 +1074,8 @@ export function createGroupQueries(session: GroupSession) {
         firstPage: read[0].page,
         // Never fresher than its oldest page (#215).
         refreshedAt: Math.min(...read.map((page) => page.refreshedAt)),
+        // A page this device restored is never presented as read in this session (#219).
+        restored: read.some((page) => page.source === 'saved'),
         moreStatus: failed ? 'error' : 'idle',
         moreMessage: failed?.message ?? null,
       };
@@ -1160,7 +1162,9 @@ export function createGroupQueries(session: GroupSession) {
     } catch {
       figures = null;
     }
-    const kept = figures ? { data: figures, refreshedAt: state.data!.refreshedAt } : {};
+    // Whether they're this device's copy, as their time says: "Saved", never "Updated" (#219).
+    const restored = state.data?.source === 'saved';
+    const kept = figures ? { data: figures, refreshedAt: state.data!.refreshedAt, restored } : {};
     if (state.fetchStatus === 'fetching')
       return same(shown, {
         ...shown,
@@ -1192,6 +1196,7 @@ export function createGroupQueries(session: GroupSession) {
       message: null,
       refreshedAt: state.data!.refreshedAt,
       stale: false,
+      restored,
     });
   };
   /**
