@@ -2037,8 +2037,62 @@ describe('Home reads its Groups and its figures together (#333)', () => {
     },
   );
 
+  it.each(['no saved list', 'a saved list that never named Maple House'] as const)(
+    'never brings back saved figures that name a Group the list leaves out, when their read fails, after a sign-in with %s and an offline restart',
+    async (saved) => {
+      const f = fixture();
+      const first = f.create();
+      await first.signIn('alex');
+      await settle();
+      first.dispose();
+      later(60_000);
+      // This phone's saved figures name Maple House; its saved list doesn't, or there is none.
+      if (saved === 'no saved list') f.rows.delete(alex.id + listPath);
+      else (f.rows.get(alex.id + listPath) as { value: { data: unknown[] } }).value.data = [cabin];
+      expect(f.row(homePath)).toMatchObject({
+        value: { data: { groups: [{ groupId: mapleId }, {}] } },
+      });
+      // Alex has lost Maple House.
+      f.server.revoked.add(mapleId);
+      const controller = f.create();
+      const published = record(controller);
+      const list = f.hold(listPath),
+        figures = f.hold(homePath, { lost: true });
+      const signingIn = controller.signIn('alex');
+      await list.reached;
+      await figures.reached;
+      // The list lands without Maple House; then the figures' reply is lost.
+      const landed = published.length;
+      list.release();
+      await settle();
+      figures.release();
+      await signingIn;
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+        home: { data: null },
+      });
+      expect(f.row(listPath)).toMatchObject({ value: { data: [{ name: 'Cabin Weekend' }] } });
+      expect(published.slice(landed).some((state) => owes(state) !== null)).toBe(false);
+
+      // Started again offline: the saved list, and no figures from before.
+      controller.dispose();
+      f.connect(false);
+      const restarted = f.create();
+      const after = record(restarted);
+      await restarted.restore();
+      await settle();
+      expect(restarted.getSnapshot()).toMatchObject({
+        auth: { status: 'authenticated', user: { id: alex.id } },
+        groups: { data: [{ name: 'Cabin Weekend' }] },
+        home: { data: null },
+      });
+      expect(after.some((state) => owes(state) !== null)).toBe(false);
+    },
+  );
+
   it.each(['a restart', 'a sign-in without the saved list'] as const)(
-    'hides this phone’s saved figures that name a Group the list leaves out until the figures are read, after %s',
+    'takes this phone’s saved figures that name a Group the list leaves out off Home, and off this phone, once the list lands, after %s',
     async (when) => {
       const f = fixture();
       const first = f.create();
@@ -2070,10 +2124,8 @@ describe('Home reads its Groups and its figures together (#333)', () => {
         groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
         home: { data: null },
       });
-      // Hidden, not removed: the figures' read may yet need them. (After a restart the list also
-      // drops Maple House from the saved list, which removes both rows, as before.)
-      if (when !== 'a restart')
-        expect(f.row(homePath)).toMatchObject({ value: { data: { buckets: [{ youOwe: 30 }] } } });
+      // Their row goes too, so no fallback or offline start shows them again (#323).
+      expect(f.row(homePath)).toBeNull();
       figures.release();
       await opening;
       await settle();

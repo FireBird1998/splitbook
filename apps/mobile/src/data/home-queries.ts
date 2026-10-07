@@ -338,10 +338,16 @@ export function createHomeQueries(session: HomeSession) {
       group.members.some((member) => member.user.id === session.snapshot().auth.user?.id),
     );
   const held = (key: QueryKey) => client.getQueryCache().get<Envelope, Error>(hashKey(key))?.state;
-  /** A saved copy shows only if its decoder reads it, and a Groups list lists the member. */
+  /**
+   * A saved copy shows only if its decoder reads it, a Groups list lists the member, and Home's
+   * figures name no Group the latest list from SplitBook leaves out (#323): one being restored,
+   * or read for an offline answer, while that list removed it, never shows.
+   */
   const readable = (key: QueryKey, value: unknown) => {
     try {
-      return key[0] === 'groups' ? memberOfAll(listOf(value)) : Boolean(figuresOf(value));
+      if (key[0] === 'groups') return memberOfAll(listOf(value));
+      void figuresOf(value);
+      return !(latest !== null && namedOf(value)?.some((id) => !latest!.has(id)));
     } catch {
       return false;
     }
@@ -369,6 +375,24 @@ export function createHomeQueries(session: HomeSession) {
       return read ? listOf(read.value).map(({ id }) => id) : row == null ? [] : null;
     } catch {
       return null;
+    }
+  };
+  /**
+   * Whether this device's saved Home figures name a Group `listed` leaves out, inside a lease
+   * write. A row that doesn't say which Groups it covers, or can't be read, is left to the checks
+   * that already cover it.
+   */
+  const savedFiguresCover = async (accountId: string, listed: Set<string>) => {
+    try {
+      const read = cachedRead(
+        await rows?.load(accountId, homePath),
+        accountId,
+        homePath,
+        session.now(),
+      );
+      return read !== null && (namedOf(read.value)?.some((id) => !listed.has(id)) ?? false);
+    } catch {
+      return false;
     }
   };
   /**
@@ -595,7 +619,13 @@ export function createHomeQueries(session: HomeSession) {
         for (const id of saved ?? []) if (!listed.has(id)) lost.add(id);
         unchecked = !saved;
         await session.retain(lease.accountId, [...listed]);
-        if (!lost.size && saved) return;
+        if (!lost.size && saved) {
+          // Saved figures that name a Group this list leaves out go too, whatever the saved list
+          // says, so no fallback or offline start counts that Group again (#323).
+          if (await savedFiguresCover(lease.accountId, listed))
+            await forget(lease.accountId, [homePath]);
+          return;
+        }
         // An older list still waiting to be saved would list them again: this list moves no
         // version, so nothing else refuses it.
         queue.drop(listPath);
