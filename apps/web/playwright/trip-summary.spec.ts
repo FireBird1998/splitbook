@@ -261,11 +261,13 @@ test('a wrap-up Record opens Balances with Record payment filled in for the pair
   const title = pays ? `You pay ${other.name}` : `${other.name} pays you`;
 
   const wrapUp = card(page, 'Trip wrap-up');
-  // Record only on Alex's own payments: the parties-only rule.
-  await expect(wrapUp.getByRole('link')).toHaveCount(
-    read.suggestedPayments.filter(({ from, to }) => from.id === alex || to.id === alex).length,
-    { timeout: 30_000 },
-  );
+  // Record only on Alex's own payments: the parties-only rule. Share wrap-up, a read, is the
+  // card's one other link (#319).
+  const own = read.suggestedPayments.filter(({ from, to }) => from.id === alex || to.id === alex);
+  await expect(wrapUp.getByRole('link', { name: /^Record payment: / })).toHaveCount(own.length, {
+    timeout: 30_000,
+  });
+  await expect(wrapUp.getByRole('link')).toHaveCount(own.length + 1);
   const record = wrapUp.getByRole('link', { name: `Record payment: ${title}, ${amount}` });
   await expect(record).toHaveAttribute(
     'href',

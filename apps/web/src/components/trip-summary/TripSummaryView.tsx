@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
+import { statementPath } from '@splitbook/shared/statement-request';
 import type { TripSummaryRead } from '@splitbook/shared/trip-summary-read';
 import ErrorState from '@/components/common/ErrorState';
 import { HomeRow, HomeSlot } from '@/components/dashboard/HomeCard';
@@ -34,6 +35,8 @@ export interface TripSummaryViewProps {
   userId: string;
   /** The viewer's today, `YYYY-MM-DD` in their own time zone. */
   today: string;
+  /** The viewer's own IANA time zone, which the Trip's statement is read in too. */
+  timeZone: string;
   /** The read for the viewer's time zone; undefined while it loads. */
   read: TripSummaryRead | undefined;
   failed: boolean;
@@ -50,6 +53,7 @@ export default function TripSummaryView({
   groupId,
   userId,
   today,
+  timeZone,
   read,
   failed,
   onRetry,
@@ -84,6 +88,7 @@ export default function TripSummaryView({
               model={ready ? wrapUp(ready, { groupId, userId, today }) : null}
               state={state}
               onRetry={onRetry}
+              shareHref={statementPath(groupId, { timeZone, wholeTrip: true })}
             />
             <TripTagsCard
               currency={ready?.currency ?? null}

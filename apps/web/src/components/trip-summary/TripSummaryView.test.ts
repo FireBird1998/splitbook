@@ -96,6 +96,7 @@ function render(props: Partial<TripSummaryViewProps> = {}) {
         groupId: GROUP,
         userId: ALEX.id,
         today: '2026-09-25',
+        timeZone: 'Asia/Kolkata',
         read: READ,
         failed: false,
         onRetry: () => {},
@@ -124,6 +125,17 @@ const whole = (html: string) => card(html, 'trip-whole-heading');
 const days = (html: string) => card(html, 'trip-days-heading');
 const wrapUpCard = (html: string) => card(html, 'trip-wrap-up-heading');
 const tags = (html: string) => card(html, 'trip-tags-heading');
+
+/** The card's links, with the `&` the markup escapes in an address read back. */
+const hrefs = (html: string) =>
+  anchors(html).map((anchor) => ({ ...anchor, href: anchor.href.replaceAll('&amp;', '&') }));
+
+/** Share wrap-up: the Trip's whole-trip statement, in the viewer's zone (#319). */
+const SHARE = {
+  href: `/groups/${GROUP}/statement?tz=Asia%2FKolkata&scope=trip`,
+  current: null,
+  text: 'Share wrap-up',
+};
 
 /** Each table row's cells, as text, header and footer rows included. */
 function tableRows(html: string): string[][] {
@@ -202,19 +214,20 @@ describe('the wrap-up', () => {
     expect(text(html)).toContain('The trip ended on Sun 20 Sep. Settle while it’s fresh.');
     expect(text(html)).toContain('Priya Shah pays Sam Chen ₹1,366.65 Priya or Sam records it');
     expect(text(html)).toContain('Priya Shah pays you ₹326.67');
-    expect(anchors(html)).toEqual([
+    expect(hrefs(html)).toEqual([
       {
         href: `/groups/${GROUP}/balances?paidBy=${PRIYA.id}`,
         current: null,
         text: 'Record',
       },
+      SHARE,
     ]);
     expect(html).toContain('aria-label="Record payment: Priya Shah pays you, ₹326.67"');
   });
 
   it('offers no Record to a member who is party to none of them', () => {
     const html = wrapUpCard(render({ userId: 'a00000000000000000000009' }));
-    expect(anchors(html)).toEqual([]);
+    expect(hrefs(html)).toEqual([SHARE]);
     expect(text(html)).toContain('Priya Shah pays Alex Rivera ₹326.67 Priya or Alex records it');
   });
 
@@ -222,7 +235,49 @@ describe('the wrap-up', () => {
     const settled = { ...READ, suggestedPayments: [] };
     const html = wrapUpCard(render({ read: settled }));
     expect(text(html)).toContain('Everyone is settled up');
-    expect(anchors(html)).toEqual([]);
+    expect(hrefs(html)).toEqual([SHARE]);
+  });
+});
+
+describe('Share wrap-up', () => {
+  it('opens the Trip’s statement for the whole trip, in the viewer’s zone, in the same tab', () => {
+    const html = wrapUpCard(render({ timeZone: 'America/New_York' }));
+    const end = html.indexOf('Share wrap-up</a>') + 'Share wrap-up</a>'.length;
+    const link = html.slice(html.lastIndexOf('<a ', end), end);
+    expect(hrefs(link)).toEqual([
+      {
+        href: `/groups/${GROUP}/statement?tz=America%2FNew_York&scope=trip`,
+        current: null,
+        text: 'Share wrap-up',
+      },
+    ]);
+    // A link, not a Record action: no new tab, and described by what it opens.
+    expect(link).not.toContain('target=');
+    expect(link).not.toContain('Record');
+    expect(link).toContain('aria-describedby="trip-wrap-up-share-note"');
+    expect(text(html)).toContain(
+      'Opens the trip’s statement to print or save as a PDF: what was spent, everyone’s Paid and Share, and who pays whom.',
+    );
+  });
+
+  it('is there for every member, whoever pays whom, and once everyone is settled up', () => {
+    for (const html of [
+      wrapUpCard(render()),
+      wrapUpCard(render({ userId: 'a00000000000000000000009' })),
+      wrapUpCard(render({ read: { ...READ, suggestedPayments: [] } })),
+    ])
+      expect(hrefs(html).filter((anchor) => anchor.text === 'Share wrap-up')).toEqual([SHARE]);
+  });
+
+  it('waits for the wrap-up: none while it loads, after a failed read, or before any Expense', () => {
+    for (const html of [
+      wrapUpCard(render({ read: undefined })),
+      wrapUpCard(render({ read: undefined, failed: true })),
+      wrapUpCard(render({ read: read([]) })),
+    ]) {
+      expect(text(html)).not.toContain('Share wrap-up');
+      expect(hrefs(html)).toEqual([]);
+    }
   });
 });
 

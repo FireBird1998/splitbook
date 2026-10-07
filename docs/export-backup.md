@@ -80,6 +80,11 @@ Trip summary's rule (#316) for Expenses dated outside the Trip's dates:
 Payments are still windowed to the Trip's dates, and current balances still include every
 payment. The page explains this scope.
 
+**Share wrap-up.** A Trip's Insights tab has Share wrap-up on its Trip wrap-up card, under the
+suggested payments, once the Trip has Expenses. It links, in the same tab, to
+`statementPath(groupId, { timeZone, wholeTrip: true })`, with the viewer's own IANA zone
+from `Intl`. It only reads, so every member has it, whoever pays whom.
+
 The browser's **Print or save as PDF** calls `window.print()`. Print CSS requests A4 with 15mm
 margins, hides app chrome and controls, repeats table headers and avoids splitting rows. It
 always uses the existing light semantic paper, text and border tokens. Screen tables have
