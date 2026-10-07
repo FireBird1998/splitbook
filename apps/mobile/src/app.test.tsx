@@ -1387,6 +1387,31 @@ describe('App Activity window (#222)', () => {
     expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000 - 1140 - 60, animated: false });
   });
 
+  // The device check of 99f96d6 (A15): at the list's end, a foreground past the window with
+  // SplitBook out of reach. Load older stays, below the events kept; what moved the list there
+  // was the offline banner shown above it.
+  it('keeps Load older at the list end when a foreground re-read fails offline', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    await app.press('Activity');
+    for (let number = 2; number <= 5; number += 1) await app.press('Load older activity');
+    app.clock.now += 34_000;
+    app.use(() => Promise.reject(new TypeError('Network request failed')));
+    app.foreground();
+    await settle();
+    expect(app.text()).toContain('Couldn’t update Activity');
+    expect(app.text()).toContain('Fictional event 5-20');
+    const older = app.pressable('Load older activity');
+    expect(older.props.accessibilityState).toMatchObject({ disabled: true });
+    // Back online, it is offered again once the events are read.
+    app.use(sixPages);
+    await settle(app.controller.refresh('pull'));
+    expect(app.pressable('Load older activity').props.accessibilityState).toMatchObject({
+      disabled: false,
+    });
+  });
+
   it('moves the view down by the events Load newer brings back above the one on screen', async () => {
     const app = await renderApp();
     app.use(sixPages);

@@ -1698,3 +1698,64 @@ describe('final checks (#222)', () => {
     expect(f.savedRows(cabinPath)).toEqual([]);
   });
 });
+
+// The device check of 99f96d6 (#222): this phone's copy after a cold restart in the usual
+// order, and the page controls when a re-read fails at the list end.
+describe('device check (#222)', () => {
+  // A15: a foreground past the window with SplitBook out of reach, the member at the list's end.
+  it('keeps the list and its Load older when a foreground re-read fails offline at the list end (A15)', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 5);
+    later(34_000);
+    f.server.offline = true;
+    const shown = published(controller);
+    const sent = f.calls.length;
+    await controller.refresh('foreground');
+    await settle();
+    // Page 1 fails; every later page is this phone's copy, behind a session check that fails too.
+    expect(f.gets(sent)).toEqual([
+      'activity p1',
+      '/api/auth/get-session',
+      '/api/auth/get-session',
+      '/api/auth/get-session',
+      '/api/auth/get-session',
+    ]);
+    // Every page loaded stays listed, with the pages after it to load: Load older stays.
+    for (const state of shown) {
+      expect(listed(state)).toEqual(mapleEvents(1, 100));
+      expect(state.activity.pagination).toMatchObject({ page: 5, totalPages: 7 });
+    }
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: true },
+      activity: { status: 'ready', moreStatus: 'idle', restored: true },
+    });
+  });
+
+  // A5-slow: a pull whose pages time out one after another.
+  it('keeps the list and its Load older through a re-read whose pages fail part-way (A5)', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 5);
+    later(31_000);
+    const shown = published(controller);
+    // Page 1 answers; page 2's request is lost, as at a timeout; the rest are read after it.
+    const lost = f.hold(activityPath(2), { lost: true });
+    const pulling = controller.refresh('pull');
+    await lost.reached;
+    await settle();
+    expect(controller.getSnapshot().activity).toMatchObject({
+      status: 'loading',
+      pagination: { page: 5, totalPages: 7 },
+    });
+    lost.release();
+    await pulling;
+    await settle();
+    for (const state of shown) {
+      expect(listed(state)).toEqual(mapleEvents(1, 100));
+      expect(state.activity.pagination).toMatchObject({ page: 5, totalPages: 7 });
+    }
+    expect(controller.getSnapshot().activity).toMatchObject({
+      status: 'ready',
+      moreStatus: 'idle',
+    });
+  });
+});
