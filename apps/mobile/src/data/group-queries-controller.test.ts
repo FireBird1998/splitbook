@@ -1036,6 +1036,26 @@ describe('sessions and access for this view (#173 gates)', () => {
     expect(f.savedRows(maplePath)).toEqual([]);
     expect(controller.getSnapshot().detail).toMatchObject({ status: 'denied', data: null });
   });
+
+  // Found in #220's review: the removal after the write failed silently, and the row stayed trusted.
+  it('never trusts a row that lands after its Group is lost and can’t be removed then', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const writing = f.holdWrite(balancesPath);
+    await controller.openGroup(mapleId);
+    await writing.reached;
+    f.server.revoked.add(mapleId);
+    await controller.refresh();
+    f.device.failRemoval = true;
+    writing.release();
+    await settle();
+    expect(f.savedRows(balancesPath)).toHaveLength(1);
+    expect(f.untrusted()).toMatchObject({
+      accountId: alex.id,
+      scopes: { [`balances:${mapleId}`]: expect.any(Number) },
+    });
+  });
 });
 // The loading-state audit's data-flow items for this view (#219, 2026-10-07), with the owner's
 // decided behaviour: a write's success shows when it is confirmed and is never lost; until the

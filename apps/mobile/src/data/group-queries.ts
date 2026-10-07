@@ -203,6 +203,8 @@ export interface GroupSession {
   versionOf(key: QueryKey): number;
   /** Saved copies of `key` verified at or before this are never shown (see `HomeSession`). */
   distrusted(key: QueryKey, early: boolean): number;
+  /** These saved copies couldn't be removed: never shown again, and deleted at the next start. */
+  distrust(accountId: string, scopes: string[]): void;
   /** Whether this device keeps saved copies of this read's Group (a listed Group). */
   savable(key: QueryKey): boolean;
   /** How long a verified read is reused without reading it again. */
@@ -436,8 +438,12 @@ export function createGroupQueries(session: GroupSession) {
         if (session.current(owner))
           session.publish({ offline: { ...offline, message: notSavedHere } });
       });
-      // Removed while it was being written: it goes too, since `forget` never waits for it.
-      if (removals(key) !== before) await rows.remove(accountId, path);
+      // Removed while it was being written: it goes too, since `forget` never waits for it. One
+      // that can't go is no longer trusted (#323).
+      if (removals(key) !== before)
+        await rows
+          .remove(accountId, path)
+          .catch(() => session.distrust(accountId, [`${key[0]}:${key[3]}`]));
     });
   };
   /**

@@ -282,8 +282,12 @@ export function createExpenseQueries(session: ExpenseSession) {
           if (session.current(owner))
             session.publish({ offline: { ...offline, message: notSavedHere } });
         });
-      // Removed while it was being written: it goes too, since `forget` never waits for it.
-      if (removals(key) !== before) await rows.remove(accountId, path);
+      // Removed while it was being written: it goes too, since `forget` never waits for it. One
+      // that can't go is no longer trusted (#323).
+      if (removals(key) !== before)
+        await rows
+          .remove(accountId, path)
+          .catch(() => session.distrust(accountId, [`ledger:${key[3]}`]));
     });
   };
   /**
@@ -577,7 +581,7 @@ export function createExpenseQueries(session: ExpenseSession) {
         );
         if (!session.current(owner)) throw new Superseded();
         if (answer instanceof RequestError && answer.kind !== 'cancelled') throw answer;
-        if (!wanted() || view?.lost) throw new Superseded();
+        if (!wanted()) throw new Superseded();
       }
     }
   };
@@ -627,11 +631,9 @@ export function createExpenseQueries(session: ExpenseSession) {
     const data = state.data;
     let base: ExpenseHistoryState =
       shown.expenseId === expenseId ? shown : { ...emptyExpenseHistory(), expenseId };
-    // Read in this open before its check of the Group passed: it waits for the check.
-    const unchecked = !opened.checked && !!data && answered.get(data) === opened;
     const read = (data?.pages ?? []).filter((page) => page.source !== 'failed');
     const failed = data?.pages.find((page) => page.source === 'failed');
-    if (read.length && !unchecked) {
+    if (read.length) {
       const parsed = read.map((page) => pageOf(page.value, `${groupId}:${expenseId}:${page.page}`));
       // A change read on two pages, as changes are added above it, is listed once; the changes
       // shown stay the same list when nothing in them changed.
@@ -867,10 +869,12 @@ export function createExpenseQueries(session: ExpenseSession) {
     /** Reads the record this open shows (`fresh`: again now), parsed as the record shows it. */
     async record(owner: number, { fresh = false, wanted = () => true }: Read = {}) {
       const opened = view as View & { expenseId: string };
+      // Once its Group refused the member, nothing of this open is read again.
+      const still = () => wanted() && view === opened && !opened.lost;
       const answer = await readNow<Envelope>(
         recordOptions(opened.groupId, opened.expenseId, true, fresh),
         owner,
-        wanted,
+        still,
       );
       return recordOf(answer.value, `${opened.groupId}:${opened.expenseId}`);
     },
@@ -891,10 +895,11 @@ export function createExpenseQueries(session: ExpenseSession) {
       if (!opened?.expenseId || opened.lost) return;
       opened.history = true;
       bindLater();
+      const still = () => wanted() && view === opened && !opened.lost;
       await readNow<Pages>(
         historyOptions(opened.groupId, opened.expenseId, true, fresh),
         owner,
-        wanted,
+        still,
       ).catch((error: unknown) => {
         // Shown on the history, beside the record; a refusal has withdrawn both already.
         if (error instanceof Superseded) throw error;

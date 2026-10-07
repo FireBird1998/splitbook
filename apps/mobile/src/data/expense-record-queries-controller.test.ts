@@ -1427,6 +1427,47 @@ describe('rows saved only while their Group is kept here', () => {
     });
     expect(f.savedRows(maplePath)).toEqual([]);
   });
+
+  it('blocks a record whose Group answers without the member, and saves nothing of it', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    f.server.left = true;
+    const from = f.calls.length;
+    await controller.openExpense(mapleId, billId);
+    await settle();
+    // The record answered beside the Group; it is dropped with the Group's answer.
+    expect(f.gets(from)).toEqual(['group', 'record bill']);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'blocked',
+      draft: null,
+      message: 'You no longer have access to this group.',
+    });
+    expect(f.savedRows(maplePath)).toEqual([]);
+  });
+
+  it('never trusts a record row that lands after its Group is lost and can’t be removed then', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    const writing = f.holdWrite(recordPath(billId));
+    await controller.openExpense(mapleId, billId);
+    await writing.reached;
+    f.server.group = 403;
+    await controller.refresh();
+    f.device.failRemoval = true;
+    writing.release();
+    await settle();
+    expect(f.savedRows(recordPath(billId))).toHaveLength(1);
+    expect(f.untrusted()).toMatchObject({
+      accountId: alex.id,
+      scopes: { [`ledger:${mapleId}`]: expect.any(Number) },
+    });
+    // The next start removes it, once this device can.
+    controller.dispose();
+    f.device.failRemoval = false;
+    f.server.group = 200;
+    await f.create().restore();
+    expect(f.savedRows(maplePath)).toEqual([]);
+  });
 });
 
 describe('an Expense its own read finds gone (404)', () => {
@@ -1513,5 +1554,55 @@ describe('an Expense its own read finds gone (404)', () => {
     expect(f.savedRows(recordPath(billId))).toEqual([]);
     expect(atOnce).toMatchObject({ status: 'loading', draft: null });
     expect(restarted.getSnapshot().expense).toMatchObject({ status: 'blocked', draft: null });
+  });
+});
+
+describe('a loss while the record is read, and reads for another Group after it', () => {
+  it('reads nothing more of a record whose Group is lost while its read is on its way', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    await settle();
+    later(31_000);
+    const record = f.hold(recordPath(billId), { exact: true });
+    const retrying = controller.refresh();
+    await record.reached;
+    const from = f.calls.length;
+    // Access is lost through the record's changes while the record is on its way.
+    f.server.group = 403;
+    await controller.refreshExpenseHistory();
+    record.release();
+    await retrying;
+    await settle();
+    expect(f.gets(from)).toEqual(['history bill p1']);
+    expect(controller.getSnapshot().expense).toMatchObject({ status: 'blocked', draft: null });
+    expect(f.savedRows(maplePath)).toEqual([]);
+  });
+
+  it('reads an Activity event’s Expense again when a change cancels it, after an Expense open’s Group was lost', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    f.server.group = 403;
+    await controller.refresh();
+    expect(controller.getSnapshot().expense.status).toBe('blocked');
+    // Home's Groups list, read on the way back, leaves Cabin Weekend out: its reads are cancelled.
+    f.server.archived.add(cabinId);
+    const list = f.hold('/api/groups', { exact: true });
+    const leaving = controller.back();
+    await list.reached;
+    await controller.openActivity(cabinId);
+    const ferry = f.hold(`${cabinPath}/expenses/${fareId}`, { exact: true });
+    const selecting = controller.selectActivity(hex('f', 1));
+    await ferry.reached;
+    list.release();
+    await settle();
+    ferry.release();
+    await Promise.all([selecting, leaving]);
+    await settle();
+    expect(controller.getSnapshot().activity.target).toMatchObject({
+      status: 'available',
+      description: 'Ferry',
+    });
   });
 });
