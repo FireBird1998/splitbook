@@ -313,18 +313,18 @@ test('the tooltip gives a month’s Spent, count and the member’s share', asyn
   await expect(tooltip).toContainText(`your share ${money(last.yourShareMinor, read.currency)}`);
 });
 
-test('a Trip shows the same Month view until its Trip summary comes', async ({ page }) => {
+test('a Trip shows its Trip summary in place of Months (#316)', async ({ page }) => {
   await enterAsPersona(page, 'alex');
   await page.goto(`/groups/${DEMO_GROUP_ID}/insights`);
-  const { month } = await viewerMonth(page);
-  await expect(monthHeading(page)).toHaveText(longMonth(month), { timeout: 30_000 });
+  const main = page.getByRole('main');
+  await expect(main.getByRole('region', { name: /^Whole trip · / })).toBeVisible({
+    timeout: 30_000,
+  });
   await expect(
-    page
-      .getByRole('main')
-      .getByRole('navigation', { name: `${DEMO_TRIP_NAME} sections` })
-      .getByRole('link', {
-        name: 'Insights',
-      }),
+    main.getByRole('navigation', { name: `${DEMO_TRIP_NAME} sections` }).getByRole('link', {
+      name: 'Insights',
+    }),
   ).toHaveAttribute('aria-current', 'page');
-  await expectStats(page, await insightsRead(page, { groupId: DEMO_GROUP_ID, month }));
+  await expect(main.getByRole('link', { name: /^Previous month/ })).toHaveCount(0);
+  await expect(main.getByRole('region', { name: 'Monthly spending' })).toHaveCount(0);
 });

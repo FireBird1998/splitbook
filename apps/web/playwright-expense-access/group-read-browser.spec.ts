@@ -348,7 +348,7 @@ const lostContent = [
   'Forbidden',
 ];
 
-for (const { tab, poll, read, shows, empty } of [
+for (const { tab, poll, read, tabPath = read, shows, empty } of [
   {
     tab: 'Expenses',
     poll: 10_000,
@@ -367,8 +367,10 @@ for (const { tab, poll, read, shows, empty } of [
   {
     tab: 'Insights',
     poll: 20_000,
-    read: 'insights',
-    // This Month's Spent (the trip total) and its biggest Expense.
+    // A Trip's Insights is its Trip summary (#316).
+    read: 'trip-summary',
+    tabPath: 'insights',
+    // The trip's Spent, and its biggest day's biggest Expense.
     shows: [tripTotal, 'Synthetic lantern dinner'],
     empty: 'No Expenses yet',
   },
@@ -400,7 +402,7 @@ for (const { tab, poll, read, shows, empty } of [
       .getByRole('navigation', { name: `${name} sections` })
       .getByRole('link', { name: tab, exact: true });
     if (tab !== 'Expenses') await tabLink.click();
-    await page.waitForURL((url) => url.pathname === `/groups/${groupId}/${read}`);
+    await page.waitForURL((url) => url.pathname === `/groups/${groupId}/${tabPath}`);
     for (const text of shows) await expect(main.getByText(text).first()).toBeVisible();
     // Hold every timer: only the tab's own poll may run, never the Group's 30 s poll.
     await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);
@@ -440,7 +442,7 @@ for (const { tab, poll, read, shows, empty } of [
     await reread;
     await expect(header).toBeVisible();
     // Back on the tab the member was on: the tab is the address.
-    expect(new URL(page.url()).pathname).toBe(`/groups/${groupId}/${read}`);
+    expect(new URL(page.url()).pathname).toBe(`/groups/${groupId}/${tabPath}`);
     await expect(tabLink).toHaveAttribute('aria-current', 'page');
     await outage;
     await expect(header).toContainText('Balance unavailable');

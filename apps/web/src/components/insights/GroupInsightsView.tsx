@@ -40,7 +40,7 @@ import {
  * A Group's Insights tab (#314, design canvas "Web portal", Group insights): Month navigation
  * and the range in the address, the Month's stat cards, and monthly spending with the average
  * of the months before it; then By Tag, Who paid this month and Recurring Expenses (#315). A
- * Trip shows this same Month view until its Trip summary (#316).
+ * Trip shows its Trip summary instead (#316).
  */
 
 export interface GroupInsightsViewProps {

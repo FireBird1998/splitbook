@@ -20,6 +20,10 @@ _Avoid_: label, expense group
 One calendar month in the viewer's own time zone, in a Group of any Theme. It is a read-only way of looking at that month's Expenses, never a line drawn in the ledger: it answers "what did August cost us", never "what is owed". An Expense late on 31 August can fall in September for a member in another time zone. When a Month is compared with the months before it, it is never part of its own average.
 _Avoid_: cycle, period, billing month
 
+**Trip day**:
+One calendar day of a Trip in the viewer's own time zone, numbered from the Trip's first day ("Day 2 · Fri 18 Sep"). The Trip's dates and its Expenses' dates are read in the same zone, so an Expense on the first day is always on Day 1. An Expense dated before the first day or after the last still counts toward the whole trip, but is never on a Trip day.
+_Avoid_: trip date, itinerary day
+
 **Saved copy**:
 Server data stored on a member's device so a Group can be shown offline. It always shows when it was last verified and is never treated as current.
 _Avoid_: cache (in product copy), offline data, local data

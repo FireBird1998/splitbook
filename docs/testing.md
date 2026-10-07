@@ -213,7 +213,8 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   of history; Month navigation and the range (`?month=`, `?compare=`) through
   reload; the stat cards, the columns, the average line and the table with its
   average row, all checked against the insights read for the browser's own
-  time zone; the tooltip; a Trip's Month view; and axe in both views.
+  time zone; the tooltip; a Trip showing its Trip summary instead; and axe in
+  both views.
 - **Insights in detail** (`group-insights-detail.spec.ts`, read-only, #315): By
   Tag's bars and average ticks and its Chart/Table switch (the table in a region
   the keyboard can scroll), and Who paid this month's Paid and Share, each
@@ -222,6 +223,16 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   checks the card itself (`playwright-pilot/insights-recurring.spec.ts`): each
   template's amount and next date, Manage for an admin (landing on the Recurring
   section of the settings, in view and focused), the note for a member, and axe.
+- **Trip summary** (`trip-summary.spec.ts`, read-only, #316): the seeded
+  six-day Trip's Insights tab from the tab bar: the whole trip in figures, one
+  column per day with the biggest in the series colour and the daily average
+  as a line, the tooltip's two biggest Expenses and the member's share, the
+  Table view with the daily average and whole-trip rows (a focusable region),
+  a Tag opening the Expenses tab filtered by it, a wrap-up Record landing on
+  Balances with Record payment filled in for the pair, and the Expenses table
+  (cards on phones) under trip-day headings with day totals, none when sorted
+  by amount. Figures come from the Trip summary read for the browser's own
+  time zone, and day labels from the app's formatter; axe in both modes.
 - **Add expense** (`add-expense.spec.ts`): the top bar's Add expense from Home
   through "Choose a Group" (axe on the chooser; the save keeps Home in place,
   confirms with the Group's name and rereads the balances), from inside a Group
