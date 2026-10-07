@@ -236,7 +236,7 @@ test('(b) after paying the whole debt and reloading, Balances still offers the p
 
   await page.reload();
   // The committed payment cleared the debt, so nothing is suggested any more.
-  await expect(page.getByText('Net positions', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Everyone', exact: true })).toBeVisible();
   await expect(recordSettlement(page)).toHaveCount(0);
   await expect(checkPayment(page)).toBeVisible();
   await checkPayment(page).click();

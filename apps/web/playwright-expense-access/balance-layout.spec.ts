@@ -44,8 +44,9 @@ for (const colorScheme of ['light', 'dark'] as const) {
       expect(response.status()).toBe(200);
       await response.finished();
     }
-    const positions = page.getByRole('region', { name: 'Net positions', exact: true });
-    const amounts = positions.getByText(/₹100\.00/);
+    // Everyone's bars (#313) carry each position's exact amount at the row's end.
+    const positions = page.getByRole('region', { name: 'Everyone', exact: true });
+    const amounts = positions.getByTestId('everyone-amount').filter({ hasText: /₹100\.00/ });
     await expect(amounts).toHaveCount(2);
     await expect(page.getByRole('status', { name: 'Loading payments' })).toBeHidden();
     for (const amount of await amounts.all()) {
