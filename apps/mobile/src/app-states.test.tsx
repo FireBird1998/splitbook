@@ -122,8 +122,11 @@ function device() {
     /** Alex has recorded the ₹30.00 owed to Sam: Balances are settled. */
     paid: false,
   };
-  /** The saved copies can't be removed, as on a full or read-only disk. */
-  const storage = { failRemoval: false };
+  /**
+   * The saved copies can't be removed, as on a full or read-only disk; or the drafts can't be
+   * read (`failDraftRead`).
+   */
+  const storage = { failRemoval: false, failDraftRead: false };
   let cookie: string | null = null,
     owner: string | null = null,
     identity: unknown = null,
@@ -335,6 +338,7 @@ function device() {
         expenseDrafts: {
           load: async (account, id) => {
             await disk();
+            if (storage.failDraftRead) throw new Error('The device storage is unreadable');
             return structuredClone(drafts.get(`${account}:${id}`) ?? null);
           },
           save: async (account, id, value) => {
@@ -2407,6 +2411,67 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     group.release();
     await settle();
   });
+
+  // Item 1, from review: the Group already knows its draft, before this phone reads it.
+  it('says “draft” for a kept draft while this phone still reads it, and not once it is discarded', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(openMaple);
+    await settle(controller().openExpense(maple));
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12' }));
+    await app.press('Back to Group, keeping your draft');
+    expect(controller().getSnapshot().keptDraft).toMatchObject({ groupId: maple });
+    // A slow phone: the draft's own read waits, and the form already says what it opens.
+    const disk = phone.holdStorage();
+    void controller().openExpense(maple);
+    await disk.reached;
+    await settle();
+    expect(controller().getSnapshot().expense).toMatchObject({ status: 'loading', draft: null });
+    expect(app.text()).toContain('Opening your draft…');
+    expect(app.text()).not.toContain('new Expense');
+    disk.release();
+    await settle();
+    expect(controller().getSnapshot().expense).toMatchObject({
+      draft: { description: 'Gas bill' },
+    });
+    // Discarded, nothing is kept: the form opening again is a new Expense.
+    const group = phone.hold(`/api/groups/${maple}`);
+    void controller().discardExpenseDraft();
+    await group.reached;
+    await settle();
+    expect(controller().getSnapshot().expense).toMatchObject({ status: 'loading', draft: null });
+    expect(app.text()).toContain('Opening a new Expense…');
+    expect(app.text()).not.toMatch(/draft/i);
+    group.release();
+    await settle();
+  });
+
+  it.each(['Group', 'storage'] as const)(
+    'says it couldn’t open a new Expense, never a draft, when the %s fails',
+    async (failure) => {
+      const phone = device();
+      await usedBefore(phone);
+      const app = await start(phone);
+      await settle();
+      await app.press(openMaple);
+      expect(controller().getSnapshot().keptDraft).toBeNull();
+      if (failure === 'Group') phone.network.failing.push(`/api/groups/${maple}`);
+      else phone.storage.failDraftRead = true;
+      await settle(controller().openExpense(maple));
+      expect(controller().getSnapshot().expense).toMatchObject({
+        status: 'blocked',
+        draft: null,
+        message:
+          failure === 'Group'
+            ? 'The server could not complete this request. Please try again.'
+            : 'Could not open a new Expense. Please try again.',
+      });
+      expect(app.text()).toContain('Couldn’t open a new Expense');
+      expect(app.text()).not.toMatch(/draft/i);
+    },
+  );
 
   // Item 2: "Checking the latest balances…" hid the balances already on screen for about 6 s.
   it('shows the chosen payment while the sheet checks the latest balances, with Record waiting, and nothing moves when the check lands', async () => {

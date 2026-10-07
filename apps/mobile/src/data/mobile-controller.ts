@@ -2698,7 +2698,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               ? expenseNotOnPhone
               : error instanceof RequestError
                 ? error.message
-                : 'Could not open this Expense draft. Your saved draft has not been changed.',
+                : // Only a draft kept on this phone has one to keep (#334).
+                  expenseId || snapshot.keptDraft?.groupId === groupId
+                  ? 'Could not open this Expense draft. Your saved draft has not been changed.'
+                  : 'Could not open a new Expense. Please try again.',
         },
       });
     }
@@ -2839,8 +2842,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({ ...snapshot, expense: { ...editor, status: 'loading' } });
     try {
       await lease.write(() => storage.remove(lease.accountId, editor.groupId!));
-      if (current(owner) && view === viewRequest)
-        await openExpense(editor.groupId, editor.requestedExpenseId ?? undefined);
+      if (!current(owner) || view !== viewRequest) return;
+      // Nothing is kept for the Group any more: the form opening again isn't a draft (#334).
+      if (snapshot.keptDraft?.groupId === editor.groupId) publish({ ...snapshot, keptDraft: null });
+      await openExpense(editor.groupId, editor.requestedExpenseId ?? undefined);
     } catch {
       if (current(owner) && view === viewRequest)
         publish({
