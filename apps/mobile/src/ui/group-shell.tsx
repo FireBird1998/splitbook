@@ -42,7 +42,13 @@ interface GroupShellProps {
   scrollRef?: Ref<ScrollView>;
   scroll?: Pick<
     ScrollViewProps,
-    'scrollEventThrottle' | 'onScroll' | 'onScrollBeginDrag' | 'onLayout' | 'onContentSizeChange'
+    | 'scrollEventThrottle'
+    | 'onScroll'
+    | 'onScrollBeginDrag'
+    | 'onScrollEndDrag'
+    | 'onMomentumScrollEnd'
+    | 'onLayout'
+    | 'onContentSizeChange'
   >;
   /** Floats above the bottom navigation, such as the save snackbar. */
   overlay?: ReactNode;

@@ -796,6 +796,15 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         onScrollBeginDrag: () => {
           pendingScroll.current = null;
         },
+        // A throttled scroll event can miss the end of a drag or a fling, by up to 100 ms of
+        // scrolling: the offset the view then keeps, after a slide or a return, comes from where
+        // scrolling stopped (#219).
+        onScrollEndDrag: (event) => {
+          scrollY.current = event.nativeEvent.contentOffset.y;
+        },
+        onMomentumScrollEnd: (event) => {
+          scrollY.current = event.nativeEvent.contentOffset.y;
+        },
         onLayout: (event) => {
           viewportHeight.current = event.nativeEvent.layout.height;
         },

@@ -337,6 +337,16 @@ async function renderApp() {
     /** The member scrolls the visible screen to this offset. */
     scrollTo: (y: number) =>
       act(() => scrollView().props.onScroll({ nativeEvent: { contentOffset: { y } } })),
+    /**
+     * Scrolling stops at this offset: the drag ends there, or the fling after it does. The
+     * throttled scroll events may not have reported it (#219).
+     */
+    scrollEnd: (y: number, by: 'drag' | 'fling') =>
+      act(() =>
+        scrollView().props[by === 'drag' ? 'onScrollEndDrag' : 'onMomentumScrollEnd']({
+          nativeEvent: { contentOffset: { y } },
+        }),
+      ),
     /** Native layout reports the visible screen's viewport and content heights. */
     layout: (viewport: number, content: number) =>
       act(() => {
@@ -1229,6 +1239,37 @@ describe('App Expense window (#219)', () => {
       y: 5000 - 1140 - 60,
       animated: false,
     });
+  });
+
+  // The device check of 3087a26 (#219): the last throttled scroll event came up to 50 dp before
+  // where a drag or fling stopped, and the view moved by as much.
+  it.each(['drag', 'fling'] as const)(
+    'shifts from where the %s stopped, which the last scroll event can miss',
+    async (by) => {
+      const app = await renderApp();
+      app.use(sixPages);
+      await app.press('Open Maple House');
+      for (let number = 2; number <= 5; number += 1) await app.press('Load more expenses');
+      await app.scrollTo(4968);
+      await app.scrollEnd(5000, by);
+      native.scrollTo.mockClear();
+      await app.press('Load more expenses');
+      const view = screen!.root.findByType(GroupExpensesView);
+      act(() => view.props.onShift(-1140));
+      expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000 - 1140, animated: false });
+    },
+  );
+
+  it('returns to where scrolling stopped after an Expense opened from the list', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    await app.scrollTo(220);
+    await app.scrollEnd(240, 'drag');
+    await app.press('Fictional row 1-3');
+    expect(await app.androidBack()).toBe(true);
+    await app.layout(700, 2600);
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 240, animated: false });
   });
 });
 describe('App invitation', () => {
