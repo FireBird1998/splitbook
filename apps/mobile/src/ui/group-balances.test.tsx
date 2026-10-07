@@ -457,6 +457,29 @@ describe('Record payment sheet states', () => {
     expect(text(checked.root)).toContain('FMFormer member');
   });
 
+  // #334, review: Try again is only for a check that couldn't run.
+  it.each([
+    ['checking', { status: 'loading', draft: null, suggested: null }],
+    ['editing', {}],
+    ['under review', { status: 'review', message: 'The suggested amount changed.' }],
+    ['recording', { status: 'saving' }],
+    ['unconfirmed', { status: 'uncertain', attempt: { key: 'settlement-key-1', body: '{}' } }],
+    ['refused', { status: 'blocked', draft: null, message: 'You no longer have access.' }],
+    ['gone', { status: 'ready', draft: null, message: 'This suggested payment has changed.' }],
+  ] as [string, Partial<SettlementState>][])(
+    'offers no Try again while %s',
+    (_state, overrides) => {
+      const { root } = sheet(
+        base({
+          chosen: { paidBy: you, paidTo: sam, currency: 'INR', shown: 1060 },
+          known: { [you]: 'Alex Rivera', [sam]: 'Sam Chen' },
+          ...overrides,
+        }),
+      );
+      expect(labelled(root, 'Try again')).toHaveLength(0);
+    },
+  );
+
   it('offers Try again when the check couldn’t run, and nothing once access is refused', () => {
     const chosen = { paidBy: you, paidTo: sam, currency: 'INR', shown: 1060 };
     const known = { [you]: 'Alex Rivera', [sam]: 'Sam Chen' };

@@ -1065,6 +1065,99 @@ describe('native payment recording', () => {
     expect(controller.getSnapshot().settlement.draft).toBeNull();
   });
 
+  // #334, review: Try again is for a check that couldn't run. Anywhere else it does nothing.
+  it('checks again on Try again only after the sheet’s check couldn’t run, and otherwise sends and changes nothing', async () => {
+    let down = false,
+      denied = false,
+      hold = false;
+    let release!: (value: FetchResponse | Promise<never>) => void, entered!: () => void;
+    const sent: string[] = [];
+    const { controller } = setup((path, init) => {
+      sent.push(`${init.method ?? 'GET'} ${path}`);
+      if (down && path.startsWith('/api/groups/'))
+        return Promise.reject(new TypeError('Network request failed'));
+      if (denied && path === `/api/groups/${groupId}`)
+        return json({ status: 403, error: 'Access removed' }, 403);
+      if (hold && path.endsWith('/settlements') && init.method === 'POST')
+        return new Promise((resolve) => {
+          release = resolve;
+          entered();
+        });
+    });
+    /** Try again in this state sends nothing and publishes nothing. */
+    const ignored = async (state: string) => {
+      const before = controller.getSnapshot(),
+        from = sent.length;
+      await controller.retrySettlementCheck();
+      expect({ state, sent: sent.slice(from), same: controller.getSnapshot() === before }).toEqual({
+        state,
+        sent: [],
+        same: true,
+      });
+    };
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().settlement.status).toBe('editing');
+    await ignored('editing');
+
+    // The check couldn't run, and an invitation opened over the sheet: away from it, Try again
+    // does nothing.
+    await controller.back();
+    down = true;
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().settlement.status).toBe('error');
+    down = false;
+    await controller.openInvitation('http://localhost:4138/join/1234abcd');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      settlement: { status: 'error' },
+    });
+    await ignored('error, away from the sheet');
+
+    // On the sheet, Try again runs the check again, with the same two reads.
+    await controller.openGroup(groupId, true, 'balances');
+    down = true;
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().settlement.status).toBe('error');
+    down = false;
+    const from = sent.length;
+    await controller.retrySettlementCheck();
+    expect(sent.slice(from)).toEqual([
+      `GET /api/groups/${groupId}`,
+      `GET /api/groups/${groupId}/balances`,
+    ]);
+    expect(controller.getSnapshot().settlement.status).toBe('editing');
+
+    // Recording, then unconfirmed once its reply is lost.
+    hold = true;
+    const dispatched = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const saving = controller.recordSettlement();
+    await dispatched;
+    expect(controller.getSnapshot().settlement.status).toBe('saving');
+    await ignored('saving');
+    hold = false;
+    release(Promise.reject(new TypeError('Network request failed')));
+    await saving;
+    expect(controller.getSnapshot().settlement.status).toBe('uncertain');
+    await ignored('uncertain');
+
+    // Refused: access is gone, so there's nothing to check again.
+    denied = true;
+    await controller.openSettlements(groupId);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      settlement: { status: 'blocked' },
+    });
+    await ignored('blocked');
+
+    denied = false;
+    await controller.signOut();
+    await ignored('signed out');
+  });
+
   // #334, review: the sheet showed Balances' ₹30 while it checked, then a ₹20 suggestion silently.
   it('says so when the sheet’s check finds another amount than Balances showed', async () => {
     let amount = 30;
