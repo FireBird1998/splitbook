@@ -1,5 +1,10 @@
 import { canEditExpense } from '../data/expense-record';
-import { ExpenseRecordScreen, ExpenseRecordView } from './expense-record-view';
+import {
+  ExpenseRecordScreen,
+  ExpenseRecordSkeleton,
+  ExpenseRecordView,
+  type RecordOutline,
+} from './expense-record-view';
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
 import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
@@ -31,6 +36,7 @@ import {
   IconTile,
   ListRow,
   TopBar,
+  useReveal,
 } from './compact';
 import { TagSheet, inactiveTagReport } from './tag-sheet';
 import { PayerSheet, paidBySummary } from './payer-sheet';
@@ -166,6 +172,7 @@ function ExpenseTask({
   onReveal,
   onLoadOlderHistory,
   onRetryHistory,
+  outline,
 }: {
   state: Editor;
   /** Shown as "You" in the form. */
@@ -197,6 +204,8 @@ function ExpenseTask({
   /** The saved record's older changes, and another read of its changes after a failure. */
   onLoadOlderHistory?: () => void;
   onRetryHistory?: () => void;
+  /** What the list row an Expense opens from already says, so its skeleton takes its shape. */
+  outline?: RecordOutline | null;
 }) {
   const theme = useTheme();
   const [editor, setEditor] = useState<'payers' | null>(null);
@@ -244,6 +253,11 @@ function ExpenseTask({
   useEffect(() => {
     if (reviewing) showReview();
   }, [reviewing]);
+  // An Expense opening from nothing shows its record's skeleton, and the record then fades in
+  // where it was. A form that is briefly loading, as while a save is discarded, isn't opening a
+  // record: it keeps the spinner it always had.
+  const opening = state.status === 'loading' && !!state.requestedExpenseId && !state.draft;
+  const recordReveal = useReveal(opening);
   const errors = state.validation.errors;
   const section = (field: ExpenseField) => (node: View | null) => {
     sections.current[field] = node;
@@ -330,7 +344,13 @@ function ExpenseTask({
 
   const requested = !!state.requestedExpenseId;
   if (state.status === 'loading')
-    return frame(<Loading label={requested ? 'Opening this Expense…' : 'Opening your draft…'} />);
+    return frame(
+      opening ? (
+        <ExpenseRecordSkeleton label="Opening this Expense…" outline={outline} />
+      ) : (
+        <Loading label={requested ? 'Opening this Expense…' : 'Opening your draft…'} />
+      ),
+    );
   if (!draft)
     return frame(
       <Notice
@@ -355,6 +375,7 @@ function ExpenseTask({
         onRefresh={onRetry}
         onLoadOlderHistory={onLoadOlderHistory}
         onRetryHistory={onRetryHistory}
+        reveal={recordReveal}
       />
     );
   const locked = state.status !== 'editing';
@@ -637,13 +658,8 @@ function ExpenseTask({
           />
         ) : canSave ? (
           <SaveBar
-            label={
-              state.status === 'saving'
-                ? 'Saving expense…'
-                : draft.original
-                  ? 'Save changes'
-                  : 'Save expense'
-            }
+            label={draft.original ? 'Save changes' : 'Save expense'}
+            busy={state.status === 'saving' ? 'Saving expense…' : undefined}
             amount={
               allocation && state.status !== 'saving' ? money(allocation.amountMinor) : undefined
             }

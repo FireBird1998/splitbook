@@ -95,7 +95,7 @@ test('desktop: a full-height sidebar holds the logo, Home, the live Group list a
     .getByRole('link', { name: 'Balances' })
     .click();
   await page.waitForURL((url) => url.pathname === `/groups/${DEMO_GROUP_ID}/balances`);
-  await expect(page.getByRole('main').getByText('Who pays whom')).toBeVisible();
+  await expect(page.getByRole('main').getByRole('heading', { name: 'Settle up' })).toBeVisible();
   await expect(trip).toHaveAttribute('aria-current', 'page');
   await expectNoSeriousA11yViolations(page, testInfo, 'shell-group');
   await reviewScreenshot(page, testInfo, 'shell-group');
@@ -187,7 +187,7 @@ test('phone: the drawer opens from the top bar with the same items, traps focus 
     .getByRole('link', { name: 'Balances' })
     .click();
   await page.waitForURL((url) => url.pathname === `/groups/${DEMO_GROUP_ID}/balances`);
-  await expect(page.getByRole('main').getByText('Who pays whom')).toBeVisible();
+  await expect(page.getByRole('main').getByRole('heading', { name: 'Settle up' })).toBeVisible();
   await expect(drawer).toHaveCount(0);
   await openNavigation(page);
   await expect(tripRow(drawer)).toHaveAttribute('aria-current', 'page');

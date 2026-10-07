@@ -128,7 +128,8 @@ test('trip workspace respects the project theme and is accessible', async ({ pag
     'page',
   );
   await sections.getByRole('link', { name: 'Balances' }).click();
-  await expect(page.getByText('Who pays whom')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Settle up' })).toBeVisible();
+  await expect(page.getByRole('region', { name: 'Record payment', exact: true })).toBeVisible();
 
   await expectNoSeriousA11yViolations(page, testInfo, 'trip-balances');
   await reviewScreenshot(page, testInfo, 'trip-balances');

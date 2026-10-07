@@ -20,10 +20,10 @@ import {
   ListRow,
   Money,
   RowAmount,
-  Skeleton,
-  SkeletonRows,
+  SkeletonText,
   SummaryStats,
   type SummaryStat,
+  useLargeText,
 } from './compact';
 import { Freshness, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
@@ -228,6 +228,7 @@ function ExpenseSummary({
   onSelectMonth: (month: string | null) => void;
 }) {
   const figures = summary ? summaryStats(summary, currentUserId) : null;
+  const large = useLargeText();
   const updated = <Freshness refreshedAt={refreshedAt} refreshing={refreshing} offline={offline} />;
   const count = summary ? `${summary.count} ${summary.count === 1 ? 'expense' : 'expenses'}` : '';
   const within = !month
@@ -290,14 +291,31 @@ function ExpenseSummary({
           </View>
         </>
       ) : loading ? (
-        <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingVertical: 14 }}>
-          {[0, 1, 2].map((stat) => (
-            <View key={stat} style={{ flex: 1, gap: 6 }}>
-              <Skeleton width="60%" height={12} />
-              <Skeleton width="85%" height={18} />
-            </View>
-          ))}
-        </View>
+        // The figures' shape, in their places, so they fade in without moving anything.
+        <>
+          <SummaryStats stats={[]} loading />
+          {null}
+          <Divider />
+          <View
+            style={{
+              minHeight: 40,
+              justifyContent: 'center',
+              paddingHorizontal: 14,
+              paddingVertical: 8,
+            }}
+          >
+            {/* At large text a Household's count and its "Updated" time wrap onto two lines. */}
+            <SkeletonText
+              gap={8}
+              lines={[
+                { width: '40%', line: 'small' },
+                ...(large && household
+                  ? [{ width: '30%' as const, line: 'caption' as const }]
+                  : []),
+              ]}
+            />
+          </View>
+        </>
       ) : (
         <View style={{ height: 8 }} />
       )}
@@ -462,7 +480,7 @@ export function GroupExpensesView({
             <CompactButton label="Retry expenses" variant="tonal" onPress={onRefreshExpenses} />
           </View>
         ) : (
-          <SkeletonRows label={`Loading ${scope} expenses`} />
+          <Card loading={`Loading ${scope} expenses`} skeleton={{ heading: true }} />
         )
       ) : expenses.data.length ? (
         <Card>

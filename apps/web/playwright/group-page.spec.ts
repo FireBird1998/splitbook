@@ -33,7 +33,7 @@ async function expectTab(page: Page, label: string, slug: string) {
 /** What each tab shows of the seeded trip once it has loaded. */
 const TABS = [
   { label: 'Expenses', slug: 'expenses', shows: 'Trip SIM cards' },
-  { label: 'Balances', slug: 'balances', shows: 'Who pays whom' },
+  { label: 'Balances', slug: 'balances', shows: 'Record payment' },
   { label: 'Activity', slug: 'activity', shows: 'Trip SIM cards' },
   { label: 'Members', slug: 'members', shows: 'Priya Shah' },
 ] as const;
@@ -106,7 +106,7 @@ test('each tab is a link with its own address; Back, Forward and reload land on 
   // A reload, or the address opened afresh (a shared link), stays on the tab.
   await page.reload();
   await expectTab(page, 'Balances', 'balances');
-  await expect(main.getByText('Who pays whom')).toBeVisible();
+  await expect(main.getByRole('heading', { name: 'Settle up' })).toBeVisible();
   await page.goto(`${GROUP}/members`);
   await expectTab(page, 'Members', 'members');
 });
@@ -120,7 +120,7 @@ test('the old ?tab=balances and ?action=add-expense links still open the right p
   await page.goto(`${GROUP}?tab=balances`);
   await expectTab(page, 'Balances', 'balances');
   expect(new URL(page.url()).search).toBe('');
-  await expect(main.getByText('Who pays whom')).toBeVisible({ timeout: 30_000 });
+  await expect(main.getByRole('heading', { name: 'Settle up' })).toBeVisible({ timeout: 30_000 });
 
   await page.goto(`${GROUP}?action=add-expense`);
   await page.waitForURL((url) => url.pathname === `${GROUP}/expenses`);

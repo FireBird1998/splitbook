@@ -1,13 +1,28 @@
-import { Pressable, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 import { useTheme } from '../theme';
 import { Icon, type IconName } from '../primitives';
+import { useReducedMotion } from './motion';
 import { denseHitSlop, radius, touch } from './scale';
 import { CompactText, FieldMarker, Money } from './text';
+
+/** Spinning while busy; with reduce motion on, a still hourglass instead. */
+function BusyMark({ color }: { color: string }) {
+  return useReducedMotion() ? (
+    <Icon name="hourglass-outline" size={18} color={color} />
+  ) : (
+    <ActivityIndicator size="small" color={color} />
+  );
+}
 
 /**
  * Primary, tonal (brand.bg) or text button. `amount` renders a monospace value after the label,
  * as in "Save expense ₹1,249.50". Disabled buttons should carry a `hint` saying why.
  * `destructive` uses the coral status colour instead of the brand, as for Leave Group.
+ *
+ * `busy` is what the button is doing, as in "Saving expense…": a spinner and that label take
+ * the label's place, at full strength, and screen readers hear the busy label with the busy
+ * state. The label stays laid out underneath, unseen, so the button keeps its size. A busy
+ * button can't be pressed.
  */
 export function CompactButton({
   label,
@@ -21,6 +36,7 @@ export function CompactButton({
   destructive = false,
   hint,
   accessibilityLabel,
+  busy,
 }: {
   label: string;
   onPress: () => void;
@@ -33,19 +49,30 @@ export function CompactButton({
   destructive?: boolean;
   hint?: string;
   accessibilityLabel?: string;
+  busy?: string;
 }) {
   const theme = useTheme();
   const tones = destructive
     ? { main: theme.status.negative, bg: theme.negative.bg }
     : { main: theme.brand.main, bg: theme.brand.bg };
   const color = variant === 'primary' ? theme.brand.contrastText : tones.main;
+  const size = dense ? 14 : 15;
+  const content = (
+    <>
+      {icon ? <Icon name={icon} size={18} color={color} /> : null}
+      <CompactText weight="semibold" style={{ color, fontSize: size }}>
+        {label}
+      </CompactText>
+      {amount ? <Money style={{ color }}>{amount}</Money> : null}
+    </>
+  );
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel ?? (amount ? `${label} ${amount}` : label)}
+      accessibilityLabel={busy ?? accessibilityLabel ?? (amount ? `${label} ${amount}` : label)}
       accessibilityHint={hint}
-      accessibilityState={{ disabled }}
-      disabled={disabled}
+      accessibilityState={busy ? { disabled: true, busy: true } : { disabled }}
+      disabled={disabled || busy !== undefined}
       onPress={onPress}
       hitSlop={dense ? denseHitSlop : undefined}
       style={({ pressed }) => ({
@@ -59,14 +86,45 @@ export function CompactButton({
         gap: 8,
         backgroundColor:
           variant === 'primary' ? tones.main : variant === 'tonal' ? tones.bg : 'transparent',
-        opacity: disabled ? 0.45 : pressed ? 0.8 : 1,
+        opacity: busy ? 1 : disabled ? 0.45 : pressed ? 0.8 : 1,
       })}
     >
-      {icon ? <Icon name={icon} size={18} color={color} /> : null}
-      <CompactText weight="semibold" style={{ color, fontSize: dense ? 14 : 15 }}>
-        {label}
-      </CompactText>
-      {amount ? <Money style={{ color }}>{amount}</Money> : null}
+      {busy === undefined ? (
+        content
+      ) : (
+        <>
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, opacity: 0 }}
+          >
+            {content}
+          </View>
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              right: 0,
+              bottom: 0,
+              left: 0,
+              paddingHorizontal: 12,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+            }}
+          >
+            <BusyMark color={color} />
+            <CompactText
+              weight="semibold"
+              numberOfLines={1}
+              style={{ color, fontSize: size, flexShrink: 1 }}
+            >
+              {busy}
+            </CompactText>
+          </View>
+        </>
+      )}
     </Pressable>
   );
 }

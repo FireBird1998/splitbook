@@ -215,11 +215,14 @@ function CreateScreen({
       focus={state.creation.validation.focus}
       onLeaveField={controller.touchCreationField}
       onReveal={onReveal}
+      onShowStatus={showStatus}
       onCheckGroups={() => undefined}
       onDiscard={() => undefined}
     />
   );
 }
+/** Create Group asks for its "Sending this Group…" note to be scrolled into view. */
+const showStatus = vi.fn();
 
 function PaymentSheet({ controller }: { controller: MobileController }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
@@ -350,6 +353,7 @@ describe('Group creation corrections, rendered', () => {
   });
 
   it('explains why Create is unavailable while the Group is being sent', async () => {
+    showStatus.mockClear();
     const view = await render('create');
     let release!: () => void;
     view.hold(new Promise<void>((resolve) => (release = resolve)));
@@ -361,6 +365,14 @@ describe('Group creation corrections, rendered', () => {
       'Sending this Group. Keep this screen open until SplitBook confirms it.',
     );
     expect(text(view.root())).toContain('Keep this screen open until SplitBook confirms it.');
+    // #331: at the end of a long form the note can open below the screen: it asks, once, to be
+    // shown whole.
+    expect(showStatus).toHaveBeenCalledOnce();
+    const [note] = showStatus.mock.calls[0] as [NodeMock];
+    const shown = note.element.props.children as { props: { children: string } };
+    expect(shown.props.children).toBe(
+      'Sending this Group. Keep this screen open until SplitBook confirms it.',
+    );
     await act(async () => release());
     await settle();
     expect(view.writes).toEqual(['POST /api/groups']);

@@ -6,6 +6,7 @@ import { setWindow } from '../../test-utils/native';
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const {
+  Badge,
   Banner,
   Chip,
   CompactButton,
@@ -305,6 +306,24 @@ describe('Feedback', () => {
     expect(one(byRole(root, 'progressbar', 'Loading September')).props.accessibilityState).toEqual({
       busy: true,
     });
+  });
+
+  // A pill is sized to its label's measure, and Android, laying the text out again to draw it,
+  // can need a fraction of a pixel more: Tea stall's badge wrapped "₹416.67" below its one-line
+  // pill (#331). A hair space after the label adds room to the measure and, as white space a line
+  // may end past, never wraps a word itself.
+  it('a badge keeps a hair space to spare after its label, with or without an icon', () => {
+    for (const icon of [undefined, 'trash-outline' as const]) {
+      const root = render(<Badge label="You owe Sam ₹416.67" tone="negative" icon={icon} />);
+      const label = one(
+        root.findAll(
+          (node) => isHost(node, 'Text') && node.children.includes('You owe Sam ₹416.67'),
+        ),
+      );
+      expect(label.children).toEqual(['You owe Sam ₹416.67', String.fromCodePoint(0x200a)]);
+      act(() => renderer!.unmount());
+      renderer = undefined;
+    }
   });
 
   it('snackbar announces politely and offers its action', () => {

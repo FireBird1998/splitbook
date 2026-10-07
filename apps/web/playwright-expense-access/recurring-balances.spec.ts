@@ -149,14 +149,14 @@ test('opening a Household shows Balances with the recurring Rent the same visit 
       (row: { user: { _id: string } }) => row.user._id === DEMO_PERSONA_IDS.sam,
     ).balance,
   ).toBe(-30000);
-  const own = page.getByText('Your balance', { exact: true }).locator('..');
+  const own = page.getByRole('region', { name: 'All-time balance', exact: true });
   await expect(own).toContainText('30,000.00');
-  await expect(own).toContainText('You owe others');
+  await expect(own).toContainText('You owe');
   expect(balanceReads.length).toBeGreaterThanOrEqual(1);
   expect(await rentRows(ledger, templateId)).toHaveLength(2);
 });
 
-test('the Balances tab debt and Record settlement prefill include this month’s Rent', async ({
+test('the Balances tab debt and the Record payment prefill include this month’s Rent', async ({
   page,
   ledger,
 }) => {
@@ -164,16 +164,12 @@ test('the Balances tab debt and Record settlement prefill include this month’s
 
   await openAsSam(page, ledger, { query: '?tab=balances' });
 
-  const debts = page.getByText('Who pays whom', { exact: true }).locator('..').locator('..');
+  const debts = page.getByRole('region', { name: 'Settle up', exact: true });
   await expect(debts.getByText('₹30,000.00', { exact: true })).toBeVisible();
-  await debts.getByRole('button', { name: 'Record settlement', exact: true }).click();
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Record settlement', exact: true }),
-  });
-  await expect(dialog.getByRole('spinbutton', { name: 'Amount' })).toHaveValue('30000');
+  await debts.getByRole('button', { name: /^Record .*payment to/ }).click();
+  const form = page.getByRole('region', { name: 'Record payment', exact: true });
+  await expect(form.getByRole('textbox', { name: 'Amount paid' })).toHaveValue('30000.00');
   // Inspect the prefill only; nothing is recorded.
-  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-  await expect(dialog).toBeHidden();
   expect(await dataOf(await ledger.sam.get(`/api/groups/${ledger.groupB}/settlements`))).toEqual(
     [],
   );

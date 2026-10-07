@@ -15,6 +15,8 @@ const currentWindow: Window = { ...phone };
 const appStateListeners: ((state: string) => void)[] = [];
 const connectionListeners: ((state: { isConnected: boolean | null }) => void)[] = [];
 const backListeners: (() => boolean)[] = [];
+const reduceMotionListeners: ((enabled: boolean) => void)[] = [];
+let reduceMotion = false;
 
 /**
  * Sets the window every test in this file starts from; call it at the top of the file.
@@ -50,8 +52,77 @@ export function backListenerCount() {
   return backListeners.length;
 }
 
+/**
+ * Android's "Remove animations" setting (reduce motion) changes; off unless a test turns it on.
+ * `AccessibilityInfo.isReduceMotionEnabled` answers with it, and its listeners hear the change.
+ */
+export function setReduceMotion(enabled: boolean) {
+  reduceMotion = enabled;
+  for (const listener of [...reduceMotionListeners]) listener(enabled);
+}
+
 /** `Animated.spring`, recorded so a test can check how a sheet settles. */
 export const spring = vi.fn(() => ({ start: vi.fn() }));
+
+/**
+ * An animation the stand-ins hand back: it never runs, so no value moves and a rendered test
+ * never depends on timing. A test checks what was started and stopped, and with what config.
+ */
+export interface StandInAnimation {
+  kind: 'timing' | 'loop';
+  value?: unknown;
+  config?: Record<string, unknown>;
+  animation?: StandInAnimation;
+  start: ReturnType<typeof vi.fn>;
+  stop: ReturnType<typeof vi.fn>;
+}
+const animation = (fields: Omit<StandInAnimation, 'start' | 'stop'>): StandInAnimation => ({
+  ...fields,
+  start: vi.fn(),
+  stop: vi.fn(),
+});
+/** `Animated.timing`, recorded with its value and config. */
+export const timing = vi.fn((value: unknown, config: Record<string, unknown>) =>
+  animation({ kind: 'timing', value, config }),
+);
+/** `Animated.loop`, recorded with the animation it repeats. */
+export const loop = vi.fn((inner: StandInAnimation) =>
+  animation({ kind: 'loop', animation: inner }),
+);
+
+/**
+ * Frames: what waits for the next one (`requestAnimationFrame`) runs when a test calls
+ * `nextFrame`, so a test sees what happens before a frame and after it.
+ */
+const waitingForFrame = new Map<number, (time: number) => void>();
+let lastFrame = 0;
+export function requestAnimationFrame(callback: (time: number) => void) {
+  lastFrame += 1;
+  waitingForFrame.set(lastFrame, callback);
+  return lastFrame;
+}
+export function cancelAnimationFrame(frame: number) {
+  waitingForFrame.delete(frame);
+}
+export function nextFrame() {
+  const due = [...waitingForFrame.values()];
+  waitingForFrame.clear();
+  for (const callback of due) callback(Date.now());
+}
+
+/** `Animated.Value`: holds a number, and describes what is derived from it. */
+class AnimatedValue {
+  value: number;
+  constructor(value: number) {
+    this.value = value;
+  }
+  setValue(value: number) {
+    this.value = value;
+  }
+  interpolate(config: { inputRange: number[]; outputRange: (number | string)[] }) {
+    return { interpolation: config, of: this };
+  }
+}
 
 const spies = {
   sendAccessibilityEvent: vi.fn(),
@@ -77,7 +148,13 @@ export function resetNative() {
   appStateListeners.length = 0;
   connectionListeners.length = 0;
   backListeners.length = 0;
+  // The kit listens for reduce motion for the life of the app, here a file: it hears the
+  // setting go back off, as it would on a device, instead of losing its listener.
+  if (reduceMotion) setReduceMotion(false);
   spring.mockClear();
+  timing.mockClear();
+  loop.mockClear();
+  waitingForFrame.clear();
   for (const spy of Object.values(spies)) spy.mockClear();
 }
 
@@ -85,21 +162,33 @@ export const reactNative = {
   AccessibilityInfo: {
     sendAccessibilityEvent: spies.sendAccessibilityEvent,
     getRecommendedTimeoutMillis: async (timeout: number) => timeout,
+    isReduceMotionEnabled: async () => reduceMotion,
+    addEventListener: (_type: 'reduceMotionChanged', listener: (enabled: boolean) => void) =>
+      listen(reduceMotionListeners, listener),
   },
   ActivityIndicator: 'ActivityIndicator',
   Alert: { alert: spies.alert },
   Animated: {
     View: 'AnimatedView',
-    Value: class {
-      value: number;
-      constructor(value: number) {
-        this.value = value;
-      }
-      setValue(value: number) {
-        this.value = value;
-      }
-    },
+    // Not 'Text': only what a reader sees is text to a test.
+    Text: 'AnimatedText',
+    Value: AnimatedValue,
+    multiply: (a: unknown, b: unknown) => ({ multiply: [a, b] }),
     spring,
+    timing,
+    loop,
+  },
+  // Easing curves are named, not run: no animation runs in a test.
+  Easing: {
+    bezier: (...points: number[]) => ({ bezier: points }),
+    in: (easing: unknown) => ({ in: easing }),
+    out: (easing: unknown) => ({ out: easing }),
+    inOut: (easing: unknown) => ({ inOut: easing }),
+    linear: 'linear',
+    ease: 'ease',
+    quad: 'quad',
+    cubic: 'cubic',
+    sin: 'sin',
   },
   AppState: {
     addEventListener: (_type: string, listener: (state: string) => void) =>
@@ -118,7 +207,8 @@ export const reactNative = {
   Modal: 'Modal',
   // Hands its config straight through as the handlers, so a test can drive a drag.
   PanResponder: { create: (config: object) => ({ panHandlers: config }) },
-  Platform: { OS: 'android' },
+  // Android 15: text scales by Android 14's non-linear curves.
+  Platform: { OS: 'android', Version: 35 },
   Pressable: 'Pressable',
   RefreshControl: 'RefreshControl',
   ScrollView: 'ScrollView',

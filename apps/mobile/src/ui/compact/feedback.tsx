@@ -89,6 +89,17 @@ export function Banner({
 
 export type BadgeTone = 'positive' | 'negative' | 'warning' | 'neutral';
 
+/**
+ * Room a pill's label keeps to spare: a hair space (U+200A) after it. React Native sizes the
+ * label to the width it measured, and Android lays the text out again to draw it. When the
+ * measure comes from React Native's cache, as on opening a record again, Android can need a
+ * fraction of a pixel more, and a label that fitted to within that fraction wraps its last word
+ * below the one-line pill: Tea stall's badge drew "You owe Sam" without "₹416.67" (#331). The
+ * hair space adds its width to the measure but never moves a word to the next line, as a line
+ * may end past its room in white space.
+ */
+const hairSpace = String.fromCodePoint(0x200a);
+
 /** A short status pill such as "Adds up", "Not confirmed" or "Saved 10:42". */
 export function Badge({
   label,
@@ -123,6 +134,7 @@ export function Badge({
       {icon ? <Icon name={icon} size={16} color={colors[1]} /> : null}
       <CompactText variant="caption" weight="semibold" style={{ color: colors[1] }}>
         {label}
+        {hairSpace}
       </CompactText>
     </View>
   );

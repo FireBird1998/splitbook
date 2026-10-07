@@ -42,11 +42,14 @@ import {
   LinearProgress,
   SkeletonRows,
   TopBar,
+  progressHeight,
 } from './src/ui/compact';
 import { SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
 import { ExpenseEditor } from './src/ui/expense-editor';
+import { scrollToShow } from './src/ui/scroll';
+import { recordOutline } from './src/ui/expense-record-view';
 import { RefreshStatus, RetainedNotice } from './src/ui/financial-views';
 import { GroupExpensesView } from './src/ui/group-expenses';
 import { TripStrip } from './src/ui/trip-strip';
@@ -62,7 +65,7 @@ import { GroupSnackbar, HomeSnackbar } from './src/ui/group-snackbar';
 import { visibleFieldErrors } from './src/data/field-feedback';
 import { groupFields } from './src/data/group-draft';
 import { GroupShell } from './src/ui/group-shell';
-import { GroupBalancesView } from './src/ui/group-balances';
+import { GroupBalancesView, settledIn } from './src/ui/group-balances';
 import { RecordPaymentSheet } from './src/ui/record-payment-sheet';
 import { GroupActivity } from './src/ui/group-activity';
 import { GroupMembers } from './src/ui/group-members';
@@ -371,6 +374,28 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
       () => undefined,
     );
   }, []);
+  const viewport = useRef(0);
+  const offset = useRef(0);
+  // Each screen's ScrollView starts at its top.
+  useEffect(() => {
+    offset.current = 0;
+  }, [state.screen]);
+  // Scroll just far enough to show a note that appeared under the actions, whole.
+  const showWhole = useCallback((section: View) => {
+    const content = scrollContent.current;
+    if (!content) return;
+    section.measureLayout(
+      content,
+      (_x, top, _width, height) => {
+        const to = scrollToShow(
+          { top, height },
+          { offset: offset.current, viewport: viewport.current },
+        );
+        if (to !== null) scroll.current?.scrollTo({ y: to, animated: true });
+      },
+      () => undefined,
+    );
+  }, []);
   const invite = state.screen === 'invite';
   return (
     <>
@@ -414,6 +439,13 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
           innerViewRef={scrollContent as RefObject<View>}
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
+          scrollEventThrottle={100}
+          onScroll={(event) => {
+            offset.current = event.nativeEvent.contentOffset.y;
+          }}
+          onLayout={(event) => {
+            viewport.current = event.nativeEvent.layout.height;
+          }}
           contentContainerStyle={{
             paddingHorizontal: 16,
             paddingTop: 4,
@@ -476,6 +508,7 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
               focus={state.creation.validation.focus}
               onLeaveField={controller.touchCreationField}
               onReveal={reveal}
+              onShowStatus={showWhole}
               onCheckGroups={() => void controller.checkCreatedGroups()}
               onDiscard={() =>
                 Alert.alert('Discard this Group form?', 'Your unsaved entries will be cleared.', [
@@ -555,7 +588,12 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
         onRefresh={refresh}
         onAccount={controller.openSettings}
       />
-      {feedback.progress ? <LinearProgress label={feedback.progress} /> : null}
+      {/* The bar's room stays when nothing loads, so Home never moves. */}
+      {feedback.progress ? (
+        <LinearProgress label={feedback.progress} />
+      ) : (
+        <View style={{ height: progressHeight }} />
+      )}
       <ScrollView
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
         refreshControl={
@@ -833,6 +871,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               offline={state.offline.active}
               refreshing={feedback.quiet}
               silent={feedback.silent}
+              knownSettled={settledIn(state.home.byGroup[group.id])}
               onRecord={(paidBy, paidTo, currency) =>
                 void controller.openRecordPayment(paidBy, paidTo, currency)
               }
@@ -915,10 +954,17 @@ function MembersScreen({ state }: { state: MobileSnapshot }) {
 
 /** Adding, editing or reviewing an Expense: a full-screen task without the Group's navigation. */
 function ExpenseScreen({ state }: { state: MobileSnapshot }) {
+  // The list row an Expense opens from already says much of what its record shows.
+  const { requestedExpenseId, groupId } = state.expense;
+  const row =
+    requestedExpenseId && state.financial.groupId === groupId
+      ? state.financial.expenses.data.find((expense) => expense.id === requestedExpenseId)
+      : undefined;
   return (
     <ExpenseEditor
       state={state.expense}
       currentUserId={state.auth.user?.id}
+      outline={row ? recordOutline(row, state.auth.user?.id) : null}
       notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
       offline={state.offline.active}
       onClose={() => void controller.back()}

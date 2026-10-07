@@ -1,5 +1,12 @@
 import type { ReactElement } from 'react';
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
+import { findHosts, layoutHeight } from '../test-utils/layout';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ActivityEvent, ActivityState } from '../data/activity';
 import type { MobileGroup } from '../data/types';
@@ -96,6 +103,28 @@ describe('Group shell', () => {
     // The first heading is the top bar's; the closed options sheet carries its own.
     expect(text(byRole(root, 'header')[0])).toBe('Maple House');
     expect(text(root)).toContain('Household · 3 members · INR');
+  });
+
+  // #331: on the emulator every destination moved up 3dp when its progress bar went.
+  it('keeps the progress bar’s room when nothing loads, so the content never moves', () => {
+    /** What sits between the top bar and the scrolling content, and how tall it is. */
+    const above = () => {
+      const json = renderer!.toJSON() as ReactTestRendererJSON;
+      // The host that holds the screen's own ScrollView; the closed options sheet has another.
+      const [frame] = findHosts(json, (_props, type) => type === 'View').filter((node) =>
+        (node.children ?? []).some(
+          (child) => typeof child !== 'string' && child.type === 'ScrollView',
+        ),
+      );
+      const children = frame!.children as ReactTestRendererJSON[];
+      const slot = children[children.findIndex((child) => child.type === 'ScrollView') - 1]!;
+      return [slot.props.accessibilityRole ?? null, layoutHeight(slot)];
+    };
+    shell({ progress: 'Opening Maple House' });
+    expect(above()).toEqual(['progressbar', 3]);
+    act(() => renderer?.unmount());
+    shell({ progress: null });
+    expect(above()).toEqual([null, 3]);
   });
 
   it('returns Home from the back arrow', () => {

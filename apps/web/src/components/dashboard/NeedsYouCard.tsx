@@ -11,7 +11,7 @@ import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import type { HomeSuggestedPaymentRead } from '@splitbook/shared/home-balances-read';
 import { initials } from '@/components/layout/AccountMenu';
-import { groupTabHref } from '@/components/groups/group-tabs';
+import { recordPaymentHref as balancesRecordHref } from '@/components/settlements/record-payment';
 import { RADIUS } from '@/lib/theme/tokens';
 import {
   HomeCard,
@@ -43,11 +43,11 @@ const visuallyHidden = {
 } as const;
 
 /**
- * Where Record goes: the payment's Group, on its Balances tab (#305), where the payment is
- * listed under "Who pays whom" and recording it fills in its amount.
+ * Where Record goes: the payment's Group, on its Balances tab (#305), with Record payment
+ * filled in for the member and the other person, and the suggested amount (#312).
  */
-export function recordPaymentHref(groupId: string): string {
-  return groupTabHref(groupId, 'balances');
+export function recordPaymentHref(payment: HomeSuggestedPaymentRead): string {
+  return balancesRecordHref(payment.groupId, payment);
 }
 
 /** "You pay Sam Chen" or "Sam Chen pays you". */
@@ -130,7 +130,7 @@ function PaymentRow({
         </Typography>
         <Button
           component={Link}
-          href={recordPaymentHref(payment.groupId)}
+          href={recordPaymentHref(payment)}
           variant="text"
           size="small"
           aria-label={`Record payment: ${title}, ${amount}, in ${payment.groupName}`}

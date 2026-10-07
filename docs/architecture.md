@@ -170,9 +170,11 @@ src/
 │   │   ├── expense-form-helpers.ts # Pure, unit-tested
 │   │   └── expense-duplicate-check.ts
 │   ├── settlements/
-│   │   └── SettleUpDialog.tsx
+│   │   ├── RecordPaymentForm.tsx   # Record payment on the Balances tab (#312)
+│   │   └── record-payment.ts       # Pure, unit-tested: amount, parties, preview wording
 │   ├── balances/
-│   │   └── BalancesView.tsx        # Balance summary + simplified debts
+│   │   ├── BalancesView.tsx        # All-time balance, Settle up, Record payment, Payments
+│   │   └── PaymentsTable.tsx       # Payments: when, from → to, amount, note, recorded by
 │   ├── dashboard/
 │   │   ├── DashboardView.tsx       # Groups overview + invitations
 │   │   ├── InvitationCard.tsx

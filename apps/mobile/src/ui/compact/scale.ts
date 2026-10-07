@@ -1,4 +1,4 @@
-import type { TextStyle } from 'react-native';
+import { Platform, type TextStyle } from 'react-native';
 import { fonts } from '../theme';
 
 /**
@@ -35,6 +35,70 @@ export const moneySizes: Record<MoneySize, TextStyle> = {
   list: { fontSize: 15, lineHeight: 20, letterSpacing: -0.3 },
   table: { fontSize: 13, lineHeight: 17, letterSpacing: -0.2 },
 };
+
+/**
+ * Android 14 (API 34) scales text sizes non-linearly from 115%: small sizes by the whole scale,
+ * large ones by less, so headings don't outgrow the screen. These are the platform's own tables
+ * (FontScaleConverterFactory): the dp each sp size becomes at each scale, interpolated between
+ * sizes and between scales; above 100sp, and below 115%, scaling is linear.
+ */
+const scaledSizes = [8, 10, 12, 14, 18, 20, 24, 30, 100];
+const scaleTables: [scale: number, dp: number[]][] = [
+  [1.15, [9.2, 11.5, 13.8, 16.4, 19.8, 21.8, 25.2, 30, 100]],
+  [1.3, [10.4, 13, 15.6, 18.8, 21.6, 23.6, 26.4, 30, 100]],
+  [1.5, [12, 15, 18, 22, 24, 26, 28, 30, 100]],
+  [1.8, [14.4, 18, 21.6, 24.4, 27.6, 30.8, 32.8, 34.8, 100]],
+  [2, [16, 20, 24, 26, 30, 34, 36, 38, 100]],
+];
+const between = (a: number, b: number, at: number) => a + (b - a) * at;
+/** One table's dp for `sp`: interpolated between its sizes, from 0 below the first. */
+function fromTable(dp: number[], sp: number) {
+  const index = scaledSizes.findIndex((size) => size >= sp);
+  if (index < 0) return (sp * dp[dp.length - 1]!) / scaledSizes[scaledSizes.length - 1]!;
+  const [fromSp, toSp] = [index ? scaledSizes[index - 1]! : 0, scaledSizes[index]!];
+  const [fromDp, toDp] = [index ? dp[index - 1]! : 0, dp[index]!];
+  return between(fromDp, toDp, (sp - fromSp) / (toSp - fromSp));
+}
+
+/**
+ * How many dp `sp` takes at this font scale, as Android lays text out: linearly before Android
+ * 14 and below 115%, by the platform's curves from there. Line heights and font sizes both
+ * follow it, so a 35sp amount stays 35dp at 130% while 16sp captions grow to about 20dp.
+ */
+export function scaledSp(sp: number, fontScale: number) {
+  const curved = Platform.OS === 'android' && Number(Platform.Version) >= 34;
+  if (!curved || fontScale < scaleTables[0]![0]) return sp * fontScale;
+  const above = scaleTables.findIndex(([scale]) => scale >= fontScale);
+  // Beyond the largest table Android scales linearly, by the scale itself.
+  if (above < 0) return sp * fontScale;
+  const [upper, upperDp] = scaleTables[above]!;
+  if (upper === fontScale || above === 0) return fromTable(upperDp, sp);
+  const [lower, lowerDp] = scaleTables[above - 1]!;
+  return between(
+    fromTable(lowerDp, sp),
+    fromTable(upperDp, sp),
+    (fontScale - lower) / (upper - lower),
+  );
+}
+
+/** A text style a skeleton line stands in for: a text variant or a money size. */
+export type LineKind = TextVariant | MoneySize;
+
+/**
+ * The height one line of `kind` takes at this font scale (Android scales line heights with the
+ * text, by `scaledSp`), and the thickness of a skeleton bar drawn in it, a little under the font
+ * size.
+ */
+export function lineBox(kind: LineKind, fontScale: number) {
+  const style =
+    kind in textVariants ? textVariants[kind as TextVariant] : moneySizes[kind as MoneySize];
+  const lineHeight = style.lineHeight as number;
+  const fontSize = style.fontSize as number;
+  return {
+    height: scaledSp(lineHeight, fontScale),
+    bar: Math.max(6, Math.round(scaledSp(fontSize, fontScale) * 0.72)),
+  };
+}
 
 /** At or above this Android font scale, tile grids and summary stats use one column. */
 export const LARGE_TEXT_SCALE = 1.3;

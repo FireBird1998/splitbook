@@ -334,6 +334,18 @@ describe('Record payment sheet states', () => {
     expect(JSON.stringify(amount.props.style)).toContain('IBMPlexMono');
   });
 
+  // #331: Record says what it's doing while it records, beside a spinner, at the same size.
+  it('is busy, labelled “Recording payment…” and announced busy while recording', () => {
+    const recording = sheet(base({ status: 'saving' }));
+    expect(labelled(recording.root, 'Record payment ₹1,060.00')).toHaveLength(0);
+    const [record] = labelled(recording.root, 'Recording payment…');
+    expect(record.props.accessibilityRole).toBe('button');
+    expect(record.props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(record.props.disabled).toBe(true);
+    expect(record.findAll((node) => isHost(node, 'ActivityIndicator'))).toHaveLength(1);
+    expect(text(record)).toContain('Recording payment…');
+  });
+
   it('can’t be closed while the payment is being recorded', () => {
     const saving = sheet(base({ status: 'saving' }));
     expect(labelled(saving.root, 'Close')[0].props.accessibilityState).toEqual({ disabled: true });

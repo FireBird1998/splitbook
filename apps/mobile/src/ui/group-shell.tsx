@@ -12,6 +12,7 @@ import {
   LinearProgress,
   ListRow,
   TopBar,
+  progressHeight,
 } from './compact';
 import { useTheme } from './theme';
 
@@ -99,7 +100,8 @@ export function GroupShell({
           ) : null
         }
       />
-      {progress ? <LinearProgress label={progress} /> : null}
+      {/* The bar's room stays when nothing loads, so the content never moves. */}
+      {progress ? <LinearProgress label={progress} /> : <View style={{ height: progressHeight }} />}
       <ScrollView
         // Each destination starts at its own top.
         key={destination}

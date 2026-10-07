@@ -53,20 +53,24 @@ Table:   Date | Description + Tag | Paid by | Split | Amount | You
 
 ## Tab: Balances
 
-Balance summary + simplified debts. See [balances.md](../features/balances.md) for details.
+The all-time balance, Settle up (the suggested payments, each with Record when the member is
+one of the pair), Record payment on the page itself, net positions and Payments (#312). See
+[balances.md](../features/balances.md) for details.
 
 ```
-Your balance: +€50.00 (owed)
+All-time balance  INR                      │ Record payment
+  You owe ₹1,480.00                         │   From [You ▾] → To [Sam Chen ▾]
+─────────────────                           │   Amount paid  INR [1060.00]  Suggested ₹1,060.00
+Settle up                                   │   (paying more than suggested: warning + tick)
+  You pay Sam Chen     ₹1,060.00  [Record]  │   After this payment: You owe ₹420.00 …
+  You pay Priya Shah     ₹420.00  [Record]  │   Note, optional
+Net positions                               │   [Record payment ₹1,060.00]
 ─────────────────
-Member balances:
-  John:  +€50.00
-  Jane:  -€30.00
-  Bob:   -€20.00
-
-Simplified debts (2 payments):
-  Jane → John: €30.00  [Settle Up]
-  Bob  → John: €20.00  [Settle Up]
+Payments: date and time · from → to · amount · note · recorded by
 ```
+
+On one column (a phone), Record payment comes straight after Settle up. Record on a suggested
+payment fills the form in and moves focus to its amount.
 
 ---
 
@@ -117,6 +121,8 @@ Shows at the top of all tabs:
 /groups/abc123                          → redirects to /groups/abc123/expenses
 /groups/abc123/expenses                 → Expenses tab
 /groups/abc123/balances                 → Balances tab
+/groups/abc123/balances?paidTo=<id>     → Balances, Record payment filled in: you pay them (Home's Record)
+/groups/abc123/balances?paidBy=<id>     → Balances, Record payment filled in: they pay you
 /groups/abc123/activity                 → Activity tab
 /groups/abc123/members                  → Members tab (read-only roster)
 /groups/abc123?tab=balances             → old link: redirects to /balances

@@ -6,7 +6,12 @@ import { createMobileController, type MobileController } from '../data/mobile-co
 import type { FetchResponse, MobileFetch } from '../data/types';
 import { clockTime } from './activity-format';
 import { ExpenseEditor } from './expense-editor';
+import { recordOutline, type RecordOutline } from './expense-record-view';
+import { parseExpensePage } from '../data/financial-dto';
 import { fonts } from './theme';
+import { motion } from './compact';
+import { findHosts, flatten, layoutHeight } from '../test-utils/layout';
+import { setWindow, timing } from '../test-utils/native';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -23,6 +28,8 @@ const ids = {
   historical: 'b00000000000000000000004',
   weekly: 'b00000000000000000000005',
   taxi: 'b00000000000000000000006',
+  tea: 'b00000000000000000000007',
+  rerun: 'b00000000000000000000008',
 };
 const iso = '2026-09-29T14:32:00.000Z';
 const group = {
@@ -111,6 +118,32 @@ const records: Record<string, Record<string, unknown>> = {
     paidBy: [row(alex, 150000)],
     splitBetween: [row(alex, 50000), row(sam, 50000), row(priya, 50000)],
     createdBy: alex.id,
+  }),
+  // As two records on an emulator measured them (#331): three people whose equal shares differ
+  // by a paisa, and two people with a short amount.
+  // As the emulator's "Tea stall": Sam paid ₹1,250.00 for three, so Alex owes Sam ₹416.67.
+  [ids.tea]: expense(ids.tea, {
+    description: 'Tea stall',
+    amount: 1250,
+    amountMinor: 125000,
+    date: '2026-10-03T06:30:00.000Z',
+    tag: 'Food',
+    tagId: 'c00000000000000000000098',
+    paidBy: [row(sam, 125000)],
+    splitBetween: [row(alex, 41667), row(sam, 41667), row(priya, 41666)],
+    createdBy: person(sam),
+  }),
+  [ids.rerun]: expense(ids.rerun, {
+    description: 'QA U1 rerun 3 e',
+    amount: 10,
+    amountMinor: 1000,
+    date: '2026-10-06T06:30:00.000Z',
+    tag: 'General',
+    tagId: 'c00000000000000000000099',
+    paidBy: [row(alex, 1000)],
+    splitBetween: [row(alex, 500), row(sam, 500)],
+    createdBy: alex.id,
+    updatedAt: '2026-10-06T18:40:00.000Z',
   }),
   [ids.weekly]: expense(ids.weekly, {
     description: 'Weekly groceries',
@@ -719,7 +752,14 @@ describe('compact Expense record', () => {
         />,
       );
     });
-    expect(text(screen!.root)).toContain('Opening this Expense…');
+    // The record's skeleton stands in, announced as busy under the Expense's name for the wait.
+    const opening = screen!.root.findAll(
+      (node) =>
+        typeof node.type === 'string' && node.props.accessibilityLabel === 'Opening this Expense…',
+    );
+    expect(opening).toHaveLength(1);
+    expect(opening[0].props.accessibilityState).toEqual({ busy: true });
+    expect(opening[0].props.accessibilityLiveRegion).toBe('polite');
     act(() => screen?.unmount());
 
     const ui = await render((controller) =>
@@ -729,5 +769,208 @@ describe('compact Expense record', () => {
     // The Group is still there; only the Expense is missing.
     expect(text(ui.root())).toContain('This Expense isn’t available.');
     expect(text(ui.root())).not.toMatch(/draft|group/i);
+  });
+});
+
+// #331: the record opens over a skeleton of its own shape, then fades in where it was.
+describe('compact Expense record, opening', () => {
+  const editor = (
+    state: Parameters<typeof ExpenseEditor>[0]['state'],
+    outline: RecordOutline | null = null,
+  ) => (
+    <ExpenseEditor
+      state={state}
+      outline={outline}
+      currentUserId={alex.id}
+      onChange={() => undefined}
+      onLeaveField={() => undefined}
+      onSave={() => undefined}
+      onResume={() => undefined}
+      onDiscard={() => undefined}
+      onRetry={() => undefined}
+      onEdit={() => undefined}
+      onReviewDelete={() => undefined}
+      onDelete={() => undefined}
+      onCancelDelete={() => undefined}
+      onReconcile={() => undefined}
+      onReviewLatest={() => undefined}
+      onAcceptCurrent={() => undefined}
+    />
+  );
+  const opening = editor({
+    ...emptyExpenseEditor(),
+    status: 'loading',
+    requestedExpenseId: ids.dinner,
+  });
+
+  /** The record's cards in the scrolling content, in order: summary, Who owes what, … */
+  const cards = () => {
+    const [content] = findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView');
+    return findHosts(content, (props) => {
+      const style = flatten(props.style);
+      return style.borderRadius === 14 && style.overflow === 'hidden';
+    });
+  };
+  /** What the Expenses list holds for this Expense: its row, as the list reads it. */
+  const listRow = (id: string) =>
+    parseExpensePage(
+      {
+        status: 200,
+        data: {
+          expenses: [records[id]],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+          summary: {
+            count: 1,
+            totalsByCurrency: [],
+            userOwes: 0,
+            userGetsBack: 0,
+            byMember: [],
+          },
+        },
+      },
+      groupId,
+      'INR',
+    ).expenses[0]!;
+  /** The heights of the summary and Who owes what, and how many cards come before History. */
+  const shape = (room: number, fontScale: number) => {
+    const [summary, owes, ...rest] = cards();
+    return {
+      summary: layoutHeight(summary!, fontScale, room),
+      owes: layoutHeight(owes!, fontScale, room),
+      before: rest.length,
+    };
+  };
+
+  // On an emulator (#331): "Tea stall", three people whose equal shares differ by a paisa, at
+  // 100% on its 411dp screen; "QA U1 rerun 3 e", two people, at 360dp and 130%. The estimate
+  // the skeleton tests rely on has to agree with what that device drew.
+  it('lays out as an emulator drew it, at 100% and at 130% text', async () => {
+    setWindow({ width: 411, fontScale: 1 });
+    await render(open(ids.tea));
+    expect(text(screen!.root)).toContain('Shares differ by the smallest unit');
+    const normal = shape(411 - 32, 1);
+    expect(Math.abs(normal.summary - 118.5)).toBeLessThanOrEqual(1);
+    expect(Math.abs(normal.owes - 245)).toBeLessThanOrEqual(1);
+    act(() => screen?.unmount());
+    setWindow({ width: 360, fontScale: 1.3 });
+    await render(open(ids.rerun));
+    const large = shape(360 - 32, 1.3);
+    expect(Math.abs(large.summary - 125.5)).toBeLessThanOrEqual(1);
+    // Its amounts sit on baselines under each name, which this estimate doesn't model.
+    expect(Math.abs(large.owes - 173)).toBeLessThan(4);
+  });
+
+  // The record's skeleton, from the row the Expense opened from, takes the record's place:
+  // History, after the summary and Who owes what, starts where it will stay.
+  it.each([
+    ['Tea stall', 411, 1, ids.tea],
+    ['Tea stall', 360, 1.3, ids.tea],
+    ['QA U1 rerun 3 e', 411, 1, ids.rerun],
+    ['QA U1 rerun 3 e', 360, 1.3, ids.rerun],
+    ['Electricity bill', 360, 1, ids.bill],
+    ['Electricity bill', 360, 1.3, ids.bill],
+  ] as const)(
+    '%s takes its skeleton’s place, %sdp wide at %s× text',
+    async (_name, width, fontScale, id) => {
+      setWindow({ width, fontScale });
+      const room = width - 32;
+      await act(async () => {
+        screen = create(
+          editor(
+            {
+              ...emptyExpenseEditor(),
+              status: 'loading',
+              requestedExpenseId: id,
+            },
+            recordOutline(listRow(id), alex.id),
+          ),
+        );
+      });
+      const skeleton = shape(room, fontScale);
+      act(() => screen?.unmount());
+      await render(open(id));
+      expect(shape(room, fontScale)).toEqual(skeleton);
+    },
+  );
+
+  // On the emulator, Tea stall's badge drew "You owe Sam" without "₹416.67" each time its
+  // measure came from React Native's cache, as on opening it again: the label measured 115.37dp
+  // in its 115.43dp, and Android, laying the text out again to draw it, needed a fraction of a
+  // pixel more and wrapped the amount below the one-line pill. The label keeps a hair space to
+  // spare, which a line may end past, so the amount never wraps.
+  it.each([
+    [411, 1],
+    [360, 1.3],
+  ])(
+    'Tea stall’s badge keeps its amount, with room to spare, %sdp at %s×',
+    async (width, fontScale) => {
+      setWindow({ width, fontScale });
+      await render(open(ids.tea));
+      const badge = screen!.root.findAll(
+        (node) => isHost(node, 'Text') && node.children.join('').startsWith('You owe'),
+      );
+      expect(badge.map((node) => node.children)).toEqual([
+        ['You owe Sam ₹416.67', String.fromCodePoint(0x200a)],
+      ]);
+      expect(badge[0]!.props.numberOfLines).toBeUndefined();
+    },
+  );
+
+  it('without a list row, stands in a typical record: two people, both History times', async () => {
+    await act(async () => {
+      screen = create(opening);
+    });
+    const [, owes, history] = cards();
+    expect(findHosts(owes!, (props) => flatten(props.style).minHeight === 48)).toHaveLength(2);
+    expect(findHosts(history!, (props) => flatten(props.style).minHeight === 60)).toHaveLength(2);
+  });
+  // Discarding an unconfirmed edit takes the form through loading and back to the form: that
+  // isn't a record opening, so it shows the spinner it always did, and nothing fades.
+  it('keeps the spinner, not the record’s skeleton, while a form briefly loads', async () => {
+    const harness = backend();
+    await harness.controller.signIn('alex');
+    await harness.controller.openExpense(groupId, ids.dinner);
+    await harness.controller.editExpense();
+    const form = harness.controller.getSnapshot().expense;
+    expect(form.draft).not.toBeNull();
+    expect(form.requestedExpenseId).toBe(ids.dinner);
+    await act(async () => {
+      screen = create(editor({ ...form, status: 'loading' }));
+    });
+    expect(
+      findHosts(screen!.toJSON(), (props) => props.accessibilityLabel === 'Opening this Expense…'),
+    ).toEqual([]);
+    expect(screen!.root.findAll((node) => isHost(node, 'ActivityIndicator'))).toHaveLength(1);
+    expect(text(screen!.root)).toContain('Opening this Expense…');
+    timing.mockClear();
+    act(() => screen!.update(editor(form)));
+    expect(
+      timing.mock.results.filter((result) => result.value.config.duration === motion.reveal),
+    ).toEqual([]);
+  });
+
+  it('fades in where its skeleton was, on the native driver', async () => {
+    const harness = backend();
+    await harness.controller.signIn('alex');
+    await harness.controller.openExpense(groupId, ids.dinner);
+    const record = harness.controller.getSnapshot().expense;
+    // Shown over its skeleton first, once Android has said reduce motion is off.
+    await act(async () => {
+      screen = create(opening);
+    });
+    timing.mockClear();
+    act(() => screen!.update(editor(record)));
+    expect(text(screen!.root)).toContain('Sunday dinner');
+    const fade = timing.mock.results
+      .map((result) => result.value)
+      .find((animation) => animation.config.duration === motion.reveal);
+    expect(fade.config).toMatchObject({ toValue: 1, useNativeDriver: true });
+    expect(fade.value.value).toBe(0);
+    expect(fade.start).toHaveBeenCalledOnce();
+    const faded = screen!.root.findAll(
+      (node) => isHost(node, 'AnimatedView') && flatten(node.props.style).opacity === fade.value,
+    );
+    expect(faded).toHaveLength(1);
+    expect(text(faded[0])).toContain('Sunday dinner');
   });
 });
