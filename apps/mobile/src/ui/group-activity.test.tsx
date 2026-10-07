@@ -1,6 +1,14 @@
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyActivity, type ActivityEvent, type ActivityState } from '../data/activity';
+import { flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
+import { setWindow } from '../test-utils/native';
 import { GroupActivity } from './group-activity';
 import { refreshedLabel } from './refresh-feedback';
 
@@ -326,5 +334,93 @@ describe('Load older and Load newer stay in place (#222, as #219)', () => {
     update({ state: window(2, { pagination }) });
     expect(state('Load newer activity')).toEqual({ disabled: false, busy: false });
     expect(state('Load older activity')).toEqual({ disabled: false, busy: false });
+  });
+});
+
+describe('the header says when its events were read, whole, at any text size (#222)', () => {
+  /** The section header: the host View holding the "Changes in this Group" title. */
+  const header = (): ReactTestRendererJSON => {
+    const search = (node: ReactTestRendererJSON): ReactTestRendererJSON | null => {
+      for (const child of node.children ?? []) {
+        if (typeof child === 'string') continue;
+        if (child.type === 'Text' && child.children?.join('') === 'Changes in this Group')
+          return node;
+        const found = search(child);
+        if (found) return found;
+      }
+      return null;
+    };
+    return search(screen!.toJSON() as ReactTestRendererJSON)!;
+  };
+  /**
+   * A part as Android draws it: an overline in capitals. The layout estimate measures letters as
+   * written, and "Changes in this Group" in capitals is about 8% wider (the UI review's 242dp at
+   * 130%, not 224dp).
+   */
+  const drawn = (node: ReactTestRendererJSON): ReactTestRendererJSON => {
+    const capitals = flatten(node.props.style).textTransform === 'uppercase';
+    return {
+      ...node,
+      children: (node.children ?? []).map((child) =>
+        typeof child === 'string' ? (capitals ? child.toUpperCase() : child) : drawn(child),
+      ),
+    };
+  };
+  // Today at 12:44 PM, as wide as a time of day gets; and an earlier day's time.
+  const today = new Date();
+  today.setHours(12, 44, 0, 0);
+  const notes: [string, Partial<Parameters<typeof GroupActivity>[0]>][] = [
+    [
+      'Newest first',
+      { state: activity({ status: 'loading', events: [], pagination: null, refreshedAt: null }) },
+    ],
+    [
+      `Updated ${refreshedLabel(today.getTime())}`,
+      { state: activity({ refreshedAt: today.getTime() }) },
+    ],
+    [`Updated ${refreshedLabel(at)}`, { state: activity() }],
+    [`Saved ${refreshedLabel(at)}`, { state: activity({ restored: true }) }],
+    // Offline, this phone's copy is a badge.
+    [`Saved ${refreshedLabel(at)}`, { state: activity({ restored: true }), offline: true }],
+  ];
+
+  // The UI review of 90f5c21 measured "Changes in this Group" beside "Updated 10:42 AM" needing
+  // about 383dp at 130% text, against 328dp of room on a 360dp phone: the time was cut off.
+  it.each([
+    [320, 1],
+    [320, 1.3],
+    [360, 1],
+    [360, 1.3],
+    [412, 1],
+    [412, 1.3],
+  ])('keeps the title and its time whole at %sdp and %s× text', (width, scale) => {
+    setWindow({ width, fontScale: scale });
+    // The screen's content is inset 16dp on each side.
+    const room = width - 32;
+    const heights: number[] = [];
+    for (const [note, props] of notes) {
+      render(props);
+      const bar = header();
+      expect(text(screen!.root)).toContain(note);
+      const style = flatten(bar.props.style);
+      const inner = room - 2 * Number(style.paddingHorizontal ?? 0);
+      const parts = (bar.children ?? [])
+        .filter((child): child is ReactTestRendererJSON => typeof child !== 'string')
+        .map(drawn);
+      expect(parts).toHaveLength(2);
+      // Each fits on a line of its own, and side by side only where both fit.
+      for (const part of parts) expect(layoutWidth(part, scale, inner)).toBeLessThanOrEqual(inner);
+      if (style.flexDirection === 'row')
+        expect(
+          parts.reduce((sum, part) => sum + layoutWidth(part, scale, inner), 0) +
+            Number(style.columnGap ?? style.gap ?? 0),
+        ).toBeLessThanOrEqual(inner);
+      heights.push(layoutHeight(drawn(bar), scale, room));
+      act(() => screen?.unmount());
+      screen = null;
+    }
+    // The note's line is as tall whatever it says, so the events below never move as it changes:
+    // "Newest first" to a time, or a Saved badge to "Updated".
+    expect(new Set(heights).size).toBe(1);
   });
 });

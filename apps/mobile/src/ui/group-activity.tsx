@@ -333,6 +333,9 @@ function ActivityList({
     <View style={{ gap: 12 }}>
       <SectionHeader
         title="Changes in this Group"
+        // Under the title: beside it, the time was cut at the screen's edge at 130% text on a
+        // 360dp phone (#222's UI review), and it never moves the events as it changes.
+        below
         trailing={
           // When the events shown were read: "Updated" for this session's reads, offline too,
           // "Saved" only for this phone's copy (#222, as #219). The progress bar says a read runs.
