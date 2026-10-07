@@ -2037,6 +2037,55 @@ describe('Home reads its Groups and its figures together (#333)', () => {
     },
   );
 
+  it.each(['a restart', 'a sign-in without the saved list'] as const)(
+    'hides this phone’s saved figures that name a Group the list leaves out until the figures are read, after %s',
+    async (when) => {
+      const f = fixture();
+      const first = f.create();
+      await first.signIn('alex');
+      await settle();
+      first.dispose();
+      later(60_000);
+      // Alex loses Maple House; this phone's saved figures still name it.
+      f.server.revoked.add(mapleId);
+      f.server.owe = 20;
+      if (when !== 'a restart') f.rows.delete(alex.id + listPath);
+      const controller = f.create();
+      const published = record(controller);
+      const list = f.hold(listPath),
+        figures = f.hold(homePath);
+      const opening = when === 'a restart' ? controller.restore() : controller.signIn('alex');
+      await list.reached;
+      await figures.reached;
+      await settle();
+      // While both are read, the saved figures show, saved.
+      expect(controller.getSnapshot().home).toMatchObject({
+        restored: true,
+        data: [{ youOwe: 30 }],
+      });
+      const landed = published.length;
+      list.release();
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+        home: { data: null },
+      });
+      // Hidden, not removed: the figures' read may yet need them. (After a restart the list also
+      // drops Maple House from the saved list, which removes both rows, as before.)
+      if (when !== 'a restart')
+        expect(f.row(homePath)).toMatchObject({ value: { data: { buckets: [{ youOwe: 30 }] } } });
+      figures.release();
+      await opening;
+      await settle();
+      expect(controller.getSnapshot().home).toMatchObject({
+        status: 'ready',
+        restored: false,
+        data: [{ youOwe: 20 }],
+      });
+      expect(published.slice(landed).some((state) => owes(state)?.[0] === 30)).toBe(false);
+    },
+  );
+
   it.each(['before', 'after'] as const)(
     'reads figures that don’t say which Groups they cover again, once, landing %s the list beside them',
     async (order) => {

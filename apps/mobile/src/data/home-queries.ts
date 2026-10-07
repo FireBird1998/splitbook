@@ -348,6 +348,8 @@ export function createHomeQueries(session: HomeSession) {
   };
   /** How often `forget` removed each row: one being written meanwhile goes once it lands. */
   const forgotten = new Map<string, number>();
+  /** This device's saved figures hidden from Home: they name a Group a newer list leaves out. */
+  const hidden = new WeakSet<object>();
   /** The persister's row for `path`, read on the account queue, checked like every saved copy. */
   const savedRow = async (lease: AccountStorageLease, path: string) =>
     cachedRead(
@@ -571,6 +573,15 @@ export function createHomeQueries(session: HomeSession) {
       coverUnlisted(figures.data.value)
     )
       await outdated(owner);
+    // This device's saved figures, shown while Home's are read, that name a Group this list
+    // leaves out no longer show. They are hidden until the read lands, not removed: the read may
+    // still fall back to them.
+    const names = (ids: string[] | null) => ids?.some((id) => !listed.has(id)) ?? false;
+    if (figures?.data?.source === 'saved' && names(namedOf(figures.data.value)))
+      hidden.add(figures.data);
+    const { home } = snapshot();
+    if (home.restored && home.data !== null && names(Object.keys(home.byGroup)))
+      session.publish({ home: emptyHome() });
     const lease = session.lease();
     if (!lease) return;
     let unchecked = false;
@@ -708,7 +719,8 @@ export function createHomeQueries(session: HomeSession) {
     if (!user) return next;
     const at = { environment: session.environment, accountId: user.id };
     const list = held(groupsKey(at)),
-      figures = held(homeBalancesKey(at));
+      read = held(homeBalancesKey(at)),
+      figures = read?.data && hidden.has(read.data) ? { ...read, data: undefined } : read;
     const groups = list ? projectGroups(list, next.groups) : next.groups;
     const home = figures ? projectHome(figures, next.home) : next.home;
     return groups === next.groups && home === next.home ? next : { ...next, groups, home };
