@@ -2462,6 +2462,32 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     ]);
   });
 
+  // Item 3 (#331): already true, and kept pinned through the App.
+  it('says it is recording, busy, and records once for two taps', async () => {
+    const { phone, app } = await onBalances();
+    await settle(controller().openRecordPayment(alex.id, sam._id, 'INR'));
+    const post = phone.hold(`/api/groups/${maple}/settlements`);
+    void button('Record payment ₹30.00')!.props.onPress();
+    await post.reached;
+    await settle();
+    expect(button('Record payment ₹30.00')).toBeNull();
+    const recording = button('Recording payment…')!;
+    expect(recording.props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(recording.props.disabled).toBe(true);
+    expect(
+      recording.findAll((node) => (node.type as unknown) === 'ActivityIndicator'),
+    ).toHaveLength(1);
+    expect(shown()).toContain('Recording payment…');
+    expect(progress()).toEqual(['Recording payment']);
+    // A second tap that gets through sends nothing more.
+    recording.props.onPress();
+    await settle();
+    post.release();
+    await settle();
+    expect(posts(phone)).toEqual([`POST /api/groups/${maple}/settlements`]);
+    expect(app.text()).toContain('Payment recorded');
+  });
+
   // Item 4: after a network failure the sheet showed only "Could not reach SplitBook…".
   it('offers Try again on the sheet when its check can’t reach SplitBook, keeping the figures, and sends nothing', async () => {
     const { phone, app } = await onBalances();
