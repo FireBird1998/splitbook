@@ -600,7 +600,11 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
           />
         }
       >
-        <OfflineNotice state={state.offline} />
+        {/* With nothing of Home to show, each part says it isn't saved on this phone, and no
+            banner says what's shown was saved, as on a Group never opened here (#332). */}
+        {!state.groups.loaded && !state.groups.data.length && state.home.data === null ? null : (
+          <OfflineNotice state={state.offline} />
+        )}
         <HomeBalances
           state={state.home}
           offline={state.offline.active}

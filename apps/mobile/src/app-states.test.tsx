@@ -106,14 +106,23 @@ const json = (body: unknown, status = 200) => Response.json(body, { status });
 /** One phone: its stored session and saved views outlive each controller, as across restarts. */
 function device() {
   const clock = { now: new Date(2026, 8, 27, 10, 42).getTime() };
-  const network = { online: true, session: 200, noGroups: false, noActivity: false };
+  const network = {
+    online: true,
+    session: 200,
+    noGroups: false,
+    noActivity: false,
+  };
+  /** The saved copies can't be removed, as on a full or read-only disk. */
+  const storage = { failRemoval: false };
   let cookie: string | null = null,
     owner: string | null = null,
-    identity: unknown = null;
+    identity: unknown = null,
+    untrusted: unknown = null;
   const cache = new Map<string, unknown>(),
     drafts = new Map<string, unknown>();
   const holds: { prefix: string; arrive: () => void; response: Promise<void> }[] = [];
-  const respond = (path: string): FetchResponse => {
+  const respond = (path: string, method: string): FetchResponse => {
+    if (path.endsWith('/sign-out')) return json({ success: true });
     if (path.endsWith('/sign-in'))
       return new Response(JSON.stringify({ user: alex }), {
         headers: { 'Set-Cookie': 'better-auth.session_token=test.signature; Path=/; HttpOnly' },
@@ -147,6 +156,8 @@ function device() {
     if (path === `/api/groups/${id}`) return json({ data: found, status: 200 });
     if (path === `/api/groups/${maple}/expenses/${expenseId}`)
       return json({ data: expense, status: 200 });
+    if (path === `/api/groups/${id}/expenses` && method === 'POST')
+      return json({ data: { _id: 'e00000000000000000000009', group: id }, status: 201 }, 201);
     if (path.startsWith(`/api/groups/${id}/expenses?`))
       return json({
         status: 200,
@@ -229,7 +240,12 @@ function device() {
             identity = null;
           },
         },
-        savedQueries: savedQueriesIn(cache),
+        savedQueries: savedQueriesIn(cache, {
+          remove: async (account, path) => {
+            if (storage.failRemoval) throw new Error('The device storage is full');
+            cache.delete(account + path);
+          },
+        }),
         readCache: {
           retainGroups: async () => undefined,
           invalidateGroup: async () => undefined,
@@ -261,9 +277,20 @@ function device() {
             },
           },
           cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-          stores: [],
+          // Saved copies this phone couldn't remove, recorded for the next start (#212).
+          untrustedCopies: {
+            load: async () => structuredClone(untrusted),
+            save: async (value) => {
+              untrusted = structuredClone(value);
+            },
+            clear: async () => {
+              untrusted = null;
+            },
+          },
+          // As the app registers them: sign-out and an account change clear the saved copies.
+          stores: [{ clear: async () => cache.clear() }],
         },
-        fetch: async (url) => {
+        fetch: async (url, init) => {
           const path = new URL(url).pathname + new URL(url).search;
           if (!network.online) throw new Error('Offline');
           const index = holds.findIndex((item) => path.startsWith(item.prefix));
@@ -274,14 +301,17 @@ function device() {
             // The connection may have dropped while it waited.
             if (!network.online) throw new Error('Offline');
           }
-          return respond(path);
+          return respond(path, init.method ?? 'GET');
         },
       },
     );
   return {
     clock,
     network,
+    storage,
     controller,
+    /** The saved copy of `path` on this phone, as stored. */
+    saved: (path: string) => cache.get(alex.id + path) ?? null,
     /** The next request starting with `prefix` waits until released. */
     hold(prefix: string) {
       let arrive!: () => void;
@@ -815,6 +845,11 @@ describe('offline', () => {
 });
 
 describe('Home says what is true, without jumps (#332)', () => {
+  const controller = () => runtime.controller as MobileController;
+  const notSaved = {
+    balances: 'Your balances aren’t saved on this phone. Connect to load them.',
+    groups: 'Your Groups aren’t saved on this phone. Connect to load them.',
+  };
   /** The top bar as rendered, and its text: the row that holds Refresh Home. */
   const topBar = () => {
     const holding = (
@@ -912,5 +947,79 @@ describe('Home says what is true, without jumps (#332)', () => {
     fits('Refreshing…');
     figures.release();
     await settle();
+  });
+
+  it('says the balances and Groups aren’t saved, offline after a sign-out cleared them', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await settle(controller().signOut());
+    expect(phone.saved('/api/groups')).toBeNull();
+    expect(phone.saved('/api/user/balances')).toBeNull();
+
+    // Alex signs in again; the connection drops before Home is read.
+    const list = phone.hold('/api/groups');
+    const signingIn = controller().signIn('alex');
+    await list.reached;
+    phone.network.online = false;
+    list.release();
+    await settle(signingIn);
+    expect(app.text()).toContain(notSaved.balances);
+    expect(app.text()).toContain(notSaved.groups);
+    expect(app.text()).not.toContain('yet');
+    // Nothing shown was saved on this phone, so nothing says it was.
+    expect(app.text()).not.toContain('What’s shown was saved');
+  });
+
+  /**
+   * Alex saves an Expense in Maple House, which makes Home's saved figures obsolete (M2-2). They
+   * are read again after it, but the connection drops first, and the app is closed.
+   */
+  async function changed(phone: ReturnType<typeof device>) {
+    const first = phone.controller();
+    await first.restore();
+    await first.openExpense(maple);
+    await first.updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId });
+    const figures = phone.hold('/api/user/balances');
+    const saving = first.saveExpense();
+    await figures.reached;
+    phone.network.online = false;
+    figures.release();
+    await saving;
+    expect(first.getSnapshot().expense.status).toBe('saved');
+    await settle();
+    first.dispose();
+  }
+
+  it('says the balances aren’t saved, offline after a change removed their copy', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    await changed(phone);
+    expect(phone.saved('/api/user/balances')).toBeNull();
+
+    const app = await start(phone);
+    await settle();
+    expect(app.text()).toContain('You’re offline');
+    expect(app.text()).toContain('Maple House');
+    expect(app.text()).toContain(notSaved.balances);
+    expect(app.text()).not.toContain('yet');
+  });
+
+  it('says the balances aren’t saved, offline while their copy is withheld (#323)', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    // The phone can't remove the obsolete copy: it stays on the device, never shown (#212).
+    phone.storage.failRemoval = true;
+    await changed(phone);
+    expect(phone.saved('/api/user/balances')).not.toBeNull();
+
+    const app = await start(phone);
+    await settle();
+    expect(phone.saved('/api/user/balances')).not.toBeNull();
+    expect(app.text()).toContain('Maple House');
+    expect(app.text()).toContain(notSaved.balances);
+    expect(app.text()).not.toContain('You owe');
+    expect(app.text()).not.toContain('yet');
   });
 });

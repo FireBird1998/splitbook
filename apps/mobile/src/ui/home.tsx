@@ -232,7 +232,8 @@ export function HomeBalances({
     return (
       <NotAvailableOffline
         compact
-        message="Your balances haven’t been saved on this phone yet. Connect to load them."
+        // True whether they were never saved, removed by a change or sign-out, or withheld.
+        message="Your balances aren’t saved on this phone. Connect to load them."
         onRetry={onRefresh}
       />
     );
@@ -524,7 +525,7 @@ export function HomeGroups({
       {unsaved ? (
         <NotAvailableOffline
           compact
-          message="Your Groups haven’t been saved on this phone yet. Connect to load them."
+          message="Your Groups aren’t saved on this phone. Connect to load them."
           onRetry={onRetry}
         />
       ) : null}
