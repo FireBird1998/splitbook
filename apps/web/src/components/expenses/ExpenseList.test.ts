@@ -258,9 +258,16 @@ describe('the Expense table', () => {
   });
 
   it('dates a row as "Wed 30 Sep", with the year only when it isn’t this year', () => {
-    const now = new Date('2026-10-07T12:00:00.000Z');
-    expect(expenseDay('2026-09-30T06:00:00.000Z', now)).toBe('Wed 30 Sep');
-    expect(expenseDay('2025-09-30T06:00:00.000Z', now)).toBe('Tue 30 Sep 2025');
+    // Noon on the day in the zone the tests run in, sent as the API sends dates: the table shows
+    // the viewer's own day, as the rest of the app does, so these hold in every zone CI runs
+    // (#227), from UTC−11 to UTC+14.
+    const localNoon = (year: number, month: number, day: number) =>
+      new Date(year, month - 1, day, 12).toISOString();
+    const now = new Date(localNoon(2026, 10, 7));
+    expect(expenseDay(localNoon(2026, 9, 30), now)).toBe('Wed 30 Sep');
+    expect(expenseDay(localNoon(2025, 9, 30), now)).toBe('Tue 30 Sep 2025');
+    expect(expenseDay(localNoon(2026, 1, 1), now)).toBe('Thu 1 Jan');
+    expect(expenseDay(localNoon(2025, 12, 31), now)).toBe('Wed 31 Dec 2025');
   });
 
   it('shows a repeat icon only on an Expense a recurring Expense added, and only while the switch is on', () => {
