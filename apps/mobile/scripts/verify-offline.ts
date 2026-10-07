@@ -280,7 +280,11 @@ async function run() {
       const { expense } = controller.getSnapshot();
       if (expense.status === 'detail')
         assert.equal(expense.draft?.description, 'Lakeside dinner, edited');
-      else assert.equal(expense.message, notSaved);
+      else
+        assert.equal(
+          expense.message,
+          'This Expense isn’t saved on this phone. Connect to load it.',
+        );
       await controller.back();
       await controller.openGroup(groupId!);
       await controller.selectMonth('2026-08');

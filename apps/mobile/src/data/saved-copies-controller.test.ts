@@ -75,6 +75,8 @@ const maple = groupOf(mapleId, 'Maple House', 'home');
 const cabin = groupOf(cabinId, 'Cabin Weekend', 'trip');
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const notSaved = 'This view was not saved on this device. Connect to load it.';
+/** An Expense this phone keeps no copy of says so in #332's words (#220). */
+const recordNotSaved = 'This Expense isn’t saved on this phone. Connect to load it.';
 
 /** The Month an Expense page is for (null without one), and its page. */
 const pageOf = (path: string) => {
@@ -580,7 +582,7 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
       august: notSaved,
       balances: [31],
       activity: notSaved,
-      record: notSaved,
+      record: recordNotSaved,
     };
     f.server.offline = true;
     expect(await readOffline(controller)).toEqual(edited);
@@ -605,7 +607,7 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
       august: notSaved,
       balances: [31],
       activity: notSaved,
-      record: notSaved,
+      record: recordNotSaved,
     };
     f.server.offline = true;
     expect(await readOffline(controller)).toEqual(deleted);
@@ -630,7 +632,7 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
       august: notSaved,
       balances: [31],
       activity: notSaved,
-      record: notSaved,
+      record: recordNotSaved,
     };
     f.server.offline = true;
     expect(await readOffline(controller)).toEqual(paid);
@@ -662,7 +664,7 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
       august: notSaved,
       balances: notSaved,
       activity: notSaved,
-      record: notSaved,
+      record: recordNotSaved,
     });
   });
 
@@ -695,7 +697,7 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
       august: notSaved,
       balances: [31],
       activity: notSaved,
-      record: notSaved,
+      record: recordNotSaved,
     });
     expect(controller.getSnapshot().auth.status).toBe('authenticated');
   });

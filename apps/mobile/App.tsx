@@ -1029,6 +1029,11 @@ function ExpenseScreen({ state }: { state: MobileSnapshot }) {
       currentUserId={state.auth.user?.id}
       outline={row ? recordOutline(row, state.auth.user?.id) : null}
       notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
+      emptyNotice={
+        state.offline.active || state.offline.message ? (
+          <OfflineNotice state={state.offline} savedShown={false} />
+        ) : null
+      }
       offline={state.offline.active}
       onClose={() => void controller.back()}
       onEdit={() => void controller.editExpense()}

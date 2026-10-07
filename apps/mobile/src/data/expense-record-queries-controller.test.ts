@@ -950,7 +950,7 @@ describe('after a write (M2-2)', () => {
       expense: {
         status: 'blocked',
         draft: null,
-        message: 'This view was not saved on this device. Connect to load it.',
+        message: 'This Expense isn’t saved on this phone. Connect to load it.',
       },
     });
   });
@@ -1090,7 +1090,7 @@ describe('opening an Expense: what is already known shows at once (loading-state
       expense: {
         status: 'blocked',
         draft: null,
-        message: 'This view was not saved on this device. Connect to load it.',
+        message: 'This Expense isn’t saved on this phone. Connect to load it.',
       },
     });
     f.server.offline = false;

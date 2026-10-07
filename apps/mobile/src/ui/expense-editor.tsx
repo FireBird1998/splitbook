@@ -154,6 +154,7 @@ function ExpenseTask({
   currentUserId,
   onClose,
   notice,
+  emptyNotice,
   offline = false,
   onChange,
   onSave,
@@ -183,6 +184,11 @@ function ExpenseTask({
   onClose?: () => void;
   /** Shown above the content, such as the offline notice. */
   notice?: ReactNode;
+  /**
+   * Shown instead while the Expense opens, or when nothing of it could be: the offline notice
+   * without the saved copy's time or a second Try again (#332's rule, #220).
+   */
+  emptyNotice?: ReactNode;
   /** Saving and checking a save need a connection; the draft stays editable. */
   offline?: boolean;
   onChange: (patch: Partial<ExpenseDraft>) => void;
@@ -295,9 +301,9 @@ function ExpenseTask({
         : 'Not saved'
       : null;
   // The offline banner speaks of what's shown: while the Expense opens, or when nothing of it
-  // could be, the screen's own message and its one Try again stand alone (the loading-state
-  // audit, #220).
-  const shownNotice = draft && state.status !== 'loading' ? notice : null;
+  // could be, it only says the phone is offline, and the screen's own Try again stands alone
+  // (the loading-state audit, #220).
+  const shownNotice = draft && state.status !== 'loading' ? notice : emptyNotice;
   const frame = (body: ReactNode, footer?: ReactNode) => (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <TopBar

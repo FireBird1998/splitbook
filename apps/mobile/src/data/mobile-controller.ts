@@ -290,6 +290,8 @@ const unconfirmedSaveBeforeLeaving =
   'An Expense save in this Group isn’t confirmed yet. Check it on Expenses first: it may already be recorded and change your balance.';
 const unconfirmedPaymentBeforeLeaving =
   'A payment in this Group isn’t confirmed yet. Check it on Balances first: it may already be recorded and change your balance.';
+/** An Expense opened offline that this phone keeps no copy of (#332's words, #220). */
+const expenseNotOnPhone = 'This Expense isn’t saved on this phone. Connect to load it.';
 const keptWorkUnreadable =
   'Couldn’t check this device for drafts or unconfirmed saves in this Group, so you haven’t left. Close this and try again.';
 
@@ -2648,10 +2650,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         await expenseQueries.drop(groupId, expenseId);
       if (!showing()) return;
       const shown = latest().expense;
-      const message = expenseFailureMessage(
-        error,
-        'Could not open this Expense. Please try again.',
-      );
+      const message =
+        error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE'
+          ? expenseNotOnPhone
+          : expenseFailureMessage(error, 'Could not open this Expense. Please try again.');
       // The member went on from what this device knew: what they do is theirs (M6-1). A save in
       // flight, or one unconfirmed, is never touched; an edit or a delete review is told why.
       if (known && shown.status !== 'detail' && shown.draft) {
@@ -2673,9 +2675,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ...snapshot.expense,
           status: denied ? 'blocked' : snapshot.expense.draft ? 'resume' : 'blocked',
           message:
-            error instanceof RequestError
-              ? error.message
-              : 'Could not open this Expense draft. Your saved draft has not been changed.',
+            error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE' && !shown.draft
+              ? expenseNotOnPhone
+              : error instanceof RequestError
+                ? error.message
+                : 'Could not open this Expense draft. Your saved draft has not been changed.',
         },
       });
     }

@@ -327,7 +327,7 @@ describe('opening an Expense: what is already known shows at once (loading-state
     expect(text(screen!.root)).not.toContain('Saved');
   });
 
-  it('has one Try again, and no banner about what’s shown, when nothing of the Expense shows', () => {
+  it('says it is offline above the one Try again when nothing of the Expense shows (S1)', () => {
     const offline = { active: true, refreshedAt: at, message: null };
     render(
       {
@@ -335,11 +335,19 @@ describe('opening an Expense: what is already known shows at once (loading-state
         groupId,
         status: 'blocked',
         requestedExpenseId: billId,
-        message: 'This view was not saved on this device. Connect to load it.',
+        message: 'This Expense isn’t saved on this phone. Connect to load it.',
       },
-      { notice: <OfflineNotice state={offline} onRetry={() => undefined} /> },
+      {
+        notice: <OfflineNotice state={offline} onRetry={() => undefined} />,
+        emptyNotice: <OfflineNotice state={offline} savedShown={false} />,
+      },
     );
+    expect(text(screen!.root)).toContain('You’re offline');
+    expect(text(screen!.root)).toContain('Connect to load the latest.');
     expect(text(screen!.root)).toContain('Couldn’t open this Expense');
+    expect(text(screen!.root)).toContain(
+      'This Expense isn’t saved on this phone. Connect to load it.',
+    );
     expect(text(screen!.root)).not.toContain('What’s shown was saved');
     expect(
       screen!.root.findAll((node) => isHost(node, 'Pressable') && /Try again/.test(text(node))),
