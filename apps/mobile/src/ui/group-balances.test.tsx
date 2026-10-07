@@ -10,7 +10,11 @@ import {
   recordWaitsForDetails,
 } from './group-balances';
 import type { PendingPayment } from '../data/settlement';
-import { RecordPaymentSheet, recordPaymentFootnote } from './record-payment-sheet';
+import {
+  RecordPaymentSheet,
+  recordPaymentFootnote,
+  retryWaitsForCheck,
+} from './record-payment-sheet';
 
 // #118: the Balances destination and the Record payment sheet's states, rendered.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -286,7 +290,13 @@ describe('Record payment sheet states', () => {
     ...overrides,
   });
   const sheet = (state: SettlementState) => {
-    const calls = { record: vi.fn(), close: vi.fn(), change: vi.fn(), leave: vi.fn() };
+    const calls = {
+      record: vi.fn(),
+      retry: vi.fn(),
+      close: vi.fn(),
+      change: vi.fn(),
+      leave: vi.fn(),
+    };
     const root = render(
       <RecordPaymentSheet
         visible
@@ -297,6 +307,7 @@ describe('Record payment sheet states', () => {
         onLeaveField={calls.leave}
         onAcknowledge={() => undefined}
         onRecord={calls.record}
+        onRetry={calls.retry}
         onClose={calls.close}
       />,
     );
@@ -405,6 +416,107 @@ describe('Record payment sheet states', () => {
     expect(labelled(root, 'Record payment ₹1,060.00')).toHaveLength(0);
     act(() => labelled(root, 'Retry payment')[0].props.onPress());
     expect(calls.record).toHaveBeenCalledOnce();
+  });
+
+  // #334: an unconfirmed payment found on this phone waits for the check too, as Retry.
+  it('keeps Retry waiting while it checks an unconfirmed payment, saying why', () => {
+    const { root } = sheet(
+      base({
+        status: 'loading',
+        group: null,
+        balances: [],
+        suggested: null,
+        attempt: { key: 'settlement-key-1', body: '{}' },
+      }),
+    );
+    expect(labelled(root, 'Record payment ₹1,060.00')).toHaveLength(0);
+    const [retry] = labelled(root, 'Retry payment');
+    expect(retry.props.accessibilityState).toEqual({ disabled: true, busy: false });
+    expect(retry.props.accessibilityHint).toBe(retryWaitsForCheck);
+    expect(retry.props.disabled).toBe(true);
+    expect(text(root)).toContain('Checking the latest balances…');
+  });
+
+  // #334, device check: Check payment named both people "Former member" while it checked.
+  it('names people as this phone knows them while it checks, and “Former member” only for someone the checked Group lacks', () => {
+    const known = { [you]: 'Alex Rivera', [sam]: 'Sam Chen' };
+    const attempt = { key: 'settlement-key-1', body: '{}' };
+    const checking = sheet(
+      base({ status: 'loading', group: null, balances: [], suggested: null, known, attempt }),
+    );
+    expect(labelled(checking.root, 'You pay Sam Chen.')).toHaveLength(1);
+    expect(text(checking.root)).toContain('ARYou');
+    expect(text(checking.root)).toContain('SCSam Chen');
+    expect(text(checking.root)).not.toContain('Former member');
+    act(() => screen?.unmount());
+    // Checked: Sam has left, so the Group it read names him a former member, whatever this
+    // phone knew before.
+    const left = { ...group(), members: group().members.filter(({ user }) => user.id !== sam) };
+    const checked = sheet(base({ status: 'uncertain', group: left, known, attempt }));
+    expect(labelled(checked.root, 'You pay Former member. Suggested ₹1,060.00.')).toHaveLength(1);
+    expect(text(checked.root)).toContain('FMFormer member');
+  });
+
+  // #334, review: Try again is only for a check that couldn't run.
+  it.each([
+    ['checking', { status: 'loading', draft: null, suggested: null }],
+    ['editing', {}],
+    ['under review', { status: 'review', message: 'The suggested amount changed.' }],
+    ['recording', { status: 'saving' }],
+    ['unconfirmed', { status: 'uncertain', attempt: { key: 'settlement-key-1', body: '{}' } }],
+    ['refused', { status: 'blocked', draft: null, message: 'You no longer have access.' }],
+    ['gone', { status: 'ready', draft: null, message: 'This suggested payment has changed.' }],
+  ] as [string, Partial<SettlementState>][])(
+    'offers no Try again while %s',
+    (_state, overrides) => {
+      const { root } = sheet(
+        base({
+          chosen: { paidBy: you, paidTo: sam, currency: 'INR', shown: 1060 },
+          known: { [you]: 'Alex Rivera', [sam]: 'Sam Chen' },
+          ...overrides,
+        }),
+      );
+      expect(labelled(root, 'Try again')).toHaveLength(0);
+    },
+  );
+
+  it('offers Try again when the check couldn’t run, and nothing once access is refused', () => {
+    const chosen = { paidBy: you, paidTo: sam, currency: 'INR', shown: 1060 };
+    const known = { [you]: 'Alex Rivera', [sam]: 'Sam Chen' };
+    const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+    const failed = sheet(
+      base({
+        status: 'error',
+        group: null,
+        balances: [],
+        draft: null,
+        suggested: null,
+        chosen,
+        known,
+        message: unreachable,
+      }),
+    );
+    expect(text(failed.root)).toContain(unreachable);
+    expect(labelled(failed.root, 'You pay Sam Chen. Suggested ₹1,060.00.')).toHaveLength(1);
+    expect(labelled(failed.root, 'Record payment ₹1,060.00')).toHaveLength(0);
+    act(() => labelled(failed.root, 'Try again')[0].props.onPress());
+    expect(failed.calls.retry).toHaveBeenCalledOnce();
+    expect(failed.calls.record).not.toHaveBeenCalled();
+    act(() => screen?.unmount());
+    const refused = sheet(
+      base({
+        status: 'blocked',
+        group: null,
+        balances: [],
+        draft: null,
+        suggested: null,
+        chosen,
+        known,
+        message: 'You no longer have access to this Group.',
+      }),
+    );
+    expect(labelled(refused.root, 'Try again')).toHaveLength(0);
+    expect(labelled(refused.root, 'You pay Sam Chen. Suggested ₹1,060.00.')).toHaveLength(0);
   });
 
   it('says so, without a Record button, when the suggestion is gone', () => {

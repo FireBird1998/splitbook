@@ -20,13 +20,20 @@ import {
   LinearProgress,
   SelectorTile,
   TileGrid,
+  progressHeight,
   radius,
 } from './compact';
+import { inPlace } from './financial-views';
 import { Field, FieldError } from './group-workflows';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
 
 export const recordPaymentFootnote = 'Records a payment made outside Splitbook. No money moves.';
+/** Record's reason while the sheet checks the latest balances (#334). */
+export const recordWaitsForCheck = 'Record is available once the latest balances are checked.';
+/** Retry's, for an unconfirmed payment found on this phone. */
+export const retryWaitsForCheck = 'Retry is available once the latest balances are checked.';
+const checkingBalances = 'Checking the latest balances…';
 
 /** Minor units, or null while the entry isn't a valid amount yet. */
 const minor = (amount: string | number, currency: string) => {
@@ -108,6 +115,11 @@ function Checkbox({
  * Record payment, a sheet over Balances. Pre-filled from the chosen suggestion; Record checks
  * the latest balances live, waits for the overpayment tick, and keeps an unconfirmed record
  * locked for an explicit retry.
+ *
+ * While the sheet checks the latest balances, it shows the chosen payment as Balances showed
+ * it, locked, and Record waits for the check, saying so where the footnote was; when the check
+ * can't reach SplitBook, the figures stay and Try again checks again (#334). Nothing moves when
+ * the progress bar comes or goes: the sheet keeps its room.
  */
 export function RecordPaymentSheet({
   visible,
@@ -118,6 +130,7 @@ export function RecordPaymentSheet({
   onLeaveField,
   onAcknowledge,
   onRecord,
+  onRetry,
   onClose,
 }: {
   visible: boolean;
@@ -129,10 +142,29 @@ export function RecordPaymentSheet({
   onLeaveField: (field: SettlementField) => void;
   onAcknowledge: (acknowledged: boolean) => void;
   onRecord: () => void;
+  /** Try again, after the sheet couldn't check the latest balances: it checks them again. */
+  onRetry: () => void;
   onClose: () => void;
 }) {
   const theme = useTheme();
-  const { draft, status } = state;
+  const { draft, status, chosen } = state;
+  // Until the check confirms the chosen payment, or when it can't run, the payment as Balances
+  // showed it: shown locked, and never recorded from.
+  const shown =
+    !draft && (status === 'loading' || status === 'error') ? (chosen?.shown ?? null) : null;
+  const figures: SettlementDraft | null =
+    draft ??
+    (shown !== null && chosen
+      ? {
+          paidBy: chosen.paidBy,
+          paidTo: chosen.paidTo,
+          currency: chosen.currency,
+          amount: String(shown),
+          note: '',
+        }
+      : null);
+  const suggested = draft ? state.suggested : shown;
+  const checking = status === 'loading';
   const errors = visibleFieldErrors(settlementFields, state.validation);
   const amountInput = useRef<TextInput | null>(null);
   const noteInput = useRef<TextInput | null>(null);
@@ -151,41 +183,70 @@ export function RecordPaymentSheet({
     setAmountFocused(false);
   }, [visible]);
 
+  // Once the check has read the Group, it alone names people; until then, this phone's own
+  // knowledge of the Group does. "Former member" only for someone neither knows (#334).
   const fullName = (id: string) =>
-    state.group?.members.find((member) => member.user.id === id)?.user.name ?? 'Former member';
+    (state.group
+      ? state.group.members.find((member) => member.user.id === id)?.user.name
+      : state.known[id]) ?? 'Former member';
   const name = (id: string) => (id === currentUserId ? 'You' : fullName(id));
   const editable = Boolean(draft) && ['editing', 'review'].includes(status) && !state.attempt;
   const extra = draft ? overpayment(state, currentUserId, name(draft.paidBy)) : null;
   const waitingForTick = Boolean(extra) && !state.acknowledged;
-  const paid = draft ? minor(draft.amount, draft.currency) : null;
+  const paid = figures ? minor(figures.amount, figures.currency) : null;
   const amountLabel =
-    draft && paid !== null && paid > 0
-      ? formatCurrency(toMajorAmount(paid, draft.currency), draft.currency)
+    figures && paid !== null && paid > 0
+      ? formatCurrency(toMajorAmount(paid, figures.currency), figures.currency)
       : undefined;
   // A single correction already shows on its field.
   const message =
     state.message && !Object.values(errors).includes(state.message) ? state.message : null;
+  // An unconfirmed payment found on this phone waits for the check as Retry.
+  const retrying = checking && state.attempt !== null;
 
-  const footer = draft ? (
-    <>
-      {status === 'uncertain' ? (
-        <CompactButton label="Retry payment" block onPress={onRecord} />
-      ) : status !== 'blocked' ? (
-        <CompactButton
-          label="Record payment"
-          amount={amountLabel}
-          busy={status === 'saving' ? 'Recording payment…' : undefined}
-          block
-          disabled={status === 'saving' || waitingForTick}
-          hint={waitingForTick ? 'Tick “I meant to pay more than suggested” first.' : undefined}
-          onPress={onRecord}
-        />
-      ) : null}
-      <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
-        {recordPaymentFootnote}
-      </CompactText>
-    </>
-  ) : undefined;
+  const footer =
+    figures || status === 'error' ? (
+      <>
+        {status === 'uncertain' ? (
+          <CompactButton label="Retry payment" block onPress={onRecord} />
+        ) : status === 'error' ? (
+          <CompactButton label="Try again" block onPress={onRetry} />
+        ) : status !== 'blocked' ? (
+          <CompactButton
+            label={retrying ? 'Retry payment' : 'Record payment'}
+            amount={retrying ? undefined : amountLabel}
+            busy={status === 'saving' ? 'Recording payment…' : undefined}
+            block
+            disabled={checking || waitingForTick}
+            hint={
+              checking
+                ? retrying
+                  ? retryWaitsForCheck
+                  : recordWaitsForCheck
+                : waitingForTick
+                  ? 'Tick “I meant to pay more than suggested” first.'
+                  : undefined
+            }
+            onPress={onRecord}
+          />
+        ) : null}
+        {/* While the check runs, it says so in the footnote's place, which the footnote holds. */}
+        {inPlace({
+          holds: checking ? (
+            <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+              {recordPaymentFootnote}
+            </CompactText>
+          ) : null,
+          children: (
+            <View style={{ alignSelf: 'stretch' }}>
+              <CompactText variant="caption" tone="secondary" style={{ textAlign: 'center' }}>
+                {checking ? checkingBalances : recordPaymentFootnote}
+              </CompactText>
+            </View>
+          ),
+        })}
+      </>
+    ) : undefined;
 
   return (
     <BottomSheet
@@ -197,13 +258,14 @@ export function RecordPaymentSheet({
       onDone={onClose}
       footer={footer}
     >
-      {status === 'loading' || status === 'saving' ? (
-        <View style={{ marginHorizontal: -20 }}>
+      {/* The bar's room stays, so nothing below moves when it comes or goes. */}
+      <View style={{ marginHorizontal: -20, height: progressHeight }}>
+        {checking || status === 'saving' ? (
           <LinearProgress
             label={status === 'saving' ? 'Recording payment' : 'Checking the latest balances'}
           />
-        </View>
-      ) : null}
+        ) : null}
+      </View>
       {status === 'uncertain' ? (
         <Banner
           tone="warning"
@@ -215,37 +277,35 @@ export function RecordPaymentSheet({
       ) : message ? (
         <Banner tone={draft ? 'warning' : 'info'} message={message} />
       ) : null}
-      {!draft ? (
-        status === 'loading' ? (
-          <CompactText tone="secondary">Checking the latest balances…</CompactText>
+      {!figures ? (
+        checking ? (
+          <CompactText tone="secondary">{checkingBalances}</CompactText>
         ) : null
       ) : (
         <>
           <View
             accessible
             accessibilityLabel={`${
-              draft.paidBy === currentUserId
-                ? `You pay ${fullName(draft.paidTo)}`
-                : `${fullName(draft.paidBy)} pays ${draft.paidTo === currentUserId ? 'you' : fullName(draft.paidTo)}`
+              figures.paidBy === currentUserId
+                ? `You pay ${fullName(figures.paidTo)}`
+                : `${fullName(figures.paidBy)} pays ${figures.paidTo === currentUserId ? 'you' : fullName(figures.paidTo)}`
             }.${
-              state.suggested === null
-                ? ''
-                : ` Suggested ${formatCurrency(state.suggested, draft.currency)}.`
+              suggested === null ? '' : ` Suggested ${formatCurrency(suggested, figures.currency)}.`
             }`}
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
           >
-            <CompactAvatar name={fullName(draft.paidBy)} />
-            <CompactText weight="semibold">{name(draft.paidBy)}</CompactText>
+            <CompactAvatar name={fullName(figures.paidBy)} />
+            <CompactText weight="semibold">{name(figures.paidBy)}</CompactText>
             <Icon name="arrow-forward" size={18} color={theme.textMuted} />
-            <CompactAvatar name={fullName(draft.paidTo)} />
+            <CompactAvatar name={fullName(figures.paidTo)} />
             <CompactText weight="semibold" style={{ flexShrink: 1 }}>
-              {name(draft.paidTo)}
+              {name(figures.paidTo)}
             </CompactText>
-            {state.suggested !== null ? (
+            {suggested !== null ? (
               <CompactText variant="caption" tone="secondary" style={{ marginLeft: 'auto' }}>
                 Suggested{' '}
                 <CompactText variant="caption" tone="secondary" style={{ fontFamily: fonts.mono }}>
-                  {formatCurrency(state.suggested, draft.currency)}
+                  {formatCurrency(suggested, figures.currency)}
                 </CompactText>
               </CompactText>
             ) : null}
@@ -278,7 +338,7 @@ export function RecordPaymentSheet({
               >
                 <View
                   accessible
-                  accessibilityLabel={`Currency ${draft.currency}, the Group’s currency`}
+                  accessibilityLabel={`Currency ${figures.currency}, the Group’s currency`}
                   style={{
                     paddingVertical: 6,
                     paddingHorizontal: 10,
@@ -287,12 +347,12 @@ export function RecordPaymentSheet({
                   }}
                 >
                   <CompactText tone="secondary" style={{ fontFamily: fonts.mono, fontSize: 15 }}>
-                    {draft.currency}
+                    {figures.currency}
                   </CompactText>
                 </View>
                 <TextInput
                   ref={amountInput}
-                  value={draft.amount}
+                  value={figures.amount}
                   maxLength={40}
                   keyboardType="decimal-pad"
                   editable={editable}
@@ -303,7 +363,7 @@ export function RecordPaymentSheet({
                   accessibilityHint={errors.amount}
                   onChangeText={(amount) => {
                     // A refused edit leaves the field showing the draft's amount.
-                    if (amount !== draft.amount && acceptsNumericText(amount, draft.amount))
+                    if (amount !== figures.amount && acceptsNumericText(amount, figures.amount))
                       onChange({ amount });
                   }}
                   onFocus={() => setAmountFocused(true)}
@@ -360,7 +420,7 @@ export function RecordPaymentSheet({
             <SelectorTile
               icon="document-text-outline"
               label="Note, optional"
-              value={draft.note.trim() || 'Add a note'}
+              value={figures.note.trim() || 'Add a note'}
               locked={!editable}
               onPress={() => {
                 setNoteOpen(true);
@@ -375,7 +435,7 @@ export function RecordPaymentSheet({
                 noteInput.current = node;
               }}
               error={errors.note}
-              value={draft.note}
+              value={figures.note}
               editable={editable}
               maxLength={500}
               multiline

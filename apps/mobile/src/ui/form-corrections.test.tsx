@@ -236,6 +236,7 @@ function PaymentSheet({ controller }: { controller: MobileController }) {
       onLeaveField={controller.touchSettlementField}
       onAcknowledge={controller.acknowledgeSettlement}
       onRecord={() => void controller.recordSettlement()}
+      onRetry={() => void controller.retrySettlementCheck()}
       onClose={() => void controller.back()}
     />
   );

@@ -76,6 +76,8 @@ function setup(
     },
   };
   const writes: RequestInit[] = [];
+  /** NetInfo's listeners: the device's connection, which `connect` reports. */
+  const connection = new Set<(state: { isConnected: boolean | null }) => void>();
   const create = () =>
     createMobileController(
       {
@@ -94,6 +96,14 @@ function setup(
           },
         },
         settlementAttempts: store,
+        netInfo: {
+          // As NetInfo does, a new listener hears the connection as it is now.
+          addEventListener: (listener) => {
+            connection.add(listener);
+            listener({ isConnected: true });
+            return () => connection.delete(listener);
+          },
+        },
         newSubmissionKey: () => `settlement-key-${++key}`,
         accountLocal: {
           owner: {
@@ -157,7 +167,10 @@ function setup(
         },
       },
     );
-  return { controller: create(), create, store, records, writes };
+  /** NetInfo reports the device's connection: false when it drops, true when it's back. */
+  const connect = (isConnected: boolean) =>
+    connection.forEach((listener) => listener({ isConnected }));
+  return { controller: create(), create, store, records, writes, connect };
 }
 describe('native payment recording', () => {
   it('unlocks a definitely rejected first submission even when a warm invitation interrupts its response', async () => {
@@ -814,12 +827,14 @@ describe('native payment recording', () => {
     expect(controller.getSnapshot().settlement).toMatchObject({ status: 'uncertain', attempt });
     expect([...records.values()]).toEqual([expect.objectContaining(attempt)]);
 
-    // Opened again while the gateway still fails, it says SplitBook can't be reached.
+    // Opened again while the gateway still fails, it says SplitBook can't be reached, and that
+    // the payment may already be recorded (#334).
     await controller.openSettlements(groupId);
     expect(controller.getSnapshot().settlement).toMatchObject({
       status: 'uncertain',
       attempt,
-      message: 'Could not reach SplitBook. Check your connection and try again.',
+      message:
+        'Could not reach SplitBook. Check your connection and try again. This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.',
     });
     expect(writes).toHaveLength(1);
 
@@ -1061,5 +1076,282 @@ describe('native payment recording', () => {
     await controller.openRecordPayment(actor, recipient, 'INR');
     expect(controller.getSnapshot().screen).toBe('group');
     expect(controller.getSnapshot().settlement.draft).toBeNull();
+  });
+
+  // #334, final review: names this phone knew of a Group the member has lost name no one.
+  it.each(['gone', 'removed'] as const)(
+    'names no one from what this phone knew once Check payment finds the member %s',
+    async (refusal) => {
+      let lose = true,
+        refused = false;
+      const { controller } = setup((path, init) => {
+        if (path.endsWith('/settlements') && init.method === 'POST' && lose) {
+          lose = false;
+          return Promise.reject(new TypeError('Network request failed'));
+        }
+        if (refused && path === `/api/groups/${groupId}`)
+          return refusal === 'gone'
+            ? json({ status: 404, error: 'Group not found' }, 404)
+            : json({
+                status: 200,
+                data: {
+                  ...group,
+                  members: group.members.filter(({ user }) => user._id !== actor),
+                },
+              });
+      });
+      await controller.signIn('alex');
+      await controller.openGroup(groupId, true, 'balances');
+      await controller.openRecordPayment(actor, recipient, 'INR');
+      await controller.recordSettlement();
+      await controller.back();
+      expect(controller.getSnapshot().pendingPayment).toMatchObject({ groupId });
+      refused = true;
+      await controller.openPendingPayment();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'settlement',
+        settlement: { status: 'blocked', group: null, draft: { paidTo: recipient } },
+      });
+      expect(controller.getSnapshot().settlement.known).toEqual({});
+    },
+  );
+
+  it('names no one from what this phone knew once a read behind the open sheet is refused', async () => {
+    let hold = false,
+      release!: (value: FetchResponse) => void,
+      entered!: () => void;
+    const held = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const { controller } = setup((path) => {
+      if (hold && path.endsWith('/expenses')) {
+        hold = false;
+        entered();
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    hold = true;
+    const refreshing = controller.refreshExpenses();
+    await held;
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      known: { [actor]: 'Alex', [recipient]: 'Sam' },
+    });
+    release(json({ status: 403, error: 'Access removed' }, 403));
+    await refreshing;
+    expect(controller.getSnapshot().settlement).toMatchObject({ group: null, balances: [] });
+    expect(controller.getSnapshot().settlement.known).toEqual({});
+  });
+
+  // #334, review: Try again is for a check that couldn't run. Anywhere else it does nothing.
+  it('checks again on Try again only after the sheet’s check couldn’t run, and otherwise sends and changes nothing', async () => {
+    let down = false,
+      denied = false,
+      hold = false;
+    let release!: (value: FetchResponse | Promise<never>) => void, entered!: () => void;
+    const sent: string[] = [];
+    const { controller } = setup((path, init) => {
+      sent.push(`${init.method ?? 'GET'} ${path}`);
+      if (down && path.startsWith('/api/groups/'))
+        return Promise.reject(new TypeError('Network request failed'));
+      if (denied && path === `/api/groups/${groupId}`)
+        return json({ status: 403, error: 'Access removed' }, 403);
+      if (hold && path.endsWith('/settlements') && init.method === 'POST')
+        return new Promise((resolve) => {
+          release = resolve;
+          entered();
+        });
+    });
+    /** Try again in this state sends nothing and publishes nothing. */
+    const ignored = async (state: string) => {
+      const before = controller.getSnapshot(),
+        from = sent.length;
+      await controller.retrySettlementCheck();
+      expect({ state, sent: sent.slice(from), same: controller.getSnapshot() === before }).toEqual({
+        state,
+        sent: [],
+        same: true,
+      });
+    };
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().settlement.status).toBe('editing');
+    await ignored('editing');
+
+    // The check couldn't run, and an invitation opened over the sheet: away from it, Try again
+    // does nothing.
+    await controller.back();
+    down = true;
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().settlement.status).toBe('error');
+    down = false;
+    await controller.openInvitation('http://localhost:4138/join/1234abcd');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      settlement: { status: 'error' },
+    });
+    await ignored('error, away from the sheet');
+
+    // On the sheet, Try again runs the check again, with the same two reads.
+    await controller.openGroup(groupId, true, 'balances');
+    down = true;
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().settlement.status).toBe('error');
+    down = false;
+    const from = sent.length;
+    await controller.retrySettlementCheck();
+    expect(sent.slice(from)).toEqual([
+      `GET /api/groups/${groupId}`,
+      `GET /api/groups/${groupId}/balances`,
+    ]);
+    expect(controller.getSnapshot().settlement.status).toBe('editing');
+
+    // Recording, then unconfirmed once its reply is lost.
+    hold = true;
+    const dispatched = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const saving = controller.recordSettlement();
+    await dispatched;
+    expect(controller.getSnapshot().settlement.status).toBe('saving');
+    await ignored('saving');
+    hold = false;
+    release(Promise.reject(new TypeError('Network request failed')));
+    await saving;
+    expect(controller.getSnapshot().settlement.status).toBe('uncertain');
+    await ignored('uncertain');
+
+    // Refused: access is gone, so there's nothing to check again.
+    denied = true;
+    await controller.openSettlements(groupId);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      settlement: { status: 'blocked' },
+    });
+    await ignored('blocked');
+
+    denied = false;
+    await controller.signOut();
+    await ignored('signed out');
+  });
+
+  // #334, review: the sheet showed Balances' ₹30 while it checked, then a ₹20 suggestion silently.
+  it('says so when the sheet’s check finds another amount than Balances showed', async () => {
+    let amount = 30;
+    const { controller, writes } = setup((path) =>
+      path === `/api/groups/${groupId}/balances` ? json(balances(amount)) : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    expect(controller.getSnapshot().financial.balances.data?.[0].debts[0].amount).toBe(30);
+    amount = 20;
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      chosen: { shown: 30 },
+      suggested: 20,
+      draft: { amount: '20' },
+      message:
+        'The suggested amount changed since Balances showed it. Check the amount, then record it.',
+    });
+    // Closed, Balances show ₹20 too: opened again, the same amount says nothing.
+    await controller.back();
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      chosen: { shown: 20 },
+      suggested: 20,
+      message: null,
+    });
+    expect(writes).toHaveLength(0);
+  });
+
+  // #334: after a network failure, Retry sends the first attempt's record again, never a new one.
+  it('says a Retry that couldn’t reach SplitBook sent nothing, and that the first may already be recorded, then sends its key and revision again only on Retry', async () => {
+    let down = false,
+      posted = 0;
+    const { controller, writes, records, connect } = setup((path, init) => {
+      if (down && path.startsWith('/api/groups/'))
+        return Promise.reject(new TypeError('Network request failed'));
+      // The first payment's reply never arrives: SplitBook may have recorded it.
+      if (path.endsWith('/settlements') && init.method === 'POST' && ++posted === 1)
+        return Promise.reject(new TypeError('Network request failed'));
+    });
+    const sent = (init: RequestInit) => {
+      const headers = new Headers(init.headers);
+      return {
+        key: headers.get('Idempotency-Key'),
+        revision: headers.get('X-Splitbook-Revision'),
+        body: init.body,
+      };
+    };
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    controller.updateSettlement({ amount: '10', note: 'Paid already' });
+    await controller.recordSettlement();
+    expect(writes).toHaveLength(1);
+    const first = sent(writes[0]);
+    const attempt = { key: first.key, body: first.body };
+    expect(first.key).toBe('settlement-key-1');
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'uncertain',
+      attempt,
+      message:
+        'This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.',
+    });
+
+    // Retry while SplitBook can't be reached: its checks fail before the payment is sent. The
+    // sheet says so, and that the first may already be recorded, still offering Retry with the
+    // record kept: never read as a payment that wasn't recorded.
+    down = true;
+    await controller.recordSettlement();
+    expect(writes).toHaveLength(1);
+    const unreachableAndUnconfirmed =
+      'Could not reach SplitBook. Check your connection and try again. This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.';
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'uncertain',
+      attempt,
+      message: unreachableAndUnconfirmed,
+    });
+    expect([...records.values()]).toEqual([expect.objectContaining(attempt)]);
+
+    // Closed, then opened again from Balances while SplitBook still can't be reached: the same.
+    await controller.back();
+    await controller.openPendingPayment();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      settlement: { status: 'uncertain', attempt, message: unreachableAndUnconfirmed },
+    });
+    expect(writes).toHaveLength(1);
+
+    // Nothing is sent by itself: not on a refresh, nor on reconnecting, nor once SplitBook
+    // answers again.
+    await controller.refresh('foreground');
+    connect(false);
+    down = false;
+    connect(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await controller.refresh('foreground');
+    await controller.refresh('pull');
+    expect(writes).toHaveLength(1);
+    expect(controller.getSnapshot().settlement).toMatchObject({ status: 'uncertain', attempt });
+
+    // Retry: the second payment carries the first one's key, body and revision.
+    await controller.recordSettlement();
+    expect(writes).toHaveLength(2);
+    expect(sent(writes[1])).toEqual(first);
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      snackbar: { message: 'Payment recorded' },
+      settlement: { attempt: null },
+    });
   });
 });

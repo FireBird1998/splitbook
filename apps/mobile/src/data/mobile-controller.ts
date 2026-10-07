@@ -32,6 +32,7 @@ import {
   settlementSuggestion,
   validateSettlementDraft,
   type PendingPayment,
+  type SettlementChoice,
   type SettlementDraft,
   type SettlementField,
 } from './settlement';
@@ -368,6 +369,9 @@ const earlierPayment = 'This earlier payment isn’t confirmed yet, so it comes 
 /** Only suggested payments are recorded, so one that's gone from the latest balances isn't. */
 const suggestionChanged =
   'This suggested payment has changed. Close this to see the latest balances.';
+/** The sheet's check found another amount than Balances showed: it says so, never silently. */
+const suggestionMoved =
+  'The suggested amount changed since Balances showed it. Check the amount, then record it.';
 
 /**
  * Session transport and Group/financial reads. Secure credential
@@ -1925,9 +1929,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ? { ...emptyActivity(), groupId: id, status: 'denied', message }
           : snapshot.activity,
       expense,
+      // Nothing of the lost Group names anyone on the sheet any more (#334).
       settlement:
         snapshot.settlement.groupId === id
-          ? { ...snapshot.settlement, group: null, balances: [] }
+          ? { ...snapshot.settlement, group: null, balances: [], known: {} }
           : snapshot.settlement,
     });
   };
@@ -2697,7 +2702,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               ? expenseNotOnPhone
               : error instanceof RequestError
                 ? error.message
-                : 'Could not open this Expense draft. Your saved draft has not been changed.',
+                : // Only a draft kept on this phone has one to keep (#334).
+                  expenseId || snapshot.keptDraft?.groupId === groupId
+                  ? 'Could not open this Expense draft. Your saved draft has not been changed.'
+                  : 'Could not open a new Expense. Please try again.',
         },
       });
     }
@@ -2838,8 +2846,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     publish({ ...snapshot, expense: { ...editor, status: 'loading' } });
     try {
       await lease.write(() => storage.remove(lease.accountId, editor.groupId!));
-      if (current(owner) && view === viewRequest)
-        await openExpense(editor.groupId, editor.requestedExpenseId ?? undefined);
+      if (!current(owner) || view !== viewRequest) return;
+      // Nothing is kept for the Group any more: the form opening again isn't a draft (#334).
+      if (snapshot.keptDraft?.groupId === editor.groupId) publish({ ...snapshot, keptDraft: null });
+      await openExpense(editor.groupId, editor.requestedExpenseId ?? undefined);
     } catch {
       if (current(owner) && view === viewRequest)
         publish({
@@ -3792,9 +3802,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   /**
    * The Record payment sheet over Balances. Its reads are live; they never cancel the Group's
-   * own reads, and leaving the Group or closing the sheet cancels them.
+   * own reads, and leaving the Group or closing the sheet cancels them. `chosen` is the payment
+   * chosen on Balances, which the sheet shows as Balances did while it checks (#334).
    */
-  const openSettlements = async (groupId: string) => {
+  const openSettlements = async (groupId: string, chosen: SettlementChoice | null = null) => {
     if (snapshot.auth.status !== 'authenticated') return;
     const owner = generation,
       view = viewRequest,
@@ -3802,9 +3813,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       lease = accountStorage(),
       storage = dependencies.settlementAttempts;
     const stale = () => !current(owner) || view !== viewRequest || request !== settlementRequest;
+    // Until the check reads the Group, the sheet names people as this phone knows them: from
+    // the Group's Balances, then its members, which win (#334).
+    const known: Record<string, string> = {};
+    if (snapshot.financial.groupId === groupId)
+      for (const bucket of snapshot.financial.balances.data ?? [])
+        for (const person of [
+          ...bucket.balances.map(({ user }) => user),
+          ...bucket.debts.flatMap(({ from, to }) => [from, to]),
+        ])
+          if (person.id) known[person.id] = person.name;
+    if (snapshot.detail.id === groupId)
+      for (const { user } of snapshot.detail.data?.members ?? []) known[user.id] = user.name;
     navigate(
       { screen: 'settlement', groupId, reread: rereadOf(groupId) },
-      { settlement: { ...emptySettlement(), groupId, status: 'loading' } },
+      { settlement: { ...emptySettlement(), groupId, status: 'loading', chosen, known } },
     );
     try {
       if (!lease || !storage) throw new DeviceStorageError(recoveryStorageMissing);
@@ -3833,21 +3856,27 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
     } catch (error) {
       if (stale() || error instanceof Superseded) return;
+      const status =
+        error instanceof RequestError && [403, 404].includes(error.status)
+          ? 'blocked'
+          : snapshot.settlement.attempt
+            ? 'uncertain'
+            : 'error';
+      // Storage problems say so, rather than pointing at the connection.
+      const reason =
+        error instanceof RequestError || error instanceof DeviceStorageError
+          ? error.message
+          : 'Couldn’t check the latest balances. Close this and try again when you’re connected.';
       publish({
         ...snapshot,
         settlement: {
           ...snapshot.settlement,
-          status:
-            error instanceof RequestError && [403, 404].includes(error.status)
-              ? 'blocked'
-              : snapshot.settlement.attempt
-                ? 'uncertain'
-                : 'error',
-          // Storage problems say so, rather than pointing at the connection.
-          message:
-            error instanceof RequestError || error instanceof DeviceStorageError
-              ? error.message
-              : 'Couldn’t check the latest balances. Close this and try again when you’re connected.',
+          status,
+          // Refused: what this phone knew of the Group names no one on the sheet (#334).
+          known: status === 'blocked' ? {} : snapshot.settlement.known,
+          // A payment stored on this phone may still be recorded, whatever kept this check from
+          // running: it says so too, so it's never taken for one that wasn't (#334).
+          message: status === 'uncertain' ? `${reason} ${unconfirmedPayment}` : reason,
         },
       });
     }
@@ -3981,7 +4010,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       groupId = state.groupId,
       draft = state.draft;
     let attempt = state.attempt,
-      completed = false;
+      completed = false,
+      // Whether the payment went out: until then, a failure can't have recorded it (#334).
+      sending = false;
     publish({ ...snapshot, settlement: { ...state, status: 'saving', message: null } });
     try {
       const context = await settlementContext(groupId, owner);
@@ -4058,6 +4089,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       if (!current(owner) || view !== viewRequest) return;
       publish({ ...snapshot, settlement: { ...snapshot.settlement, attempt } });
+      sending = true;
       const response = await ledgerWrite(groupId, `/api/groups/${groupId}/settlements`, owner, {
         method: 'POST',
         serializedBody: attempt.body,
@@ -4129,6 +4161,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         (error instanceof RequestError && [403, 404, 409, 422].includes(error.status)) ||
         (error instanceof Error &&
           ['INVALID_MEMBERS', 'FORBIDDEN_SETTLEMENT', 'SAME_PARTY'].includes(error.message));
+      // A Retry whose checks failed before the payment went out sent nothing this time: it says
+      // why, as opening the sheet does. The first may still be recorded, so it says that too, and
+      // stays unconfirmed, with the same record (#334).
+      const unsent = !sending && error instanceof RequestError ? error.message : null;
       publish({
         ...snapshot,
         settlement: {
@@ -4138,7 +4174,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           message: denied
             ? 'This payment can’t be recorded with your current access or details. Any unconfirmed record stays on this device.'
             : attempt
-              ? unconfirmedPayment
+              ? unsent
+                ? `${unsent} ${unconfirmedPayment}`
+                : unconfirmedPayment
               : error instanceof Error
                 ? error.message
                 : 'Could not record this payment. Your entries are kept.',
@@ -4183,7 +4221,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.financial.balances.changed
     )
       return;
-    await openSettlements(groupId);
+    // The sheet shows the payment as Balances show it until its check lands (#334).
+    const debt = snapshot.financial.balances.data
+      ?.find((bucket) => bucket.currency === currency)
+      ?.debts.find((item) => item.from.id === paidBy && item.to.id === paidTo);
+    await checkChosenPayment(groupId, { paidBy, paidTo, currency, shown: debt?.amount ?? null });
+  };
+
+  /**
+   * The sheet's check of the payment chosen on Balances, then that payment pre-filled from the
+   * latest balances: on Record, and on Try again after the check couldn't run (#334).
+   */
+  const checkChosenPayment = async (groupId: string, chosen: SettlementChoice) => {
+    const { paidBy, paidTo, currency } = chosen;
+    await openSettlements(groupId, chosen);
     // Closed while the live read ran.
     const { screen, settlement: state } = latest();
     if (screen !== 'settlement' || state.groupId !== groupId) return;
@@ -4204,6 +4255,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     selectSettlement(paidBy, paidTo, currency);
     if (!snapshot.settlement.draft)
       publish({ ...snapshot, settlement: { ...snapshot.settlement, message: suggestionChanged } });
+    // The member saw Balances' amount while the sheet checked: a new one says so (#334).
+    else if (chosen.shown !== null && snapshot.settlement.suggested !== chosen.shown)
+      publish({ ...snapshot, settlement: { ...snapshot.settlement, message: suggestionMoved } });
   };
 
   /** Check payment on Balances opens the Group's unconfirmed payment in the sheet, to retry. */
@@ -4218,6 +4272,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.offline.active
     )
       return;
+    await checkPendingPayment(groupId);
+  };
+
+  /** The sheet's check of the Group's unconfirmed payment: on Check payment, and on Try again. */
+  const checkPendingPayment = async (groupId: string) => {
     await openSettlements(groupId);
     const { screen, settlement: state } = latest();
     // Resolved since Balances showed it: nothing is waiting any more.
@@ -4229,6 +4288,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           message: 'Nothing is waiting to be retried. Close this to see the latest balances.',
         },
       });
+  };
+
+  /**
+   * Try again, once the sheet couldn't check the latest balances (#334): the same check, with
+   * the same reads, for the same payment. It sends nothing, and Record waits for it as it does
+   * when the sheet opens. An unconfirmed payment is retried by Record instead, with its own key.
+   */
+  const retrySettlementCheck = async () => {
+    const { status, groupId, chosen } = snapshot.settlement;
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.screen !== 'settlement' ||
+      status !== 'error' ||
+      !groupId
+    )
+      return;
+    await (chosen ? checkChosenPayment(groupId, chosen) : checkPendingPayment(groupId));
   };
 
   /**
@@ -5313,6 +5389,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                 status: 'blocked',
                 group: null,
                 balances: [],
+                known: {},
                 message: error.message,
               },
             });
@@ -5454,6 +5531,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openSettlements,
     openRecordPayment,
     openPendingPayment,
+    retrySettlementCheck,
     closeSettlement,
     selectSettlement,
     updateSettlement,

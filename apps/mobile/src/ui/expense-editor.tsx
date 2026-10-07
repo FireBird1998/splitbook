@@ -152,6 +152,7 @@ function ExpenseProblem({
 function ExpenseTask({
   state,
   currentUserId,
+  kept = false,
   onClose,
   notice,
   emptyNotice,
@@ -180,6 +181,11 @@ function ExpenseTask({
   state: Editor;
   /** Shown as "You" in the form. */
   currentUserId?: string;
+  /**
+   * A draft is kept on this phone for this Group, as its Group last read: opening a new Expense
+   * says "draft" only then, even before the draft itself is read (#334).
+   */
+  kept?: boolean;
   /** Close or Back: returns to the Group and keeps the draft on this device. */
   onClose?: () => void;
   /** Shown above the content, such as the offline notice. */
@@ -370,13 +376,28 @@ function ExpenseTask({
       opening ? (
         <ExpenseRecordSkeleton label="Opening this Expense…" outline={outline} />
       ) : (
-        <Loading label={requested ? 'Opening this Expense…' : 'Opening your draft…'} />
+        // Only a draft this phone kept says "draft": a new Expense has none (#334).
+        <Loading
+          label={
+            requested
+              ? 'Opening this Expense…'
+              : draft || kept
+                ? 'Opening your draft…'
+                : 'Opening a new Expense…'
+          }
+        />
       ),
     );
   if (!draft)
     return frame(
       <Notice
-        title={requested ? 'Couldn’t open this Expense' : 'Couldn’t open this draft'}
+        title={
+          requested
+            ? 'Couldn’t open this Expense'
+            : kept
+              ? 'Couldn’t open this draft'
+              : 'Couldn’t open a new Expense'
+        }
         message={state.message ?? 'Please try again.'}
         retry={onRetry}
       />,

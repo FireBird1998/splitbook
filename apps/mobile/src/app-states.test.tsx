@@ -117,13 +117,18 @@ function device() {
     groupBalances: false,
     /** Groups that refuse Alex (403): Alex has lost them. */
     refused: [] as string[],
+    /** Groups that answer without Alex among their members: Alex was removed from them. */
+    removed: [] as string[],
     /** Paths the server fails with a 500: exact, or every path a prefix ending in `?` starts. */
     failing: [] as string[],
     /** Alex has recorded the ₹30.00 owed to Sam: Balances are settled. */
     paid: false,
   };
-  /** The saved copies can't be removed, as on a full or read-only disk. */
-  const storage = { failRemoval: false };
+  /**
+   * The saved copies can't be removed, as on a full or read-only disk; or the drafts can't be
+   * read (`failDraftRead`).
+   */
+  const storage = { failRemoval: false, failDraftRead: false };
   let cookie: string | null = null,
     owner: string | null = null,
     identity: unknown = null,
@@ -190,7 +195,13 @@ function device() {
       )
     )
       return json({}, 500);
-    if (path === `/api/groups/${id}`) return json({ data: found, status: 200 });
+    if (path === `/api/groups/${id}`)
+      return json({
+        data: network.removed.includes(found._id)
+          ? { ...found, members: found.members.filter(({ user }) => user.name !== alex.name) }
+          : found,
+        status: 200,
+      });
     if (path === `/api/groups/${maple}/expenses/${expenseId}`)
       return json({ data: expense, status: 200 });
     if (path === `/api/groups/${id}/expenses` && method === 'POST')
@@ -335,6 +346,7 @@ function device() {
         expenseDrafts: {
           load: async (account, id) => {
             await disk();
+            if (storage.failDraftRead) throw new Error('The device storage is unreadable');
             return structuredClone(drafts.get(`${account}:${id}`) ?? null);
           },
           save: async (account, id, value) => {
@@ -2307,4 +2319,375 @@ describe('A Group says what is true, without jumps (#219)', () => {
       expect(iconsBeside(words)).toEqual(['alert-circle-outline']);
     },
   );
+});
+
+describe('The Expense form and Record payment say what they are doing (#334)', () => {
+  const controller = () => runtime.controller as MobileController;
+  const openMaple = 'Open Maple House, Household · 2 members';
+  const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+  const footnote = 'Records a payment made outside Splitbook. No money moves.';
+  /** Maple House on Balances, where Alex owes Sam ₹30.00. */
+  async function onBalances() {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(openMaple);
+    await app.press('Balances');
+    return { phone, app };
+  }
+  /**
+   * Text as the member sees it: without what is laid out only to hold a place, unseen and unread
+   * (`importantForAccessibility` and `accessibilityElementsHidden`).
+   */
+  const words = (node: ReactTestRendererJSON | ReactTestRendererJSON[] | string | null): string =>
+    node === null
+      ? ''
+      : typeof node === 'string'
+        ? node
+        : Array.isArray(node)
+          ? node.map(words).join('')
+          : node.props.accessibilityElementsHidden === true &&
+              node.props.importantForAccessibility === 'no-hide-descendants'
+            ? ''
+            : (node.children ?? []).map(words).join('');
+  /** The Record payment sheet as rendered, while it is open. */
+  const sheet = () =>
+    findHosts(screen!.toJSON(), (props, type) => type === 'Modal' && props.visible === true).find(
+      (modal) =>
+        findHosts(modal, (props) => props.accessibilityRole === 'header').some(
+          (header) => words(header) === 'Record payment',
+        ),
+    ) ?? null;
+  /** What the open sheet shows. */
+  const shown = () => words(sheet());
+  /** The open sheet's live hosts labelled `label`, to read their props or press them. */
+  const inSheet = (label: string) =>
+    screen!.root
+      .findAll((node) => (node.type as unknown) === 'Modal' && node.props.visible === true)
+      .flatMap((modal) =>
+        modal.findAll(
+          (node) => typeof node.type === 'string' && node.props.accessibilityLabel === label,
+        ),
+      );
+  /** The open sheet's one button labelled `label`, or null. */
+  const button = (label: string) => {
+    const found = inSheet(label).filter((node) => node.props.accessibilityRole === 'button');
+    return found.length === 1 ? found[0]! : null;
+  };
+  const progress = () =>
+    findHosts(sheet(), (props) => props.accessibilityRole === 'progressbar').map(
+      (bar) => bar.props.accessibilityLabel,
+    );
+  /** How tall the open sheet lays out on this 360dp phone. */
+  const sheetHeight = (fontScale = 1) => layoutHeight(sheet(), fontScale, 360);
+  /** The payments this phone has sent. */
+  const posts = (phone: ReturnType<typeof device>) =>
+    phone.sent.filter((request) => request === `POST /api/groups/${maple}/settlements`);
+
+  // Item 1: "Opening your draft…" showed for a brand-new Expense.
+  it('opens a new Expense without saying “draft”, and says it only for a kept draft', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(openMaple);
+    // Nothing is kept for Maple House: the form waits only for the Group's read.
+    let group = phone.hold(`/api/groups/${maple}`);
+    void controller().openExpense(maple);
+    await group.reached;
+    await settle();
+    expect(controller().getSnapshot().expense).toMatchObject({ status: 'loading', draft: null });
+    expect(app.text()).toContain('Opening a new Expense…');
+    expect(app.text()).not.toMatch(/draft/i);
+    group.release();
+    await settle();
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12' }));
+    await app.press('Back to Group, keeping your draft');
+    expect(controller().getSnapshot().keptDraft).toMatchObject({ groupId: maple });
+    // The draft kept for Maple House opens, and says so.
+    group = phone.hold(`/api/groups/${maple}`);
+    void controller().openExpense(maple);
+    await group.reached;
+    await settle();
+    expect(controller().getSnapshot().expense).toMatchObject({
+      status: 'loading',
+      draft: { description: 'Gas bill' },
+    });
+    expect(app.text()).toContain('Opening your draft…');
+    expect(app.text()).not.toContain('new Expense');
+    group.release();
+    await settle();
+  });
+
+  // Item 1, from review: the Group already knows its draft, before this phone reads it.
+  it('says “draft” for a kept draft while this phone still reads it, and not once it is discarded', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(openMaple);
+    await settle(controller().openExpense(maple));
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12' }));
+    await app.press('Back to Group, keeping your draft');
+    expect(controller().getSnapshot().keptDraft).toMatchObject({ groupId: maple });
+    // A slow phone: the draft's own read waits, and the form already says what it opens.
+    const disk = phone.holdStorage();
+    void controller().openExpense(maple);
+    await disk.reached;
+    await settle();
+    expect(controller().getSnapshot().expense).toMatchObject({ status: 'loading', draft: null });
+    expect(app.text()).toContain('Opening your draft…');
+    expect(app.text()).not.toContain('new Expense');
+    disk.release();
+    await settle();
+    expect(controller().getSnapshot().expense).toMatchObject({
+      draft: { description: 'Gas bill' },
+    });
+    // Discarded, nothing is kept: the form opening again is a new Expense.
+    const group = phone.hold(`/api/groups/${maple}`);
+    void controller().discardExpenseDraft();
+    await group.reached;
+    await settle();
+    expect(controller().getSnapshot().expense).toMatchObject({ status: 'loading', draft: null });
+    expect(app.text()).toContain('Opening a new Expense…');
+    expect(app.text()).not.toMatch(/draft/i);
+    group.release();
+    await settle();
+  });
+
+  it.each(['Group', 'storage'] as const)(
+    'says it couldn’t open a new Expense, never a draft, when the %s fails',
+    async (failure) => {
+      const phone = device();
+      await usedBefore(phone);
+      const app = await start(phone);
+      await settle();
+      await app.press(openMaple);
+      expect(controller().getSnapshot().keptDraft).toBeNull();
+      if (failure === 'Group') phone.network.failing.push(`/api/groups/${maple}`);
+      else phone.storage.failDraftRead = true;
+      await settle(controller().openExpense(maple));
+      expect(controller().getSnapshot().expense).toMatchObject({
+        status: 'blocked',
+        draft: null,
+        message:
+          failure === 'Group'
+            ? 'The server could not complete this request. Please try again.'
+            : 'Could not open a new Expense. Please try again.',
+      });
+      expect(app.text()).toContain('Couldn’t open a new Expense');
+      expect(app.text()).not.toMatch(/draft/i);
+    },
+  );
+
+  // Item 2: "Checking the latest balances…" hid the balances already on screen for about 6 s.
+  it('shows the chosen payment while the sheet checks the latest balances, with Record waiting, and nothing moves when the check lands', async () => {
+    const { phone, app } = await onBalances();
+    const before = phone.sent.length;
+    const balances = phone.hold(`/api/groups/${maple}/balances`);
+    app.tap('Record your payment to Sam Chen');
+    await balances.reached;
+    await settle();
+    // The payment as Balances shows it, locked, under the progress bar, with a quiet status.
+    expect(controller().getSnapshot().settlement).toMatchObject({ status: 'loading', draft: null });
+    expect(progress()).toEqual(['Checking the latest balances']);
+    expect(inSheet('You pay Sam Chen. Suggested ₹30.00.')).toHaveLength(1);
+    expect(inSheet('Amount paid, required')[0]!.props).toMatchObject({
+      value: '30',
+      editable: false,
+    });
+    const record = button('Record payment ₹30.00')!;
+    expect(record.props.accessibilityState).toEqual({ disabled: true, busy: false });
+    expect(record.props.accessibilityHint).toBe(
+      'Record is available once the latest balances are checked.',
+    );
+    expect(shown()).toContain('Checking the latest balances…');
+    expect(shown()).not.toContain(footnote);
+    const checking = [sheetHeight(), sheetHeight(1.3)];
+    // A tap that gets through records nothing from figures the check hasn't confirmed.
+    record.props.onPress();
+    await settle();
+    expect(posts(phone)).toEqual([]);
+
+    balances.release();
+    await settle();
+    expect(controller().getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      draft: { amount: '30' },
+    });
+    expect(progress()).toEqual([]);
+    expect(inSheet('Amount paid, required')[0]!.props).toMatchObject({
+      value: '30',
+      editable: true,
+    });
+    expect(button('Record payment ₹30.00')!.props.accessibilityState).toEqual({
+      disabled: false,
+      busy: false,
+    });
+    expect(shown()).toContain(footnote);
+    expect(shown()).not.toContain('Checking');
+    expect([sheetHeight(), sheetHeight(1.3)]).toEqual(checking);
+    // The same reads as before: the Group, then its Balances.
+    expect(phone.sent.slice(before)).toEqual([
+      `GET /api/groups/${maple}`,
+      `GET /api/groups/${maple}/balances`,
+    ]);
+  });
+
+  // Item 3 (#331): already true, and kept pinned through the App.
+  it('says it is recording, busy, and records once for two taps', async () => {
+    const { phone, app } = await onBalances();
+    await settle(controller().openRecordPayment(alex.id, sam._id, 'INR'));
+    const post = phone.hold(`/api/groups/${maple}/settlements`);
+    void button('Record payment ₹30.00')!.props.onPress();
+    await post.reached;
+    await settle();
+    expect(button('Record payment ₹30.00')).toBeNull();
+    const recording = button('Recording payment…')!;
+    expect(recording.props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(recording.props.disabled).toBe(true);
+    expect(
+      recording.findAll((node) => (node.type as unknown) === 'ActivityIndicator'),
+    ).toHaveLength(1);
+    expect(shown()).toContain('Recording payment…');
+    expect(progress()).toEqual(['Recording payment']);
+    // A second tap that gets through sends nothing more.
+    recording.props.onPress();
+    await settle();
+    post.release();
+    await settle();
+    expect(posts(phone)).toEqual([`POST /api/groups/${maple}/settlements`]);
+    expect(app.text()).toContain('Payment recorded');
+  });
+
+  // Device check: Check payment read "FM You → FM Former member" until its check landed.
+  it('names who pays whom while Check payment checks an unconfirmed payment', async () => {
+    const { phone, app } = await onBalances();
+    await settle(controller().openRecordPayment(alex.id, sam._id, 'INR'));
+    // The payment is sent, and its reply is lost.
+    const post = phone.hold(`/api/groups/${maple}/settlements`);
+    void button('Record payment ₹30.00')!.props.onPress();
+    await post.reached;
+    phone.network.online = false;
+    post.release();
+    await settle();
+    expect(controller().getSnapshot().settlement.status).toBe('uncertain');
+    phone.network.online = true;
+    void controller().back();
+    await settle();
+    expect(controller().getSnapshot().pendingPayment).toMatchObject({ groupId: maple });
+    const balances = phone.hold(`/api/groups/${maple}/balances`);
+    app.tap('Check payment');
+    await balances.reached;
+    await settle();
+    expect(controller().getSnapshot().settlement).toMatchObject({
+      status: 'loading',
+      group: null,
+    });
+    // The row as drawn, avatars' initials included: who pays whom, as this phone knows them.
+    const [row] = inSheet('You pay Sam Chen.');
+    expect(
+      row!
+        .findAll((node) => (node.type as unknown) === 'Text')
+        .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
+        .join(' '),
+    ).toBe('AR You SC Sam Chen');
+    expect(shown()).not.toContain('Former member');
+    balances.release();
+    await settle();
+    // Checked: the Group it read names them now.
+    expect(controller().getSnapshot().settlement).toMatchObject({
+      status: 'uncertain',
+      group: { id: maple },
+    });
+    expect(inSheet('You pay Sam Chen.')).toHaveLength(1);
+    expect(posts(phone)).toEqual([`POST /api/groups/${maple}/settlements`]);
+  });
+
+  // Final review: a sheet refused on a refresh named people from what this phone knew.
+  it('names no one from what this phone knew once a refresh finds Alex removed from the Group', async () => {
+    const { phone } = await onBalances();
+    await settle(controller().openRecordPayment(alex.id, sam._id, 'INR'));
+    expect(inSheet('You pay Sam Chen. Suggested ₹30.00.')).toHaveLength(1);
+    phone.network.removed.push(maple);
+    await settle(controller().refresh());
+    expect(controller().getSnapshot().settlement).toMatchObject({
+      status: 'blocked',
+      group: null,
+      known: {},
+    });
+    expect(inSheet('You pay Former member. Suggested ₹30.00.')).toHaveLength(1);
+    expect(shown()).not.toContain('Sam Chen');
+  });
+
+  // Final review, N4: no flow opens the sheet over another Group's view today; if one did, that
+  // Group's people would name no one on it.
+  it('takes no names from another Group’s view when the sheet opens', async () => {
+    const { phone } = await onBalances();
+    const lisbonGroup = phone.hold(`/api/groups/${lisbon}`);
+    void controller().openSettlements(lisbon);
+    await lisbonGroup.reached;
+    expect(controller().getSnapshot()).toMatchObject({
+      detail: { id: maple },
+      financial: { groupId: maple },
+      settlement: { groupId: lisbon, status: 'loading' },
+    });
+    expect(controller().getSnapshot().settlement.known).toEqual({});
+    lisbonGroup.release();
+    await settle();
+  });
+
+  // Item 4: after a network failure the sheet showed only "Could not reach SplitBook…".
+  it('offers Try again on the sheet when its check can’t reach SplitBook, keeping the figures, and sends nothing', async () => {
+    const { phone, app } = await onBalances();
+    phone.network.online = false;
+    app.tap('Record your payment to Sam Chen');
+    await settle();
+    expect(controller().getSnapshot().settlement).toMatchObject({
+      status: 'error',
+      draft: null,
+      attempt: null,
+      message: unreachable,
+    });
+    // Said plainly, not as a payment that may be recorded: nothing was sent.
+    expect(shown()).toContain(unreachable);
+    expect(shown()).not.toContain('Payment not confirmed');
+    expect(inSheet('You pay Sam Chen. Suggested ₹30.00.')).toHaveLength(1);
+    expect(inSheet('Amount paid, required')[0]!.props.editable).toBe(false);
+    expect(button('Record payment ₹30.00')).toBeNull();
+    const retry = button('Try again')!;
+    expect(retry.props.accessibilityState).toEqual({ disabled: false, busy: false });
+    expect(progress()).toEqual([]);
+
+    // Try again checks again, with the same reads, and Record waits for them.
+    phone.network.online = true;
+    const before = phone.sent.length;
+    const balances = phone.hold(`/api/groups/${maple}/balances`);
+    void retry.props.onPress();
+    await balances.reached;
+    await settle();
+    expect(shown()).not.toContain(unreachable);
+    expect(progress()).toEqual(['Checking the latest balances']);
+    expect(inSheet('You pay Sam Chen. Suggested ₹30.00.')).toHaveLength(1);
+    expect(button('Record payment ₹30.00')!.props.accessibilityState).toEqual({
+      disabled: true,
+      busy: false,
+    });
+    balances.release();
+    await settle();
+    expect(controller().getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      draft: { paidBy: alex.id, paidTo: sam._id, amount: '30' },
+    });
+    expect(button('Record payment ₹30.00')!.props.accessibilityState).toEqual({
+      disabled: false,
+      busy: false,
+    });
+    expect(phone.sent.slice(before)).toEqual([
+      `GET /api/groups/${maple}`,
+      `GET /api/groups/${maple}/balances`,
+    ]);
+    expect(posts(phone)).toEqual([]);
+  });
 });
