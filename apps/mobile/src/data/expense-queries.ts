@@ -161,7 +161,12 @@ interface View {
   /** How many Try agains are reading this open's record again: while any is, it says so. */
   retrying: number;
 }
-type Read = { fresh?: boolean; wanted?: () => boolean };
+type Read = {
+  fresh?: boolean;
+  wanted?: () => boolean;
+  /** Called as the changes start being read, after a Load older or newer on its way lands. */
+  starting?: () => void;
+};
 
 /**
  * An Expense record and its history on declarative queries (ADR 0006, M1-1; #220): the record's
@@ -781,8 +786,7 @@ export function createExpenseQueries(session: ExpenseSession) {
       await api.record(owner, { fresh, wanted });
       if (!here(false)) return;
       // Its changes being read again say so on their own, from the publish that starts them.
-      unmark(true);
-      await api.history(owner, { fresh, wanted });
+      await api.history(owner, { fresh, wanted, starting: () => unmark(true) });
     } catch (error) {
       // The refusal has already withdrawn the record's queries: what shows goes too.
       if (step === 'session' || !here(true) || !(error instanceof RequestError)) return;
@@ -928,7 +932,10 @@ export function createExpenseQueries(session: ExpenseSession) {
      * Reads the record's changes: every page loaded, from the window's first, up to 5 (M1-3), or
      * the newest page when none is. Once the record shows as read, they follow it.
      */
-    async history(owner: number, { fresh = false, wanted = () => true }: Read = {}) {
+    async history(
+      owner: number,
+      { fresh = false, wanted = () => true, starting = () => undefined }: Read = {},
+    ) {
       const opened = view;
       if (!opened?.expenseId || opened.lost) return;
       opened.history = true;
@@ -945,6 +952,7 @@ export function createExpenseQueries(session: ExpenseSession) {
         await loading.promise?.catch(() => undefined);
         if (!still()) throw new Superseded();
       }
+      starting();
       await readNow<Pages>(
         historyOptions(opened.groupId, opened.expenseId, true, fresh),
         owner,

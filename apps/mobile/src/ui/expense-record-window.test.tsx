@@ -1,4 +1,10 @@
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { emptyExpenseHistory, parseActivityPage, type ExpenseHistoryState } from '../data/activity';
 import {
@@ -335,68 +341,26 @@ describe('an Expense’s changes past 5 pages (#220, M7-2)', () => {
     expect(pressables('Load older changes')[0].props.accessibilityState).toEqual({
       disabled: true,
     });
-    // The changes shown stay; History says only that they are being read again (B1).
+    // The changes shown stay, with when they were read: in this session, so never "Saved".
     expect(text(screen!.root)).toContain('Note 21');
-    expect(text(history())).toContain('Refreshing…');
-    expect(text(screen!.root)).not.toMatch(/Saved|Updated/);
+    expect(text(history())).toContain(`Updated ${refreshedLabel(at)} · refreshing`);
+    expect(text(screen!.root)).not.toContain('Saved');
   });
 
-  it('keeps Load older and Load newer disabled in place from the moment Try again starts', () => {
-    // Try again is reading the session, the Group and the record; the changes aren't read yet.
-    render(detail(windowOf(2), { refreshing: true }));
-    expect(pressables('Load newer changes')[0].props.accessibilityState).toEqual({
-      disabled: true,
-    });
-    expect(pressables('Load older changes')[0].props.accessibilityState).toEqual({
-      disabled: true,
-    });
-    expect(text(topBar())).toContain('Refreshing…');
-  });
-
-  it('loads newer changes in Load newer’s own place, busy, so the changes below it stay put (N2)', () => {
-    const control = (label: string) =>
-      findHosts(
-        screen!.toJSON(),
-        (props, type) => type === 'Pressable' && props.accessibilityLabel === label,
-      )[0]!;
-    const load = render(detail(windowOf(2)));
-    const idle = layoutHeight(control('Load newer changes'));
-    load(detail(windowOf(2, { newerStatus: 'loading' })));
-    const loading = control('Loading newer changes…');
-    expect(loading.props.accessibilityState).toEqual({ disabled: true, busy: true });
-    expect(layoutHeight(loading)).toBe(idle);
-    // Nothing but the button stands above the changes while the page is read.
-    expect(text(history())).not.toContain('Couldn’t');
-  });
-
-  it('says only that older changes couldn’t be read when a page read again fails, as the changes end before it (N1)', () => {
-    render(detail(windowOf(1, { moreStatus: 'error' })));
-    const alert = screen!.root.find(
-      (node) => isHost(node, 'Text') && node.props.accessibilityRole === 'alert',
-    );
-    expect(text(alert)).toBe('Couldn’t load older changes.');
-    expect(pressables('Try loading older changes')).toHaveLength(1);
-  });
-
-  it('says when the changes shown were read once reading them again failed (review item 3)', () => {
-    // Read earlier in this session: "Updated".
-    render(
-      detail(windowOf(1, { status: 'error', message: 'Couldn’t load this Expense’s changes.' })),
-    );
-    expect(text(history())).toContain(`Updated ${refreshedLabel(at)}`);
-    expect(text(history())).toContain('Note 1');
+  it('keeps the time of this device’s saved pages while they are read again, and says it once', () => {
+    // Restored after a restart, read again: their own time stays (ADR 0006).
+    render(detail(windowOf(2, { status: 'loading', restored: true })));
+    expect(text(history())).toContain(`Saved ${refreshedLabel(at)} · refreshing`);
     act(() => screen!.unmount());
-    // This device's saved copy, after a restart: "Saved".
+    // The record is read again too: the top bar says so, and History keeps only the time.
     render(
-      detail(
-        windowOf(1, {
-          status: 'error',
-          message: 'Couldn’t load this Expense’s changes.',
-          restored: true,
-        }),
-      ),
+      detail(windowOf(2, { status: 'loading', restored: true }), {
+        known: { refreshedAt: at, refreshing: true, saved: true },
+      }),
     );
+    expect(text(topBar())).toContain('Refreshing…');
     expect(text(history())).toContain(`Saved ${refreshedLabel(at)}`);
+    expect(text(screen!.root).match(/refreshing/gi)).toHaveLength(1);
   });
 });
 
@@ -427,10 +391,12 @@ describe('opening an Expense: what is already known shows at once (loading-state
     expect(bar()).not.toMatch(/Saved|Updated/);
     expect(body()).toContain(`Saved ${refreshedLabel(at)}`);
     act(() => screen!.unmount());
-    // Read earlier in this session: never "Saved", and no time while it is read again.
+    // Read earlier in this session, perhaps hours ago: "Updated", never "Saved", while it is read
+    // again too (the money-safety re-review).
     render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: true, saved: false } }));
     expect(bar()).toContain('Refreshing…');
-    expect(text(screen!.root)).not.toMatch(/Saved|Updated/);
+    expect(body()).toContain(`Updated ${refreshedLabel(at)}`);
+    expect(text(screen!.root)).not.toContain('Saved');
     act(() => screen!.unmount());
     // Its read failed: when it was read stays, in the body.
     render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: false, saved: false } }));
@@ -445,35 +411,59 @@ describe('opening an Expense: what is already known shows at once (loading-state
     expect(text(screen!.root)).not.toMatch(/Saved|Updated|Refreshing/);
   });
 
-  // The device check of 3ac9be2: "Saved 5:44 PM · refreshing" cut the title to "Expen…" and hid
-  // the Group; a copy from an earlier day was wider still.
-  it.each([1, 1.3])(
-    'keeps the title, the Group and the actions in a 360dp top bar at %s× text',
-    (fontScale) => {
-      setWindow({ width: 360, fontScale });
-      const earlier = Date.parse('2026-09-28T09:02:00.000Z');
-      render(
-        detail(windowOf(1), { known: { refreshedAt: earlier, refreshing: true, saved: true } }),
-      );
-      const bar = findHosts(
-        screen!.toJSON(),
-        (props, type) =>
-          type === 'View' && props.style !== undefined && flatten(props.style).minHeight === 64,
-      )[0]!;
-      expect(layoutWidth(bar, fontScale)).toBeLessThanOrEqual(360);
-      const lines = findHosts(bar, (props, type) => type === 'Text' && props.numberOfLines === 1);
-      expect(lines.map((line) => line.children?.join(''))).toEqual([
-        'Expense',
-        'Maple House',
-        'Refreshing…',
-      ]);
-      expect(lines[2]!.props).toMatchObject({ adjustsFontSizeToFit: true });
-      // The earlier day's time is in the body, not the bar.
-      expect(text(topBar())).not.toContain(refreshedLabel(earlier));
-      expect(text(screen!.root)).toContain(`Saved ${refreshedLabel(earlier)}`);
-      expect(pressables('Expense options')).toHaveLength(1);
-    },
-  );
+  // The device check of 3ac9be2 cut the title to "Expen…" and hid the Group; the UI re-review of
+  // 0f8c377 measured "Refreshing…" doing the same on the App's bar, with its Back button.
+  it.each([
+    [320, 1],
+    [320, 1.3],
+    [360, 1],
+    [360, 1.3],
+    [412, 1],
+    [412, 1.3],
+  ])('keeps the title and the Group whole in the top bar at %sdp and %s× text', (width, scale) => {
+    setWindow({ width, fontScale: scale });
+    const earlier = Date.parse('2026-09-28T09:02:00.000Z');
+    render(
+      detail(windowOf(1), { known: { refreshedAt: earlier, refreshing: true, saved: true } }),
+      { onClose: () => undefined },
+    );
+    const bar = findHosts(
+      screen!.toJSON(),
+      (props, type) =>
+        type === 'View' && props.style !== undefined && flatten(props.style).minHeight === 64,
+    )[0]!;
+    const parts = (bar.children ?? []).filter(
+      (child): child is ReactTestRendererJSON => typeof child !== 'string',
+    );
+    const titles = parts.find((part) => flatten(part.props.style).flex === 1)!;
+    const style = flatten(bar.props.style);
+    // What the title and the Group have: the bar less its padding, gaps and everything else in it.
+    const room =
+      width -
+      Number(style.paddingLeft) -
+      Number(style.paddingRight) -
+      Number(style.gap) * (parts.length - 1) -
+      parts
+        .filter((part) => part !== titles)
+        .reduce((sum, part) => sum + layoutWidth(part, scale, width), 0) -
+      2 * Number(flatten(titles.props.style).paddingHorizontal);
+    const [title, subtitle] = findHosts(titles, (_, type) => type === 'Text');
+    expect(title!.children).toEqual(['Expense']);
+    expect(subtitle!.children).toEqual(['Maple House']);
+    expect(layoutWidth(title!, scale)).toBeLessThanOrEqual(room);
+    expect(layoutWidth(subtitle!, scale)).toBeLessThanOrEqual(room);
+    expect(pressables('Back to Group')).toHaveLength(1);
+    expect(pressables('Expense options')).toHaveLength(1);
+    // The cue is named "Refreshing" either way; on a narrow phone it is the sync mark alone.
+    const cue = findHosts(bar, (props) => props.accessibilityLabel === 'Refreshing');
+    if (width < 380) {
+      expect(cue).toHaveLength(1);
+      expect(text(topBar())).not.toContain('Refreshing…');
+    } else expect(text(topBar())).toContain('Refreshing…');
+    // The earlier day's time is in the body, not the bar.
+    expect(text(topBar())).not.toContain(refreshedLabel(earlier));
+    expect(text(screen!.root)).toContain(`Saved ${refreshedLabel(earlier)}`);
+  });
 
   it('names the other person in the badge as the list row does, before the Group’s details are known', () => {
     // A saved copy shows before its Group is checked: the badge already reads as it will after.

@@ -1794,6 +1794,50 @@ describe('what the record says while it is read again (B1, the device check)', (
     });
   });
 
+  // The UI re-review of 0f8c377: a Try again over a Load older on its way stopped saying so, and
+  // offered the page controls, until that page landed and the pages were read again.
+  it('keeps saying so while a Load older on its way lands, until every page is read again', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    const older = f.hold(historyPath(billId, 2), { exact: true });
+    const loading = controller.loadOlderExpenseHistory();
+    await older.reached;
+    const pages = f.hold(historyPath(billId, 1), { exact: true });
+    const shown: Controller['getSnapshot'] extends () => infer S ? S[] : never = [];
+    const stop = controller.subscribe(() => shown.push(controller.getSnapshot()));
+    const retrying = controller.refresh();
+    await settle();
+    // The session, the Group and the record are read; the changes wait for page 2.
+    expect(controller.getSnapshot().expense).toMatchObject({
+      refreshing: true,
+      history: { moreStatus: 'loading' },
+    });
+    older.release();
+    await pages.reached;
+    await settle();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      refreshing: false,
+      history: { status: 'loading' },
+    });
+    // No screen between offers the page controls with nothing saying a refresh is under way.
+    stop();
+    expect(
+      shown.filter(
+        ({ expense }) =>
+          !expense.refreshing &&
+          expense.history.status === 'ready' &&
+          expense.history.moreStatus !== 'loading',
+      ),
+    ).toEqual([]);
+    pages.release();
+    await Promise.all([loading, retrying]);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      refreshing: false,
+      history: { status: 'ready', pagination: { page: 2 } },
+    });
+  });
+
   it('stops saying so when the Try again fails before its changes are read', async () => {
     const f = fixture();
     const controller = await signedIn(f);

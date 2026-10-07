@@ -103,21 +103,47 @@ const positionTone = (position: ExpenseRecordPosition): BadgeTone =>
 /**
  * When what's shown was verified, in the body, never the top bar (#332): "Saved h:mm" for this
  * device's saved copy, the badge every saved view shows offline; "Updated h:mm" for a read in
- * this session.
+ * this session; "· refreshing" while it is read again and nothing else says so. One line that
+ * shrinks rather than wraps.
  */
 function ReadTime({
   refreshedAt,
   saved,
   offline,
+  refreshing = false,
 }: {
   refreshedAt: number;
   saved: boolean;
   offline: boolean;
+  refreshing?: boolean;
 }) {
   const time = refreshedLabel(refreshedAt);
   if (saved && offline) return <Badge label={`Saved ${time}`} />;
-  return <StatusText tone="muted">{`${saved ? 'Saved' : 'Updated'} ${time}`}</StatusText>;
+  return (
+    <StatusText tone="muted" shrink numberOfLines={1} adjustsFontSizeToFit>
+      {`${saved ? 'Saved' : 'Updated'} ${time}${refreshing ? ' · refreshing' : ''}`}
+    </StatusText>
+  );
 }
+
+/**
+ * The top bar's cue that the record is read again, on a narrow phone: the sync mark alone, so the
+ * title and the Group keep their room (#220's UI re-review). Its name is still "Refreshing".
+ */
+function RefreshMark() {
+  return (
+    <View
+      accessible
+      accessibilityLabel="Refreshing"
+      accessibilityLiveRegion="polite"
+      style={{ paddingHorizontal: 4 }}
+    >
+      <Icon name="sync-outline" size={18} />
+    </View>
+  );
+}
+/** Narrower than this, the top bar's cue is the sync mark alone. */
+const narrowBar = 380;
 
 /** "29 Sep, 20:02", with the year when it isn't this year. */
 function recordTime(iso: string, now = Date.now()) {
@@ -182,6 +208,7 @@ export function ExpenseRecordScreen({
 }) {
   const theme = useTheme();
   const large = useLargeText();
+  const { width } = useWindowDimensions();
   const [options, setOptions] = useState(false);
   const scroll = useRef<ScrollView>(null);
   // Where the record was scrolled to, from where scrolling stopped as well as while it scrolls: a
@@ -257,10 +284,13 @@ export function ExpenseRecordScreen({
   const held = state.groupDraft ? 'Finish or discard the draft in this Group first.' : undefined;
   // What is said above the record: the Group's draft, a message, and when the record shown was
   // read, if it wasn't in this open.
+  // Said whenever the record shown wasn't read in this open: a copy kept here can be hours old.
   const readTime =
-    state.known && !offline && (state.known.saved || !state.known.refreshing) ? (
+    state.known && !offline ? (
       <ReadTime refreshedAt={state.known.refreshedAt} saved={state.known.saved} offline={offline} />
     ) : null;
+  // The top bar says the record is read again; History then doesn't say it twice.
+  const cued = !offline && !!(state.known?.refreshing || state.refreshing);
   const lead =
     state.groupDraft || (state.message && state.status !== 'delete-review') || readTime ? (
       <>
@@ -346,11 +376,7 @@ export function ExpenseRecordScreen({
         }
         // Only that it is being read again, on one line that shrinks: when it was read is in the
         // body, so the title and Group keep their room (#332, #220).
-        status={
-          !offline && (state.known?.refreshing || state.refreshing) ? (
-            <RefreshStatus visible />
-          ) : undefined
-        }
+        status={cued ? width < narrowBar ? <RefreshMark /> : <RefreshStatus visible /> : undefined}
         actions={
           <>
             {!record.isDeleted ? (
@@ -422,6 +448,7 @@ export function ExpenseRecordScreen({
             tags={context?.tags}
             offline={offline}
             busy={!!state.refreshing}
+            cued={cued}
             onLoadOlder={onLoadOlderHistory}
             onLoadNewer={onLoadNewerHistory}
             onRetry={onRetryHistory}
@@ -889,6 +916,7 @@ function RecordHistory({
   tags,
   offline = false,
   busy = false,
+  cued = false,
   onLoadOlder,
   onLoadNewer,
   onRetry,
@@ -903,6 +931,8 @@ function RecordHistory({
   offline?: boolean;
   /** Try again is reading the record again: Load older and Load newer wait, in place. */
   busy?: boolean;
+  /** The top bar says the record is read again: History doesn't say it too. */
+  cued?: boolean;
   onLoadOlder?: () => void;
   onLoadNewer?: () => void;
   onRetry?: () => void;
@@ -1039,16 +1069,16 @@ function RecordHistory({
       <SectionHeader
         title="History"
         trailing={
-          // While the changes shown are read again, only that; once their read failed, offline,
-          // or from this device's copy, the oldest page's time (#220).
-          !events.length ? undefined : refreshing ? (
-            <RefreshStatus visible />
-          ) : (offline || history.status === 'error' || history.restored) &&
-            history.refreshedAt != null ? (
+          // The oldest page's time while the changes shown are read again, once their read failed,
+          // offline, or from this device's copy (#220): "Saved" only for that copy.
+          events.length > 0 &&
+          history.refreshedAt != null &&
+          (refreshing || offline || history.status === 'error' || history.restored) ? (
             <ReadTime
               refreshedAt={history.refreshedAt}
               saved={!!history.restored}
               offline={offline}
+              refreshing={refreshing && !cued}
             />
           ) : undefined
         }
