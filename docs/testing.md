@@ -233,6 +233,16 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   (cards on phones) under trip-day headings with day totals, none when sorted
   by amount. Figures come from the Trip summary read for the browser's own
   time zone, and day labels from the app's formatter; axe in both modes.
+- **Backup and statement** (`export-backup-statement.spec.ts`, #318, #319): the
+  JSON backup from Export (all time, Shares always in, the file parsed by
+  `backupSchema`, no email anywhere); the printable statement from Export with
+  every section, names in place of "You", and print media (no app chrome, white
+  paper); a Trip's Share wrap-up from its Insights tab, opening the whole-trip
+  statement in the browser's own zone, with the Trip's dates, every section and
+  the wrap-up's suggested payments; and the 403 refusal page ("Group not found",
+  Back to Home) for a Group Priya was only invited to and for one that doesn't
+  exist. axe on each. The pilot suite records the statement's print snapshot
+  (`playwright-pilot/statement-print.spec.ts`).
 - **Add expense** (`add-expense.spec.ts`): the top bar's Add expense from Home
   through "Choose a Group" (axe on the chooser; the save keeps Home in place,
   confirms with the Group's name and rereads the balances), from inside a Group

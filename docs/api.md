@@ -971,15 +971,15 @@ exactly. The shared path, query key (scope `search`) and decoder are `searchPath
 
 ## Export
 
-| Method | Path          | Description                                  |
-| ------ | ------------- | -------------------------------------------- |
-| GET    | `/api/export` | The member's Groups as CSV files, or one zip |
+| Method | Path          | Description                                                          |
+| ------ | ------------- | -------------------------------------------------------------------- |
+| GET    | `/api/export` | The member's Groups as CSV files, one zip, or one JSON backup (#318) |
 
 ### GET /api/export
 
-The Export page's download (#317). It answers with a file, not JSON: one CSV,
-or a zip when there are several. Refusals and failures use the standard JSON
-error shape.
+The Export page's download (#317). It answers with a file: one CSV, a zip when
+there are several, or with `format=json` one JSON backup of every chosen Group
+(#318). Refusals and failures use the standard JSON error shape.
 
 **Query params:**
 
@@ -989,12 +989,13 @@ error shape.
 | `from`    | no       | First day of the window, `YYYY-MM-DD`, inclusive                                                      |
 | `to`      | no       | Last day of the window, `YYYY-MM-DD`, inclusive. Give both `from` and `to`, or neither for all time   |
 | `include` | no       | Any of `payments`, `shares`, `deleted`, `history`, joined by commas                                   |
-| `format`  | no       | `csv` (the only format; the default)                                                                  |
+| `format`  | no       | `csv` (the default), or `json` for the backup, which always covers all time                           |
 | `tz`      | no       | The viewer's IANA time zone, `UTC` by default: the calendar payments, edits and deletions are read in |
 
 A query it can't read (no Groups, an id that isn't one, half a window, a window
 that ends before it starts, a day that doesn't exist, an unknown include, format
-or time zone) is a 422 validation error. The shared path builder is
+or time zone, or a window with `format=json`) is a 422 validation error. The
+shared path builder is
 `exportPath`; `parseExportQuery` and `planExportFiles` are in
 `@splitbook/shared/export-request`, and the CSV builders in
 `@splitbook/shared/export-csv`.
@@ -1024,7 +1025,7 @@ period. Nothing is built for a refused export.
 **Response.** `200` with:
 
 - `Content-Type: text/csv; charset=utf-8` for one CSV, `application/zip` for
-  several.
+  several, `application/json; charset=utf-8` for a backup.
 - `Content-Disposition: attachment; filename="…"`.
 - `Cache-Control: no-store`.
 
@@ -1101,6 +1102,25 @@ nothing else changed).
 
 The zip is made with [`fflate`](https://github.com/101arrowz/fflate) (MIT).
 
+**JSON backup.** With `format=json`, the download is one
+`splitbook-<n>-groups-backup.json` in the versioned `splitbook-backup/1`
+format: exact minor units, stable ids and names, never an email (an address
+typed into a description, note or name reads `[redacted]`). Payers and shares
+are always in it; `payments`, `deleted` and `history` work as for CSV, and
+`shares` changes nothing. The schema, `backupSchema` in
+`@splitbook/shared/export-backup`, is described in
+[JSON backup and printable statements](export-backup.md).
+
+### Printable statement page
+
+`/groups/[id]/statement?from=…&to=…&tz=…` (or `scope=trip` for a Trip's whole
+trip, which the Trip's Share wrap-up opens) is a server-rendered page, not an
+API route: it adds no JSON read or query key. It has the same members-only
+check as the Group reads, before anything is read; a Group the member never
+joined, has left, or that doesn't exist answers a real `403` with the app's
+"Group not found" page, and a signed-out visitor is redirected to `/login`.
+See [JSON backup and printable statements](export-backup.md).
+
 ---
 
 ## Not implemented
@@ -1112,8 +1132,3 @@ Documented in earlier drafts but absent from the codebase:
   either Zod schema, so no request can populate it. See
   [`features/receipts.md`](features/receipts.md).
 - **`GET /api/groups/[id]/balances/simplified`** — folded into `/balances`.
-
-## JSON backups and printable statements
-
-The JSON export format and member-only printable statement are documented in
-[JSON backup and printable statements](export-backup.md).
