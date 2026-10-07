@@ -8,9 +8,9 @@
 export const GROUP_TABS = [
   { slug: 'expenses', label: 'Expenses' },
   { slug: 'balances', label: 'Balances' },
-  // Insights goes here, between Balances and Activity, once #314 builds it: add
-  // `{ slug: 'insights', label: 'Insights' }` and its route, `(tabs)/insights/page.tsx`.
-  // Until then it is hidden rather than shown as a placeholder.
+  // The Month against the Months before it (#314). A Trip shows the same Month view until its
+  // Trip summary replaces it (#316).
+  { slug: 'insights', label: 'Insights' },
   { slug: 'activity', label: 'Activity' },
   { slug: 'members', label: 'Members' },
 ] as const;

@@ -21,10 +21,11 @@ const SAM = 'a00000000000000000000002';
 const PRIYA = 'a00000000000000000000003';
 
 describe('the Group page’s tabs', () => {
-  it('are Expenses, Balances, Activity and Members, in the canvas’s order, with Insights hidden until #314', () => {
+  it('are Expenses, Balances, Insights, Activity and Members, in the canvas’s order', () => {
     expect(GROUP_TABS.map((tab) => tab.label)).toEqual([
       'Expenses',
       'Balances',
+      'Insights',
       'Activity',
       'Members',
     ]);
@@ -34,6 +35,7 @@ describe('the Group page’s tabs', () => {
     expect(GROUP_TABS.map((tab) => groupTabHref(GROUP, tab.slug))).toEqual([
       `/groups/${GROUP}/expenses`,
       `/groups/${GROUP}/balances`,
+      `/groups/${GROUP}/insights`,
       `/groups/${GROUP}/activity`,
       `/groups/${GROUP}/members`,
     ]);
@@ -46,6 +48,7 @@ describe('the Group page’s tabs', () => {
   it('are read back from a path, and nothing else is a tab', () => {
     expect(groupTabFromPath(`/groups/${GROUP}/expenses`)).toBe('expenses');
     expect(groupTabFromPath(`/groups/${GROUP}/members/`)).toBe('members');
+    expect(groupTabFromPath(`/groups/${GROUP}/insights`)).toBe('insights');
     for (const path of [
       `/groups/${GROUP}`,
       `/groups/${GROUP}/settings`,
