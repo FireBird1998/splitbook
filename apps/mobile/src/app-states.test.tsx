@@ -11,8 +11,9 @@ import { createMobileController, type MobileController } from './data/mobile-con
 import type { FetchResponse } from './data/types';
 import { balanceWidth } from './ui/home';
 import { refreshedLabel } from './ui/refresh-feedback';
-import { findHosts, layoutWidth } from './test-utils/layout';
-import { setFileWindow, setWindow } from './test-utils/native';
+import { findHosts, flatten, layoutHeight, layoutWidth } from './test-utils/layout';
+import { loop, setFileWindow, setReduceMotion, setWindow, timing } from './test-utils/native';
+import { progressHeight, sweepTrack } from './ui/compact';
 import { savedQueriesIn } from './test-utils/saved-queries';
 
 // #127: the App's loading, refreshing, offline and cold-start states, rendered through the real
@@ -463,6 +464,117 @@ describe('cold start', () => {
     await settle();
     expect(app.text()).toContain('Shared expenses.');
     expect(app.text()).not.toContain('Maple House');
+  });
+});
+
+describe('start-up shows progress while it waits (#335)', () => {
+  /** The host just above the screen's content: the progress bar, or the room it keeps. */
+  const aboveContent = (content: string) => {
+    const json = screen!.toJSON() as ReactTestRendererJSON;
+    const [frame] = findHosts(json, () => true).filter((node) =>
+      (node.children ?? []).some((child) => typeof child !== 'string' && child.type === content),
+    );
+    const children = frame!.children as ReactTestRendererJSON[];
+    return children[children.findIndex((child) => child.type === content) - 1]!;
+  };
+  const spinners = () =>
+    screen!.root.findAll((node) => (node.type as unknown) === 'ActivityIndicator');
+  /** The polite live regions' text, as a screen reader hears it change. */
+  const announced = (app: Awaited<ReturnType<typeof start>>) =>
+    app
+      .hosts((p) => p.accessibilityLiveRegion === 'polite')
+      .map((node) =>
+        node
+          .findAll((child) => (child.type as unknown) === 'Text')
+          .flatMap((text) => text.children.filter((part) => typeof part === 'string'))
+          .join(''),
+      );
+  /** Nothing moves: no loop or fade started, no spinner, and the bar's segment where it rests. */
+  const still = (app: Awaited<ReturnType<typeof start>>) => {
+    expect(loop).not.toHaveBeenCalled();
+    expect(timing).not.toHaveBeenCalled();
+    expect(spinners()).toEqual([]);
+    for (const bar of app.progress()) {
+      const [segment] = bar.findAll((node) => (node.type as unknown) === 'AnimatedView');
+      const [{ translateX }] = flatten(segment!.props.style).transform as [
+        { translateX: { multiply: [{ value: number }] } },
+      ];
+      expect(translateX.multiply[0].value).toBe(sweepTrack.rest);
+    }
+  };
+
+  it('shows the progress bar while the session is checked, saying what it checks', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    // A session without a verified account shows no saved Home: the check has the screen.
+    phone.unverifySession();
+    const check = phone.hold('/api/auth/get-session');
+    const app = await start(phone);
+    await check.reached;
+    await settle();
+
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual([
+      'Checking your session',
+    ]);
+    expect(layoutHeight(aboveContent('KeyboardAvoidingView'))).toBe(progressHeight);
+    expect(announced(app)).toContain('Checking your session…');
+    // The bar is the one progress cue: no spinner beside it.
+    expect(spinners()).toEqual([]);
+
+    check.release();
+    await settle();
+    expect(app.text()).not.toContain('Checking your session');
+    expect(app.progress()).toEqual([]);
+    expect(app.text()).toContain('Maple House');
+  });
+
+  it('shows the progress bar over the saved Home while its session is checked, labelled as saved', async () => {
+    const phone = device();
+    const savedAt = await usedBefore(phone);
+    phone.clock.now += 60 * 60_000;
+    const check = phone.hold('/api/auth/get-session');
+    const app = await start(phone);
+    await check.reached;
+    await settle();
+
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual([
+      'Checking your session',
+    ]);
+    expect(aboveContent('ScrollView').props.accessibilityRole).toBe('progressbar');
+    // #332's labels: the top bar says what is happening, the saved figures when they were saved.
+    expect(app.content().outside).toContain('Checking…');
+    expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}`);
+    expect(app.text()).not.toContain('Updated');
+
+    check.release();
+    await settle();
+    expect(app.progress()).toEqual([]);
+    expect(app.text()).not.toContain('Checking…');
+    expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+  });
+
+  it('keeps the session check still with reduce motion on, its states still shown', async () => {
+    setReduceMotion(true);
+    const phone = device();
+    const savedAt = await usedBefore(phone);
+    phone.clock.now += 60 * 60_000;
+    const check = phone.hold('/api/auth/get-session');
+    const app = await start(phone);
+    await check.reached;
+    await settle();
+
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual([
+      'Checking your session',
+    ]);
+    expect(app.content().outside).toContain('Checking…');
+    expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}`);
+    still(app);
+
+    // The fresh figures replace the saved ones at once.
+    check.release();
+    await settle();
+    expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+    still(app);
   });
 });
 

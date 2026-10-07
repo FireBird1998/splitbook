@@ -531,10 +531,11 @@ describe('cold start (#127 decision): the saved Home while the session is checke
       drafts: [{ groupId: maple, description: 'Weekly groceries' }],
       offline: { active: false },
     });
+    // The check shows the one progress bar under the top bar (#335).
     expect(refreshFeedback(saved)).toMatchObject({
       checking: true,
       quiet: false,
-      progress: null,
+      progress: 'Checking your session',
     });
 
     // Nothing can be sent, or change the screen, before the session is confirmed.

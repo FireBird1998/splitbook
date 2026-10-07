@@ -16,7 +16,8 @@ export interface RefreshFeedback {
   checking: boolean;
   /**
    * The one progress bar under the top bar, so labelled: a first load with nothing to keep on
-   * screen, or a Group's quiet refresh, which leaves its top bar intact.
+   * screen, a Group's quiet refresh, which leaves its top bar intact, or the cold-start session
+   * check under the saved Home (#335).
    */
   progress: string | null;
 }
@@ -92,7 +93,9 @@ export function refreshFeedback(state: MobileSnapshot): RefreshFeedback {
     quiet,
     silent,
     checking,
-    progress: progress ?? (group && quiet ? 'Refreshing' : null),
+    progress: checking
+      ? 'Checking your session'
+      : (progress ?? (group && quiet ? 'Refreshing' : null)),
   };
 }
 
