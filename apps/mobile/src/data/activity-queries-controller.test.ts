@@ -1532,4 +1532,71 @@ describe('final checks (#222)', () => {
       ...mapleEvents(1, 15),
     ]);
   });
+
+  it('shows nothing it read beside a Group that turned out to be a Household until it is read again after it', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    // Listed as a Trip, so Activity is read beside the Group; the Group's read says Household.
+    f.server.groupAnswers[cabinId] = { category: 'home' };
+    const sent = f.calls.length;
+    const group = f.hold(cabinPath, { exact: true });
+    const shown = published(controller);
+    const opening = controller.openActivity(cabinId);
+    await group.reached;
+    await settle();
+    // The Group's read adds a due recurring Expense and its event.
+    f.server.events[cabinId].unshift({
+      ...f.server.events[cabinId][0],
+      _id: hex('d', 777),
+      metadata: { description: 'Recurring rent', amount: 5, currency: 'INR', recurring: true },
+    });
+    const again = f.hold(activityPath(1, cabinPath));
+    group.release();
+    await again.reached;
+    await settle();
+    // Checked and a Household: the placeholder holds, as on a Household's first open.
+    expect(controller.getSnapshot()).toMatchObject({
+      detail: { data: { category: 'home' } },
+      activity: { groupId: cabinId, status: 'loading', events: [], pagination: null },
+    });
+    again.release();
+    await opening;
+    await settle();
+    expect(listed(controller.getSnapshot())[0]).toBe('Recurring rent');
+    expect(controller.getSnapshot().activity).toMatchObject({ status: 'ready', restored: false });
+    // No snapshot listed the events read before the Group's.
+    for (const state of shown)
+      if (state.activity.events.length) expect(listed(state)[0]).toBe('Recurring rent');
+    expect(f.gets(sent)).toEqual(['cabin', 'cabin activity p1', 'cabin activity p1']);
+  });
+
+  it('reads a Household’s Activity again after its Group when the member comes back to it, having switched away while the Group was read', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    f.server.groupAnswers[cabinId] = { category: 'home' };
+    const group = f.hold(cabinPath, { exact: true });
+    const opening = controller.openActivity(cabinId);
+    await group.reached;
+    await settle();
+    // Read beside the Group; the member is on Expenses by the time the Group answers.
+    const switching = controller.selectDestination('expenses');
+    f.server.events[cabinId].unshift({
+      ...f.server.events[cabinId][0],
+      _id: hex('d', 777),
+      metadata: { description: 'Recurring rent', amount: 5, currency: 'INR', recurring: true },
+    });
+    group.release();
+    await Promise.all([opening, switching]);
+    await settle();
+    const sent = f.calls.length;
+    await controller.selectDestination('activity');
+    await settle();
+    // Inside the window, yet read again: what was read beside the Group may lack that event.
+    expect(f.activityGets(sent)).toEqual(['cabin activity p1']);
+    expect(listed(controller.getSnapshot())[0]).toBe('Recurring rent');
+  });
 });

@@ -170,6 +170,12 @@ interface View {
   /** Reads of this open running, or waiting for the Group read they follow. */
   reading: number;
   detail: Detail | null;
+  /**
+   * Read beside its Group, before the Group's check passed (owner decision, 2026-10-06). Should
+   * the Group turn out to be a Household, whose read can add a due recurring Expense and its
+   * event, nothing of it shows until a read after the Group's lands (#180 Risk 8).
+   */
+  beside: boolean;
 }
 
 /**
@@ -255,6 +261,11 @@ export function createActivityQueries(session: ActivitySession) {
     value: row.value,
   });
 
+  /** The Group's read in this open says it is a Household. */
+  const household = (groupId: string) => {
+    const { detail } = session.snapshot();
+    return detail.id === groupId && detail.data?.category === 'home';
+  };
   /** Activity on screen for this open: the Group's view on its Activity destination. */
   const onScreen = () => {
     const at = session.route();
@@ -586,6 +597,8 @@ export function createActivityQueries(session: ActivitySession) {
           : null;
       /** This read answered with pages read now, which are being saved on this device. */
       let answered = false;
+      /** It read after this open's check of the Group passed. */
+      let checked = false;
       try {
         reproject();
         if (after) {
@@ -608,7 +621,11 @@ export function createActivityQueries(session: ActivitySession) {
         if (!still()) return false;
         const reread = rereadOf(key),
           before = held(key)?.state.dataUpdatedAt;
-        await readNow(listOptions(key, fresh), owner, still);
+        checked = session.checked(opened.groupId);
+        if (!checked && !after) opened.beside = true;
+        // Read beside a Group that turned out to be a Household: read again, after it.
+        const again = opened.beside && checked && household(opened.groupId);
+        await readNow(listOptions(key, fresh || again), owner, still);
         answered = held(key)?.state.dataUpdatedAt !== before;
         if (reread) shownRereads.add(reread);
       } catch (error) {
@@ -618,6 +635,8 @@ export function createActivityQueries(session: ActivitySession) {
       } finally {
         await restoring;
         opened.reading -= 1;
+        // Landed after the Group's check: what it read shows, or its failure with what was read.
+        if (checked) opened.beside = false;
         if (session.current(owner)) reproject();
       }
       return answered;
@@ -674,7 +693,7 @@ export function createActivityQueries(session: ActivitySession) {
     return target;
   };
   /** Activity as its query holds it, in the snapshot's shape. */
-  const activityFrom = (shown: ActivityState, opened: View): ActivityState => {
+  const activityFrom = (shown: ActivityState, opened: View, household: boolean): ActivityState => {
     const { groupId } = opened,
       state = stateOf<Pages>(activityKey(groupId)),
       selected = opened.detail?.event ?? null,
@@ -697,7 +716,10 @@ export function createActivityQueries(session: ActivitySession) {
       !!data &&
       !previewed(data) &&
       state.dataUpdatedAt >= opened.since;
-    const pages = unchecked ? [] : (data?.pages ?? []);
+    // Read beside a Group that turned out to be a Household, and not yet read again after it: it
+    // may lack the event of a due recurring Expense its Group's read added (#180 Risk 8).
+    const recheck = opened.beside && session.checked(groupId) && household;
+    const pages = unchecked || recheck ? [] : (data?.pages ?? []);
     const read = pages.filter((page) => page.source !== 'failed');
     const failedPage = pages.find((page) => page.source === 'failed');
     let next: ActivityState = base;
@@ -734,6 +756,8 @@ export function createActivityQueries(session: ActivitySession) {
         return same(shown, { ...next, status: 'ready', newerStatus: 'loading' });
       return same(shown, { ...next, status: 'loading', moreStatus: 'idle' });
     }
+    // Until the read after a Household's Group lands, its placeholder holds.
+    if (recheck) return same(shown, { ...next, status: 'loading' });
     // Not checked by this open yet: a saved copy shows while the Group is read.
     if (unchecked || !session.checked(groupId) || (previewed(data) && !failure(state)))
       return same(shown, { ...next, status: opened.reading ? 'loading' : 'idle' });
@@ -784,7 +808,7 @@ export function createActivityQueries(session: ActivitySession) {
           }
         : next;
     }
-    const activity = activityFrom(next.activity, opened);
+    const activity = activityFrom(next.activity, opened, next.detail.data?.category === 'home');
     return activity === next.activity ? next : { ...next, activity };
   };
   /** A fetch that answered from the server: each page saved as its row while still current. */
@@ -828,7 +852,14 @@ export function createActivityQueries(session: ActivitySession) {
     open(groupId: string, { again, fresh }: { again: boolean; fresh: boolean }) {
       if (again && view?.groupId === groupId && !view.lost) view.detail = null;
       else {
-        view = { groupId, lost: false, since: Date.now(), reading: 0, detail: null };
+        view = {
+          groupId,
+          lost: false,
+          since: Date.now(),
+          reading: 0,
+          detail: null,
+          beside: false,
+        };
         const key = activityKey(groupId),
           query = held<Pages>(key),
           pages = query?.state.data;
