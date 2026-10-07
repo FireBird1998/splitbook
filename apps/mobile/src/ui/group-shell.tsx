@@ -1,5 +1,5 @@
-import { useRef, useState, type ReactNode, type Ref } from 'react';
-import { RefreshControl, ScrollView, View, type ScrollViewProps } from 'react-native';
+import { useState, type ReactNode, type Ref } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, View, type ScrollViewProps } from 'react-native';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupDestination, MobileGroup } from '../data/types';
 import {
@@ -54,7 +54,8 @@ interface GroupShellProps {
   overlay?: ReactNode;
   /**
    * Shown over the destination's content in its own scroll view, such as an open Activity event:
-   * the content stays mounted underneath, hidden from TalkBack, never shortened or scrolled, so
+   * it fills the content's place, between the top bar's progress and the navigation, and the
+   * content stays mounted underneath, hidden from TalkBack, never shortened or scrolled, so
    * closing the cover finds it at the same place (#222's device check).
    */
   cover?: ReactNode;
@@ -86,8 +87,6 @@ export function GroupShell({
 }: GroupShellProps) {
   const theme = useTheme();
   const [options, setOptions] = useState(false);
-  /** Where the destination's scroll view lies, as it last laid out: a cover takes its place. */
-  const area = useRef({ y: 0, height: 0 });
   const content = {
     paddingHorizontal: 16,
     paddingTop: 4,
@@ -123,48 +122,41 @@ export function GroupShell({
       />
       {/* The bar's room stays when nothing loads, so the content never moves. */}
       {progress ? <LinearProgress label={progress} /> : <View style={{ height: progressHeight }} />}
-      <ScrollView
-        // Each destination starts at its own top.
-        key={destination}
-        ref={scrollRef}
-        {...scroll}
-        onLayout={(event) => {
-          area.current = event.nativeEvent.layout;
-          scroll?.onLayout?.(event);
-        }}
-        // Under a cover it keeps its content and its offset, out of TalkBack's reach.
-        importantForAccessibility={cover ? 'no-hide-descendants' : 'auto'}
-        accessibilityElementsHidden={!!cover}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={content}
-        refreshControl={
-          <RefreshControl
-            refreshing={pull.refreshing}
-            onRefresh={pull.onRefresh}
-            tintColor={theme.brand.main}
-            colors={[theme.brand.main]}
-          />
-        }
-      >
-        {children}
-      </ScrollView>
-      {cover ? (
+      {/* The content's place: a cover fills it exactly. Never measured, since the content's own
+          layout is its pull-to-refresh wrapper's on Android, not this column's. */}
+      <View style={{ flex: 1 }}>
         <ScrollView
-          // From its own top, over the content, which stays as it was underneath.
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: area.current.y,
-            height: area.current.height,
-            backgroundColor: theme.bg,
-          }}
+          // Each destination starts at its own top.
+          key={destination}
+          ref={scrollRef}
+          {...scroll}
+          // Under a cover it keeps its content and its offset, out of TalkBack's reach.
+          importantForAccessibility={cover ? 'no-hide-descendants' : 'auto'}
+          accessibilityElementsHidden={!!cover}
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ ...content, paddingBottom: 24 }}
+          contentContainerStyle={content}
+          refreshControl={
+            <RefreshControl
+              refreshing={pull.refreshing}
+              onRefresh={pull.onRefresh}
+              tintColor={theme.brand.main}
+              colors={[theme.brand.main]}
+            />
+          }
         >
-          {cover}
+          {children}
         </ScrollView>
-      ) : null}
+        {cover ? (
+          <ScrollView
+            // From its own top, over the content, which stays as it was underneath.
+            style={[StyleSheet.absoluteFill, { backgroundColor: theme.bg }]}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ ...content, paddingBottom: 24 }}
+          >
+            {cover}
+          </ScrollView>
+        ) : null}
+      </View>
       <GroupNavBar
         groupName={group?.name ?? 'Group'}
         value={destination}

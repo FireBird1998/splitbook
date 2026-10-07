@@ -5,7 +5,7 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { findHosts, layoutHeight } from './test-utils/layout';
+import { findHosts, flatten, layoutHeight } from './test-utils/layout';
 import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
@@ -1453,6 +1453,24 @@ describe('App Activity window (#222)', () => {
           textOf(view).includes('This records a payment made outside Splitbook.'),
         );
         expect(cover).toBeDefined();
+        // It fills the list's place, in the View that holds the list: never measured, so never
+        // over the top bar, short of the navigation, or 0 high (#222's UI review of 32e99ad).
+        const [place] = findHosts(screen!.toJSON(), (_props, type) => type === 'View').filter(
+          (node) =>
+            (node.children ?? []).filter(
+              (child) => typeof child !== 'string' && child.type === 'ScrollView',
+            ).length === 2,
+        );
+        expect(flatten(place?.props.style)).toEqual({ flex: 1 });
+        const [, over] = place!.children as ReactTestRendererJSON[];
+        expect(flatten(over.props.style)).toEqual({
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: 0,
+          backgroundColor: expect.any(String),
+        });
         // The list stays mounted under it with every row, out of TalkBack's reach.
         expect(under.props.importantForAccessibility).toBe('no-hide-descendants');
         expect(textOf(under)).toContain('Fictional event 2-20');
