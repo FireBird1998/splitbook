@@ -54,6 +54,15 @@ const notKept = {
   // Under "Couldn't load your Groups", before "Showing previously verified Groups."
   groups: 'This phone no longer keeps a copy of them.',
 };
+/**
+ * Home's own words when it has nothing to show and this phone keeps no copy: never the generic
+ * "This view was not saved on this device", which isn't true once a copy was removed or withheld
+ * (#332). Home's "Not available offline" says the same.
+ */
+export const notOnPhone = {
+  balances: 'Your balances aren’t saved on this phone. Connect to load them.',
+  groups: 'Your Groups aren’t saved on this phone. Connect to load them.',
+};
 /** SplitBook couldn't be reached, and this phone had no saved copy to answer with. */
 const unkept = (error: Error) =>
   error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
@@ -154,12 +163,13 @@ export function projectGroups(read: Read, shown: MobileSnapshot['groups']) {
     status: denied ? 'denied' : 'error',
     data: denied ? [] : shown.data,
     // Groups still on screen: what is true of them, never "not saved" (#332).
-    message:
-      unkept(error) && shown.data.length
+    message: unkept(error)
+      ? shown.data.length
         ? notKept.groups
-        : error instanceof RequestError
-          ? error.message
-          : 'The server returned invalid group data. Please refresh.',
+        : notOnPhone.groups
+      : error instanceof RequestError
+        ? error.message
+        : 'The server returned invalid group data. Please refresh.',
     loaded: shown.loaded,
     restored: denied ? false : shown.restored,
   });
@@ -204,12 +214,13 @@ export function projectHome(read: Read, shown: HomeFinancialState): HomeFinancia
     ...(denied ? emptyHome() : shown),
     status: denied ? 'denied' : 'error',
     // Figures still on screen: what is true of them, never "not saved" (#332).
-    message:
-      unkept(error) && shown.data !== null
+    message: unkept(error)
+      ? shown.data !== null
         ? notKept.balances
-        : error instanceof RequestError
-          ? error.message
-          : 'Could not load your balances. Please try again.',
+        : notOnPhone.balances
+      : error instanceof RequestError
+        ? error.message
+        : 'Could not load your balances. Please try again.',
   };
 }
 

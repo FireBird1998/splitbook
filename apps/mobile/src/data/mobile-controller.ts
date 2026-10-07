@@ -4762,6 +4762,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       publish({
         ...snapshot,
         invitation: { code: null, status: 'idle', preview: null, message: null },
+        // Online again, Home's figures are no longer its earlier failure to reach SplitBook:
+        // the join made them obsolete, and they're read when Home next shows them (#332).
+        home:
+          snapshot.home.status === 'error'
+            ? { ...snapshot.home, status: 'idle', message: null }
+            : snapshot.home,
       });
       // Home, while the Groups list is read again with the joined Group; then that Group.
       const loadingGroups = listOnHome(owner);

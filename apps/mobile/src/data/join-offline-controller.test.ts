@@ -181,6 +181,8 @@ function phone() {
     create,
     /** The invitation saved on this device. */
     invitation: () => invitation,
+    /** This device no longer keeps Alex's saved copy of `path`, as after a change removed it. */
+    forget: (path: string) => void disk.delete(alex.id + path),
     /** The next request `METHOD /path` waits until it is answered, or can't reach SplitBook. */
     hold(request: string) {
       let arrive!: () => void, answer!: () => void, drop!: () => void;
@@ -412,6 +414,46 @@ describe('After a Join, Home says what is true (#332)', () => {
     expect(home.length).toBeGreaterThan(0);
     expect(home.every((state) => state.home.restored)).toBe(true);
     expect(published.filter((state) => state.offline.active)).toEqual([]);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      detail: { status: 'ready', data: { id: maple } },
+    });
+  });
+
+  it('says nothing offline on Home once a Join after an offline start confirms', async () => {
+    const f = phone();
+    const first = f.create();
+    await first.signIn('alex');
+    first.dispose();
+    // Alex's phone keeps no copy of Home's figures, and restarts offline.
+    f.forget('/api/user/balances');
+    f.network.online = false;
+    const controller = f.create();
+    await controller.restore();
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: true },
+      home: {
+        status: 'error',
+        data: null,
+        message: 'Your balances aren’t saved on this phone. Connect to load them.',
+      },
+    });
+    // Sam's invitation can't load; back online, Try again reads it, and Alex joins.
+    await controller.openInvitation(link);
+    f.network.online = true;
+    await controller.retryInvitation();
+    const published: MobileSnapshot[] = [];
+    controller.subscribe(() => published.push(controller.getSnapshot()));
+    await controller.joinInvitation();
+
+    // Home shows while its Groups are read again: online, with no failure to reach SplitBook.
+    const home = published.filter((state) => state.screen === 'groups');
+    expect(home.length).toBeGreaterThan(0);
+    expect(
+      home.filter(
+        (state) => state.offline.active || state.home.status === 'error' || state.home.message,
+      ),
+    ).toEqual([]);
     expect(controller.getSnapshot()).toMatchObject({
       screen: 'group',
       detail: { status: 'ready', data: { id: maple } },

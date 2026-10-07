@@ -13,6 +13,7 @@ import type {
   MobileGroup,
   MobileSnapshot,
 } from '../data/types';
+import { notOnPhone } from '../data/home-queries';
 import {
   Badge,
   Banner,
@@ -236,7 +237,7 @@ export function HomeBalances({
       <NotAvailableOffline
         compact
         // True whether they were never saved, removed by a change or sign-out, or withheld.
-        message="Your balances aren’t saved on this phone. Connect to load them."
+        message={notOnPhone.balances}
         onRetry={onRefresh}
       />
     );
@@ -550,11 +551,7 @@ export function HomeGroups({
         }
       />
       {unsaved ? (
-        <NotAvailableOffline
-          compact
-          message="Your Groups aren’t saved on this phone. Connect to load them."
-          onRetry={onRetry}
-        />
+        <NotAvailableOffline compact message={notOnPhone.groups} onRetry={onRetry} />
       ) : null}
       {(groups.status === 'error' || groups.status === 'denied') && !unsaved && (
         <Banner
