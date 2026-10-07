@@ -1469,8 +1469,10 @@ export function createGroupQueries(session: GroupSession) {
     },
     /**
      * Whether the Expenses `financial` shows were read from the server by a read begun after
-     * `change`: only such a list shows a saved row as it now is, never as it was before the
-     * change or while it is read again (#219).
+     * `change` (#219); never while the change isn't known yet (`Infinity`). The comparison with
+     * the change is defence in depth, not the guard: the change removes the Group's lists
+     * (`ledgerChanged`) before anything publishes, so a list shown after it was read after it,
+     * and no test can tell this comparison from a looser one.
      */
     listedSince(groupId: string, financial: GroupFinancialState, change: number) {
       const key = view?.groupId === groupId ? shownList(financial) : null,
