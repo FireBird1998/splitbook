@@ -1763,22 +1763,28 @@ describe('Balances and Home follow every read of a Group (M1-5, AMEND-1)', () =>
     await controller.signIn('alex');
     await controller.openGroup(mapleId);
     await controller.back();
+    // Home's figures are verified 10 s after the Group, and the view shows the Group 20 s after
+    // it. Record comes past the window for the Group only, so the sheet reads it (#333).
+    later(10_000);
+    await controller.refreshHome();
+    later(10_000);
     await controller.openGroup(mapleId, true, 'balances');
+    later(11_000);
     let sent = f.calls.length;
     await controller.openRecordPayment(alex.id, sam.id, 'INR');
     expect(f.calls.slice(sent).map(({ method, path }) => `${method} ${path}`)).toEqual([
       `GET ${maplePath}`,
       `GET ${maplePath}/balances`,
     ]);
+    // The Group's Balances are not read again: the sheet read them after its check of the
+    // Group, and they stand verified as the view's (#219).
+    sent = f.calls.length;
     await controller.closeSettlement();
-    // Within the window, Home's figures are read again. The Group's Balances are not: the sheet
-    // read them after its check of the Group, and they stand verified as the view's (#219).
+    expect(f.reads(`${maplePath}/balances`, sent)).toBe(0);
+    // Within the window, Home's figures are read again.
     sent = f.calls.length;
     await controller.back();
     expect(f.reads(homePath, sent)).toBe(1);
-    sent = f.calls.length;
-    await controller.openGroup(mapleId, true, 'balances');
-    expect(f.reads(`${maplePath}/balances`, sent)).toBe(0);
   });
 });
 
@@ -1914,6 +1920,41 @@ describe('Home reads its Groups and its figures together (#333)', () => {
       expect(f.row(homePath)).toMatchObject({ value: { data: { buckets: [{ youOwe: 20 }] } } });
     },
   );
+
+  it('reads Home’s figures again after the payment sheet saw newer Balances, and only then', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(mapleId, true, 'balances');
+    // Home's figures are read again after the view's read of the Group (AMEND-1).
+    await controller.back();
+    await controller.openGroup(mapleId, true, 'balances');
+    // The sheet checks the Group its view verified within 30 s, reading only the Balances, the
+    // same as the view's: nothing makes Home's figures out of date.
+    let sent = f.calls.length;
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    await controller.closeSettlement();
+    expect(f.reads(`${maplePath}/balances`, sent)).toBe(1);
+    sent = f.calls.length;
+    await controller.back();
+    expect(f.reads(homePath, sent)).toBe(0);
+
+    // A change elsewhere: the sheet sees newer Balances, so on closing it the view's Balances,
+    // and then Home's figures, are read again.
+    await controller.openGroup(mapleId, true, 'balances');
+    f.server.owe = 45;
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    sent = f.calls.length;
+    await controller.closeSettlement();
+    expect(f.reads(`${maplePath}/balances`, sent)).toBe(1);
+    sent = f.calls.length;
+    await controller.back();
+    expect(f.reads(homePath, sent)).toBe(1);
+    expect(controller.getSnapshot().home).toMatchObject({
+      status: 'ready',
+      data: [{ youOwe: 45 }],
+    });
+  });
 
   it('reads the figures again only once when the list beside them is the older one', async () => {
     const f = fixture();

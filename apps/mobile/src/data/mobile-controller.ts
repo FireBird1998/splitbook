@@ -3790,19 +3790,54 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  const settlementContext = async (groupId: string, owner: number) => {
-    const group = parseGroup(await request(`/api/groups/${groupId}`, owner));
+  /**
+   * The Group as its view verified it within the display freshness window: never a saved copy,
+   * never while offline, never while it is being read again. Null otherwise.
+   */
+  const verifiedGroup = (groupId: string) => {
+    if (offlineSession || snapshot.offline.active) return null;
+    const state = queryClient.getQueryState<Envelope>(groupKey(account(), groupId));
+    const at = state?.dataUpdatedAt ?? 0;
+    return state?.data?.source === 'network' &&
+      state.fetchStatus !== 'fetching' &&
+      at <= Date.now() &&
+      Date.now() - at < freshness
+      ? state.data.value
+      : null;
+  };
+  /**
+   * The Group the Record payment sheet checks a payment against: the one its view verified
+   * within the freshness window, as another screen over the Group reuses it (#333), or read now.
+   */
+  const settlementGroup = async (groupId: string, owner: number) => {
+    const group = parseGroup(
+      verifiedGroup(groupId) ?? (await request(`/api/groups/${groupId}`, owner)),
+    );
     if (group.id !== groupId || !group.members.some((m) => m.user.id === snapshot.auth.user?.id))
       throw new RequestError('You no longer have access to this Group.', 403);
+    return group;
+  };
+  /**
+   * The Group's latest Balances, read live, after any read of the Group (M1-5, AMEND-1). Their
+   * suggestions are what a payment is checked against; a lost Group refuses them (403) as it
+   * refuses its own read, and is purged the same way.
+   */
+  const settlementBalances = async (groupId: string, owner: number) => {
     const value = await request(`/api/groups/${groupId}/balances`, owner);
     const balances = parseGroupBalances(value);
     if (current(owner)) groupQueries.sheetBalances(groupId, value);
-    return { group, balances };
+    return balances;
+  };
+  const settlementContext = async (groupId: string, owner: number) => {
+    const group = await settlementGroup(groupId, owner);
+    return { group, balances: await settlementBalances(groupId, owner) };
   };
   /**
-   * The Record payment sheet over Balances. Its reads are live; they never cancel the Group's
-   * own reads, and leaving the Group or closing the sheet cancels them. `chosen` is the payment
-   * chosen on Balances, which the sheet shows as Balances did while it checks (#334).
+   * The Record payment sheet over Balances. It checks the Group its view verified within the
+   * freshness window, or reads it first, then reads the Balances live (#333); its reads never
+   * cancel the Group's own reads, and leaving the Group or closing the sheet cancels them.
+   * `chosen` is the payment chosen on Balances, which the sheet shows as Balances did while it
+   * checks (#334).
    */
   const openSettlements = async (groupId: string, chosen: SettlementChoice | null = null) => {
     if (snapshot.auth.status !== 'authenticated') return;
@@ -4014,7 +4049,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       sending = false;
     publish({ ...snapshot, settlement: { ...state, status: 'saving', message: null } });
     try {
-      const context = await settlementContext(groupId, owner);
+      // The Group the sheet's check named stands (#333): SplitBook checks members, currency and
+      // who may record on the payment itself. Only the Balances are read again, live: their
+      // suggestion is what the payment is checked against, and a Retry's only check before it
+      // is sent again.
+      const context = {
+        group: state.group ?? (await settlementGroup(groupId, owner)),
+        balances: await settlementBalances(groupId, owner),
+      };
       if (!current(owner) || view !== viewRequest) return;
       assertSettlementMembers(
         new Set(context.group.members.map((m) => m.user.id)),
@@ -4345,14 +4387,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const { groupId } = to;
     const shown = snapshot.detail.id === groupId && snapshot.detail.data !== null;
     // The sheet read Balances after its own check of the Group: when they're the ones shown,
-    // they stand verified; newer ones, or a payment that may be recorded, are read again.
-    if (
-      shown &&
-      attempt === null &&
-      group !== null &&
-      JSON.stringify(balances) === JSON.stringify(snapshot.financial.balances.data)
-    )
+    // they stand verified; newer ones, or a payment that may be recorded, are read again. A check
+    // that reused the view's Group (#333) read nothing that made them out of date: newer Balances
+    // it saw do, with Home's figures, as a read of the Group would have (M1-5, AMEND-1).
+    const same = JSON.stringify(balances) === JSON.stringify(snapshot.financial.balances.data);
+    if (shown && attempt === null && group !== null && same)
       groupQueries.adoptSheetBalances(groupId);
+    else if (shown && group !== null && !same) invalidateReads(`balances:${groupId}`, 'home');
     const pending = attempt
       ? { groupId, draft }
       : snapshot.pendingPayment?.groupId === groupId

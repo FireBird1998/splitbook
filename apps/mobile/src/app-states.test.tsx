@@ -2537,11 +2537,8 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     expect(shown()).toContain(footnote);
     expect(shown()).not.toContain('Checking');
     expect([sheetHeight(), sheetHeight(1.3)]).toEqual(checking);
-    // The same reads as before: the Group, then its Balances.
-    expect(phone.sent.slice(before)).toEqual([
-      `GET /api/groups/${maple}`,
-      `GET /api/groups/${maple}/balances`,
-    ]);
+    // Only its Balances: the Group its view verified within 30 s stands (#333).
+    expect(phone.sent.slice(before)).toEqual([`GET /api/groups/${maple}/balances`]);
   });
 
   // Item 3 (#331): already true, and kept pinned through the App.
@@ -2693,10 +2690,8 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
       disabled: false,
       busy: false,
     });
-    expect(phone.sent.slice(before)).toEqual([
-      `GET /api/groups/${maple}`,
-      `GET /api/groups/${maple}/balances`,
-    ]);
+    // The same check: the Balances, over the Group its view verified within 30 s (#333).
+    expect(phone.sent.slice(before)).toEqual([`GET /api/groups/${maple}/balances`]);
     expect(posts(phone)).toEqual([]);
   });
 });
