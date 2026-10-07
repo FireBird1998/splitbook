@@ -247,6 +247,46 @@ const activityPage = (page: number) => ({
     pagination: { page, limit: 20, total: 20 * pages, totalPages: pages },
   },
 });
+/** An Expense of the list as its own record reads it (#220). */
+const expenseRecord = (expenseId: string) => {
+  const [page, row] = [Number(expenseId.slice(-3, -2)), Number(expenseId.slice(-2)) + 1];
+  const { expenses } = expensePage(page).data;
+  return {
+    status: 200,
+    data: {
+      ...expenses[row - 1],
+      revision: 1,
+      notes: '',
+      isDeleted: false,
+      createdBy: person,
+      editHistory: [],
+    },
+  };
+};
+/** One Expense's changes, newest first: 6 pages of them, so they slide past 5 (M7-2, #220). */
+const historyPages = 6;
+const historyPage = (expenseId: string, page: number) => ({
+  status: 200,
+  data: {
+    activities: Array.from({ length: 20 }, (_, row) => ({
+      _id: hex('e', page * 100 + row),
+      group: groupId,
+      actor: { _id: user.id, name: user.name },
+      type: 'expense_updated',
+      createdAt: iso,
+      metadata: {
+        expenseId,
+        changes: {
+          notes: {
+            old: `Fictional note ${page}-${row + 2}`,
+            new: `Fictional note ${page}-${row + 1}`,
+          },
+        },
+      },
+    })),
+    pagination: { page, limit: 20, total: 20 * historyPages, totalPages: historyPages },
+  },
+});
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 /** `expensePages`: how many pages of Expenses Maple House has; 5 unless a journey needs more. */
@@ -317,8 +357,13 @@ function backend({ expensePages = pages } = {}) {
           });
         if (path.startsWith(`/api/groups/${groupId}/expenses?`))
           return json(expensePage(pageOf(path), expensePages));
+        const expenseId = new URL(path, 'http://local').searchParams.get('expenseId');
         if (path.startsWith(`/api/groups/${groupId}/activity?`))
-          return json(activityPage(pageOf(path)));
+          return json(
+            expenseId ? historyPage(expenseId, pageOf(path)) : activityPage(pageOf(path)),
+          );
+        if (path.startsWith(`/api/groups/${groupId}/expenses/`))
+          return json(expenseRecord(path.split('/').pop()!));
         if (path === `/api/groups/${groupId}/balances`)
           return json({
             data: {
@@ -481,6 +526,14 @@ async function renderApp(options?: { expensePages?: number }) {
       ),
     /** How many buttons on screen have a label starting with `label`, such as list rows. */
     count: (label: string) => root().findAll(labelled(label)).length,
+    /** How many rows read aloud with `text` in their label, such as an Expense's changes. */
+    rows: (text: string) =>
+      root().findAll(
+        (node) =>
+          isHost(node, 'View') &&
+          node.props.accessible === true &&
+          String(node.props.accessibilityLabel ?? '').includes(text),
+      ).length,
     /** Whether some text on screen contains `text`. */
     shows: (text: string) =>
       root()
@@ -709,6 +762,44 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
       'Load newer Expenses (pages 1 to 5)',
       () => app.press('Load newer expenses'),
       window(1),
+    );
+  });
+  // An Expense's changes re-read the pages loaded on a refresh (M1-3) and slide past 5 pages
+  // (M7-2), as the lists do (#220): Load older reads page 6, then Load newer page 1.
+  it('an Expense record and its changes', async () => {
+    const app = await renderApp();
+    const changes =
+      (count: number, first = 1) =>
+      () => {
+        expect(app.rows('changed the notes'), 'Changes').toBe(count);
+        expect(app.rows(`“Fictional note ${first}-1”`), `Page ${first} first`).toBe(1);
+        expect(app.count('Load newer changes'), 'Load newer').toBe(first > 1 ? 1 : 0);
+      };
+    await app.press('Open Maple House');
+    await journey(
+      'Open an Expense from Expenses',
+      () => app.press('Fictional expense 1-1,'),
+      changes(20),
+    );
+    await app.press('Load older changes');
+    await journey(
+      'Refresh an Expense with 2 pages of changes',
+      async () => {
+        await app.press('Expense options');
+        await app.press('Refresh');
+      },
+      changes(40),
+    );
+    for (let page = 3; page <= pages; page += 1) await app.press('Load older changes');
+    await journey(
+      'Load the 6th page of an Expense’s changes (pages 2 to 6)',
+      () => app.press('Load older changes'),
+      changes(100, 2),
+    );
+    await journey(
+      'Load newer changes (pages 1 to 5)',
+      () => app.press('Load newer changes'),
+      changes(100, 1),
     );
   });
   it('typing in the Expense form', async () => {

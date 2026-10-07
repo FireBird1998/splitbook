@@ -109,6 +109,30 @@
       "commits": 3,
       "renders": 331
     },
+    "Open an Expense from Expenses": {
+      "requests": 3,
+      "publishes": 5,
+      "commits": 3,
+      "renders": 261
+    },
+    "Refresh an Expense with 2 pages of changes": {
+      "requests": 5,
+      "publishes": 4,
+      "commits": 5,
+      "renders": 1316
+    },
+    "Load the 6th page of an Expense’s changes (pages 2 to 6)": {
+      "requests": 1,
+      "publishes": 2,
+      "commits": 2,
+      "renders": 1132
+    },
+    "Load newer changes (pages 1 to 5)": {
+      "requests": 1,
+      "publishes": 2,
+      "commits": 2,
+      "renders": 1132
+    },
     "Type 20 characters into Description": {
       "requests": 0,
       "publishes": 40,
