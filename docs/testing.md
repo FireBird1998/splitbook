@@ -202,6 +202,12 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   `?tab=balances` and `?action=add-expense` links, the Members roster (names
   and roles, no emails) with Invite, and axe on every tab, the Expenses tab
   whole, with nothing left out.
+- **Insights** (`group-insights.spec.ts`, read-only): the seeded Household's
+  Insights tab, opened from the tab bar on the current Month with seven months
+  of history; Month navigation and the range (`?month=`, `?compare=`) through
+  reload; the stat cards, the columns, the average line and the table with its
+  average row, all checked against the insights read for the browser's own
+  time zone; the tooltip; a Trip's Month view; and axe in both views.
 - **Add expense** (`add-expense.spec.ts`): the top bar's Add expense from Home
   through "Choose a Group" (axe on the chooser; the save keeps Home in place,
   confirms with the Group's name and rereads the balances), from inside a Group

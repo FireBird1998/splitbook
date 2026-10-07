@@ -147,20 +147,21 @@ describe('the tabs', () => {
     return render(createElement(GroupTabs, { groupId: GROUP, label: 'Maple House sections' }));
   };
 
-  it('are links to each tab’s address, in a labelled navigation, with Insights hidden until #314', () => {
+  it('are links to each tab’s address, in a labelled navigation', () => {
     const html = tabs(`/groups/${GROUP}/expenses`);
     expect(html).toMatch(/<nav\b[^>]*aria-label="Maple House sections"/);
     expect(html).not.toContain('role="tab');
     expect(anchors(html).map(({ href, text }) => [text, href])).toEqual([
       ['Expenses', `/groups/${GROUP}/expenses`],
       ['Balances', `/groups/${GROUP}/balances`],
+      ['Insights', `/groups/${GROUP}/insights`],
       ['Activity', `/groups/${GROUP}/activity`],
       ['Members', `/groups/${GROUP}/members`],
     ]);
   });
 
   it('mark the open tab, and only it, as the current page', () => {
-    for (const tab of ['expenses', 'balances', 'activity', 'members'])
+    for (const tab of ['expenses', 'balances', 'insights', 'activity', 'members'])
       expect(
         anchors(tabs(`/groups/${GROUP}/${tab}`))
           .filter(({ current }) => current)

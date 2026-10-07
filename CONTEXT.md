@@ -17,7 +17,7 @@ A Group-scoped, user-managed label with a stable identity independent of its nam
 _Avoid_: label, expense group
 
 **Month**:
-In a Household group, a read-only lens over expenses for one calendar month in the viewer's own timezone — never a ledger boundary. Answers "what did August cost us", never "what is owed".
+One calendar month in the viewer's own time zone, in a Group of any Theme. It is a read-only way of looking at that month's Expenses, never a line drawn in the ledger: it answers "what did August cost us", never "what is owed". An Expense late on 31 August can fall in September for a member in another time zone. When a Month is compared with the months before it, it is never part of its own average.
 _Avoid_: cycle, period, billing month
 
 **Saved copy**:

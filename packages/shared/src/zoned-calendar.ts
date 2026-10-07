@@ -113,6 +113,26 @@ function readMonth(month: MonthKey): { year: number; month: number } {
   return { year: Number(match[1]), month: Number(match[2]) };
 }
 
+/** True for a calendar Month written `YYYY-MM`, such as `2026-09`. */
+export function isMonthKey(value: unknown): value is MonthKey {
+  return typeof value === 'string' && MONTH_KEY.test(value);
+}
+
+/**
+ * Every Month from `from` to `to`, both included, oldest first. Empty when `from` is after
+ * `to`. Months compare as text, since `YYYY-MM` sorts as the calendar does.
+ */
+export function monthsBetween(from: MonthKey, to: MonthKey): MonthKey[] {
+  readMonth(from);
+  readMonth(to);
+  const months: MonthKey[] = [];
+  for (let month = from; month <= to; month = addMonths(month, 1)) {
+    months.push(month);
+    if (month === to) break;
+  }
+  return months;
+}
+
 /** A Month moved by whole months, across years: `addMonths('2026-01', -1)` is `2025-12`. */
 export function addMonths(month: MonthKey, offset: number): MonthKey {
   if (!Number.isSafeInteger(offset)) throw new RangeError('Invalid Month offset');
