@@ -61,6 +61,11 @@ export interface ActivityState {
   newerStatus?: 'idle' | 'loading' | 'error';
   /** A page shown is this device's saved copy, not a read in this session: "Saved", not "Updated". */
   restored?: boolean;
+  /**
+   * Nothing shows because SplitBook couldn't be reached and this phone keeps no copy of it: "isn't
+   * saved on this phone". Never for a failure SplitBook answered, such as a 500 (#222).
+   */
+  unsaved?: boolean;
 }
 export function emptyActivity(): ActivityState {
   return {
@@ -76,6 +81,7 @@ export function emptyActivity(): ActivityState {
     firstPage: 1,
     newerStatus: 'idle',
     restored: false,
+    unsaved: false,
   };
 }
 /** A saved Expense's own events: its Group's Activity, filtered to that Expense. */

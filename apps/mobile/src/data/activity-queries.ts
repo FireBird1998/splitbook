@@ -50,6 +50,8 @@ const refreshFailed =
 const notKept =
   'Couldn’t refresh this Group’s activity, and this phone no longer keeps a copy of it. A missing event does not mean the ledger change failed.';
 const olderFailed = 'Couldn’t load older activity.';
+/** Nothing shown, and a failure SplitBook answered that says nothing itself. */
+const loadFailed = 'Could not load Activity. Please try again.';
 
 /** One parse per answer: structural sharing keeps an unchanged page, and its events, the same. */
 const parsedPages = new WeakMap<object, Map<string, ReturnType<typeof parseActivityPage>>>();
@@ -745,12 +747,19 @@ export function createActivityQueries(session: ActivitySession) {
       return same(shown, {
         ...next,
         status: 'error',
-        // Events still on screen: what is true of them, never "not saved" (#222, as #219).
+        // Nothing shown, SplitBook out of reach, and no copy here: "isn't saved on this phone".
+        unsaved: unreachable(error) && !next.events.length,
+        // Events still on screen: what is true of them, never "not saved" (#222, as #219). With
+        // nothing shown, what failed: a server's answer, offline too, says so (#222).
         message: unreachable(error)
           ? next.events.length
             ? notKept
             : error.message
-          : refreshFailed,
+          : next.events.length
+            ? refreshFailed
+            : error instanceof RequestError
+              ? error.message
+              : loadFailed,
       });
     return same(shown, { ...next, status: 'ready' });
   };

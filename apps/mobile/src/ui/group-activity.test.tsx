@@ -125,6 +125,7 @@ describe('when Activity’s events were read (#222, the loading-state audit)', (
         pagination: null,
         refreshedAt: null,
         message: 'This view was not saved on this device. Connect to load it.',
+        unsaved: true,
       }),
     });
     expect(text(root)).toContain(
@@ -422,5 +423,23 @@ describe('the header says when its events were read, whole, at any text size (#2
     // The note's line is as tall whatever it says, so the events below never move as it changes:
     // "Newest first" to a time, or a Saved badge to "Updated".
     expect(new Set(heights).size).toBe(1);
+  });
+});
+
+describe('offline with nothing shown (#222, the loading-state audit)', () => {
+  it('says the server couldn’t complete the request when it answered, never that nothing is saved', () => {
+    const { root } = render({
+      offline: true,
+      state: activity({
+        status: 'error',
+        events: [],
+        pagination: null,
+        refreshedAt: null,
+        message: 'The server could not complete this request. Please try again.',
+      }),
+    });
+    expect(text(root)).toContain('The server could not complete this request. Please try again.');
+    expect(text(root)).not.toContain('isn’t saved on this phone');
+    expect(button(root, 'Try again')).toHaveLength(1);
   });
 });

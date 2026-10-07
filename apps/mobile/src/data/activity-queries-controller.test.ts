@@ -1166,6 +1166,36 @@ describe('the loading-state audit (#280)', () => {
     });
     expect(controller.getSnapshot().activity.restored).not.toBe(true);
   });
+
+  it('says what failed when SplitBook answers with nothing shown, offline too, and “not saved” only when it can’t be reached', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(mapleId);
+    f.server.offline = true;
+    await controller.refresh('pull');
+    await controller.selectDestination('activity');
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: true },
+      activity: { status: 'error', events: [], unsaved: true },
+    });
+    // SplitBook answers again, with a 500, before the app has seen it reachable.
+    await controller.selectDestination('expenses');
+    f.server.offline = false;
+    f.server.failPage = 1;
+    await controller.selectDestination('activity');
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: true },
+      activity: {
+        status: 'error',
+        events: [],
+        unsaved: false,
+        message: 'The server could not complete this request. Please try again.',
+      },
+    });
+  });
 });
 
 // The money-safety review of 90f5c21 (#222): saved copies a change or a loss left behind, a

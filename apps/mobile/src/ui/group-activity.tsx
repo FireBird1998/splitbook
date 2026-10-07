@@ -349,11 +349,12 @@ function ActivityList({
           )
         }
       />
-      {state.status === 'error' && offline && !state.events.length ? (
+      {state.status === 'error' && state.unsaved && !state.events.length ? (
         <NotAvailableOffline
           compact
           // True whether it was never saved here, removed by a change or a sign-out, or withheld
-          // (#323): never "hasn't been opened" (#280 item 2).
+          // (#323): never "hasn't been opened" (#280 item 2). A server's own failure says what
+          // failed instead, offline too: it isn't about what this phone keeps (#222).
           message="This Group’s activity isn’t saved on this phone. Connect to load it."
           onRetry={onRetry}
         />
