@@ -74,13 +74,16 @@ export function CompactText({
  * A short status that changes in place, such as "Updated 10:42" becoming "Saved 10:42 ·
  * refreshing": the old text fades out where it was on screen while the new one fades in, instead
  * of the words jumping. Screen readers hear only the current text. `shrink` lets a long status
- * wrap inside a row rather than push its neighbours out.
+ * wrap inside a row rather than push its neighbours out. `instant` shows this text at once, with
+ * nothing fading out beside it: for a status that must never be seen next to the one it
+ * replaces, such as "Updating…" over out-of-date figures (#219).
  */
 export function StatusText({
   children,
   variant = 'caption',
   tone = 'secondary',
   shrink = false,
+  instant = false,
   style,
   ...props
 }: TextProps & {
@@ -88,9 +91,10 @@ export function StatusText({
   variant?: TextVariant;
   tone?: TextTone;
   shrink?: boolean;
+  instant?: boolean;
 }) {
   const theme = useTheme();
-  const change = useStatusFade(children);
+  const change = useStatusFade(children, instant);
   const look = [textVariants[variant], { color: toneColor(theme, tone) }, style];
   const line = useRef<View>(null);
   /** The edge of its row the line keeps when its text grows or shrinks, as last laid out. */

@@ -1673,6 +1673,14 @@ describe('A Group says what is true, without jumps (#219)', () => {
   const seen = () =>
     words(findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView')[0]!);
   /**
+   * What the screen's statuses are fading out (#331): text a reader may still see for a moment
+   * beside what replaced it.
+   */
+  const fading = () =>
+    screen!.root
+      .findAll((node) => (node.type as unknown) === 'AnimatedText')
+      .map((node) => node.children.join(''));
+  /**
    * From the first publish `shows` is true of, this phone's next storage call waits until
    * released: what that publish drew stays on screen while the reads after it wait on storage.
    */
@@ -2064,6 +2072,8 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expect(frames.length).toBeGreaterThan(1);
     for (const frame of frames) expect(frame).toContain('Your balancesUpdating…');
     expect(seen()).toContain('Your balancesUpdating…');
+    // Nothing fades from the old time into it.
+    expect(fading().filter((text) => text.startsWith('Updated'))).toEqual([]);
     expect(app.content().outside).not.toContain('Refreshing');
     expect(contentHeight()).toBe(height);
     expect(seen()).toContain('Your balancesUpdating…');
@@ -2164,7 +2174,10 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expect(since.filter((request) => /\/(expenses\?|balances$)/.test(request))).toEqual([]);
     expect(seen()).toContain('All-time balance · INRUpdating…You owe₹30.00');
     expect(seen()).toContain('Suggested paymentsRecord once updated');
-    expect(seen()).not.toContain(`Updated ${readAt}`);
+    // Nothing fades from the old time or caption into these: neither is drawn at any opacity
+    // beside "Payment recorded".
+    expect(fading()).not.toContain(`Updated ${readAt}`);
+    expect(fading()).not.toContain('Record one once it’s paid');
     storage.release();
     await settle(recording);
     expect(seen()).toContain(`All-time balance · INRUpdated ${refreshedLabel(phone.clock.now)}`);

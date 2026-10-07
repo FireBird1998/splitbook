@@ -231,9 +231,10 @@ function SuggestedPayments({
       <SectionHeader
         title="Suggested payments"
         trailing={
-          // While a change keeps Record waiting, its caption says why, in a line no longer than
-          // the caption's, so nothing moves (#219); the full reason is Record's hint.
-          <StatusText variant="caption" tone="muted">
+          // While a change keeps Record waiting, its caption says why at once, never fading from
+          // the caption, in a line no longer than its own, so nothing moves (#219); the full
+          // reason is Record's hint.
+          <StatusText variant="caption" tone="muted" instant={locked && !offline}>
             {locked && !offline ? recordWaitsShort : recordCaption}
           </StatusText>
         }

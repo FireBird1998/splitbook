@@ -44,9 +44,10 @@ export function RefreshStatus({
  * Says `children` in the place `holds` takes: an unseen, unread copy of `holds` keeps that place
  * at its size, so a short status standing in for a longer text moves nothing around it, whatever
  * the text size (#219). With `holds` null, `children` take their own place. The same `children`
- * stay mounted either way, so a status in them fades from one text to the other.
+ * stay mounted either way, so a status in them can change its text in place. A plain function,
+ * drawn as part of the component that calls it.
  */
-function InPlace({ holds, children }: { holds: ReactNode | null; children: ReactNode }) {
+export function inPlace({ holds, children }: { holds: ReactNode | null; children: ReactNode }) {
   return (
     <View>
       {holds === null ? null : (
@@ -117,19 +118,19 @@ export function readTime({
   const time = refreshedLabel(refreshedAt);
   if (restored && offline && !updating) return <Badge label={`Saved ${time}`} />;
   const read = `${restored ? 'Saved' : 'Updated'} ${time}`;
-  return (
-    <InPlace
-      holds={
-        updating ? (
-          <CompactText variant="caption" tone={tone}>
-            {read}
-          </CompactText>
-        ) : null
-      }
-    >
-      <StatusText tone={tone}>{updating ? 'Updating…' : read}</StatusText>
-    </InPlace>
-  );
+  return inPlace({
+    holds: updating ? (
+      <CompactText variant="caption" tone={tone}>
+        {read}
+      </CompactText>
+    ) : null,
+    children: (
+      // Into "Updating…" at once, never fading from the time beside it; back out with a fade.
+      <StatusText tone={tone} instant={updating}>
+        {updating ? 'Updating…' : read}
+      </StatusText>
+    ),
+  });
 }
 
 /**

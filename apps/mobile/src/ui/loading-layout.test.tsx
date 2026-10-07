@@ -499,46 +499,49 @@ describe('A Household’s Balances', () => {
     },
   );
 
+  /** Balances owing, as read; `after` a change written here, while they're read again. */
+  const changed = (after: boolean) => (
+    <GroupBalancesView
+      group={maple}
+      currentUserId={you}
+      state={{
+        groupId: maple.id,
+        month: '2026-09',
+        expenses: {
+          status: 'ready',
+          data: [],
+          summary: null,
+          pagination: null,
+          message: null,
+          moreStatus: 'idle',
+          moreMessage: null,
+          month: '2026-09',
+          refreshedAt: at.getTime(),
+        },
+        balances: {
+          status: after ? 'loading' : 'ready',
+          data: [owing],
+          message: null,
+          refreshedAt: at.getTime(),
+          stale: after,
+          changed: after,
+        },
+      }}
+      pending={null}
+      offline={false}
+      onRecord={vi.fn()}
+      onCheckPayment={vi.fn()}
+      onRefreshBalances={vi.fn()}
+    />
+  );
+
   // #219: once a change written here makes them out of date, the balance's time says
   // "Updating…" in the place of the time it stands in for, and the payments' caption says why
-  // Record waits in a line no longer than its own, so nothing below moves at any text size.
+  // Record waits in the place of the caption it stands in for, so nothing below moves at any
+  // text size.
   it.each([1, 1.3, 2])(
     'Balances say they are updating, and why Record waits, in place, at %s× text',
     (scale) => {
-      const changed = (after: boolean) => (
-        <GroupBalancesView
-          group={maple}
-          currentUserId={you}
-          state={{
-            groupId: maple.id,
-            month: '2026-09',
-            expenses: {
-              status: 'ready',
-              data: [],
-              summary: null,
-              pagination: null,
-              message: null,
-              moreStatus: 'idle',
-              moreMessage: null,
-              month: '2026-09',
-              refreshedAt: at.getTime(),
-            },
-            balances: {
-              status: after ? 'loading' : 'ready',
-              data: [owing],
-              message: null,
-              refreshedAt: at.getTime(),
-              stale: after,
-              changed: after,
-            },
-          }}
-          pending={null}
-          offline={false}
-          onRecord={vi.fn()}
-          onCheckPayment={vi.fn()}
-          onRefreshBalances={vi.fn()}
-        />
-      );
       const { before, after } = heights(changed(false), changed(true), scale);
       expect(after).toBeGreaterThan(300);
       expect(after).toBe(before);

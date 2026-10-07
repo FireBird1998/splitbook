@@ -250,9 +250,10 @@ interface StatusChange {
  * line never restarts from the old text or shows the one in between at full strength. The fade
  * runs on the native driver from the frame after the change, on views new to it (`key`), so the
  * line never shows an opacity a finished fade left behind. A first render, and any change with
- * reduce motion on, shows the new text at once.
+ * reduce motion on, shows the new text at once; so does a change into an `instant` text, which
+ * must never show beside the one it replaces, and it ends a fade running then (#219).
  */
-export function useStatusFade(text: string): StatusChange {
+export function useStatusFade(text: string, instant = false): StatusChange {
   useWatchReducedMotion();
   /** The text last shown in full. */
   const settled = useRef(text);
@@ -262,8 +263,8 @@ export function useStatusFade(text: string): StatusChange {
   const latest = useRef(text);
   const changes = useRef(0);
   const change = useMemo(() => {
-    if (running.current && settled.current !== text) return running.current;
-    const from = settled.current !== text && moving() ? settled.current : null;
+    if (running.current && settled.current !== text && !instant) return running.current;
+    const from = settled.current !== text && moving() && !instant ? settled.current : null;
     const fade = new Animated.Value(from === null ? 1 : 0);
     const out = fade.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
     changes.current += 1;
