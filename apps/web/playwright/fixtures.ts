@@ -68,6 +68,20 @@ export async function openAddExpense(
   return dialog;
 }
 
+/** The theme switch's name, which says the mode it moves to. */
+export const THEME_SWITCH_NAME = /^Switch to (dark|light) mode$/;
+
+/**
+ * The theme switch: in the top bar, or below 430 px, where the bar has no room for it, at the
+ * foot of the drawer, which this opens (src/components/layout/phone-top-bar.ts).
+ */
+export async function themeSwitch(page: Page) {
+  if (page.viewportSize()!.width >= 430)
+    return page.getByRole('banner').getByRole('button', { name: THEME_SWITCH_NAME });
+  const drawer = await openNavigation(page);
+  return drawer.getByRole('button', { name: THEME_SWITCH_NAME });
+}
+
 /** Sign out from the account menu at the foot of the sidebar, and land back on the persona picker. */
 export async function signOut(page: Page): Promise<void> {
   const navigation = await openNavigation(page);

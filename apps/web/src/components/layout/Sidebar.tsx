@@ -4,10 +4,14 @@ import Link from 'next/link';
 import Box from '@mui/material/Box';
 import IconButton from '@mui/material/IconButton';
 import CloseIcon from '@mui/icons-material/Close';
+import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import DashboardOutlinedIcon from '@mui/icons-material/DashboardOutlined';
+import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
+import { useThemeMode } from '@/providers/ThemeProvider';
 import BrandLogo from './BrandLogo';
 import AccountMenu, { type ShellUser } from './AccountMenu';
+import { THEME_IN_BAR, themeSwitchLabel } from './phone-top-bar';
 import SidebarGroups from './SidebarGroups';
 import { HOME_HREF, MAIN_NAV, SETTINGS_HREF, navCurrent } from './shell-nav';
 
@@ -145,8 +149,40 @@ export default function Sidebar({
           <SettingsOutlinedIcon sx={{ fontSize: 20 }} />
           Settings
         </Box>
+        {drawer ? <DrawerThemeSwitch /> : null}
         <AccountMenu user={user} onNavigate={onNavigate} />
       </Box>
+    </Box>
+  );
+}
+
+/**
+ * The theme switch on a narrow phone, where the top bar has no room for it (phone-top-bar.ts):
+ * the same name and icon as the bar's, naming the mode it moves to. Wider screens keep the
+ * bar's switch, so the drawer shows none.
+ */
+function DrawerThemeSwitch() {
+  const { mode, toggleTheme } = useThemeMode();
+  const Icon = mode === 'light' ? DarkModeOutlinedIcon : LightModeOutlinedIcon;
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={toggleTheme}
+      sx={{
+        ...navLinkSx,
+        width: '100%',
+        border: 0,
+        bgcolor: 'transparent',
+        // The family only: the shorthand would undo the link's size.
+        fontFamily: 'inherit',
+        textAlign: 'left',
+        cursor: 'pointer',
+        [THEME_IN_BAR]: { display: 'none' },
+      }}
+    >
+      <Icon sx={{ fontSize: 20 }} />
+      {themeSwitchLabel(mode)}
     </Box>
   );
 }

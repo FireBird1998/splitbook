@@ -7,6 +7,7 @@ import {
   expectNoSeriousA11yViolations,
   expectThemeApplied,
   reviewScreenshot,
+  themeSwitch,
 } from './fixtures';
 
 /**
@@ -148,9 +149,12 @@ test('theme toggle flips the document theme and persists', async ({ page }, test
   const initial = expectedTheme(testInfo);
   const target = initial === 'light' ? 'dark' : 'light';
 
-  await page.getByRole('button', { name: `Switch to ${target} mode` }).click();
+  // In the top bar, or in the drawer on a narrow phone.
+  const toggle = await themeSwitch(page);
+  await expect(toggle).toHaveAccessibleName(`Switch to ${target} mode`);
+  await toggle.click();
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe(target);
-  await expect(page.getByRole('button', { name: `Switch to ${initial} mode` })).toBeVisible();
+  await expect(toggle).toHaveAccessibleName(`Switch to ${initial} mode`);
 
   // Persists via localStorage across reloads.
   await page.reload();

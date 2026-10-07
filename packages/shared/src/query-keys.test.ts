@@ -9,6 +9,7 @@ import {
   homeBalancesPath,
   invitationsPath,
   recurringExpensesPath,
+  searchPath,
   settlementsPath,
   userActivityPath,
 } from './api-paths';
@@ -27,6 +28,7 @@ import {
   matchScope,
   queryKeyPath,
   recurringExpensesKey,
+  searchKey,
   settlementsKey,
   userActivityKey,
   type QueryAccount,
@@ -55,6 +57,11 @@ describe('key factories', () => {
       'invitations',
       invitationsKey(alex),
       ['invitations', environment, alex.accountId, '/api/invitations'],
+    ],
+    [
+      'a search',
+      searchKey(alex, ' goa  dinner '),
+      ['search', environment, alex.accountId, '/api/search?q=goa%20dinner'],
     ],
     [
       'a Group',
@@ -160,6 +167,12 @@ describe('keys differ', () => {
     expect(userActivityKey(alex, { limit: 10 })).not.toEqual(userActivityKey(alex, { limit: 50 }));
   });
 
+  it('by search, but not by how the search is spaced', () => {
+    expect(searchKey(alex, 'goa')).not.toEqual(searchKey(alex, 'goa dinner'));
+    expect(searchKey(alex, '  goa   dinner ')).toEqual(searchKey(alex, 'goa dinner'));
+    expect(searchKey(alex, 'goa')).not.toEqual(searchKey(sam, 'goa'));
+  });
+
   it('never between an account and a Group that share an id', () => {
     const twin: QueryAccount = { environment, accountId: maple };
     expect(groupsKey(twin)).not.toEqual(groupKey(alex, maple));
@@ -172,6 +185,7 @@ const reads: ((account: QueryAccount, groupId: string) => QueryKey)[] = [
   (account) => homeBalancesKey(account),
   (account) => userActivityKey(account, { limit: 10 }),
   (account) => invitationsKey(account),
+  (account) => searchKey(account, 'goa'),
   (account, groupId) => groupKey(account, groupId),
   (account, groupId) => groupBalancesKey(account, groupId),
   (account, groupId) => expensePageKey(account, groupId, monthPage),
@@ -197,17 +211,22 @@ describe('matchers', () => {
     }
     for (const key of keys.filter((key) => !matchGroup(maple)(key)))
       expect(
-        key[0] === 'groups' || key[0] === 'home' || key[0] === 'invitations' || key[3] === goa,
+        key[0] === 'groups' ||
+          key[0] === 'home' ||
+          key[0] === 'invitations' ||
+          key[0] === 'search' ||
+          key[3] === goa,
       ).toBe(true);
   });
 
-  it('never select the Groups list, Home or invitations for a Group, even one named like an account', () => {
+  it('never select the Groups list, Home, invitations or search for a Group, even one named like an account', () => {
     const twin: QueryAccount = { environment, accountId: maple };
     for (const key of [
       groupsKey(twin),
       homeBalancesKey(twin),
       userActivityKey(twin),
       invitationsKey(twin),
+      searchKey(twin, maple),
     ])
       expect(matchGroup(maple)(key)).toBe(false);
   });
@@ -218,16 +237,19 @@ describe('matchers', () => {
     expect(keys.filter(matchGroup(maple.slice(1)))).toEqual([]);
   });
 
-  it.each([groupsPath(), homeBalancesPath(), userActivityPath({ limit: 10 }), invitationsPath()])(
-    'never select an account read for a Group id equal to its path, %s',
-    (path) => {
-      expect(keys.filter(matchGroup(path))).toEqual([]);
-    },
-  );
+  it.each([
+    groupsPath(),
+    homeBalancesPath(),
+    userActivityPath({ limit: 10 }),
+    invitationsPath(),
+    searchPath('goa'),
+  ])('never select an account read for a Group id equal to its path, %s', (path) => {
+    expect(keys.filter(matchGroup(path))).toEqual([]);
+  });
 
   it("select only this account's keys in this environment", () => {
     const selected = keys.filter(matchAccount(alex));
-    expect(selected).toHaveLength(2 * 11);
+    expect(selected).toHaveLength(2 * 12);
     expect(selected).toEqual(
       expect.arrayContaining([...everyKey(alex, maple), ...everyKey(alex, goa)]),
     );
@@ -240,7 +262,7 @@ describe('matchers', () => {
     );
   });
 
-  it.each(['groups', 'home', 'group', 'balances', 'ledger', 'invitations'] as const)(
+  it.each(['groups', 'home', 'group', 'balances', 'ledger', 'invitations', 'search'] as const)(
     'select only the %s scope',
     (scope) => {
       const selected = keys.filter(matchScope(scope));
