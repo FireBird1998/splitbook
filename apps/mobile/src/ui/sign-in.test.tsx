@@ -23,9 +23,10 @@ afterEach(() => {
   act(() => renderer?.unmount());
   renderer = undefined;
 });
-/** Renders, then lets Android answer whether reduce motion is on. */
+/** Renders in place of what was rendered, then lets Android answer whether reduce motion is on. */
 async function render(element: ReactElement) {
   act(() => {
+    renderer?.unmount();
     renderer = create(element);
   });
   await act(async () => undefined);
