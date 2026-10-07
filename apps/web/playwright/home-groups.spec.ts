@@ -114,6 +114,10 @@ test('Home lists every Group: Theme, members, spent this month, the balance and 
     }
   } else {
     const table = card.getByRole('table', { name: 'Groups' });
+    // A narrow card may scroll the table sideways: the keyboard can reach it to scroll.
+    const frame = card.getByRole('region', { name: 'Groups table' });
+    await frame.focus();
+    await expect(frame).toBeFocused();
     await expect(table.getByRole('columnheader')).toHaveText([
       'Group',
       'Members',
@@ -215,6 +219,10 @@ test('Where it went shows this month’s share by Category, with the same number
 
   await card.getByRole('button', { name: 'Table' }).click();
   await expect(card.getByTestId('category-bars')).toHaveCount(0);
+  // A narrow card may scroll the table sideways: the keyboard can reach it to scroll.
+  const frame = card.getByRole('region', { name: 'Your share by Category table' });
+  await frame.focus();
+  await expect(frame).toBeFocused();
   const table = card.getByRole('table', {
     name: `Your share by Category in ${month}, in ${series.currency}`,
   });

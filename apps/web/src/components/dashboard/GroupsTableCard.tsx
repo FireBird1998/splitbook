@@ -229,7 +229,16 @@ function GroupsTable({ rows, spentHeading }: { rows: GroupsTableRow[]; spentHead
     color: 'text.secondary',
   } as const;
   return (
-    <Box sx={{ overflowX: 'auto' }}>
+    // May scroll sideways in a narrow card: the keyboard can reach and scroll it.
+    <Box
+      role="region"
+      aria-label="Groups table"
+      tabIndex={0}
+      sx={{
+        overflowX: 'auto',
+        '&:focus-visible': { outline: 2, outlineColor: 'focus.main', outlineOffset: -2 },
+      }}
+    >
       <Box
         component="table"
         aria-labelledby={`${CARD_ID}-heading`}

@@ -34,6 +34,14 @@ function render(element: ReactElement, mode: 'light' | 'dark' = 'light') {
 }
 
 const noop = () => {};
+
+/** The opening tag of the element carrying `attribute`, or '' when there is none. */
+function openingTag(html: string, attribute: string): string {
+  const at = html.indexOf(attribute);
+  if (at < 0) return '';
+  const start = html.lastIndexOf('<', at);
+  return html.slice(start, html.indexOf('>', at) + 1);
+}
 const loading = { status: 'loading' } as const;
 const failed = { status: 'error' } as const;
 const ready = <T>(value: T): CardRead<T> => ({ status: 'ready', value });
@@ -128,6 +136,20 @@ describe('Where it went', () => {
     expect(html).not.toContain('category-bars');
     expect(html).toMatch(/aria-pressed="true"[^>]*>Table/);
     expect(text(html)).toContain('Housing 2 ₹6,000.00');
+  });
+
+  it('lets the keyboard reach the shown table, which may scroll, but never the hidden copy', () => {
+    const shown = card(ready(THIS_MONTH), 'table');
+    expect(openingTag(shown, 'aria-label="Your share by Category table"')).toMatch(
+      /^<div(?=[^>]*\brole="region")(?=[^>]*\btabindex="0")/i,
+    );
+    // Behind the bars, the copy for screen readers is no keyboard stop.
+    const behindBars = card(ready(THIS_MONTH));
+    const tableAt = behindBars.indexOf('<table');
+    expect(behindBars.slice(behindBars.lastIndexOf('<div', tableAt), tableAt)).not.toMatch(
+      /tabindex|role="region"/i,
+    );
+    expect(behindBars).not.toContain('aria-label="Your share by Category table"');
   });
 
   it('is empty, calmly, when nothing is shared this month', () => {
@@ -307,6 +329,14 @@ describe('the Groups table', () => {
     const football = html.slice(html.indexOf(`data-group-id="${GROUPS[3]._id}"`));
     expect(text(football.slice(0, football.indexOf('</tr>')))).toContain('AR SC +6');
     expect(html).toContain(`<time dateTime="${LAST_CHANGES[0].at}">Today, 9:14\u00a0AM</time>`);
+  });
+
+  it('lets the keyboard reach and scroll the table in a narrow card', () => {
+    expect(openingTag(table(), 'aria-label="Groups table"')).toMatch(
+      /^<div(?=[^>]*\brole="region")(?=[^>]*\btabindex="0")/i,
+    );
+    // A phone's rows don't scroll sideways: no extra keyboard stop.
+    expect(table({ layout: 'rows' })).not.toContain('aria-label="Groups table"');
   });
 
   it('opens each Group from its row, and has New Group', () => {

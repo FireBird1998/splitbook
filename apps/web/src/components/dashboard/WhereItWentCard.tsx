@@ -178,7 +178,21 @@ function CategoryTable({
   } as const;
   const number = { ...cell, textAlign: 'right', whiteSpace: 'nowrap' } as const;
   return (
-    <Box sx={hidden ? visuallyHidden : { overflowX: 'auto' }}>
+    <Box
+      {...(hidden
+        ? // The copy behind the bars: read, never seen, and never a stop for the keyboard.
+          { sx: visuallyHidden }
+        : // Shown, it may scroll sideways in a narrow card, so the keyboard can reach and scroll it.
+          {
+            role: 'region',
+            'aria-label': 'Your share by Category table',
+            tabIndex: 0,
+            sx: {
+              overflowX: 'auto',
+              '&:focus-visible': { outline: 2, outlineColor: 'focus.main', outlineOffset: -2 },
+            },
+          })}
+    >
       <Box
         component="table"
         sx={{
