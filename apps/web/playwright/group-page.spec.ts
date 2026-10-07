@@ -34,6 +34,8 @@ async function expectTab(page: Page, label: string, slug: string) {
 const TABS = [
   { label: 'Expenses', slug: 'expenses', shows: 'Trip SIM cards' },
   { label: 'Balances', slug: 'balances', shows: 'Record payment' },
+  // Shown only once the Month's figures have loaded (#314).
+  { label: 'Insights', slug: 'insights', shows: 'You paid' },
   { label: 'Activity', slug: 'activity', shows: 'Trip SIM cards' },
   { label: 'Members', slug: 'members', shows: 'Priya Shah' },
 ] as const;
@@ -72,6 +74,7 @@ test('the header shows the Group’s icon, name, Theme, members, currency, Invit
   await expect(sections(page).getByRole('link')).toHaveText([
     'Expenses',
     'Balances',
+    'Insights',
     'Activity',
     'Members',
   ]);

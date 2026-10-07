@@ -361,6 +361,14 @@ for (const { tab, poll, read, shows, empty } of [
     empty: 'All settled up',
   },
   {
+    tab: 'Insights',
+    poll: 20_000,
+    read: 'insights',
+    // This Month's Spent (the trip total) and its biggest Expense.
+    shows: [tripTotal, 'Synthetic lantern dinner'],
+    empty: 'No Expenses yet',
+  },
+  {
     tab: 'Activity',
     poll: 10_000,
     read: 'activity',
@@ -542,7 +550,7 @@ test('a non-member, and a member who has left, get the same refusal on every tab
   page,
   ledger,
 }) => {
-  // Fourteen page loads, each of a route the local `next dev` may still be compiling.
+  // Sixteen page loads, each of a route the local `next dev` may still be compiling.
   test.slow();
   // groupA is Alex's alone; Sam joined this one and then left it.
   const left = await dataOf(
@@ -560,6 +568,7 @@ test('a non-member, and a member who has left, get the same refusal on every tab
       '',
       '/expenses',
       '/balances',
+      '/insights',
       '/activity',
       '/members',
       '?tab=balances',

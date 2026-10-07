@@ -3,9 +3,11 @@ import {
   TimeZoneError,
   addMonths,
   dayKeyInZone,
+  isMonthKey,
   isTimeZone,
   lastMonths,
   monthKeyInZone,
+  monthsBetween,
   monthsQueryRange,
   monthsWindow,
   readTimeZone,
@@ -182,6 +184,41 @@ describe('Month arithmetic', () => {
   it('refuses a Month outside four-digit years', () => {
     expect(() => addMonths('9999-12', 1)).toThrow(RangeError);
     expect(() => addMonths('0000-01', -1)).toThrow(RangeError);
+  });
+
+  it.each(['2026-09', '2025-12', '0001-01', '9999-12'])('reads %s as a Month', (month) => {
+    expect(isMonthKey(month)).toBe(true);
+  });
+
+  it.each([
+    '2026-13',
+    '2026-00',
+    '2026-9',
+    '2026-09-01',
+    ' 2026-09',
+    'September',
+    '',
+    202609,
+    null,
+  ])('does not read %j as a Month', (value) => {
+    expect(isMonthKey(value)).toBe(false);
+  });
+
+  it('lists the Months between two, both included, across the year', () => {
+    expect(monthsBetween('2025-11', '2026-02')).toEqual([
+      '2025-11',
+      '2025-12',
+      '2026-01',
+      '2026-02',
+    ]);
+    expect(monthsBetween('2026-09', '2026-09')).toEqual(['2026-09']);
+    expect(monthsBetween('9999-11', '9999-12')).toEqual(['9999-11', '9999-12']);
+  });
+
+  it('lists none when the first Month is after the last, and refuses a malformed one', () => {
+    expect(monthsBetween('2026-10', '2026-09')).toEqual([]);
+    expect(() => monthsBetween('2026-13', '2026-09')).toThrow(RangeError);
+    expect(() => monthsBetween('2026-01', 'soon')).toThrow(RangeError);
   });
 });
 

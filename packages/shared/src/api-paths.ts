@@ -118,6 +118,26 @@ export const userSpendingPath = ({ months, timeZone }: UserSpendingQuery) =>
     ['tz', timeZone],
   ])}`;
 
+export interface GroupInsightsQuery {
+  /** The Month, `YYYY-MM`; the server's default is the current Month in the time zone. */
+  month?: string;
+  /** How many Months before it to compare it with: 1–12. */
+  compare?: number;
+  /** The viewer's named IANA time zone, such as `Asia/Kolkata`: it decides each Month. */
+  timeZone: string;
+}
+
+/** A Group's Month against the Months before it: the Insights tab (#314). */
+export const groupInsightsPath = (
+  groupId: string,
+  { month, compare, timeZone }: GroupInsightsQuery,
+) =>
+  `${group(groupId)}/insights${query([
+    ['month', month],
+    ['compare', compare],
+    ['tz', timeZone],
+  ])}`;
+
 export const invitationsPath = () => '/api/invitations';
 export const settlementsPath = (groupId: string) => `${group(groupId)}/settlements`;
 export const recurringExpensesPath = (groupId: string) => `${group(groupId)}/recurring`;

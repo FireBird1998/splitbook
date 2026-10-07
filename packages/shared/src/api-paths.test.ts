@@ -4,6 +4,7 @@ import {
   expensePagePath,
   expenseRecordPath,
   groupBalancesPath,
+  groupInsightsPath,
   groupPath,
   groupsPath,
   homeBalancesPath,
@@ -154,6 +155,35 @@ describe("Home's spending chart (#307)", () => {
       ['months', '12'],
       ['tz', 'Etc/GMT+5'],
     ]);
+  });
+});
+
+describe("a Group's insights (#314)", () => {
+  const groupId = 'b00000000000000000000001';
+
+  it('sends the Month, the earlier-Month count and the time zone, encoded', () => {
+    const path = groupInsightsPath(groupId, {
+      month: '2026-09',
+      compare: 6,
+      timeZone: 'Asia/Kolkata',
+    });
+    expect(path).toBe(`/api/groups/${groupId}/insights?month=2026-09&compare=6&tz=Asia%2FKolkata`);
+    expect(queryOf(path)).toEqual([
+      ['month', '2026-09'],
+      ['compare', '6'],
+      ['tz', 'Asia/Kolkata'],
+    ]);
+  });
+
+  it('leaves out a Month and a count that are not set, so the server’s defaults apply', () => {
+    expect(groupInsightsPath(groupId, { timeZone: 'Etc/GMT+5' })).toBe(
+      `/api/groups/${groupId}/insights?tz=Etc%2FGMT%2B5`,
+    );
+  });
+
+  it('refuses a Group id that would change the route', () => {
+    expect(() => groupInsightsPath('..', { timeZone: 'UTC' })).toThrow(RangeError);
+    expect(groupInsightsPath('a/b', { timeZone: 'UTC' })).toBe('/api/groups/a%2Fb/insights?tz=UTC');
   });
 });
 
