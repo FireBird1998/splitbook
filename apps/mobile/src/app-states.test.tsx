@@ -846,7 +846,7 @@ describe('first load and refresh', () => {
     expect(app.progress()).toHaveLength(0);
   });
 
-  it('keeps a pull on Balances there: Activity shows its own first load', async () => {
+  it('keeps a pull on Balances there: Activity says its own read', async () => {
     const phone = device();
     await usedBefore(phone);
     const app = await start(phone);
@@ -864,7 +864,10 @@ describe('first load and refresh', () => {
     await activity.reached;
     await settle();
     expect(app.pull().refreshing).toBe(false);
-    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Loading Activity']);
+    // This phone's copy of Activity shows at once while it is read (M3-1, #222), so its own bar
+    // says it is refreshing.
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Refreshing']);
+    expect(app.text()).toMatch(/Saved \d/);
     activity.release();
     expenses.release();
     await settle();

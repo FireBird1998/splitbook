@@ -1501,6 +1501,20 @@ describe('saved copies and cues after review (#222)', () => {
 // The final checks of 9ec19e4 (#222): a refresh's page that falls back to another total, a Trip
 // that turns out to be a Household, and a Trip's saved copy after an online restart.
 describe('final checks (#222)', () => {
+  /** Alex opened Cabin Weekend's Activity once; the app starts again, online, a minute later. */
+  async function restartedOnCabin(f: ReturnType<typeof fixture>) {
+    const first = f.create();
+    await first.signIn('alex');
+    await first.openActivity(cabinId);
+    await settle();
+    first.dispose();
+    later(60_000);
+    const controller = f.create();
+    await controller.restore();
+    await settle();
+    return controller;
+  }
+
   it('ends a refresh’s list where a page falls back to a copy that counted another total', async () => {
     const f = fixture();
     const controller = await onActivity(f, 2);
@@ -1598,5 +1612,89 @@ describe('final checks (#222)', () => {
     // Inside the window, yet read again: what was read beside the Group may lack that event.
     expect(f.activityGets(sent)).toEqual(['cabin activity p1']);
     expect(listed(controller.getSnapshot())[0]).toBe('Recurring rent');
+  });
+
+  it('shows a Trip’s saved copy at once after an online restart, until its Group’s check passes', async () => {
+    const f = fixture();
+    const controller = await restartedOnCabin(f);
+    const group = f.hold(cabinPath, { exact: true });
+    const page = f.hold(activityPath(1, cabinPath));
+    const opening = controller.openActivity(cabinId);
+    await group.reached;
+    await page.reached;
+    await settle();
+    // Both reads are under way: this phone's copy shows with its own time (M3-1).
+    expect(controller.getSnapshot().activity).toMatchObject({
+      groupId: cabinId,
+      status: 'loading',
+      restored: true,
+      refreshedAt: start,
+    });
+    expect(controller.getSnapshot().activity.events).toHaveLength(20);
+    // Activity answers first: the copy stays until the Group's check passes, never a placeholder.
+    page.release();
+    await settle();
+    expect(controller.getSnapshot().activity).toMatchObject({ restored: true, refreshedAt: start });
+    expect(controller.getSnapshot().activity.events).toHaveLength(20);
+    group.release();
+    await opening;
+    await settle();
+    expect(controller.getSnapshot().activity).toMatchObject({
+      status: 'ready',
+      restored: false,
+      refreshedAt: start + 60_000,
+    });
+    expect(controller.getSnapshot().activity.events).toHaveLength(20);
+  });
+
+  it('never shows the saved copy once a read of this open answered, though a pull is under way when it is read', async () => {
+    const f = fixture();
+    const controller = await restartedOnCabin(f);
+    // This device reads its copy slowly; the read beside the Group fails before it is read.
+    const loading = f.holdLoad(activityPath(1, cabinPath));
+    f.server.failing.add(activityPath(1, cabinPath));
+    const opening = controller.openActivity(cabinId);
+    await loading.reached;
+    await settle();
+    // A pull reads again, and is still under way when the copy has been read.
+    f.server.failing.delete(activityPath(1, cabinPath));
+    const page = f.hold(activityPath(1, cabinPath));
+    const pulling = controller.refresh('pull');
+    await page.reached;
+    loading.release();
+    await settle();
+    expect(controller.getSnapshot().activity.events).toEqual([]);
+    page.release();
+    await Promise.all([opening, pulling]);
+    await settle();
+    expect(controller.getSnapshot().activity).toMatchObject({ status: 'ready', restored: false });
+    expect(controller.getSnapshot().activity.events).toHaveLength(20);
+  });
+
+  it('drops a Trip’s saved copy shown at once when its Group then refuses the member', async () => {
+    const f = fixture();
+    const controller = await restartedOnCabin(f);
+    f.server.groupRefused.add(cabinId);
+    const group = f.hold(cabinPath, { exact: true });
+    const page = f.hold(activityPath(1, cabinPath));
+    const opening = controller.openActivity(cabinId);
+    await group.reached;
+    await page.reached;
+    await settle();
+    expect(controller.getSnapshot().activity.events).toHaveLength(20);
+    // The Group refuses: the copy goes with its rows, and the page's late answer brings nothing.
+    group.release();
+    await settle();
+    const dropped = {
+      detail: { status: 'denied', data: null },
+      activity: { status: 'denied', events: [] },
+    };
+    expect(controller.getSnapshot()).toMatchObject(dropped);
+    expect(f.savedRows(cabinPath)).toEqual([]);
+    page.release();
+    await opening;
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject(dropped);
+    expect(f.savedRows(cabinPath)).toEqual([]);
   });
 });

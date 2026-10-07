@@ -176,6 +176,13 @@ interface View {
    * event, nothing of it shows until a read after the Group's lands (#180 Risk 8).
    */
   beside: boolean;
+  /**
+   * This device's copy shown at once in this open (M3-1), and the version of its scope then: it
+   * stays while what this open read can't show yet, so the list never empties to a placeholder.
+   */
+  preview: { data: Pages; version: number } | null;
+  /** How many reads of its Activity had answered when this open began: a copy shows before more. */
+  answers: number;
 }
 
 /**
@@ -193,6 +200,14 @@ export function createActivityQueries(session: ActivitySession) {
   const { client, rows } = session;
   const queue = createSavedCopyQueue();
   const runs = new Map<string, Run>();
+  /** How many reads of each query have answered, by its hash: a copy never shows after one. */
+  const answeredReads = new Map<string, number>();
+  const answerOf = (key: QueryKey) => answeredReads.get(hashKey(key)) ?? 0;
+  /** A read of `key` answered, from the server or failing. */
+  const answer = (key: QueryKey, run: Run) => {
+    run.answered = true;
+    answeredReads.set(hashKey(key), answerOf(key) + 1);
+  };
   /** Each fetch's start, by its promise: whose session, and which version of its scope. */
   const starts = new WeakMap<object, { owner: number; version: number }>();
   /** How many pages each fetch has read so far, by its promise. */
@@ -316,31 +331,32 @@ export function createActivityQueries(session: ActivitySession) {
     });
   };
   /**
-   * While Activity is first read, its newest page saved on this device shows, with its own time.
-   * Never one a change, a denial or a failed removal made obsolete, one it can't read, and never
-   * once a read of it answered.
+   * While Activity is first read, its newest page saved on this device shows, with its own time:
+   * at once, even while a read beside the Group is under way (M3-1). Never one a change, a denial
+   * or a failed removal made obsolete, one it can't read, and never once a read of it answered
+   * (`answers`: how many had when this open began). Returns what it shows.
    */
-  const restore = async (key: QueryKey, owner: number) => {
+  const restore = async (key: QueryKey, owner: number, answers: number): Promise<Pages | null> => {
     const lease = session.lease(),
-      version = session.versionOf(key),
-      started = runs.get(hashKey(key));
-    if (!lease || !rows) return;
+      version = session.versionOf(key);
+    if (!lease || !rows) return null;
     const row = await savedRow(lease, pagePath(key, 1)).catch(() => null);
-    const latest = runs.get(hashKey(key));
     if (
       !row ||
-      (latest && (latest !== started || latest.answered)) ||
+      runs.get(hashKey(key))?.answered ||
+      answerOf(key) !== answers ||
       !session.current(owner) ||
       version !== session.versionOf(key) ||
       held(key)?.state.data !== undefined ||
       row.refreshedAt <= session.distrusted(key, true) ||
       !readable(key, row.value, 1)
     )
-      return;
+      return null;
     const data: Pages = { pages: [{ ...savedCopy(row), page: 1 }], pageParams: [1] };
     previews.add(data);
     known.add(row.path);
     client.setQueryData(key, data);
+    return data;
   };
   /** Records a read, and its fetch's start, so its answer is saved only while current. */
   const track = (key: QueryKey, run: Run) => {
@@ -378,9 +394,9 @@ export function createActivityQueries(session: ActivitySession) {
     let value: unknown;
     try {
       value = await session.read(path, owner, run.abort?.signal);
-      run.answered = true;
+      answer(key, run);
     } catch (error) {
-      run.answered = true;
+      answer(key, run);
       if (!(error instanceof RequestError) || !error.networkFailure || !lease || !rows) throw error;
       const row = obsolete() ? null : await savedRow(lease, path).catch(() => null);
       // Overtaken by a change, a denial or a Groups list: it is read again, not shown.
@@ -591,8 +607,12 @@ export function createActivityQueries(session: ActivitySession) {
       // What this device saved shows while the Group is first read, with its own time.
       const restoring =
         held(key)?.state.data === undefined
-          ? restore(key, owner)
-              .then(() => reproject())
+          ? restore(key, owner, opened.answers)
+              .then((data) => {
+                if (data && view === opened)
+                  opened.preview = { data, version: session.versionOf(key) };
+                reproject();
+              })
               .catch(() => undefined)
           : null;
       /** This read answered with pages read now, which are being saved on this device. */
@@ -719,7 +739,13 @@ export function createActivityQueries(session: ActivitySession) {
     // Read beside a Group that turned out to be a Household, and not yet read again after it: it
     // may lack the event of a due recurring Expense its Group's read added (#180 Risk 8).
     const recheck = opened.beside && session.checked(groupId) && household;
-    const pages = unchecked || recheck ? [] : (data?.pages ?? []);
+    // Until what this open read can show, the copy it showed at once stays, never a placeholder
+    // in its place (M3-1); without one, the placeholder holds, as on a Household's first open.
+    const preview =
+      opened.preview?.version === session.versionOf(activityKey(groupId))
+        ? opened.preview.data.pages
+        : [];
+    const pages = unchecked || recheck ? preview : (data?.pages ?? []);
     const read = pages.filter((page) => page.source !== 'failed');
     const failedPage = pages.find((page) => page.source === 'failed');
     let next: ActivityState = base;
@@ -756,7 +782,7 @@ export function createActivityQueries(session: ActivitySession) {
         return same(shown, { ...next, status: 'ready', newerStatus: 'loading' });
       return same(shown, { ...next, status: 'loading', moreStatus: 'idle' });
     }
-    // Until the read after a Household's Group lands, its placeholder holds.
+    // Until the read after a Household's Group lands, its placeholder (or copy) holds.
     if (recheck) return same(shown, { ...next, status: 'loading' });
     // Not checked by this open yet: a saved copy shows while the Group is read.
     if (unchecked || !session.checked(groupId) || (previewed(data) && !failure(state)))
@@ -859,6 +885,8 @@ export function createActivityQueries(session: ActivitySession) {
           reading: 0,
           detail: null,
           beside: false,
+          preview: null,
+          answers: answerOf(activityKey(groupId)),
         };
         const key = activityKey(groupId),
           query = held<Pages>(key),
