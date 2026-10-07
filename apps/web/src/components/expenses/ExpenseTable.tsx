@@ -5,7 +5,7 @@ import Box from '@mui/material/Box';
 import { format } from 'date-fns';
 import MoneyText from '@/components/common/MoneyText';
 import { visuallyHidden } from '@/components/common/visually-hidden';
-import { RADIUS } from '@/lib/theme/tokens';
+import { RADIUS, TOPBAR_HEIGHT } from '@/lib/theme/tokens';
 import type { ExpenseRead } from '@splitbook/shared/expense-page-read';
 import {
   expensePayerSummary,
@@ -14,6 +14,7 @@ import {
 } from '@splitbook/shared/expense-row';
 import { ExpenseTag, PayerLabel, PositionText, RepeatsIcon } from './expense-row-parts';
 import TripDayRow from './TripDayRow';
+import { useExpenseTableKeys } from './expense-table-keys';
 import type { TripDayHeading } from './expense-trip-days';
 
 /** The table's columns, as the design canvas ("GroupExpenses") lays them out. */
@@ -44,6 +45,8 @@ interface ExpenseTableProps {
   /** The Expense open in the side panel. */
   openId: string | null;
   onToggle: (expenseId: string) => void;
+  /** Edit the focused Expense while the table has focus (#322). */
+  onEdit?: (expenseId: string) => void;
   /** The side panel's element, which the open row's button controls (#311). */
   panelId: string;
   /** Dim the rows while a newer page loads. */
@@ -85,8 +88,10 @@ export default function ExpenseTable({
   panelId,
   stale = false,
   dayHeadings = null,
+  onEdit,
 }: ExpenseTableProps) {
   const now = new Date();
+  const onKeyDown = useExpenseTableKeys({ openId, onEdit });
   return (
     <Box
       component="section"
@@ -103,6 +108,7 @@ export default function ExpenseTable({
       <Box sx={{ overflowX: 'auto' }}>
         <Box
           component="table"
+          onKeyDown={onKeyDown}
           sx={{
             width: '100%',
             // Beside the side panel (#311) a 1280 px screen leaves the table about 630 px, so
@@ -160,6 +166,9 @@ export default function ExpenseTable({
                       cursor: 'pointer',
                       '& > td': { bgcolor: open ? 'tint.brand' : undefined },
                       '&:hover > td': { bgcolor: open ? 'tint.brand' : 'surface.hover' },
+                      '&:has(button:focus-visible) > td': {
+                        bgcolor: open ? 'tint.brand' : 'surface.hover',
+                      },
                     }}
                   >
                     <Box
@@ -194,6 +203,9 @@ export default function ExpenseTable({
                           color: 'text.primary',
                           font: 'inherit',
                           cursor: 'pointer',
+                          // Keep the focused row clear of the sticky top bar.
+                          scrollMarginTop: TOPBAR_HEIGHT + 16,
+                          scrollMarginBottom: 16,
                         }}
                       >
                         <Box

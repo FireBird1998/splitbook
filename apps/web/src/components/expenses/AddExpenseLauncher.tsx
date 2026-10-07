@@ -14,7 +14,9 @@ import Snackbar from '@mui/material/Snackbar';
 import AddIcon from '@mui/icons-material/Add';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import ErrorState from '@/components/common/ErrorState';
+import { ShortcutHint, useShortcutAria } from '@/components/shortcuts/ShortcutHint';
 import { isGroupReadDenied, useGroup } from '@/lib/hooks/use-groups';
+import { useShortcut } from '@/lib/shortcuts/ShortcutsProvider';
 import ExpenseFormDialog from './ExpenseFormDialog';
 import GroupChooserDialog from './GroupChooserDialog';
 import { addExpenseDefaultDate, addExpenseTarget, expenseAddedMessage } from './add-expense';
@@ -47,6 +49,7 @@ const visuallyHidden = {
  * Group page's own, so a save is the same request with the same idempotency key, unconfirmed-
  * save handling and errors. After a save the member stays on the page, a confirmation names
  * the Group, and the form's refetch (plus the shell's, after any write) refreshes its figures.
+ * N does the same from anywhere (#322), and the button shows the key while shortcuts are on.
  */
 export default function AddExpenseLauncher({ userId }: { userId: string }) {
   const pathname = usePathname();
@@ -62,6 +65,8 @@ export default function AddExpenseLauncher({ userId }: { userId: string }) {
         : { kind: 'choose' },
     );
   };
+  useShortcut('add-expense', open);
+  const keyShortcuts = useShortcutAria('add-expense');
 
   return (
     <>
@@ -69,6 +74,7 @@ export default function AddExpenseLauncher({ userId }: { userId: string }) {
         variant="contained"
         onClick={open}
         aria-haspopup="dialog"
+        aria-keyshortcuts={keyShortcuts}
         sx={(theme) => ({
           flex: 'none',
           gap: 1,
@@ -86,6 +92,7 @@ export default function AddExpenseLauncher({ userId }: { userId: string }) {
         <Box component="span" sx={(theme) => ({ [theme.breakpoints.down('sm')]: visuallyHidden })}>
           Add expense
         </Box>
+        <ShortcutHint id="add-expense" onButton />
       </Button>
 
       <GroupChooserDialog

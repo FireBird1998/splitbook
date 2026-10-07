@@ -268,6 +268,17 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   linked to the field; "More options" opening the form prefilled; axe on each
   state. Writes go to a Household the test creates for Alex alone. The lost
   reply is in the expense-access suite (`quick-add-retry.spec.ts`).
+- **Keyboard shortcuts** (`shortcuts.spec.ts`, #322, read-only): the keyboard
+  path through the Expense table (J and K move between the rows' buttons, Enter
+  opens the Expense in the side panel, E edits the row with focus, X does
+  nothing); N and / from the Expenses tab, from another tab (/ opens Expenses
+  with its search focused) and from Home (the chooser, and search across Groups),
+  never while typing or while a dialog is open; the hints beside Add expense and
+  the Group's search and the Expenses tab's footer; the Settings switch turning
+  single keys off for one member on the device (hints gone, N, / and J do
+  nothing, ⌘K still opens search, every row still reachable with Tab) while
+  another member keeps them; no hints on phones; axe on the Expenses tab and
+  Settings in light and dark. Forms open and close without saving.
 - **Theme + a11y matrix** (`theme-a11y.spec.ts`): persona entry, dashboard,
   and trip workspace at **desktop 1280×800** and **mobile 390×844**, each in
   **light and dark** (driven by `prefers-color-scheme` emulation), plus the

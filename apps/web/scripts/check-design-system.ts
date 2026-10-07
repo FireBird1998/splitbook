@@ -72,6 +72,8 @@ const adoptedFiles = [
   'src/components/statement/StatementView.tsx',
   'src/components/groups/GroupUnavailable.tsx',
   'src/app/(main)/groups/[id]/forbidden.tsx',
+  'src/components/shortcuts/ShortcutHint.tsx',
+  'src/components/shortcuts/ShortcutsSetting.tsx',
 ];
 
 let failed = false;
