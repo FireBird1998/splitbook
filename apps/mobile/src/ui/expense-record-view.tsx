@@ -1,5 +1,12 @@
 import { Fragment, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { getCategory } from '@splitbook/shared/categories';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
@@ -16,7 +23,10 @@ import {
   type ExpenseHistoryChange,
 } from '../data/expense-history';
 import { canEditExpense, storedExpenseMoney, type ExpenseRecord } from '../data/expense-record';
-import { expenseRecordPosition } from '@splitbook/shared/expense-position';
+import {
+  expenseRecordPosition,
+  type ExpenseRecordPosition,
+} from '@splitbook/shared/expense-position';
 import { clockTime } from './activity-format';
 import {
   Badge,
@@ -27,15 +37,22 @@ import {
   CompactButton,
   CompactText,
   Divider,
+  FadeIn,
   IconButton,
   IconTile,
   ListRow,
   Money,
   SectionHeader,
+  Skeleton,
+  SkeletonOf,
+  SkeletonText,
   TopBar,
+  useLargeText,
   type BadgeTone,
+  type Reveal,
 } from './compact';
-import { WhoOwesWhat } from './expense-form';
+import { WhoOwesWhat, sharesDifferNote } from './expense-form';
+import type { MobileExpense } from '../data/types';
 import { savingNeedsConnection } from './offline-notice';
 import { Copy, Icon, Label, Panel, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
@@ -51,6 +68,22 @@ const categoryIcons: Record<string, IconName> = {
   health: 'medkit-outline',
   education: 'school-outline',
 };
+
+/** "Tue, Sep 29, 2026", as the record's second line starts. */
+const recordDay = (date: string | Date) =>
+  new Date(date).toLocaleDateString([], {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+
+/** The record's badge for the member's position: "You lent Sam ₹5.00", "You paid your share". */
+function positionLabel(position: ExpenseRecordPosition, other: string, amount: string) {
+  if (position.kind === 'owe') return `You owe ${other}${amount}`;
+  if (position.kind === 'lent') return `You lent ${other}${amount}`;
+  return position.kind === 'even' ? 'You paid your share' : 'You’re not involved';
+}
 
 /** "29 Sep, 20:02", with the year when it isn't this year. */
 function recordTime(iso: string, now = Date.now()) {
@@ -82,6 +115,7 @@ export function ExpenseRecordScreen({
   onRefresh,
   onLoadOlderHistory,
   onRetryHistory,
+  reveal = null,
 }: {
   state: Editor;
   currentUserId?: string;
@@ -100,6 +134,8 @@ export function ExpenseRecordScreen({
   onLoadOlderHistory?: () => void;
   /** Reads the Expense's changes again after they couldn't be read. */
   onRetryHistory?: () => void;
+  /** The record fades in where its skeleton was, when it opened over one. */
+  reveal?: Reveal | null;
 }) {
   const theme = useTheme();
   const [options, setOptions] = useState(false);
@@ -138,23 +174,19 @@ export function ExpenseRecordScreen({
     ? { label: 'Deleted', tone: 'neutral', icon: 'trash-outline' }
     : !position
       ? null
-      : position.kind === 'owe'
-        ? { label: `You owe ${other}${money(position.amountMinor)}`, tone: 'negative' }
-        : position.kind === 'lent'
-          ? { label: `You lent ${other}${money(position.amountMinor)}`, tone: 'positive' }
-          : {
-              label: position.kind === 'even' ? 'You paid your share' : 'You’re not involved',
-              tone: 'neutral',
-            };
+      : {
+          label: positionLabel(position, other, money(position.amountMinor)),
+          tone:
+            position.kind === 'owe'
+              ? 'negative'
+              : position.kind === 'lent'
+                ? 'positive'
+                : 'neutral',
+        };
   const tag =
     context?.tags.find((item) => item.id === record.tagId)?.name ??
     (record.tag || 'Historical Tag');
-  const date = new Date(record.date).toLocaleDateString([], {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+  const date = recordDay(record.date);
   const category = record.category !== 'other' ? getCategory(record.category)?.label : undefined;
   const editable = canEditExpense(record);
   // The Group's draft holds Edit and Delete; the record itself stays readable.
@@ -204,90 +236,92 @@ export function ExpenseRecordScreen({
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
       >
         {notice}
-        {state.groupDraft ? (
-          <Banner
-            tone="info"
-            message="This Group has an unfinished draft. Finish or discard it to edit or delete this Expense."
-          >
-            <CompactButton label="Resume draft" variant="text" dense onPress={onResume} />
-          </Banner>
-        ) : null}
-        {state.message && state.status !== 'delete-review' ? (
-          <CompactText variant="small" accessibilityRole="alert">
-            {state.message}
-          </CompactText>
-        ) : null}
-        <Card padded>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <IconTile icon={categoryIcons[record.category] ?? 'receipt-outline'} />
-            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-              <CompactText variant="heading" accessibilityRole="header">
-                {record.description}
-              </CompactText>
-              <CompactText
-                variant="small"
-                tone="secondary"
-                accessibilityLabel={`${date}, Tag ${tag}`}
-              >
-                {date} · {tag}
-              </CompactText>
-            </View>
-          </View>
-          <View
-            style={{
-              flexDirection: 'row',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 8,
-              marginTop: 12,
-            }}
-          >
-            {/* Shrinks to fit rather than cutting the amount short. */}
-            <Money size="form" adjustsFontSizeToFit>
-              {allocation
-                ? money(allocation.amountMinor)
-                : formatCurrency(record.amount, record.currency)}
-            </Money>
-            {badge ? <Badge label={badge.label} tone={badge.tone} icon={badge.icon} /> : null}
-          </View>
-          {record.isDeleted ? (
-            <CompactText variant="small" tone="secondary" style={{ marginTop: 8 }}>
-              This Expense was deleted. It no longer counts in balances.
-            </CompactText>
-          ) : !editable ? (
-            <CompactText variant="small" tone="secondary" style={{ marginTop: 8 }}>
-              This Expense includes a member whose account is no longer available. It can be
-              deleted, but not edited.
+        <FadeIn reveal={reveal} style={{ gap: 12 }}>
+          {state.groupDraft ? (
+            <Banner
+              tone="info"
+              message="This Group has an unfinished draft. Finish or discard it to edit or delete this Expense."
+            >
+              <CompactButton label="Resume draft" variant="text" dense onPress={onResume} />
+            </Banner>
+          ) : null}
+          {state.message && state.status !== 'delete-review' ? (
+            <CompactText variant="small" accessibilityRole="alert">
+              {state.message}
             </CompactText>
           ) : null}
-        </Card>
-        <WhoOwesWhat
-          draft={draft}
-          allocation={allocation}
-          problem="This allocation can’t be shown."
-          name={name}
-          currentUserId={currentUserId}
-          money={money}
-          saved
-        />
-        {category || record.notes ? (
-          <Card>
-            {category ? <DetailRow label="Category" value={category} /> : null}
-            {category && record.notes ? <Divider /> : null}
-            {record.notes ? <DetailRow label="Notes" value={record.notes} /> : null}
+          <Card padded>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <IconTile icon={categoryIcons[record.category] ?? 'receipt-outline'} />
+              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <CompactText variant="heading" accessibilityRole="header">
+                  {record.description}
+                </CompactText>
+                <CompactText
+                  variant="small"
+                  tone="secondary"
+                  accessibilityLabel={`${date}, Tag ${tag}`}
+                >
+                  {date} · {tag}
+                </CompactText>
+              </View>
+            </View>
+            <View
+              style={{
+                flexDirection: 'row',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                marginTop: 12,
+              }}
+            >
+              {/* Shrinks to fit rather than cutting the amount short. */}
+              <Money size="form" adjustsFontSizeToFit>
+                {allocation
+                  ? money(allocation.amountMinor)
+                  : formatCurrency(record.amount, record.currency)}
+              </Money>
+              {badge ? <Badge label={badge.label} tone={badge.tone} icon={badge.icon} /> : null}
+            </View>
+            {record.isDeleted ? (
+              <CompactText variant="small" tone="secondary" style={{ marginTop: 8 }}>
+                This Expense was deleted. It no longer counts in balances.
+              </CompactText>
+            ) : !editable ? (
+              <CompactText variant="small" tone="secondary" style={{ marginTop: 8 }}>
+                This Expense includes a member whose account is no longer available. It can be
+                deleted, but not edited.
+              </CompactText>
+            ) : null}
           </Card>
-        ) : null}
-        <RecordHistory
-          record={record}
-          history={state.history}
-          currentUserId={currentUserId}
-          name={name}
-          people={members}
-          tags={context?.tags}
-          onLoadOlder={onLoadOlderHistory}
-          onRetry={onRetryHistory}
-        />
+          <WhoOwesWhat
+            draft={draft}
+            allocation={allocation}
+            problem="This allocation can’t be shown."
+            name={name}
+            currentUserId={currentUserId}
+            money={money}
+            saved
+          />
+          {category || record.notes ? (
+            <Card>
+              {category ? <DetailRow label="Category" value={category} /> : null}
+              {category && record.notes ? <Divider /> : null}
+              {record.notes ? <DetailRow label="Notes" value={record.notes} /> : null}
+            </Card>
+          ) : null}
+          <RecordHistory
+            record={record}
+            history={state.history}
+            currentUserId={currentUserId}
+            name={name}
+            people={members}
+            tags={context?.tags}
+            onLoadOlder={onLoadOlderHistory}
+            onRetry={onRetryHistory}
+          />
+        </FadeIn>
       </ScrollView>
       <BottomSheet
         visible={options}
@@ -365,6 +399,327 @@ export function ExpenseRecordScreen({
   );
 }
 
+/**
+ * What a list row already says about the record it opens, so the record's skeleton takes the
+ * record's shape: its texts, where they wrap, and how many rows follow.
+ */
+export interface RecordOutline {
+  description: string;
+  /** The second line: "Tue, Sep 29, 2026 · Utilities". */
+  meta: string;
+  amount: string;
+  /** The member's position, as the record's badge words it; null when it has none. */
+  badge: string | null;
+  /**
+   * The people in Who owes what, the member first, with what each paid (null for nothing, shown
+   * as "–") and their share, as the record writes them.
+   */
+  people: { paid: string | null; share: string }[];
+  /** An equal split whose shares differ by the smallest unit: its note follows the people. */
+  sharesDiffer: boolean;
+  /** A Category row follows Who owes what. */
+  category: boolean;
+  /** History says when it was last changed, as well as when it was added. */
+  changed: boolean;
+}
+
+/**
+ * Where nothing is known, as when an Expense opens from Activity: a typical record, an amount
+ * and badge of everyday length, two people and both History times, so the shape is close.
+ */
+const typicalRecord: RecordOutline = {
+  description: 'Weekly groceries',
+  meta: 'Tue, Sep 29, 2026 · Groceries',
+  amount: '₹2,400.00',
+  badge: 'You lent Sam ₹1,200.00',
+  people: [
+    { paid: '₹2,400.00', share: '₹1,200.00' },
+    { paid: null, share: '₹1,200.00' },
+  ],
+  sharesDiffer: false,
+  category: false,
+  changed: true,
+};
+
+/** The outline of the record a list row opens, from what the row already holds. */
+export function recordOutline(expense: MobileExpense, currentUserId?: string): RecordOutline {
+  const rows = (list: MobileExpense['paidBy']) =>
+    list.map(({ user, amountMinor }) => ({ user: user.id, amountMinor }));
+  const paid = new Map(expense.paidBy.map(({ user, amountMinor }) => [user.id, amountMinor]));
+  const share = new Map(
+    expense.splitBetween.map(({ user, amountMinor }) => [user.id, amountMinor]),
+  );
+  // As Who owes what orders them: the member first, then everyone else in the split's order.
+  const people = [...new Set([...share.keys(), ...paid.keys()])].sort(
+    (a, b) => Number(b === currentUserId) - Number(a === currentUserId),
+  );
+  const shares = [...share.values()];
+  const position = currentUserId
+    ? expenseRecordPosition(
+        {
+          paidBy: rows(expense.paidBy),
+          splitBetween: rows(expense.splitBetween),
+        },
+        currentUserId,
+      )
+    : null;
+  const counterparty = [...expense.paidBy, ...expense.splitBetween].find(
+    ({ user }) => user.id !== null && user.id === position?.counterpartyId,
+  )?.user.name;
+  const money = (minor: number) =>
+    formatCurrency(toMajorAmount(minor, expense.currency), expense.currency);
+  return {
+    description: expense.description,
+    meta: `${recordDay(expense.date)} · ${expense.tag || 'Historical Tag'}`,
+    amount: money(expense.amountMinor),
+    badge:
+      position === null
+        ? null
+        : positionLabel(
+            position,
+            counterparty ? `${counterparty.split(' ')[0]} ` : '',
+            money(position.amountMinor),
+          ),
+    people: people.map((id) => ({
+      paid: paid.has(id) ? money(paid.get(id)!) : null,
+      share: money(share.get(id) ?? 0),
+    })),
+    sharesDiffer:
+      expense.splitMethod === 'equal' &&
+      shares.length > 1 &&
+      Math.max(...shares) !== Math.min(...shares),
+    category: expense.category !== 'other' && !!getCategory(expense.category)?.label,
+    changed: expense.updatedAt.getTime() !== expense.createdAt.getTime(),
+  };
+}
+
+/**
+ * The record's shape while it opens, laid out as the record lays itself out at this text size,
+ * so the record takes its place without moving: its summary card with the texts a list row
+ * already knows (unseen, under breathing blocks), Who owes what with its people and any
+ * rounding note, a Category row, and History with its times and the line that loads the rest.
+ * `outline` comes from the list row it opened from; without one, a typical record stands in.
+ * Announced as busy under `label`.
+ */
+export function ExpenseRecordSkeleton({
+  label,
+  outline,
+}: {
+  label: string;
+  outline?: RecordOutline | null;
+}) {
+  const record = outline ?? typicalRecord;
+  const theme = useTheme();
+  const large = useLargeText();
+  const { width } = useWindowDimensions();
+  // As Who owes what decides: amounts sit under each name at large text or on a narrow screen.
+  const stacked = large || width < 360;
+  // As Who owes what shows them: three, then Show all, past four people.
+  const shown = record.people.length > 4 ? record.people.slice(0, 3) : record.people;
+  const history = record.changed ? 2 : 1;
+  return (
+    <View
+      accessibilityLabel={label}
+      accessibilityState={{ busy: true }}
+      accessibilityLiveRegion="polite"
+      style={{ gap: 12 }}
+    >
+      <Card padded>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Skeleton width={40} height={40} rounded={12} />
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <SkeletonOf bar>
+              <CompactText variant="heading">{record.description}</CompactText>
+            </SkeletonOf>
+            <SkeletonOf bar>
+              <CompactText variant="small">{record.meta}</CompactText>
+            </SkeletonOf>
+          </View>
+        </View>
+        <View
+          style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            marginTop: 12,
+          }}
+        >
+          <SkeletonOf bar align="center">
+            <Money size="form">{record.amount}</Money>
+          </SkeletonOf>
+          {record.badge ? (
+            <SkeletonOf rounded={999} align="center">
+              <Badge label={record.badge} />
+            </SkeletonOf>
+          ) : null}
+        </View>
+      </Card>
+      <Card>
+        <View
+          style={{
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            paddingHorizontal: 14,
+            paddingTop: 12,
+          }}
+        >
+          <Skeleton width="32%" line="overline" />
+          <Skeleton width="24%" line="caption" />
+        </View>
+        {stacked ? (
+          <View style={{ height: 6 }} />
+        ) : (
+          <View
+            style={{
+              alignItems: 'flex-end',
+              paddingHorizontal: 14,
+              paddingTop: 6,
+            }}
+          >
+            <Skeleton width={148} line="caption" />
+          </View>
+        )}
+        {shown.map((person, index) => (
+          <View
+            key={index}
+            style={{
+              minHeight: 48,
+              justifyContent: 'center',
+              gap: 2,
+              paddingHorizontal: 14,
+              paddingVertical: stacked ? 6 : 4,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Skeleton width={26} height={26} rounded={9} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Skeleton width="45%" line="body" />
+              </View>
+              {stacked ? null : <Skeleton width={148} line="table" />}
+            </View>
+            {stacked ? (
+              // Their amounts, under the name, wrap as the record's do: these are its texts.
+              <View
+                style={{
+                  flexDirection: 'row',
+                  flexWrap: 'wrap',
+                  columnGap: 16,
+                  rowGap: 2,
+                  paddingLeft: 36,
+                }}
+              >
+                {(
+                  [
+                    ['Paid', person.paid],
+                    ['Share', person.share],
+                  ] as const
+                ).map(([label, amount]) => (
+                  <SkeletonOf key={label} bar>
+                    <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 6 }}>
+                      <CompactText variant="caption">{label}</CompactText>
+                      {amount === null ? (
+                        <CompactText>–</CompactText>
+                      ) : (
+                        <Money size="table" numberOfLines={0}>
+                          {amount}
+                        </Money>
+                      )}
+                    </View>
+                  </SkeletonOf>
+                ))}
+              </View>
+            ) : null}
+          </View>
+        ))}
+        {record.people.length > 4 ? <View style={{ height: 44 }} /> : null}
+        {record.sharesDiffer ? (
+          <View
+            style={{
+              marginTop: 4,
+              borderTopWidth: 1,
+              borderTopColor: theme.border,
+              padding: 14,
+              gap: 4,
+            }}
+          >
+            <SkeletonOf bar>
+              <CompactText variant="caption">{sharesDifferNote}</CompactText>
+            </SkeletonOf>
+          </View>
+        ) : (
+          <View style={{ height: 8 }} />
+        )}
+      </Card>
+      {record.category ? (
+        <Card>
+          <View
+            style={{
+              minHeight: 48,
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+            }}
+          >
+            <Skeleton width="28%" line="small" />
+            <Skeleton width="32%" line="body" />
+          </View>
+        </Card>
+      ) : null}
+      <View style={{ gap: 8 }}>
+        <View
+          style={{
+            minHeight: 32,
+            justifyContent: 'center',
+            paddingHorizontal: 2,
+          }}
+        >
+          <Skeleton width="18%" line="overline" />
+        </View>
+        <Card>
+          {Array.from({ length: history }, (_, row) => (
+            <View key={row}>
+              {row > 0 ? <Divider inset={58} /> : null}
+              <View
+                style={{
+                  minHeight: 60,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 12,
+                  paddingVertical: 8,
+                  paddingHorizontal: 14,
+                }}
+              >
+                <Skeleton width={32} height={32} rounded={11} />
+                <SkeletonText
+                  style={{ flex: 1 }}
+                  gap={2}
+                  lines={[
+                    { width: '55%', line: 'body' },
+                    { width: '35%', line: 'caption' },
+                  ]}
+                />
+              </View>
+            </View>
+          ))}
+        </Card>
+        {/* The line that loads the rest of History, as the record shows it while it does. */}
+        <View
+          style={{
+            minHeight: 48,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Skeleton width="55%" line="body" />
+        </View>
+      </View>
+    </View>
+  );
+}
 function DetailRow({ label, value }: { label: string; value: string }) {
   return (
     <View

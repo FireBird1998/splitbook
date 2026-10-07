@@ -27,8 +27,9 @@ import {
   RowAmount,
   SectionHeader,
   Skeleton,
-  SkeletonRows,
+  SkeletonText,
   useLargeText,
+  useLineBox,
 } from './compact';
 import { Freshness, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
@@ -206,7 +207,12 @@ export function HomeBalances({
   onRefresh: () => void;
 }) {
   const theme = useTheme();
+  const large = useLargeText();
+  const chip = useLineBox('body').height + 6;
+  // Tall enough for "Updated hh:mm" from the start, so the figures don't move when it appears.
+  const status = useLineBox('caption').height;
   const loading = state.status === 'idle' || state.status === 'loading';
+  const placeholder = state.data === null && loading;
   if (state.data === null && state.status === 'error' && offline)
     return (
       <NotAvailableOffline
@@ -228,24 +234,55 @@ export function HomeBalances({
           onRetry={onRefresh}
         />
       )}
-      <Card padded>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-          <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
-            Your balances
-          </CompactText>
-          {state.data !== null ? (
-            <Freshness refreshedAt={state.refreshedAt} offline={offline} tone="muted" />
-          ) : null}
-        </View>
+      <Card
+        padded
+        header={
+          <View
+            style={{
+              minHeight: status,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              flexWrap: 'wrap',
+            }}
+          >
+            <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
+              Your balances
+            </CompactText>
+            {state.data !== null ? (
+              <Freshness refreshedAt={state.refreshedAt} offline={offline} tone="muted" />
+            ) : null}
+          </View>
+        }
+        loading={placeholder ? 'Loading your balances' : undefined}
+      >
         {state.data === null ? (
-          loading ? (
+          placeholder ? (
+            // One currency's row, as `CurrencyRow` lays it out at this text size.
             <View
-              accessibilityLabel="Loading your balances"
-              accessibilityState={{ busy: true }}
-              style={{ gap: 8, paddingVertical: 12 }}
+              style={{
+                flexDirection: large ? 'column' : 'row',
+                alignItems: large ? 'flex-start' : 'center',
+                gap: large ? 6 : 12,
+                paddingVertical: 10,
+              }}
             >
-              <Skeleton width="55%" height={18} />
-              <Skeleton width="80%" height={14} />
+              <Skeleton width={52} height={chip} rounded={8} />
+              <SkeletonText
+                style={large ? { alignSelf: 'stretch' } : { flex: 1 }}
+                gap={large ? 4 : 0}
+                lines={
+                  large
+                    ? [
+                        { width: '80%', line: 'balance' },
+                        { width: '80%', line: 'balance' },
+                      ]
+                    : [
+                        { width: '40%', line: 'small' },
+                        { width: '55%', line: 'balance' },
+                      ]
+                }
+              />
             </View>
           ) : (
             <View style={{ gap: 8, paddingTop: 10, alignItems: 'flex-start' }}>
@@ -493,7 +530,8 @@ export function HomeGroups({
       )}
       {/* A list read empty stays empty while it's read again. */}
       {groups.status === 'loading' && !groups.loaded ? (
-        <SkeletonRows label="Loading your Groups" />
+        // The list's own Card, so the Groups fade in where their skeleton was.
+        <Card loading="Loading your Groups" skeleton={{ dividers: true }} />
       ) : ['ready', 'loading'].includes(groups.status) && !groups.data.length ? (
         <NoGroups onRefresh={onRetry} />
       ) : groups.data.length ? (

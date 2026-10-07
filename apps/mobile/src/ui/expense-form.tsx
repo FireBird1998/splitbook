@@ -311,6 +311,9 @@ export function ExpenseTiles({
  * "Who owes what": each person's paid amount and share, an "Adds up" badge and the totals.
  * With more than four people it shows three and "Show all".
  */
+/** Under an equal split whose shares differ by the smallest unit. */
+export const sharesDifferNote = 'Shares differ by the smallest unit so the whole amount is shared.';
+
 export function WhoOwesWhat({
   draft,
   allocation,
@@ -505,7 +508,7 @@ export function WhoOwesWhat({
           )}
           {rounded ? (
             <CompactText variant="caption" tone="secondary">
-              Shares differ by the smallest unit so the whole amount is shared.
+              {sharesDifferNote}
             </CompactText>
           ) : null}
         </View>
@@ -791,12 +794,15 @@ export function OptionalDetails({
 export function SaveBar({
   label,
   amount,
+  busy,
   blocked,
   onSave,
   secondary,
 }: {
   label: string;
   amount?: string;
+  /** While saving, what Save says it's doing, beside a spinner, e.g. "Saving expense…". */
+  busy?: string;
   /** Why Save is unavailable, also spoken as its hint. */
   blocked: string | null;
   onSave: () => void;
@@ -816,19 +822,21 @@ export function SaveBar({
         backgroundColor: theme.bgElevated,
       }}
     >
-      <CompactButton
-        label={label}
-        amount={amount}
-        block
-        disabled={blocked !== null}
-        hint={blocked ?? undefined}
-        onPress={onSave}
-      />
+      {/* Above Save: the bar grows upward from the bottom of the screen, so Save stays put. */}
       {blocked ? (
         <CompactText variant="small" tone="secondary">
           {blocked}
         </CompactText>
       ) : null}
+      <CompactButton
+        label={label}
+        amount={amount}
+        busy={busy}
+        block
+        disabled={blocked !== null}
+        hint={blocked ?? undefined}
+        onPress={onSave}
+      />
       {secondary ? (
         <CompactButton label={secondary.label} variant="text" block onPress={secondary.onPress} />
       ) : null}

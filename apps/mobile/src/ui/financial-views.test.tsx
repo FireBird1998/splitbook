@@ -3,7 +3,8 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse } from '../data/types';
-import { RefreshStatus } from './financial-views';
+import { Freshness, RefreshStatus } from './financial-views';
+import { flatten } from '../test-utils/layout';
 import { GroupBalancesView } from './group-balances';
 import { GroupExpensesView } from './group-expenses';
 import { HomeBalances } from './home';
@@ -348,5 +349,32 @@ describe('rendered refresh feedback', () => {
     await next.release(json(page(rows.slice(20), 2, 21)));
     await settle(more);
     expect(text(root())).toContain('Item 21');
+  });
+});
+
+// #331: the freshness line's old text fades out from the edge its line keeps in its row: the
+// right where it ends a row, the left where it wrapped onto a line of its own.
+describe('Freshness', () => {
+  it.each([
+    ['ends its row', { x: 214, width: 104 }, { right: 0 }],
+    ['wrapped onto a line of its own', { x: 14, width: 104 }, { left: 0 }],
+  ])('fades its old text out from the edge it keeps where it %s', async (_where, at, edge) => {
+    const time = new Date(2026, 9, 7, 3, 21).getTime();
+    // As its line reads its layout on a device: in a 332dp row.
+    const line = {
+      getBoundingClientRect: () => ({ x: at.x, width: at.width }),
+      parentNode: { getBoundingClientRect: () => ({ x: 0, width: 332 }) },
+    };
+    let row!: ReactTestRenderer;
+    act(() => {
+      row = create(<Freshness refreshedAt={time} refreshing />, { createNodeMock: () => line });
+    });
+    // Android answers that reduce motion is off.
+    await act(async () => undefined);
+    act(() => row.update(<Freshness refreshedAt={time} />));
+    const [outgoing] = row.root.findAll((node) => (node.type as unknown) === 'AnimatedText');
+    expect(outgoing!.children).toEqual([`Saved ${refreshedLabel(time)} · refreshing`]);
+    expect(flatten(outgoing!.parent!.props.style)).toMatchObject(edge);
+    act(() => row.unmount());
   });
 });

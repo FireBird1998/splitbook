@@ -1,4 +1,11 @@
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
+import { findHosts, layoutHeight } from './test-utils/layout';
 import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
@@ -312,6 +319,7 @@ async function renderApp() {
     ).length;
   return {
     ...harness,
+    root,
     text,
     pressable,
     refreshControl,
@@ -930,6 +938,90 @@ describe('App return from an Expense', () => {
     await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
     expect(app.text()).not.toContain('Draft: Kept for later');
     expect(app.pressable('Add expense').props.accessibilityRole).toBe('button');
+  });
+
+  // #331: on the emulator Home moved up 3dp when its progress bar went.
+  it('keeps the progress bar’s room on Home when nothing loads', async () => {
+    const app = await renderApp();
+    expect(app.progressbars()).toBe(0);
+    const json = screen!.toJSON() as ReactTestRendererJSON;
+    // The host that holds Home's scrolling content, and what sits just above it.
+    const [frame] = findHosts(json, () => true).filter((node) =>
+      (node.children ?? []).some(
+        (child) => typeof child !== 'string' && child.type === 'ScrollView',
+      ),
+    );
+    const children = frame!.children as ReactTestRendererJSON[];
+    const slot = children[children.findIndex((child) => child.type === 'ScrollView') - 1]!;
+    expect(slot.props.accessibilityRole).toBeUndefined();
+    expect(layoutHeight(slot)).toBe(3);
+  });
+
+  // #331: a settled card is shorter than one with an amount; Home's last read shapes the wait.
+  it('shapes the Balances placeholder as settled when Home last read the member settled there', async () => {
+    const app = await renderApp();
+    app.use((path) =>
+      path === '/api/user/balances'
+        ? json({
+            data: {
+              buckets: [],
+              groups: [{ groupId, balances: [{ currency: 'INR', balance: 0 }] }],
+            },
+            status: 200,
+          })
+        : undefined,
+    );
+    await app.press('Refresh Home');
+    const read = hold();
+    app.use((path) => (path === `/api/groups/${groupId}/balances` ? read.respond() : undefined));
+    await app.press('Open Maple House');
+    await app.press('Balances');
+    const [placeholder] = app
+      .root()
+      .findAll(
+        (node) =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityLabel === 'Loading balances' &&
+          node.props.accessibilityRole !== 'progressbar',
+      );
+    // No line as tall as an amount (35dp); a "Settled up" line (20dp) instead.
+    const heights = placeholder!
+      .findAll((node) => typeof node.type === 'string')
+      .map((node) => (node.props.style as { height?: number } | undefined)?.height);
+    expect(heights).not.toContain(35);
+    expect(heights).toContain(20);
+    read.release(json({ data: { byCurrency: [] }, status: 200 }));
+    await settle();
+  });
+
+  // #331: the record's skeleton takes the shape of what the list row already says about it.
+  it('opens an Expense from its row over a skeleton of that record', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    const read = hold();
+    app.use((path) =>
+      path === `/api/groups/${groupId}/expenses/${september._id}` ? read.respond() : undefined,
+    );
+    await app.press('September groceries');
+    await read.reached;
+    const opening = app
+      .root()
+      .findAll(
+        (node) =>
+          typeof node.type === 'string' &&
+          node.props.accessibilityLabel === 'Opening this Expense…',
+      );
+    expect(opening).toHaveLength(1);
+    const laidOut = opening[0]
+      .findAll((node) => (node.type as unknown) === 'Text')
+      .flatMap((node) => node.children.filter((child) => typeof child === 'string'));
+    // Its texts are laid out, unseen, under the skeleton: the row's, not a stand-in's.
+    expect(laidOut).toContain('September groceries');
+    expect(laidOut).toContain('₹10.00');
+    expect(opening[0].props.accessibilityState).toEqual({ busy: true });
+    read.release(json({ status: 200, data: { ...september, revision: 0, isDeleted: false } }));
+    await settle();
+    expect(app.text()).toContain('You paid your share');
   });
 
   it('the top-bar back arrow names the Group it returns to', async () => {

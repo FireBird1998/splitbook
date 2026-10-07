@@ -1,6 +1,6 @@
 import { View } from 'react-native';
 import type { LoadStatus } from '../data/types';
-import { Badge, CompactText, type TextTone } from './compact';
+import { Badge, StatusText, type TextTone } from './compact';
 import { Button, Copy, Icon } from './primitives';
 import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
@@ -18,18 +18,17 @@ export function RefreshStatus({
   savedAt?: number | null;
   checking?: boolean;
 }) {
-  const theme = useTheme();
   if (!visible) return null;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
       <Icon name="sync-outline" size={15} />
-      <Copy style={{ color: theme.textSecondary, fontSize: 13, lineHeight: 20, flexShrink: 1 }}>
+      <StatusText shrink style={{ fontSize: 13, lineHeight: 20 }}>
         {savedAt === null
           ? checking
             ? 'Checking…'
             : 'Refreshing…'
           : `Saved ${refreshedLabel(savedAt)} · ${checking ? 'checking' : 'refreshing'}`}
-      </Copy>
+      </StatusText>
     </View>
   );
 }
@@ -53,9 +52,9 @@ export function Freshness({
   const time = refreshedLabel(refreshedAt);
   if (offline) return <Badge label={`Saved ${time}`} />;
   return (
-    <CompactText variant="caption" tone={tone}>
+    <StatusText tone={tone}>
       {refreshing ? `Saved ${time} · refreshing` : `Updated ${time}`}
-    </CompactText>
+    </StatusText>
   );
 }
 

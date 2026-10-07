@@ -14,7 +14,8 @@ import {
   Money,
   RowAmount,
   SectionHeader,
-  Skeleton,
+  SkeletonOf,
+  SkeletonText,
 } from './compact';
 import { Freshness, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
@@ -22,6 +23,13 @@ import { Icon } from './primitives';
 import { useTheme } from './theme';
 
 export const recordNeedsConnection = 'Recording a payment needs a connection.';
+
+/**
+ * Whether Home last read the member as settled up in a Group: its balances there are known,
+ * and nothing is owed either way in any currency.
+ */
+export const settledIn = (balances: { balance: number }[] | undefined) =>
+  balances !== undefined && balances.every(({ balance }) => getMoneyTone(balance) === 'neutral');
 
 /**
  * Suggested payments the member can record: they pay or receive it, both are still members,
@@ -373,6 +381,7 @@ export function GroupBalancesView({
   offline,
   refreshing = false,
   silent = false,
+  knownSettled = false,
   onRecord,
   onCheckPayment,
   onRefreshBalances,
@@ -386,6 +395,11 @@ export function GroupBalancesView({
   /** Shown Balances are read again: their freshness says so. */
   refreshing?: boolean;
   silent?: boolean;
+  /**
+   * The member's last-known balance in this Group is settled (as Home last read it): while the
+   * Balances load, their placeholder takes the settled card's shape, with no amount.
+   */
+  knownSettled?: boolean;
   onRecord: (paidBy: string, paidTo: string, currency: string) => void;
   onCheckPayment: () => void;
   onRefreshBalances: () => void;
@@ -429,10 +443,37 @@ export function GroupBalancesView({
         {notice}
         <View accessibilityLabel="Loading balances" accessibilityState={{ busy: true }}>
           <Card padded>
-            <View style={{ gap: 10 }}>
-              <Skeleton width="45%" />
-              <Skeleton width="70%" height={26} />
-              <Skeleton width="90%" />
+            {/* The balance card's lines, as MemberBalanceCard lays them out: its heading and a
+                typical "Updated" time wrap where the card's do, and a Household's note about
+                Months takes two lines. */}
+            <View style={{ gap: 4 }}>
+              <View
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}
+              >
+                <View style={{ flex: 1 }}>
+                  <SkeletonOf bar>
+                    <CompactText variant="overline">
+                      All-time balance · {group.defaultCurrency}
+                    </CompactText>
+                  </SkeletonOf>
+                </View>
+                <SkeletonOf bar>
+                  <CompactText variant="caption">Updated 10:42 AM</CompactText>
+                </SkeletonOf>
+              </View>
+              <SkeletonText
+                gap={4}
+                lines={[
+                  // "Settled up", or a label and an amount when anything is owed; with nothing
+                  // known, an amount, as an open balance is the commoner case.
+                  knownSettled
+                    ? { width: '30%' as const, line: 'body' as const }
+                    : { width: '70%' as const, line: 'form' as const },
+                  ...(group.category === 'home'
+                    ? [{ width: '90%' as const, line: 'small' as const, count: 2 }]
+                    : []),
+                ]}
+              />
             </View>
           </Card>
         </View>

@@ -174,6 +174,7 @@ export function RecordPaymentSheet({
         <CompactButton
           label="Record payment"
           amount={amountLabel}
+          busy={status === 'saving' ? 'Recording payment…' : undefined}
           block
           disabled={status === 'saving' || waitingForTick}
           hint={waitingForTick ? 'Tick “I meant to pay more than suggested” first.' : undefined}
