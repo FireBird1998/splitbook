@@ -221,6 +221,21 @@ describe('the sidebar', () => {
     ]);
   });
 
+  it('keeps "and 1 more currency" for screen readers only: one pixel, never the row’s width', () => {
+    const html = sidebar('/dashboard');
+    const span = /<span class="([^"]+)">, and 1 more currency<\/span>/.exec(html);
+    expect(span, 'the hidden text').not.toBeNull();
+    // Emotion's rule for the span's own class (its last), as the server renders it.
+    const ownClass = span![1].split(' ').at(-1)!;
+    const rule = new RegExp(`\\.${ownClass}\\{([^}]*)\\}`).exec(html)?.[1] ?? '';
+    expect(rule).toContain('position:absolute');
+    // In `sx`, numbers would mean 100% wide and a −8px margin: the text would show (#308).
+    expect(rule).toMatch(/(^|;)width:1px(;|$)/);
+    expect(rule).toMatch(/(^|;)height:1px(;|$)/);
+    expect(rule).toMatch(/(^|;)margin:-1px(;|$)/);
+    expect(rule).not.toMatch(/100%|-8px/);
+  });
+
   it('keeps Groups, New Group (today’s create flow), Settings and the account in reach', () => {
     const html = sidebar('/dashboard');
     expect(anchors(html).map(({ href }) => href)).toEqual(

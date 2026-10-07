@@ -17,6 +17,10 @@ async function enter(page: Page, ledger: Ledger, path: string, actor: 'sam' | 'p
 
 const initialMessage = 'Groups could not be loaded.';
 const staleMessage = 'Groups could not be refreshed. Showing previously loaded groups.';
+/** Home's cards (#306, #308) say Try again; the Groups list page says Retry. */
+const retryName = (path: string) => (path === '/dashboard' ? 'Try again' : 'Retry');
+/** The empty state of the Groups list page, or of Home's Groups table. */
+const noGroupsYet = /^No groups yet$/i;
 
 for (const viewport of [
   { name: 'desktop', width: 1280, height: 900 },
@@ -49,7 +53,7 @@ for (const viewport of [
       const error = page.getByRole('alert').filter({ hasText: initialMessage });
       await expect(error).toBeVisible();
       await expect(page.getByText(validName, { exact: true })).toHaveCount(0);
-      await expect(page.getByText('No groups yet', { exact: true })).toHaveCount(0);
+      await expect(page.getByText(noGroupsYet)).toHaveCount(0);
       // Home's heading counts the Groups only from a list it could read (#306).
       await expect(page.getByText(/\b0 Groups\b/)).toHaveCount(0);
       await expect(error).not.toContainText('members');
@@ -68,7 +72,7 @@ for (const viewport of [
         .analyze();
       expect(accessibility.violations).toEqual([]);
       await page.unroute('**/api/groups');
-      const retry = error.getByRole('button', { name: 'Retry', exact: true });
+      const retry = error.getByRole('button', { name: retryName(path), exact: true });
       await retry.focus();
       await expect(retry).toBeFocused();
       await retry.press('Enter');
@@ -107,10 +111,10 @@ for (const path of ['/groups', '/dashboard']) {
     const error = page.getByRole('alert').filter({ hasText: staleMessage });
     await expect(error).toBeVisible();
     await expect(page.getByText(name, { exact: true }).first()).toBeVisible();
-    await expect(page.getByText('No groups yet', { exact: true })).toHaveCount(0);
+    await expect(page.getByText(noGroupsYet)).toHaveCount(0);
     await expect(page.getByText('UNSUPPORTED-private-payload')).toHaveCount(0);
     await page.unroute('**/api/groups');
-    await error.getByRole('button', { name: 'Retry', exact: true }).click();
+    await error.getByRole('button', { name: retryName(path), exact: true }).click();
     await expect(error).toHaveCount(0);
     await expect(page.getByText(name, { exact: true }).first()).toBeVisible();
   });
@@ -704,10 +708,13 @@ test('saving Group settings preserves fields and updates the list, dashboard The
     .getByRole('link', { name: 'Home', exact: true })
     .click();
   await expect(page).toHaveURL(/\/dashboard$/);
-  // The Trip-specific link label proves the saved Theme reached the dashboard adapter.
-  const trip = page.getByRole('link', { name: /^Shared contract spring trip trip,/ });
+  // The Groups table's Theme line, a Trip's with its dates, proves the saved Theme and trip
+  // dates reached Home (#308).
+  const trip = page
+    .getByRole('region', { name: 'Groups' })
+    .getByRole('link', { name: /^Shared contract spring trip / });
   await expect(trip).toBeVisible();
-  await expect(trip).toHaveAccessibleName(/Apr 10, 2032 – Apr 14, 2032/);
+  await expect(trip).toHaveAccessibleName(/Trip · Apr 10–14, 2032$/);
   await sidebar.getByRole('link', { name: 'Groups', exact: true }).click();
   await page.locator(`a[href="${settingsPath}"]`).click();
   await expect(page.getByLabel('Group Name', { exact: true })).toHaveValue(name);

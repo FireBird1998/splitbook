@@ -100,12 +100,16 @@ test('from Home: choose a Group, add the Expense, and stay on Home with a confir
     await expect(button.getByText('Add expense')).toBeVisible();
   }
 
-  // The Group's card on Home, before the Expense: this Month's spending, from its own read.
-  const card = main
-    .locator('.MuiPaper-root')
-    .filter({ hasText: group.name })
-    .filter({ hasText: 'so far' });
-  await expect(card).toContainText('so far · ₹0.00 across 0 expenses');
+  // The Group's row in Home's Groups table (#308), before the Expense: nothing spent this
+  // Month (a table column on a desktop; a phone's row shows the balance and last change), and
+  // the Group's own creation as its last change.
+  const groupsCard = main.getByRole('region', { name: 'Groups' });
+  const row = isPhone(testInfo)
+    ? groupsCard.getByRole('listitem').filter({ hasText: group.name })
+    : groupsCard.locator('tbody tr').filter({ hasText: group.name });
+  if (!isPhone(testInfo)) await expect(row.getByRole('cell').nth(1)).toHaveText('₹0.00');
+  await expect(row.locator('time')).toHaveText(/^Today, /);
+  const createdAt = await row.locator('time').getAttribute('datetime');
 
   const chooser = chooserDialog(page);
   await openAddExpense(page, chooser);
@@ -127,12 +131,13 @@ test('from Home: choose a Group, add the Expense, and stay on Home with a confir
   await expect(form.getByText(group.name, { exact: true })).toBeVisible();
 
   const description = `Top bar lunch ${testInfo.project.name}`;
-  // The Group's own read on Home, and the account's Groups and balances (the sidebar's too).
+  // The account's Groups, balances and spending, which Home's Groups table (and the sidebar)
+  // shows.
   await saveExpense(page, {
     groupId: group.id,
     description,
     amount: '90',
-    rereads: [`/api/groups/${group.id}/expenses`, '/api/groups', '/api/user/balances'],
+    rereads: ['/api/groups', '/api/user/balances', '/api/user/spending'],
   });
 
   // Still on Home, told where the Expense went, and back on the button.
@@ -141,8 +146,13 @@ test('from Home: choose a Group, add the Expense, and stay on Home with a confir
     `Expense added to ${group.name}`,
   );
   await expect(button).toBeFocused();
-  // The Group's figures on Home now count the Expense.
-  await expect(card).toContainText('so far · ₹90.00 across 1 expense');
+  // The Group's row on Home now counts the Expense, and its last change is the Expense: today,
+  // and later than the Group's creation.
+  if (!isPhone(testInfo)) await expect(row.getByRole('cell').nth(1)).toHaveText('₹90.00');
+  await expect(row.locator('time')).toHaveText(/^Today, /);
+  await expect
+    .poll(async () => (await row.locator('time').getAttribute('datetime'))! > createdAt!)
+    .toBe(true);
 
   // The Expense is in the Group: its row, or its card on a phone (#310).
   await page.goto(`/groups/${group.id}`);

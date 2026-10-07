@@ -120,10 +120,11 @@ async function giveSamDistinctFigures(ledger: Ledger): Promise<Marker[]> {
   expect(await invitedTo(ledger.alex)).not.toContain(INVITATION_GROUP);
 
   const totals = 'section[aria-labelledby="home-balances-heading"]';
-  const sharedGroupCard = `.MuiPaper-root:has(a[href="/groups/${ledger.groupA}"])`;
+  // The shared Group's row in Home's Groups table (#308).
+  const sharedGroupRow = `section[aria-labelledby="home-groups-heading"] tr:has(a[href="/groups/${ledger.groupA}"])`;
   return [
     ...samTotals.map((text) => ({ within: totals, text })),
-    { within: sharedGroupCard, text: money(633.33) }, // Sam's balance in the Group they share
+    { within: sharedGroupRow, text: money(633.33) }, // Sam's balance in the Group they share
     // Sam's suggested payment to Priya in Needs you: Record opens a Group Alex isn't in, with
     // Record payment filled in for Sam paying Priya (#312).
     { within: `a[href="/groups/${ledger.groupB}/balances?paidTo=${PRIYA}"]` },

@@ -354,9 +354,8 @@ rows of a wide card beside a narrow one, inside the shell's 1320 px column,
 wrapping to one column on a phone. Each card is its own component with its own
 reads (SWR shares them with the sidebar), so it loads, fails with Try again, and
 is empty on its own. A new card joins `DashboardView` on one line, in a
-`HomeRow`; the rows hold comments where #307 and #308 add theirs. A card that
-brings its own frame, such as Latest changes (#309), sits in a `HomeSlot` of its
-width.
+`HomeRow`. A card that brings its own frame, such as Latest changes (#309), sits
+in a `HomeSlot` of its width.
 
 | Component           | Description                                                                                                                                                                                                                                              |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -366,7 +365,8 @@ width.
 | `BalancesCard`      | Your balances: per currency, Net (large, signed), You owe and Owed to you, exact and never converted, and "N Groups": the Groups where the member's balance in that currency isn't zero (a settled Group isn't counted)                                  |
 | `NeedsYouCard`      | Needs you: every suggested payment the member makes or receives, with the other person, the Group, the amount and Record (the Group's Balances, with Record payment filled in for the pair), then invitations; "Nothing needs you" when there is neither |
 | `InvitationRow`     | An invitation in Needs you, answered with Join or Decline                                                                                                                                                                                                |
-| `GroupCardGrid`     | The Group cards, kept until #308 replaces them with the Groups table                                                                                                                                                                                     |
+| `WhereItWentCard`   | Where it went (#308): the member's share of this month by Category across every Group (never by Tag), one currency at a time, as bars with a Chart/Table switch                                                                                          |
+| `GroupsTableCard`   | The Groups table (#308): each Group's Theme (with a Trip's dates), members, what it spent this month, the member's balance and Last change (its latest Activity), with New Group; rows on a phone                                                        |
 | `LatestChangesCard` | Latest changes (#309): the newest Activity across the member's Groups                                                                                                                                                                                    |
 
 ### Activity (`src/components/activity/`)

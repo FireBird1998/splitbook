@@ -2,8 +2,9 @@
  * Insights: the figures Splitbook computes so that people, and later Connected assistants,
  * never add up a list of Expenses themselves (#300, PR #242). One pure module for the web and
  * the MCP tools, and for Android later (ADR 0002). It holds the member's share of spending
- * across their Groups (#307) and a Group's Months compared with the Months before them (#314);
- * the Trip summary (#316) and the MCP insight tools add their functions here.
+ * across their Groups (#307), one Month across them by Category and by Group (#308), and a
+ * Group's Months compared with the Months before them (#314); the Trip summary (#316) and the
+ * MCP insight tools add their functions here.
  *
  * Rules every insight follows:
  * - Money is exact: minor units, read and summed with the shared exact-money helpers.
@@ -12,6 +13,7 @@
  * - A Month is left out of its own average.
  */
 
+import { CATEGORY_IDS } from './categories';
 import { moneyParticipantId, readStoredAmountMinor, sumMinorAmounts } from './exact-money';
 import {
   addMonths,
@@ -683,5 +685,161 @@ export function groupMonthInsights({
         (a.currency < b.currency ? -1 : a.currency > b.currency ? 1 : 0),
     ),
     recurringExpenses,
+  };
+}
+
+// --- One Month across the member's Groups (#308) ----------------------------------------------
+
+/*
+ * Home's "Where it went" (the member's share by Category) and the Groups table's "Spent in
+ * <Month>" (what each Group spent).
+ */
+
+/**
+ * An Expense's Category, as insights count it: one of the global Categories (`categories`).
+ * A stored value outside them, or none, counts as Other. Spending is never grouped by Tag
+ * across Groups: a Tag belongs to one Group, so two Tags with the same name are two Tags.
+ */
+export function insightCategory(value: unknown): string {
+  return typeof value === 'string' && CATEGORY_IDS.includes(value) ? value : 'other';
+}
+
+/** A stored Expense of one of the member's Groups, as the Month in detail reads it. */
+export interface MonthDetailExpense extends InsightExpense {
+  /** The Expense's total, in exact or legacy amounts: what its Group spent. */
+  amount?: number;
+  amountMinor?: number;
+  /** Its Category, as stored; see `insightCategory`. */
+  category?: string;
+}
+
+/** One Category's part of the member's share in the Month. */
+export interface CategoryShare {
+  category: string;
+  shareMinor: number;
+  /** Expenses of this Category the member shares in the Month. */
+  expenseCount: number;
+}
+
+/** The member's share in one currency in the Month, by Category. */
+export interface CategorySpending {
+  currency: string;
+  totalMinor: number;
+  expenseCount: number;
+  /** Only Categories with a share: the largest first, then by Category. */
+  categories: CategoryShare[];
+}
+
+/** What a Group spent in one currency in the Month: every Expense, whoever shares it. */
+export interface GroupSpent {
+  currency: string;
+  totalMinor: number;
+  expenseCount: number;
+}
+
+/** One Group's spending in the Month. */
+export interface GroupMonthSpending {
+  groupId: string;
+  /** Only currencies with Expenses, the one with the most first, then by code. */
+  spent: GroupSpent[];
+}
+
+/** One Month in detail, across the member's Groups. */
+export interface MonthDetail {
+  month: MonthKey;
+  /**
+   * The member's share by Category, across every Group, per currency. Only currencies with a
+   * share: the one with the most Expenses first, then by code.
+   */
+  byCategory: CategorySpending[];
+  /** Every Group the read covered, in the order given, with what it spent. */
+  groups: GroupMonthSpending[];
+}
+
+const byCode = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+const mostExpensesFirst = (
+  a: { currency: string; expenseCount: number },
+  b: { currency: string; expenseCount: number },
+) => b.expenseCount - a.expenseCount || byCode(a.currency, b.currency);
+
+/**
+ * The Month in detail, in the time zone: the member's share of each Category, and what each
+ * Group spent (each Expense's total, `expenseTotalMinor`). An Expense outside the Month or in a
+ * Group not listed counts for nothing; one the member doesn't share counts toward its Group's
+ * spending only.
+ */
+export function spendingInMonth({
+  memberId,
+  timeZone,
+  month,
+  groups,
+  expenses,
+}: {
+  memberId: string;
+  timeZone: string;
+  month: MonthKey;
+  groups: readonly Pick<SpendingGroup, 'groupId'>[];
+  expenses: Iterable<MonthDetailExpense>;
+}): MonthDetail {
+  const zone = readTimeZone(timeZone);
+  // Refuses a malformed Month before anything is counted.
+  monthsWindow([month]);
+  const spentByGroup = new Map(
+    groups.map(({ groupId }) => [groupId, new Map<string, Omit<GroupSpent, 'currency'>>()]),
+  );
+  const shareByCurrency = new Map<
+    string,
+    { expenseCount: number; categories: Map<string, Omit<CategoryShare, 'category'>> }
+  >();
+
+  for (const expense of expenses) {
+    const spent = spentByGroup.get(expense.groupId);
+    if (!spent || monthKeyInZone(expense.date, zone) !== month) continue;
+    const before = spent.get(expense.currency) ?? { totalMinor: 0, expenseCount: 0 };
+    spent.set(expense.currency, {
+      totalMinor: sumMinorAmounts([before.totalMinor, expenseTotalMinor(expense)]),
+      expenseCount: before.expenseCount + 1,
+    });
+
+    const share = memberShareMinor(expense, memberId);
+    if (share === 0) continue;
+    let currency = shareByCurrency.get(expense.currency);
+    if (!currency) {
+      currency = { expenseCount: 0, categories: new Map() };
+      shareByCurrency.set(expense.currency, currency);
+    }
+    currency.expenseCount += 1;
+    const category = insightCategory(expense.category);
+    const part = currency.categories.get(category) ?? { shareMinor: 0, expenseCount: 0 };
+    currency.categories.set(category, {
+      shareMinor: sumMinorAmounts([part.shareMinor, share]),
+      expenseCount: part.expenseCount + 1,
+    });
+  }
+
+  const byCategory = [...shareByCurrency].map(
+    ([currency, { expenseCount, categories }]): CategorySpending => {
+      const parts = [...categories]
+        .map(([category, part]) => ({ category, ...part }))
+        .sort((a, b) => b.shareMinor - a.shareMinor || byCode(a.category, b.category));
+      return {
+        currency,
+        totalMinor: sumMinorAmounts(parts.map((part) => part.shareMinor)),
+        expenseCount,
+        categories: parts,
+      };
+    },
+  );
+  byCategory.sort(mostExpensesFirst);
+
+  return {
+    month,
+    byCategory,
+    groups: [...spentByGroup].map(([groupId, spent]) => ({
+      groupId,
+      spent: [...spent]
+        .map(([currency, entry]) => ({ currency, ...entry }))
+        .sort(mostExpensesFirst),
+    })),
   };
 }

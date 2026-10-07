@@ -13,6 +13,7 @@ import {
   parseHomeBalancesResponse,
   type HomeBalancesRead,
 } from '@splitbook/shared/home-balances-read';
+import { visuallyHidden } from '@/components/common/visually-hidden';
 import { useGroups } from '@/lib/hooks/use-groups';
 import { fetcher } from '@/lib/utils/fetcher';
 import { GROUPS_HREF, NEW_GROUP_HREF, groupCurrent, groupsListCurrent } from './shell-nav';
@@ -26,18 +27,6 @@ import {
 /** Shell sizes from the design canvas (web.css: .side-h, .g-a, .gi). */
 const ROW_RADIUS = '10px';
 const TILE_RADIUS = '9px';
-
-const visuallyHidden = {
-  position: 'absolute',
-  width: 1,
-  height: 1,
-  margin: -1,
-  padding: 0,
-  overflow: 'hidden',
-  clip: 'rect(0 0 0 0)',
-  whiteSpace: 'nowrap',
-  border: 0,
-} as const;
 
 /** The read Home's balances use: the same key and fetcher, so both share one request. */
 export const USER_BALANCES_KEY = '/api/user/balances';
