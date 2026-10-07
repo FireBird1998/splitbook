@@ -6,6 +6,7 @@ import { formatDate } from '@splitbook/shared/date';
 import type { SearchRead } from '@splitbook/shared/search-read';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { anchors, text } from '@/lib/test-utils/markup';
+import { readOpenExpense } from '@/components/expenses/expense-list-query';
 import {
   expenseHref,
   initialsOf,
@@ -36,6 +37,8 @@ const { default: SearchLauncher } = await import('./SearchLauncher');
 const goa = 'b00000000000000000000001';
 const flat = 'b00000000000000000000002';
 const sam = 'a00000000000000000000002';
+const dinner = 'c00000000000000000000001';
+const ferry = 'c00000000000000000000002';
 
 /** A search read for "goa", fictional throughout. */
 const READ: SearchRead = {
@@ -46,7 +49,7 @@ const READ: SearchRead = {
   ],
   expenses: [
     {
-      id: 'c00000000000000000000001',
+      id: dinner,
       groupId: goa,
       groupName: 'Goa Friends Trip',
       description: 'Goa beach shack dinner & drinks',
@@ -55,7 +58,7 @@ const READ: SearchRead = {
       date: '2026-09-12T00:00:00.000Z',
     },
     {
-      id: 'c00000000000000000000002',
+      id: ferry,
       groupId: goa,
       groupName: 'Goa Friends Trip',
       description: 'Goa ferry',
@@ -206,7 +209,12 @@ describe('the search dialog’s states', () => {
 
   it('results: each one links where it opens, with its details', () => {
     const html = panel(results());
-    expect(anchors(html)).toEqual([
+    // Markup writes an address's `&` as `&amp;`; the link itself has a plain `&`.
+    const links = anchors(html).map((link) => ({
+      ...link,
+      href: link.href.replaceAll('&amp;', '&'),
+    }));
+    expect(links).toEqual([
       { href: `/groups/${goa}`, current: null, text: 'Goa Friends Trip Trip · 3 members' },
       {
         href: `/groups/${flat}`,
@@ -214,12 +222,12 @@ describe('the search dialog’s states', () => {
         text: 'SC Sam Goa Chen In Banyan Court and 2 other Groups',
       },
       {
-        href: `/groups/${goa}/expenses?search=Goa%20beach%20shack%20dinner%20%26%20drinks`,
+        href: `/groups/${goa}/expenses?expense=${dinner}&search=Goa%20beach%20shack%20dinner%20%26%20drinks`,
         current: null,
         text: `Goa beach shack dinner & drinks Goa Friends Trip · ${shownDate(0)} ₹2,400.50`,
       },
       {
-        href: `/groups/${goa}/expenses?search=Goa%20ferry`,
+        href: `/groups/${goa}/expenses?expense=${ferry}&search=Goa%20ferry`,
         current: null,
         text: `Goa ferry Goa Friends Trip · ${shownDate(1)}`,
       },
@@ -265,14 +273,18 @@ describe('the search dialog’s states', () => {
 });
 
 describe('results and where they go', () => {
-  it('a Group opens its page, a person the first Group shared, an Expense its Group searched for it', () => {
+  it('a Group opens its page, a person the first Group shared, an Expense open in its Group, searched for it', () => {
     const [groups, people, expenses] = searchSections(READ);
     expect(groups.options.map((option) => option.href)).toEqual([`/groups/${goa}`]);
     expect(people.options.map((option) => option.href)).toEqual([`/groups/${flat}`]);
     expect(expenses.options.map((option) => option.href)).toEqual([
-      `/groups/${goa}/expenses?search=Goa%20beach%20shack%20dinner%20%26%20drinks`,
-      `/groups/${goa}/expenses?search=Goa%20ferry`,
+      `/groups/${goa}/expenses?expense=${dinner}&search=Goa%20beach%20shack%20dinner%20%26%20drinks`,
+      `/groups/${goa}/expenses?expense=${ferry}&search=Goa%20ferry`,
     ]);
+    // The Expenses tab reads both: the open Expense (#311) and the search (#310).
+    const link = new URL(expenses.options[0].href, 'https://splitbook.test');
+    expect(readOpenExpense(link.searchParams)).toBe(dinner);
+    expect(link.searchParams.get('search')).toBe('Goa beach shack dinner & drinks');
   });
 
   it('leaves out empty sections', () => {
@@ -292,8 +304,8 @@ describe('results and where they go', () => {
   });
 
   it('encodes a description so it never changes the address', () => {
-    expect(expenseHref({ groupId: goa, description: 'Rent?tab=balances#x' })).toBe(
-      `/groups/${goa}/expenses?search=Rent%3Ftab%3Dbalances%23x`,
+    expect(expenseHref({ id: ferry, groupId: goa, description: 'Rent?tab=balances#x' })).toBe(
+      `/groups/${goa}/expenses?expense=${ferry}&search=Rent%3Ftab%3Dbalances%23x`,
     );
   });
 

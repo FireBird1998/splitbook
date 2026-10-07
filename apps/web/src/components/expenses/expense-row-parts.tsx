@@ -93,13 +93,13 @@ export function PositionText({
   );
 }
 
-/** Who paid, with their initials (design canvas `.gx-payer`): "You", a name or "2 people". */
+/**
+ * Who paid, with their initials (design canvas `.gx-payer`): "You", a name or "2 people". A
+ * long name may wrap beside the initials when the table sits beside the side panel (#311).
+ */
 export function PayerLabel({ payer }: { payer: ExpensePayerSummary }) {
   return (
-    <Box
-      component="span"
-      sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, whiteSpace: 'nowrap' }}
-    >
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
       <Avatar
         aria-hidden
         sx={{
