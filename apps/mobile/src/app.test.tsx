@@ -1412,6 +1412,50 @@ describe('App Activity window (#222)', () => {
     });
   });
 
+  // The device check of 99f96d6 (A11j-l): a payment recorded on page 2 opened in place, and
+  // every Back returned to the top of Activity, not to the payment.
+  it.each(['the top bar', 'the detail', 'Android'] as const)(
+    'returns to the payment it opened from Back on %s, where the list was',
+    async (by) => {
+      const app = await renderApp();
+      app.use((path) => {
+        const answer = sixPages(path);
+        if (!answer || !path.includes('page=2&')) return answer;
+        // Page 2's first event is a payment, which opens what was recorded.
+        return answer.json().then((body: typeof activityPage) => {
+          const [first, ...rest] = body.data.activities;
+          const payment = {
+            ...first,
+            type: 'settlement_recorded',
+            metadata: { paidByName: 'Sam', paidToName: 'Alex', amount: 100, currency: 'INR' },
+          };
+          return json({ ...body, data: { ...body.data, activities: [payment, ...rest] } });
+        });
+      });
+      await app.press('Open Maple House');
+      await app.press('Activity');
+      await app.press('Load older activity');
+      await app.scrollTo(1700);
+      await app.scrollEnd(1700, 'fling');
+      await app.press('You recorded a payment');
+      expect(app.text()).toContain('This records a payment made outside Splitbook.');
+      native.scrollTo.mockClear();
+      const backs = app
+        .root()
+        .findAll(
+          (node) =>
+            (node.type as unknown) === 'Pressable' &&
+            node.props.accessibilityLabel === 'Back to Activity',
+        );
+      if (by === 'Android') expect(await app.androidBack()).toBe(true);
+      else await settle(Promise.resolve(backs[by === 'the top bar' ? 0 : 1].props.onPress()));
+      expect(app.text()).toContain('Fictional event 2-20');
+      // Laid out again, the list returns to where it was when the payment opened.
+      app.layout(800, 5000);
+      expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 1700, animated: false });
+    },
+  );
+
   it('moves the view down by the events Load newer brings back above the one on screen', async () => {
     const app = await renderApp();
     app.use(sixPages);
