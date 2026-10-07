@@ -493,6 +493,15 @@ afterEach(() => {
 const later = (ms: number) => vi.setSystemTime(Date.now() + ms);
 /** Lets every answer and storage step already under way go as far as it can. */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 10));
+/** What reconnecting reads after the app was offline: the session again before each read. */
+const afterOffline = [
+  '/api/auth/get-session',
+  'group',
+  '/api/auth/get-session',
+  'record bill',
+  '/api/auth/get-session',
+  'history bill p1',
+];
 const billChanges = (from: number, to: number) =>
   Array.from({ length: to - from + 1 }, (_, index) => hex('d', from + index));
 const shownChanges = (controller: Controller) =>
@@ -671,9 +680,7 @@ describe('reconnecting and the foreground (M1-4, M1-6)', () => {
     const from = f.calls.length;
     f.connect(true);
     await settle();
-    expect(f.gets(from)).toEqual(
-      expect.arrayContaining(['group', 'record bill', 'history bill p1']),
-    );
+    expect(f.gets(from)).toEqual(afterOffline);
     expect(controller.getSnapshot()).toMatchObject({
       offline: { active: false },
       expense: { status: 'detail', draft: { original: { revision: 2 } } },
@@ -893,9 +900,7 @@ describe('saved copies on the persister (M3-1)', () => {
     const from = f.calls.length;
     f.connect(true);
     await settle();
-    expect(f.gets(from)).toEqual(
-      expect.arrayContaining(['group', 'record bill', 'history bill p1']),
-    );
+    expect(f.gets(from)).toEqual(afterOffline);
     expect(restarted.getSnapshot()).toMatchObject({
       offline: { active: false },
       expense: { history: { refreshedAt: Date.now() } },
@@ -1604,6 +1609,52 @@ describe('a loss while the record is read, and reads for another Group after it'
       status: 'available',
       description: 'Ferry',
     });
+  });
+});
+
+// The UI review and the device check of #220 (2026-10-07): exactly what each action reads, what a
+// Try again says from its start, and what the form says once the Group can be checked again.
+describe('exactly what each action reads (S4)', () => {
+  it('reads the session, the Group, the record and every page loaded on Try again, within 30 s too', async () => {
+    const f = fixture();
+    const controller = await withPages(f, 2);
+    const from = f.calls.length;
+    await controller.refresh();
+    expect(f.gets(from)).toEqual([
+      '/api/auth/get-session',
+      'group',
+      'record bill',
+      'history bill p1',
+      'history bill p2',
+    ]);
+  });
+
+  it('reads only the newest page of changes when the record opens again', async () => {
+    const f = fixture();
+    const controller = await withPages(f, 3);
+    await controller.back();
+    const from = f.calls.length;
+    await controller.openExpense(mapleId, billId);
+    expect(f.gets(from)).toEqual(['group', 'record bill', 'history bill p1']);
+    expect(controller.getSnapshot().expense.history).toMatchObject({ pagination: { page: 1 } });
+  });
+
+  it('reads nothing on reconnecting within 30 s of the reads, then the Group, the record and its changes', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    let from = f.calls.length;
+    later(10_000);
+    f.connect(false);
+    f.connect(true);
+    await settle();
+    expect(f.gets(from)).toEqual([]);
+    from = f.calls.length;
+    later(21_000);
+    f.connect(false);
+    f.connect(true);
+    await settle();
+    expect(f.gets(from)).toEqual(['group', 'record bill', 'history bill p1']);
   });
 });
 

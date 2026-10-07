@@ -204,13 +204,14 @@ describe('an Expense’s changes past 5 pages (#220, M7-2)', () => {
     for (let number = first * 20 - 19; number <= (first + 4) * 20; number += 1)
       layout(places(number).row, (number - (first * 20 - 19)) * 61);
   };
-  const scrolled = (y: number) =>
+  /** The record's own scroll view reports `event` at `y`: its sheets scroll too. */
+  const scrolledBy = (event: 'onScroll' | 'onScrollEndDrag' | 'onMomentumScrollEnd', y: number) =>
     act(() =>
       screen!.root
-        // The record's own: its sheets scroll too.
         .find((node) => isHost(node, 'ScrollView') && node.props.onScrollEndDrag)
-        .props.onScrollEndDrag({ nativeEvent: { contentOffset: { x: 0, y } } }),
+        .props[event]({ nativeEvent: { contentOffset: { x: 0, y } } }),
     );
+  const scrolled = (y: number) => scrolledBy('onScrollEndDrag', y);
   const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
 
   it('keeps the change on screen in its place when the newest page drops: the view moves up by what left', async () => {
@@ -226,6 +227,39 @@ describe('an Expense’s changes past 5 pages (#220, M7-2)', () => {
     // Change 21 was at 700 + 20 × 61 = 1920; it is now at 760.
     expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ y: 1900 + 760 - 1920, animated: false });
   });
+
+  // #219's lessons (app.test.tsx): at the end of a record, Android clamps the view to the shorter
+  // record before the shift lands; and the last throttled scroll event can come up to 50 dp
+  // before where a drag or a fling stopped.
+  it('shifts from where the slide began, though Android clamped the view before the shift landed', async () => {
+    const slide = render(detail(windowOf(1)));
+    lay(1, 700);
+    scrolled(1900);
+    await tick();
+    slide(detail(windowOf(2)));
+    scrolledBy('onScroll', 1500);
+    lay(2, 760);
+    await tick();
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ y: 1900 + 760 - 1920, animated: false });
+  });
+
+  it.each([
+    ['drag', 'onScrollEndDrag'],
+    ['fling', 'onMomentumScrollEnd'],
+  ] as const)(
+    'shifts from where the %s stopped, which the last scroll event can miss',
+    async (_, stopped) => {
+      const slide = render(detail(windowOf(1)));
+      lay(1, 700);
+      scrolledBy('onScroll', 1868);
+      scrolledBy(stopped, 1900);
+      await tick();
+      slide(detail(windowOf(2)));
+      lay(2, 760);
+      await tick();
+      expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ y: 1900 + 760 - 1920, animated: false });
+    },
+  );
 
   it('keeps the change on screen when Load newer brings the newest page back: the view moves down by what came', async () => {
     const slide = render(detail(windowOf(2)));
