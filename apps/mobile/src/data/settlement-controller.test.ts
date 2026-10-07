@@ -76,6 +76,8 @@ function setup(
     },
   };
   const writes: RequestInit[] = [];
+  /** NetInfo's listeners: the device's connection, which `connect` reports. */
+  const connection = new Set<(state: { isConnected: boolean | null }) => void>();
   const create = () =>
     createMobileController(
       {
@@ -94,6 +96,14 @@ function setup(
           },
         },
         settlementAttempts: store,
+        netInfo: {
+          // As NetInfo does, a new listener hears the connection as it is now.
+          addEventListener: (listener) => {
+            connection.add(listener);
+            listener({ isConnected: true });
+            return () => connection.delete(listener);
+          },
+        },
         newSubmissionKey: () => `settlement-key-${++key}`,
         accountLocal: {
           owner: {
@@ -157,7 +167,10 @@ function setup(
         },
       },
     );
-  return { controller: create(), create, store, records, writes };
+  /** NetInfo reports the device's connection: false when it drops, true when it's back. */
+  const connect = (isConnected: boolean) =>
+    connection.forEach((listener) => listener({ isConnected }));
+  return { controller: create(), create, store, records, writes, connect };
 }
 describe('native payment recording', () => {
   it('unlocks a definitely rejected first submission even when a warm invitation interrupts its response', async () => {
@@ -1193,7 +1206,7 @@ describe('native payment recording', () => {
   it('says a Retry that couldn’t reach SplitBook sent nothing, and that the first may already be recorded, then sends its key and revision again only on Retry', async () => {
     let down = false,
       posted = 0;
-    const { controller, writes, records } = setup((path, init) => {
+    const { controller, writes, records, connect } = setup((path, init) => {
       if (down && path.startsWith('/api/groups/'))
         return Promise.reject(new TypeError('Network request failed'));
       // The first payment's reply never arrives: SplitBook may have recorded it.
@@ -1248,9 +1261,13 @@ describe('native payment recording', () => {
     });
     expect(writes).toHaveLength(1);
 
-    // Nothing is sent by itself: not on a refresh, nor once SplitBook answers again.
+    // Nothing is sent by itself: not on a refresh, nor on reconnecting, nor once SplitBook
+    // answers again.
     await controller.refresh('foreground');
+    connect(false);
     down = false;
+    connect(true);
+    await new Promise((resolve) => setTimeout(resolve, 0));
     await controller.refresh('foreground');
     await controller.refresh('pull');
     expect(writes).toHaveLength(1);
