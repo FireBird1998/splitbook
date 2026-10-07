@@ -806,12 +806,9 @@ describe('first load and refresh', () => {
       expect(app.text()).not.toContain('· refreshing');
     };
     await refresh(`/api/groups/${maple}`, 'Expenses');
-    // The Expenses, read beside the Group (#219), have answered: Balances wait to follow them.
-    await refresh(
-      `/api/groups/${maple}`,
-      'Balances',
-      /Updating balances\. These figures are from .+ and may change\./,
-    );
+    // The Expenses, read beside the Group (#219), have answered: Balances wait to follow them,
+    // with their time, in their place.
+    await refresh(`/api/groups/${maple}`, 'Balances', /Updated \d/);
     await refresh(`/api/groups/${maple}/activity?`, 'Activity');
   });
 
@@ -1535,6 +1532,29 @@ describe('A Group says what is true, without jumps (#219)', () => {
     [lisbon]: 'Open Lisbon Offsite, Work · 2 members',
   };
   /**
+   * The scrolling content as it lays out on this 360dp phone: its children stacked with its gap,
+   * as Yoga stacks them (`layoutHeight`). Sheets lie over it and take no room.
+   */
+  const contentHeight = (fontScale = 1) => {
+    const [scroll] = findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView');
+    const style = flatten(scroll!.props.contentContainerStyle);
+    const children = (scroll!.children ?? []).filter(
+      (child): child is ReactTestRendererJSON =>
+        typeof child !== 'string' && child.type !== 'Modal',
+    );
+    const room = 360 - 2 * (style.paddingHorizontal as number);
+    return (
+      children.reduce((sum, child) => sum + layoutHeight(child, fontScale, room), 0) +
+      (style.gap as number) * Math.max(0, children.length - 1)
+    );
+  };
+  /** Group options, then Refresh: started, not waited for. */
+  const refresh = async (app: Awaited<ReturnType<typeof start>>) => {
+    await app.press('Group options');
+    app.tap('Refresh, Check for the latest changes');
+  };
+
+  /**
    * Alex opens `groupId` and saves an Expense in it, which removes its ledger's saved copies
    * (M2-2); the connection drops before its Expenses are read again, and the app is closed.
    * `withheld`: the phone can't remove them, so they stay on it, never shown (#212, #323).
@@ -1607,4 +1627,53 @@ describe('A Group says what is true, without jumps (#219)', () => {
       expect(app.text()).not.toContain('yet');
     },
   );
+
+  it.each([1, 1.3])(
+    'keeps Balances where they are while they wait for the Expenses to be read again, at %s× text',
+    async (scale) => {
+      setWindow({ fontScale: scale });
+      const phone = device();
+      await usedBefore(phone);
+      const app = await start(phone);
+      await settle();
+      await app.press(open[maple]);
+      await app.press('Balances');
+      const readAt = refreshedLabel(phone.clock.now);
+      const height = contentHeight(scale);
+      phone.clock.now += 5 * 60_000;
+      const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
+      await refresh(app);
+      await expenses.reached;
+      await settle();
+      // Balances wait to follow the Expenses: the screen's one progress bar says they're read.
+      expect(controller().getSnapshot().financial.balances).toMatchObject({ stale: true });
+      expect(contentHeight(scale)).toBe(height);
+      expect(app.content().inside).toContain(`Updated ${readAt}`);
+      expect(app.text()).not.toContain('Updating');
+      expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Refreshing']);
+      expenses.release();
+      await settle();
+      expect(contentHeight(scale)).toBe(height);
+      expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+    },
+  );
+
+  it('keeps Home’s balances where they are while they are read again after a Group', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    const height = contentHeight();
+    await app.press(open[maple]);
+    const figures = phone.hold('/api/user/balances');
+    app.tap('Back to Home');
+    await figures.reached;
+    await settle();
+    expect(contentHeight()).toBe(height);
+    expect(app.text()).not.toContain('Updating');
+    expect(app.content().outside).toContain('Refreshing…');
+    figures.release();
+    await settle();
+    expect(contentHeight()).toBe(height);
+  });
 });

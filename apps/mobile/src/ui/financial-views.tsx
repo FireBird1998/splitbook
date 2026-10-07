@@ -105,12 +105,12 @@ export function DetailsNotice({
 }
 
 /**
- * Explains figures that stay visible but are not current: still being verified
- * after a ledger change, or kept after a refresh failed.
+ * Explains figures kept on screen after a refresh failed, with when they were read and a retry.
+ * Figures read again after a ledger change say nothing here: they keep their place and their
+ * time, and the screen's one progress cue says they're being read, so nothing moves (#219).
  */
 export function RetainedNotice({
   status,
-  stale,
   refreshedAt,
   message,
   subject,
@@ -118,7 +118,6 @@ export function RetainedNotice({
   onRetry,
 }: {
   status: LoadStatus;
-  stale: boolean;
   refreshedAt: number | null;
   message: string | null;
   subject: string;
@@ -127,25 +126,16 @@ export function RetainedNotice({
 }) {
   const theme = useTheme();
   const time = refreshedLabel(refreshedAt);
-  if (status === 'error')
-    return (
-      <View style={{ gap: 12 }}>
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Icon name="cloud-offline-outline" color={theme.status.negative} />
-          <Copy accessibilityRole="alert" style={{ flex: 1, color: theme.status.negative }}>
-            {message ?? `Couldn’t refresh ${subject}.`} Showing {subject} from {time}.
-          </Copy>
-        </View>
-        <Button label={retryLabel} secondary onPress={onRetry} />
-      </View>
-    );
-  if (!stale) return null;
+  if (status !== 'error') return null;
   return (
-    <View style={{ flexDirection: 'row', gap: 10 }}>
-      <Icon name="sync-outline" color={theme.textSecondary} />
-      <Copy style={{ flex: 1, color: theme.textSecondary, fontSize: 14, lineHeight: 21 }}>
-        Updating {subject}. These figures are from {time} and may change.
-      </Copy>
+    <View style={{ gap: 12 }}>
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <Icon name="cloud-offline-outline" color={theme.status.negative} />
+        <Copy accessibilityRole="alert" style={{ flex: 1, color: theme.status.negative }}>
+          {message ?? `Couldn’t refresh ${subject}.`} Showing {subject} from {time}.
+        </Copy>
+      </View>
+      <Button label={retryLabel} secondary onPress={onRetry} />
     </View>
   );
 }

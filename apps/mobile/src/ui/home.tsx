@@ -212,17 +212,16 @@ function BalancesTime({ state, offline }: { state: HomeFinancialState; offline: 
 
 /**
  * One row per currency, each kept separate, with when the figures were read (`BalancesTime`).
- * `silent` keeps an automatic refresh unannounced.
+ * Read again after a change in a Group, they keep their place and their time: the top bar says
+ * they're refreshing, so nothing moves (#219).
  */
 export function HomeBalances({
   state,
   offline = false,
-  silent = false,
   onRefresh,
 }: {
   state: HomeFinancialState;
   offline?: boolean;
-  silent?: boolean;
   onRefresh: () => void;
 }) {
   const theme = useTheme();
@@ -246,7 +245,6 @@ export function HomeBalances({
       {state.data !== null && (
         <RetainedNotice
           status={state.status}
-          stale={state.stale && !silent}
           refreshedAt={state.refreshedAt}
           message={state.message}
           subject="your balances"

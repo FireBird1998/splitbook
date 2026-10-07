@@ -267,9 +267,9 @@ describe('rendered refresh feedback', () => {
     expect(shown).toContain('Groceries');
     expect(shown).toContain('1 expense this month');
     expect(shown).toContain('You owe₹30.00');
-    expect(shown).toContain(
-      `Updating balances. These figures are from ${refreshedLabel(verifiedAt)} and may change.`,
-    );
+    // Balances wait for the Expenses with their time, in their place: the one cue says it (#219).
+    expect(shown).toContain(`Updated ${refreshedLabel(verifiedAt)}`);
+    expect(shown).not.toContain('Updating');
     await expenses.release(
       json(
         page([

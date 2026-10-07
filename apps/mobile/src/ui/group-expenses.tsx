@@ -524,7 +524,6 @@ export function GroupExpensesView({
       {listed ? (
         <RetainedNotice
           status={expenses.status}
-          stale={false}
           refreshedAt={expenses.refreshedAt}
           message={expenses.message}
           subject={`${scope} expenses`}

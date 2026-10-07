@@ -389,7 +389,7 @@ function Everyone({
 /**
  * The Balances destination: an unconfirmed payment first, then the member's all-time balance
  * per currency, the suggested payments they can record, and everyone's net position.
- * Choosing a Month never changes it. `silent` keeps an automatic refresh unannounced.
+ * Choosing a Month never changes it.
  */
 export function GroupBalancesView({
   group,
@@ -398,7 +398,6 @@ export function GroupBalancesView({
   pending,
   offline,
   refreshing = false,
-  silent = false,
   knownSettled = false,
   recordUnavailable = null,
   onRecord,
@@ -413,7 +412,6 @@ export function GroupBalancesView({
   offline: boolean;
   /** Shown Balances are read again: their freshness says so. */
   refreshing?: boolean;
-  silent?: boolean;
   /**
    * The member's last-known balance in this Group is settled (as Home last read it): while the
    * Balances load, their placeholder takes the settled card's shape, with no amount.
@@ -509,7 +507,6 @@ export function GroupBalancesView({
     <View style={{ gap: 14 }}>
       <RetainedNotice
         status={balances.status}
-        stale={balances.stale && !silent}
         refreshedAt={balances.refreshedAt}
         message={balances.message}
         subject="balances"

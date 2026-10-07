@@ -67,12 +67,13 @@ export function refreshFeedback(state: MobileSnapshot): RefreshFeedback {
           ? `Opening ${shown?.name ?? 'this Group'}`
           : `Loading ${state.destination === 'activity' ? 'Activity' : state.destination}`
       : null;
+  // Figures read again after a change, as after a Group's Expenses were read, keep their place
+  // and their time like any others: this cue is what says they're being read (#219).
   const refreshing =
     state.screen === 'groups'
       ? [
           groups.status === 'loading' && groups.loaded,
-          // Unverified Home figures already carry their own "Updating" label.
-          home.status === 'loading' && home.data !== null && !home.stale,
+          home.status === 'loading' && home.data !== null,
         ]
       : !group
         ? []
@@ -82,8 +83,7 @@ export function refreshFeedback(state: MobileSnapshot): RefreshFeedback {
               ? // Older pages have their own footer; a first load shows its placeholder.
                 activity.status === 'loading' && activity.pagination !== null
               : state.destination === 'balances'
-                ? // Unverified Balances already carry their own "Updating" label.
-                  balances.status === 'loading' && balances.data !== null && !balances.stale
+                ? balances.status === 'loading' && balances.data !== null
                 : // Pagination has its own footer.
                   expenses.status === 'loading' && expenses.moreStatus !== 'loading' && listed,
           ];

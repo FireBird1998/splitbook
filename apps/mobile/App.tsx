@@ -628,7 +628,6 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
         <HomeBalances
           state={state.home}
           offline={state.offline.active}
-          silent={feedback.silent}
           onRefresh={() => void controller.refreshHome()}
         />
         {state.creation.status === 'uncertain' && (
@@ -893,7 +892,6 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
             state.detail.status === 'error' && (
               <RetainedNotice
                 status="error"
-                stale={false}
                 refreshedAt={state.detail.refreshedAt}
                 message={state.detail.message}
                 subject={group.name}
@@ -924,7 +922,6 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               pending={state.pendingPayment}
               offline={state.offline.active}
               refreshing={feedback.quiet}
-              silent={feedback.silent}
               knownSettled={settledIn(state.home.byGroup[group.id])}
               // The sheet needs the Group's details, which 2A can't show (#219).
               recordUnavailable={state.detail.data ? null : recordWaitsForDetails(group.name)}

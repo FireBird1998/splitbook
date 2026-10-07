@@ -167,7 +167,8 @@ describe('Balances destination', () => {
     const { root } = view({
       state: financial({ status: 'loading', stale: true, changed: true }),
     });
-    expect(text(root)).toContain('Updating balances.');
+    // The figures keep their place: the screen's progress cue says they're read (#219).
+    expect(text(root)).not.toContain('Updating');
     const record = labelled(root, 'Record your payment to Sam Chen')[0];
     expect(record.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(record.props.accessibilityHint).toBe(recordWaitsForBalances);
