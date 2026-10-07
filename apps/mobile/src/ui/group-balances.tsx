@@ -536,8 +536,10 @@ export function GroupBalancesView({
             currentUserId={currentUserId}
             refreshedAt={balances.refreshedAt}
             restored={balances.restored === true}
-            // The figures shown are from before a change written here, and being read again.
-            updating={balances.changed === true && balances.status === 'loading'}
+            // The figures shown are from before a change written here: they say so from the
+            // publish that says the change was made, before their reads start, until the read
+            // after it lands or fails (#219).
+            updating={balances.changed === true && balances.status !== 'error'}
             offline={offline}
             monthLens={group.category === 'home'}
           />

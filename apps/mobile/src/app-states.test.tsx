@@ -9,8 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decodeStoredSession } from './data/cookies';
 import { createMobileController, type MobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
-import { balanceWidth } from './ui/home';
-import { refreshedLabel } from './ui/refresh-feedback';
+import { balanceWidth, HomeBalances } from './ui/home';
+import { refreshFeedback, refreshedLabel } from './ui/refresh-feedback';
 import { findHosts, flatten, layoutHeight, layoutWidth } from './test-utils/layout';
 import { loop, setFileWindow, setReduceMotion, setWindow, timing } from './test-utils/native';
 import { progressHeight, sweepTrack } from './ui/compact';
@@ -134,6 +134,15 @@ function device() {
   const holds: { prefix: string; arrive: () => void; response: Promise<void> }[] = [];
   /** Every request this phone sent, as `METHOD /path?query`. */
   const sent: string[] = [];
+  /** Storage calls to hold, in order: a slow device's next reads, writes or removals. */
+  const slow: { arrive: () => void; response: Promise<void> }[] = [];
+  /** A call to this phone's saved copies or drafts: it waits while a storage hold is set. */
+  const disk = async () => {
+    const held = slow.shift();
+    if (!held) return;
+    held.arrive();
+    await held.response;
+  };
   const respond = (path: string, method: string): FetchResponse => {
     if (path.endsWith('/sign-out')) return json({ success: true });
     if (path.endsWith('/sign-in'))
@@ -303,7 +312,12 @@ function device() {
           clear: async () => payments.clear(),
         },
         savedQueries: savedQueriesIn(cache, {
+          load: async (account, path) => {
+            await disk();
+            return structuredClone(cache.get(account + path) ?? null);
+          },
           remove: async (account, path) => {
+            await disk();
             if (storage.failRemoval) throw new Error('The device storage is full');
             cache.delete(account + path);
           },
@@ -319,7 +333,10 @@ function device() {
           clear: async () => cache.clear(),
         },
         expenseDrafts: {
-          load: async (account, id) => structuredClone(drafts.get(`${account}:${id}`) ?? null),
+          load: async (account, id) => {
+            await disk();
+            return structuredClone(drafts.get(`${account}:${id}`) ?? null);
+          },
           save: async (account, id, value) => {
             drafts.set(`${account}:${id}`, structuredClone(value));
           },
@@ -378,6 +395,19 @@ function device() {
     saved: (path: string) => cache.get(alex.id + path) ?? null,
     /** This phone loses its saved copy of `path`, as after a write that failed. */
     lose: (path: string) => cache.delete(alex.id + path),
+    /** The phone's next call to its saved copies or drafts waits until released. */
+    holdStorage() {
+      let arrive!: () => void;
+      let release!: () => void;
+      const reached = new Promise<void>((resolve) => {
+        arrive = resolve;
+      });
+      const response = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      slow.push({ arrive, response });
+      return { reached, release };
+    },
     /** The next request starting with `prefix` waits until released. */
     hold(prefix: string) {
       let arrive!: () => void;
@@ -1625,16 +1655,42 @@ describe('A Group says what is true, without jumps (#219)', () => {
   };
   /**
    * The scrolling content's text as the member sees it: without what is laid out only to hold a
-   * place, unseen and unread (`accessibilityElementsHidden`), such as a skeleton's sizing copy.
+   * place, such as a skeleton's sizing copy, unseen and unread by TalkBack and VoiceOver alike
+   * (`importantForAccessibility` and `accessibilityElementsHidden`). Hidden from one of them only,
+   * it counts as seen.
    */
-  const seen = () => {
-    const words = (node: ReactTestRendererJSON | string): string =>
-      typeof node === 'string'
+  const words = (node: ReactTestRendererJSON | ReactTestRendererJSON[] | string | null): string =>
+    node === null
+      ? ''
+      : typeof node === 'string'
         ? node
-        : node.props.accessibilityElementsHidden
-          ? ''
-          : (node.children ?? []).map(words).join('');
-    return words(findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView')[0]!);
+        : Array.isArray(node)
+          ? node.map(words).join('')
+          : node.props.accessibilityElementsHidden === true &&
+              node.props.importantForAccessibility === 'no-hide-descendants'
+            ? ''
+            : (node.children ?? []).map(words).join('');
+  const seen = () =>
+    words(findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView')[0]!);
+  /**
+   * From the first publish `shows` is true of, this phone's next storage call waits until
+   * released: what that publish drew stays on screen while the reads after it wait on storage.
+   */
+  const slowFrom = (phone: ReturnType<typeof device>, shows: () => boolean) => {
+    let held: ReturnType<ReturnType<typeof device>['holdStorage']> | null = null;
+    let reached!: () => void;
+    const holding = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const stop = controller().subscribe(() => {
+      if (held || !shows()) return;
+      held = phone.holdStorage();
+      void held.reached.then(reached);
+    });
+    return {
+      reached: holding.then(stop),
+      release: () => held?.release(),
+    };
   };
   /** Group options, then Refresh: started, not waited for. */
   const refresh = async (app: Awaited<ReturnType<typeof start>>) => {
@@ -1980,11 +2036,35 @@ describe('A Group says what is true, without jumps (#219)', () => {
     const height = contentHeight();
     await app.press(open[maple]);
     const figures = phone.hold('/api/user/balances');
+    // Home's balances as each publish back on Home draws them, before their read starts too.
+    const frames: string[] = [];
+    const stop = controller().subscribe(() => {
+      const shown = controller().getSnapshot();
+      if (shown.screen !== 'groups') return;
+      let frame!: ReactTestRenderer;
+      act(() => {
+        frame = create(
+          <HomeBalances
+            state={shown.home}
+            offline={shown.offline.active}
+            silent={refreshFeedback(shown).silent}
+            onRefresh={() => undefined}
+          />,
+        );
+      });
+      frames.push(words(frame.toJSON()));
+      act(() => frame.unmount());
+    });
     app.tap('Back to Home');
     await figures.reached;
     await settle();
+    stop();
     // The Group's Expenses were read since: Home's figures say in place that they're updating,
-    // where their time was, and the top bar stays quiet.
+    // where their time was, from the first frame back, and the top bar stays quiet.
+    expect(frames.length).toBeGreaterThan(1);
+    for (const frame of frames) expect(frame).toContain('Your balancesUpdating…');
+    expect(seen()).toContain('Your balancesUpdating…');
+    expect(app.content().outside).not.toContain('Refreshing');
     expect(contentHeight()).toBe(height);
     expect(seen()).toContain('Your balancesUpdating…');
     expect(seen()).not.toContain('Updated');
@@ -2055,6 +2135,97 @@ describe('A Group says what is true, without jumps (#219)', () => {
       expect(seen()).toContain(`Your balancesUpdated ${refreshedLabel(phone.clock.now)}`);
     },
   );
+
+  // Balances' frame gap: a slow device holds the reads after a payment, but not what they say.
+  it('says Balances are updating from the frame that says the payment is recorded', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[maple]);
+    await app.press('Balances');
+    const readAt = refreshedLabel(phone.clock.now);
+    phone.clock.now += 2 * 60_000;
+    await settle(controller().openRecordPayment(alex.id, sam._id, 'INR'));
+    // The payment is confirmed; from the publish that says so, the reads after it wait on this
+    // phone's storage.
+    const storage = slowFrom(
+      phone,
+      () => controller().getSnapshot().snackbar?.message === 'Payment recorded',
+    );
+    const before = phone.sent.length;
+    const recording = controller().recordSettlement();
+    await storage.reached;
+    await settle();
+    expect(app.text()).toContain('Payment recorded');
+    // Neither the Expenses nor Balances have been asked for since the payment.
+    const sent = phone.sent.slice(before);
+    const since = sent.slice(sent.indexOf(`POST /api/groups/${maple}/settlements`) + 1);
+    expect(since.filter((request) => /\/(expenses\?|balances$)/.test(request))).toEqual([]);
+    expect(seen()).toContain('All-time balance · INRUpdating…You owe₹30.00');
+    expect(seen()).toContain('Suggested paymentsRecord once updated');
+    expect(seen()).not.toContain(`Updated ${readAt}`);
+    storage.release();
+    await settle(recording);
+    expect(seen()).toContain(`All-time balance · INRUpdated ${refreshedLabel(phone.clock.now)}`);
+  });
+
+  // N2 (MB): once the Expenses are read after a change, they're current, whatever Balances wait on.
+  it('says the Expenses are refreshing plainly once read after a change, while Balances still wait', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[maple]);
+    phone.clock.now += 2 * 60_000;
+    await settle(controller().openExpense(maple));
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId }));
+    const balances = phone.hold(`/api/groups/${maple}/balances`);
+    const saving = controller().saveExpense();
+    await balances.reached;
+    await settle();
+    // The Expenses were read after the save; Balances, read after them, are still on their way.
+    const listedAt = refreshedLabel(phone.clock.now);
+    expect(seen()).toContain(`0 expenses this monthUpdated ${listedAt}`);
+    phone.clock.now += 60_000;
+    const pulled = phone.hold(`/api/groups/${maple}/expenses?`);
+    void controller().refresh('pull');
+    await pulled.reached;
+    await settle();
+    expect(seen()).toContain(`0 expenses this monthUpdated ${listedAt}`);
+    expect(seen()).not.toContain('Updating');
+    pulled.release();
+    balances.release();
+    await settle(saving);
+    await settle();
+  });
+
+  // N3 (MD): an automatic refresh says nothing, even of figures a Group's Expenses made stale.
+  it('keeps an automatic refresh of Home’s figures silent, stale after a Group', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    const readAt = refreshedLabel(phone.clock.now);
+    await app.press(open[maple]);
+    // Offline back on Home, with no copy of its figures to stand in: they stay, stale.
+    phone.lose('/api/user/balances');
+    phone.network.online = false;
+    await app.press('Back to Home');
+    expect(controller().getSnapshot().home).toMatchObject({ status: 'error', stale: true });
+    // Back online, the foreground reads them again, automatically.
+    phone.network.online = true;
+    phone.clock.now += 31_000;
+    const figures = phone.hold('/api/user/balances');
+    void controller().refresh('foreground');
+    await figures.reached;
+    await settle();
+    expect(controller().getSnapshot().home).toMatchObject({ status: 'loading', stale: true });
+    expect(seen()).toContain(`Your balancesUpdated ${readAt}`);
+    expect(seen()).not.toContain('Updating');
+    figures.release();
+    await settle();
+  });
 
   // S1: after a save, the Month's figures say they're being updated until the list is read again.
   it('says the Expenses are updating after an Expense is saved, in place', async () => {

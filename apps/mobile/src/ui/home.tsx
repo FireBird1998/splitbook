@@ -282,7 +282,9 @@ export function HomeBalances({
               <BalancesTime
                 state={state}
                 offline={offline}
-                updating={state.stale && state.status === 'loading' && !silent}
+                // From the frame Home shows them, before their read starts, until it lands or
+                // fails; an automatic refresh says nothing (#219).
+                updating={state.stale && state.status !== 'error' && !silent}
               />
             ) : null}
           </View>
