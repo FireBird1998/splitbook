@@ -39,15 +39,22 @@ type Sessions = {
  * which the gate passes, so it never ages a session in the shared database.
  */
 async function sessionKeepsItsToken(origin: string, cookie: string) {
-  if (!process.env.SPLITBOOK_NATIVE_DATABASE) {
-    console.log(
-      'SKIP: the session refresh check needs this backend’s SPLITBOOK_NATIVE_* variables (pnpm swarm up prints them).',
-    );
+  const { SPLITBOOK_NATIVE_DATABASE: database, SPLITBOOK_NATIVE_ORIGIN_PORT: port } = process.env;
+  // Only a backend of its own: never the shared one, and only the one these requests reach.
+  const refused = !database
+    ? 'needs this backend’s SPLITBOOK_NATIVE_* variables (pnpm swarm up prints them)'
+    : database === 'splitbook_mobile_50'
+      ? 'never ages a session in the shared database, splitbook_mobile_50'
+      : new URL(origin).port !== port
+        ? 'needs SPLITBOOK_NATIVE_ORIGIN_PORT to be the port of MOBILE_VERIFY_URL'
+        : null;
+  if (refused) {
+    console.log(`SKIP: the session refresh check ${refused}.`);
     return false;
   }
   const token = decodeURIComponent(cookie.slice(cookie.indexOf('=') + 1)).split('.')[0];
-  const database = resolve(process.cwd(), 'scripts/dev-backend/database.mjs');
-  const { withIsolatedDatabase } = (await import(pathToFileURL(database).href)) as {
+  const control = resolve(process.cwd(), 'scripts/dev-backend/database.mjs');
+  const { withIsolatedDatabase } = (await import(pathToFileURL(control).href)) as {
     withIsolatedDatabase: <T>(
       action: (database: { collection(name: 'sessions'): Sessions }) => Promise<T>,
     ) => Promise<T>;
