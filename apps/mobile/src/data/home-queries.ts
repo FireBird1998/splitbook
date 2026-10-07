@@ -339,15 +339,18 @@ export function createHomeQueries(session: HomeSession) {
     );
   const held = (key: QueryKey) => client.getQueryCache().get<Envelope, Error>(hashKey(key))?.state;
   /**
-   * A saved copy shows only if its decoder reads it, a Groups list lists the member, and Home's
-   * figures name no Group the latest list from SplitBook leaves out (#323): one being restored,
-   * or read for an offline answer, while that list removed it, never shows.
+   * A saved copy shows only if its decoder reads it, a Groups list lists the member, and, once a
+   * list from SplitBook has landed, Home's figures name only Groups it lists (#323): one being
+   * restored, or read for an offline answer, while that list removed it, never shows, nor one
+   * that doesn't say which Groups it covers.
    */
   const readable = (key: QueryKey, value: unknown) => {
     try {
       if (key[0] === 'groups') return memberOfAll(listOf(value));
       void figuresOf(value);
-      return !(latest !== null && namedOf(value)?.some((id) => !latest!.has(id)));
+      if (latest === null) return true;
+      const named = namedOf(value);
+      return named !== null && named.every((id) => latest!.has(id));
     } catch {
       return false;
     }
@@ -378,21 +381,18 @@ export function createHomeQueries(session: HomeSession) {
     }
   };
   /**
-   * Whether this device's saved Home figures name a Group `listed` leaves out, inside a lease
-   * write. A row that doesn't say which Groups it covers, or can't be read, is left to the checks
-   * that already cover it.
+   * Whether this device's saved Home figures may cover a Group `listed` leaves out, inside a lease
+   * write: they name one, don't say which Groups they cover, or can't be read (#323).
    */
   const savedFiguresCover = async (accountId: string, listed: Set<string>) => {
     try {
-      const read = cachedRead(
-        await rows?.load(accountId, homePath),
-        accountId,
-        homePath,
-        session.now(),
-      );
-      return read !== null && (namedOf(read.value)?.some((id) => !listed.has(id)) ?? false);
+      const row = await rows?.load(accountId, homePath);
+      if (row == null) return false;
+      const read = cachedRead(row, accountId, homePath, session.now()),
+        named = read && namedOf(read.value);
+      return !named || named.some((id) => !listed.has(id));
     } catch {
-      return false;
+      return true;
     }
   };
   /**
@@ -598,8 +598,7 @@ export function createHomeQueries(session: HomeSession) {
     )
       await outdated(owner);
     // This device's saved figures, shown while Home's are read, that name a Group this list
-    // leaves out no longer show. They are hidden until the read lands, not removed: the read may
-    // still fall back to them.
+    // leaves out no longer show: hidden from Home, their row removed below.
     const names = (ids: string[] | null) => ids?.some((id) => !listed.has(id)) ?? false;
     if (figures?.data?.source === 'saved' && names(namedOf(figures.data.value)))
       hidden.add(figures.data);

@@ -100,6 +100,8 @@ function fixture() {
    * read a row.
    */
   const device = { failRemoval: false, failSave: false, failRetain: false, failLoad: false };
+  /** Paths whose next load of a row fails, once. */
+  const failOnce = new Set<string>();
   /** Loads, writes and removals of rows held part-way, as on a slow disk, by path. */
   const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [],
     removals: typeof writes = [],
@@ -148,7 +150,8 @@ function fixture() {
   const savedQueries = {
     ...records(rows),
     load: async (account: string, key: string) => {
-      if (device.failLoad) throw new Error('The device storage can’t be read');
+      if (device.failLoad || failOnce.delete(key))
+        throw new Error('The device storage can’t be read');
       await pause(loads, key);
       return structuredClone(rows.get(account + key) ?? null);
     },
@@ -424,6 +427,8 @@ function fixture() {
     holdRemoval: (path: string) => holdRow(removals, path),
     /** The next load of this path's row waits until released. */
     holdLoad: (path: string) => holdRow(loads, path),
+    /** The next load of this path's row fails, as a read of the device's storage can. */
+    failLoadOnce: (path: string) => void failOnce.add(path),
     /** NetInfo reports the device's connection. */
     connect(isConnected: boolean) {
       server.offline = !isConnected;
@@ -1798,6 +1803,8 @@ describe('Balances and Home follow every read of a Group (M1-5, AMEND-1)', () =>
 });
 
 describe('Home reads its Groups and its figures together (#333)', () => {
+  /** What Home says when this phone keeps no copy of its figures (#332). */
+  const balancesNotOnPhone = 'Your balances aren’t saved on this phone. Connect to load them.';
   /** Requests sent since `from`, as `METHOD /path`. */
   const sentSince = (f: ReturnType<typeof fixture>, from: number) =>
     f.calls.slice(from).map(({ method, path }) => `${method} ${path}`);
@@ -2068,9 +2075,11 @@ describe('Home reads its Groups and its figures together (#333)', () => {
       figures.release();
       await signingIn;
       await settle();
+      // Home says it has no balances to show, offline, and offers Retry (its error state).
       expect(controller.getSnapshot()).toMatchObject({
         groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
-        home: { data: null },
+        home: { status: 'error', data: null, message: balancesNotOnPhone },
+        offline: { active: true },
       });
       expect(f.row(listPath)).toMatchObject({ value: { data: [{ name: 'Cabin Weekend' }] } });
       expect(published.slice(landed).some((state) => owes(state) !== null)).toBe(false);
@@ -2085,7 +2094,70 @@ describe('Home reads its Groups and its figures together (#333)', () => {
       expect(restarted.getSnapshot()).toMatchObject({
         auth: { status: 'authenticated', user: { id: alex.id } },
         groups: { data: [{ name: 'Cabin Weekend' }] },
-        home: { data: null },
+        home: { status: 'error', data: null, message: balancesNotOnPhone },
+        offline: { active: true },
+      });
+      expect(after.some((state) => owes(state) !== null)).toBe(false);
+    },
+  );
+
+  it.each([
+    ['the Home row can’t be read while the list is checked', 'unreadable'],
+    ['the saved figures don’t say which Groups they cover', 'unnamed'],
+  ] as const)(
+    'never brings back saved figures that may cover a Group the list leaves out when %s, after a lost read and an offline restart',
+    async (_, how) => {
+      const f = fixture();
+      if (how === 'unnamed') f.server.groupFigures = false;
+      const first = f.create();
+      await first.signIn('alex');
+      await settle();
+      first.dispose();
+      later(60_000);
+      f.server.groupFigures = true;
+      // This phone's saved list never named Maple House; its saved figures cover it.
+      (f.rows.get(alex.id + listPath) as { value: { data: unknown[] } }).value.data = [cabin];
+      f.server.revoked.add(mapleId);
+      const controller = f.create();
+      const published = record(controller);
+      const list = f.hold(listPath),
+        figures = f.hold(homePath, { lost: true });
+      // Unnamed: their restore is slow, and lands once the list has.
+      const restoring = how === 'unnamed' ? f.holdLoad(homePath) : null;
+      const signingIn = controller.signIn('alex');
+      await list.reached;
+      await figures.reached;
+      if (restoring) await restoring.reached;
+      else await settle();
+      // Unreadable: the list's check of the saved figures can't read them.
+      if (how === 'unreadable') f.failLoadOnce(homePath);
+      const landed = published.length;
+      list.release();
+      await settle();
+      restoring?.release();
+      await settle();
+      figures.release();
+      await signingIn;
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+        home: { status: 'error', data: null, message: balancesNotOnPhone },
+        offline: { active: true },
+      });
+      expect(published.slice(landed).some((state) => owes(state) !== null)).toBe(false);
+      expect(f.row(homePath)).toBeNull();
+
+      controller.dispose();
+      f.connect(false);
+      const restarted = f.create();
+      const after = record(restarted);
+      await restarted.restore();
+      await settle();
+      expect(restarted.getSnapshot()).toMatchObject({
+        auth: { status: 'authenticated', user: { id: alex.id } },
+        groups: { data: [{ name: 'Cabin Weekend' }] },
+        home: { status: 'error', data: null, message: balancesNotOnPhone },
+        offline: { active: true },
       });
       expect(after.some((state) => owes(state) !== null)).toBe(false);
     },

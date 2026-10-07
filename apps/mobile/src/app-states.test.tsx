@@ -165,12 +165,14 @@ function device() {
           buckets: network.noGroups
             ? []
             : [{ currency: 'INR', youOwe: network.paid ? 0 : 30, youAreOwed: 0 }],
-          ...(network.groupBalances && {
-            groups: [
-              { groupId: maple, balances: [{ currency: 'INR', balance: -30 }] },
-              { groupId: lisbon, balances: [] },
-            ],
-          }),
+          // Home's figures say which Groups they cover, as SplitBook's do (#333): with no Group
+          // balances, none, so each row's balance stays unknown.
+          groups: network.groupBalances
+            ? [
+                { groupId: maple, balances: [{ currency: 'INR', balance: -30 }] },
+                { groupId: lisbon, balances: [] },
+              ]
+            : [],
         },
         status: 200,
       });
