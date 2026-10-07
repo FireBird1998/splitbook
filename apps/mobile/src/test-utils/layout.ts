@@ -40,9 +40,10 @@ export function layoutHeight(node: Node | string | null, fontScale = 1, width?: 
       // Wrapped onto as many lines as its estimated width needs, up to `numberOfLines`.
       const room = width === undefined ? 0 : width - horizontal(style);
       // A box sized to its text gets its width back through sums that can lose a hair: a text
-      // within a millionth of a dp of its room still fits.
+      // within a millionth of a dp of its room still fits. White space ending a line may run
+      // past its room, as Android lays it out.
       const needed =
-        room > 0 ? Math.max(1, Math.ceil(textWidth(node, fontScale) / room - 1e-6)) : 1;
+        room > 0 ? Math.max(1, Math.ceil(textWidth(node, fontScale, true) / room - 1e-6)) : 1;
       const limit = Number(node.props.numberOfLines) || Infinity;
       return box(scaledSp(number(style.lineHeight), fontScale) * Math.min(needed, limit));
     }
@@ -178,6 +179,8 @@ const inFlow = (node: Node) =>
       typeof child !== 'string' && flatten(child.props.style).position !== 'absolute',
   );
 
+const hairSpace = String.fromCodePoint(0x200a);
+
 /**
  * Outfit's advance, as a fraction of the font size, by kind of character. Fitted to seven texts
  * measured on an emulator at 100% and 130% (#331), each within 3.5%: "0 expenses this month"
@@ -186,6 +189,8 @@ const inFlow = (node: Node) =>
  * whole amount is shared." fits a 349dp line at 100%, as it did there.
  */
 function outfitAdvance(character: string) {
+  // A hair space, as a badge keeps after its label: 4px of a 32px label there.
+  if (character === hairSpace) return 0.125;
   if ('iljtfr'.includes(character)) return 0.22;
   if ('mw'.includes(character)) return 0.8;
   if (/[a-z]/.test(character)) return 0.55;
@@ -197,12 +202,14 @@ function outfitAdvance(character: string) {
 /**
  * One line of a text node's characters, estimated: IBM Plex Mono's advance is exactly 0.6 of
  * the font size; Outfit's comes from `outfitAdvance`. Letter spacing adds to each character.
+ * `hanging` leaves out the white space it ends with, which a line may end past its room in.
  */
-function textWidth(node: Node, fontScale: number) {
+function textWidth(node: Node, fontScale: number, hanging = false) {
   const style = flatten(node.props.style);
   const size = scaledSp(number(style.fontSize), fontScale);
   const mono = String(style.fontFamily ?? '').includes('Mono');
-  return [...text(node)].reduce(
+  const characters = hanging ? text(node).trimEnd() : text(node);
+  return [...characters].reduce(
     (width, character) =>
       width + size * (mono ? 0.6 : outfitAdvance(character)) + number(style.letterSpacing),
     0,

@@ -893,46 +893,26 @@ describe('compact Expense record, opening', () => {
     },
   );
 
-  // On the emulator, Tea stall's badge drew "You owe Sam" and lost "₹416.67" once its skeleton
-  // had laid out the same badge text, unseen: React Native measures text once per string and
-  // style and reuses the result, so the record's badge took the skeleton's measurement and
-  // wrapped its amount out of the pill. The skeleton's texts must never be the record's.
+  // On the emulator, Tea stall's badge drew "You owe Sam" without "₹416.67" each time its
+  // measure came from React Native's cache, as on opening it again: the label measured 115.37dp
+  // in its 115.43dp, and Android, laying the text out again to draw it, needed a fraction of a
+  // pixel more and wrapped the amount below the one-line pill. The label keeps a hair space to
+  // spare, which a line may end past, so the amount never wraps.
   it.each([
     [411, 1],
     [360, 1.3],
   ])(
-    'Tea stall’s badge keeps its amount, and shares no text with its skeleton, %sdp at %s×',
+    'Tea stall’s badge keeps its amount, with room to spare, %sdp at %s×',
     async (width, fontScale) => {
       setWindow({ width, fontScale });
-      const strings = (scope: ReactTestInstance) =>
-        scope
-          .findAll((node) => isHost(node, 'Text'))
-          .map((node) => node.children.filter((child) => typeof child === 'string').join(''));
-      await act(async () => {
-        screen = create(
-          editor(
-            { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: ids.tea },
-            recordOutline(listRow(ids.tea), alex.id),
-          ),
-        );
-      });
-      // What the skeleton lays out, unseen, inside its busy placeholder.
-      const [placeholder] = screen!.root.findAll(
-        (node) =>
-          typeof node.type === 'string' &&
-          node.props.accessibilityLabel === 'Opening this Expense…',
-      );
-      const laidOut = new Set(strings(placeholder!));
-      expect(laidOut.size).toBeGreaterThan(4);
-      act(() => screen?.unmount());
       await render(open(ids.tea));
       const badge = screen!.root.findAll(
         (node) => isHost(node, 'Text') && node.children.join('').startsWith('You owe'),
       );
-      expect(badge.map((node) => node.children.join(''))).toEqual(['You owe Sam ₹416.67']);
+      expect(badge.map((node) => node.children)).toEqual([
+        ['You owe Sam ₹416.67', String.fromCodePoint(0x200a)],
+      ]);
       expect(badge[0]!.props.numberOfLines).toBeUndefined();
-      const shared = strings(screen!.root).filter((text) => text && laidOut.has(text));
-      expect(shared).toEqual([]);
     },
   );
 
