@@ -724,30 +724,28 @@ export function createExpenseQueries(session: ExpenseSession) {
     const opened = view,
       owner = session.generation(),
       fresh = kind === 'retry';
-    if (!opened || opened.lost || !onScreen() || onScreen()!.expense.status === 'saving') return;
-    const still = () =>
-      session.current(owner) && view === opened && !opened.lost && onScreen() !== null;
+    // On the screen of this open; once its Group refused the member, only Try again reads it.
+    const here = (lost = kind === 'retry') =>
+      session.current(owner) && view === opened && onScreen(lost) !== null;
+    if (!opened || !here() || onScreen(true)!.expense.status === 'saving') return;
     let step: 'session' | 'group' | 'record' = 'session';
     try {
       if (kind !== 'reconnect') await session.checkSession(owner);
-      if (!still()) return;
+      if (!here()) return;
       step = 'group';
-      adoptContext(
-        await session.group.read(opened.groupId, owner, { fresh, wanted: still }),
-        opened,
-      );
+      const wanted = () => here();
+      adoptContext(await session.group.read(opened.groupId, owner, { fresh, wanted }), opened);
       const { expense } = onScreen() ?? {},
         expenseId = expense?.draft?.original?._id;
-      if (kind === 'foreground' || !still() || !expenseId) return;
+      if (kind === 'foreground' || !here(false) || !expenseId) return;
       if (!['detail', 'delete-review', 'editing'].includes(expense!.status)) return;
       step = 'record';
       api.want(expenseId);
-      await api.record(owner, { fresh, wanted: still });
-      if (still()) await api.history(owner, { fresh, wanted: still });
+      await api.record(owner, { fresh, wanted });
+      if (here(false)) await api.history(owner, { fresh, wanted });
     } catch (error) {
       // The refusal has already withdrawn the record's queries: what shows goes too.
-      const here = session.current(owner) && view === opened && onScreen(true) !== null;
-      if (step === 'session' || !here || !(error instanceof RequestError)) return;
+      if (step === 'session' || !here(true) || !(error instanceof RequestError)) return;
       if (error.status === 403 || (step === 'group' && error.status === 404))
         session.refused(opened.groupId, error);
       else if (error.status === 404 && opened.expenseId)
