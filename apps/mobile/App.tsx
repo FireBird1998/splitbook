@@ -855,11 +855,8 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
           {state.detail.status === 'error' && !state.detail.data ? (
             <DetailsNotice
               subject={group.name}
-              balances={
-                state.financial.balances.status === 'ready' &&
-                !state.financial.balances.stale &&
-                !state.financial.balances.changed
-              }
+              // Up to date only as the server answered them in this open, never a saved copy.
+              balances={state.financial.balances.answeredThisOpen === true}
               onRetry={() => void controller.refresh()}
             />
           ) : (

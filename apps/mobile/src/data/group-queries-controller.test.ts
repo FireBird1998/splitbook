@@ -1512,6 +1512,55 @@ describe('a Group read that fails beside Expenses that answer', () => {
     await restarted.openGroup(mapleId);
     expect(restarted.getSnapshot().financial.expenses.data).toEqual([]);
   });
+
+  // Beside the Group's failure, Balances are up to date only as the server answered them in this
+  // open: never a saved copy, and not once a read of them fails.
+  it('counts Balances up to date only while the server’s answer in this open shows', async () => {
+    const f = fixture();
+    const first = f.create();
+    await first.signIn('alex');
+    await first.openGroup(mapleId);
+    await settle();
+    // With the Group shown, nothing more is said of its Balances.
+    expect(first.getSnapshot().financial.balances.answeredThisOpen).toBeUndefined();
+    first.dispose();
+    // No Group copy on this phone; the Balances copy says 30, while the server now holds 45.
+    f.rows.delete(alex.id + maplePath);
+    f.server.owe = 45;
+    f.server.failGroup = true;
+    const restarted = f.create();
+    await restarted.restore();
+    // The Expenses answer, then the connection drops before Balances are read.
+    const expenses = f.hold(septemberPath(1));
+    const opening = restarted.openGroup(mapleId);
+    await expenses.reached;
+    f.server.offline = true;
+    expenses.release();
+    await opening;
+    await settle();
+    const amounts = (state: MobileSnapshot) =>
+      state.financial.balances.data?.flatMap(({ debts }) => debts.map(({ amount }) => amount));
+    const saved = restarted.getSnapshot();
+    expect(saved).toMatchObject({
+      detail: { status: 'error', data: null },
+      offline: { active: true },
+      financial: { expenses: { status: 'ready' }, balances: { status: 'ready' } },
+    });
+    expect(amounts(saved)).toEqual([30]);
+    expect(saved.financial.balances.answeredThisOpen).toBeFalsy();
+    // Back online, the view is read again: the server answers Balances in this open.
+    f.connect(false);
+    f.connect(true);
+    await settle();
+    const answered = restarted.getSnapshot();
+    expect(amounts(answered)).toEqual([45]);
+    expect(answered.financial.balances).toMatchObject({ status: 'ready', answeredThisOpen: true });
+    // A read of them that then fails leaves them shown, but no longer up to date.
+    f.server.failBalances = true;
+    await restarted.refreshBalances();
+    expect(restarted.getSnapshot().financial.balances).toMatchObject({ status: 'error' });
+    expect(restarted.getSnapshot().financial.balances.answeredThisOpen).toBeFalsy();
+  });
 });
 
 describe('opening and refreshing a Group read independent things together', () => {

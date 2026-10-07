@@ -453,6 +453,21 @@ describe('App refresh rendering', () => {
     expect(app.text()).toContain('You owe₹30.00');
   });
 
+  it('says only the Expenses are up to date when Balances aren’t answered beside a failed Group read (2A)', async () => {
+    const app = await renderApp();
+    app.use((path) =>
+      path === `/api/groups/${groupId}` || path === `/api/groups/${groupId}/balances`
+        ? json({}, 500)
+        : undefined,
+    );
+    await app.press('Open Maple House');
+    expect(app.text()).toContain(
+      'Couldn’t load Maple House’s details. Expenses below are up to date.',
+    );
+    expect(app.text()).not.toContain('Expenses and balances below are up to date.');
+    expect(app.text()).toContain('September groceries');
+  });
+
   it('reopens a recent Group without a request, then shows it with its time while it is read again', async () => {
     const app = await renderApp();
     const reads: string[] = [];

@@ -288,7 +288,7 @@ export function createGroupQueries(session: GroupSession) {
   let changes = 0;
   /** How many Group views have opened in this session. */
   let opens = 0;
-  /** Each Expense list read from the server, by its data: the start of the fetch that read it. */
+  /** Each Expense list or Balances read from the server, by its data: its fetch's start. */
   const answers = new WeakMap<object, Start>();
   /** How many pages each fetch of an Expense list has read so far, by its promise. */
   const pagesRead = new WeakMap<object, number>();
@@ -1194,11 +1194,26 @@ export function createGroupQueries(session: GroupSession) {
       stale: false,
     });
   };
-  /** Out of date since a change written in this Group: no payment is offered until read (#219). */
+  /**
+   * Out of date since a change written in this Group: no payment is offered until read (#219).
+   * With no Group to show (owner decision 2A), they count as up to date only while the server's
+   * answer to a read sent in this open shows, never a saved copy. The open is checked as 2A
+   * checks the Expenses, as defence in depth: Balances read before this open can't show without
+   * the Group, which stays once read.
+   */
   const projectBalances = (shown: Balances, opened: View, financial: GroupFinancialState) => {
-    const next = balancesFrom(shown, opened, financial),
-      changed = opened.change !== 0;
-    return (next.changed ?? false) === changed ? next : { ...next, changed };
+    let next = balancesFrom(shown, opened, financial);
+    const changed = opened.change !== 0;
+    if ((next.changed ?? false) !== changed) next = { ...next, changed };
+    const data = stateOf<Envelope>(balancesKey(opened.groupId))?.data;
+    const answered =
+      held(groupQueryKey(opened.groupId))?.state.data === undefined &&
+      next.status === 'ready' &&
+      !!data &&
+      answers.get(data)?.open === opened.open;
+    if ((next.answeredThisOpen ?? false) !== answered)
+      next = { ...next, answeredThisOpen: answered };
+    return next;
   };
   /** The Group as its query holds it, in the snapshot's shape. */
   const projectDetail = (shown: MobileSnapshot['detail'], opened: View) => {
@@ -1521,11 +1536,14 @@ export function createGroupQueries(session: GroupSession) {
             return;
           if (event.action.type === 'success' && !event.action.manual) {
             saveAnswer(query);
-            // An Expense list read from the server: when its read began, by its data (#219).
-            const pages = isList(key) ? (query.state.data as Pages | undefined) : undefined,
+            // An Expense list or Balances read from the server: when its read began, by its data
+            // (#219).
+            const data = query.state.data as Pages | Envelope | undefined,
               start = query.promise && starts.get(query.promise);
-            if (pages && start && pages.pages.every((page) => page.source !== 'saved'))
-              answers.set(pages, start);
+            const fromServer = isList(key)
+              ? (data as Pages | undefined)?.pages.every((page) => page.source !== 'saved')
+              : key[0] === 'balances' && (data as Envelope | undefined)?.source === 'network';
+            if (data && start && fromServer) answers.set(data, start);
           }
           if (!view || key[3] !== view.groupId) return;
           if (client.getQueryCache().get(query.queryHash) !== query) return;

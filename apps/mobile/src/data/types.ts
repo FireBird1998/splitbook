@@ -155,6 +155,11 @@ export interface GroupFinancialState {
      * they're read again after it (#219). Unset before any change.
      */
     changed?: boolean;
+    /**
+     * With no Group to show (owner decision 2A, #219): the server answered these Balances in this
+     * open, so they're up to date beside the Group's failure. Never a saved copy. Unset otherwise.
+     */
+    answeredThisOpen?: boolean;
   };
 }
 
