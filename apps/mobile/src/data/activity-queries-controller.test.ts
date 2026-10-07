@@ -604,9 +604,102 @@ describe('Activity reuses reads verified inside the window (#181, M1-6)', () => 
     const sent = f.calls.length;
     await controller.openActivity(mapleId);
     await settle();
-    expect(f.gets(sent).filter((read) => !read.startsWith('/api/'))).toEqual([]);
+    expect(f.gets(sent)).toEqual([]);
     expect(controller.getSnapshot().activity).toMatchObject({ groupId: mapleId, status: 'ready' });
     expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 20));
+  });
+
+  // A Group opened anew is a new open, never a return to it: it lists Activity from its newest
+  // page, as its Months do (#219) and as #215 says, while a return keeps every page loaded (M1-3).
+  it('lists Activity from its newest page when the Group is opened again inside the window, reading nothing', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 2);
+    expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 40));
+    await controller.back();
+    await settle();
+    later(10_000);
+    let sent = f.calls.length;
+    await controller.openActivity(mapleId);
+    await settle();
+    expect(f.gets(sent)).toEqual([]);
+    expect(controller.getSnapshot().activity).toMatchObject({
+      status: 'ready',
+      firstPage: 1,
+      pagination: { page: 1 },
+    });
+    expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 20));
+    // Load older reads page 2 again.
+    sent = f.calls.length;
+    await controller.loadMoreActivity();
+    expect(f.gets(sent)).toEqual(['activity p2']);
+    expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 40));
+  });
+
+  it('reads nothing on a reconnect inside the window, and every loaded page after it', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 2);
+    let sent = f.calls.length;
+    f.connect(false);
+    await settle();
+    f.connect(true);
+    await settle();
+    expect(f.gets(sent)).toEqual([]);
+    later(31_000);
+    sent = f.calls.length;
+    f.connect(false);
+    await settle();
+    f.connect(true);
+    await settle();
+    // Through TanStack's online event (M1-4): every page loaded, in order (M1-3).
+    expect(f.gets(sent)).toEqual(['activity p1', 'activity p2']);
+    expect(controller.getSnapshot().activity).toMatchObject({ status: 'ready', restored: false });
+    expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 40));
+  });
+
+  it('checks the session before each page it reads again, on a reconnect after a read failed offline', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 2);
+    f.connect(false);
+    await settle();
+    await controller.refresh('pull');
+    await settle();
+    expect(controller.getSnapshot().offline.active).toBe(true);
+    const sent = f.calls.length;
+    f.connect(true);
+    await settle();
+    await settle();
+    // Each read after one failed offline checks the session first, as an Expense's history does
+    // (#356).
+    expect(f.gets(sent)).toEqual([
+      '/api/auth/get-session',
+      'activity p1',
+      '/api/auth/get-session',
+      'activity p2',
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      offline: { active: false },
+      activity: { status: 'ready', restored: false },
+    });
+    expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 40));
+  });
+
+  it('reads nothing switching back from Expenses inside the window, and every loaded page after it', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 2);
+    await controller.selectDestination('expenses');
+    await settle();
+    let sent = f.calls.length;
+    await controller.selectDestination('activity');
+    await settle();
+    expect(f.gets(sent)).toEqual([]);
+    await controller.selectDestination('expenses');
+    await settle();
+    later(31_000);
+    sent = f.calls.length;
+    await controller.selectDestination('activity');
+    await settle();
+    expect(f.gets(sent)).toEqual(['activity p1', 'activity p2']);
+    expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 40));
   });
 
   it('says when its events were read: the oldest page in its window, never fresher', async () => {
@@ -877,7 +970,8 @@ describe('saved copies on the persister (M3-1, AMEND-2)', () => {
     const sent = f.calls.length;
     await controller.refresh('foreground');
     await settle();
-    expect(f.activityGets(sent)).toEqual(['activity p1']);
+    // The session is checked first, as after any read that failed offline (#356).
+    expect(f.gets(sent)).toEqual(['/api/auth/get-session', 'activity p1']);
     expect(controller.getSnapshot().activity).toMatchObject({
       refreshedAt: start + 60_000,
       restored: false,
@@ -902,7 +996,7 @@ describe('a save made while the window has slid (#215)', () => {
     const sent = f.calls.length;
     await controller.selectDestination('activity');
     await settle();
-    expect(f.activityGets(sent)).toEqual(['activity p1']);
+    expect(f.gets(sent)).toEqual(['activity p1']);
     expect(controller.getSnapshot().activity).toMatchObject({
       status: 'ready',
       firstPage: 1,
@@ -924,7 +1018,7 @@ describe('after a write (M2-2)', () => {
     let sent = f.calls.length;
     await controller.selectDestination('activity');
     await settle();
-    expect(f.activityGets(sent)).toEqual(['activity p1']);
+    expect(f.gets(sent)).toEqual(['activity p1']);
     expect(listed(controller.getSnapshot())[0]).toBe('Lake dinner');
     // No snapshot on Activity listed an event from before the change.
     for (const state of shown.filter(
@@ -935,7 +1029,7 @@ describe('after a write (M2-2)', () => {
     shown.length = 0;
     await controller.openExpense(mapleId, dinnerId);
     await settle();
-    expect(f.gets(sent)).toContain('history p1');
+    expect(f.gets(sent)).toEqual(['group', 'record', 'history p1']);
     expect(controller.getSnapshot().expense.history.events).toHaveLength(2);
     // Its history never showed without the change either.
     for (const state of shown.filter(({ screen }) => screen === 'expense'))
@@ -953,7 +1047,7 @@ describe('after a write (M2-2)', () => {
     const sent = f.calls.length;
     await controller.selectDestination('activity');
     await settle();
-    expect(f.activityGets(sent)).toEqual(['activity p1']);
+    expect(f.gets(sent)).toEqual(['activity p1']);
     expect(listed(controller.getSnapshot())).toEqual(['Fresh groceries', ...mapleEvents(1, 19)]);
   });
 
@@ -1077,7 +1171,7 @@ describe('sessions and access (#173 gates)', () => {
     const sent = f.calls.length;
     await controller.selectDestination('activity');
     await settle();
-    expect(f.activityGets(sent)).toEqual(['activity p1']);
+    expect(f.gets(sent)).toEqual(['activity p1']);
     expect(listed(controller.getSnapshot())[0]).toBe('Lake dinner');
   });
 
