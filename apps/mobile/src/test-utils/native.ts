@@ -90,6 +90,26 @@ export const loop = vi.fn((inner: StandInAnimation) =>
   animation({ kind: 'loop', animation: inner }),
 );
 
+/**
+ * Frames: what waits for the next one (`requestAnimationFrame`) runs when a test calls
+ * `nextFrame`, so a test sees what happens before a frame and after it.
+ */
+const waitingForFrame = new Map<number, (time: number) => void>();
+let lastFrame = 0;
+export function requestAnimationFrame(callback: (time: number) => void) {
+  lastFrame += 1;
+  waitingForFrame.set(lastFrame, callback);
+  return lastFrame;
+}
+export function cancelAnimationFrame(frame: number) {
+  waitingForFrame.delete(frame);
+}
+export function nextFrame() {
+  const due = [...waitingForFrame.values()];
+  waitingForFrame.clear();
+  for (const callback of due) callback(Date.now());
+}
+
 /** `Animated.Value`: holds a number, and describes what is derived from it. */
 class AnimatedValue {
   value: number;
@@ -134,6 +154,7 @@ export function resetNative() {
   spring.mockClear();
   timing.mockClear();
   loop.mockClear();
+  waitingForFrame.clear();
   for (const spy of Object.values(spies)) spy.mockClear();
 }
 

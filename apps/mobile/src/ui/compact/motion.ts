@@ -248,9 +248,9 @@ interface StatusChange {
  * out is the one last shown in full. A change that arrives while a fade is running (a refresh
  * ends a moment before its new time arrives) carries the same fade on to the newer text, so the
  * line never restarts from the old text or shows the one in between at full strength. The fade
- * starts at once, on the native driver, on views new to it (`key`), so the line never shows an
- * opacity a finished fade left behind. A first render, and any change with reduce motion on,
- * shows the new text at once.
+ * runs on the native driver from the frame after the change, on views new to it (`key`), so the
+ * line never shows an opacity a finished fade left behind. A first render, and any change with
+ * reduce motion on, shows the new text at once.
  */
 export function useStatusFade(text: string): StatusChange {
   useWatchReducedMotion();
@@ -284,11 +284,19 @@ export function useStatusFade(text: string): StatusChange {
       easing: Easing.inOut(Easing.quad),
       useNativeDriver: true,
     });
-    animation.start(({ finished }) => {
-      if (running.current === change) running.current = null;
-      if (finished) settled.current = latest.current;
-    });
+    // An update from a store, as a refresh's result arrives, commits and runs this effect in the
+    // task that brought it, and React Native draws that commit only when the task ends. Started
+    // at once, the fade could run its course before its views were drawn: on the emulator,
+    // "Updated" replaced "Saved · refreshing" in one frame as the refresh's progress bar went
+    // (#331). From the next frame, it starts with them on screen, as they were made to start.
+    const frame = requestAnimationFrame(() =>
+      animation.start(({ finished }) => {
+        if (running.current === change) running.current = null;
+        if (finished) settled.current = latest.current;
+      }),
+    );
     return () => {
+      cancelAnimationFrame(frame);
       if (running.current === change) running.current = null;
       animation.stop();
     };

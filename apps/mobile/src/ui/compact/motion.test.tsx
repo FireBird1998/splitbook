@@ -9,7 +9,7 @@ import {
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { flatten, layoutHeight } from '../../test-utils/layout';
-import { loop, setReduceMotion, setWindow, timing } from '../../test-utils/native';
+import { loop, nextFrame, setReduceMotion, setWindow, timing } from '../../test-utils/native';
 
 // #331: the loading pieces move on the native driver, together, and only while they're shown;
 // with reduce motion on, nothing moves. The stand-ins never run an animation, so these tests
@@ -454,6 +454,7 @@ describe('A status change cross-fades', () => {
     update(<StatusText>Saved 6:49 AM · refreshing</StatusText>);
     expect(style(room(root))).toMatchObject({ right: 0 });
     // The next change starts from where the line is now.
+    act(() => nextFrame());
     act(() => timings()[0].start.mock.calls[0][0]({ finished: true }));
     update(<StatusText>Updated 6:49 AM</StatusText>);
     expect(style(room(root))).toMatchObject({ left: 0 });
@@ -503,6 +504,7 @@ describe('A status change cross-fades', () => {
     update(<StatusText>Saved 6:53 AM · refreshing</StatusText>);
     expect(views()[0]).toBe(before[0]);
     expect(views()[1]).toBe(before[1]);
+    act(() => nextFrame());
     act(() => forward.start.mock.calls[0][0]({ finished: true }));
     update(<StatusText>Updated 6:53 AM</StatusText>);
     const [incoming, outgoing] = views();
@@ -522,9 +524,33 @@ describe('A status change cross-fades', () => {
     await render(<StatusText>Updated 10:42</StatusText>);
     update(<StatusText>Saved 10:42 · refreshing</StatusText>);
     const [fade] = timings();
+    act(() => nextFrame());
     expect(fade.start).toHaveBeenCalledOnce();
     act(() => renderer!.unmount());
     renderer = undefined;
+    expect(fade.stop).toHaveBeenCalledOnce();
+  });
+
+  // On the emulator, "Updated" replaced "Saved · refreshing" in one frame as a refresh ended:
+  // its fade started in the task that brought the change, and ran its course before React
+  // Native drew the change at that task's end.
+  it('starts its fade from the next frame, once the change is drawn', async () => {
+    await render(<StatusText>Updated 10:42</StatusText>);
+    update(<StatusText>Saved 10:42 · refreshing</StatusText>);
+    const [fade] = timings();
+    expect(fade.start).not.toHaveBeenCalled();
+    act(() => nextFrame());
+    expect(fade.start).toHaveBeenCalledOnce();
+  });
+
+  it('never starts a fade whose line goes before its frame', async () => {
+    await render(<StatusText>Updated 10:42</StatusText>);
+    update(<StatusText>Saved 10:42 · refreshing</StatusText>);
+    const [fade] = timings();
+    act(() => renderer!.unmount());
+    renderer = undefined;
+    act(() => nextFrame());
+    expect(fade.start).not.toHaveBeenCalled();
     expect(fade.stop).toHaveBeenCalledOnce();
   });
 
