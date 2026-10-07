@@ -352,20 +352,29 @@ describe('rendered refresh feedback', () => {
   });
 });
 
-// #331: the freshness line ends its row on the right, so its old text fades out from there.
+// #331: the freshness line's old text fades out from the edge its line keeps in its row: the
+// right where it ends a row, the left where it wrapped onto a line of its own.
 describe('Freshness', () => {
-  it('fades its old text out from the right edge, where it sits', async () => {
-    const at = new Date(2026, 9, 7, 3, 21).getTime();
-    let line!: ReactTestRenderer;
+  it.each([
+    ['ends its row', { x: 214, width: 104 }, { right: 0 }],
+    ['wrapped onto a line of its own', { x: 14, width: 104 }, { left: 0 }],
+  ])('fades its old text out from the edge it keeps where it %s', async (_where, at, edge) => {
+    const time = new Date(2026, 9, 7, 3, 21).getTime();
+    // As its line reads its layout on a device: in a 332dp row.
+    const line = {
+      getBoundingClientRect: () => ({ x: at.x, width: at.width }),
+      parentNode: { getBoundingClientRect: () => ({ x: 0, width: 332 }) },
+    };
+    let row!: ReactTestRenderer;
     act(() => {
-      line = create(<Freshness refreshedAt={at} refreshing />);
+      row = create(<Freshness refreshedAt={time} refreshing />, { createNodeMock: () => line });
     });
     // Android answers that reduce motion is off.
     await act(async () => undefined);
-    act(() => line.update(<Freshness refreshedAt={at} />));
-    const [outgoing] = line.root.findAll((node) => (node.type as unknown) === 'AnimatedText');
-    expect(outgoing!.children).toEqual([`Saved ${refreshedLabel(at)} · refreshing`]);
-    expect(flatten(outgoing!.parent!.props.style)).toMatchObject({ right: 0 });
-    act(() => line.unmount());
+    act(() => row.update(<Freshness refreshedAt={time} />));
+    const [outgoing] = row.root.findAll((node) => (node.type as unknown) === 'AnimatedText');
+    expect(outgoing!.children).toEqual([`Saved ${refreshedLabel(time)} · refreshing`]);
+    expect(flatten(outgoing!.parent!.props.style)).toMatchObject(edge);
+    act(() => row.unmount());
   });
 });

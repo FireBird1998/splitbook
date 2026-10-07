@@ -403,17 +403,71 @@ describe('A status change cross-fades', () => {
     expect((style(outgoing).opacity as { of: unknown }).of).toBe(fade.value);
   });
 
+  /**
+   * Renders a status whose line sits at `at` in a 320dp parent, as a layout puts it: what the
+   * line reads with getBoundingClientRect, as it does on a device.
+   */
+  async function laidOut(element: ReactElement, at: { x: number; width: number }) {
+    const parent = { getBoundingClientRect: () => ({ x: 16, width: 320 }) };
+    const line = {
+      getBoundingClientRect: () => ({ x: 16 + at.x, width: at.width }),
+      parentNode: parent,
+    };
+    act(() => {
+      renderer = create(element, { createNodeMock: () => line });
+    });
+    await answered();
+    return renderer!.root;
+  }
+  const room = (root: ReactTestInstance) => hosts(root, 'AnimatedText')[0]!.parent!;
+
   // On the emulator, "Updated" fading in drew the old text from the left of a right-hand
   // status, then snapped right.
-  it('keeps both texts to the status’s edge, the old one at full length', async () => {
-    const root = await render(<StatusText align="right">Saved 10:42 · refreshing</StatusText>);
-    update(<StatusText align="right">Updated 10:43</StatusText>);
-    const [outgoing] = hosts(root, 'AnimatedText');
-    const room = outgoing.parent!;
-    expect(style(room)).toMatchObject({ position: 'absolute', right: 0 });
-    expect(style(room).left).toBeUndefined();
-    expect(style(room).width as number).toBeGreaterThan(400);
-    expect(style(outgoing).textAlign).toBe('right');
+  it('fades its old text out from the right end of a row, the edge its line keeps', async () => {
+    const at = { x: 186, width: 120 };
+    const root = await laidOut(<StatusText>Saved 10:42 · refreshing</StatusText>, at);
+    update(<StatusText>Updated 10:43</StatusText>);
+    expect(style(room(root))).toMatchObject({ position: 'absolute', right: 0 });
+    expect(style(room(root)).left).toBeUndefined();
+    expect(style(room(root)).width as number).toBeGreaterThan(400);
+    expect(style(hosts(root, 'AnimatedText')[0]!).textAlign).toBe('right');
+  });
+
+  // At 360dp and 130% on the emulator, a status on a line of its own sat at the left, and its
+  // old text jumped 63dp to the right before fading.
+  it('and from the left of a line of its own, the edge that one keeps', async () => {
+    const at = { x: 14, width: 120 };
+    const root = await laidOut(<StatusText>Updated 6:48 AM</StatusText>, at);
+    update(<StatusText>Saved 6:48 AM · refreshing</StatusText>);
+    expect(style(room(root))).toMatchObject({ position: 'absolute', left: 0 });
+    expect(style(room(root)).right).toBeUndefined();
+    expect(style(hosts(root, 'AnimatedText')[0]!).textAlign).toBe('left');
+  });
+
+  it('keeps the edge the change found while it fades, wherever its line goes', async () => {
+    const at = { x: 186, width: 120 };
+    const root = await laidOut(<StatusText>Updated 6:48 AM</StatusText>, at);
+    update(<StatusText>Saved 6:48 AM · refreshing</StatusText>);
+    // Laid out again on a line of its own: the old text still fades from where it was.
+    Object.assign(at, { x: 14, width: 180 });
+    update(<StatusText>Saved 6:49 AM · refreshing</StatusText>);
+    update(<StatusText>Saved 6:49 AM · refreshing</StatusText>);
+    expect(style(room(root))).toMatchObject({ right: 0 });
+    // The next change starts from where the line is now.
+    act(() => timings()[0].start.mock.calls[0][0]({ finished: true }));
+    update(<StatusText>Updated 6:49 AM</StatusText>);
+    expect(style(room(root))).toMatchObject({ left: 0 });
+  });
+
+  it('takes its edge from a layout its row makes without it, too', async () => {
+    const at = { x: 186, width: 120 };
+    const root = await laidOut(<StatusText>Updated 6:48 AM</StatusText>, at);
+    // The row wraps the line onto a line of its own, without the status rendering again.
+    Object.assign(at, { x: 14, width: 120 });
+    const [line] = root.findAll((node) => typeof node.props.onLayout === 'function');
+    act(() => line!.props.onLayout({ nativeEvent: { layout: { x: 14, y: 22, width: 120 } } }));
+    update(<StatusText>Saved 6:48 AM · refreshing</StatusText>);
+    expect(style(room(root))).toMatchObject({ left: 0 });
   });
 
   // On the emulator, going back to "Updated" showed the new time alone for 100ms, then the old
