@@ -3208,6 +3208,19 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       view = viewRequest;
     publish({ ...snapshot, expense: { ...editor, status: 'loading', latest: null } });
     try {
+      // A refusal took the Group's details with it: they are checked again first, as a save
+      // checks them, so the form says what is true once access is back (#220's device check).
+      let { context } = editor;
+      if (!context) {
+        context = parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
+        if (!current(owner) || view !== viewRequest) return;
+        if (
+          context.group.id !== groupId ||
+          !context.group.members.some((member) => member.user.id === snapshot.auth.user?.id)
+        )
+          throw new RequestError('You no longer have access to this Group.', 403);
+        publish({ ...snapshot, expense: { ...snapshot.expense, context } });
+      }
       const latest = parseExpenseRecord(
         await request(`/api/groups/${groupId}/expenses/${original._id}`, owner),
         groupId,

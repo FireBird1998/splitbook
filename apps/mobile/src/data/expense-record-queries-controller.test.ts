@@ -1606,3 +1606,45 @@ describe('a loss while the record is read, and reads for another Group after it'
     });
   });
 });
+
+describe('the Group’s details after a refused save (the device check)', () => {
+  it('checks the Group again before the record when the form lost its details, and shows them', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Meter read on the 20th' });
+    f.server.group = 403;
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'blocked',
+      context: null,
+      draft: { notes: 'Meter read on the 20th' },
+    });
+    // Alex is added back, then checks the current Expense.
+    f.server.group = 200;
+    const from = f.calls.length;
+    await controller.reconcileExpense();
+    expect(f.gets(from)).toEqual(['group', 'record bill']);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'conflict',
+      context: { group: { id: mapleId } },
+      draft: { notes: 'Meter read on the 20th' },
+    });
+  });
+
+  it('reads no Group before the record when the form has its details', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Meter read on the 20th' });
+    f.server.loseWrites = true;
+    await controller.saveExpense();
+    f.server.loseWrites = false;
+    f.server.offline = false;
+    const from = f.calls.length;
+    await controller.reconcileExpense();
+    expect(f.gets(from)[0]).toBe('record bill');
+  });
+});

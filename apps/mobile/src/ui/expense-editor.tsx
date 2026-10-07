@@ -561,12 +561,24 @@ function ExpenseTask({
               ))}
             </Banner>
           ) : null}
-          {!context && (
-            <Banner
-              tone="offline"
-              message="Connect to check the current members and Tags. You can still edit your saved text."
-            />
-          )}
+          {/* The Group's details are unknown: offline, refused, or not read. Each says which. */}
+          {!context &&
+            (offline ? (
+              <Banner
+                tone="offline"
+                message="Connect to check the current members and Tags. You can still edit your saved text."
+              />
+            ) : (
+              <Banner
+                tone="warning"
+                standing
+                message={
+                  state.status === 'blocked'
+                    ? 'You no longer have access to this Group’s members and Tags. Your draft is kept.'
+                    : 'Couldn’t check the current members and Tags. You can still edit your saved text.'
+                }
+              />
+            ))}
           <AmountDescriptionCard
             draft={draft}
             locked={locked}

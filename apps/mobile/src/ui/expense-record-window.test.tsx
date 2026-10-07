@@ -354,3 +354,40 @@ describe('opening an Expense: what is already known shows at once (loading-state
     ).toHaveLength(1);
   });
 });
+
+describe('the Group’s details unknown beside a draft (the device check of 3ac9be2)', () => {
+  const draft = (status: Editor['status']): Editor => ({
+    ...emptyExpenseEditor(),
+    groupId,
+    context: null,
+    draft: { ...draftFromExpense(original), description: 'Electricity bill draft' },
+    status,
+    requestedExpenseId: billId,
+  });
+
+  it('says to connect only while offline', () => {
+    render(draft('resume'), { offline: true });
+    expect(text(screen!.root)).toContain('Connect to check the current members and Tags.');
+  });
+
+  it('says access was lost, with no offline cue, when the Group refused the member', () => {
+    render(draft('blocked'));
+    expect(text(screen!.root)).toContain(
+      'You no longer have access to this Group’s members and Tags. Your draft is kept.',
+    );
+    expect(text(screen!.root)).not.toContain('Connect to check');
+    expect(
+      screen!.root.findAll(
+        (node) => isHost(node, 'Ionicons') && node.props.name === 'cloud-offline-outline',
+      ),
+    ).toEqual([]);
+  });
+
+  it('says the details couldn’t be checked when they weren’t read online', () => {
+    render(draft('resume'));
+    expect(text(screen!.root)).toContain(
+      'Couldn’t check the current members and Tags. You can still edit your saved text.',
+    );
+    expect(text(screen!.root)).not.toContain('Connect to check');
+  });
+});
