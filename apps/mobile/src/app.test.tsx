@@ -13,6 +13,7 @@ import { createMobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
 import { emitAppState, pressBack } from './test-utils/native';
+import { GroupExpensesView } from './ui/group-expenses';
 
 // The real App tree renders through the shared host stand-ins; only native modules are replaced.
 // What the mocked `./runtime` serves: the controller under test and the appearance.
@@ -336,6 +337,16 @@ async function renderApp() {
     /** The member scrolls the visible screen to this offset. */
     scrollTo: (y: number) =>
       act(() => scrollView().props.onScroll({ nativeEvent: { contentOffset: { y } } })),
+    /**
+     * Scrolling stops at this offset: the drag ends there, or the fling after it does. The
+     * throttled scroll events may not have reported it (#219).
+     */
+    scrollEnd: (y: number, by: 'drag' | 'fling') =>
+      act(() =>
+        scrollView().props[by === 'drag' ? 'onScrollEndDrag' : 'onMomentumScrollEnd']({
+          nativeEvent: { contentOffset: { y } },
+        }),
+      ),
     /** Native layout reports the visible screen's viewport and content heights. */
     layout: (viewport: number, content: number) =>
       act(() => {
@@ -386,7 +397,8 @@ describe('App refresh rendering', () => {
     expect(shown).not.toContain('September');
   });
 
-  it('keeps Expenses and Balances with their time, a message and a retry when the Group read fails', async () => {
+  // Owner decision 2A (#219): the Expenses and Balances read beside a failed Group read show.
+  it('keeps the Group’s details with their time, a message and a retry when its read fails, beside Expenses and Balances read again', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');
     const verifiedAt = refreshedLabel(app.clock.now);
@@ -412,7 +424,11 @@ describe('App refresh rendering', () => {
     await retried.reached;
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
-    expect(app.text()).toContain(`Saved ${verifiedAt} · refreshing`);
+    // The pull read Expenses and Balances again beside the failed Group read; the retry reads the
+    // Expenses beside the Group again (#219), so Balances wait to follow them.
+    expect(app.text()).toContain(
+      `Updating balances. These figures are from ${refreshedLabel(app.clock.now)} and may change.`,
+    );
     expect(app.text()).toContain('You owe₹30.00');
 
     app.use(() => undefined);
@@ -424,6 +440,72 @@ describe('App refresh rendering', () => {
     expect(app.refreshControl().refreshing).toBe(false);
     await app.press('Expenses');
     expect(app.text()).toContain('September groceries');
+  });
+
+  it('opens a Group whose own read fails as Home lists it, with its Expenses and the failure (2A)', async () => {
+    const app = await renderApp();
+    app.use((path) => (path === `/api/groups/${groupId}` ? json({}, 500) : undefined));
+    await app.press('Open Maple House');
+    // The note says what failed and what is current; no time it can't know, no offline icon.
+    expect(app.text()).toContain(
+      'Couldn’t load Maple House’s details. Expenses and balances below are up to date.',
+    );
+    expect(app.text()).not.toContain('unknown time');
+    expect(app.text()).not.toContain('Couldn’t open this Group');
+    const icons = screen!.root
+      .findAll((node) => (node.type as unknown) === 'Ionicons')
+      .map((node) => node.props.name as string);
+    expect(icons).toContain('alert-circle-outline');
+    expect(icons).not.toContain('cloud-offline-outline');
+    expect(app.pressable('Retry Group')).toBeDefined();
+    expect(app.text()).toContain('September groceries');
+    await app.press('Balances');
+    expect(app.text()).toContain('You owe₹30.00');
+  });
+
+  it('says only the Expenses are up to date when Balances aren’t answered beside a failed Group read (2A)', async () => {
+    const app = await renderApp();
+    app.use((path) =>
+      path === `/api/groups/${groupId}` || path === `/api/groups/${groupId}/balances`
+        ? json({}, 500)
+        : undefined,
+    );
+    await app.press('Open Maple House');
+    expect(app.text()).toContain(
+      'Couldn’t load Maple House’s details. Expenses below are up to date.',
+    );
+    expect(app.text()).not.toContain('Expenses and balances below are up to date.');
+    expect(app.text()).toContain('September groceries');
+  });
+
+  it('keeps Record disabled, and says why, while the Group’s details can’t be read (2A)', async () => {
+    const app = await renderApp();
+    // Alex is a member too, so Sam's debt to Alex is a payment Sam can record.
+    const both = {
+      ...group,
+      members: [
+        ...group.members,
+        { user: { ...alex, email: 'alex@x.test' }, role: 'member', joinedAt: iso },
+      ],
+    };
+    app.use((path) =>
+      path === '/api/groups'
+        ? json({ data: [both], status: 200 })
+        : path === `/api/groups/${groupId}`
+          ? json({}, 500)
+          : undefined,
+    );
+    await settle(Promise.resolve(app.refreshControl().onRefresh()));
+    await app.press('Open Maple House');
+    await app.press('Balances');
+    const record = app.pressable('Record your payment to Alex');
+    expect(record.props.accessibilityState).toEqual({ disabled: true });
+    expect(record.props.accessibilityHint).toBe(
+      'Record is available once Maple House’s details load.',
+    );
+    expect(app.text()).toContain('Record is available once Maple House’s details load.');
+    await app.press('Record your payment to Alex');
+    expect(app.controller.getSnapshot().screen).toBe('group');
   });
 
   it('reopens a recent Group without a request, then shows it with its time while it is read again', async () => {
@@ -458,7 +540,10 @@ describe('App refresh rendering', () => {
     expect(app.text()).toContain(`Saved ${verifiedAt} · refreshing`);
     expect(app.text()).toContain('September groceries');
     await app.press('Balances');
-    expect(app.text()).toContain(`Saved ${verifiedAt} · refreshing`);
+    // The Expenses, read beside the Group (#219), have answered: Balances wait to follow them.
+    expect(app.text()).toContain(
+      `Updating balances. These figures are from ${verifiedAt} and may change.`,
+    );
     expect(app.text()).toContain('You owe₹30.00');
     expect(app.refreshControl().refreshing).toBe(false);
     app.use(() => undefined);
@@ -1109,6 +1194,150 @@ describe('App return from an Expense', () => {
   });
 });
 
+describe('App Expense window (#219)', () => {
+  // September has 6 pages of 20 fictional Expenses.
+  const septemberPage = (number: number) => ({
+    ...page(
+      Array.from({ length: 20 }, (_, row) =>
+        expense(
+          `e${String(number * 100 + row).padStart(23, '0')}`,
+          `Fictional row ${number}-${row + 1}`,
+        ),
+      ),
+    ),
+  });
+  const sixPages = (path: string) => {
+    if (!path.includes('/expenses?')) return undefined;
+    const number = Number(new URL(path, 'http://local').searchParams.get('page'));
+    const answer = septemberPage(number);
+    answer.data.pagination = { page: number, limit: 20, total: 120, totalPages: 6 };
+    answer.data.summary = { ...answer.data.summary, count: 120 };
+    return json(answer);
+  };
+
+  it('keeps the row on screen when the newest page drops: it scrolls from where the slide began', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    for (let number = 2; number <= 5; number += 1) await app.press('Load more expenses');
+    await app.scrollTo(5000);
+    native.scrollTo.mockClear();
+    await app.press('Load more expenses');
+    expect(app.text()).toContain('Fictional row 6-20');
+    expect(app.text()).not.toContain('Fictional row 1-1');
+    // The list is shorter now, so Android has already clamped the offset before the shift lands.
+    await app.scrollTo(4200);
+    const view = screen!.root.findByType(GroupExpensesView);
+    act(() => view.props.onShift(-1140));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({
+      y: 5000 - 1140,
+      animated: false,
+    });
+    // Only the slide's own shift starts from there.
+    act(() => view.props.onShift(-60));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({
+      y: 5000 - 1140 - 60,
+      animated: false,
+    });
+  });
+
+  // The device check of 3087a26 (#219): the last throttled scroll event came up to 50 dp before
+  // where a drag or fling stopped, and the view moved by as much.
+  it.each(['drag', 'fling'] as const)(
+    'shifts from where the %s stopped, which the last scroll event can miss',
+    async (by) => {
+      const app = await renderApp();
+      app.use(sixPages);
+      await app.press('Open Maple House');
+      for (let number = 2; number <= 5; number += 1) await app.press('Load more expenses');
+      await app.scrollTo(4968);
+      await app.scrollEnd(5000, by);
+      native.scrollTo.mockClear();
+      await app.press('Load more expenses');
+      const view = screen!.root.findByType(GroupExpensesView);
+      act(() => view.props.onShift(-1140));
+      expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000 - 1140, animated: false });
+    },
+  );
+
+  it('moves the view down by the rows Load newer brings back above the one on screen', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    for (let number = 2; number <= 6; number += 1) await app.press('Load more expenses');
+    await app.scrollTo(40);
+    await app.scrollEnd(60, 'fling');
+    native.scrollTo.mockClear();
+    await app.press('Load newer expenses');
+    expect(app.text()).toContain('Fictional row 1-1');
+    const view = screen!.root.findByType(GroupExpensesView);
+    act(() => view.props.onShift(1140));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 60 + 1140, animated: false });
+  });
+
+  // The device recheck of a31f3e8 (#219): an edit at the list's end came back one row short, as the
+  // list dropped Load more while its window was read again.
+  it('returns an edit made at the list’s end to its place: the list keeps Load more while read again', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    for (let number = 2; number <= 5; number += 1) await app.press('Load more expenses');
+    await app.scrollTo(4980);
+    await app.scrollEnd(5000, 'fling');
+    const id = `e${String(5 * 100 + 18).padStart(23, '0')}`;
+    const record = { ...expense(id, 'Fictional row 5-19'), revision: 0, isDeleted: false };
+    // Once the edit is sent, the window's pages answer only when released.
+    let holding = false;
+    const held: (() => void)[] = [];
+    app.use((path, init) => {
+      if (path === `/api/groups/${groupId}/expenses/${id}`)
+        return init.method === 'PATCH'
+          ? json({ status: 200, data: { ...record, description: 'Fictional row 5-19 r' } })
+          : json({ status: 200, data: record });
+      if (holding && path.includes('/expenses?'))
+        return new Promise<FetchResponse>((resolve) => held.push(() => resolve(sixPages(path)!)));
+      return sixPages(path);
+    });
+    await app.press('Fictional row 5-19');
+    await settle(app.controller.editExpense());
+    await settle(app.controller.updateExpenseDraft({ description: 'Fictional row 5-19 r' }));
+    holding = true;
+    native.scrollTo.mockClear();
+    const saving = app.controller.saveExpense();
+    await settle();
+    // Back on Expenses while the window is read again: Load more holds its place, disabled, so
+    // the list is as long as when the member left it, and the return lands where it began.
+    expect(held.length).toBeGreaterThan(0);
+    expect(app.text()).toContain('Expense updated · Fictional row 5-19 r');
+    expect(app.pressable('Load more expenses').props.accessibilityState).toEqual({
+      disabled: true,
+    });
+    await app.layout(700, 5700);
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000, animated: false });
+    holding = false;
+    while (held.length) {
+      held.shift()!();
+      await settle();
+    }
+    await settle(saving);
+    expect(app.text()).toContain('Fictional row 5-19 r');
+    expect(app.pressable('Load more expenses').props.accessibilityState).toEqual({
+      disabled: false,
+    });
+  });
+
+  it('returns to where scrolling stopped after an Expense opened from the list', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    await app.scrollTo(220);
+    await app.scrollEnd(240, 'drag');
+    await app.press('Fictional row 1-3');
+    expect(await app.androidBack()).toBe(true);
+    await app.layout(700, 2600);
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 240, animated: false });
+  });
+});
 describe('App invitation', () => {
   it('stays on the invitation while Joining Group…, then opens the joined Group', async () => {
     const app = await renderApp();

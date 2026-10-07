@@ -1,4 +1,4 @@
-import type { AccountGroupRecordStore } from '../data/account-record-storage';
+import type { AccountGroupRecordStore, FindableRecordStore } from '../data/account-record-storage';
 
 /**
  * The persister's rows (ADR 0006, M3-1) for a fixture whose saved copies live in one map: each
@@ -10,7 +10,7 @@ export function savedQueriesIn(
   map: Map<string, unknown>,
   store: Partial<AccountGroupRecordStore> = {},
   separator = '',
-): AccountGroupRecordStore {
+): FindableRecordStore {
   const key = (account: string, path: string) => account + separator + path;
   return {
     load: async (account, path) => structuredClone(map.get(key(account, path)) ?? null),
@@ -21,6 +21,18 @@ export function savedQueriesIn(
       map.delete(key(account, path));
     },
     clear: async () => map.clear(),
+    // Rows by path, as the persister lists them; a key of the map that holds no path isn't one.
+    list: async (account) =>
+      [...map]
+        .filter(([entry]) => entry.startsWith(key(account, '/api/')))
+        .map(([entry, value]) => ({
+          groupId: entry.slice(key(account, '').length),
+          value: structuredClone(value),
+        })),
+    keys: async (account) =>
+      [...map.keys()]
+        .filter((entry) => entry.startsWith(key(account, '/api/')))
+        .map((entry) => entry.slice(key(account, '').length)),
     ...store,
   };
 }

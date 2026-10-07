@@ -3,7 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { emptySettlement, type SettlementState } from '../data/settlement';
 import type { GroupCurrencyBalance, GroupFinancialState, MobileGroup } from '../data/types';
-import { GroupBalancesView, recordNeedsConnection } from './group-balances';
+import {
+  GroupBalancesView,
+  recordNeedsConnection,
+  recordWaitsForBalances,
+  recordWaitsForDetails,
+} from './group-balances';
 import type { PendingPayment } from '../data/settlement';
 import { RecordPaymentSheet, recordPaymentFootnote } from './record-payment-sheet';
 
@@ -156,6 +161,34 @@ describe('Balances destination', () => {
     expect(record.props.accessibilityHint).toBe(recordNeedsConnection);
     expect(text(root)).toContain(recordNeedsConnection);
     expect(onRecord).not.toHaveBeenCalled();
+  });
+
+  it('disables Record while Balances are read again after a change, and says why (#219)', () => {
+    const { root } = view({
+      state: financial({ status: 'loading', stale: true, changed: true }),
+    });
+    expect(text(root)).toContain('Updating balances.');
+    const record = labelled(root, 'Record your payment to Sam Chen')[0];
+    expect(record.props.accessibilityState).toEqual({ disabled: true });
+    expect(record.props.accessibilityHint).toBe(recordWaitsForBalances);
+  });
+
+  it('disables Record while the Group’s details can’t be read, and says why (2A, #219)', () => {
+    const { root } = view({ recordUnavailable: recordWaitsForDetails('Maple House') });
+    const record = labelled(root, 'Record your payment to Sam Chen')[0];
+    expect(record.props.accessibilityState).toEqual({ disabled: true });
+    expect(record.props.accessibilityHint).toBe(
+      'Record is available once Maple House’s details load.',
+    );
+    expect(text(root)).toContain('Record is available once Maple House’s details load.');
+    // Offline says so first.
+    const offline = view({
+      offline: true,
+      recordUnavailable: recordWaitsForDetails('Maple House'),
+    });
+    expect(
+      labelled(offline.root, 'Record your payment to Sam Chen')[0].props.accessibilityHint,
+    ).toBe(recordNeedsConnection);
   });
 
   it('offers an unconfirmed payment even once nothing is suggested', () => {

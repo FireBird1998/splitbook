@@ -50,7 +50,7 @@ import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/
 import { ExpenseEditor } from './src/ui/expense-editor';
 import { scrollToShow } from './src/ui/scroll';
 import { recordOutline } from './src/ui/expense-record-view';
-import { RefreshStatus, RetainedNotice } from './src/ui/financial-views';
+import { DetailsNotice, RefreshStatus, RetainedNotice } from './src/ui/financial-views';
 import { GroupExpensesView } from './src/ui/group-expenses';
 import { TripStrip } from './src/ui/trip-strip';
 import {
@@ -65,7 +65,7 @@ import { GroupSnackbar, HomeSnackbar } from './src/ui/group-snackbar';
 import { visibleFieldErrors } from './src/data/field-feedback';
 import { groupFields } from './src/data/group-draft';
 import { GroupShell } from './src/ui/group-shell';
-import { GroupBalancesView, settledIn } from './src/ui/group-balances';
+import { GroupBalancesView, recordWaitsForDetails, settledIn } from './src/ui/group-balances';
 import { RecordPaymentSheet } from './src/ui/record-payment-sheet';
 import { GroupActivity } from './src/ui/group-activity';
 import { GroupMembers } from './src/ui/group-members';
@@ -687,9 +687,15 @@ function shareInvite() {
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
 function GroupScreen({ state }: { state: MobileSnapshot }) {
   const feedback = refreshFeedback(state);
-  const group = state.detail.data;
   // The top bar keeps the Group's name and actions while it is first read.
   const known = shownGroup(state);
+  // Its details couldn't be read, but its Expenses answered, which proves the member belongs
+  // (owner decision 2A, #219): the Group shows as Home lists it, with the failure on its details.
+  const proven =
+    state.detail.status === 'error' &&
+    state.financial.groupId === state.detail.id &&
+    state.financial.expenses.status === 'ready';
+  const group = state.detail.data ?? (proven ? known : null);
   // Never opened on this phone, and offline: the navigation stays, without a banner.
   const unavailable = !group && state.detail.status === 'error' && state.offline.active;
   const userId = state.auth.user!.id;
@@ -706,6 +712,16 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
   if (shownScrollKey.current !== scrollKey) {
     shownScrollKey.current = scrollKey;
     scrollY.current = 0;
+  }
+  // Where the view was when the Expense window moved (the newest page dropped, or came back),
+  // before Android clamps the offset to a shorter list: the shift that keeps the row on screen
+  // starts from there (#219).
+  const firstPage = state.financial.expenses.firstPage ?? 1;
+  const shownFirstPage = useRef(firstPage);
+  const slideFrom = useRef<number | null>(null);
+  if (shownFirstPage.current !== firstPage) {
+    slideFrom.current = scrollY.current;
+    shownFirstPage.current = firstPage;
   }
   if (!state.restoreScroll) pendingScroll.current = null;
   else if (state.restoreScroll.request !== restoreRequest.current) {
@@ -781,6 +797,15 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         onScrollBeginDrag: () => {
           pendingScroll.current = null;
         },
+        // A throttled scroll event can miss the end of a drag or a fling, by up to 100 ms of
+        // scrolling: the offset the view then keeps, after a slide or a return, comes from where
+        // scrolling stopped (#219).
+        onScrollEndDrag: (event) => {
+          scrollY.current = event.nativeEvent.contentOffset.y;
+        },
+        onMomentumScrollEnd: (event) => {
+          scrollY.current = event.nativeEvent.contentOffset.y;
+        },
         onLayout: (event) => {
           viewportHeight.current = event.nativeEvent.layout.height;
         },
@@ -837,16 +862,25 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
       ) : (
         <>
           {/* A failed refresh keeps the whole Group readable, with its time and a retry. */}
-          {state.detail.status === 'error' && (
-            <RetainedNotice
-              status="error"
-              stale={false}
-              refreshedAt={state.detail.refreshedAt}
-              message={state.detail.message}
+          {state.detail.status === 'error' && !state.detail.data ? (
+            <DetailsNotice
               subject={group.name}
-              retryLabel="Retry Group"
+              // Up to date only as the server answered them in this open, never a saved copy.
+              balances={state.financial.balances.answeredThisOpen === true}
               onRetry={() => void controller.refresh()}
             />
+          ) : (
+            state.detail.status === 'error' && (
+              <RetainedNotice
+                status="error"
+                stale={false}
+                refreshedAt={state.detail.refreshedAt}
+                message={state.detail.message}
+                subject={group.name}
+                retryLabel="Retry Group"
+                onRetry={() => void controller.refresh()}
+              />
+            )
           )}
           {state.destination === 'activity' ? (
             <GroupActivity
@@ -872,6 +906,8 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               refreshing={feedback.quiet}
               silent={feedback.silent}
               knownSettled={settledIn(state.home.byGroup[group.id])}
+              // The sheet needs the Group's details, which 2A can't show (#219).
+              recordUnavailable={state.detail.data ? null : recordWaitsForDetails(group.name)}
               onRecord={(paidBy, paidTo, currency) =>
                 void controller.openRecordPayment(paidBy, paidTo, currency)
               }
@@ -902,6 +938,14 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                 onSelectMonth={(month) => void controller.selectMonth(month)}
                 onRefreshExpenses={() => void controller.refreshExpenses()}
                 onLoadMore={() => void controller.loadMoreExpenses()}
+                onLoadNewer={() => void controller.loadNewerExpenses()}
+                // The newest page dropped: the row on screen keeps its place (#219).
+                onShift={(dy) => {
+                  const from = slideFrom.current ?? scrollY.current;
+                  slideFrom.current = null;
+                  scrollY.current = Math.max(0, from + dy);
+                  scroll.current?.scrollTo({ y: scrollY.current, animated: false });
+                }}
                 onOpenExpense={(expenseId) => openExpense(group.id, expenseId)}
                 onResumeDraft={resumeDraft}
                 onDiscardDraft={discardDraft}

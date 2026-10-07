@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './mobile-controller';
 import type { ExpenseDraft } from './expense-draft';
-import type { FetchResponse, MobileFetch } from './types';
+import type { FetchResponse, MobileFetch, MobileSnapshot } from './types';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // Fictional people and Groups only.
@@ -677,9 +677,9 @@ describe('Returning to an Expense beyond the first page', () => {
     expect(financial.expenses.pagination?.page).toBe(2);
     expect(server.pagesRead().slice(reads)).toEqual([1, 2]);
 
-    // Only the return restores the range; an ordinary refresh starts from the first page.
+    // A refresh reads the pages loaded again too (#219, M1-3), not only the first page.
     await controller.refresh('pull');
-    expect(server.pagesRead().slice(reads + 2)).toEqual([1]);
+    expect(server.pagesRead().slice(reads + 2)).toEqual([1, 2]);
   });
 
   it('reads the same pages again after an edit or a new Expense is saved', async () => {
@@ -784,6 +784,127 @@ describe('Returning to an Expense beyond the first page', () => {
   });
 });
 
+// Owner decision 1A (2026-10-07): an edit or a delete made while the list has slid past its
+// newest page keeps the window where it was, and reads its pages again; a new Expense still goes
+// to the newest page, with its highlight (#215).
+describe('An edit or delete in a list that has slid past its newest page (#219, 1A)', () => {
+  /** 130 August Expenses read to page 6: the window holds pages 2 to 6. */
+  async function slid() {
+    const server = ledger();
+    server.seed(
+      '2026-08',
+      Array.from({ length: 130 }, (_, index) => (index % 28) + 1),
+    );
+    const { controller } = await signedIn(server);
+    await controller.openGroup(householdId);
+    await controller.selectMonth('2026-08');
+    for (let page = 2; page <= 6; page += 1) await controller.loadMoreExpenses();
+    const { expenses } = controller.getSnapshot().financial;
+    expect(expenses).toMatchObject({ firstPage: 2, pagination: { page: 6 } });
+    return { server, controller, last: expenses.data.at(-1)! };
+  }
+
+  it('keeps the window after an edit, reads its pages again, and highlights the edited row', async () => {
+    const { server, controller, last } = await slid();
+    await controller.openExpense(householdId, last.id, { scrollY: 6100 });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Seeded, corrected' });
+    const reads = server.pagesRead().length;
+    await controller.saveExpense();
+    const shown = controller.getSnapshot();
+    expect(shown).toMatchObject({
+      restoreScroll: { y: 6100 },
+      snackbar: {
+        message: 'Expense updated · Seeded, corrected',
+        expenseId: last.id,
+      },
+      financial: { expenses: { firstPage: 2, pagination: { page: 6 } } },
+    });
+    expect(shown.financial.expenses.data).toHaveLength(100);
+    expect(shown.financial.expenses.data.find((row) => row.id === last.id)?.description).toBe(
+      'Seeded, corrected',
+    );
+    expect(server.pagesRead().slice(reads)).toEqual([2, 3, 4, 5, 6]);
+  });
+
+  // A highlight shows only on a row a read after the write listed: never on the row as it was
+  // before the edit, while it is read again, or once that read failed (#219).
+  it('highlights no row before the window’s read after an edit lands, or while it runs', async () => {
+    const { server, controller, last } = await slid();
+    await controller.openExpense(householdId, last.id, { scrollY: 6100 });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Seeded, corrected' });
+    const states: MobileSnapshot[] = [];
+    controller.subscribe(() => states.push(controller.getSnapshot()));
+    const reread = server.hold('GET', /\/expenses\?page=2&/);
+    const saving = controller.saveExpense();
+    await reread.reached;
+    const shown = controller.getSnapshot();
+    expect(shown.snackbar?.message).toBe('Expense updated · Seeded, corrected');
+    // The row as it was before the edit is still listed, but it isn't the edited Expense yet.
+    expect(shown.financial.expenses.data.find((row) => row.id === last.id)?.description).not.toBe(
+      'Seeded, corrected',
+    );
+    expect(shown.snackbar?.expenseId).toBeUndefined();
+    reread.release();
+    await saving;
+    expect(controller.getSnapshot().snackbar?.expenseId).toBe(last.id);
+    // From the moment the edit was confirmed, every highlight showed the row as edited.
+    const edited = (state: MobileSnapshot) =>
+      state.financial.expenses.data.find((row) => row.id === last.id)?.description ===
+      'Seeded, corrected';
+    expect(states.filter((state) => state.snackbar?.expenseId && !edited(state))).toEqual([]);
+  });
+
+  it('highlights no row, and says the list couldn’t be updated, when the window’s read after an edit fails', async () => {
+    const { server, controller, last } = await slid();
+    await controller.openExpense(householdId, last.id, { scrollY: 6100 });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Seeded, corrected' });
+    server.failNextPage(2);
+    await controller.saveExpense();
+    const shown = controller.getSnapshot();
+    expect(shown.snackbar?.message).toBe(
+      'Expense updated · Seeded, corrected. Expenses couldn’t be updated yet — pull to refresh.',
+    );
+    // The row as it was before the edit stays listed, unhighlighted.
+    expect(shown.financial.expenses.data.map((row) => row.id)).toContain(last.id);
+    expect(shown.snackbar?.expenseId).toBeUndefined();
+  });
+
+  it('highlights no row when the edit moves the Expense out of the window', async () => {
+    const { controller, last } = await slid();
+    await controller.openExpense(householdId, last.id, { scrollY: 6100 });
+    await controller.editExpense();
+    // Dated after every other August Expense, it sorts onto page 1, before the window.
+    await controller.updateExpenseDraft({ date: '2026-08-31' });
+    await controller.saveExpense();
+    const shown = controller.getSnapshot();
+    expect(shown.financial.expenses).toMatchObject({
+      status: 'ready',
+      firstPage: 2,
+    });
+    expect(shown.financial.expenses.data.map((row) => row.id)).not.toContain(last.id);
+    expect(shown.snackbar?.message).toMatch(/^Expense updated · /);
+    expect(shown.snackbar?.expenseId).toBeUndefined();
+  });
+  it('keeps the window after a delete, and reads its pages again', async () => {
+    const { server, controller, last } = await slid();
+    await controller.openExpense(householdId, last.id, { scrollY: 6100 });
+    controller.reviewExpenseDeletion();
+    const reads = server.pagesRead().length;
+    await controller.deleteExpense();
+    const shown = controller.getSnapshot();
+    expect(shown).toMatchObject({
+      restoreScroll: { y: 6100 },
+      financial: { expenses: { firstPage: 2, pagination: { page: 6 } } },
+    });
+    expect(shown.snackbar?.message).toMatch(/^Expense deleted · /);
+    expect(shown.snackbar?.expenseId).toBeUndefined();
+    expect(shown.financial.expenses.data.map((row) => row.id)).not.toContain(last.id);
+    expect(server.pagesRead().slice(reads)).toEqual([2, 3, 4, 5, 6]);
+  });
+});
 describe('Saving into the same or another Month', () => {
   it('stays on the current Month and confirms a save in that Month', async () => {
     const { server, controller } = await signedIn();
@@ -1352,6 +1473,43 @@ describe('An edit or delete whose answer was lost (#232)', () => {
     },
   );
 
+  // #219: a change this app learns of only by checking, after a restart, still holds Balances'
+  // payments back until they are read after it.
+  it('offers no payment on Balances read before a check confirms an edit made before a restart', async () => {
+    const server = ledger();
+    const { controller } = await signedIn(server);
+    await controller.openGroup(householdId);
+    await controller.openExpense(householdId, expenseId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ amount: '45' });
+    const patch = server.hold('PATCH', recordPath);
+    const saving = controller.saveExpense();
+    await patch.reached;
+    // The app closes; the ledger then commits the edit, and its answer reaches no one.
+    controller.dispose();
+    patch.release();
+    await saving;
+
+    const restarted = server.create();
+    await restarted.restore();
+    await restarted.openGroup(householdId, true, 'balances');
+    expect(restarted.getSnapshot().financial.balances).toMatchObject({
+      status: 'ready',
+    });
+    expect(restarted.getSnapshot().financial.balances.changed).toBeFalsy();
+    await restarted.openExpense(householdId, expenseId);
+    restarted.resumeExpenseDraft();
+    const balances = server.hold('GET', new RegExp(`/api/groups/${householdId}/balances$`));
+    const checking = restarted.reconcileExpense();
+    await balances.reached;
+    expect(restarted.getSnapshot()).toMatchObject({
+      screen: 'group',
+      financial: { balances: { changed: true } },
+    });
+    balances.release();
+    await checking;
+    expect(restarted.getSnapshot().financial.balances.changed).toBeFalsy();
+  });
   it('removes the Group’s older saved copies when a check after a restart confirms the edit', async () => {
     const server = ledger({ savedCopies: true });
     /** Saved copies of the Group's ledger that still show the Expense from before the edit. */

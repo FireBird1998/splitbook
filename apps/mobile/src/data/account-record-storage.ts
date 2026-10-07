@@ -4,9 +4,26 @@ export interface AccountGroupRecordStore {
   save(accountId: string, groupId: string, value: unknown): Promise<void>;
   remove(accountId: string, groupId: string): Promise<void>;
   clear(): Promise<void>;
-  /** Every record this account has in this environment, such as Home's Expense drafts. */
+  /**
+   * Every record this account has in this environment, such as Home's Expense drafts, or the
+   * persister's rows, each by its query's path.
+   */
   list?(accountId: string): Promise<{ groupId: string; value: unknown }[]>;
+  /**
+   * The keys of every record this account has in this environment, without reading any: one
+   * that can't be read never stops a removal that only needs its key (#219).
+   */
+  keys?(accountId: string): Promise<string[]>;
 }
+/**
+ * A store that finds its records without knowing their keys, by `keys`, `list` or both, as the
+ * persister's rows must, to remove every row of a Group (#219).
+ */
+export type FindableRecordStore = Omit<AccountGroupRecordStore, 'keys' | 'list'> &
+  (
+    | (Required<Pick<AccountGroupRecordStore, 'keys'>> & Pick<AccountGroupRecordStore, 'list'>)
+    | ({ keys?: undefined } & Required<Pick<AccountGroupRecordStore, 'list'>>)
+  );
 
 /**
  * Atomic account/Group JSON records. The two existing on-disk stores keep their identities.
@@ -16,7 +33,7 @@ export interface AccountGroupRecordStore {
 export function createAccountGroupRecordStore(
   environment: string,
   kind: 'expense' | 'settlement' | 'cache' | 'saved' | 'group-creation' | 'sign-out',
-): AccountGroupRecordStore {
+): AccountGroupRecordStore & Required<Pick<AccountGroupRecordStore, 'keys' | 'list'>> {
   const {
     file,
     table,
@@ -90,6 +107,16 @@ export function createAccountGroupRecordStore(
         accountId,
       );
       return rows.map((row) => ({ groupId: row.id, value: JSON.parse(row.value) }));
+    },
+    async keys(accountId) {
+      const rows = await (
+        await database()
+      ).getAllAsync<{ id: string }>(
+        `SELECT ${column} AS id FROM ${table} WHERE environment = ? AND account_id = ?`,
+        environment,
+        accountId,
+      );
+      return rows.map((row) => row.id);
     },
   };
 }

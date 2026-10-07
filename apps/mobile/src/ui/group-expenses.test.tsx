@@ -186,6 +186,7 @@ function view(props: Partial<Parameters<typeof GroupExpensesView>[0]> = {}) {
     onSelectMonth: vi.fn(),
     onRefreshExpenses: vi.fn(),
     onLoadMore: vi.fn(),
+    onLoadNewer: vi.fn(),
     onOpenExpense: vi.fn(),
     onResumeDraft: vi.fn(),
     onDiscardDraft: vi.fn(),
@@ -338,8 +339,320 @@ describe('Expense rows', () => {
     expect(failed.onLoadMore).toHaveBeenCalledOnce();
   });
 
+  it('renders a row again when its Expense changes, and when it stops being just saved (#219)', () => {
+    const props = {
+      group: group(),
+      currentUserId: you,
+      kept: null,
+      now,
+      onSelectMonth: vi.fn(),
+      onRefreshExpenses: vi.fn(),
+      onLoadMore: vi.fn(),
+      onLoadNewer: vi.fn(),
+      onOpenExpense: vi.fn(),
+      onResumeDraft: vi.fn(),
+      onDiscardDraft: vi.fn(),
+    };
+    act(() => {
+      screen = create(
+        <GroupExpensesView {...props} state={financial()} savedExpenseId={groceries.id} />,
+      );
+    });
+    const rows = () => buttons(screen!.root).filter((label) => label?.includes('₹'));
+    expect(rows()).toContain(
+      'Weekly groceries, ₹1,249.50, You paid, Groceries, you lent ₹833.00, just saved',
+    );
+    // A read changed one row, and the save is no longer just made; the other rows are as they were.
+    const corrected = {
+      ...electricity,
+      description: 'Electricity bill, corrected',
+    };
+    act(() =>
+      screen!.update(
+        <GroupExpensesView
+          {...props}
+          state={financial({ data: [groceries, corrected, lunch, villa] })}
+          savedExpenseId={null}
+        />,
+      ),
+    );
+    expect(rows()).toContain('Weekly groceries, ₹1,249.50, You paid, Groceries, you lent ₹833.00');
+    expect(rows().filter((label) => label?.endsWith('just saved'))).toEqual([]);
+    expect(
+      rows().filter((label) => label?.startsWith('Electricity bill, corrected, ')),
+    ).toHaveLength(1);
+    expect(rows().filter((label) => label?.startsWith('Electricity bill, ₹'))).toEqual([]);
+  });
   it('has no Load more on the last page', () => {
     expect(buttons(view().root)).not.toContain('Load more expenses');
+  });
+
+  it('loads newer above a list that has slid past its newest page, as Load more does (#219)', () => {
+    const slid = { firstPage: 2, pagination: { page: 6, limit: 20, total: 130, totalPages: 7 } };
+    expect(buttons(view().root)).not.toContain('Load newer expenses');
+    remount();
+
+    const { root, onLoadNewer } = view({ state: financial(slid) });
+    const order = buttons(root);
+    // Above the rows, and TalkBack names the list.
+    expect(order.indexOf('Load newer expenses')).toBeLessThan(
+      order.findIndex((label) => label?.startsWith('Weekly groceries')),
+    );
+    press(root, 'Load newer expenses');
+    expect(onLoadNewer).toHaveBeenCalledOnce();
+    remount();
+
+    const loading = view({ state: financial({ ...slid, newerStatus: 'loading' }) }).root;
+    expect(text(loading)).toContain('Loading newer expenses…');
+    expect(loading.findAll((node) => isHost(node, 'ActivityIndicator'))).toHaveLength(1);
+    expect(buttons(loading)).not.toContain('Load newer expenses');
+    expect(text(loading)).toContain('Weekly groceries');
+    remount();
+
+    const failed = view({
+      state: financial({
+        ...slid,
+        newerStatus: 'error',
+        newerMessage: 'Could not load newer expenses. Please try again.',
+      }),
+    });
+    const alert = failed.root.find(
+      (node) => isHost(node, 'Text') && node.props.accessibilityRole === 'alert',
+    );
+    expect(alert.children.join('')).toContain('The ones shown are still here.');
+    press(failed.root, 'Try loading newer expenses');
+    expect(failed.onLoadNewer).toHaveBeenCalledOnce();
+  });
+  describe('when the newest page drops (#219)', () => {
+    // 120 fictional rows of one day, 20 a page; each row is 60 high under a 30-high day heading.
+    const rows = Array.from({ length: 120 }, (_, index) =>
+      expense(
+        `e${String(index + 1).padStart(23, '0')}`,
+        `Fictional row ${index + 1}`,
+        20,
+        [[you, 1000]],
+        [[you, 1000]],
+      ),
+    );
+    const window = (first: number) =>
+      financial({
+        data: rows.slice((first - 1) * 20, (first + 4) * 20),
+        firstPage: first,
+        pagination: { page: first + 4, limit: 20, total: 120, totalPages: 6 },
+      });
+    const layout = (node: ReactTestInstance, y: number) =>
+      act(() =>
+        node.props.onLayout({
+          nativeEvent: { layout: { x: 0, y, width: 390, height: 60 } },
+        }),
+      );
+    /** The host Views that report the layout of a row, its day and the list, by row number. */
+    const places = (root: ReactTestInstance, number: number) => {
+      const found: ReactTestInstance[] = [];
+      let node: ReactTestInstance | null = root.find(
+        (candidate) =>
+          isHost(candidate, 'Pressable') &&
+          String(candidate.props.accessibilityLabel).startsWith(`Fictional row ${number},`),
+      );
+      while (node && found.length < 3) {
+        if (isHost(node, 'View') && node.props.onLayout) found.push(node);
+        node = node.parent;
+      }
+      const [row, day, list] = found;
+      return { row, day, list };
+    };
+    /** Lays the window out as a phone would: the list at `listY`, rows from `first`. */
+    const lay = (root: ReactTestInstance, first: number, listY: number) => {
+      const { day, list } = places(root, first * 20 - 19);
+      layout(list, listY);
+      layout(day, 0);
+      for (let number = first * 20 - 19; number <= (first + 4) * 20; number += 1)
+        layout(places(root, number).row, 30 + (number - (first * 20 - 19)) * 60);
+    };
+    const render = (first: number, onShift: (dy: number) => void) => {
+      const props = {
+        group: group(),
+        currentUserId: you,
+        kept: null,
+        savedExpenseId: null,
+        now,
+        onSelectMonth: vi.fn(),
+        onRefreshExpenses: vi.fn(),
+        onLoadMore: vi.fn(),
+        onLoadNewer: vi.fn(),
+        onShift,
+        onOpenExpense: vi.fn(),
+        onResumeDraft: vi.fn(),
+        onDiscardDraft: vi.fn(),
+      };
+      act(() => {
+        screen = create(<GroupExpensesView {...props} state={window(first)} />);
+      });
+      return (next: number) =>
+        act(() => screen!.update(<GroupExpensesView {...props} state={window(next)} />));
+    };
+    const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    it('keeps the row on screen in its place: the view moves up by the rows that went', async () => {
+      const onShift = vi.fn();
+      const slide = render(1, onShift);
+      lay(screen!.root, 1, 200);
+      await tick();
+      expect(onShift).not.toHaveBeenCalled();
+      // Load more read page 6: pages 2 to 6 show, below Load newer, 60 high, above the list.
+      slide(2);
+      lay(screen!.root, 2, 260);
+      await tick();
+      // Row 21 was at 200 + 30 + 20 × 60 = 1430; it is now at 260 + 30 = 290.
+      expect(onShift).toHaveBeenCalledExactlyOnceWith(290 - 1430);
+      // Only the slide's own layout moves the view.
+      layout(places(screen!.root, 21).list, 300);
+      await tick();
+      expect(onShift).toHaveBeenCalledOnce();
+    });
+
+    it('shows Load newer, above the rows, once Load more slides the list past its newest page', () => {
+      const slide = render(1, vi.fn());
+      expect(buttons(screen!.root)).not.toContain('Load newer expenses');
+      slide(2);
+      const order = buttons(screen!.root);
+      expect(order.indexOf('Load newer expenses')).toBeGreaterThanOrEqual(0);
+      expect(order.indexOf('Load newer expenses')).toBeLessThan(
+        order.findIndex((label) => label?.startsWith('Fictional row 21,')),
+      );
+    });
+
+    it('keeps Load newer in place, disabled, while the slid window is read again', () => {
+      const slide = render(2, vi.fn());
+      const refreshing = window(2);
+      refreshing.expenses = { ...refreshing.expenses, status: 'loading' };
+      act(() =>
+        screen!.update(
+          <GroupExpensesView
+            group={group()}
+            currentUserId={you}
+            kept={null}
+            savedExpenseId={null}
+            now={now}
+            state={refreshing}
+            onSelectMonth={vi.fn()}
+            onRefreshExpenses={vi.fn()}
+            onLoadMore={vi.fn()}
+            onLoadNewer={vi.fn()}
+            onOpenExpense={vi.fn()}
+            onResumeDraft={vi.fn()}
+            onDiscardDraft={vi.fn()}
+          />,
+        ),
+      );
+      const newer = labelled(screen!.root, 'Load newer expenses');
+      expect(newer).toHaveLength(1);
+      expect(newer[0].props.accessibilityState).toEqual({ disabled: true });
+      slide(2);
+      expect(labelled(screen!.root, 'Load newer expenses')[0].props.accessibilityState).toEqual({
+        disabled: false,
+      });
+    });
+
+    // The device recheck of a31f3e8: a return to the list's end came back one row short, as the
+    // list dropped Load more while its rows were read again.
+    it('keeps Load more in place, disabled, while the rows shown are read again', () => {
+      const slide = render(1, vi.fn());
+      const more = () => labelled(screen!.root, 'Load more expenses');
+      expect(more()[0].props.accessibilityState).toEqual({ disabled: false });
+      const refreshing = window(1);
+      refreshing.expenses = { ...refreshing.expenses, status: 'loading' };
+      act(() =>
+        screen!.update(
+          <GroupExpensesView
+            group={group()}
+            currentUserId={you}
+            kept={null}
+            savedExpenseId={null}
+            now={now}
+            state={refreshing}
+            onSelectMonth={vi.fn()}
+            onRefreshExpenses={vi.fn()}
+            onLoadMore={vi.fn()}
+            onLoadNewer={vi.fn()}
+            onOpenExpense={vi.fn()}
+            onResumeDraft={vi.fn()}
+            onDiscardDraft={vi.fn()}
+          />,
+        ),
+      );
+      expect(more()).toHaveLength(1);
+      expect(more()[0].props.accessibilityState).toEqual({ disabled: true });
+      slide(1);
+      expect(more()[0].props.accessibilityState).toEqual({ disabled: false });
+    });
+    it('keeps the row on screen when Load newer brings the newest page back: the view moves down by the rows that came', async () => {
+      const onShift = vi.fn();
+      const slide = render(2, onShift);
+      lay(screen!.root, 2, 260);
+      await tick();
+      expect(onShift).not.toHaveBeenCalled();
+      // Row 21, first under Load newer at 260 + 30 = 290, now has page 1's 20 rows above it, and
+      // Load newer has gone: 200 + 30 + 20 × 60 = 1430.
+      slide(1);
+      lay(screen!.root, 1, 200);
+      await tick();
+      expect(onShift).toHaveBeenCalledExactlyOnceWith(1430 - 290);
+    });
+
+    it('moves the view up for the slide, and back down by as much when Load newer undoes it', async () => {
+      const onShift = vi.fn();
+      const slide = render(1, onShift);
+      lay(screen!.root, 1, 200);
+      slide(2);
+      lay(screen!.root, 2, 260);
+      await tick();
+      expect(onShift).toHaveBeenCalledExactlyOnceWith(290 - 1430);
+      slide(1);
+      lay(screen!.root, 1, 200);
+      await tick();
+      expect(onShift).toHaveBeenCalledTimes(2);
+      expect(onShift).toHaveBeenLastCalledWith(1430 - 290);
+    });
+
+    it('moves nothing when the list is read anew from its first page, with none of its rows', async () => {
+      const onShift = vi.fn();
+      render(2, onShift);
+      lay(screen!.root, 2, 260);
+      // Another list from its first page, such as a Month's: no row it showed is listed.
+      const others = rows.map((row) => ({ ...row, id: `f${row.id.slice(1)}` }));
+      act(() =>
+        screen!.update(
+          <GroupExpensesView
+            group={group()}
+            currentUserId={you}
+            kept={null}
+            savedExpenseId={null}
+            now={now}
+            state={financial({
+              data: others.slice(0, 20),
+              firstPage: 1,
+              pagination: { page: 1, limit: 20, total: 120, totalPages: 6 },
+            })}
+            onSelectMonth={vi.fn()}
+            onRefreshExpenses={vi.fn()}
+            onLoadMore={vi.fn()}
+            onLoadNewer={vi.fn()}
+            onShift={onShift}
+            onOpenExpense={vi.fn()}
+            onResumeDraft={vi.fn()}
+            onDiscardDraft={vi.fn()}
+          />,
+        ),
+      );
+      // Without Load newer, the list now starts 60 higher.
+      const { row, day, list } = places(screen!.root, 1);
+      layout(list, 200);
+      layout(day, 0);
+      layout(row, 30);
+      await tick();
+      expect(onShift).not.toHaveBeenCalled();
+    });
   });
 
   it('shows placeholders on a first load, and a retry when it fails', () => {

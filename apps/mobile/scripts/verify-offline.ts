@@ -71,6 +71,10 @@ async function run() {
             await rows.save(saved);
           },
           clear: rows.clear,
+          list: async (account) =>
+            Object.entries(await entries(rows))
+              .filter(([key]) => key.startsWith(account))
+              .map(([key, value]) => ({ groupId: key.slice(account.length), value })),
         },
         readCache: {
           load: async (account, path) => (await entries())[account + path] ?? null,

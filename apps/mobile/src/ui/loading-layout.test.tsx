@@ -254,6 +254,7 @@ describe('A Group’s Expenses', () => {
       onSelectMonth={vi.fn()}
       onRefreshExpenses={vi.fn()}
       onLoadMore={vi.fn()}
+      onLoadNewer={vi.fn()}
       onOpenExpense={vi.fn()}
       onResumeDraft={vi.fn()}
       onDiscardDraft={vi.fn()}

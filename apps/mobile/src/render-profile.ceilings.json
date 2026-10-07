@@ -15,15 +15,15 @@
     },
     "Open a Group on Expenses": {
       "requests": 3,
-      "publishes": 11,
-      "commits": 4,
-      "renders": 512
+      "publishes": 9,
+      "commits": 3,
+      "renders": 312
     },
     "Change Month": {
       "requests": 2,
-      "publishes": 8,
+      "publishes": 5,
       "commits": 3,
-      "renders": 468
+      "renders": 325
     },
     "Switch to Balances": {
       "requests": 0,
@@ -39,15 +39,15 @@
     },
     "Load the 5th Expense page (80 → 100 rows)": {
       "requests": 2,
-      "publishes": 7,
+      "publishes": 5,
       "commits": 3,
-      "renders": 2147
+      "renders": 327
     },
     "Foreground within 30 s after 5 Expense pages": {
       "requests": 0,
-      "publishes": 7,
+      "publishes": 2,
       "commits": 1,
-      "renders": 204
+      "renders": 62
     },
     "Load the 5th Activity page (80 → 100 events)": {
       "requests": 1,
@@ -69,21 +69,21 @@
     },
     "Reopen the Group within 30 s": {
       "requests": 0,
-      "publishes": 6,
+      "publishes": 4,
       "commits": 1,
       "renders": 204
     },
     "Pull to refresh with 5 Expense pages": {
-      "requests": 3,
-      "publishes": 13,
+      "requests": 7,
+      "publishes": 10,
       "commits": 4,
-      "renders": 1932
+      "renders": 248
     },
     "Foreground after 30 s with 5 Expense pages": {
-      "requests": 3,
-      "publishes": 13,
+      "requests": 7,
+      "publishes": 8,
       "commits": 4,
-      "renders": 1932
+      "renders": 248
     },
     "Pull to refresh with 5 Activity pages": {
       "requests": 1,
@@ -96,6 +96,18 @@
       "publishes": 5,
       "commits": 2,
       "renders": 572
+    },
+    "Load the 6th Expense page (pages 2 to 6)": {
+      "requests": 2,
+      "publishes": 5,
+      "commits": 3,
+      "renders": 331
+    },
+    "Load newer Expenses (pages 1 to 5)": {
+      "requests": 2,
+      "publishes": 5,
+      "commits": 3,
+      "renders": 331
     },
     "Type 20 characters into Description": {
       "requests": 0,

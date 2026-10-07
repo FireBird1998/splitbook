@@ -1,6 +1,6 @@
 import type { FinancialReadStore, OfflineIdentityStore } from './offline-cache';
 import type { ActivityState } from './activity';
-import type { AccountGroupRecordStore } from './account-record-storage';
+import type { AccountGroupRecordStore, FindableRecordStore } from './account-record-storage';
 import type { PendingPayment, SettlementState } from './settlement';
 import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
 import type { GroupValidation } from './group-draft';
@@ -134,13 +134,32 @@ export interface GroupFinancialState {
     moreMessage: string | null;
     /** The Month these Expenses belong to; content is never shown or kept under another. */
     month: string | null;
+    /** The oldest verification time among the pages listed (#215). */
     refreshedAt: number | null;
+    /**
+     * The first page listed: past 1 once the list has slid past 5 pages, when Load newer reads
+     * the page before it (M7-2). `pagination` is the last page listed.
+     */
+    firstPage?: number;
+    /** Load newer, at the top of the list: reading the page before the window, or failed to. */
+    newerStatus?: 'idle' | 'loading' | 'error';
+    newerMessage?: string | null;
   };
   /** All-time; never filtered by `month`. */
   balances: ReadFreshness & {
     status: LoadStatus;
     data: GroupCurrencyBalance[] | null;
     message: string | null;
+    /**
+     * A change written in this Group made them out of date: no payment is offered on them until
+     * they're read again after it (#219). Unset before any change.
+     */
+    changed?: boolean;
+    /**
+     * With no Group to show (owner decision 2A, #219): the server answered these Balances in this
+     * open, so they're up to date beside the Group's failure. Never a saved copy. Unset otherwise.
+     */
+    answeredThisOpen?: boolean;
   };
 }
 
@@ -159,6 +178,11 @@ export interface GroupReturnContext {
   scrollY: number;
   /** Expense pages loaded at entry, read again on return so that position still exists. */
   pages: number;
+  /**
+   * The first Expense page listed at entry, only when the list had slid past the newest page: a
+   * save made then returns to the newest page instead (#215).
+   */
+  firstPage?: number;
   /** The bottom-navigation destination at entry; Back and close return to it. */
   destination: GroupDestination;
   /** Activity pages loaded at entry from Activity, read again on return. */
@@ -172,7 +196,11 @@ export interface GroupReturnContext {
  */
 export interface GroupReread {
   groupId: string;
-  expenses: { month: string | null; pages: number } | null;
+  /**
+   * `pages`: the last Expense page to read again. `first`: the window's first page, when it had
+   * slid past the newest page; reading starts there (#219, owner decision 1A).
+   */
+  expenses: { month: string | null; pages: number; first?: number } | null;
   activity: { pages: number } | null;
 }
 
@@ -495,10 +523,11 @@ export interface MobileDependencies {
   googleSignIn?: () => Promise<GoogleIdentityResult>;
   readCache?: FinancialReadStore;
   /**
-   * The persister's rows (ADR 0006, M3-1): one saved copy per query, keyed by its path, for the
-   * Groups list and Home's figures. Register it in `accountLocal.stores` too.
+   * The persister's rows (ADR 0006, M3-1): one saved copy per query (a list's, per page), keyed by
+   * its path, for the Groups list, Home's figures and each Group's view. Its `list` finds a
+   * Group's rows to remove them together. Register it in `accountLocal.stores` too.
    */
-  savedQueries?: AccountGroupRecordStore;
+  savedQueries?: FindableRecordStore;
   /** Reconnecting reads the screen's queries again (M1-4); NetInfo, or a fake in tests. */
   netInfo?: NetworkState;
   offlineIdentity?: OfflineIdentityStore;

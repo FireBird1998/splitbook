@@ -59,6 +59,46 @@ export function Freshness({
 }
 
 /**
+ * A Group whose details couldn't be read, though its Expenses were, in this open (owner decision
+ * 2A, #219): it says what failed and what is current, with a retry. Nothing is out of date, so it
+ * shows no time, and the failure isn't the connection's.
+ */
+export function DetailsNotice({
+  subject,
+  balances,
+  onRetry,
+}: {
+  subject: string;
+  /** Balances were read too, after the Expenses. */
+  balances: boolean;
+  onRetry: () => void;
+}) {
+  const theme = useTheme();
+  return (
+    <View style={{ gap: 12 }}>
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <Icon name="alert-circle-outline" color={theme.status.negative} />
+        {/* Its words change in place once Balances are read: they fade, as a status does. */}
+        <StatusText
+          shrink
+          variant="body"
+          tone="negative"
+          accessibilityRole="alert"
+          style={{ fontSize: 16, lineHeight: 24 }}
+        >
+          {`Couldn’t load ${subject}’s details. ${
+            balances
+              ? 'Expenses and balances below are up to date.'
+              : 'Expenses below are up to date.'
+          }`}
+        </StatusText>
+      </View>
+      <Button label="Retry Group" secondary onPress={onRetry} />
+    </View>
+  );
+}
+
+/**
  * Explains figures that stay visible but are not current: still being verified
  * after a ledger change, or kept after a refresh failed.
  */

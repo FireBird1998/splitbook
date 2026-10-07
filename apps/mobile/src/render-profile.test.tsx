@@ -198,7 +198,7 @@ const group = groups[0]!;
 const groupId = group._id;
 const pages = 5;
 const pageOf = (path: string) => Number(new URL(path, 'http://local').searchParams.get('page'));
-const expensePage = (page: number) => ({
+const expensePage = (page: number, total = pages) => ({
   status: 200,
   data: {
     expenses: Array.from({ length: 20 }, (_, row) => ({
@@ -219,10 +219,10 @@ const expensePage = (page: number) => ({
       splitBetween: [{ user: person, amount: 10, amountMinor: 1000 }],
       splitMethod: 'equal',
     })),
-    pagination: { page, limit: 20, total: 20 * pages, totalPages: pages },
+    pagination: { page, limit: 20, total: 20 * total, totalPages: total },
     summary: {
-      count: 20 * pages,
-      totalsByCurrency: [{ currency: 'INR', totalAmount: 200 * pages }],
+      count: 20 * total,
+      totalsByCurrency: [{ currency: 'INR', totalAmount: 200 * total }],
       userOwes: 0,
       userGetsBack: 0,
       byMember: [],
@@ -249,7 +249,8 @@ const activityPage = (page: number) => ({
 });
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
-function backend() {
+/** `expensePages`: how many pages of Expenses Maple House has; 5 unless a journey needs more. */
+function backend({ expensePages = pages } = {}) {
   let cookie: string | null = null;
   let account: string | null = null;
   const drafts = new Map<string, unknown>();
@@ -315,7 +316,7 @@ function backend() {
             status: 200,
           });
         if (path.startsWith(`/api/groups/${groupId}/expenses?`))
-          return json(expensePage(pageOf(path)));
+          return json(expensePage(pageOf(path), expensePages));
         if (path.startsWith(`/api/groups/${groupId}/activity?`))
           return json(activityPage(pageOf(path)));
         if (path === `/api/groups/${groupId}/balances`)
@@ -376,6 +377,11 @@ beforeEach(() => {
 afterEach(() => {
   screen?.unmount();
   screen = null;
+  // TanStack's focus and online events reach every controller still running: an earlier test's
+  // must not read during a later test's journey (#219).
+  (runtime.controller as { dispose(): void } | undefined)?.dispose();
+  runtime.controller = undefined;
+  vi.useRealTimers();
   vi.restoreAllMocks();
   expect(consoleErrors, 'Unexpected console errors').toEqual([]);
 });
@@ -418,8 +424,8 @@ const settle = async (pending?: Promise<unknown>) => {
   }
 };
 
-async function renderApp() {
-  const harness = backend();
+async function renderApp(options?: { expensePages?: number }) {
+  const harness = backend(options);
   await harness.controller.signIn('sam');
   runtime.controller = harness.controller;
   harness.controller.subscribe(() => {
@@ -556,7 +562,8 @@ async function journey(
   return sample;
 }
 
-describe('render and request profile (#177, #206)', () => {
+// These journeys render real lists, and CI's verify job runs every workspace at once: 30 s each.
+describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
   it('Home and Group navigation', async () => {
     let app!: Awaited<ReturnType<typeof renderApp>>;
     const home = () => expect(app.count('Open '), 'Group rows on Home').toBe(groups.length);
@@ -608,12 +615,11 @@ describe('render and request profile (#177, #206)', () => {
       () => app.press('Load more expenses'),
       expenseRows(100),
     );
-    // An automatic refresh starts again from the first page (#104), so the list shrinks.
-    // ADR 0006 keeps up to 5 loaded pages instead (#219), which will re-record this journey.
+    // Within the freshness window nothing is read again, and the 5 loaded pages stay (M1-3, #219).
     await journey(
       'Foreground within 30 s after 5 Expense pages',
       () => app.foreground(),
-      expenseRows(20),
+      expenseRows(100),
     );
     await app.press('Activity');
     for (let page = 2; page < pages; page += 1) await app.press('Load older activity');
@@ -643,9 +649,9 @@ describe('render and request profile (#177, #206)', () => {
     await journey('Reopen the Group within 30 s', () => app.press('Open Maple House'), expenseRows);
   });
 
-  // The journeys a refresh of loaded pages (ADR 0006, #215) changes. Today a refresh starts
-  // again from the first page (#104), so the list shrinks to 20 rows; #219 (Expenses) and #222
-  // (Activity) re-read the loaded pages instead, and re-record these journeys.
+  // The journeys a refresh of loaded pages (ADR 0006, #215) changes. A refresh of Expenses
+  // re-reads the 5 loaded pages and keeps their 100 rows (M1-3, #219). Activity still starts
+  // again from the first page (#104), so its list shrinks to 20 rows until #222.
   it('refreshing 5 loaded pages', async () => {
     const app = await renderApp();
     const expenseRows = (rows: number) => () =>
@@ -656,20 +662,21 @@ describe('render and request profile (#177, #206)', () => {
       for (let page = 2; page <= pages; page += 1) await app.press(more);
       rows();
     };
-    // Moves the harness clock past the 30-second freshness window, then returns to the
-    // foreground. Once freshness follows Date.now, #214 moves time with fake timers instead.
+    // Moves both clocks past the 30-second freshness window, then returns to the foreground: the
+    // harness clock, and Date.now, which the Group view's queries follow (#219).
+    vi.useFakeTimers({ toFake: ['Date'] });
     const foregroundAfter30s = () => {
       app.clock.now += 31_000;
+      vi.setSystemTime(Date.now() + 31_000);
       return app.foreground();
     };
     await app.press('Open Maple House');
     await load('Load more expenses', expenseRows(100));
-    await journey('Pull to refresh with 5 Expense pages', () => app.pull(), expenseRows(20));
-    await load('Load more expenses', expenseRows(100));
+    await journey('Pull to refresh with 5 Expense pages', () => app.pull(), expenseRows(100));
     await journey(
       'Foreground after 30 s with 5 Expense pages',
       foregroundAfter30s,
-      expenseRows(20),
+      expenseRows(100),
     );
     await app.press('Activity');
     await load('Load older activity', activityRows(100));
@@ -682,6 +689,28 @@ describe('render and request profile (#177, #206)', () => {
     );
   });
 
+  // Past 5 pages the list slides (M7-2, #219): Load more reads page 6, then Load newer page 1.
+  it('sliding past 5 Expense pages', async () => {
+    const app = await renderApp({ expensePages: 6 });
+    const window = (first: number) => () => {
+      expect(app.count('Fictional expense'), 'Expense rows').toBe(100);
+      expect(app.count(`Fictional expense ${first}-`), `Page ${first} first`).toBe(20);
+      expect(app.count(`Fictional expense ${first + 4}-`), `Page ${first + 4} last`).toBe(20);
+      expect(app.count('Load newer expenses'), 'Load newer').toBe(first > 1 ? 1 : 0);
+    };
+    await app.press('Open Maple House');
+    for (let page = 2; page <= pages; page += 1) await app.press('Load more expenses');
+    await journey(
+      'Load the 6th Expense page (pages 2 to 6)',
+      () => app.press('Load more expenses'),
+      window(2),
+    );
+    await journey(
+      'Load newer Expenses (pages 1 to 5)',
+      () => app.press('Load newer expenses'),
+      window(1),
+    );
+  });
   it('typing in the Expense form', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');
