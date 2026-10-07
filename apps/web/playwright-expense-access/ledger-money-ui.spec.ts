@@ -235,18 +235,23 @@ test('legacy currencies are individually visible and never combined into one bal
       response.request().method() === 'GET',
   );
   await enter(page, ledger.sam, `/groups/${ledger.groupB}?tab=balances`);
-  const ownBalance = page.getByText('Your balance', { exact: true }).last().locator('..');
+  const ownBalance = page.getByRole('region', { name: 'All-time balance', exact: true });
   await expect(ownBalance.getByText(/₹100\.00/)).toBeVisible();
   await page.getByRole('combobox', { name: 'Balance currency' }).click();
   await page.getByRole('option', { name: 'EUR', exact: true }).click();
   await expect(page.getByRole('listbox')).toBeHidden();
   await expect(ownBalance.getByText(/€60\.00/)).toBeVisible();
   await expect(page.getByText(/Historical balances in EUR/)).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Record settlement' })).toHaveCount(0);
+  // Historical balances in another currency suggest payments, but none is recorded from them.
+  await expect(
+    page
+      .getByRole('region', { name: 'Settle up', exact: true })
+      .getByRole('button', { name: /^Record/ }),
+  ).toHaveCount(0);
   const history = await historyLoaded;
   expect(history.status()).toBe(200);
   await history.finished();
-  await expect(page.getByRole('status', { name: 'Loading settlement history' })).toBeHidden();
+  await expect(page.getByRole('status', { name: 'Loading payments' })).toBeHidden();
   await page.screenshot({
     path: testInfo.outputPath('legacy-euro-balance.png'),
     fullPage: true,

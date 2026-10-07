@@ -543,12 +543,14 @@ const writes: StaleWrite[] = [
       path: `/api/groups/${ledger.groupA}/settlements`,
     }),
     open: async (page: Page) => {
-      await page.getByRole('button', { name: 'Record settlement', exact: true }).click();
-      const dialog = page.getByRole('dialog').filter({
-        has: page.getByRole('heading', { name: 'Record settlement', exact: true }),
-      });
-      await expect(dialog.getByRole('spinbutton', { name: 'Amount' })).toHaveValue('300');
-      return dialog.getByRole('button', { name: 'Save settlement', exact: true });
+      // Record payment is a form on the Balances tab (#312); Record on a suggestion fills it.
+      await page
+        .getByRole('region', { name: 'Settle up', exact: true })
+        .getByRole('button', { name: /^Record .*payment to/ })
+        .click();
+      const form = page.getByRole('region', { name: 'Record payment', exact: true });
+      await expect(form.getByRole('textbox', { name: 'Amount paid' })).toHaveValue('300.00');
+      return form.getByRole('button', { name: /^Record payment/ });
     },
   },
   {
@@ -599,6 +601,8 @@ for (const write of writes) {
     const before = await ledgerSnapshot(ledger, group);
     const dialogFeedback = await watchCurrentDocument(page, [
       { within: '[role="dialog"] [role="alert"]' },
+      // Record payment is a form on the Balances tab (#312), not a dialog.
+      { within: '[aria-labelledby="record-payment-heading"] [role="alert"]' },
     ]);
     // Hold every timer, so no poll or focus refetch notices the switch before the save does.
     await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);

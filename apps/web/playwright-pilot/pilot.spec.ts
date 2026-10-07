@@ -24,7 +24,7 @@ test('pending invitations do not claim nothing needs you', async ({ page }) => {
   await expect(page.getByText('Nothing needs you')).toBeVisible();
 });
 
-test('pending settlement history is loading, not an empty result', async ({ page }) => {
+test('pending payments are loading, not an empty result', async ({ page }) => {
   await installPilotFixtures(page);
   await enterAsPersona(page, 'alex');
   let release!: () => void;
@@ -37,15 +37,13 @@ test('pending settlement history is loading, not an empty result', async ({ page
   });
   try {
     await page.goto(`/groups/${DEMO_GROUP_ID}?tab=balances`);
-    await expect(page.getByText('Who pays whom', { exact: true })).toBeVisible();
-    await expect(page.getByRole('status', { name: 'Loading settlement history' })).toBeVisible();
-    await expect(page.getByText('No settlements yet — record one when someone pays.')).toHaveCount(
-      0,
-    );
+    await expect(page.getByRole('heading', { name: 'Settle up' })).toBeVisible();
+    await expect(page.getByRole('status', { name: 'Loading payments' })).toBeVisible();
+    await expect(page.getByText('No payments yet. Record one when someone pays.')).toHaveCount(0);
   } finally {
     release();
   }
-  await expect(page.getByText('No settlements yet — record one when someone pays.')).toBeVisible();
+  await expect(page.getByText('No payments yet. Record one when someone pays.')).toBeVisible();
 });
 
 for (const section of [
@@ -95,8 +93,14 @@ test('balances announces loading then shows owed-to-you direction', async ({ pag
   } finally {
     release();
   }
-  await expect(page.getByText('Others owe you', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Record settlement', exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', { name: 'All-time balance' })
+      .getByText('You’re owed', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Record Alex Rivera’s payment to you', exact: true }),
+  ).toBeVisible();
 });
 
 test('dashboard keeps loaded groups visible and retries a safe balance error', async ({ page }) => {
@@ -147,7 +151,7 @@ test('empty dashboard and settled balances remain distinct from errors', async (
   await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);
 });
 
-test('settlement history failure preserves debts, warns about mixed currency, and recovers', async ({
+test('a Payments failure preserves debts, warns about mixed currency, and recovers', async ({
   page,
 }) => {
   await installPilotFixtures(page, {
@@ -167,17 +171,17 @@ test('settlement history failure preserves debts, warns about mixed currency, an
   });
   await enterAsPersona(page, 'alex');
   await page.goto(`/groups/${DEMO_GROUP_ID}?tab=balances`);
-  await expect(page.getByText('Who pays whom', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Settle up' })).toBeVisible();
   await expect(
     page.getByRole('alert').filter({ hasText: 'Each balance is shown separately' }),
   ).toBeVisible();
   await expect(page.getByRole('combobox', { name: 'Balance currency' })).toBeVisible();
-  const error = page.getByRole('alert').filter({ hasText: 'Could not load settlement history.' });
+  const error = page.getByRole('alert').filter({ hasText: 'Payments could not be loaded.' });
   await expect(error).toBeVisible();
   failing = false;
   await error.getByRole('button', { name: 'Retry' }).click();
   await expect(error).toHaveCount(0);
-  await expect(page.getByText('No settlements yet — record one when someone pays.')).toBeVisible();
+  await expect(page.getByText('No payments yet. Record one when someone pays.')).toBeVisible();
 });
 
 test('initial dashboard loading is announced until requests finish', async ({ page }) => {
@@ -206,13 +210,14 @@ test('initial dashboard loading is announced until requests finish', async ({ pa
   await expect(page.getByRole('status', { name: /^Loading/ })).toHaveCount(0);
 });
 
-test('narrow and breakpoint layouts keep settlement controls reachable and return dialog focus', async ({
+test('narrow and breakpoint layouts keep Record reachable, and Record moves focus into the form', async ({
   page,
 }) => {
   await installPilotFixtures(page);
   await enterAsPersona(page, 'alex');
   await page.goto(`/groups/${DEMO_GROUP_ID}?tab=balances`);
-  const record = page.getByRole('button', { name: 'Record settlement', exact: true });
+  const record = page.getByRole('button', { name: 'Record your payment to Sam Chen', exact: true });
+  const form = page.getByRole('region', { name: 'Record payment', exact: true });
   for (const width of [320, 600, 1199, 1200]) {
     await page.setViewportSize({ width, height: 844 });
     await expect(record).toBeVisible();
@@ -224,39 +229,28 @@ test('narrow and breakpoint layouts keep settlement controls reachable and retur
     expect(bounds).not.toBeNull();
     expect(bounds!.x).toBeGreaterThanOrEqual(0);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width);
+    // Record payment fits the width too, with nothing scrolling the page sideways.
+    const formBounds = await form.boundingBox();
+    expect(formBounds!.x + formBounds!.width).toBeLessThanOrEqual(width);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      width,
+    );
   }
   await record.focus();
   await page.keyboard.press('Enter');
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toBeVisible();
-  // MUI may initially focus its modal container. Focus must enter the modal,
-  // then follow its form order, remain trapped, and return to the trigger.
-  await expect
-    .poll(() =>
-      dialog.evaluate((element) => {
-        const focused = document.activeElement;
-        return (
-          focused !== document.body &&
-          (element.contains(focused) || Boolean(focused?.contains(element)))
-        );
-      }),
-    )
-    .toBe(true);
-  const amount = dialog.getByRole('spinbutton', { name: 'Amount' });
-  if (!(await amount.evaluate((element) => element === document.activeElement)))
-    await page.keyboard.press('Tab');
+  // Record fills the form in on the page and moves focus to the amount, then the form's order.
+  const amount = form.getByRole('textbox', { name: 'Amount paid' });
   await expect(amount).toBeFocused();
+  await expect(amount).toHaveValue('1480.00');
   await page.keyboard.press('Tab');
-  await expect(dialog.getByLabel('Note (optional)')).toBeFocused();
+  await expect(form.getByRole('textbox', { name: 'Note, optional' })).toBeFocused();
   await page.keyboard.press('Tab');
-  await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused();
-  await page.keyboard.press('Tab');
-  await expect(dialog.getByRole('button', { name: 'Save settlement' })).toBeFocused();
-  await page.keyboard.press('Tab');
+  const save = form.getByRole('button', { name: 'Record payment ₹1,480.00', exact: true });
+  await expect(save).toBeFocused();
+  await expect(save).toBeEnabled();
+  await page.keyboard.press('Shift+Tab');
+  await page.keyboard.press('Shift+Tab');
   await expect(amount).toBeFocused();
-  await page.keyboard.press('Escape');
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(record).toBeFocused();
 });
 
 for (const screen of ['dashboard', 'balances'] as const) {
@@ -267,7 +261,7 @@ for (const screen of ['dashboard', 'balances'] as const) {
     await enterAsPersona(page, 'alex');
     if (screen === 'balances') await page.goto(`/groups/${DEMO_GROUP_ID}?tab=balances`);
     if (screen === 'balances')
-      await expect(page.getByText('Who pays whom', { exact: true })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'Settle up' })).toBeVisible();
     else
       await expect(
         page
@@ -289,9 +283,7 @@ for (const screen of ['dashboard', 'balances'] as const) {
   });
 }
 
-test('balances presents a safe retryable error independently of settlement history', async ({
-  page,
-}) => {
+test('balances presents a safe retryable error independently of Payments', async ({ page }) => {
   await enterAsPersona(page, 'alex');
   let failing = true;
   await page.route(`**/api/groups/${DEMO_GROUP_ID}/balances`, async (route) => {
@@ -306,5 +298,5 @@ test('balances presents a safe retryable error independently of settlement histo
   await expect(page.getByText('Settled', { exact: true })).toHaveCount(0);
   failing = false;
   await error.getByRole('button', { name: 'Retry' }).click();
-  await expect(page.getByText('Who pays whom', { exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Settle up' })).toBeVisible();
 });

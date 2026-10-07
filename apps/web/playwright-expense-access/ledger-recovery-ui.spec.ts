@@ -34,19 +34,24 @@ test('Settlement retry reuses its key and a new identical payment receives a fre
     }
     return route.continue();
   });
-  const record = page.getByRole('button', { name: 'Record settlement', exact: true });
+  // Record payment is a form on the Balances tab (#312); Record on a suggestion fills it in.
+  const record = page
+    .getByRole('region', { name: 'Settle up', exact: true })
+    .getByRole('button', { name: /^Record .*payment to/ });
+  const form = page.getByRole('region', { name: 'Record payment', exact: true });
+  const amount = form.getByRole('textbox', { name: 'Amount paid' });
+  const note = form.getByRole('textbox', { name: 'Note, optional' });
+  const save = form.getByRole('button', { name: /^Record payment/ });
+  const recorded = form.getByRole('status').filter({ hasText: 'Payment recorded.' });
   await record.click();
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Record settlement', exact: true }),
-  });
-  await dialog.getByRole('spinbutton', { name: 'Amount' }).fill('250.25');
-  await dialog.getByLabel('Note (optional)').fill('Identical separate payments');
-  await dialog.getByRole('button', { name: 'Save settlement', exact: true }).click();
-  await expect(dialog.getByRole('alert')).toBeVisible();
-  await expect(dialog.getByRole('spinbutton', { name: 'Amount' })).toHaveValue('250.25');
-  await expect(dialog.getByLabel('Note (optional)')).toHaveValue('Identical separate payments');
-  await dialog.getByRole('button', { name: 'Save settlement', exact: true }).click();
-  await expect(dialog).toBeHidden();
+  await amount.fill('250.25');
+  await note.fill('Identical separate payments');
+  await save.click();
+  await expect(form.getByRole('alert')).toBeVisible();
+  await expect(amount).toHaveValue('250.25');
+  await expect(note).toHaveValue('Identical separate payments');
+  await save.click();
+  await expect(recorded).toBeVisible();
   expect(keys).toHaveLength(2);
   expect(keys[0]).toBeTruthy();
   expect(keys[1]).toBe(keys[0]);
@@ -55,12 +60,12 @@ test('Settlement retry reuses its key and a new identical payment receives a fre
   expect(first).toHaveLength(1);
   expect(first[0]).toMatchObject({ amount: 250.25, amountMinor: 25025 });
 
-  // Closing and starting a second action must rotate the key even for equal payloads.
+  // Starting a second payment must rotate the key even for equal payloads.
   await record.click();
-  await dialog.getByRole('spinbutton', { name: 'Amount' }).fill('250.25');
-  await dialog.getByLabel('Note (optional)').fill('Identical separate payments');
-  await dialog.getByRole('button', { name: 'Save settlement', exact: true }).click();
-  await expect(dialog).toBeHidden();
+  await amount.fill('250.25');
+  await note.fill('Identical separate payments');
+  await save.click();
+  await expect(recorded).toBeVisible();
   expect(keys).toHaveLength(3);
   expect(keys[2]).toBeTruthy();
   expect(keys[2]).not.toBe(keys[0]);

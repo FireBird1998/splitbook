@@ -318,10 +318,15 @@ link, `/groups/[id]?search=…`, fills the search.
 
 ### Balances & Settlements
 
-| Component        | Description                                |
-| ---------------- | ------------------------------------------ |
-| `BalancesView`   | Net balances per member + simplified debts |
-| `SettleUpDialog` | Record a payment dialog                    |
+| Component           | Description                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| `BalancesView`      | The Balances tab: all-time balance, Settle up (suggested payments), net positions               |
+| `RecordPaymentForm` | Record payment on the page: parties-only pairs, suggestion, overpayment tick, unconfirmed saves |
+| `PaymentsTable`     | Payments: date and time, from → to, amount, note and who recorded it (names only)               |
+
+The suggestion, the overpayment check and the positions after come from the shared settlement
+preview (`@splitbook/shared/settlement-preview`). The UI says "Record payment" and "Payments";
+the code and the glossary say Settlement.
 
 ### Home (`src/components/dashboard/`)
 

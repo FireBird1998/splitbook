@@ -191,7 +191,7 @@ test('alex: edits the expense and sees the update', async ({ page }) => {
   await expect(expenseItem(page, 'QA Dinner — updated').item).toContainText('₹240.00');
 });
 
-test('sam: switches persona and records a settlement; balances update', async ({
+test('sam: switches persona and records a payment on Balances; balances update', async ({
   page,
 }, testInfo) => {
   await enterAsPersona(page, 'alex');
@@ -208,19 +208,22 @@ test('sam: switches persona and records a settlement; balances update', async ({
     .getByRole('link', { name: 'Balances' })
     .click();
 
-  // Sam is a party to exactly one open debt, so exactly one settle action.
-  const settleButton = page.getByRole('button', { name: 'Record settlement' });
+  // Sam is a party to exactly one open debt, so exactly one Record on Settle up.
+  const settleUp = page.getByRole('region', { name: 'Settle up', exact: true });
+  const recordButton = page.getByRole('button', { name: /^Record .*payment to/ });
+  const settleButton = settleUp.getByRole('button', { name: /^Record .*payment to/ });
   await expect(settleButton).toHaveCount(1);
-  const debtRow = page.locator('div', { has: settleButton }).last();
+  const debtRow = settleUp.getByRole('listitem').filter({ has: recordButton });
   const debtBefore = parseMoneyText((await debtRow.textContent()) ?? '');
 
+  // Record fills in Record payment, on the page itself (#312).
   await settleButton.click();
-  const dialog = page.getByRole('dialog');
-  await expect(dialog.getByText('Record settlement')).toBeVisible();
-  await dialog.getByLabel('Amount').fill('100');
-  await dialog.getByRole('button', { name: 'Save settlement' }).click();
-
-  await expect(dialog).toBeHidden();
+  const form = page.getByRole('region', { name: 'Record payment', exact: true });
+  const amount = form.getByRole('textbox', { name: 'Amount paid' });
+  await expect(amount).toBeFocused();
+  await amount.fill('100');
+  await form.getByRole('button', { name: /^Record payment/ }).click();
+  await expect(form.getByRole('status').filter({ hasText: 'Payment recorded.' })).toBeVisible();
 
   // The open debt shrinks by exactly the settled amount. The app formats
   // amounts with en-US grouping (see formatCurrency).
@@ -228,10 +231,12 @@ test('sam: switches persona and records a settlement; balances update', async ({
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-  await expect(page.getByText(`₹${expected}`, { exact: true })).toBeVisible();
+  await expect(settleUp.getByText(`₹${expected}`, { exact: true })).toBeVisible();
 
-  // Settlement history gains the new entry at the top.
-  await expect(page.getByText('Settlement history')).toBeVisible();
+  // Payments gains the new entry at the top, recorded by Sam.
+  const newest = page.getByRole('table', { name: 'Payments' }).getByRole('row').nth(1);
+  await expect(newest).toContainText('₹100.00');
+  await expect(newest).toContainText('You');
 
   await reviewScreenshot(page, testInfo, 'sam-after-settlement');
 });
@@ -261,7 +266,7 @@ test('priya: switches persona and verifies her seeded balance', async ({ page },
     .getByRole('navigation', { name: `${DEMO_TRIP_NAME} sections` })
     .getByRole('link', { name: 'Balances' })
     .click();
-  await expect(page.getByText('Who pays whom')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Settle up' })).toBeVisible();
   await expect(page.getByText('₹4,680.00').first()).toBeVisible();
 
   await reviewScreenshot(page, testInfo, 'priya-balances');

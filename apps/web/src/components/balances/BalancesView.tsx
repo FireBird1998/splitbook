@@ -1,31 +1,44 @@
 'use client';
 
 import useSWR from 'swr';
-import { useState } from 'react';
-import Avatar from '@mui/material/Avatar';
-import Box from '@mui/material/Box';
-import Stack from '@mui/material/Stack';
-import Typography from '@mui/material/Typography';
-import Skeleton from '@mui/material/Skeleton';
-import Button from '@mui/material/Button';
+import { useCallback, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import AlertTitle from '@mui/material/AlertTitle';
-import TextField from '@mui/material/TextField';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import MenuItem from '@mui/material/MenuItem';
+import Skeleton from '@mui/material/Skeleton';
+import Stack from '@mui/material/Stack';
+import TextField from '@mui/material/TextField';
+import Typography from '@mui/material/Typography';
 import MoneyText from '@/components/common/MoneyText';
-import StatusLabel from '@/components/common/StatusLabel';
 import ErrorState from '@/components/common/ErrorState';
 import EmptyState from '@/components/common/EmptyState';
-import { RADIUS } from '@/lib/theme/tokens';
-import { formatDate } from '@splitbook/shared/date';
+import RecordPaymentForm, {
+  type PaymentParty,
+  type RecordPaymentStart,
+} from '@/components/settlements/RecordPaymentForm';
+import {
+  amountInputText,
+  firstName,
+  type LedgerState,
+} from '@/components/settlements/record-payment';
+import { viewerFirst } from '@/components/groups/group-tabs';
 import { formatCurrency } from '@splitbook/shared/currency';
-import SettleUpDialog from '@/components/settlements/SettleUpDialog';
+import { parseAmountMinor, readLegacyAmountMinor } from '@splitbook/shared/exact-money';
+import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
+import {
+  previewSettlement,
+  settlementLedgerFromRead,
+  type SettlementLedger,
+} from '@splitbook/shared/settlement-preview';
+import { getGroupTheme } from '@splitbook/shared/group-themes';
+import type { GroupRead } from '@splitbook/shared/group-read';
 import { fetcher } from '@/lib/utils/fetcher';
 import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
 import type { SettlementAttempt } from '@/lib/settlement-attempts';
-import { canRecordSettlement } from '@splitbook/shared/settlement-authorization';
-import { getGroupTheme } from '@splitbook/shared/group-themes';
-import type { GroupCategory } from '@splitbook/shared/types';
+import { BalancesCard, PersonAvatar } from './BalancesCard';
+import PaymentsTable, { type PaymentRead, type PaymentsState } from './PaymentsTable';
 
 const MIXED_CURRENCY_WARNING =
   'This ledger contains multiple currencies. Each balance is shown separately, without conversion.';
@@ -33,18 +46,25 @@ const MIXED_CURRENCY_WARNING =
 interface BalancesViewProps {
   groupId: string;
   userId: string;
-  group: Record<string, unknown>;
+  group: GroupRead;
 }
 
-interface Settlement {
+interface BalancePerson {
   _id: string;
-  paidBy: { _id: string; name: string };
-  paidTo: { _id: string; name: string };
-  amount: number;
+  name: string;
+}
+
+interface CurrencyFigures {
   currency: string;
-  note?: string;
-  createdAt: string;
-  createdBy?: { _id: string; name: string };
+  balances: Array<{ user: BalancePerson; balance: number }>;
+  debts: Array<{ from: BalancePerson; to: BalancePerson; amount: number }>;
+}
+
+interface BalancesRead {
+  data?: Partial<CurrencyFigures> & {
+    byCurrency?: CurrencyFigures[];
+    hasMixedCurrencies?: boolean;
+  };
 }
 
 /** "Your payment of ₹250.25 to Priya Shah may already be recorded…", or the other way round. */
@@ -57,95 +77,144 @@ function unconfirmedPaymentMessage(attempt: SettlementAttempt, userId: string) {
   return `${payment} may already be recorded. Check it before recording another.`;
 }
 
-function PersonChip({ name }: { name: string }) {
+/** A stored payment's amount as the form's field shows it. */
+function attemptAmountText(attempt: SettlementAttempt) {
+  try {
+    return amountInputText(parseAmountMinor(attempt.amount, attempt.currency), attempt.currency);
+  } catch {
+    return String(attempt.amount);
+  }
+}
+
+/** One currency's figures in exact minor units, or null when there are none or they don't read. */
+function ledgerOf(
+  figures: Partial<CurrencyFigures> | undefined,
+  currency: string,
+): SettlementLedger | null {
+  if (!figures) return null;
+  try {
+    return settlementLedgerFromRead(figures, currency);
+  } catch {
+    return null;
+  }
+}
+
+/** The overline style the canvas uses for small headings (web.css: .t-over). */
+const overlineSx = {
+  m: 0,
+  fontSize: '0.72rem',
+  lineHeight: 1.3,
+  fontWeight: 600,
+  letterSpacing: '0.08em',
+  textTransform: 'uppercase',
+  color: 'text.secondary',
+} as const;
+
+function CurrencyChip({ currency }: { currency: string }) {
   return (
-    <Stack direction="row" alignItems="center" spacing={1}>
-      <Avatar
-        aria-hidden="true"
-        sx={{ width: 32, height: 32, fontSize: 13, bgcolor: 'tint.brand', color: 'primary.main' }}
-      >
-        {name[0]}
-      </Avatar>
-      <Typography variant="body2" fontWeight={600} color="text.primary">
-        {name}
-      </Typography>
-    </Stack>
+    <Box
+      component="span"
+      sx={(theme) => ({
+        ...theme.typography.money,
+        fontSize: '0.75rem',
+        fontWeight: 600,
+        color: 'text.secondary',
+        bgcolor: 'surface.muted',
+        borderRadius: '8px',
+        px: 1,
+        py: 0.375,
+      })}
+    >
+      {currency}
+    </Box>
   );
 }
 
+/**
+ * The Balances tab (#312): the member's all-time balance, Settle up with the suggested payments
+ * (Record fills the form in), Record payment on the page itself, everyone's net position and
+ * the Group's Payments. Record payment keeps its place whatever the balances above it are
+ * doing (loading, refreshing or failing), so a refresh never loses what the member entered.
+ */
 export default function BalancesView({ groupId, userId, group }: BalancesViewProps) {
   const [selectedCurrency, setSelectedCurrency] = useState('');
-  const [settleDialog, setSettleDialog] = useState<{
-    open: boolean;
-    fromUser?: { _id: string; name: string };
-    toUser?: { _id: string; name: string };
-    amount?: number;
-    purpose?: 'record' | 'check';
-  }>({
-    open: false,
-  });
+  const blank = useCallback((): RecordPaymentStart => ({ from: userId, to: '' }), [userId]);
+  /** Each new `seq` starts the form afresh; nothing else (such as a refresh) resets it. */
+  const [form, setForm] = useState<{
+    seq: number;
+    start: RecordPaymentStart;
+    outcome: string | null;
+  }>(() => ({ seq: 0, start: blank(), outcome: null }));
+  const [formPair, setFormPair] = useState({ from: userId, to: '' });
   // Payments whose reply was lost, offered whatever the suggestions say (#198).
   const attempts = useSettlementAttempts(userId, groupId);
 
-  const { data, isLoading, error, mutate } = useSWR(`/api/groups/${groupId}/balances`, fetcher, {
+  const { data, error, mutate } = useSWR<BalancesRead>(`/api/groups/${groupId}/balances`, fetcher, {
     refreshInterval: 15_000,
   });
   const {
     data: settlementsData,
-    isLoading: settlementsLoading,
     error: settlementsError,
     mutate: mutateSettlements,
-  } = useSWR(`/api/groups/${groupId}/settlements`, fetcher);
+  } = useSWR<{ data?: PaymentRead[] }>(`/api/groups/${groupId}/settlements`, fetcher);
 
-  const defaultCurrency = data?.data?.currency || (group.defaultCurrency as string);
-  const buckets = (data?.data?.byCurrency || []) as Array<{
-    currency: string;
-    balances: Array<{ user: { _id: string; name: string }; balance: number }>;
-    debts: Array<{
-      from: { _id: string; name: string };
-      to: { _id: string; name: string };
-      amount: number;
-    }>;
-  }>;
+  const refresh = useCallback(() => {
+    void mutate();
+    void mutateSettlements();
+  }, [mutate, mutateSettlements]);
+
+  const openForm = (start: RecordPaymentStart) =>
+    setForm((current) => ({ seq: current.seq + 1, start, outcome: null }));
+  const onFormDone = useCallback(
+    (outcome: string | null) => {
+      refresh();
+      setForm((current) => ({
+        seq: current.seq + 1,
+        start: { ...blank(), focus: outcome ? 'outcome' : 'from' },
+        outcome,
+      }));
+    },
+    [refresh, blank],
+  );
+
+  const groupCurrency = group.defaultCurrency;
+  const read = data?.data;
+  const defaultCurrency = read?.currency || groupCurrency;
+  const buckets = read?.byCurrency ?? [];
   const currency = buckets.some((bucket) => bucket.currency === selectedCurrency)
     ? selectedCurrency
     : defaultCurrency;
-  const selectedBucket = buckets.find((bucket) => bucket.currency === currency);
-  const balances = selectedBucket?.balances || data?.data?.balances || [];
-  const debts = selectedBucket?.debts || data?.data?.debts || [];
-  const hasMixedCurrencies = Boolean(data?.data?.hasMixedCurrencies);
-  const settlements = (settlementsData?.data || []) as Settlement[];
+  const shownBucket = buckets.find((bucket) => bucket.currency === currency);
+  const balances = shownBucket?.balances ?? read?.balances ?? [];
+  const debts = shownBucket?.debts ?? read?.debts ?? [];
+  const hasMixedCurrencies = Boolean(read?.hasMixedCurrencies);
 
-  const userBalance = balances.find(
-    (b: { user: { _id: string }; balance: number }) => b.user._id === userId,
+  // Every new payment is in the Group's currency, so the form reads that currency's figures.
+  const groupLedger = ledgerOf(
+    buckets.find((bucket) => bucket.currency === groupCurrency) ?? read,
+    groupCurrency,
   );
+  const ledger: LedgerState = groupLedger
+    ? { status: 'ready', ledger: groupLedger }
+    : read || error
+      ? { status: 'error' }
+      : { status: 'loading' };
+  // Settle up's figures in exact minor units, for the currency shown.
+  const shownLedger = ledgerOf(shownBucket ?? read, currency);
 
-  const refresh = () => {
-    mutate();
-    mutateSettlements();
-  };
-  // The dialog keeps its place whichever state Balances is in, so a refresh never closes it.
-  const settleUpDialog = (
-    <SettleUpDialog
-      open={settleDialog.open}
-      onClose={() => setSettleDialog({ open: false })}
-      groupId={groupId}
-      group={group}
-      accountId={userId}
-      fromUser={settleDialog.fromUser}
-      toUser={settleDialog.toUser}
-      defaultAmount={settleDialog.amount}
-      purpose={settleDialog.purpose}
-      onSettled={refresh}
-      onRefresh={refresh}
-    />
-  );
-  const withDialog = (content: React.ReactNode) => (
-    <>
-      {content}
-      {settleUpDialog}
-    </>
-  );
+  const members: PaymentParty[] = viewerFirst(group.members, userId).map((member) => ({
+    id: member.user._id,
+    name: member.user.name,
+  }));
+  const displayName = (person: BalancePerson) => (person._id === userId ? 'You' : person.name);
+  const userBalance = balances.find((balance) => balance.user._id === userId);
+  const theme = getGroupTheme(group.category);
+
+  const payments: PaymentsState = settlementsData
+    ? { status: 'ready', payments: settlementsData.data ?? [] }
+    : settlementsError
+      ? { status: 'error' }
+      : { status: 'loading' };
 
   const unconfirmedPayments =
     attempts.length > 0 ? (
@@ -160,12 +229,12 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
                 color="inherit"
                 size="small"
                 onClick={() =>
-                  setSettleDialog({
-                    open: true,
+                  openForm({
+                    from: attempt.paidBy,
+                    to: attempt.paidTo,
+                    amount: attemptAmountText(attempt),
                     purpose: 'check',
-                    fromUser: { _id: attempt.paidBy, name: attempt.paidByName },
-                    toUser: { _id: attempt.paidTo, name: attempt.paidToName },
-                    amount: attempt.amount,
+                    focus: 'amount',
                   })
                 }
               >
@@ -180,102 +249,6 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
       </Stack>
     ) : null;
 
-  if (isLoading) {
-    return withDialog(
-      <Stack spacing={1.5} role="status" aria-label="Loading balances" aria-busy="true">
-        {[1, 2, 3].map((i) => (
-          <Skeleton key={i} variant="rounded" height={64} />
-        ))}
-      </Stack>,
-    );
-  }
-
-  if (error) {
-    return withDialog(
-      <Stack spacing={3}>
-        {unconfirmedPayments}
-        <ErrorState message="Balances could not be loaded." onRetry={() => void mutate()} />
-      </Stack>,
-    );
-  }
-
-  const displayName = (user: { _id: string; name: string }) =>
-    user._id === userId ? 'You' : user.name;
-
-  const settlementHistory = (
-    <Box>
-      <Stack direction="row" alignItems="baseline" justifyContent="space-between" sx={{ mb: 1.5 }}>
-        <Typography variant="body2" fontWeight={600} color="text.primary">
-          Settlement history
-        </Typography>
-        {settlements.length > 0 && <StatusLabel label="Settled" tone="positive" />}
-      </Stack>
-      <Stack spacing={1.25}>
-        {settlementsLoading && !settlementsData && (
-          <Box role="status" aria-label="Loading settlement history" aria-busy="true">
-            <Skeleton variant="rounded" height={64} />
-          </Box>
-        )}
-        {settlementsError && (
-          <ErrorState
-            severity="warning"
-            message="Could not load settlement history."
-            onRetry={() => void mutateSettlements()}
-          />
-        )}
-        {!settlementsLoading && !settlementsError && settlements.length === 0 && (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-            No settlements yet — record one when someone pays.
-          </Typography>
-        )}
-        {settlements.map((settlement) => (
-          <Box
-            key={settlement._id}
-            sx={{
-              py: 1.25,
-              borderBottom: '1px solid',
-              borderColor: 'divider',
-              '&:last-of-type': { borderBottom: 'none' },
-            }}
-          >
-            <Stack
-              direction={{ xs: 'column', sm: 'row' }}
-              spacing={0.75}
-              justifyContent="space-between"
-              alignItems={{ xs: 'flex-start', sm: 'center' }}
-            >
-              <Box>
-                <Typography variant="body2" color="text.primary">
-                  <Box component="span" sx={{ fontWeight: 600 }}>
-                    {displayName(settlement.paidBy)}
-                  </Box>
-                  {' → '}
-                  <Box component="span" sx={{ fontWeight: 600 }}>
-                    {displayName(settlement.paidTo)}
-                  </Box>
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {formatDate(settlement.createdAt)}
-                  {settlement.createdBy
-                    ? ` · Recorded by ${displayName(settlement.createdBy)}`
-                    : ''}
-                  {settlement.note ? ` · ${settlement.note}` : ''}
-                </Typography>
-              </Box>
-              <MoneyText
-                amount={settlement.amount}
-                currency={settlement.currency || currency}
-                tone="positive"
-                variant="body2"
-                fontWeight={700}
-              />
-            </Stack>
-          </Box>
-        ))}
-      </Stack>
-    </Box>
-  );
-
   const currencySelector = hasMixedCurrencies ? (
     <Stack spacing={1.5}>
       <Alert severity="info">{MIXED_CURRENCY_WARNING}</Alert>
@@ -285,6 +258,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
         value={currency}
         onChange={(event) => setSelectedCurrency(event.target.value)}
         size="small"
+        sx={{ maxWidth: 320 }}
       >
         {buckets.map((bucket) => (
           <MenuItem key={bucket.currency} value={bucket.currency}>
@@ -292,193 +266,354 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
           </MenuItem>
         ))}
       </TextField>
-      {currency !== defaultCurrency && (
+      {currency !== groupCurrency && (
         <Typography variant="caption" color="text.secondary">
-          Historical balances in {currency}. New settlements use the Group currency,{' '}
-          {defaultCurrency}.
+          Historical balances in {currency}. New payments use the Group currency, {groupCurrency}.
         </Typography>
       )}
     </Stack>
   ) : null;
 
-  if (balances.length === 0 && debts.length === 0) {
-    return withDialog(
-      <Stack spacing={3}>
-        {unconfirmedPayments}
-        {currencySelector}
-        <EmptyState
-          title="All settled up"
-          description={`No one owes anyone in this ${getGroupTheme(group.category as GroupCategory).nouns.singular} right now.`}
-        />
-        {settlementHistory}
-      </Stack>,
-    );
-  }
-
-  return withDialog(
-    <Stack spacing={3}>
-      {unconfirmedPayments}
-      {currencySelector}
-
-      {userBalance && (
-        <Box sx={{ animation: 'balance-settle 400ms ease-out both' }}>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-            Your balance
+  const balanceCard = (() => {
+    const amount = userBalance?.balance ?? 0;
+    const position = amount < 0 ? 'You owe' : amount > 0 ? 'You’re owed' : 'You’re settled up';
+    return (
+      <Box
+        component="section"
+        aria-labelledby="all-time-balance-heading"
+        sx={{
+          bgcolor: 'background.paper',
+          border: 1,
+          borderColor: 'divider',
+          borderRadius: '16px',
+          px: 2.75,
+          pt: 2.25,
+          pb: 2.5,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 1.5,
+          animation: 'balance-settle 400ms ease-out both',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          <Typography id="all-time-balance-heading" component="h2" sx={overlineSx}>
+            All-time balance
           </Typography>
-          <MoneyText
-            amount={userBalance.balance}
-            currency={currency}
-            signed
-            variant="h5"
-            fontWeight={700}
-            sx={{ display: 'block' }}
-          />
-          <Typography variant="caption" color="text.secondary">
-            {userBalance.balance > 0
-              ? 'Others owe you'
-              : userBalance.balance < 0
-                ? 'You owe others'
-                : 'Nothing outstanding for you'}
-          </Typography>
+          <CurrencyChip currency={currency} />
         </Box>
-      )}
-
-      {debts.length > 0 && (
-        <Box>
-          <Stack
-            direction="row"
-            alignItems="baseline"
-            justifyContent="space-between"
-            sx={{ mb: 0.5 }}
-          >
-            <Typography variant="body2" fontWeight={600} color="text.primary">
-              Who pays whom
-            </Typography>
-            <StatusLabel label={`${debts.length} open`} tone="negative" />
-          </Stack>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-            {debts.length} payment{debts.length !== 1 ? 's' : ''} to settle · either person can
-            record it
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+          <Typography sx={{ m: 0, color: 'text.secondary' }}>{position}</Typography>
+          <MoneyText
+            amount={Math.abs(amount)}
+            currency={currency}
+            tone={amount < 0 ? 'negative' : amount > 0 ? 'positive' : 'neutral'}
+            sx={{
+              display: 'block',
+              fontSize: { xs: '2rem', sm: '2.5rem' },
+              lineHeight: 1.05,
+              letterSpacing: '-0.04em',
+            }}
+          />
+        </Box>
+        {theme.signature === 'monthCycle' && (
+          <Typography sx={{ m: 0, fontSize: '0.875rem', color: 'text.secondary' }}>
+            Includes every month. Picking a month on Expenses doesn’t change it.
           </Typography>
-          <Stack spacing={1.5}>
-            {debts.map(
-              (
-                d: {
-                  from: { _id: string; name: string };
-                  to: { _id: string; name: string };
-                  amount: number;
-                },
-                i: number,
-              ) => {
-                const involved = canRecordSettlement(userId, d.from._id, d.to._id);
-                return (
+        )}
+      </Box>
+    );
+  })();
+
+  const settleUpCard = (
+    <BalancesCard
+      headingId="settle-up-heading"
+      title="Settle up"
+      subtitle={debts.length > 0 ? `${currency} · Record one once it’s paid` : currency}
+    >
+      {debts.length === 0 ? (
+        <Typography sx={{ m: 0, px: 2.5, pb: 2.5, fontSize: '0.875rem', color: 'text.secondary' }}>
+          Everyone is settled up in {currency}.
+        </Typography>
+      ) : (
+        <>
+          <Box
+            component="ul"
+            aria-label="Suggested payments"
+            sx={{ listStyle: 'none', m: 0, p: 0 }}
+          >
+            {debts.map((debt, index) => {
+              const involved = canRecordSettlement(userId, debt.from._id, debt.to._id);
+              const recordable = involved && currency === groupCurrency;
+              const inForm =
+                recordable && formPair.from === debt.from._id && formPair.to === debt.to._id;
+              const payer = displayName(debt.from);
+              const payee = displayName(debt.to);
+              const title =
+                debt.from._id === userId
+                  ? `You pay ${payee}`
+                  : debt.to._id === userId
+                    ? `${payer} pays you`
+                    : `${payer} pays ${payee}`;
+              let amountMinor: number | null = null;
+              try {
+                amountMinor = readLegacyAmountMinor(debt.amount, currency);
+              } catch {
+                amountMinor = null;
+              }
+              const after =
+                shownLedger && amountMinor
+                  ? previewSettlement(shownLedger, {
+                      paidBy: debt.from._id,
+                      paidTo: debt.to._id,
+                      amountMinor,
+                    })
+                  : null;
+              const sub = inForm
+                ? 'In the form'
+                : !involved
+                  ? `Only ${firstName(debt.from.name)} or ${firstName(debt.to.name)} can record it`
+                  : after?.paidTo.afterMinor === 0
+                    ? debt.to._id === userId
+                      ? 'Then you’re settled up'
+                      : `Then ${firstName(debt.to.name)} is settled up`
+                    : after?.paidBy.afterMinor === 0
+                      ? debt.from._id === userId
+                        ? 'Then you’re settled up'
+                        : `Then ${firstName(debt.from.name)} is settled up`
+                      : 'Either of you can record it';
+              return (
+                <Box
+                  component="li"
+                  key={`${debt.from._id}-${debt.to._id}-${index}`}
+                  sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: 1.5,
+                    minHeight: 60,
+                    px: 2.5,
+                    py: 1,
+                    bgcolor: inForm ? 'tint.brand' : 'transparent',
+                    '& + li': { borderTop: 1, borderColor: 'divider' },
+                  }}
+                >
+                  <Box aria-hidden sx={{ display: 'flex', alignItems: 'center', gap: '2px' }}>
+                    <PersonAvatar name={debt.from.name} />
+                    <Box
+                      component="svg"
+                      viewBox="0 0 24 24"
+                      sx={{
+                        width: 16,
+                        height: 16,
+                        fill: 'none',
+                        stroke: 'currentColor',
+                        strokeWidth: 1.8,
+                        strokeLinecap: 'round',
+                        strokeLinejoin: 'round',
+                        color: 'text.disabled',
+                      }}
+                    >
+                      <path d="M5 12h14M13 6l6 6-6 6" />
+                    </Box>
+                    <PersonAvatar name={debt.to.name} />
+                  </Box>
                   <Box
-                    key={`${d.from._id}-${d.to._id}-${i}`}
                     sx={{
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      borderRadius: `${RADIUS.md}px`,
-                      px: 2,
-                      py: 1.75,
-                      bgcolor: 'background.paper',
+                      flex: '1 1 160px',
+                      minWidth: 0,
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '1px',
                     }}
                   >
-                    <Stack
-                      direction={{ xs: 'column', sm: 'row' }}
-                      spacing={1.5}
-                      alignItems={{ xs: 'stretch', sm: 'center' }}
-                      justifyContent="space-between"
+                    <Typography
+                      sx={{ m: 0, fontSize: '0.875rem', fontWeight: 600, color: 'text.primary' }}
                     >
-                      <Stack
-                        direction="row"
-                        alignItems="center"
-                        spacing={1.5}
-                        sx={{ flexWrap: 'wrap', rowGap: 0.5 }}
-                      >
-                        <PersonChip name={displayName(d.from)} />
-                        <Typography
-                          component="span"
-                          variant="caption"
-                          color="text.disabled"
-                          aria-hidden="true"
-                          sx={{ letterSpacing: '0.08em' }}
-                        >
-                          pays →
-                        </Typography>
-                        <PersonChip name={displayName(d.to)} />
-                        <MoneyText
-                          amount={d.amount}
-                          currency={currency}
-                          tone="neutral"
-                          variant="h6"
-                          fontWeight={600}
-                          sx={{ ml: { sm: 'auto' } }}
-                        />
-                      </Stack>
-                      {involved && currency === defaultCurrency && (
-                        <Button
-                          size="medium"
-                          variant="contained"
-                          onClick={() =>
-                            setSettleDialog({
-                              open: true,
-                              purpose: 'record',
-                              fromUser: d.from,
-                              toUser: d.to,
-                              amount: d.amount,
-                            })
-                          }
-                          sx={{ flexShrink: 0 }}
-                        >
-                          Record settlement
-                        </Button>
-                      )}
-                    </Stack>
+                      {title}
+                    </Typography>
+                    <Typography sx={{ m: 0, fontSize: '0.75rem', color: 'text.secondary' }}>
+                      {sub}
+                    </Typography>
                   </Box>
-                );
-              },
-            )}
-          </Stack>
-        </Box>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, ml: 'auto' }}>
+                    <MoneyText
+                      amount={debt.amount}
+                      currency={currency}
+                      tone="neutral"
+                      sx={{ fontSize: '1rem', fontWeight: 500 }}
+                    />
+                    {recordable && (
+                      <Button
+                        variant={inForm ? 'outlined' : 'contained'}
+                        disableElevation
+                        aria-label={
+                          debt.from._id === userId
+                            ? `Record your payment to ${debt.to.name}`
+                            : `Record ${debt.from.name}’s payment to you`
+                        }
+                        onClick={() =>
+                          openForm({
+                            from: debt.from._id,
+                            to: debt.to._id,
+                            amount:
+                              amountMinor === null ? '' : amountInputText(amountMinor, currency),
+                            purpose: 'record',
+                            focus: 'amount',
+                          })
+                        }
+                        sx={{
+                          minHeight: 40,
+                          borderRadius: '12px',
+                          px: 2,
+                          flexShrink: 0,
+                          ...(inForm
+                            ? {
+                                bgcolor: 'background.paper',
+                                borderColor: 'border.strong',
+                                color: 'text.primary',
+                              }
+                            : {
+                                bgcolor: 'tint.brand',
+                                color: 'primary.main',
+                                '&:hover': { bgcolor: 'tint.brand' },
+                              }),
+                        }}
+                      >
+                        Record
+                      </Button>
+                    )}
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+          <Box sx={{ mx: 2.5, borderTop: 1, borderColor: 'divider' }} />
+          <Typography
+            sx={{ m: 0, px: 2.5, pt: 1.5, pb: 2, fontSize: '0.875rem', color: 'text.secondary' }}
+          >
+            After {debts.length === 1 ? 'this payment' : `these ${debts.length} payments`}, everyone
+            in {group.name} is settled up in {currency}.
+          </Typography>
+        </>
       )}
+    </BalancesCard>
+  );
 
-      <Box>
-        <Typography variant="body2" fontWeight={600} color="text.primary" sx={{ mb: 1.5 }}>
-          Net positions
-        </Typography>
-        <Stack spacing={1}>
-          {balances.map(
-            (b: { user: { _id: string; name: string; image?: string }; balance: number }) => (
-              <Stack
-                key={b.user._id}
-                direction="row"
-                alignItems="center"
-                justifyContent="space-between"
-                sx={{ py: 0.75 }}
+  const positionsCard = (
+    <BalancesCard
+      headingId="net-positions-heading"
+      title="Net positions"
+      subtitle={`All-time net · ${currency}`}
+    >
+      <Box component="ul" sx={{ listStyle: 'none', m: 0, px: 2.5, pt: 0, pb: 1.5 }}>
+        {balances.map((balance) => (
+          <Box
+            component="li"
+            key={balance.user._id}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 1.5,
+              minHeight: 44,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
+              <PersonAvatar name={balance.user.name} />
+              <Typography sx={{ m: 0, fontSize: '0.875rem', color: 'text.primary' }}>
+                {displayName(balance.user)}
+              </Typography>
+            </Box>
+            {balance.balance === 0 ? (
+              <Typography
+                sx={{ m: 0, fontSize: '0.875rem', fontWeight: 600, color: 'status.positive' }}
               >
-                <Typography variant="body2" color="text.primary">
-                  {b.user._id === userId ? 'You' : b.user.name}
-                </Typography>
-                {b.balance === 0 ? (
-                  <Typography variant="body2" fontWeight={600} color="status.positive">
-                    Settled
-                  </Typography>
-                ) : (
-                  <MoneyText
-                    amount={b.balance}
-                    currency={currency}
-                    signed
-                    variant="body2"
-                    fontWeight={600}
-                  />
-                )}
-              </Stack>
-            ),
-          )}
-        </Stack>
+                Settled
+              </Typography>
+            ) : (
+              <MoneyText
+                amount={balance.balance}
+                currency={currency}
+                signed
+                variant="body2"
+                fontWeight={600}
+              />
+            )}
+          </Box>
+        ))}
       </Box>
+    </BalancesCard>
+  );
 
-      {settlementHistory}
-    </Stack>,
+  const figures = !read ? (
+    error ? (
+      <ErrorState message="Balances could not be loaded." onRetry={() => void mutate()} />
+    ) : (
+      <Stack spacing={2} role="status" aria-label="Loading balances" aria-busy="true">
+        <Skeleton variant="rounded" height={150} sx={{ borderRadius: '16px' }} />
+        <Skeleton variant="rounded" height={180} sx={{ borderRadius: '16px' }} />
+      </Stack>
+    )
+  ) : balances.length === 0 && debts.length === 0 ? (
+    <Box
+      component="section"
+      aria-label="Balances"
+      sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '16px' }}
+    >
+      <EmptyState
+        title="All settled up"
+        description={`No one owes anyone in this ${theme.nouns.singular} right now.`}
+      />
+    </Box>
+  ) : (
+    <>
+      {error && (
+        <ErrorState
+          severity="warning"
+          message="Balances could not be refreshed. Showing the balances loaded before."
+          onRetry={() => void mutate()}
+        />
+      )}
+      {balanceCard}
+      {settleUpCard}
+      {positionsCard}
+    </>
+  );
+
+  return (
+    <Stack spacing={2.5}>
+      {unconfirmedPayments}
+      {currencySelector}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2.5, alignItems: 'flex-start' }}>
+        <Box
+          sx={{
+            flex: '999 1 560px',
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2.5,
+          }}
+        >
+          {figures}
+        </Box>
+        <Box sx={{ flex: '1 1 340px', minWidth: 0 }}>
+          <RecordPaymentForm
+            key={form.seq}
+            groupId={groupId}
+            groupName={group.name}
+            accountId={userId}
+            currency={groupCurrency}
+            members={members}
+            ledger={ledger}
+            start={form.start}
+            outcome={form.outcome}
+            onDone={onFormDone}
+            onRefresh={refresh}
+            onPairChange={setFormPair}
+          />
+        </Box>
+      </Box>
+      <PaymentsTable state={payments} viewerId={userId} onRetry={() => void mutateSettlements()} />
+    </Stack>
   );
 }
