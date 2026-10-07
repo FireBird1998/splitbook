@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './mobile-controller';
 import type { ExpenseDraft } from './expense-draft';
-import type { FetchResponse, MobileFetch } from './types';
+import type { FetchResponse, MobileFetch, MobileSnapshot } from './types';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 
 // Fictional people and Groups only.
@@ -827,6 +827,67 @@ describe('An edit or delete in a list that has slid past its newest page (#219, 
     expect(server.pagesRead().slice(reads)).toEqual([2, 3, 4, 5, 6]);
   });
 
+  // A highlight shows only on a row a read after the write listed: never on the row as it was
+  // before the edit, while it is read again, or once that read failed (#219).
+  it('highlights no row before the window’s read after an edit lands, or while it runs', async () => {
+    const { server, controller, last } = await slid();
+    await controller.openExpense(householdId, last.id, { scrollY: 6100 });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Seeded, corrected' });
+    const states: MobileSnapshot[] = [];
+    controller.subscribe(() => states.push(controller.getSnapshot()));
+    const reread = server.hold('GET', /\/expenses\?page=2&/);
+    const saving = controller.saveExpense();
+    await reread.reached;
+    const shown = controller.getSnapshot();
+    expect(shown.snackbar?.message).toBe('Expense updated · Seeded, corrected');
+    // The row as it was before the edit is still listed, but it isn't the edited Expense yet.
+    expect(shown.financial.expenses.data.find((row) => row.id === last.id)?.description).not.toBe(
+      'Seeded, corrected',
+    );
+    expect(shown.snackbar?.expenseId).toBeUndefined();
+    reread.release();
+    await saving;
+    expect(controller.getSnapshot().snackbar?.expenseId).toBe(last.id);
+    // From the moment the edit was confirmed, every highlight showed the row as edited.
+    const edited = (state: MobileSnapshot) =>
+      state.financial.expenses.data.find((row) => row.id === last.id)?.description ===
+      'Seeded, corrected';
+    expect(states.filter((state) => state.snackbar?.expenseId && !edited(state))).toEqual([]);
+  });
+
+  it('highlights no row, and says the list couldn’t be updated, when the window’s read after an edit fails', async () => {
+    const { server, controller, last } = await slid();
+    await controller.openExpense(householdId, last.id, { scrollY: 6100 });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Seeded, corrected' });
+    server.failNextPage(2);
+    await controller.saveExpense();
+    const shown = controller.getSnapshot();
+    expect(shown.snackbar?.message).toBe(
+      'Expense updated · Seeded, corrected. Expenses couldn’t be updated yet — pull to refresh.',
+    );
+    // The row as it was before the edit stays listed, unhighlighted.
+    expect(shown.financial.expenses.data.map((row) => row.id)).toContain(last.id);
+    expect(shown.snackbar?.expenseId).toBeUndefined();
+  });
+
+  it('highlights no row when the edit moves the Expense out of the window', async () => {
+    const { controller, last } = await slid();
+    await controller.openExpense(householdId, last.id, { scrollY: 6100 });
+    await controller.editExpense();
+    // Dated after every other August Expense, it sorts onto page 1, before the window.
+    await controller.updateExpenseDraft({ date: '2026-08-31' });
+    await controller.saveExpense();
+    const shown = controller.getSnapshot();
+    expect(shown.financial.expenses).toMatchObject({
+      status: 'ready',
+      firstPage: 2,
+    });
+    expect(shown.financial.expenses.data.map((row) => row.id)).not.toContain(last.id);
+    expect(shown.snackbar?.message).toMatch(/^Expense updated · /);
+    expect(shown.snackbar?.expenseId).toBeUndefined();
+  });
   it('keeps the window after a delete, and reads its pages again', async () => {
     const { server, controller, last } = await slid();
     await controller.openExpense(householdId, last.id, { scrollY: 6100 });

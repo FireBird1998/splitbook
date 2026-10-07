@@ -257,6 +257,12 @@ function fixture() {
           ? { ...group, members: group.members.filter(({ user }) => user._id !== alex.id) }
           : group,
       });
+    // Activity: none yet, which no test here reads into.
+    if (path.startsWith(`/api/groups/${id}/activity?`))
+      return json({
+        status: 200,
+        data: { activities: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } },
+      });
     if (path.startsWith(`/api/groups/${id}/expenses?`)) {
       const number = pageOf(path);
       if (id === mapleId && monthOf(path) === '2026-09' && number === server.failPage)
@@ -1241,6 +1247,168 @@ describe('a confirmed write in the Group: its message at once, never beside figu
     expect(states.filter(highlightsMissingRow)).toEqual([]);
   });
 
+  it('says Balances couldn’t be updated after a save, and highlights the row the list read after it', async () => {
+    const f = fixture();
+    const { controller } = await saving(f);
+    const post = f.hold(`${maplePath}/expenses`);
+    const save = controller.saveExpense();
+    await post.reached;
+    f.server.failBalances = true;
+    post.release();
+    await save;
+    await settle();
+    const done = controller.getSnapshot();
+    expect(done).toMatchObject({
+      snackbar: { message: `Expense saved · Fresh groceries.${failed}` },
+      financial: { expenses: { status: 'ready' }, balances: { changed: true } },
+    });
+    // The highlight follows the list alone, which was read after the save.
+    expect(listed(done)[0]).toBe('Fresh groceries');
+    expect(done.snackbar?.expenseId).toBe(done.financial.expenses.data[0].id);
+  });
+
+  // A read that never ran isn't a failure: the message says so only once a read failed, and
+  // stops saying so once a read lands.
+  it('keeps “Payment recorded” plain when Balances aren’t read because the member is on Activity, and after they are', async () => {
+    const f = fixture();
+    const { controller } = await paying(f);
+    controller.updateSettlement({ amount: '10' });
+    const reread = f.hold(maplePath, { afterWrite: true, exact: true });
+    const recording = controller.recordSettlement();
+    await reread.reached;
+    await controller.selectDestination('activity');
+    reread.release();
+    await recording;
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      destination: 'activity',
+      snackbar: { message: 'Payment recorded' },
+      financial: { balances: { changed: true } },
+    });
+    await controller.selectDestination('balances');
+    await settle();
+    expect(controller.getSnapshot().snackbar?.message).toBe('Payment recorded');
+    expect(recordable(controller.getSnapshot())).toEqual([20]);
+  });
+
+  it('keeps “Expense saved” plain when the list isn’t read because the member is on Activity, and after it is', async () => {
+    const f = fixture();
+    const { controller } = await saving(f);
+    const reread = f.hold(septemberPath(1), { afterWrite: true });
+    const save = controller.saveExpense();
+    await reread.reached;
+    await controller.selectDestination('activity');
+    reread.release();
+    await save;
+    await settle();
+    expect(controller.getSnapshot().snackbar?.message).toBe('Expense saved · Fresh groceries');
+    await controller.selectDestination('expenses');
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      snackbar: { message: 'Expense saved · Fresh groceries' },
+      financial: { expenses: { status: 'ready' } },
+    });
+    expect(listed(controller.getSnapshot())[0]).toBe('Fresh groceries');
+  });
+
+  it('stops saying Balances couldn’t be updated once they are read after a payment', async () => {
+    const f = fixture();
+    const { controller } = await paying(f);
+    controller.updateSettlement({ amount: '10' });
+    // The payment is recorded; the Balances read after it fails.
+    const post = f.hold(`${maplePath}/settlements`);
+    const recording = controller.recordSettlement();
+    await post.reached;
+    f.server.failBalances = true;
+    post.release();
+    await recording;
+    await settle();
+    expect(controller.getSnapshot().snackbar?.message).toBe(`Payment recorded.${failed}`);
+    f.server.failBalances = false;
+    await controller.refreshBalances();
+    expect(controller.getSnapshot()).toMatchObject({
+      snackbar: { message: 'Payment recorded' },
+      financial: { balances: { status: 'ready', stale: false } },
+    });
+    expect(recordable(controller.getSnapshot())).toEqual([20]);
+  });
+
+  it('stops saying the list couldn’t be updated once it is read after a save, on reconnecting', async () => {
+    const f = fixture();
+    const { controller } = await saving(f);
+    const post = f.hold(`${maplePath}/expenses`);
+    const save = controller.saveExpense();
+    await post.reached;
+    f.server.offline = true;
+    post.release();
+    await save;
+    await settle();
+    expect(controller.getSnapshot().snackbar?.message).toBe(
+      'Expense saved · Fresh groceries. Expenses couldn’t be updated yet — pull to refresh.',
+    );
+    f.connect(false);
+    f.connect(true);
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      snackbar: { message: 'Expense saved · Fresh groceries' },
+      financial: { expenses: { status: 'ready' } },
+    });
+    expect(listed(controller.getSnapshot())[0]).toBe('Fresh groceries');
+    expect(controller.getSnapshot().snackbar?.expenseId).toBe(
+      controller.getSnapshot().financial.expenses.data[0].id,
+    );
+  });
+
+  // Once the change has been read, a later read that fails isn't the change's to report.
+  it('keeps “Payment recorded” plain when a later read of Balances fails', async () => {
+    const f = fixture();
+    const { controller } = await paying(f);
+    controller.updateSettlement({ amount: '10' });
+    await controller.recordSettlement();
+    await settle();
+    expect(controller.getSnapshot().snackbar?.message).toBe('Payment recorded');
+    f.server.failBalances = true;
+    await controller.refreshBalances();
+    expect(controller.getSnapshot()).toMatchObject({
+      snackbar: { message: 'Payment recorded' },
+      financial: { balances: { status: 'error' } },
+    });
+  });
+
+  it('keeps “Expense saved” plain, with its highlight, when a later read of the list fails', async () => {
+    const f = fixture();
+    const { controller } = await saving(f);
+    await controller.saveExpense();
+    await settle();
+    const saved = controller.getSnapshot().snackbar?.expenseId;
+    expect(saved).toBe(controller.getSnapshot().financial.expenses.data[0].id);
+    f.server.failPage = 1;
+    await controller.refreshExpenses();
+    expect(controller.getSnapshot()).toMatchObject({
+      snackbar: { message: 'Expense saved · Fresh groceries', expenseId: saved },
+      financial: { expenses: { status: 'error' } },
+    });
+  });
+
+  it('never brings back a message dismissed while the read after a payment ran', async () => {
+    const f = fixture();
+    const { controller, states } = await paying(f);
+    // The payment is recorded; Balances can't be read after it, and the Group answers late.
+    const post = f.hold(`${maplePath}/settlements`);
+    const recording = controller.recordSettlement();
+    await post.reached;
+    f.server.failBalances = true;
+    const reread = f.hold(maplePath, { exact: true });
+    post.release();
+    await reread.reached;
+    controller.dismissSnackbar();
+    const dismissed = states.length;
+    reread.release();
+    await recording;
+    await settle();
+    expect(controller.getSnapshot().snackbar).toBeNull();
+    expect(states.slice(dismissed).filter((state) => state.snackbar)).toEqual([]);
+  });
   it('never shows a Balances copy whose removal failed after a payment, even before the Group answers on a restart', async () => {
     const f = fixture();
     const { controller } = await paying(f);

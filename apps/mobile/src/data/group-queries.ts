@@ -1443,9 +1443,24 @@ export function createGroupQueries(session: GroupSession) {
     ) {
       return (await readNow<Envelope>(groupOptions(groupId, fresh), owner, wanted)).value;
     },
-    /** A change was written in this Group, or may have been: its Balances wait to be read. */
+    /**
+     * A change was written in this Group, or may have been: its Balances wait to be read. Returns
+     * the change's count, which `listedSince` compares reads with.
+     */
     changed(groupId: string) {
-      if (view?.groupId === groupId) view.change = ++changes;
+      const change = ++changes;
+      if (view?.groupId === groupId) view.change = change;
+      return change;
+    },
+    /**
+     * Whether the Expenses `financial` shows were read from the server by a read begun after
+     * `change`: only such a list shows a saved row as it now is, never as it was before the
+     * change or while it is read again (#219).
+     */
+    listedSince(groupId: string, financial: GroupFinancialState, change: number) {
+      const key = view?.groupId === groupId ? shownList(financial) : null,
+        pages = key && held<Pages>(key)?.state.data;
+      return !!pages && (answers.get(pages)?.change ?? -1) >= change;
     },
     /**
      * The member lost this Group: its view reads and observes nothing more, so a removed query's
