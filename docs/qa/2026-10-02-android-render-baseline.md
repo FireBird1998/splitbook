@@ -83,7 +83,7 @@ Publishes / commits / component renders, and requests, for every journey whose c
 | Journey                                      | Requests | Before (`d506f6e`) |         #219 | Why                                                                      |
 | -------------------------------------------- | -------: | -----------------: | -----------: | ------------------------------------------------------------------------ |
 | Open a Group on Expenses                     |        3 |       11 / 4 / 512 |  9 / 3 / 312 | rows render once; the Group and its Expenses are read together           |
-| Change Month                                 |        2 |        8 / 3 / 468 |  5 / 3 / 328 | the view publishes only what changed                                     |
+| Change Month                                 |        2 |        8 / 3 / 468 |  5 / 3 / 325 | the view publishes only what changed                                     |
 | Load the 5th Expense page (80 → 100 rows)    |        2 |      7 / 3 / 2,147 |  5 / 3 / 327 | only the new page's 20 rows render                                       |
 | Foreground within 30 s after 5 Expense pages |        0 |        7 / 1 / 204 |   2 / 1 / 62 | the 100 rows stay, and none renders again                                |
 | Reopen the Group within 30 s                 |        0 |        6 / 1 / 204 |  4 / 1 / 204 | the view publishes only what changed                                     |
@@ -95,6 +95,8 @@ Publishes / commits / component renders, and requests, for every journey whose c
 **The two request ceilings that rose** are the re-record ADR 0006 planned: a pull, and a foreground after 30 s, with 5 Expense pages loaded each send the Group and Expenses page 1 together, then Expenses pages 2 to 5, then Balances, 7 requests instead of 3. The owner applies `re-record-ceilings` on #219's pull request. Every other change lowers a ceiling.
 
 The two journeys #219 added send, in order: Expenses page 6 then Balances, and Expenses page 1 then Balances (Balances follow every Expense read, finding 6).
+
+Rebased on #331's loading motion (`d41424b`), one count moved: Change Month renders 325, not 328, with #331's Month summary skeleton. Its ceiling came down; no other count moved.
 
 ### Requests per journey
 
