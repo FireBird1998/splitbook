@@ -208,14 +208,16 @@ function ActivityList({
 }: GroupActivityProps) {
   const theme = useTheme();
   const loading = state.status === 'loading';
-  // Read, or being read again with the events it had: those stay shown (M1-3).
-  const read = state.pagination !== null && (state.status === 'ready' || loading);
-  // Load older stays in place, disabled, while the events shown are read again, so the list
-  // never gets shorter under the member: at its end, Android would clamp the view (#219).
-  const more = read && state.pagination!.page < state.pagination!.totalPages;
+  // Events listed with their pages: they stay shown while they're read again (M1-3), and after
+  // that failed.
+  const listed = state.pagination !== null && state.events.length > 0;
+  // Load older stays in place, disabled, while the events shown are read again and after that
+  // failed, so the list never gets shorter under the member: at its end, Android would clamp the
+  // view (#219).
+  const more = listed && state.pagination!.page < state.pagination!.totalPages;
   // Past 5 pages the list has slid: the pages before it are read with Load newer, above it, which
-  // stays in place, disabled, while the window is read again (M7-2).
-  const newer = read && (state.firstPage ?? 1) > 1;
+  // stays in place, disabled, as Load older does (M7-2, as #219's Expenses keep it).
+  const newer = listed && (state.firstPage ?? 1) > 1;
   // The latest handler, behind one that never changes, so no row renders again for it.
   const selecting = useRef(onSelect);
   useEffect(() => {
@@ -296,7 +298,8 @@ function ActivityList({
   /**
    * Load older, below the events, or Load newer, above them: loading, failed with the events
    * kept, or offered, and named for TalkBack. Load newer loads busy in its own place, so the
-   * events below it don't move before its page lands (#220's lesson).
+   * events below it don't move before its page lands (#220's lesson). Each is offered once the
+   * events are read, and not while the other one reads.
    */
   const pageControl = (
     which: 'older' | 'newer',
@@ -317,7 +320,10 @@ function ActivityList({
           busy={status === 'loading' ? `Loading ${which} activity…` : undefined}
           variant="tonal"
           block
-          disabled={state.status !== 'ready'}
+          disabled={
+            state.status !== 'ready' ||
+            (which === 'older' ? state.newerStatus : state.moreStatus) === 'loading'
+          }
           onPress={onPress}
         />
       </>

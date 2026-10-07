@@ -296,3 +296,35 @@ describe('a row is drawn again only when what it says changes (#222, D6)', () =>
     }
   });
 });
+
+describe('Load older and Load newer stay in place (#222, as #219)', () => {
+  // Pages 2 to 6 of 7: both ends are offered.
+  const pagination = { page: 6, limit: 20, total: 130, totalPages: 7 };
+  const state = (label: string) => button(screen!.root, label)[0]?.props.accessibilityState;
+
+  it('keeps both, disabled, when reading the events shown again failed', () => {
+    const { root } = render({
+      state: window(2, { status: 'error', pagination, message: 'Could not refresh Activity.' }),
+    });
+    expect(text(root)).toContain('Couldn’t update Activity');
+    for (const label of ['Load newer activity', 'Load older activity']) {
+      expect(button(root, label)).toHaveLength(1);
+      expect(state(label)).toEqual({ disabled: true, busy: false });
+    }
+    // In their places: above the first event shown, and below the last.
+    expect(buttons(root).indexOf('Load newer activity')).toBeLessThan(rowIndex(root, 21));
+    expect(buttons(root).indexOf('Load older activity')).toBeGreaterThan(rowIndex(root, 120));
+  });
+
+  it('keeps the other one disabled while one of them reads', () => {
+    const { update } = render({ state: window(2, { pagination, moreStatus: 'loading' }) });
+    expect(text(screen!.root)).toContain('Loading older activity…');
+    expect(state('Load newer activity')).toEqual({ disabled: true, busy: false });
+    update({ state: window(2, { pagination, newerStatus: 'loading' }) });
+    expect(state('Loading newer activity…')).toEqual({ disabled: true, busy: true });
+    expect(state('Load older activity')).toEqual({ disabled: true, busy: false });
+    update({ state: window(2, { pagination }) });
+    expect(state('Load newer activity')).toEqual({ disabled: false, busy: false });
+    expect(state('Load older activity')).toEqual({ disabled: false, busy: false });
+  });
+});
