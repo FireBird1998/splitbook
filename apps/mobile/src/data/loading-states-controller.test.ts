@@ -1499,9 +1499,10 @@ describe('Home after navigating while the Groups list loads (#190)', () => {
     await controller.openGroup(maple);
     list.release(new Error('Network request failed'));
     await pulling;
+    // The Groups read earlier stay; never "not saved" beside them (#332).
     expect(controller.getSnapshot().groups).toMatchObject({
       status: 'error',
-      message: 'This view was not saved on this device. Connect to load it.',
+      message: 'This phone no longer keeps a copy of them.',
     });
 
     f.requests.length = 0;

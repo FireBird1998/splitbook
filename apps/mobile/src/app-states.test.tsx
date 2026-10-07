@@ -113,6 +113,8 @@ function device() {
     noActivity: false,
     /** Home's figures hold Alex's balance in each Group too. */
     groupBalances: false,
+    /** Groups that refuse Alex (403): Alex has lost them. */
+    refused: [] as string[],
   };
   /** The saved copies can't be removed, as on a full or read-only disk. */
   const storage = { failRemoval: false };
@@ -161,6 +163,7 @@ function device() {
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
     const found = groups.find((item) => item._id === id);
     if (!found) return json({}, 404);
+    if (network.refused.includes(found._id)) return json({}, 403);
     if (path === `/api/groups/${id}`) return json({ data: found, status: 200 });
     if (path === `/api/groups/${maple}/expenses/${expenseId}`)
       return json({ data: expense, status: 200 });
@@ -1062,13 +1065,79 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(app.content().inside).toContain(`Updated ${readAt}`);
     expect(app.text()).not.toContain(`Saved ${readAt}`);
     expect(app.content().inside).toContain(
-      `Couldn’t refresh your balances. They aren’t saved on this phone. Showing your balances from ${readAt}.`,
+      `Couldn’t refresh your balances, and this phone no longer keeps a copy of them. Showing your balances from ${readAt}.`,
     );
     expect(app.text()).not.toContain('This view was not saved');
     // Home says it's offline, but nothing shown is this phone's copy, so not that it was saved.
     expect(app.text()).toContain('You’re offlineConnect to load the latest.');
     expect(app.text()).not.toContain('What’s shown was saved');
   });
+
+  it('says the same beside the badge of a saved copy a change has since removed', async () => {
+    const phone = device();
+    const savedAt = await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    phone.clock.now += 60 * 60_000;
+    // Offline on Home, this phone's copy stands in for the figures.
+    phone.network.online = false;
+    await settle(controller().refreshHome());
+    const saved = badge(`Saved ${refreshedLabel(savedAt)}`);
+    expect(app.content().inside).toContain(saved);
+    // Alex opens a Group, reconnects, pulls and saves an Expense, which removes that copy; the
+    // connection drops before Home's figures are read again, and Alex goes back to Home.
+    await app.press('Open Maple House, Household · 2 members');
+    phone.network.online = true;
+    await settle(controller().refresh('pull'));
+    await settle(controller().openExpense(maple));
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId }));
+    const figures = phone.hold('/api/user/balances');
+    const saving = controller().saveExpense();
+    await figures.reached;
+    phone.network.online = false;
+    figures.release();
+    await settle(saving);
+    expect(phone.saved('/api/user/balances')).toBeNull();
+    await settle(Promise.resolve(controller().back()));
+
+    expect(app.content().inside).toContain(saved);
+    expect(app.content().inside).toContain(
+      `Couldn’t refresh your balances, and this phone no longer keeps a copy of them. Showing your balances from ${refreshedLabel(savedAt)}.`,
+    );
+    expect(app.text()).toContain('You’re offline');
+  });
+
+  it.each(['removed', 'withheld'] as const)(
+    'says what is true of the Groups on screen, offline after losing a Group %s their copy',
+    async (copy) => {
+      const phone = device();
+      await usedBefore(phone);
+      const app = await start(phone);
+      await settle();
+      // Offline, Home's list is read again: this phone's copy stands in for it.
+      phone.network.online = false;
+      await settle(controller().checkCreatedGroups());
+      // Back online, Alex opens Lisbon Offsite, which refuses Alex now. Losing it removes Home's
+      // saved copies, or withholds them on a phone that can't remove them (#212, #323).
+      phone.storage.failRemoval = copy === 'withheld';
+      phone.network.online = true;
+      phone.network.refused.push(lisbon);
+      await app.press('Open Lisbon Offsite, Work · 2 members');
+      // The connection drops before Home is read again.
+      phone.network.online = false;
+      await settle(Promise.resolve(controller().back()));
+
+      expect(phone.saved('/api/groups') === null).toBe(copy === 'removed');
+      expect(app.text()).toContain('Maple House');
+      expect(app.text()).not.toContain('Lisbon Offsite');
+      expect(app.text()).toContain(
+        'Couldn’t load your GroupsThis phone no longer keeps a copy of them. Showing previously verified Groups.',
+      );
+      expect(app.text()).not.toContain('This view was not saved');
+      // The list on screen is still this phone's earlier copy, and the banner says so.
+      expect(app.text()).toContain('What’s shown was saved on this device');
+    },
+  );
 
   it('keeps the offline banner over saved figures beside a list read in this session', async () => {
     const phone = device();

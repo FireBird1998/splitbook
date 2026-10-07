@@ -44,8 +44,19 @@ export const listPath = '/api/groups',
 /** The server can't be reached, and this device has no saved copy of the view. */
 export const notSaved = 'This view was not saved on this device. Connect to load it.';
 const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
-/** Home's figures on screen stay; SplitBook can't be reached, and this phone has no copy of them. */
-const notRefreshed = 'Couldn’t refresh your balances. They aren’t saved on this phone.';
+/**
+ * What stays on Home when SplitBook can't be reached and this phone keeps no copy to show
+ * instead: removed by a change, withheld (#323) or never saved. True beside a "Saved" badge too,
+ * for a copy shown before it was removed (#332).
+ */
+const notKept = {
+  balances: 'Couldn’t refresh your balances, and this phone no longer keeps a copy of them.',
+  // Under "Couldn't load your Groups", before "Showing previously verified Groups."
+  groups: 'This phone no longer keeps a copy of them.',
+};
+/** SplitBook couldn't be reached, and this phone had no saved copy to answer with. */
+const unkept = (error: Error) =>
+  error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
 
 export function emptyHome(): HomeFinancialState {
   return {
@@ -142,10 +153,13 @@ export function projectGroups(read: Read, shown: MobileSnapshot['groups']) {
   return same(shown, {
     status: denied ? 'denied' : 'error',
     data: denied ? [] : shown.data,
+    // Groups still on screen: what is true of them, never "not saved" (#332).
     message:
-      error instanceof RequestError
-        ? error.message
-        : 'The server returned invalid group data. Please refresh.',
+      unkept(error) && shown.data.length
+        ? notKept.groups
+        : error instanceof RequestError
+          ? error.message
+          : 'The server returned invalid group data. Please refresh.',
     loaded: shown.loaded,
     restored: denied ? false : shown.restored,
   });
@@ -186,18 +200,16 @@ export function projectHome(read: Read, shown: HomeFinancialState): HomeFinancia
   const error = failure(read);
   if (!error) return shown;
   const denied = error instanceof RequestError && error.status === 403;
-  // Figures still on screen that this phone holds no saved copy of: never "not saved" beside
-  // them, but what is true of them (#332).
-  const unsaved =
-    error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE' && shown.data !== null;
   return {
     ...(denied ? emptyHome() : shown),
     status: denied ? 'denied' : 'error',
-    message: unsaved
-      ? notRefreshed
-      : error instanceof RequestError
-        ? error.message
-        : 'Could not load your balances. Please try again.',
+    // Figures still on screen: what is true of them, never "not saved" (#332).
+    message:
+      unkept(error) && shown.data !== null
+        ? notKept.balances
+        : error instanceof RequestError
+          ? error.message
+          : 'Could not load your balances. Please try again.',
   };
 }
 

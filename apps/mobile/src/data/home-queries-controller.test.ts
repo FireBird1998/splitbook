@@ -1458,7 +1458,7 @@ describe('after a write (M2-2)', () => {
       home: {
         status: 'error',
         data: [{ youOwe: 30 }],
-        message: 'Couldn’t refresh your balances. They aren’t saved on this phone.',
+        message: 'Couldn’t refresh your balances, and this phone no longer keeps a copy of them.',
         restored: false,
       },
       offline: { active: true, refreshedAt: null },
