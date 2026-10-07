@@ -17,7 +17,7 @@ import { parseExpenseRecord } from '../data/expense-record';
 import { parseExpensePage } from '../data/financial-dto';
 import { findHosts, flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
-import { TopBar } from './compact';
+import { Divider, TopBar } from './compact';
 import { ExpenseEditor } from './expense-editor';
 import { recordOutline } from './expense-record-view';
 import { OfflineNotice } from './offline-notice';
@@ -361,6 +361,128 @@ describe('an Expense’s changes past 5 pages (#220, M7-2)', () => {
     expect(text(topBar())).toContain('Refreshing…');
     expect(text(history())).toContain(`Saved ${refreshedLabel(at)}`);
     expect(text(screen!.root).match(/refreshing/gi)).toHaveLength(1);
+  });
+
+  // The UI re-review of 0f8c377: rows that are drawn only when they change must still be drawn
+  // when they do, including a Tag renamed once the Group's details arrive (the saved copy path).
+  it('draws a change again when it, the Group’s Tags or its place change, and only then', () => {
+    const tagged = (name: string) =>
+      parseExpenseContext({
+        status: 200,
+        data: {
+          ...group,
+          tags: [
+            ...group.tags,
+            { _id: 'a00000000000000000000021', name, isArchived: false, createdAt: iso },
+          ],
+        },
+      });
+    const first = windowOf(1);
+    const retagged = { ...first.events[0]!, metadata: { ...first.events[0]!.metadata } };
+    retagged.metadata.changes = {
+      tagId: { old: 'a00000000000000000000020', new: 'a00000000000000000000021' },
+    };
+    const events = [retagged, ...first.events.slice(1)];
+    const update = render(detail({ ...first, events }, { context: tagged('Rent') }));
+    expect(text(history())).toContain('Utilities');
+    expect(text(history())).toContain('Rent');
+    // The Group's details change: the Tag's new name shows.
+    update(detail({ ...first, events }, { context: tagged('Housing') }));
+    expect(text(history())).toContain('Housing');
+    expect(text(history())).not.toContain('Rent');
+    // One change is read again with other words, under the same id: it shows them.
+    const edited = { ...events[1]!, metadata: { ...events[1]!.metadata } };
+    edited.metadata.changes = { notes: { old: 'Note 3', new: 'Meter read on the 20th' } };
+    update(
+      detail(
+        { ...first, events: [events[0]!, edited, ...events.slice(2)] },
+        {
+          context: tagged('Housing'),
+        },
+      ),
+    );
+    expect(text(history())).toContain('Meter read on the 20th');
+    // The window slides: the change that was 21st is first now, with no divider above it.
+    /** The divider drawn above change `number`'s row: one, or none for the first. */
+    const dividers = (number: number) =>
+      screen!.root
+        .find(
+          (node) =>
+            isHost(node, 'View') &&
+            node.props.onLayout !== undefined &&
+            node.findAll(
+              (inner) =>
+                isHost(inner, 'View') &&
+                inner.props.accessible === true &&
+                !!inner.props.accessibilityLabel,
+            ).length === 1 &&
+            node.findAll((inner) =>
+              String(inner.props.accessibilityLabel).includes(`to “Note ${number}”`),
+            ).length > 0,
+        )
+        .findAllByType(Divider).length;
+    expect(dividers(21)).toBe(1);
+    update(detail(windowOf(2), { context: tagged('Housing') }));
+    expect(dividers(21)).toBe(0);
+    expect(dividers(22)).toBe(1);
+  });
+
+  it('keeps Load older and Load newer disabled in place from the moment Try again starts', () => {
+    // Try again is reading the session, the Group and the record; the changes aren't read yet.
+    render(detail(windowOf(2), { refreshing: true }));
+    expect(pressables('Load newer changes')[0].props.accessibilityState).toEqual({
+      disabled: true,
+    });
+    expect(pressables('Load older changes')[0].props.accessibilityState).toEqual({
+      disabled: true,
+    });
+    expect(text(topBar())).toContain('Refreshing…');
+  });
+
+  it('loads newer changes in Load newer’s own place, busy, so the changes below it stay put (N2)', () => {
+    const control = (label: string) =>
+      findHosts(
+        screen!.toJSON(),
+        (props, type) => type === 'Pressable' && props.accessibilityLabel === label,
+      )[0]!;
+    const load = render(detail(windowOf(2)));
+    const idle = layoutHeight(control('Load newer changes'));
+    load(detail(windowOf(2, { newerStatus: 'loading' })));
+    const loading = control('Loading newer changes…');
+    expect(loading.props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(layoutHeight(loading)).toBe(idle);
+    // Nothing but the button stands above the changes while the page is read.
+    expect(text(history())).not.toContain('Couldn’t');
+  });
+
+  it('says only that older changes couldn’t be read when a page read again fails, as the changes end before it (N1)', () => {
+    render(detail(windowOf(1, { moreStatus: 'error' })));
+    const alert = screen!.root.find(
+      (node) => isHost(node, 'Text') && node.props.accessibilityRole === 'alert',
+    );
+    expect(text(alert)).toBe('Couldn’t load older changes.');
+    expect(pressables('Try loading older changes')).toHaveLength(1);
+  });
+
+  it('says when the changes shown were read once reading them again failed (review item 3)', () => {
+    // Read earlier in this session: "Updated".
+    render(
+      detail(windowOf(1, { status: 'error', message: 'Couldn’t load this Expense’s changes.' })),
+    );
+    expect(text(history())).toContain(`Updated ${refreshedLabel(at)}`);
+    expect(text(history())).toContain('Note 1');
+    act(() => screen!.unmount());
+    // This device's saved copy, after a restart: "Saved".
+    render(
+      detail(
+        windowOf(1, {
+          status: 'error',
+          message: 'Couldn’t load this Expense’s changes.',
+          restored: true,
+        }),
+      ),
+    );
+    expect(text(history())).toContain(`Saved ${refreshedLabel(at)}`);
   });
 });
 
