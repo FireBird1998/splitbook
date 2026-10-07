@@ -315,11 +315,16 @@ describe('opening an Expense: what is already known shows at once (loading-state
   });
 
   it('says when a record shown from what this device knew was saved, while it is read again', () => {
-    render(detail(windowOf(1), { knownAt: at }));
+    render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: true } }));
     expect(text(screen!.root)).toContain(`Saved ${refreshedLabel(at)} · refreshing`);
     act(() => screen!.unmount());
-    render(detail(windowOf(1), { knownAt: null }));
+    // Its read failed: it still says when it was saved.
+    render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: false } }));
+    expect(text(screen!.root)).toContain(`Saved ${refreshedLabel(at)}`);
     expect(text(screen!.root)).not.toContain('refreshing');
+    act(() => screen!.unmount());
+    render(detail(windowOf(1), { known: null }));
+    expect(text(screen!.root)).not.toContain('Saved');
   });
 
   it('has one Try again, and no banner about what’s shown, when nothing of the Expense shows', () => {

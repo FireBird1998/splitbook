@@ -2500,7 +2500,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         },
       },
     );
-    let known = false;
+    let known = false,
+      checked = false;
     try {
       const lease = accountStorage();
       if (!lease || !dependencies.expenseDrafts) throw new Error('Draft storage is unavailable.');
@@ -2585,6 +2586,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         if (expenseId) reading ??= readRecord(expenseId);
       }
       expenseQueries.check();
+      checked = true;
       const original = reading
         ? await reading.catch((error: unknown) => {
             // The Group was just read: what's missing is this Expense.
@@ -2594,9 +2596,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           })
         : null;
       if (!showing()) return;
-      // The member went on from what this device knew (Edit, Delete): theirs stays (M6-1).
-      if (known && latest().expense.status !== 'detail')
-        return publish({ ...snapshot, expense: { ...snapshot.expense, context } });
+      // The member went on from what this device knew (Edit, Delete): theirs stays (M6-1), and
+      // the record's changes are read all the same.
+      if (known && latest().expense.status !== 'detail') {
+        publish({ ...snapshot, expense: { ...snapshot.expense, context } });
+        return await expenseQueries.history(owner, { fresh: true, wanted });
+      }
       const draft = original ? draftFromExpense(original) : (record?.draft ?? blank);
       publish({
         ...snapshot,
@@ -2634,15 +2639,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     } catch (error) {
       if (!showing() || error instanceof Superseded) return;
       const denied = error instanceof RequestError && [403, 404].includes(error.status);
-      const shown = latest().expense;
-      // What this device knew of the record stays when it can't be read now; it goes once the
-      // Expense is gone or the Group refuses the member.
-      if (known && shown.status === 'detail' && shown.draft?.original?._id === expenseId)
+      const shown = latest().expense,
+        mine = known && shown.draft?.original?._id === expenseId;
+      // What this device knew of the record stays, beside its changes, when the record can't be
+      // read now; it goes once the Expense is gone, or the Group refuses or can't check the member.
+      if (mine && checked && !denied) {
+        const message = expenseFailureMessage(error, 'Could not refresh this Expense. Try again.');
+        publish({ ...snapshot, expense: { ...shown, message } });
+        return await expenseQueries.history(owner, { fresh: true, wanted }).catch(() => undefined);
+      }
+      if (mine && ['detail', 'delete-review'].includes(shown.status))
         return publish({
           ...snapshot,
-          expense: denied
-            ? withdrawExpense(error.message)
-            : { ...shown, message: expenseFailureMessage(error, notSaved) },
+          expense: withdrawExpense(
+            expenseFailureMessage(error, 'Could not open this Expense. Please try again.'),
+          ),
         });
       publish({
         ...snapshot,

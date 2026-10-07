@@ -513,7 +513,8 @@ export function createExpenseQueries(session: ExpenseSession) {
       observers.group = new QueryObserver(client, groupNext);
       observers.group.subscribe(() => undefined);
     }
-    const recordNext = recordOptions(groupId, expenseId, view.checked);
+    // Enabled from the start, so this open's check never sets off another read of the record.
+    const recordNext = recordOptions(groupId, expenseId);
     if (observers.record) observers.record.setOptions(recordNext);
     else {
       observers.record = new QueryObserver<Envelope, Error, Envelope, Envelope, QueryKey>(
@@ -522,7 +523,7 @@ export function createExpenseQueries(session: ExpenseSession) {
       );
       observers.record.subscribe(() => undefined);
     }
-    const historyNext = historyOptions(groupId, expenseId, view.checked && view.history);
+    const historyNext = historyOptions(groupId, expenseId, view.history);
     if (observers.history) observers.history.setOptions(historyNext);
     else {
       observers.history = new InfiniteQueryObserver<PageEnvelope, Error, Pages, QueryKey, number>(
@@ -593,12 +594,18 @@ export function createExpenseQueries(session: ExpenseSession) {
     } catch {
       record = null;
     }
-    // Shown from what this device knew, while it is read again: it says when it was verified.
-    const knownAt =
-      record && query.state.fetchStatus === 'fetching' && answered.get(data) !== opened
-        ? data.refreshedAt
-        : null;
-    let next = editor.knownAt === knownAt ? editor : { ...editor, knownAt };
+    // Shown from what this device knew, not read in this open: it says when it was verified,
+    // and whether it is being read again.
+    const was = editor.known,
+      known =
+        record && answered.get(data) !== opened
+          ? { refreshedAt: data.refreshedAt, refreshing: query.state.fetchStatus === 'fetching' }
+          : null;
+    let next =
+      was === known ||
+      (was && known && was.refreshedAt === known.refreshedAt && was.refreshing === known.refreshing)
+        ? editor
+        : { ...editor, known };
     if (record && record !== editor.draft?.original) {
       const draft = draftFromExpense(record);
       next = { ...next, draft, preview: previewExpense(draft) };
@@ -656,8 +663,8 @@ export function createExpenseQueries(session: ExpenseSession) {
         newerStatus: 'idle',
       });
     }
-    // Restored, or read before this open's check: it shows while the changes are read again.
-    if (!opened.checked || !opened.history || (data && answered.get(data) !== opened))
+    // Not read in this open yet: what shows waits for the changes to be read.
+    if (!opened.checked || !opened.history)
       return same(shown, { ...base, status: 'loading', message: null });
     const error = failure(state);
     if (state.status === 'error' && !error) return shown;
@@ -671,6 +678,9 @@ export function createExpenseQueries(session: ExpenseSession) {
         status: 'error',
         message: unreachable(error) ? historyUnsaved : historyFailed,
       });
+    // Restored, or read in an earlier open: it shows while this open reads it.
+    if (data && answered.get(data) !== opened)
+      return same(shown, { ...base, status: 'loading', message: null });
     return same(shown, { ...base, status: 'ready', message: null, newerStatus: 'idle' });
   };
   /** The record and its changes, projected into `next` while the member is on them. */
@@ -792,8 +802,11 @@ export function createExpenseQueries(session: ExpenseSession) {
       const key = historyKey(view.groupId, expenseId),
         query = held<Pages>(key),
         pages = query?.state.data;
+      // A read an earlier open began, such as its Load older, isn't this open's: it goes.
+      if (query?.state.fetchStatus === 'fetching')
+        return void client.removeQueries({ queryKey: key, exact: true });
       if (!query || !pages || pages.pages.length < 2) return;
-      if (pages.pageParams[0] === 1 && query.state.fetchStatus !== 'fetching')
+      if (pages.pageParams[0] === 1)
         client.setQueryData<Pages>(
           key,
           { pages: pages.pages.slice(0, 1), pageParams: [1] },
@@ -824,9 +837,9 @@ export function createExpenseQueries(session: ExpenseSession) {
           recordOf(data.value, `${opened.groupId}:${opened.expenseId}`),
         );
         const preview = previewExpense(draft);
-        const knownAt = data.refreshedAt;
+        const known = { refreshedAt: data.refreshedAt, refreshing: true };
         session.publish({
-          expense: { ...editor, draft, preview, status: 'detail', groupDraft, knownAt },
+          expense: { ...editor, draft, preview, status: 'detail', groupDraft, known },
         });
         return true;
       } catch {

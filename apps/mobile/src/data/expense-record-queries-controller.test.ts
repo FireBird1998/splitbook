@@ -98,6 +98,8 @@ function fixture() {
     gone: new Set<string>(),
     /** A page of the bill's changes that answers 500 instead. */
     failPage: 0,
+    /** The bill's record answers 500 instead: a server fault, not a refusal. */
+    failRecord: false,
     offline: false,
     /** An edit or deletion is recorded, but its reply never arrives: the connection drops. */
     loseWrites: false,
@@ -217,6 +219,7 @@ function fixture() {
     if (id) {
       const current = server.records.get(id);
       if (!current || server.gone.has(id)) return json({}, 404);
+      if (id === billId && server.failRecord && method === 'GET') return json({}, 500);
       if (method === 'PATCH' || method === 'DELETE') {
         const revision = (init.headers as Record<string, string>)['X-Splitbook-Revision'];
         if (revision !== String(current.revision))
@@ -1008,14 +1011,14 @@ describe('opening an Expense: what is already known shows at once (loading-state
     expect(controller.getSnapshot().expense).toMatchObject({
       status: 'detail',
       draft: { original: { revision: 1, description: 'Electricity bill' } },
-      knownAt: savedAt,
+      known: { refreshedAt: savedAt, refreshing: true },
     });
     group.release();
     await opening;
     expect(controller.getSnapshot().expense).toMatchObject({
       status: 'detail',
       draft: { original: { revision: 2, description: 'Electricity bill (August)' } },
-      knownAt: null,
+      known: null,
     });
   });
 
@@ -1039,5 +1042,120 @@ describe('opening an Expense: what is already known shows at once (loading-state
       offline: { active: false },
       expense: { status: 'detail', draft: { original: { _id: dinnerId } } },
     });
+  });
+});
+// Found in review: what a read that fails, or a member who moves on, leaves behind.
+describe('reads that fail, and a member who moves on, while the record opens', () => {
+  it('says its changes couldn’t be read again when a reopened record’s first page fails', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    await controller.back();
+    f.server.failPage = 1;
+    await controller.openExpense(mapleId, billId);
+    expect(controller.getSnapshot().expense.history).toMatchObject({
+      status: 'error',
+      message: 'Couldn’t load this Expense’s changes.',
+    });
+    f.server.failPage = 0;
+    await controller.refreshExpenseHistory();
+    expect(controller.getSnapshot().expense.history).toMatchObject({
+      status: 'ready',
+    });
+  });
+
+  it('says older changes couldn’t be read each time they fail, with the changes kept', async () => {
+    const f = fixture();
+    const controller = await withPages(f, 2);
+    f.server.failPage = 2;
+    await controller.refreshExpenseHistory();
+    expect(controller.getSnapshot().expense.history).toMatchObject({
+      status: 'ready',
+      moreStatus: 'error',
+    });
+    await controller.loadOlderExpenseHistory();
+    expect(controller.getSnapshot().expense.history).toMatchObject({
+      status: 'ready',
+      moreStatus: 'error',
+    });
+    expect(shownChanges(controller)).toEqual(billChanges(1, 20));
+  });
+
+  it('reads the changes of a record shown from this device, after the member went on to delete it', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    await controller.back();
+    later(60_000);
+    const group = f.hold(maplePath, { exact: true });
+    const opening = controller.openExpense(mapleId, billId);
+    await group.reached;
+    await settle();
+    controller.reviewExpenseDeletion();
+    const from = f.calls.length;
+    group.release();
+    await opening;
+    await settle();
+    expect(f.gets(from)).toEqual(['history bill p1']);
+    controller.cancelExpenseDeletion();
+    expect(controller.getSnapshot().expense.history).toMatchObject({
+      status: 'ready',
+    });
+  });
+
+  it('keeps a record shown from this device, with when it was saved, when reading it fails, and reads it once', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    const savedAt = Date.now();
+    await controller.openExpense(mapleId, billId);
+    await controller.back();
+    later(60_000);
+    f.server.failRecord = true;
+    const from = f.calls.length;
+    await controller.openExpense(mapleId, billId);
+    await settle();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      draft: { original: { revision: 1 } },
+      known: { refreshedAt: savedAt, refreshing: false },
+      message: 'The server could not complete this request. Please try again.',
+      history: { status: 'ready' },
+    });
+    expect(f.gets(from).filter((read) => read === 'record bill')).toHaveLength(1);
+  });
+
+  it('never shows a record this device knew once its Group can’t be checked', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    await controller.back();
+    later(60_000);
+    f.server.group = 500;
+    await controller.openExpense(mapleId, billId);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'blocked',
+      draft: null,
+    });
+  });
+
+  it('reads the first page of changes again when the record opens anew while an older page loads', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    const older = f.hold(historyPath(billId, 2), { exact: true });
+    const loading = controller.loadOlderExpenseHistory();
+    await older.reached;
+    await controller.back();
+    const from = f.calls.length;
+    await controller.openExpense(mapleId, billId);
+    older.release();
+    await loading;
+    await settle();
+    expect(f.gets(from)).toContain('history bill p1');
+    expect(controller.getSnapshot().expense.history).toMatchObject({
+      status: 'ready',
+      pagination: { page: 1 },
+    });
+    expect(shownChanges(controller)).toEqual(billChanges(1, 20));
   });
 });

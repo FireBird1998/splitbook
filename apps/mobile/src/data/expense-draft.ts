@@ -125,10 +125,11 @@ export interface ExpenseEditor {
   /** The saved Expense's changes, read while its record is shown. */
   history: ExpenseHistoryState;
   /**
-   * When the record shown was verified, while it is what this device already knew (a saved copy,
-   * or a read before this open) and is read again (#220); null once it is current.
+   * The record shown is what this device already knew (a saved copy, or a read before this
+   * open): when it was verified, and whether it is being read again (#220). Null once the record
+   * shown was read in this open.
    */
-  knownAt?: number | null;
+  known?: { refreshedAt: number; refreshing: boolean } | null;
 }
 /** Correctable Expense inputs, in the order they appear on screen. */
 export const expenseFields = ['amount', 'description', 'date', 'payers', 'split', 'tag'] as const;

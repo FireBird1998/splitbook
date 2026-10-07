@@ -236,9 +236,13 @@ export function ExpenseRecordScreen({
             : undefined
         }
         status={
-          // What this device knew of the record, while it is read again (#220).
-          state.knownAt != null && !offline ? (
-            <Freshness refreshedAt={state.knownAt} refreshing />
+          // What this device knew of the record: being read again, or saved when (#220).
+          state.known && !offline ? (
+            <Freshness
+              refreshedAt={state.known.refreshedAt}
+              refreshing={state.known.refreshing}
+              offline={!state.known.refreshing}
+            />
           ) : undefined
         }
         actions={
