@@ -1929,9 +1929,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ? { ...emptyActivity(), groupId: id, status: 'denied', message }
           : snapshot.activity,
       expense,
+      // Nothing of the lost Group names anyone on the sheet any more (#334).
       settlement:
         snapshot.settlement.groupId === id
-          ? { ...snapshot.settlement, group: null, balances: [] }
+          ? { ...snapshot.settlement, group: null, balances: [], known: {} }
           : snapshot.settlement,
     });
   };
@@ -3871,6 +3872,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         settlement: {
           ...snapshot.settlement,
           status,
+          // Refused: what this phone knew of the Group names no one on the sheet (#334).
+          known: status === 'blocked' ? {} : snapshot.settlement.known,
           // A payment stored on this phone may still be recorded, whatever kept this check from
           // running: it says so too, so it's never taken for one that wasn't (#334).
           message: status === 'uncertain' ? `${reason} ${unconfirmedPayment}` : reason,
@@ -5386,6 +5389,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
                 status: 'blocked',
                 group: null,
                 balances: [],
+                known: {},
                 message: error.message,
               },
             });

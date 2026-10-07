@@ -117,6 +117,8 @@ function device() {
     groupBalances: false,
     /** Groups that refuse Alex (403): Alex has lost them. */
     refused: [] as string[],
+    /** Groups that answer without Alex among their members: Alex was removed from them. */
+    removed: [] as string[],
     /** Paths the server fails with a 500: exact, or every path a prefix ending in `?` starts. */
     failing: [] as string[],
     /** Alex has recorded the ₹30.00 owed to Sam: Balances are settled. */
@@ -193,7 +195,13 @@ function device() {
       )
     )
       return json({}, 500);
-    if (path === `/api/groups/${id}`) return json({ data: found, status: 200 });
+    if (path === `/api/groups/${id}`)
+      return json({
+        data: network.removed.includes(found._id)
+          ? { ...found, members: found.members.filter(({ user }) => user.name !== alex.name) }
+          : found,
+        status: 200,
+      });
     if (path === `/api/groups/${maple}/expenses/${expenseId}`)
       return json({ data: expense, status: 200 });
     if (path === `/api/groups/${id}/expenses` && method === 'POST')
@@ -2595,6 +2603,39 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     });
     expect(inSheet('You pay Sam Chen.')).toHaveLength(1);
     expect(posts(phone)).toEqual([`POST /api/groups/${maple}/settlements`]);
+  });
+
+  // Final review: a sheet refused on a refresh named people from what this phone knew.
+  it('names no one from what this phone knew once a refresh finds Alex removed from the Group', async () => {
+    const { phone } = await onBalances();
+    await settle(controller().openRecordPayment(alex.id, sam._id, 'INR'));
+    expect(inSheet('You pay Sam Chen. Suggested ₹30.00.')).toHaveLength(1);
+    phone.network.removed.push(maple);
+    await settle(controller().refresh());
+    expect(controller().getSnapshot().settlement).toMatchObject({
+      status: 'blocked',
+      group: null,
+      known: {},
+    });
+    expect(inSheet('You pay Former member. Suggested ₹30.00.')).toHaveLength(1);
+    expect(shown()).not.toContain('Sam Chen');
+  });
+
+  // Final review, N4: no flow opens the sheet over another Group's view today; if one did, that
+  // Group's people would name no one on it.
+  it('takes no names from another Group’s view when the sheet opens', async () => {
+    const { phone } = await onBalances();
+    const lisbonGroup = phone.hold(`/api/groups/${lisbon}`);
+    void controller().openSettlements(lisbon);
+    await lisbonGroup.reached;
+    expect(controller().getSnapshot()).toMatchObject({
+      detail: { id: maple },
+      financial: { groupId: maple },
+      settlement: { groupId: lisbon, status: 'loading' },
+    });
+    expect(controller().getSnapshot().settlement.known).toEqual({});
+    lisbonGroup.release();
+    await settle();
   });
 
   // Item 4: after a network failure the sheet showed only "Could not reach SplitBook…".

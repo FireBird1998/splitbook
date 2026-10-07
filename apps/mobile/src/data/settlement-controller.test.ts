@@ -1078,6 +1078,76 @@ describe('native payment recording', () => {
     expect(controller.getSnapshot().settlement.draft).toBeNull();
   });
 
+  // #334, final review: names this phone knew of a Group the member has lost name no one.
+  it.each(['gone', 'removed'] as const)(
+    'names no one from what this phone knew once Check payment finds the member %s',
+    async (refusal) => {
+      let lose = true,
+        refused = false;
+      const { controller } = setup((path, init) => {
+        if (path.endsWith('/settlements') && init.method === 'POST' && lose) {
+          lose = false;
+          return Promise.reject(new TypeError('Network request failed'));
+        }
+        if (refused && path === `/api/groups/${groupId}`)
+          return refusal === 'gone'
+            ? json({ status: 404, error: 'Group not found' }, 404)
+            : json({
+                status: 200,
+                data: {
+                  ...group,
+                  members: group.members.filter(({ user }) => user._id !== actor),
+                },
+              });
+      });
+      await controller.signIn('alex');
+      await controller.openGroup(groupId, true, 'balances');
+      await controller.openRecordPayment(actor, recipient, 'INR');
+      await controller.recordSettlement();
+      await controller.back();
+      expect(controller.getSnapshot().pendingPayment).toMatchObject({ groupId });
+      refused = true;
+      await controller.openPendingPayment();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'settlement',
+        settlement: { status: 'blocked', group: null, draft: { paidTo: recipient } },
+      });
+      expect(controller.getSnapshot().settlement.known).toEqual({});
+    },
+  );
+
+  it('names no one from what this phone knew once a read behind the open sheet is refused', async () => {
+    let hold = false,
+      release!: (value: FetchResponse) => void,
+      entered!: () => void;
+    const held = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const { controller } = setup((path) => {
+      if (hold && path.endsWith('/expenses')) {
+        hold = false;
+        entered();
+        return new Promise((resolve) => {
+          release = resolve;
+        });
+      }
+    });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    hold = true;
+    const refreshing = controller.refreshExpenses();
+    await held;
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      known: { [actor]: 'Alex', [recipient]: 'Sam' },
+    });
+    release(json({ status: 403, error: 'Access removed' }, 403));
+    await refreshing;
+    expect(controller.getSnapshot().settlement).toMatchObject({ group: null, balances: [] });
+    expect(controller.getSnapshot().settlement.known).toEqual({});
+  });
+
   // #334, review: Try again is for a check that couldn't run. Anywhere else it does nothing.
   it('checks again on Try again only after the sheet’s check couldn’t run, and otherwise sends and changes nothing', async () => {
     let down = false,
