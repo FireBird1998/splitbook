@@ -908,8 +908,9 @@ describe('account-scoped offline financial views', () => {
           offline: { active: true, refreshedAt: now },
         });
         expect(gateway.snapshot).toEqual(offline.snapshot);
-        // Only session checks: the restore's, then one before each saved view, as offline.
-        expect(gateway.sent).toEqual(Array(3).fill('GET /api/auth/get-session'));
+        // Only session checks: the restore's, then one that Home's list and figures, read
+        // together (#333), both wait for before their saved copies show, as offline.
+        expect(gateway.sent).toEqual(Array(2).fill('GET /api/auth/get-session'));
         expect(gateway.sent).toEqual(offline.sent);
       },
     );

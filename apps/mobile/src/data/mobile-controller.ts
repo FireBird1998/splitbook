@@ -1541,9 +1541,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  /** Home in a session just confirmed or restored offline: its figures wait for its first list. */
+  /** Home in a session just confirmed or restored offline. */
   const openHome = (user: NonNullable<MobileSnapshot['auth']['user']>, start = {}) => {
-    homeQueries.hold();
     const signedIn = cleanSnapshot({ status: 'authenticated', user, message: null });
     navigate(home, { ...signedIn, ...savedHome(user.id), ...start });
   };
@@ -4612,7 +4611,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // Something else opened while the request ran; it stays, and its Groups list is already updated.
     if (!showingLeave || !current(owner)) return;
     // Forgetting the Group made Home read its list and figures again: wait for both.
-    await homeQueries.settle(owner, { list: true });
+    await homeQueries.settle(owner);
   };
 
   /**
@@ -5410,9 +5409,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // only foreground trigger (M1-6): this waits for what it started. A pull or Retry reads it all.
     if (snapshot.screen === 'group' && snapshot.detail.id)
       return reuse ? groupQueries.settle(generation) : openGroup(snapshot.detail.id, false);
-    // A pull or Retry reads Home's Groups list, then its figures; a return to the foreground has
-    // already reached them through TanStack's focus event (M1-6), and waits for what it started.
-    return homeQueries.settle(generation, reuse ? { list: true } : { fresh: true });
+    // A pull or Retry reads Home's Groups list and its figures together (#333); a return to the
+    // foreground has already reached them through TanStack's focus event (M1-6), and waits for
+    // what it started.
+    return homeQueries.settle(generation, { fresh: !reuse });
   };
   /** A screen showing none of a Group: its saved copies no longer keep the offline banner. */
   const unshowGroup = (groupId: string) => {

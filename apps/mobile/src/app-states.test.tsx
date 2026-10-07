@@ -646,8 +646,10 @@ describe('sign-in and start-up show progress while they wait (#335)', () => {
     expect(app.text()).not.toContain('Updated');
 
     // Confirmed, Home is read again: the bar goes with the check, and the top bar says
-    // "Refreshing…" over the saved figures until they're answered (#332).
+    // "Refreshing…" over the saved figures until they're answered (#332). Its list and figures
+    // are read together (#333).
     const list = phone.hold('/api/groups');
+    const figures = phone.hold('/api/user/balances');
     check.release();
     await list.reached;
     await settle();
@@ -660,6 +662,7 @@ describe('sign-in and start-up show progress while they wait (#335)', () => {
     expect(app.text()).not.toContain('Updated');
 
     list.release();
+    figures.release();
     await settle();
     expect(app.progress()).toEqual([]);
     expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
@@ -1363,14 +1366,15 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(trailing()).toEqual([width, width]);
   });
 
-  it('holds each Group’s balance in its row while its figures wait for the list', async () => {
+  it('holds each Group’s balance in its row while its figures are read beside the list', async () => {
     const phone = device();
     await usedBefore(phone);
     // Home's figures have no saved copy, so the saved list shows with its balances unknown.
     await changed(phone);
     phone.network.online = true;
-    // Confirmed online, Home reads its list again before its figures, which wait for it.
+    // Confirmed online, Home reads its list and its figures again, together (#333).
     const list = phone.hold('/api/groups');
+    const figures = phone.hold('/api/user/balances');
     const app = await start(phone);
     await list.reached;
     await settle();
@@ -1379,6 +1383,9 @@ describe('Home says what is true, without jumps (#332)', () => {
     const width = Math.round(balanceWidth(1) * 100) / 100;
     expect(trailing()).toEqual([width, width]);
     list.release();
+    await settle();
+    expect(trailing()).toEqual([width, width]);
+    figures.release();
     await settle();
   });
 
@@ -1548,12 +1555,14 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(phone.saved('/api/groups')).toBeNull();
     expect(phone.saved('/api/user/balances')).toBeNull();
 
-    // Alex signs in again; the connection drops before Home is read.
+    // Alex signs in again; the connection drops before Home's list and figures are answered.
     const list = phone.hold('/api/groups');
+    const figures = phone.hold('/api/user/balances');
     const signingIn = controller().signIn('alex');
-    await list.reached;
+    await Promise.all([list.reached, figures.reached]);
     phone.network.online = false;
     list.release();
+    figures.release();
     await settle(signingIn);
     expect(app.text()).toContain(notSaved.balances);
     expect(app.text()).toContain(notSaved.groups);

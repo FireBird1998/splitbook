@@ -923,9 +923,18 @@ describe('Home after navigating while the Groups list loads (#190)', () => {
   const savedOwe = (f: ReturnType<typeof fixture>) =>
     (f.saved('/api/user/balances') as { value: { data: { buckets: { youOwe: number }[] } } } | null)
       ?.value.data.buckets[0]?.youOwe ?? null;
-  /** Figures worked out by the server before a Group left the list. */
+  /**
+   * Figures worked out by the server before a Group left the list. Like SplitBook's, they name
+   * the Groups they were worked out over: that Group too.
+   */
   const olderFigures = () =>
-    json({ status: 200, data: { buckets: [{ currency: 'INR', youOwe: 99, youAreOwed: 0 }] } });
+    json({
+      status: 200,
+      data: {
+        buckets: [{ currency: 'INR', youOwe: 99, youAreOwed: 0 }],
+        groups: groups.map(({ _id }) => ({ groupId: _id, balances: [] })),
+      },
+    });
   /** Home lists this Group. */
   const lists = (state: MobileSnapshot, id: string) =>
     state.groups.data.some((item) => item.id === id);
@@ -968,16 +977,15 @@ describe('Home after navigating while the Groups list loads (#190)', () => {
     const f = fixture();
     const controller = f.create();
     await controller.signIn('alex');
-    // Home's figures are no longer recent, so going back reads them too.
+    // Home's figures are no longer recent, so the pull reads them too, beside the list (#333).
     f.clock.now += 31_000;
     f.requests.length = 0;
     const list = f.hold('/api/groups');
-    const pulling = controller.refresh('pull');
-    await list.reached;
-    await controller.openGroup(maple);
     const figures = f.hold('/api/user/balances');
+    const pulling = controller.refresh('pull');
+    await Promise.all([list.reached, figures.reached]);
+    await controller.openGroup(maple);
     const back = controller.back();
-    await figures.reached;
     // Still in flight: Home shows the pull it started with.
     expect(controller.getSnapshot().groups.status).toBe('loading');
     expect(refreshFeedback(controller.getSnapshot()).pull).toBe(true);
@@ -1205,14 +1213,13 @@ describe('Home after navigating while the Groups list loads (#190)', () => {
     await controller.signIn('alex');
     f.clock.now += 31_000;
     const list = f.hold('/api/groups');
+    const figures = f.hold('/api/user/balances');
     const pulling = controller.refresh('pull');
-    await list.reached;
+    await Promise.all([list.reached, figures.reached]);
     await controller.openGroup(maple);
     // Lisbon Offsite, never opened here, is archived on the web while Home's figures are read.
     f.state.archived = lisbon;
-    const figures = f.hold('/api/user/balances');
     const back = controller.back();
-    await figures.reached;
     list.release();
     await vi.waitFor(() => expect(controller.getSnapshot().groups.status).toBe('ready'));
     figures.release(olderFigures());
@@ -1226,7 +1233,7 @@ describe('Home after navigating while the Groups list loads (#190)', () => {
     expect(savedOwe(f)).toBe(30);
   });
 
-  it('reads Home’s figures again when a session’s first list leaves out a Group this device kept', async () => {
+  it('reads Home’s figures again when a session’s first list leaves out a Group they name', async () => {
     const f = fixture();
     // An earlier session kept both Groups here; the saved list itself has since been removed.
     const earlier = f.create();
@@ -1236,13 +1243,13 @@ describe('Home after navigating while the Groups list loads (#190)', () => {
     // Lisbon Offsite is archived on the web before Alex signs in again.
     f.state.archived = lisbon;
     const controller = f.create();
+    // Home's list and figures are read together (#333).
     const list = f.hold('/api/groups');
-    const signingIn = controller.signIn('alex');
-    await list.reached;
-    controller.startCreate();
     const figures = f.hold('/api/user/balances');
+    const signingIn = controller.signIn('alex');
+    await Promise.all([list.reached, figures.reached]);
+    controller.startCreate();
     const back = controller.back();
-    await figures.reached;
     list.release();
     await vi.waitFor(() => expect(controller.getSnapshot().groups.status).toBe('ready'));
     figures.release(olderFigures());

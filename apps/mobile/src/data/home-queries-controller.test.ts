@@ -84,6 +84,8 @@ function fixture() {
     failGroup: 0,
     /** A status Create Group answers with, instead of the new Group. */
     refuseCreate: 0,
+    /** Home's figures name the Groups they were worked out over, as SplitBook's server does. */
+    groupFigures: false,
   };
   let cookie: string | null = null,
     owner: string | null = null,
@@ -113,7 +115,13 @@ function fixture() {
   /** Every request sent, answered or not. */
   const calls: { method: string; path: string; account: string }[] = [];
   /** Requests held until released, by path. */
-  const held: { path: string; arrive: () => void; answer: Promise<void>; lost: boolean }[] = [];
+  const held: {
+    path: string;
+    arrive: () => void;
+    answer: Promise<void>;
+    lost: boolean;
+    late: boolean;
+  }[] = [];
   const connection = new Set<(state: { isConnected: boolean | null }) => void>();
   const records = (map: Map<string, unknown>) => ({
     load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
@@ -212,6 +220,9 @@ function fixture() {
         status: 200,
         data: {
           buckets: [{ currency: 'INR', youOwe: user === sam ? 50 : server.owe, youAreOwed: 0 }],
+          ...(server.groupFigures
+            ? { groups: listed().map(({ _id }) => ({ groupId: _id, balances: [] })) }
+            : {}),
         },
       });
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
@@ -349,13 +360,14 @@ function fixture() {
           if (server.offline) throw new TypeError('Network request failed');
           const index = held.findIndex((request) => path === request.path);
           if (index >= 0) {
-            // The server answers as it is when the request arrives; the reply comes on release.
+            // The server answers as it is when the request arrives, unless it answers `late`, as it
+            // is on release; the reply comes on release.
             const [request] = held.splice(index, 1),
-              reply = respond(path, init);
+              reply = request.late ? null : respond(path, init);
             request.arrive();
             return request.answer.then(() => {
               if (request.lost) throw new TypeError('Network request failed');
-              return reply;
+              return reply ?? respond(path, init);
             });
           }
           return respond(path, init);
@@ -391,9 +403,10 @@ function fixture() {
       calls.slice(from).filter((call) => call.method === 'GET' && call.path === path).length,
     /**
      * The next request for exactly this path is answered by the server at once, and its reply
-     * arrives when released: late, or `lost` on the way, as when the connection drops.
+     * arrives when released: late, or `lost` on the way, as when the connection drops. A `late`
+     * one is answered by the server as it is on release.
      */
-    hold(path: string, { lost = false } = {}) {
+    hold(path: string, { lost = false, late = false } = {}) {
       let arrive!: () => void;
       let release!: () => void;
       const reached = new Promise<void>((resolve) => {
@@ -402,7 +415,7 @@ function fixture() {
       const answer = new Promise<void>((resolve) => {
         release = resolve;
       });
-      held.push({ path, arrive, answer, lost });
+      held.push({ path, arrive, answer, lost, late });
       return { reached, release };
     },
     /** The next write of this path's row waits until released. */
@@ -780,11 +793,15 @@ describe('sessions and late answers (#173 gates)', () => {
     await controller.signIn('alex');
     await settle();
     later(31_000);
-    // A pull: the list's row is still being written, and Home's waits behind it.
+    // A pull: the list's row is still being written, and Home's waits behind it. Home's figures
+    // are read beside the list (#333), so their answer is held until then.
     f.server.owe = 31;
     const writing = f.holdWrite(listPath);
-    await controller.refresh('pull');
+    const figures = f.hold(homePath);
+    const pulling = controller.refresh('pull');
     await writing.reached;
+    figures.release();
+    await pulling;
     // The session ends on the server: the next read gets a 401.
     f.server.expired = true;
     await controller.refreshHome();
@@ -1762,5 +1779,166 @@ describe('Balances and Home follow every read of a Group (M1-5, AMEND-1)', () =>
     sent = f.calls.length;
     await controller.openGroup(mapleId, true, 'balances');
     expect(f.reads(`${maplePath}/balances`, sent)).toBe(0);
+  });
+});
+
+describe('Home reads its Groups and its figures together (#333)', () => {
+  /** Requests sent since `from`, as `METHOD /path`. */
+  const sentSince = (f: ReturnType<typeof fixture>, from: number) =>
+    f.calls.slice(from).map(({ method, path }) => `${method} ${path}`);
+
+  it.each(['sign-in', 'start-up'] as const)(
+    'sends the list and the figures together at %s, once each, and says “Saved” only of a saved copy',
+    async (when) => {
+      const f = fixture();
+      f.server.groupFigures = true;
+      let controller = f.create();
+      if (when === 'start-up') {
+        await controller.signIn('alex');
+        await settle();
+        controller.dispose();
+        later(60_000);
+        controller = f.create();
+      }
+      const sent = f.calls.length;
+      const list = f.hold(listPath),
+        figures = f.hold(homePath);
+      const opening = when === 'sign-in' ? controller.signIn('alex') : controller.restore();
+      await list.reached;
+      await settle();
+      // Both are on their way before either answers.
+      expect(f.reads(listPath, sent)).toBe(1);
+      expect(f.reads(homePath, sent)).toBe(1);
+      expect(controller.getSnapshot()).toMatchObject(
+        when === 'sign-in'
+          ? { groups: { status: 'loading', data: [] }, home: { data: null } }
+          : {
+              groups: { status: 'loading', restored: true, data: [{}, {}] },
+              home: { status: 'loading', restored: true, refreshedAt: start },
+            },
+      );
+
+      // The figures answer first: they are verified now, while the list is still read.
+      figures.release();
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: when === 'start-up' ? { status: 'loading', restored: true } : { status: 'loading' },
+        home: { status: 'ready', restored: false, refreshedAt: Date.now() },
+      });
+      list.release();
+      await opening;
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', restored: false, data: [{}, { name: 'Cabin Weekend' }] },
+        home: { status: 'ready', restored: false, data: [{ youOwe: 30 }] },
+      });
+      // Figures that name only listed Groups stand: nothing is read twice.
+      expect(f.reads(listPath, sent)).toBe(1);
+      expect(f.reads(homePath, sent)).toBe(1);
+      expect(f.row(listPath)).toMatchObject({ refreshedAt: Date.now() });
+      expect(f.row(homePath)).toMatchObject({ refreshedAt: Date.now() });
+    },
+  );
+
+  it('sends the list and the figures together on a pull, and Retry on the figures reads only them', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    later(31_000);
+    let sent = f.calls.length;
+    const list = f.hold(listPath),
+      figures = f.hold(homePath);
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    await settle();
+    expect(sentSince(f, sent)).toEqual([`GET ${listPath}`, `GET ${homePath}`]);
+    list.release();
+    figures.release();
+    await pulling;
+    expect(sentSince(f, sent)).toEqual([`GET ${listPath}`, `GET ${homePath}`]);
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { status: 'ready' },
+      home: { status: 'ready', refreshedAt: start + 31_000 },
+    });
+
+    sent = f.calls.length;
+    await controller.refreshHome();
+    expect(sentSince(f, sent)).toEqual([`GET ${homePath}`]);
+  });
+
+  it.each(['before', 'after'] as const)(
+    'reads the figures again, once, when they name a Group the list beside them leaves out, landing %s it',
+    async (order) => {
+      const f = fixture();
+      f.server.groupFigures = true;
+      const controller = f.create();
+      const published = record(controller);
+      // The figures are worked out while Alex is still in Maple House, the list once Alex has
+      // lost it.
+      const list = f.hold(listPath, { late: true }),
+        figures = f.hold(homePath);
+      const signingIn = controller.signIn('alex');
+      await list.reached;
+      await settle();
+      expect(f.reads(homePath)).toBe(1);
+      await figures.reached;
+      f.server.revoked.add(mapleId);
+      f.server.owe = 20;
+      if (order === 'before') {
+        figures.release();
+        await settle();
+        list.release();
+      } else {
+        list.release();
+        await settle();
+        figures.release();
+      }
+      await signingIn;
+      await settle();
+      expect(f.reads(listPath)).toBe(1);
+      expect(f.reads(homePath)).toBe(2);
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+        home: { status: 'ready', data: [{ youOwe: 20 }] },
+      });
+      // Figures that cover the lost Group never stand beside the list that left it out.
+      expect(
+        published.some(
+          (state) =>
+            state.groups.status === 'ready' &&
+            state.home.status === 'ready' &&
+            owes(state)?.[0] !== 20,
+        ),
+      ).toBe(false);
+      expect(f.row(homePath)).toMatchObject({ value: { data: { buckets: [{ youOwe: 20 }] } } });
+    },
+  );
+
+  it('reads the figures again only once when the list beside them is the older one', async () => {
+    const f = fixture();
+    f.server.groupFigures = true;
+    const controller = f.create();
+    // The list is worked out before Alex joins Zed Club, the figures after it.
+    const list = f.hold(listPath),
+      figures = f.hold(homePath, { late: true });
+    const signingIn = controller.signIn('alex');
+    await list.reached;
+    await settle();
+    expect(f.reads(homePath)).toBe(1);
+    await figures.reached;
+    f.server.listed = [maple, cabin, zed];
+    list.release();
+    await settle();
+    figures.release();
+    await signingIn;
+    await settle();
+    // Read again after the list, the figures still name Zed Club: they stand.
+    expect(f.reads(listPath)).toBe(1);
+    expect(f.reads(homePath)).toBe(2);
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { status: 'ready', data: [{}, {}] },
+      home: { status: 'ready', data: [{ youOwe: 30 }] },
+    });
   });
 });
