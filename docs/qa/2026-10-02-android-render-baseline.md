@@ -113,13 +113,13 @@ A change's row is drawn again only when what it says changes, so a slide or a re
 
 ### Added for #333
 
-**Build:** `swarm/333-reads-together`, on `main` at `907b147`, recorded three times with `RENDER_PROFILE=record`; the three runs gave identical counts. Home reads its Groups list and its figures together, the Record payment sheet checks the Group its view verified within 30 s and reads only its Balances, and Record reads only the Balances before the payment. The harness's `payment` backend adds Alex to Maple House, so Sam can record the payment Balances suggest, and answers the payment. Requests stay as before for every existing journey; one ceiling is lowered and two journeys are new, so nothing needs a re-record.
+**Build:** `swarm/333-reads-together`, on `main` at `907b147`, recorded three times with `RENDER_PROFILE=record`; the three runs gave identical counts. Under load (the gate runs every workspace at once), Record a payment sometimes commits once more and renders one more component, so its ceiling is the higher pair, 7 and 469; its 6 requests never vary. Home reads its Groups list and its figures together, the Record payment sheet checks the Group its view verified within 30 s and reads only its Balances, and Record reads only the Balances before the payment. The harness's `payment` backend adds Alex to Maple House, so Sam can record the payment Balances suggest, and answers the payment. Requests stay as before for every existing journey; one ceiling is lowered and two journeys are new, so nothing needs a re-record.
 
 | Journey                            | Requests | Publishes / commits / renders | Sent, in order                                                                                                   |
 | ---------------------------------- | -------: | ----------------------------: | ---------------------------------------------------------------------------------------------------------------- |
 | Sign in and show Home (20 Groups)  |        7 | 8 / 4 / 319 (was 8 / 5 / 461) | as before; Home's list and figures are read together: one commit fewer                                           |
 | Open the payment sheet within 30 s |        1 |                   3 / 2 / 196 | Balances                                                                                                         |
-| Record a payment                   |        6 |                  13 / 6 / 468 | Balances, `POST /api/groups/:id/settlements`, then Group, Expenses page 1, Balances and `GET /api/user/balances` |
+| Record a payment                   |        6 |      13 / 6 to 7 / 468 to 469 | Balances, `POST /api/groups/:id/settlements`, then Group, Expenses page 1, Balances and `GET /api/user/balances` |
 
 ### Requests per journey
 

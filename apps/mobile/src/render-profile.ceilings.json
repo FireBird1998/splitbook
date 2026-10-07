@@ -142,8 +142,8 @@
     "Record a payment": {
       "requests": 6,
       "publishes": 13,
-      "commits": 6,
-      "renders": 468
+      "commits": 7,
+      "renders": 469
     },
     "Type 20 characters into Description": {
       "requests": 0,
