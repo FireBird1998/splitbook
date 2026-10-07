@@ -2647,7 +2647,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const denied = error instanceof RequestError && [403, 404].includes(error.status);
       // The record's own read found the Expense gone: nothing saved of it shows again (#220).
       if (checked && expenseId && error instanceof RequestError && error.status === 404)
-        await expenseQueries.drop(groupId, expenseId);
+        await expenseQueries.drop(groupId, expenseId, owner);
       if (!showing()) return;
       const shown = latest().expense;
       const message =
@@ -2655,10 +2655,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           ? expenseNotOnPhone
           : expenseFailureMessage(error, 'Could not open this Expense. Please try again.');
       // The member went on from what this device knew: what they do is theirs (M6-1). A save in
-      // flight, or one unconfirmed, is never touched; an edit or a delete review is told why.
+      // flight, or one unconfirmed, is never touched. A refusal blocks an edit and withdraws a
+      // delete review, as a refusal on a read again does; an Expense gone withdraws a delete review,
+      // as it does on a read again, so nothing is sent for it. Otherwise they are told why.
       if (known && shown.status !== 'detail' && shown.draft) {
-        if (['editing', 'delete-review'].includes(shown.status))
-          publish({ ...snapshot, expense: { ...shown, message } });
+        if (!['editing', 'delete-review'].includes(shown.status)) return;
+        const refused =
+          error instanceof RequestError && (error.status === 403 || (!checked && denied));
+        if (refused)
+          publish({
+            ...snapshot,
+            expense: { ...withdrawExpense(message), status: 'blocked', message },
+          });
+        else if (denied && shown.status === 'delete-review')
+          publish({ ...snapshot, expense: withdrawExpense(message) });
+        else publish({ ...snapshot, expense: { ...shown, message } });
         return;
       }
       // What this device knew of the record stays, beside its changes, when the record can't be

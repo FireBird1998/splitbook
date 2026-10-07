@@ -790,7 +790,7 @@ export function createExpenseQueries(session: ExpenseSession) {
         session.refused(opened.groupId, error);
       else if (error.status === 404 && opened.expenseId) {
         session.gone(recordPaths(opened.groupId, opened.expenseId));
-        await api.drop(opened.groupId, opened.expenseId);
+        await api.drop(opened.groupId, opened.expenseId, owner);
       }
     } finally {
       unmark(false);
@@ -1029,7 +1029,7 @@ export function createExpenseQueries(session: ExpenseSession) {
      * rows go, with any still waiting to be written, so nothing of it shows again, at once or after
      * a restart. A row that can't be removed is no longer trusted (#323).
      */
-    async drop(groupId: string, expenseId: string) {
+    async drop(groupId: string, expenseId: string, owner: number) {
       const record = recordKey(groupId, expenseId),
         history = historyKey(groupId, expenseId),
         paths = recordPaths(groupId, expenseId);
@@ -1048,7 +1048,7 @@ export function createExpenseQueries(session: ExpenseSession) {
               await rows.remove(lease.accountId, path);
         });
       } catch (error) {
-        if (!(error instanceof Superseded) && session.current(session.generation()))
+        if (!(error instanceof Superseded) && session.current(owner))
           session.distrust(lease.accountId, [`ledger:${groupId}`]);
       }
     },

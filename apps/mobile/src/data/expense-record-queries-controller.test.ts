@@ -1230,7 +1230,10 @@ describe('a save in flight while the record’s open fails (D6)', () => {
    * Alex opens the bill again a minute later, beside a new Expense drafted in its Group with
    * `draft`; its Group's check, held, will answer `status`.
    */
-  async function reopened(f: Fixture, { draft = false, status = 500 } = {}) {
+  async function reopened(
+    f: Fixture,
+    { draft = false, status = 500, gone = false, left = false, holdRecord = false } = {},
+  ) {
     const controller = await signedIn(f);
     await controller.openExpense(mapleId, billId);
     await controller.back();
@@ -1242,9 +1245,15 @@ describe('a save in flight while the record’s open fails (D6)', () => {
     await settle();
     later(60_000);
     f.server.group = status;
+    // The Expense deleted elsewhere, or the Group no longer listing Alex, as the open reads them.
+    if (gone) f.server.gone.add(billId);
+    f.server.left = left;
     const check = f.hold(maplePath, { exact: true });
+    // The record read beside it answers when released, not at once.
+    const record = holdRecord ? f.hold(recordPath(billId), { exact: true }) : null;
     const opening = controller.openExpense(mapleId, billId);
     await check.reached;
+    await record?.reached;
     await settle();
     f.server.group = 200;
     expect(controller.getSnapshot().expense).toMatchObject({
@@ -1253,7 +1262,7 @@ describe('a save in flight while the record’s open fails (D6)', () => {
       known: { refreshing: true },
       groupDraft: draft ? { description: 'Fresh groceries' } : null,
     });
-    return { controller, check, opening };
+    return { controller, check, opening, record };
   }
 
   it('keeps a delete being sent from the record this device knew, and sends it once', async () => {
@@ -1365,6 +1374,87 @@ describe('a save in flight while the record’s open fails (D6)', () => {
       message: 'The server could not complete this request. Please try again.',
     });
   });
+
+  // The money-safety re-review of 0f8c377 (P8): Delete stayed offered over an Expense its open
+  // found gone, its DELETE got a 404, and the unconfirmed delete then held the Group for good.
+  it('withdraws a delete review begun from the record this device knew once its open finds the Expense gone, and sends nothing', async () => {
+    const f = fixture();
+    const { controller, check, opening } = await reopened(f, { status: 200, gone: true });
+    controller.reviewExpenseDeletion();
+    check.release();
+    await opening;
+    await settle();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'blocked',
+      draft: null,
+      mutation: null,
+      message: 'This Expense isn’t available.',
+    });
+    const from = f.calls.length;
+    await controller.deleteExpense();
+    expect(f.writes(from)).toEqual([]);
+    // Nothing is kept that would hold the Group: another Expense opens as it is, and the member
+    // can discard or leave.
+    expect(f.drafts.get(`${alex.id}${mapleId}`)).toBeUndefined();
+    await controller.back();
+    await controller.openExpense(mapleId, dinnerId);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      draft: { original: { _id: dinnerId } },
+      mutation: null,
+      attempt: null,
+      message: null,
+    });
+  });
+
+  it('keeps an edit begun from the record this device knew when its open finds the Expense gone; its save meets the 404', async () => {
+    const f = fixture();
+    const { controller, check, opening } = await reopened(f, { status: 200, gone: true });
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Meter read on the 20th' });
+    check.release();
+    await opening;
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      draft: { notes: 'Meter read on the 20th' },
+      message: 'This Expense isn’t available.',
+    });
+  });
+
+  // P7b: an edit begun from what this device knew survived losing the Group, with its details
+  // gone; ADR 0006 keeps the draft, blocked.
+  it.each([
+    ['refuses the member (403)', { status: 403, holdRecord: true }],
+    ['answers without the member', { status: 200, left: true }],
+  ] as const)(
+    'blocks an edit begun from the record this device knew when its Group %s, and keeps the draft',
+    async (_, how) => {
+      const f = fixture();
+      const { controller, check, opening, record } = await reopened(f, how);
+      if (how.status === 403) f.server.group = 403;
+      await controller.editExpense();
+      await controller.updateExpenseDraft({ notes: 'Meter read on the 20th' });
+      check.release();
+      await settle();
+      record?.release();
+      await opening;
+      await settle();
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'blocked',
+        context: null,
+        draft: { notes: 'Meter read on the 20th', original: { _id: billId } },
+        message: 'You no longer have access to this group.',
+      });
+      const from = f.calls.length;
+      await controller.saveExpense();
+      expect(f.writes(from)).toEqual([]);
+      expect(
+        (f.drafts.get(`${alex.id}${mapleId}`) as { draft: { notes: string }; mutation?: unknown })
+          ?.mutation ?? null,
+      ).toBeNull();
+      expect(f.savedRows(maplePath)).toEqual([]);
+    },
+  );
 
   it('leaves an edit being saved alone when a read on reconnecting finds the Expense gone', async () => {
     const f = fixture();
@@ -1765,6 +1855,28 @@ describe('the Group’s details after a refused save (the device check)', () => 
     expect(controller.getSnapshot().expense).toMatchObject({
       status: 'conflict',
       context: { group: { id: mapleId } },
+      draft: { notes: 'Meter read on the 20th' },
+    });
+  });
+
+  // NIT from the money-safety re-review: the Group read again before Check must list the member.
+  it('blocks Check current Expense, reading no record, when the Group read again no longer lists the member', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Meter read on the 20th' });
+    f.server.group = 403;
+    await controller.saveExpense();
+    f.server.group = 200;
+    f.server.left = true;
+    const from = f.calls.length;
+    await controller.reconcileExpense();
+    expect(f.gets(from)).toEqual(['group']);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'blocked',
+      context: null,
+      latest: null,
       draft: { notes: 'Meter read on the 20th' },
     });
   });
