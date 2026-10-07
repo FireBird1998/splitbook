@@ -139,9 +139,14 @@ function SplitBook() {
   // Cold start: the saved Home of the account that last signed in, while its session is checked.
   const checking = state.auth.status === 'restoring' && state.auth.user !== null;
   const joining = state.invitation.status === 'joining';
-  // The session check, with nothing of the account on screen yet (#335).
-  const waiting =
-    configurationReady && state.auth.status === 'restoring' ? 'Checking your session' : null;
+  // The session check, or a sign-in, with nothing of the account on screen yet (#335).
+  const waiting = !configurationReady
+    ? null
+    : state.auth.status === 'restoring'
+      ? 'Checking your session'
+      : state.auth.status === 'signing-in'
+        ? 'Signing in'
+        : null;
   if (configurationReady && authenticated && state.screen === 'expense')
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -271,8 +276,8 @@ function SplitBook() {
           </View>
         )}
       </View>
-      {/* #331's one progress cue while the session is checked. Its room stays when nothing
-          runs, so the screen never moves (#335). */}
+      {/* #331's one progress cue while the session is checked or a sign-in runs. Its room
+          stays when nothing runs, so the screen never moves (#335). */}
       {waiting ? <LinearProgress label={waiting} /> : <View style={{ height: progressHeight }} />}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -319,6 +324,7 @@ function SplitBook() {
         ) : !authenticated ? (
           <SignIn
             busy={state.auth.status === 'signing-in'}
+            option={state.auth.option}
             message={
               state.auth.message ??
               (state.invitation.code

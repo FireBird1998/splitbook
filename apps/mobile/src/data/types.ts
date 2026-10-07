@@ -362,6 +362,11 @@ export interface MobileSnapshot {
       | 'sign-out-unconfirmed';
     user: SessionUser | null;
     message: string | null;
+    /**
+     * While `signing-in`: the option chosen, a development persona's id or 'google'. The
+     * sign-in screen shows that option busy (#335).
+     */
+    option?: string;
   };
   /** 'members' is the Group's Members and Group details page; Back returns to the Group. */
   screen: Route['screen'];

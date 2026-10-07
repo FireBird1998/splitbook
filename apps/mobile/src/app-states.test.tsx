@@ -467,7 +467,9 @@ describe('cold start', () => {
   });
 });
 
-describe('start-up shows progress while it waits (#335)', () => {
+describe('sign-in and start-up show progress while they wait (#335)', () => {
+  /** What the App's controller publishes. */
+  const shown = () => (runtime.controller as MobileController).getSnapshot();
   /** The host just above the screen's content: the progress bar, or the room it keeps. */
   const aboveContent = (content: string) => {
     const json = screen!.toJSON() as ReactTestRendererJSON;
@@ -479,6 +481,8 @@ describe('start-up shows progress while it waits (#335)', () => {
   };
   const spinners = () =>
     screen!.root.findAll((node) => (node.type as unknown) === 'ActivityIndicator');
+  const icons = (node: ReactTestInstance) =>
+    node.findAll((child) => (child.type as unknown) === 'Ionicons').map((icon) => icon.props.name);
   /** The polite live regions' text, as a screen reader hears it change. */
   const announced = (app: Awaited<ReturnType<typeof start>>) =>
     app
@@ -576,8 +580,133 @@ describe('start-up shows progress while it waits (#335)', () => {
     expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
     still(app);
   });
-});
 
+  it('shows the progress bar and the chosen persona busy until Home opens; the others wait', async () => {
+    const phone = device();
+    const app = await start(phone);
+    await settle();
+    expect(app.progress()).toEqual([]);
+    // The bar's room stays while nothing runs, so the options never move.
+    expect(layoutHeight(aboveContent('KeyboardAvoidingView'))).toBe(progressHeight);
+
+    const posted = phone.hold('/api/auth/demo-persona/sign-in');
+    const check = phone.hold('/api/auth/get-session');
+    app.tap('Continue as Alex Rivera');
+    await posted.reached;
+    await settle();
+
+    const waiting = () => {
+      expect(shown().auth).toMatchObject({
+        status: 'signing-in',
+        option: 'alex',
+      });
+      expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Signing in']);
+      expect(layoutHeight(aboveContent('KeyboardAvoidingView'))).toBe(progressHeight);
+      // The chosen option: at full strength, busy and saying so, with a spinner for its arrow.
+      const chosen = app.button('Signing in as Alex Rivera')!;
+      expect(chosen.props.accessibilityState).toEqual({
+        disabled: true,
+        busy: true,
+      });
+      expect(chosen.props.disabled).toBe(true);
+      expect(flatten(chosen.props.style).opacity).toBe(1);
+      expect(chosen.findAll((node) => (node.type as unknown) === 'ActivityIndicator')).toHaveLength(
+        1,
+      );
+      expect(icons(chosen)).not.toContain('arrow-forward-outline');
+      expect(app.button('Continue as Alex Rivera')).toBeNull();
+      // The others are disabled and dimmed.
+      for (const other of ['Continue as Sam Chen', 'Continue as Priya Shah']) {
+        expect(app.button(other)!.props.accessibilityState).toEqual({
+          disabled: true,
+        });
+        expect(app.button(other)!.props.disabled).toBe(true);
+        expect(flatten(app.button(other)!.props.style).opacity).toBe(0.45);
+      }
+      expect(announced(app)).toContain('Signing in as Alex Rivera…');
+    };
+    waiting();
+    // The sign-in's session check is part of the same wait.
+    posted.release();
+    await check.reached;
+    await settle();
+    waiting();
+
+    check.release();
+    await settle();
+    expect(shown().auth).toEqual({
+      status: 'authenticated',
+      user: alex,
+      message: null,
+    });
+    expect(app.text()).not.toContain('Signing in');
+    expect(app.progress()).toEqual([]);
+    expect(app.text()).toContain('Maple House');
+  });
+
+  it('ends the busy state when a sign-in fails, so any option can be chosen again', async () => {
+    const phone = device();
+    const app = await start(phone);
+    await settle();
+    const posted = phone.hold('/api/auth/demo-persona/sign-in');
+    app.tap('Continue as Sam Chen');
+    await posted.reached;
+    await settle();
+    expect(app.button('Signing in as Sam Chen')!.props.accessibilityState).toEqual({
+      disabled: true,
+      busy: true,
+    });
+    expect(app.progress()).toHaveLength(1);
+
+    // The connection drops before the reply.
+    phone.network.online = false;
+    posted.release();
+    await settle();
+    expect(shown().auth).toEqual({
+      status: 'signed-out',
+      user: null,
+      message: 'Could not reach SplitBook. Check your connection and try again.',
+    });
+    expect(app.progress()).toEqual([]);
+    expect(layoutHeight(aboveContent('KeyboardAvoidingView'))).toBe(progressHeight);
+    expect(spinners()).toEqual([]);
+    expect(app.text()).not.toContain('Signing in');
+    for (const name of ['Alex Rivera', 'Sam Chen', 'Priya Shah']) {
+      const option = app.button(`Continue as ${name}`)!;
+      expect(option.props.accessibilityState).toEqual({ disabled: false });
+      expect(flatten(option.props.style).opacity).toBe(1);
+      expect(icons(option)).toEqual(['arrow-forward-outline']);
+    }
+  });
+
+  it('keeps a sign-in still with reduce motion on: the busy option shows a still mark', async () => {
+    setReduceMotion(true);
+    const phone = device();
+    const app = await start(phone);
+    await settle();
+    const posted = phone.hold('/api/auth/demo-persona/sign-in');
+    app.tap('Continue as Priya Shah');
+    await posted.reached;
+    await settle();
+
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Signing in']);
+    const chosen = app.button('Signing in as Priya Shah')!;
+    expect(chosen.props.accessibilityState).toEqual({
+      disabled: true,
+      busy: true,
+    });
+    expect(icons(chosen)).toContain('hourglass-outline');
+    expect(app.disabled('Continue as Alex Rivera')).toBe(true);
+    expect(app.disabled('Continue as Sam Chen')).toBe(true);
+    expect(announced(app)).toContain('Signing in as Priya Shah…');
+    still(app);
+
+    posted.release();
+    await settle();
+    expect(app.text()).toContain('Maple House');
+    still(app);
+  });
+});
 describe('first load and refresh', () => {
   it('keeps the Group’s top bar during a first load, with one progress bar and placeholders', async () => {
     const phone = device();

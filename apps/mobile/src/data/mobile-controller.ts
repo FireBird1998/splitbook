@@ -1642,7 +1642,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // A sign-in this one replaces may already have its session, saved here.
     const replacing = snapshot.auth.status === 'signing-in';
     const owner = invalidate();
-    cleanHome({ status: 'signing-in', user: null, message: null });
+    cleanHome({ status: 'signing-in', user: null, message: null, option: personaId });
     try {
       // A pending sign-out's revoke is sent once before its saved cookie goes, and so is the
       // session of a sign-in this one replaced.
@@ -1694,7 +1694,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const owner = invalidate();
     const attempt = { owner, choosing: false };
     googleAttempt = attempt;
-    cleanHome({ status: 'signing-in', user: null, message: null });
+    cleanHome({ status: 'signing-in', user: null, message: null, option: 'google' });
     try {
       await finishSignOut(owner, true);
       if (replacing) await revokeSession(owner, true);

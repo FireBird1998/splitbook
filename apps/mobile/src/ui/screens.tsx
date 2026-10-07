@@ -2,6 +2,7 @@ import { GoogleSignInButton } from 'react-native-nitro-google-signin';
 import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import {
   Banner,
+  BusyMark,
   Card,
   CompactAvatar,
   CompactText,
@@ -12,13 +13,21 @@ import {
 import { Icon } from './primitives';
 import { useTheme } from './theme';
 
+/**
+ * The sign-in options: Google for the invited beta, or a test persona in development. While
+ * `busy`, every option is disabled, and the one signing in (`option`) stays at full strength with
+ * #331's busy mark, says so to screen readers, and keeps its size; the others are dimmed (#335).
+ */
 export function SignIn({
   busy,
+  option,
   message,
   onSignIn,
   onGoogleSignIn,
 }: {
   busy: boolean;
+  /** While busy: the option signing in, a persona's id or 'google'. */
+  option?: string;
   message: string | null;
   onSignIn: (id: string) => void;
   onGoogleSignIn?: () => void;
@@ -29,6 +38,8 @@ export function SignIn({
     { id: 'sam', name: 'Sam Chen', detail: 'Keeps the household in order' },
     { id: 'priya', name: 'Priya Shah', detail: 'Always up for the next trip' },
   ];
+  const chosen = busy ? option : undefined;
+  const persona = personas.find(({ id }) => id === chosen);
   return (
     <ScrollView
       contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
@@ -50,17 +61,40 @@ export function SignIn({
                   can continue after signing in.
                 </CompactText>
               </View>
-              <GoogleSignInButton
-                signInBehavior="none"
-                colorScheme={theme.mode}
-                size="wide"
-                style={{ width: '100%', height: 48 }}
-                accessibilityRole="button"
-                accessibilityLabel="Sign in with Google"
-                accessibilityState={{ disabled: busy, busy }}
-                onPress={onGoogleSignIn}
-                disabled={busy}
-              />
+              <View>
+                <GoogleSignInButton
+                  signInBehavior="none"
+                  colorScheme={theme.mode}
+                  size="wide"
+                  style={{ width: '100%', height: 48 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    chosen === 'google' ? 'Signing in with Google' : 'Sign in with Google'
+                  }
+                  accessibilityState={
+                    chosen === 'google' ? { disabled: true, busy: true } : { disabled: busy }
+                  }
+                  onPress={onGoogleSignIn}
+                  disabled={busy}
+                />
+                {/* Google's own button keeps its size and label; the busy mark sits at its end. */}
+                {chosen === 'google' ? (
+                  <View
+                    pointerEvents="none"
+                    accessibilityElementsHidden
+                    importantForAccessibility="no-hide-descendants"
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      bottom: 0,
+                      right: 14,
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <BusyMark color={theme.brand.main} />
+                  </View>
+                ) : null}
+              </View>
               <CompactText variant="caption" tone="secondary">
                 This beta has a separate test ledger. Entries will not move to your live account
                 automatically.
@@ -81,15 +115,19 @@ export function SignIn({
                 </CompactText>
               </View>
             </View>
-            {personas.map((persona) => (
-              <View key={persona.id}>
+            {personas.map(({ id, name, detail }) => (
+              <View key={id}>
                 <Divider />
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={`Continue as ${persona.name}`}
-                  accessibilityState={{ disabled: busy }}
+                  accessibilityLabel={
+                    id === chosen ? `Signing in as ${name}` : `Continue as ${name}`
+                  }
+                  accessibilityState={
+                    id === chosen ? { disabled: true, busy: true } : { disabled: busy }
+                  }
                   disabled={busy}
-                  onPress={() => onSignIn(persona.id)}
+                  onPress={() => onSignIn(id)}
                   style={({ pressed }) => ({
                     minHeight: 60,
                     paddingVertical: 8,
@@ -98,17 +136,24 @@ export function SignIn({
                     alignItems: 'center',
                     gap: 12,
                     backgroundColor: pressed ? theme.surfaceMuted : undefined,
-                    opacity: busy ? 0.45 : 1,
+                    opacity: busy && id !== chosen ? 0.45 : 1,
                   })}
                 >
-                  <CompactAvatar name={persona.name} />
+                  <CompactAvatar name={name} />
                   <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-                    <CompactText weight="semibold">{persona.name}</CompactText>
+                    <CompactText weight="semibold">{name}</CompactText>
                     <CompactText variant="caption" tone="secondary">
-                      {persona.detail}
+                      {detail}
                     </CompactText>
                   </View>
-                  <Icon name="arrow-forward-outline" color={theme.brand.main} size={20} />
+                  {/* One width for the arrow and the busy mark in its place, so nothing moves. */}
+                  <View style={{ width: 20, alignItems: 'center' }}>
+                    {id === chosen ? (
+                      <BusyMark color={theme.brand.main} />
+                    ) : (
+                      <Icon name="arrow-forward-outline" color={theme.brand.main} size={20} />
+                    )}
+                  </View>
                 </Pressable>
               </View>
             ))}
@@ -123,7 +168,11 @@ export function SignIn({
           accessibilityLiveRegion="polite"
           style={{ textAlign: 'center' }}
         >
-          Signing in…
+          {persona
+            ? `Signing in as ${persona.name}…`
+            : chosen === 'google'
+              ? 'Signing in with Google…'
+              : 'Signing in…'}
         </CompactText>
       )}
     </ScrollView>

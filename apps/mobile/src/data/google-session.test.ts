@@ -178,6 +178,26 @@ describe('Google login within the native session boundary', () => {
     expect(test.saved()).toBeNull();
     expect(test.controller.getSnapshot().auth.status).toBe('signed-out');
   });
+  it('records Google as the option signing in until the sign-in ends (#335)', async () => {
+    const selection = deferred<GoogleIdentityResult>();
+    const test = setup({ acquire: () => selection.promise });
+    const signingIn = test.controller.signInWithGoogle();
+    await vi.waitFor(() => expect(test.acquire).toHaveBeenCalledOnce());
+    // The sign-in screen shows this option busy.
+    expect(test.controller.getSnapshot().auth).toEqual({
+      status: 'signing-in',
+      user: null,
+      message: null,
+      option: 'google',
+    });
+    selection.resolve(identity);
+    await signingIn;
+    expect(test.controller.getSnapshot().auth).toEqual({
+      status: 'authenticated',
+      user,
+      message: null,
+    });
+  });
   it('ignores a late server cookie after logout', async () => {
     const exchange = deferred<Response>();
     const test = setup({ intercept: () => exchange.promise });

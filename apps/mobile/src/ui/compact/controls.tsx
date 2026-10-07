@@ -6,7 +6,7 @@ import { denseHitSlop, radius, touch } from './scale';
 import { CompactText, FieldMarker, Money } from './text';
 
 /** Spinning while busy; with reduce motion on, a still hourglass instead. */
-function BusyMark({ color }: { color: string }) {
+export function BusyMark({ color }: { color: string }) {
   return useReducedMotion() ? (
     <Icon name="hourglass-outline" size={18} color={color} />
   ) : (
