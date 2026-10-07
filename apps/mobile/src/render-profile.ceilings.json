@@ -117,7 +117,7 @@
     },
     "Refresh an Expense with 2 pages of changes": {
       "requests": 5,
-      "publishes": 4,
+      "publishes": 5,
       "commits": 5,
       "renders": 331
     },

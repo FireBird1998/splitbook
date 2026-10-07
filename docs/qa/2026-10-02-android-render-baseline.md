@@ -100,16 +100,16 @@ Rebased on #331's loading motion (`d41424b`), one count moved: Change Month rend
 
 ### Added for #220
 
-**Build:** `swarm/220-expense-record-queries`, on `main` at `42ae7e3`, recorded with `RENDER_PROFILE=record`. An Expense record and its history moved to declarative queries (ADR 0006): the record is read beside its Group, a refresh re-reads the pages of changes already loaded (M1-3), and the changes slide past 5 pages, with Load newer (M7-2). The harness serves each Expense's record and 6 pages of its changes. No existing journey's count moved; the four journeys below are new, so they need no re-record.
+**Build:** `swarm/220-expense-record-queries`, on `main` at `a948168`, recorded with `RENDER_PROFILE=record`. An Expense record and its history moved to declarative queries (ADR 0006): the record is read beside its Group, a refresh re-reads the pages of changes already loaded (M1-3), and the changes slide past 5 pages, with Load newer (M7-2). The harness serves each Expense's record and 6 pages of its changes. No existing journey's count moved; the four journeys below are new, so they need no re-record.
 
 | Journey                                                  | Requests | Publishes / commits / renders | Sent, in order                                                               |
 | -------------------------------------------------------- | -------: | ----------------------------: | ---------------------------------------------------------------------------- |
 | Open an Expense from Expenses                            |        3 |                   5 / 3 / 261 | Group and the record together, then the changes' page 1                      |
-| Refresh an Expense with 2 pages of changes               |        5 |                 4 / 5 / 1,316 | the session check, Group, the record, then the changes' pages 1 and 2 (M1-3) |
-| Load the 6th page of an Expense’s changes (pages 2 to 6) |        1 |                 2 / 2 / 1,132 | the changes' page 6; page 1 drops                                            |
-| Load newer changes (pages 1 to 5)                        |        1 |                 2 / 2 / 1,132 | the changes' page 1; page 6 drops                                            |
+| Refresh an Expense with 2 pages of changes               |        5 |                   5 / 5 / 331 | the session check, Group, the record, then the changes' pages 1 and 2 (M1-3) |
+| Load the 6th page of an Expense’s changes (pages 2 to 6) |        1 |                   2 / 2 / 238 | the changes' page 6; page 1 drops                                            |
+| Load newer changes (pages 1 to 5)                        |        1 |                   2 / 2 / 240 | the changes' page 1; page 6 drops                                            |
 
-The record's changes are `HistoryRow`s, which aren't memoized yet (#178), so a slide renders every change shown again, as Activity's 5th page does.
+A change's row is drawn again only when what it says changes, so a slide or a refresh draws only the changes it adds. Refresh publishes once more than first recorded: the top bar says "Refreshing…" from the tap, before the session check (the device check of #220).
 
 ### Requests per journey
 

@@ -158,6 +158,8 @@ interface View {
   lost: boolean;
   /** The record shows as read in this open: its changes are read, and follow it. */
   history: boolean;
+  /** How many Try agains are reading this open's record again: while any is, it says so. */
+  retrying: number;
 }
 type Read = { fresh?: boolean; wanted?: () => boolean };
 
@@ -602,15 +604,23 @@ export function createExpenseQueries(session: ExpenseSession) {
       record = null;
     }
     // Shown from what this device knew, not read in this open: it says when it was verified,
-    // and whether it is being read again.
+    // whether it is being read again, and whether it is this device's saved copy.
     const was = editor.known,
       known =
         record && answered.get(data) !== opened
-          ? { refreshedAt: data.refreshedAt, refreshing: query.state.fetchStatus === 'fetching' }
+          ? {
+              refreshedAt: data.refreshedAt,
+              refreshing: query.state.fetchStatus === 'fetching',
+              saved: data.source === 'saved',
+            }
           : null;
     let next =
       was === known ||
-      (was && known && was.refreshedAt === known.refreshedAt && was.refreshing === known.refreshing)
+      (was &&
+        known &&
+        was.refreshedAt === known.refreshedAt &&
+        was.refreshing === known.refreshing &&
+        was.saved === known.saved)
         ? editor
         : { ...editor, known };
     if (record && record !== editor.draft?.original) {
@@ -653,6 +663,7 @@ export function createExpenseQueries(session: ExpenseSession) {
         firstPage: read[0].page,
         // Never fresher than its oldest page (#215).
         refreshedAt: Math.min(...read.map((page) => page.refreshedAt)),
+        restored: read.some((page) => page.source === 'saved'),
         moreStatus: failed ? 'error' : 'idle',
       };
     }
@@ -705,6 +716,8 @@ export function createExpenseQueries(session: ExpenseSession) {
     let expense = projectRecord(next.expense, opened);
     const history = projectHistory(expense.history, opened);
     if (history !== expense.history) expense = { ...expense, history };
+    const refreshing = opened.retrying > 0;
+    if (!!expense.refreshing !== refreshing) expense = { ...expense, refreshing };
     return expense === next.expense ? next : { ...next, expense };
   };
   /** A fetch that answered from the server: saved as its row(s) while still current. */
@@ -743,6 +756,15 @@ export function createExpenseQueries(session: ExpenseSession) {
     const here = (lost = kind === 'retry') =>
       session.current(owner) && view === opened && onScreen(lost) !== null;
     if (!opened || !here() || onScreen(true)!.expense.status === 'saving') return;
+    // Try again on the record shown says so from the start, and its page controls wait, until
+    // its changes are read again, which say so themselves (the device check of #220).
+    let marked = kind === 'retry' && recordShown();
+    if (marked) mark(opened, +1);
+    /** The record's part is done: its mark goes, `quietly` with the next thing published. */
+    const unmark = (quietly: boolean) => {
+      if (marked) mark(opened, -1, quietly);
+      marked = false;
+    };
     let step: 'session' | 'group' | 'record' = 'session';
     try {
       if (kind !== 'reconnect') await session.checkSession(owner);
@@ -757,7 +779,10 @@ export function createExpenseQueries(session: ExpenseSession) {
       step = 'record';
       api.want(expenseId);
       await api.record(owner, { fresh, wanted });
-      if (here(false)) await api.history(owner, { fresh, wanted });
+      if (!here(false)) return;
+      // Its changes being read again say so on their own, from the publish that starts them.
+      unmark(true);
+      await api.history(owner, { fresh, wanted });
     } catch (error) {
       // The refusal has already withdrawn the record's queries: what shows goes too.
       if (step === 'session' || !here(true) || !(error instanceof RequestError)) return;
@@ -767,7 +792,15 @@ export function createExpenseQueries(session: ExpenseSession) {
         session.gone(recordPaths(opened.groupId, opened.expenseId));
         await api.drop(opened.groupId, opened.expenseId);
       }
+    } finally {
+      unmark(false);
     }
+  };
+  /** A Try again of this open starts or ends: its record says so while it shows. */
+  const mark = (opened: View, by: 1 | -1, quietly = false) => {
+    opened.retrying = Math.max(0, opened.retrying + by);
+    const before = session.snapshot();
+    if (!quietly && view === opened && project(before) !== before) session.publish({});
   };
   /** Where an Expense's record and its pages of changes are read and saved. */
   const recordPaths = (groupId: string, expenseId: string) => [
@@ -799,6 +832,7 @@ export function createExpenseQueries(session: ExpenseSession) {
         checked: false,
         lost: false,
         history: false,
+        retrying: 0,
       };
     },
     /**
@@ -846,7 +880,11 @@ export function createExpenseQueries(session: ExpenseSession) {
           recordOf(data.value, `${opened.groupId}:${opened.expenseId}`),
         );
         const preview = previewExpense(draft);
-        const known = { refreshedAt: data.refreshedAt, refreshing: true };
+        const known = {
+          refreshedAt: data.refreshedAt,
+          refreshing: true,
+          saved: data.source === 'saved',
+        };
         session.publish({
           expense: { ...editor, draft, preview, status: 'detail', groupDraft, known },
         });
@@ -896,6 +934,17 @@ export function createExpenseQueries(session: ExpenseSession) {
       opened.history = true;
       bindLater();
       const still = () => wanted() && view === opened && !opened.lost;
+      // A read again would join a Load older or newer still on its way: that page lands first,
+      // then every page loaded is read again.
+      const loading = held<Pages>(historyKey(opened.groupId, opened.expenseId));
+      if (
+        fresh &&
+        loading?.state.fetchStatus === 'fetching' &&
+        loading.state.fetchMeta?.fetchMore
+      ) {
+        await loading.promise?.catch(() => undefined);
+        if (!still()) throw new Superseded();
+      }
       await readNow<Pages>(
         historyOptions(opened.groupId, opened.expenseId, true, fresh),
         owner,

@@ -83,6 +83,8 @@ export interface ExpenseHistoryState {
   firstPage?: number;
   /** Load newer, above the changes: reading the page before the window, or failed to. */
   newerStatus?: 'idle' | 'loading' | 'error';
+  /** A page shown is this device's saved copy, not a read in this session: "Saved", not "Updated". */
+  restored?: boolean;
 }
 export function emptyExpenseHistory(): ExpenseHistoryState {
   return {
@@ -95,6 +97,7 @@ export function emptyExpenseHistory(): ExpenseHistoryState {
     refreshedAt: null,
     firstPage: 1,
     newerStatus: 'idle',
+    restored: false,
   };
 }
 const PAGE_SIZE = 20;

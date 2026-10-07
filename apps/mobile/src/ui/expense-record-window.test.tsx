@@ -9,6 +9,9 @@ import {
 } from '../data/expense-draft';
 import { parseExpenseRecord } from '../data/expense-record';
 import { parseExpensePage } from '../data/financial-dto';
+import { findHosts, flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
+import { setWindow } from '../test-utils/native';
+import { TopBar } from './compact';
 import { ExpenseEditor } from './expense-editor';
 import { recordOutline } from './expense-record-view';
 import { OfflineNotice } from './offline-notice';
@@ -108,6 +111,20 @@ const windowOf = (first: number, overrides: Partial<ExpenseHistoryState> = {}) =
     ...overrides,
   };
 };
+/** The bill as its Group's list of Expenses holds it. */
+const listRow = () =>
+  parseExpensePage(
+    {
+      status: 200,
+      data: {
+        expenses: [wire],
+        pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        summary: { count: 1, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
+      },
+    },
+    groupId,
+    'INR',
+  ).expenses[0]!;
 const detail = (history: ExpenseHistoryState, overrides: Partial<Editor> = {}): Editor => ({
   ...emptyExpenseEditor(),
   groupId,
@@ -136,6 +153,11 @@ const pressables = (label: string) =>
   screen!.root.findAll(
     (node) => isHost(node, 'Pressable') && node.props.accessibilityLabel === label,
   );
+/** The record's top bar. */
+const topBar = () => screen!.root.findAllByType(TopBar)[0]!;
+/** The record's History: its header, page controls and changes. */
+const history = () =>
+  screen!.root.find((node) => (node.type as { name?: string }).name === 'RecordHistory');
 /** Whether a reader can reach this node: no ancestor hides it. */
 const readable = (node: ReactTestInstance) => {
   for (let parent: ReactTestInstance | null = node; parent; parent = parent.parent)
@@ -313,26 +335,74 @@ describe('an Expense’s changes past 5 pages (#220, M7-2)', () => {
     expect(pressables('Load older changes')[0].props.accessibilityState).toEqual({
       disabled: true,
     });
-    // The changes shown stay, marked as being read again, with the oldest page's time.
+    // The changes shown stay; History says only that they are being read again (B1).
     expect(text(screen!.root)).toContain('Note 21');
-    expect(text(screen!.root)).toContain(`Saved ${refreshedLabel(at)} · refreshing`);
+    expect(text(history())).toContain('Refreshing…');
+    expect(text(screen!.root)).not.toMatch(/Saved|Updated/);
+  });
+
+  it('keeps Load older and Load newer disabled in place from the moment Try again starts', () => {
+    // Try again is reading the session, the Group and the record; the changes aren't read yet.
+    render(detail(windowOf(2), { refreshing: true }));
+    expect(pressables('Load newer changes')[0].props.accessibilityState).toEqual({
+      disabled: true,
+    });
+    expect(pressables('Load older changes')[0].props.accessibilityState).toEqual({
+      disabled: true,
+    });
+    expect(text(topBar())).toContain('Refreshing…');
+  });
+
+  it('loads newer changes in Load newer’s own place, busy, so the changes below it stay put (N2)', () => {
+    const control = (label: string) =>
+      findHosts(
+        screen!.toJSON(),
+        (props, type) => type === 'Pressable' && props.accessibilityLabel === label,
+      )[0]!;
+    const load = render(detail(windowOf(2)));
+    const idle = layoutHeight(control('Load newer changes'));
+    load(detail(windowOf(2, { newerStatus: 'loading' })));
+    const loading = control('Loading newer changes…');
+    expect(loading.props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(layoutHeight(loading)).toBe(idle);
+    // Nothing but the button stands above the changes while the page is read.
+    expect(text(history())).not.toContain('Couldn’t');
+  });
+
+  it('says only that older changes couldn’t be read when a page read again fails, as the changes end before it (N1)', () => {
+    render(detail(windowOf(1, { moreStatus: 'error' })));
+    const alert = screen!.root.find(
+      (node) => isHost(node, 'Text') && node.props.accessibilityRole === 'alert',
+    );
+    expect(text(alert)).toBe('Couldn’t load older changes.');
+    expect(pressables('Try loading older changes')).toHaveLength(1);
+  });
+
+  it('says when the changes shown were read once reading them again failed (review item 3)', () => {
+    // Read earlier in this session: "Updated".
+    render(
+      detail(windowOf(1, { status: 'error', message: 'Couldn’t load this Expense’s changes.' })),
+    );
+    expect(text(history())).toContain(`Updated ${refreshedLabel(at)}`);
+    expect(text(history())).toContain('Note 1');
+    act(() => screen!.unmount());
+    // This device's saved copy, after a restart: "Saved".
+    render(
+      detail(
+        windowOf(1, {
+          status: 'error',
+          message: 'Couldn’t load this Expense’s changes.',
+          restored: true,
+        }),
+      ),
+    );
+    expect(text(history())).toContain(`Saved ${refreshedLabel(at)}`);
   });
 });
 
 describe('opening an Expense: what is already known shows at once (loading-state audit)', () => {
   it('shows what the list row says straight away, while the record is read', () => {
-    const row = parseExpensePage(
-      {
-        status: 200,
-        data: {
-          expenses: [wire],
-          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
-          summary: { count: 1, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
-        },
-      },
-      groupId,
-      'INR',
-    ).expenses[0]!;
+    const row = listRow();
     render(
       { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: billId },
       {
@@ -348,17 +418,109 @@ describe('opening an Expense: what is already known shows at once (loading-state
     }
   });
 
-  it('says when a record shown from what this device knew was saved, while it is read again', () => {
-    render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: true } }));
-    expect(text(screen!.root)).toContain(`Saved ${refreshedLabel(at)} · refreshing`);
+  it('says in the top bar only that a record this device knew is read again, and in the body when it was read (B1)', () => {
+    const bar = () => text(topBar());
+    const body = () => text(screen!.root).replace(bar(), '');
+    // This device's saved copy, being read again.
+    render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: true, saved: true } }));
+    expect(bar()).toContain('Refreshing…');
+    expect(bar()).not.toMatch(/Saved|Updated/);
+    expect(body()).toContain(`Saved ${refreshedLabel(at)}`);
     act(() => screen!.unmount());
-    // Its read failed: it still says when it was saved.
-    render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: false } }));
-    expect(text(screen!.root)).toContain(`Saved ${refreshedLabel(at)}`);
-    expect(text(screen!.root)).not.toContain('refreshing');
+    // Read earlier in this session: never "Saved", and no time while it is read again.
+    render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: true, saved: false } }));
+    expect(bar()).toContain('Refreshing…');
+    expect(text(screen!.root)).not.toMatch(/Saved|Updated/);
     act(() => screen!.unmount());
+    // Its read failed: when it was read stays, in the body.
+    render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: false, saved: false } }));
+    expect(bar()).not.toContain('Refreshing…');
+    expect(body()).toContain(`Updated ${refreshedLabel(at)}`);
+    act(() => screen!.unmount());
+    render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: false, saved: true } }));
+    expect(body()).toContain(`Saved ${refreshedLabel(at)}`);
+    act(() => screen!.unmount());
+    // Read in this open: nothing to say.
     render(detail(windowOf(1), { known: null }));
-    expect(text(screen!.root)).not.toContain('Saved');
+    expect(text(screen!.root)).not.toMatch(/Saved|Updated|Refreshing/);
+  });
+
+  // The device check of 3ac9be2: "Saved 5:44 PM · refreshing" cut the title to "Expen…" and hid
+  // the Group; a copy from an earlier day was wider still.
+  it.each([1, 1.3])(
+    'keeps the title, the Group and the actions in a 360dp top bar at %s× text',
+    (fontScale) => {
+      setWindow({ width: 360, fontScale });
+      const earlier = Date.parse('2026-09-28T09:02:00.000Z');
+      render(
+        detail(windowOf(1), { known: { refreshedAt: earlier, refreshing: true, saved: true } }),
+      );
+      const bar = findHosts(
+        screen!.toJSON(),
+        (props, type) =>
+          type === 'View' && props.style !== undefined && flatten(props.style).minHeight === 64,
+      )[0]!;
+      expect(layoutWidth(bar, fontScale)).toBeLessThanOrEqual(360);
+      const lines = findHosts(bar, (props, type) => type === 'Text' && props.numberOfLines === 1);
+      expect(lines.map((line) => line.children?.join(''))).toEqual([
+        'Expense',
+        'Maple House',
+        'Refreshing…',
+      ]);
+      expect(lines[2]!.props).toMatchObject({ adjustsFontSizeToFit: true });
+      // The earlier day's time is in the body, not the bar.
+      expect(text(topBar())).not.toContain(refreshedLabel(earlier));
+      expect(text(screen!.root)).toContain(`Saved ${refreshedLabel(earlier)}`);
+      expect(pressables('Expense options')).toHaveLength(1);
+    },
+  );
+
+  it('names the other person in the badge as the list row does, before the Group’s details are known', () => {
+    // A saved copy shows before its Group is checked: the badge already reads as it will after.
+    render(
+      detail(windowOf(1), {
+        context: null,
+        known: { refreshedAt: at, refreshing: true, saved: true },
+      }),
+    );
+    expect(text(screen!.root)).toContain('You owe Sam ₹1,430.00');
+    expect(text(screen!.root)).not.toContain('Sam Chen ₹');
+  });
+
+  it('keeps the list row’s summary as it was when the record lands, in the same colours (S2)', async () => {
+    const row = listRow();
+    const outline = recordOutline(row, alex.id);
+    expect(outline.badge).toEqual({ label: 'You owe Sam ₹1,430.00', tone: 'negative' });
+    // Shown over its skeleton first, once Android has said reduce motion is off.
+    await act(async () => {
+      screen = create(
+        editor(
+          { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: billId },
+          { outline },
+        ),
+        { createNodeMock: () => ({ scrollTo, focus: () => undefined }) },
+      );
+    });
+    const badgeColour = () =>
+      flatten(
+        screen!.root.find(
+          (node) => isHost(node, 'Text') && text(node).startsWith('You owe Sam ₹1,430.00'),
+        ).props.style,
+      ).color;
+    const before = badgeColour();
+    act(() => screen!.update(editor(detail(windowOf(1)), { outline })));
+    expect(badgeColour()).toBe(before);
+    // Only what the row didn't show fades in.
+    const faded = screen!.root.findAll(
+      (node) => isHost(node, 'AnimatedView') && flatten(node.props.style).opacity !== undefined,
+    );
+    expect(faded.length).toBeGreaterThan(0);
+    for (const node of faded) {
+      expect(text(node)).not.toContain('Electricity bill');
+      expect(text(node)).not.toContain('Utilities');
+      expect(text(node)).not.toContain('You owe Sam');
+    }
+    expect(text(faded[0]!)).toContain('Who owes what');
   });
 
   it('says it is offline above the one Try again when nothing of the Expense shows (S1)', () => {

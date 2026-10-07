@@ -1058,7 +1058,7 @@ describe('sessions and access for the record (#173 gates)', () => {
 
 // The loading-state audit's items for the Expense record (2026-10-07, owner approved).
 describe('opening an Expense: what is already known shows at once (loading-state audit)', () => {
-  it('shows the record this device saved at once, before its Group answers, and refreshes it in place', async () => {
+  it('shows the record read earlier at once, before its Group answers, and refreshes it in place', async () => {
     const f = fixture();
     const controller = await signedIn(f);
     const savedAt = Date.now();
@@ -1074,7 +1074,7 @@ describe('opening an Expense: what is already known shows at once (loading-state
     expect(controller.getSnapshot().expense).toMatchObject({
       status: 'detail',
       draft: { original: { revision: 1, description: 'Electricity bill' } },
-      known: { refreshedAt: savedAt, refreshing: true },
+      known: { refreshedAt: savedAt, refreshing: true, saved: false },
     });
     group.release();
     await opening;
@@ -1127,7 +1127,7 @@ describe('reads that fail, and a member who moves on, while the record opens', (
     });
   });
 
-  it('says older changes couldn’t be read each time they fail, with the changes kept', async () => {
+  it('ends the changes before a page that fails to be read again, and says older ones couldn’t be read', async () => {
     const f = fixture();
     const controller = await withPages(f, 2);
     f.server.failPage = 2;
@@ -1655,6 +1655,91 @@ describe('exactly what each action reads (S4)', () => {
     f.connect(true);
     await settle();
     expect(f.gets(from)).toEqual(['group', 'record bill', 'history bill p1']);
+  });
+
+  it('reads every page again once a Load older on its way lands, when a refresh starts meanwhile (N5)', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    const from = f.calls.length;
+    const older = f.hold(historyPath(billId, 2), { exact: true });
+    const loading = controller.loadOlderExpenseHistory();
+    await older.reached;
+    const refreshing = controller.refreshExpenseHistory();
+    await settle();
+    older.release();
+    await Promise.all([loading, refreshing]);
+    expect(f.gets(from)).toEqual(['history bill p2', 'history bill p1', 'history bill p2']);
+    expect(shownChanges(controller)).toEqual(billChanges(1, 40));
+    expect(controller.getSnapshot().expense.history).toMatchObject({ status: 'ready' });
+  });
+});
+
+describe('what the record says while it is read again (B1, the device check)', () => {
+  it('says a Try again reads the record from its session check on, until its changes say so', async () => {
+    const f = fixture();
+    const controller = await withPages(f, 2);
+    const check = f.hold('/api/auth/get-session', { exact: true });
+    const pages = f.hold(historyPath(billId, 1), { exact: true });
+    const retrying = controller.refresh();
+    await check.reached;
+    await settle();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      refreshing: true,
+      history: { status: 'ready' },
+    });
+    check.release();
+    await pages.reached;
+    await settle();
+    // The changes being read say so themselves: Load older waits on them.
+    expect(controller.getSnapshot().expense).toMatchObject({
+      refreshing: false,
+      history: { status: 'loading' },
+    });
+    pages.release();
+    await retrying;
+    expect(controller.getSnapshot().expense).toMatchObject({
+      refreshing: false,
+      history: { status: 'ready' },
+    });
+  });
+
+  it('stops saying so when the Try again fails before its changes are read', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    f.server.failRecord = true;
+    await controller.refresh();
+    expect(controller.getSnapshot().expense).toMatchObject({ status: 'detail', refreshing: false });
+  });
+
+  it('says a copy restored after a restart is this device’s saved copy, and a read in this open isn’t', async () => {
+    const f = fixture();
+    const first = await signedIn(f);
+    const savedAt = Date.now();
+    await first.openExpense(mapleId, billId);
+    await settle();
+    first.dispose();
+    later(60_000);
+    const restarted = f.create();
+    await restarted.restore();
+    const check = f.hold(maplePath, { exact: true });
+    const reading = f.hold(recordPath(billId), { exact: true });
+    const opening = restarted.openExpense(mapleId, billId);
+    await Promise.all([check.reached, reading.reached]);
+    await settle();
+    expect(restarted.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      known: { refreshedAt: savedAt, refreshing: true, saved: true },
+      history: { restored: true },
+    });
+    check.release();
+    reading.release();
+    await opening;
+    expect(restarted.getSnapshot().expense).toMatchObject({
+      known: null,
+      history: { status: 'ready', restored: false },
+    });
   });
 });
 

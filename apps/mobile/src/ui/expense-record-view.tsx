@@ -55,15 +55,17 @@ import {
   Skeleton,
   SkeletonOf,
   SkeletonText,
+  StatusText,
   TopBar,
   useLargeText,
   type BadgeTone,
   type Reveal,
 } from './compact';
 import { WhoOwesWhat, sharesDifferNote } from './expense-form';
-import { Freshness } from './financial-views';
+import { RefreshStatus } from './financial-views';
 import type { MobileExpense } from '../data/types';
 import { savingNeedsConnection } from './offline-notice';
+import { refreshedLabel } from './refresh-feedback';
 import { Copy, Icon, Label, Panel, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
 
@@ -93,6 +95,28 @@ function positionLabel(position: ExpenseRecordPosition, other: string, amount: s
   if (position.kind === 'owe') return `You owe ${other}${amount}`;
   if (position.kind === 'lent') return `You lent ${other}${amount}`;
   return position.kind === 'even' ? 'You paid your share' : 'You’re not involved';
+}
+/** The badge's tone for the member's position: what they owe is negative, what they lent positive. */
+const positionTone = (position: ExpenseRecordPosition): BadgeTone =>
+  position.kind === 'owe' ? 'negative' : position.kind === 'lent' ? 'positive' : 'neutral';
+
+/**
+ * When what's shown was verified, in the body, never the top bar (#332): "Saved h:mm" for this
+ * device's saved copy, the badge every saved view shows offline; "Updated h:mm" for a read in
+ * this session.
+ */
+function ReadTime({
+  refreshedAt,
+  saved,
+  offline,
+}: {
+  refreshedAt: number;
+  saved: boolean;
+  offline: boolean;
+}) {
+  const time = refreshedLabel(refreshedAt);
+  if (saved && offline) return <Badge label={`Saved ${time}`} />;
+  return <StatusText tone="muted">{`${saved ? 'Saved' : 'Updated'} ${time}`}</StatusText>;
 }
 
 /** "29 Sep, 20:02", with the year when it isn't this year. */
@@ -127,6 +151,7 @@ export function ExpenseRecordScreen({
   onLoadNewerHistory,
   onRetryHistory,
   reveal = null,
+  outlined = false,
 }: {
   state: Editor;
   currentUserId?: string;
@@ -149,8 +174,14 @@ export function ExpenseRecordScreen({
   onRetryHistory?: () => void;
   /** The record fades in where its skeleton was, when it opened over one. */
   reveal?: Reveal | null;
+  /**
+   * Its skeleton showed the list row's summary: the summary card stays as it was, and only the
+   * rest fades in (#220).
+   */
+  outlined?: boolean;
 }) {
   const theme = useTheme();
+  const large = useLargeText();
   const [options, setOptions] = useState(false);
   const scroll = useRef<ScrollView>(null);
   // Where the record was scrolled to, from where scrolling stopped as well as while it scrolls: a
@@ -194,12 +225,16 @@ export function ExpenseRecordScreen({
   const people = allocation
     ? [...new Set([...allocation.paidBy, ...allocation.splitBetween].map((row) => row.user))]
     : [];
-  /** A current member's first name, unless someone else here shares it. */
+  /**
+   * A current member's first name, unless someone else here shares it. Before the Group's details
+   * are known, as for a saved copy shown at once, everyone counts as current, as the list row's
+   * outline names them, so the badge's words don't change when the record is read.
+   */
   const shortName = (id: string) => {
     const full = name(id);
     const first = full.split(' ')[0];
     const shared = people.some((other) => other !== id && name(other).split(' ')[0] === first);
-    return members.some((member) => member.id === id) && !shared ? first : full;
+    return (!context || members.some((member) => member.id === id)) && !shared ? first : full;
   };
   const position =
     allocation && currentUserId ? expenseRecordPosition(allocation, currentUserId) : null;
@@ -210,12 +245,7 @@ export function ExpenseRecordScreen({
       ? null
       : {
           label: positionLabel(position, other, money(position.amountMinor)),
-          tone:
-            position.kind === 'owe'
-              ? 'negative'
-              : position.kind === 'lent'
-                ? 'positive'
-                : 'neutral',
+          tone: positionTone(position),
         };
   const tag =
     context?.tags.find((item) => item.id === record.tagId)?.name ??
@@ -225,6 +255,75 @@ export function ExpenseRecordScreen({
   const editable = canEditExpense(record);
   // The Group's draft holds Edit and Delete; the record itself stays readable.
   const held = state.groupDraft ? 'Finish or discard the draft in this Group first.' : undefined;
+  // What is said above the record: the Group's draft, a message, and when the record shown was
+  // read, if it wasn't in this open.
+  const readTime =
+    state.known && !offline && (state.known.saved || !state.known.refreshing) ? (
+      <ReadTime refreshedAt={state.known.refreshedAt} saved={state.known.saved} offline={offline} />
+    ) : null;
+  const lead =
+    state.groupDraft || (state.message && state.status !== 'delete-review') || readTime ? (
+      <>
+        {state.groupDraft ? (
+          <Banner
+            tone="info"
+            message="This Group has an unfinished draft. Finish or discard it to edit or delete this Expense."
+          >
+            <CompactButton label="Resume draft" variant="text" dense onPress={onResume} />
+          </Banner>
+        ) : null}
+        {state.message && state.status !== 'delete-review' ? (
+          <CompactText variant="small" accessibilityRole="alert">
+            {state.message}
+          </CompactText>
+        ) : null}
+        {readTime}
+      </>
+    ) : null;
+  // The record's summary: what a list row already showed of it.
+  const summary = (
+    <Card padded>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <IconTile icon={categoryIcons[record.category] ?? 'receipt-outline'} />
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <CompactText variant="heading" accessibilityRole="header">
+            {record.description}
+          </CompactText>
+          <CompactText variant="small" tone="secondary" accessibilityLabel={`${date}, Tag ${tag}`}>
+            {date} · {tag}
+          </CompactText>
+        </View>
+      </View>
+      <View
+        style={{
+          flexDirection: 'row',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 8,
+          marginTop: 12,
+        }}
+      >
+        {/* Shrinks to fit rather than cutting the amount short. */}
+        <Money size="form" adjustsFontSizeToFit>
+          {allocation
+            ? money(allocation.amountMinor)
+            : formatCurrency(record.amount, record.currency)}
+        </Money>
+        {badge ? <Badge label={badge.label} tone={badge.tone} icon={badge.icon} /> : null}
+      </View>
+      {record.isDeleted ? (
+        <CompactText variant="small" tone="secondary" style={{ marginTop: 8 }}>
+          This Expense was deleted. It no longer counts in balances.
+        </CompactText>
+      ) : !editable ? (
+        <CompactText variant="small" tone="secondary" style={{ marginTop: 8 }}>
+          This Expense includes a member whose account is no longer available. It can be deleted,
+          but not edited.
+        </CompactText>
+      ) : null}
+    </Card>
+  );
   const editReason =
     held ??
     (editable
@@ -245,14 +344,11 @@ export function ExpenseRecordScreen({
               }
             : undefined
         }
+        // Only that it is being read again, on one line that shrinks: when it was read is in the
+        // body, so the title and Group keep their room (#332, #220).
         status={
-          // What this device knew of the record: being read again, or saved when (#220).
-          state.known && !offline ? (
-            <Freshness
-              refreshedAt={state.known.refreshedAt}
-              refreshing={state.known.refreshing}
-              offline={!state.known.refreshing}
-            />
+          !offline && (state.known?.refreshing || state.refreshing) ? (
+            <RefreshStatus visible />
           ) : undefined
         }
         actions={
@@ -261,7 +357,8 @@ export function ExpenseRecordScreen({
               <CompactButton
                 label="Edit"
                 accessibilityLabel="Edit expense"
-                icon="pencil-outline"
+                // At large text its word says it alone, so the title and Group keep their room.
+                icon={large ? undefined : 'pencil-outline'}
                 variant="text"
                 disabled={!!editReason}
                 hint={editReason}
@@ -291,65 +388,15 @@ export function ExpenseRecordScreen({
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
       >
         {notice}
+        {lead ? (
+          <FadeIn reveal={reveal} style={{ gap: 12 }}>
+            {lead}
+          </FadeIn>
+        ) : null}
+        {/* What the list row already showed stays as it was; the rest fades in. */}
+        {outlined ? summary : null}
         <FadeIn reveal={reveal} style={{ gap: 12 }}>
-          {state.groupDraft ? (
-            <Banner
-              tone="info"
-              message="This Group has an unfinished draft. Finish or discard it to edit or delete this Expense."
-            >
-              <CompactButton label="Resume draft" variant="text" dense onPress={onResume} />
-            </Banner>
-          ) : null}
-          {state.message && state.status !== 'delete-review' ? (
-            <CompactText variant="small" accessibilityRole="alert">
-              {state.message}
-            </CompactText>
-          ) : null}
-          <Card padded>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <IconTile icon={categoryIcons[record.category] ?? 'receipt-outline'} />
-              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                <CompactText variant="heading" accessibilityRole="header">
-                  {record.description}
-                </CompactText>
-                <CompactText
-                  variant="small"
-                  tone="secondary"
-                  accessibilityLabel={`${date}, Tag ${tag}`}
-                >
-                  {date} · {tag}
-                </CompactText>
-              </View>
-            </View>
-            <View
-              style={{
-                flexDirection: 'row',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 8,
-                marginTop: 12,
-              }}
-            >
-              {/* Shrinks to fit rather than cutting the amount short. */}
-              <Money size="form" adjustsFontSizeToFit>
-                {allocation
-                  ? money(allocation.amountMinor)
-                  : formatCurrency(record.amount, record.currency)}
-              </Money>
-              {badge ? <Badge label={badge.label} tone={badge.tone} icon={badge.icon} /> : null}
-            </View>
-            {record.isDeleted ? (
-              <CompactText variant="small" tone="secondary" style={{ marginTop: 8 }}>
-                This Expense was deleted. It no longer counts in balances.
-              </CompactText>
-            ) : !editable ? (
-              <CompactText variant="small" tone="secondary" style={{ marginTop: 8 }}>
-                This Expense includes a member whose account is no longer available. It can be
-                deleted, but not edited.
-              </CompactText>
-            ) : null}
-          </Card>
+          {outlined ? null : summary}
           <WhoOwesWhat
             draft={draft}
             allocation={allocation}
@@ -374,6 +421,7 @@ export function ExpenseRecordScreen({
             people={members}
             tags={context?.tags}
             offline={offline}
+            busy={!!state.refreshing}
             onLoadOlder={onLoadOlderHistory}
             onLoadNewer={onLoadNewerHistory}
             onRetry={onRetryHistory}
@@ -466,8 +514,11 @@ export interface RecordOutline {
   /** The second line: "Tue, Sep 29, 2026 · Utilities". */
   meta: string;
   amount: string;
-  /** The member's position, as the record's badge words it; null when it has none. */
-  badge: string | null;
+  /**
+   * The member's position, as the record's badge words and colours it, so it doesn't change when
+   * the record lands (#220); null when it has none.
+   */
+  badge: { label: string; tone: BadgeTone } | null;
   /**
    * The people in Who owes what, the member first, with what each paid (null for nothing, shown
    * as "–") and their share, as the record writes them.
@@ -489,7 +540,7 @@ const typicalRecord: RecordOutline = {
   description: 'Weekly groceries',
   meta: 'Tue, Sep 29, 2026 · Groceries',
   amount: '₹2,400.00',
-  badge: 'You lent Sam ₹1,200.00',
+  badge: { label: 'You lent Sam ₹1,200.00', tone: 'positive' },
   people: [
     { paid: '₹2,400.00', share: '₹1,200.00' },
     { paid: null, share: '₹1,200.00' },
@@ -521,9 +572,15 @@ export function recordOutline(expense: MobileExpense, currentUserId?: string): R
         currentUserId,
       )
     : null;
-  const counterparty = [...expense.paidBy, ...expense.splitBetween].find(
-    ({ user }) => user.id !== null && user.id === position?.counterpartyId,
-  )?.user.name;
+  const everyone = [...expense.paidBy, ...expense.splitBetween].map(({ user }) => user);
+  const counterparty = everyone.find(
+    ({ id }) => id !== null && id === position?.counterpartyId,
+  )?.name;
+  // Their first name, unless someone else here shares it, as the record names them.
+  const first = counterparty?.split(' ')[0];
+  const shared = everyone.some(
+    ({ id, name }) => id !== position?.counterpartyId && name.split(' ')[0] === first,
+  );
   const money = (minor: number) =>
     formatCurrency(toMajorAmount(minor, expense.currency), expense.currency);
   return {
@@ -533,11 +590,14 @@ export function recordOutline(expense: MobileExpense, currentUserId?: string): R
     badge:
       position === null
         ? null
-        : positionLabel(
-            position,
-            counterparty ? `${counterparty.split(' ')[0]} ` : '',
-            money(position.amountMinor),
-          ),
+        : {
+            label: positionLabel(
+              position,
+              counterparty ? `${shared ? counterparty : first} ` : '',
+              money(position.amountMinor),
+            ),
+            tone: positionTone(position),
+          },
     people: people.map((id) => ({
       paid: paid.has(id) ? money(paid.get(id)!) : null,
       share: money(share.get(id) ?? 0),
@@ -617,10 +677,10 @@ export function ExpenseRecordSkeleton({
           {known(<Money size="form">{record.amount}</Money>, 'center')}
           {record.badge ? (
             outline ? (
-              <Badge label={record.badge} />
+              <Badge label={record.badge.label} tone={record.badge.tone} />
             ) : (
               <SkeletonOf rounded={999} align="center">
-                <Badge label={record.badge} />
+                <Badge label={record.badge.label} tone={record.badge.tone} />
               </SkeletonOf>
             )
           ) : null}
@@ -828,6 +888,7 @@ function RecordHistory({
   people,
   tags,
   offline = false,
+  busy = false,
   onLoadOlder,
   onLoadNewer,
   onRetry,
@@ -840,6 +901,8 @@ function RecordHistory({
   people: { id: string; name: string }[];
   tags?: { id: string; name: string }[];
   offline?: boolean;
+  /** Try again is reading the record again: Load older and Load newer wait, in place. */
+  busy?: boolean;
   onLoadOlder?: () => void;
   onLoadNewer?: () => void;
   onRetry?: () => void;
@@ -939,29 +1002,34 @@ function RecordHistory({
     </View>
   );
   /**
-   * Load older, below the changes, or Load newer, above them: loading, failed with the changes
-   * kept, or offered. Both stay in place, disabled, while the changes shown are read again, so the
-   * record never gets shorter under the member.
+   * Load older, below the changes, or Load newer, above them: loading, failed, or offered. Both
+   * stay in place, disabled, while the changes shown are read again, so the record never gets
+   * shorter under the member. Load newer loads in its own place, busy, so the changes below it
+   * don't move before its page lands (#220). A page read again that fails ends the changes
+   * before it, so only Load newer's failure keeps every change shown.
    */
   const pageControl = (
     which: 'older' | 'newer',
     status: 'idle' | 'loading' | 'error',
     onPress: () => void,
   ) =>
-    status === 'loading' ? (
-      progress(`Loading ${which} changes…`)
+    status === 'loading' && which === 'older' ? (
+      progress('Loading older changes…')
     ) : (
       <>
         {status === 'error' ? (
           <CompactText variant="small" tone="negative" accessibilityRole="alert">
-            {`Couldn’t load ${which} changes. The changes shown are still here.`}
+            {which === 'newer'
+              ? 'Couldn’t load newer changes. The changes shown are still here.'
+              : 'Couldn’t load older changes.'}
           </CompactText>
         ) : null}
         <CompactButton
           label={status === 'error' ? `Try loading ${which} changes` : `Load ${which} changes`}
+          busy={status === 'loading' ? `Loading ${which} changes…` : undefined}
           variant="tonal"
           block
-          disabled={refreshing}
+          disabled={refreshing || busy}
           onPress={onPress}
         />
       </>
@@ -971,11 +1039,15 @@ function RecordHistory({
       <SectionHeader
         title="History"
         trailing={
-          // The oldest page's time, while the changes shown are read again or saved here.
-          (offline || refreshing) && events.length > 0 && history.refreshedAt != null ? (
-            <Freshness
+          // While the changes shown are read again, only that; once their read failed, offline,
+          // or from this device's copy, the oldest page's time (#220).
+          !events.length ? undefined : refreshing ? (
+            <RefreshStatus visible />
+          ) : (offline || history.status === 'error' || history.restored) &&
+            history.refreshedAt != null ? (
+            <ReadTime
               refreshedAt={history.refreshedAt}
-              refreshing={refreshing}
+              saved={!!history.restored}
               offline={offline}
             />
           ) : undefined

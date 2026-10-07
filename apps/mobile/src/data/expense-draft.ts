@@ -126,10 +126,16 @@ export interface ExpenseEditor {
   history: ExpenseHistoryState;
   /**
    * The record shown is what this device already knew (a saved copy, or a read before this
-   * open): when it was verified, and whether it is being read again (#220). Null once the record
-   * shown was read in this open.
+   * open): when it was verified, whether it is being read again, and whether it is this device's
+   * saved copy (`saved`) rather than a read in this session (#220). Null once the record shown
+   * was read in this open.
    */
-  known?: { refreshedAt: number; refreshing: boolean } | null;
+  known?: { refreshedAt: number; refreshing: boolean; saved: boolean } | null;
+  /**
+   * Try again (Options → Refresh) is reading the record shown again, from its session check to
+   * its last page of changes: the top bar says so, and its changes' page controls wait (#220).
+   */
+  refreshing?: boolean;
 }
 /** Correctable Expense inputs, in the order they appear on screen. */
 export const expenseFields = ['amount', 'description', 'date', 'payers', 'split', 'tag'] as const;

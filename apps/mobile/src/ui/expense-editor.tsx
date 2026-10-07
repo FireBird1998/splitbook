@@ -273,6 +273,9 @@ function ExpenseTask({
   // record: it keeps the spinner it always had.
   const opening = state.status === 'loading' && !!state.requestedExpenseId && !state.draft;
   const recordReveal = useReveal(opening);
+  // Whether the skeleton showed the list row's summary: it stays as it was when the record lands.
+  const outlined = useRef(false);
+  if (opening) outlined.current = !!outline;
   const errors = state.validation.errors;
   const section = (field: ExpenseField) => (node: View | null) => {
     sections.current[field] = node;
@@ -396,6 +399,7 @@ function ExpenseTask({
         onLoadNewerHistory={onLoadNewerHistory}
         onRetryHistory={onRetryHistory}
         reveal={recordReveal}
+        outlined={outlined.current}
       />
     );
   const locked = state.status !== 'editing';
