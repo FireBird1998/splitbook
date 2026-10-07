@@ -3835,21 +3835,25 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
     } catch (error) {
       if (stale() || error instanceof Superseded) return;
+      const status =
+        error instanceof RequestError && [403, 404].includes(error.status)
+          ? 'blocked'
+          : snapshot.settlement.attempt
+            ? 'uncertain'
+            : 'error';
+      // Storage problems say so, rather than pointing at the connection.
+      const reason =
+        error instanceof RequestError || error instanceof DeviceStorageError
+          ? error.message
+          : 'Couldn’t check the latest balances. Close this and try again when you’re connected.';
       publish({
         ...snapshot,
         settlement: {
           ...snapshot.settlement,
-          status:
-            error instanceof RequestError && [403, 404].includes(error.status)
-              ? 'blocked'
-              : snapshot.settlement.attempt
-                ? 'uncertain'
-                : 'error',
-          // Storage problems say so, rather than pointing at the connection.
-          message:
-            error instanceof RequestError || error instanceof DeviceStorageError
-              ? error.message
-              : 'Couldn’t check the latest balances. Close this and try again when you’re connected.',
+          status,
+          // A payment stored on this phone may still be recorded, whatever kept this check from
+          // running: it says so too, so it's never taken for one that wasn't (#334).
+          message: status === 'uncertain' ? `${reason} ${unconfirmedPayment}` : reason,
         },
       });
     }
@@ -4134,8 +4138,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         (error instanceof RequestError && [403, 404, 409, 422].includes(error.status)) ||
         (error instanceof Error &&
           ['INVALID_MEMBERS', 'FORBIDDEN_SETTLEMENT', 'SAME_PARTY'].includes(error.message));
-      // A Retry whose checks failed before the payment went out sent nothing: it says why, as
-      // opening the sheet does, and stays unconfirmed, with the same record (#334).
+      // A Retry whose checks failed before the payment went out sent nothing this time: it says
+      // why, as opening the sheet does. The first may still be recorded, so it says that too, and
+      // stays unconfirmed, with the same record (#334).
       const unsent = !sending && error instanceof RequestError ? error.message : null;
       publish({
         ...snapshot,
@@ -4146,7 +4151,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           message: denied
             ? 'This payment can’t be recorded with your current access or details. Any unconfirmed record stays on this device.'
             : attempt
-              ? (unsent ?? unconfirmedPayment)
+              ? unsent
+                ? `${unsent} ${unconfirmedPayment}`
+                : unconfirmedPayment
               : error instanceof Error
                 ? error.message
                 : 'Could not record this payment. Your entries are kept.',

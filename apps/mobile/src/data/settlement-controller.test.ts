@@ -814,12 +814,14 @@ describe('native payment recording', () => {
     expect(controller.getSnapshot().settlement).toMatchObject({ status: 'uncertain', attempt });
     expect([...records.values()]).toEqual([expect.objectContaining(attempt)]);
 
-    // Opened again while the gateway still fails, it says SplitBook can't be reached.
+    // Opened again while the gateway still fails, it says SplitBook can't be reached, and that
+    // the payment may already be recorded (#334).
     await controller.openSettlements(groupId);
     expect(controller.getSnapshot().settlement).toMatchObject({
       status: 'uncertain',
       attempt,
-      message: 'Could not reach SplitBook. Check your connection and try again.',
+      message:
+        'Could not reach SplitBook. Check your connection and try again. This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.',
     });
     expect(writes).toHaveLength(1);
 
@@ -1064,7 +1066,7 @@ describe('native payment recording', () => {
   });
 
   // #334: after a network failure, Retry sends the first attempt's record again, never a new one.
-  it('says a Retry that couldn’t reach SplitBook sent nothing, then sends the first attempt’s key and revision again only on Retry', async () => {
+  it('says a Retry that couldn’t reach SplitBook sent nothing, and that the first may already be recorded, then sends its key and revision again only on Retry', async () => {
     let down = false,
       posted = 0;
     const { controller, writes, records } = setup((path, init) => {
@@ -1098,17 +1100,29 @@ describe('native payment recording', () => {
         'This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.',
     });
 
-    // Retry while SplitBook can't be reached: its checks fail before the payment is sent, and the
-    // sheet says so, still offering Retry with the record kept.
+    // Retry while SplitBook can't be reached: its checks fail before the payment is sent. The
+    // sheet says so, and that the first may already be recorded, still offering Retry with the
+    // record kept: never read as a payment that wasn't recorded.
     down = true;
     await controller.recordSettlement();
     expect(writes).toHaveLength(1);
+    const unreachableAndUnconfirmed =
+      'Could not reach SplitBook. Check your connection and try again. This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.';
     expect(controller.getSnapshot().settlement).toMatchObject({
       status: 'uncertain',
       attempt,
-      message: 'Could not reach SplitBook. Check your connection and try again.',
+      message: unreachableAndUnconfirmed,
     });
     expect([...records.values()]).toEqual([expect.objectContaining(attempt)]);
+
+    // Closed, then opened again from Balances while SplitBook still can't be reached: the same.
+    await controller.back();
+    await controller.openPendingPayment();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      settlement: { status: 'uncertain', attempt, message: unreachableAndUnconfirmed },
+    });
+    expect(writes).toHaveLength(1);
 
     // Nothing is sent by itself: not on a refresh, nor once SplitBook answers again.
     await controller.refresh('foreground');
