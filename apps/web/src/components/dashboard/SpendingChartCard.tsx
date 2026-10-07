@@ -1,32 +1,18 @@
 'use client';
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useId,
-  useMemo,
-  useState,
-  useSyncExternalStore,
-} from 'react';
-import useSWR from 'swr';
+import { createContext, useCallback, useContext, useId, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 import { BarChart } from '@mui/x-charts/BarChart';
 import { ChartsTooltipContainer, useAxesTooltip } from '@mui/x-charts/ChartsTooltip';
-import { userSpendingPath } from '@splitbook/shared/api-paths';
 import { SPENDING_MONTHS } from '@splitbook/shared/insights';
-import {
-  parseUserSpendingResponse,
-  type UserSpendingRead,
-} from '@splitbook/shared/user-spending-read';
-import { isTimeZone } from '@splitbook/shared/zoned-calendar';
+import type { UserSpendingRead } from '@splitbook/shared/user-spending-read';
 import MoneyText from '@/components/common/MoneyText';
 import SegmentedControl from '@/components/charts/SegmentedControl';
 import { HomeCard, HomeCardBody, HomeCardEmpty, HomeCardError, HomeCardLoading } from './HomeCard';
-import { fetcher } from '@/lib/utils/fetcher';
+import { useHomeSpending } from './home-reads';
 import {
   compactMoney,
   spendingChartModel,
@@ -64,30 +50,9 @@ const visuallyHidden = {
   border: 0,
 } as const;
 
-/** The viewer's own time zone, read in the browser only: the server's would be wrong. */
-const noSubscription = () => () => {};
-function browserTimeZone(): string {
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  return isTimeZone(zone) ? zone : 'UTC';
-}
-function useViewerTimeZone(): string | null {
-  return useSyncExternalStore(noSubscription, browserTimeZone, () => null);
-}
-
-async function fetchSpending(path: string): Promise<UserSpendingRead> {
-  return parseUserSpendingResponse(await fetcher(path));
-}
-
 export default function SpendingChartCard() {
-  const timeZone = useViewerTimeZone();
-  const { data, error, mutate } = useSWR(
-    timeZone ? userSpendingPath({ months: SPENDING_MONTHS.default, timeZone }) : null,
-    fetchSpending,
-    { refreshInterval: 30_000 },
-  );
-  return (
-    <SpendingChartView read={data} failed={!data && Boolean(error)} onRetry={() => void mutate()} />
-  );
+  const { read, failed, retry } = useHomeSpending();
+  return <SpendingChartView read={read} failed={failed} onRetry={retry} />;
 }
 
 export type SpendingView = 'chart' | 'table';

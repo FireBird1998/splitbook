@@ -85,6 +85,30 @@ const spending = {
       }),
     },
   ],
+  // #308: September by Category (Alex's ₹2,960.00) and what the trip spent; its last change is
+  // the dinner's correction in Latest changes.
+  thisMonth: {
+    month: '2026-09',
+    byCategory: [
+      {
+        currency: 'INR',
+        totalMinor: 296000,
+        expenseCount: 3,
+        categories: [
+          { category: 'food', shareMinor: 125000, expenseCount: 1 },
+          { category: 'accommodation', shareMinor: 120000, expenseCount: 1 },
+          { category: 'transport', shareMinor: 51000, expenseCount: 1 },
+        ],
+      },
+    ],
+    groups: [
+      {
+        groupId: DEMO_GROUP_ID,
+        spent: [{ currency: 'INR', totalMinor: 592000, expenseCount: 3 }],
+      },
+    ],
+  },
+  lastChanges: [{ groupId: DEMO_GROUP_ID, at: '2026-09-06T08:40:00.000Z' }],
 };
 export const groupBalances = {
   balances: [

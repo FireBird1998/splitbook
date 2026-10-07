@@ -59,14 +59,15 @@ describe('semantic design tokens', () => {
   });
 
   it('pins the chart tokens from the design canvas: one series colour, a grid, an inverse tooltip', () => {
+    // The soft series is raised from the canvas's --chart-soft (#c9cff7, #343c6e) to 3:1 (#308).
     expect(lightTokens.chart).toEqual({
       series: '#3d4fcf',
-      seriesSoft: '#c9cff7',
+      seriesSoft: '#7b87de',
       grid: '#e6e9f2',
     });
     expect(darkTokens.chart).toEqual({
       series: '#6f80f5',
-      seriesSoft: '#343c6e',
+      seriesSoft: '#5562b7',
       grid: '#262a39',
     });
     expect(lightTokens.inverse).toEqual({ bg: '#151828', text: '#f4f5f9' });

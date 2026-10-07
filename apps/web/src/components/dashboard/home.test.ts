@@ -31,10 +31,6 @@ vi.mock('next/navigation', () => ({
   usePathname: () => '/dashboard',
   useRouter: () => ({ push: vi.fn() }),
 }));
-// The Group card grid stays until #308; its cards aren't what these tests look at.
-vi.mock('@/components/groups/GroupCard', () => ({
-  default: ({ group }: { group: GroupRead }) => createElement('article', null, group.name),
-}));
 
 const { default: DashboardView } = await import('./DashboardView');
 
@@ -331,10 +327,19 @@ describe('the heading', () => {
 });
 
 describe('Home', () => {
+  const members = [{ user: { _id: USER.id, name: USER.name }, role: 'admin' }];
   const GROUPS = [
-    { _id: id(1), name: 'Maple House', category: 'home', defaultCurrency: 'INR' },
-    { _id: id(2), name: 'Goa Friends Trip', category: 'trip', defaultCurrency: 'INR' },
-  ] as GroupRead[];
+    { _id: id(1), name: 'Maple House', category: 'home', defaultCurrency: 'INR', members },
+    {
+      _id: id(2),
+      name: 'Goa Friends Trip',
+      category: 'trip',
+      defaultCurrency: 'INR',
+      startDate: null,
+      endDate: null,
+      members,
+    },
+  ] as unknown as GroupRead[];
   const BALANCES = {
     status: 200,
     data: {
@@ -354,7 +359,7 @@ describe('Home', () => {
       '/api/invitations': invitations,
     });
 
-  it('lays out the canvas’s order: the heading, Your balances beside Needs you, Your share of spending, then the Groups beside Latest changes', () => {
+  it('lays out the canvas’s order: the heading, Your balances beside Needs you, Your share of spending beside Where it went, then the Groups beside Latest changes', () => {
     const html = home(BALANCES);
     const headings = [...html.matchAll(/<h([12])\b[^>]*>([^<]+)<\/h\1>/g)].map(
       ([, , name]) => name,
@@ -364,11 +369,18 @@ describe('Home', () => {
       'Your balances',
       'Needs you',
       'Your share of spending',
-      'Your groups',
+      'Where it went',
+      'Groups',
       'Latest changes',
     ]);
     expect(text(region(html, 'Your balances'))).toContain('Net −₹860.00');
     expect(text(region(html, 'Needs you'))).toContain('You pay Sam Chen');
+    // The Groups table replaces the Group cards: each Group, with its balance from the read.
+    const groups = region(html, 'Groups');
+    expect(groups).toMatch(/<table\b/);
+    expect(text(groups)).toContain('Maple House Household');
+    expect(text(groups)).toContain('−₹1,480.00 you owe ₹1,480.00');
+    expect(html).not.toContain('Your groups');
     // Receipts are backlogged: nothing on Home mentions them.
     expect(text(html)).not.toMatch(/receipt/i);
   });
@@ -396,8 +408,10 @@ describe('Home', () => {
     const html = render(createElement(DashboardView, { userId: USER.id, userName: USER.name }));
     expect(html).toContain('aria-label="Loading your balances"');
     expect(html).toContain('aria-label="Loading what needs you"');
-    // The server can't know the viewer's time zone, so the spending chart waits for the browser.
+    // The server can't know the viewer's time zone, so the spending read waits for the browser.
     expect(html).toContain('aria-label="Loading your spending"');
+    expect(html).toContain('aria-label="Loading where your money went"');
+    expect(html).toContain('aria-label="Loading your Groups"');
     expect(text(html)).toContain('Home');
   });
 });

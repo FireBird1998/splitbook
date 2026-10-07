@@ -46,6 +46,8 @@ export interface SemanticTokens {
    * Charts (design canvas "Web portal": --chart, --chart-soft, --grid). One series colour per
    * chart: `series` marks the figure in focus, such as the current Month, and `seriesSoft` the
    * rest. Comparisons are drawn as ticks or lines in text colours, never as extra hues.
+   * `seriesSoft` is the series hue, still at least 3:1 against a card (WCAG 1.4.11, #308), so a
+   * column that isn't in focus stays visible; the canvas's --chart-soft was about 1.5:1.
    */
   chart: { series: string; seriesSoft: string; grid: string };
   /** The inverse surface (canvas --inv-bg, --inv-text): chart tooltips, and later snackbars. */
@@ -83,7 +85,7 @@ export const lightTokens: SemanticTokens = {
     perforation: 'rgba(244, 245, 249, 0.95)',
     stub: 'rgba(255, 255, 255, 0.12)',
   },
-  chart: { series: '#3d4fcf', seriesSoft: '#c9cff7', grid: '#e6e9f2' },
+  chart: { series: '#3d4fcf', seriesSoft: '#7b87de', grid: '#e6e9f2' },
   inverse: { bg: '#151828', text: '#f4f5f9' },
   shadowSm: '0 1px 2px rgba(21, 24, 40, 0.05)',
   shadowMd: '0 4px 16px rgba(21, 24, 40, 0.07)',
@@ -118,7 +120,7 @@ export const darkTokens: SemanticTokens = {
     perforation: 'rgba(14, 16, 22, 0.95)',
     stub: 'rgba(255, 255, 255, 0.08)',
   },
-  chart: { series: '#6f80f5', seriesSoft: '#343c6e', grid: '#262a39' },
+  chart: { series: '#6f80f5', seriesSoft: '#5562b7', grid: '#262a39' },
   inverse: { bg: '#f0f2f8', text: '#151828' },
   shadowSm: '0 1px 2px rgba(0, 0, 0, 0.35)',
   shadowMd: '0 6px 20px rgba(0, 0, 0, 0.4)',
