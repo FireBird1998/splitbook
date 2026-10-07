@@ -22,8 +22,10 @@ const personas: { id: PersonaId; name: string; detail: string }[] = [
 
 /**
  * The sign-in options: Google for the invited beta, or a test persona in development. While
- * `busy`, every option is disabled, and the one signing in (`option`) stays at full strength with
- * #331's busy mark, says so to screen readers, and keeps its size; the others are dimmed (#335).
+ * `busy`, every option is disabled, and the one signing in (`option`) shows #331's busy mark,
+ * says so to screen readers, and keeps its size (#335). A persona's row stays at full strength
+ * while the others are dimmed. Google's own button dims itself to 55% when disabled
+ * (react-native-nitro-google-signin), so there only the busy mark stays at full strength.
  */
 export function SignIn({
   busy,
