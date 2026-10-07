@@ -9,8 +9,33 @@ import PaymentsTable, { paymentWhen, type PaymentRead, type PaymentsState } from
 /*
  * Payments on the Balances tab (#312), rendered to static markup: the table's loading, error
  * and empty states, and each payment's date and time, who paid whom, amount, note and who
- * recorded it, by name only. Tests run in UTC (vitest.config.ts).
+ * recorded it, by name only.
+ *
+ * A payment is an instant, shown in the viewer's own time zone, and the unit tests also run in
+ * zones from UTC−11 to UTC+14 (#227). So the expected date and time are worked out here from
+ * each instant's local calendar fields, never written for one zone.
  */
+
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * "Sun 27 Sep" (with the year when it isn't `nowYear`) and "6:15 PM", from the instant's
+ * calendar fields in the zone the tests run in: an oracle that doesn't use the table's code.
+ */
+function localWhen(createdAt: string, nowYear = new Date().getFullYear()) {
+  const at = new Date(createdAt);
+  const year = at.getFullYear() === nowYear ? '' : ` ${at.getFullYear()}`;
+  const hours = at.getHours();
+  return {
+    date: `${WEEKDAYS[at.getDay()]} ${at.getDate()} ${MONTHS[at.getMonth()]}${year}`,
+    time: `${hours % 12 || 12}:${String(at.getMinutes()).padStart(2, '0')} ${hours < 12 ? 'AM' : 'PM'}`,
+  };
+}
+const shownWhen = (createdAt: string) => {
+  const { date, time } = localWhen(createdAt);
+  return `${date} ${time}`;
+};
 
 const ALEX = { _id: 'a00000000000000000000001', name: 'Alex Rivera', email: 'alex@example.test' };
 const SAM = { _id: 'a00000000000000000000002', name: 'Sam Chen', email: 'sam@example.test' };
@@ -79,21 +104,28 @@ describe('Payments', () => {
     ).toEqual(['Date', 'From → to', 'Amount', 'Note', 'Recorded by']);
     expect(rows(html)).toEqual([
       [
-        expect.stringMatching(/^Sun 27 Sep( 2026)? 6:15 PM$/),
+        shownWhen(payments[0].createdAt),
         'Priya Shah to Sam Chen',
         '₹200.00',
         'No note',
         'Priya Shah',
       ],
       [
-        expect.stringMatching(/^Wed 2 Sep( 2026)? 9:05 AM$/),
+        shownWhen(payments[1].createdAt),
         'You to Priya Shah',
         '₹1,150.00',
         'August settle-up',
         'You',
       ],
-      ['Sun 10 Aug 2025 9:40 PM', 'Sam Chen to You', '₹300.00', 'No note', 'Not known'],
+      [shownWhen(payments[2].createdAt), 'Sam Chen to You', '₹300.00', 'No note', 'Not known'],
     ]);
+    // Each date reads as weekday, day and month, then the time; last year's has its year.
+    expect(rows(html).map(([when]) => when)).toEqual([
+      expect.stringMatching(/^[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}( \d{4})? \d{1,2}:\d{2} [AP]M$/),
+      expect.stringMatching(/^[A-Z][a-z]{2} \d{1,2} [A-Z][a-z]{2}( \d{4})? \d{1,2}:\d{2} [AP]M$/),
+      expect.stringMatching(/^[A-Z][a-z]{2} \d{1,2} Aug 2025 \d{1,2}:\d{2} [AP]M$/),
+    ]);
+    // The instant itself, whatever the zone, for the browser and assistive technology.
     expect(html).toContain('dateTime="2026-09-27T18:15:00.000Z"');
   });
 
@@ -138,15 +170,29 @@ describe('Payments', () => {
 });
 
 describe('paymentWhen', () => {
+  // Mid-June instants and a mid-July "now": the same year and month in every zone from
+  // UTC−12 to UTC+14, so the year rule is tested away from any year's edges.
+  const now = new Date('2026-07-15T12:00:00.000Z');
+
   it('leaves the year out for this year’s payments only', () => {
-    const now = new Date('2026-10-07T12:00:00.000Z');
-    expect(paymentWhen('2026-09-27T18:15:00.000Z', now)).toEqual({
-      date: 'Sun 27 Sep',
-      time: '6:15 PM',
-    });
-    expect(paymentWhen('2025-09-27T08:15:00.000Z', now)).toEqual({
-      date: 'Sat 27 Sep 2025',
-      time: '8:15 AM',
-    });
+    const thisYear = paymentWhen('2026-06-15T12:00:00.000Z', now);
+    const lastYear = paymentWhen('2025-06-15T12:00:00.000Z', now);
+    expect(thisYear.date).toMatch(/^[A-Z][a-z]{2} \d{1,2} Jun$/);
+    expect(lastYear.date).toMatch(/^[A-Z][a-z]{2} \d{1,2} Jun 2025$/);
+    expect(thisYear).toEqual(localWhen('2026-06-15T12:00:00.000Z', 2026));
+    expect(lastYear).toEqual(localWhen('2025-06-15T12:00:00.000Z', 2026));
+  });
+
+  it('shows the viewer’s own date and 12-hour time, wherever the instant falls in UTC', () => {
+    for (const instant of [
+      '2026-06-15T00:05:00.000Z',
+      '2026-06-15T11:59:00.000Z',
+      '2026-06-15T12:00:00.000Z',
+      '2026-06-15T23:30:00.000Z',
+    ]) {
+      const when = paymentWhen(instant, now);
+      expect(when).toEqual(localWhen(instant, 2026));
+      expect(when.time).toMatch(/^(1[0-2]|[1-9]):[0-5]\d [AP]M$/);
+    }
   });
 });
