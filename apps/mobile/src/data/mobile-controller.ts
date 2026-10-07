@@ -992,6 +992,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return request(path, owner, { signal });
     },
     answered: (path: string, saved?: number | null) => answered(path, saved),
+    distrust: (accountId: string, scopes: string[]) => untrusted.mark(accountId, scopes, now()),
     now,
   };
   /** Home's two queries and their saved copies (ADR 0006, M1-1, M3-1). */
@@ -2642,6 +2643,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     } catch (error) {
       if (!showing() || error instanceof Superseded) return;
       const denied = error instanceof RequestError && [403, 404].includes(error.status);
+      // The record's own read found the Expense gone: nothing saved of it shows again (#220).
+      if (checked && expenseId && error instanceof RequestError && error.status === 404)
+        await expenseQueries.drop(groupId, expenseId);
+      if (!showing()) return;
       const shown = latest().expense;
       const message = expenseFailureMessage(
         error,

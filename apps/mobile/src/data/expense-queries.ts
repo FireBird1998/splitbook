@@ -129,6 +129,8 @@ export interface ExpenseSession {
       options: { fresh: boolean; wanted: () => boolean },
     ): Promise<unknown>;
   };
+  /** These saved copies couldn't be removed: never shown again, and deleted at the next start. */
+  distrust(accountId: string, scopes: string[]): void;
   /** The session check that comes before the Group is read again on the foreground. */
   checkSession(owner: number): Promise<void>;
   /** The Group refused the member on a read this screen made: what it shows goes. */
@@ -759,13 +761,17 @@ export function createExpenseQueries(session: ExpenseSession) {
       if (step === 'session' || !here(true) || !(error instanceof RequestError)) return;
       if (error.status === 403 || (step === 'group' && error.status === 404))
         session.refused(opened.groupId, error);
-      else if (error.status === 404 && opened.expenseId)
-        session.gone([
-          queryKeyPath(recordKey(opened.groupId, opened.expenseId)),
-          queryKeyPath(historyKey(opened.groupId, opened.expenseId)).split('limit=')[0],
-        ]);
+      else if (error.status === 404 && opened.expenseId) {
+        session.gone(recordPaths(opened.groupId, opened.expenseId));
+        await api.drop(opened.groupId, opened.expenseId);
+      }
     }
   };
+  /** Where an Expense's record and its pages of changes are read and saved. */
+  const recordPaths = (groupId: string, expenseId: string) => [
+    queryKeyPath(recordKey(groupId, expenseId)),
+    `/api/groups/${groupId}/activity?expenseId=${expenseId}&`,
+  ];
 
   const api = {
     project,
@@ -963,6 +969,34 @@ export function createExpenseQueries(session: ExpenseSession) {
       view.lost = true;
       view.checked = false;
       unbind();
+    },
+    /**
+     * The record's own read found the Expense gone, once its Group was checked: its queries and
+     * rows go, with any still waiting to be written, so nothing of it shows again, at once or after
+     * a restart. A row that can't be removed is no longer trusted (#323).
+     */
+    async drop(groupId: string, expenseId: string) {
+      const record = recordKey(groupId, expenseId),
+        history = historyKey(groupId, expenseId),
+        paths = recordPaths(groupId, expenseId);
+      queue.drop(paths[0]);
+      for (const page of held<Pages>(history)?.state.data?.pageParams ?? [])
+        queue.drop(pagePath(history, page));
+      client.removeQueries({ queryKey: record, exact: true });
+      client.removeQueries({ queryKey: history, exact: true });
+      const lease = session.lease();
+      if (!lease || !rows) return;
+      forgotten.set(groupId, (forgotten.get(groupId) ?? 0) + 1);
+      try {
+        await lease.write(async () => {
+          for (const path of await rowPaths(rows, lease.accountId, known))
+            if (path === paths[0] || path.startsWith(paths[1]))
+              await rows.remove(lease.accountId, path);
+        });
+      } catch (error) {
+        if (!(error instanceof Superseded) && session.current(session.generation()))
+          session.distrust(lease.accountId, [`ledger:${groupId}`]);
+      }
     },
     /** Removes a Group's record and history rows, inside a lease write: a change or a loss. */
     async forget(accountId: string, groupId: string) {

@@ -1428,3 +1428,90 @@ describe('rows saved only while their Group is kept here', () => {
     expect(f.savedRows(maplePath)).toEqual([]);
   });
 });
+
+describe('an Expense its own read finds gone (404)', () => {
+  /** Alex has the bill and the dinner saved here; the bill is then deleted elsewhere. */
+  async function goneOnReopen(f: Fixture) {
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, dinnerId);
+    await controller.back();
+    await controller.openExpense(mapleId, billId);
+    await controller.back();
+    await settle();
+    f.server.gone.add(billId);
+    later(60_000);
+    return controller;
+  }
+  /** After a restart, the bill opens with its Group's check held: what shows at once. */
+  async function restartAndOpen(f: Fixture, controller: Controller) {
+    controller.dispose();
+    const restarted = f.create();
+    await restarted.restore();
+    await settle();
+    const check = f.hold(maplePath, { exact: true });
+    const opening = restarted.openExpense(mapleId, billId);
+    await check.reached;
+    await settle();
+    const atOnce = restarted.getSnapshot().expense;
+    check.release();
+    await opening;
+    return { restarted, atOnce };
+  }
+
+  it('removes its record and its changes from memory and this device, and nothing of it shows again after a restart', async () => {
+    const f = fixture();
+    const controller = await goneOnReopen(f);
+    await controller.openExpense(mapleId, billId);
+    await settle();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'blocked',
+      draft: null,
+      message: 'This Expense isn’t available.',
+    });
+    expect(f.savedRows(recordPath(billId))).toEqual([]);
+    expect(f.savedRows(`${maplePath}/activity?expenseId=${billId}`)).toEqual([]);
+    // Only the bill's rows go.
+    expect(f.savedRows(recordPath(dinnerId))).toHaveLength(1);
+    const { restarted, atOnce } = await restartAndOpen(f, controller);
+    expect(atOnce).toMatchObject({ status: 'loading', draft: null });
+    expect(restarted.getSnapshot().expense).toMatchObject({ status: 'blocked', draft: null });
+  });
+
+  it('removes them when the record is read again on reconnecting, too', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    await settle();
+    f.server.gone.add(billId);
+    later(60_000);
+    f.connect(false);
+    f.connect(true);
+    await settle();
+    expect(controller.getSnapshot().expense).toMatchObject({ status: 'blocked', draft: null });
+    expect(f.savedRows(recordPath(billId))).toEqual([]);
+    expect(f.savedRows(`${maplePath}/activity?expenseId=${billId}`)).toEqual([]);
+  });
+
+  it('never trusts its rows when they can’t be removed, and removes them at the next start', async () => {
+    const f = fixture();
+    const controller = await goneOnReopen(f);
+    f.device.failRemoval = true;
+    await controller.openExpense(mapleId, billId);
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      auth: { status: 'authenticated' },
+      expense: { status: 'blocked', draft: null },
+    });
+    expect(f.savedRows(recordPath(billId))).toHaveLength(1);
+    expect(f.untrusted()).toMatchObject({
+      accountId: alex.id,
+      scopes: { [`ledger:${mapleId}`]: expect.any(Number) },
+    });
+    // Storage works again at the next start: its record rows go before anything reads them.
+    f.device.failRemoval = false;
+    const { restarted, atOnce } = await restartAndOpen(f, controller);
+    expect(f.savedRows(recordPath(billId))).toEqual([]);
+    expect(atOnce).toMatchObject({ status: 'loading', draft: null });
+    expect(restarted.getSnapshot().expense).toMatchObject({ status: 'blocked', draft: null });
+  });
+});
