@@ -4750,6 +4750,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         }),
       );
       assertCurrent(owner);
+      // SplitBook answered, so the app is online (ADR 0006: a successful request clears
+      // offline). Home's Groups and figures, which the join made obsolete, are read again from
+      // the server, so this device's copies from earlier no longer make Home say it's offline;
+      // its figures still say when they were saved (#332).
+      for (const path of ['/api/groups', '/api/user/balances']) staleReads.delete(path);
       if (view !== viewRequest || pendingCode !== code) return;
       await savePending(null);
       assertCurrent(owner);
