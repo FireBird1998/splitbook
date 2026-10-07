@@ -370,7 +370,16 @@ function ExpenseTask({
       opening ? (
         <ExpenseRecordSkeleton label="Opening this Expense…" outline={outline} />
       ) : (
-        <Loading label={requested ? 'Opening this Expense…' : 'Opening your draft…'} />
+        // Only a draft this phone kept says "draft": a new Expense has none (#334).
+        <Loading
+          label={
+            requested
+              ? 'Opening this Expense…'
+              : draft
+                ? 'Opening your draft…'
+                : 'Opening a new Expense…'
+          }
+        />
       ),
     );
   if (!draft)

@@ -2308,3 +2308,43 @@ describe('A Group says what is true, without jumps (#219)', () => {
     },
   );
 });
+
+describe('The Expense form and Record payment say what they are doing (#334)', () => {
+  const controller = () => runtime.controller as MobileController;
+  const openMaple = 'Open Maple House, Household · 2 members';
+
+  // Item 1: "Opening your draft…" showed for a brand-new Expense.
+  it('opens a new Expense without saying “draft”, and says it only for a kept draft', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(openMaple);
+    // Nothing is kept for Maple House: the form waits only for the Group's read.
+    let group = phone.hold(`/api/groups/${maple}`);
+    void controller().openExpense(maple);
+    await group.reached;
+    await settle();
+    expect(controller().getSnapshot().expense).toMatchObject({ status: 'loading', draft: null });
+    expect(app.text()).toContain('Opening a new Expense…');
+    expect(app.text()).not.toMatch(/draft/i);
+    group.release();
+    await settle();
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12' }));
+    await app.press('Back to Group, keeping your draft');
+    expect(controller().getSnapshot().keptDraft).toMatchObject({ groupId: maple });
+    // The draft kept for Maple House opens, and says so.
+    group = phone.hold(`/api/groups/${maple}`);
+    void controller().openExpense(maple);
+    await group.reached;
+    await settle();
+    expect(controller().getSnapshot().expense).toMatchObject({
+      status: 'loading',
+      draft: { description: 'Gas bill' },
+    });
+    expect(app.text()).toContain('Opening your draft…');
+    expect(app.text()).not.toContain('new Expense');
+    group.release();
+    await settle();
+  });
+});
