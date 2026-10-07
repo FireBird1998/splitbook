@@ -26,6 +26,10 @@ const personas: { id: PersonaId; name: string; detail: string }[] = [
  * says so to screen readers, and keeps its size (#335). A persona's row stays at full strength
  * while the others are dimmed. Google's own button dims itself to 55% when disabled
  * (react-native-nitro-google-signin), so there only the busy mark stays at full strength.
+ *
+ * Each option's accessibility state always sets `busy` and `disabled`, false as much as true:
+ * React Native on Android keeps a key it is no longer sent, so after a failed sign-in the option
+ * chosen still read "busy" on the emulator while it showed ready (#335's device check).
  */
 export function SignIn({
   busy,
@@ -75,9 +79,8 @@ export function SignIn({
                   accessibilityLabel={
                     chosen === 'google' ? 'Signing in with Google' : 'Sign in with Google'
                   }
-                  accessibilityState={
-                    chosen === 'google' ? { disabled: true, busy: true } : { disabled: busy }
-                  }
+                  // Both keys every time: Android keeps a key no longer sent (see `SignIn`).
+                  accessibilityState={{ disabled: busy, busy: chosen === 'google' }}
                   onPress={onGoogleSignIn}
                   disabled={busy}
                 />
@@ -127,9 +130,8 @@ export function SignIn({
                   accessibilityLabel={
                     id === chosen ? `Signing in as ${name}` : `Continue as ${name}`
                   }
-                  accessibilityState={
-                    id === chosen ? { disabled: true, busy: true } : { disabled: busy }
-                  }
+                  // Both keys every time: Android keeps a key no longer sent (see `SignIn`).
+                  accessibilityState={{ disabled: busy, busy: id === chosen }}
                   disabled={busy}
                   onPress={() => onSignIn(id)}
                   style={({ pressed }) => ({

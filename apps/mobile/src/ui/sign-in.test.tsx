@@ -81,7 +81,7 @@ describe('An option named while nothing runs', () => {
         (node) =>
           typeof node.type === 'string' && node.props.accessibilityLabel === `Continue as ${name}`,
       );
-      expect(row!.props.accessibilityState).toEqual({ disabled: false });
+      expect(row!.props.accessibilityState).toEqual({ disabled: false, busy: false });
       expect(row!.props.disabled).toBe(false);
       expect(flatten(row!.props.style).opacity).toBe(1);
       expect(icons(row!)).toEqual(['arrow-forward-outline']);
@@ -94,8 +94,11 @@ describe('An option named while nothing runs', () => {
     );
     expect(ofType(google, 'GoogleSignInButton')[0]!.props).toMatchObject({
       accessibilityLabel: 'Sign in with Google',
-      accessibilityState: { disabled: false },
       disabled: false,
+    });
+    expect(ofType(google, 'GoogleSignInButton')[0]!.props.accessibilityState).toEqual({
+      disabled: false,
+      busy: false,
     });
     expect(ofType(google, 'ActivityIndicator')).toEqual([]);
     expect(text(google)).not.toContain('Signing in');
@@ -110,9 +113,9 @@ describe('Google signing in', () => {
     );
     expect(idle.props).toMatchObject({
       accessibilityLabel: 'Sign in with Google',
-      accessibilityState: { disabled: false },
       disabled: false,
     });
+    expect(idle.props.accessibilityState).toEqual({ disabled: false, busy: false });
     const size = flatten(idle.props.style);
 
     const root = await render(
@@ -148,5 +151,26 @@ describe('Google signing in', () => {
     expect(ofType(root, 'ActivityIndicator')).toEqual([]);
     expect(icons(root)).toContain('hourglass-outline');
     expect(loop).not.toHaveBeenCalled();
+  });
+
+  it('says it is no longer busy when its sign-in fails, rather than saying nothing', async () => {
+    const onGoogleSignIn = vi.fn();
+    const root = await render(
+      <SignIn busy option="google" {...options} onGoogleSignIn={onGoogleSignIn} />,
+    );
+    // The same button, as the sign-in fails: Android keeps a key no longer sent.
+    act(() =>
+      renderer!.update(
+        <SignIn
+          busy={false}
+          {...options}
+          message="Could not reach SplitBook. Check your connection and try again."
+          onGoogleSignIn={onGoogleSignIn}
+        />,
+      ),
+    );
+    expect(google(root).props.accessibilityLabel).toBe('Sign in with Google');
+    expect(google(root).props.accessibilityState).toEqual({ disabled: false, busy: false });
+    expect(ofType(root, 'ActivityIndicator')).toEqual([]);
   });
 });

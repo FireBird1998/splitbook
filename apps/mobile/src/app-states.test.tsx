@@ -632,6 +632,7 @@ describe('sign-in and start-up show progress while they wait (#335)', () => {
       for (const other of ['Continue as Sam Chen', 'Continue as Priya Shah']) {
         expect(app.button(other)!.props.accessibilityState).toEqual({
           disabled: true,
+          busy: false,
         });
         expect(app.button(other)!.props.disabled).toBe(true);
         expect(flatten(app.button(other)!.props.style).opacity).toBe(0.45);
@@ -686,7 +687,9 @@ describe('sign-in and start-up show progress while they wait (#335)', () => {
     expect(app.text()).not.toContain('Signing in');
     for (const name of ['Alex Rivera', 'Sam Chen', 'Priya Shah']) {
       const option = app.button(`Continue as ${name}`)!;
-      expect(option.props.accessibilityState).toEqual({ disabled: false });
+      // Busy is sent as false, not dropped: Android keeps a key no longer sent, and Sam's row
+      // read "busy" on the emulator after this failure while it showed ready.
+      expect(option.props.accessibilityState).toEqual({ disabled: false, busy: false });
       expect(flatten(option.props.style).opacity).toBe(1);
       expect(icons(option)).toEqual(['arrow-forward-outline']);
     }
