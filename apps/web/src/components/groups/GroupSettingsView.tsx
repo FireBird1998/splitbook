@@ -41,6 +41,7 @@ import EditIcon from '@mui/icons-material/Edit';
 import LabelIcon from '@mui/icons-material/Label';
 import { CURRENCIES, getSortedCurrencies } from '@splitbook/shared/currency';
 import LeaveGroupSection from '@/components/groups/LeaveGroupSection';
+import GroupUnavailable from '@/components/groups/GroupUnavailable';
 import { formatDate } from '@splitbook/shared/date';
 import { useGroup } from '@/lib/hooks/use-groups';
 import { isGroupReadKey } from '@/lib/group-read';
@@ -149,14 +150,7 @@ function GroupSettingsContent({
   if (!group) {
     return (
       <Container maxWidth="md" disableGutters>
-        <Box sx={{ textAlign: 'center', py: 6 }}>
-          <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
-            Group not found
-          </Typography>
-          <Typography color="text.secondary">
-            This group may have been deleted or you don&apos;t have access.
-          </Typography>
-        </Box>
+        <GroupUnavailable />
       </Container>
     );
   }

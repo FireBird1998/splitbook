@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { test, expect, type Page } from '@playwright/test';
 import { backupSchema } from '@splitbook/shared/export-backup';
 import { statementPath } from '@splitbook/shared/statement-request';
-import { DEMO_WEEK_TRIP_ID } from '../src/lib/demo-personas';
+import { DEMO_WEEK_TRIP_ID, DEMO_WORK_GROUP_ID } from '../src/lib/demo-personas';
 import {
   DEMO_GROUP_ID,
   DEMO_TRIP_NAME,
@@ -149,4 +149,31 @@ test('a Trip’s Share wrap-up opens its whole-trip statement, with every sectio
   await expect(page.getByRole('button', { name: 'Print or save as PDF' })).toBeHidden();
   await expect(page.locator('aside')).toBeHidden();
   await reviewScreenshot(page, testInfo, 'trip-statement-print');
+});
+
+test('a Group the member can’t open refuses its statement with the app’s own page', async ({
+  page,
+}, testInfo) => {
+  // Priya was only invited to the Studio Lunch Club; the other Group doesn't exist. Both are
+  // refused with the same 403 page, which never says which it is.
+  await enterAsPersona(page, 'priya');
+  for (const id of [DEMO_WORK_GROUP_ID, 'f00000000000000000000000']) {
+    const response = await page.goto(`/groups/${id}/statement?tz=UTC`);
+    expect(response?.status()).toBe(403);
+    await expectThemeApplied(page, testInfo);
+    const main = page.getByRole('main');
+    await expect(main.getByRole('heading', { level: 1 })).toHaveText('Group not found');
+    await expect(main).toContainText("This group may have been deleted or you don't have access.");
+    await expect(main.getByRole('link', { name: 'Back to Home' })).toHaveAttribute(
+      'href',
+      '/dashboard',
+    );
+    await expect(main).not.toContainText('Studio Lunch Club');
+    await expect(page.locator('.statement-paper')).toHaveCount(0);
+  }
+  await expectNoSeriousA11yViolations(page, testInfo, 'group-refusal');
+  await reviewScreenshot(page, testInfo, 'group-refusal');
+
+  await page.getByRole('main').getByRole('link', { name: 'Back to Home' }).click();
+  await page.waitForURL((url) => url.pathname === '/dashboard');
 });

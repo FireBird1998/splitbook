@@ -57,6 +57,12 @@ inaccessible Groups return HTTP 403, and signed-out visitors redirect to login. 
 JSON endpoint or client query cache is introduced. Next's `authInterrupts` enables the server
 page's actual HTTP 403, rather than displaying a refusal with a 200 response.
 
+The refusal is `app/(main)/groups/[id]/forbidden.tsx`, shown inside the app's shell. It uses
+the Group page's own words for a Group the member can't open (#201), "Group not found" and
+"This group may have been deleted or you don't have access.", through the shared
+`GroupUnavailable` component, with a **Back to Home** link. It takes no props, so a missing
+Group and a refused one get the same page, and neither is named.
+
 `buildStatement` in `@splitbook/shared/statement` reuses the insights' member Paid/Share
 helpers and the exact settlement ledger's `calculateNetBalancesMinor` and `simplifyDebtsMinor`.
 Spent, Expense count, Paid, Share and Net cover the selected period. Paid and Share each sum
