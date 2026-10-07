@@ -4,8 +4,8 @@
     "Sign in and show Home (20 Groups)": {
       "requests": 7,
       "publishes": 8,
-      "commits": 5,
-      "renders": 461
+      "commits": 4,
+      "renders": 319
     },
     "Foreground on Home within 30 s": {
       "requests": 0,
@@ -132,6 +132,18 @@
       "publishes": 2,
       "commits": 2,
       "renders": 240
+    },
+    "Open the payment sheet within 30 s": {
+      "requests": 1,
+      "publishes": 3,
+      "commits": 2,
+      "renders": 196
+    },
+    "Record a payment": {
+      "requests": 6,
+      "publishes": 13,
+      "commits": 6,
+      "renders": 468
     },
     "Type 20 characters into Description": {
       "requests": 0,

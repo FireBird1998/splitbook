@@ -289,11 +289,25 @@ const historyPage = (expenseId: string, page: number) => ({
 });
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
-/** `expensePages`: how many pages of Expenses Maple House has; 5 unless a journey needs more. */
-function backend({ expensePages = pages } = {}) {
+/**
+ * `expensePages`: how many pages of Expenses Maple House has; 5 unless a journey needs more.
+ * `payment`: Alex is in Maple House too, so Sam can record the payment Balances suggest (#333).
+ */
+function backend({ expensePages = pages, payment = false } = {}) {
   let cookie: string | null = null;
   let account: string | null = null;
-  const drafts = new Map<string, unknown>();
+  let paid = false;
+  const drafts = new Map<string, unknown>(),
+    attempts = new Map<string, unknown>();
+  const shown = payment
+    ? {
+        ...group,
+        members: [
+          ...group.members,
+          { user: { ...alex, email: 'a@x.test' }, role: 'member', joinedAt: iso },
+        ],
+      }
+    : group;
   const clock = { now: new Date(2026, 8, 27, 12).getTime() };
   const controller = createMobileController(
     {
@@ -327,6 +341,21 @@ function backend({ expensePages = pages } = {}) {
         stores: [],
       },
       newSubmissionKey: () => 'render-profile-0001',
+      ...(payment
+        ? {
+            settlementAttempts: {
+              load: async (accountId: string, id: string) =>
+                structuredClone(attempts.get(`${accountId}:${id}`) ?? null),
+              save: async (accountId: string, id: string, value: unknown) => {
+                attempts.set(`${accountId}:${id}`, structuredClone(value));
+              },
+              remove: async (accountId: string, id: string) => {
+                attempts.delete(`${accountId}:${id}`);
+              },
+              clear: async () => attempts.clear(),
+            },
+          }
+        : {}),
       credentials: {
         load: async () => cookie,
         save: async (value) => {
@@ -349,7 +378,31 @@ function backend({ expensePages = pages } = {}) {
         if (path.endsWith('/get-session'))
           return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
         if (path === '/api/groups') return json({ data: groups, status: 200 });
-        if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
+        if (path === `/api/groups/${groupId}`) return json({ data: shown, status: 200 });
+        if (path === `/api/groups/${groupId}/settlements` && init.method === 'POST') {
+          paid = true;
+          const body = JSON.parse(String(init.body)) as { amount: number; note?: string };
+          return json(
+            {
+              status: 201,
+              data: {
+                _id: hex('e', 1),
+                group: groupId,
+                paidBy: person,
+                paidTo: alex,
+                createdBy: person,
+                amount: body.amount,
+                amountMinor: Math.round(body.amount * 100),
+                moneyVersion: 1,
+                currency: 'INR',
+                note: body.note ?? '',
+                createdAt: iso,
+                updatedAt: iso,
+              },
+            },
+            201,
+          );
+        }
         // Home's figures say which Groups they cover, as SplitBook's do (#333): none here, so no
         // Group the list leaves out, and each row's balance stays unknown, as this profile has
         // always measured it.
@@ -373,8 +426,8 @@ function backend({ expensePages = pages } = {}) {
               byCurrency: [
                 {
                   currency: 'INR',
-                  balances: [{ user: person, balance: -30 }],
-                  debts: [{ from: person, to: alex, amount: 30 }],
+                  balances: [{ user: person, balance: paid ? 0 : -30 }],
+                  debts: paid ? [] : [{ from: person, to: alex, amount: 30 }],
                 },
               ],
             },
@@ -472,7 +525,7 @@ const settle = async (pending?: Promise<unknown>) => {
   }
 };
 
-async function renderApp(options?: { expensePages?: number }) {
+async function renderApp(options?: { expensePages?: number; payment?: boolean }) {
   const harness = backend(options);
   await harness.controller.signIn('sam');
   runtime.controller = harness.controller;
@@ -805,6 +858,36 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
       changes(100, 1),
     );
   });
+  // #333: the sheet checks the Group its view verified within 30 s, and reads only its Balances;
+  // Record reads only the Balances before it sends the payment.
+  it('the Record payment sheet', async () => {
+    const app = await renderApp({ payment: true });
+    await app.press('Open Maple House');
+    await app.press('Balances');
+    expect(app.shows('All-time balance'), 'Balances on screen').toBe(true);
+    await journey(
+      'Open the payment sheet within 30 s',
+      () => app.press('Record your payment to Alex'),
+      () => {
+        expect(app.controller.getSnapshot().settlement.status, 'The sheet is ready').toBe(
+          'editing',
+        );
+        expect(app.count('Record payment ₹30.00'), 'Record on the sheet').toBe(1);
+      },
+    );
+    await journey(
+      'Record a payment',
+      () => app.press('Record payment ₹30.00'),
+      () =>
+        expect(app.controller.getSnapshot(), 'Recorded, back on Balances').toMatchObject({
+          screen: 'group',
+          destination: 'balances',
+          snackbar: { message: 'Payment recorded' },
+        }),
+      { allow: [`POST /api/groups/${groupId}/settlements`] },
+    );
+  });
+
   it('typing in the Expense form', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');

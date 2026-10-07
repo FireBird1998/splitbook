@@ -111,6 +111,16 @@ Rebased on #331's loading motion (`d41424b`), one count moved: Change Month rend
 
 A change's row is drawn again only when what it says changes, so a slide or a refresh draws only the changes it adds. Refresh publishes once more than first recorded: the top bar says "Refreshing…" from the tap, before the session check (the device check of #220).
 
+### Added for #333
+
+**Build:** `swarm/333-reads-together`, on `main` at `907b147`, recorded three times with `RENDER_PROFILE=record`; the three runs gave identical counts. Home reads its Groups list and its figures together, the Record payment sheet checks the Group its view verified within 30 s and reads only its Balances, and Record reads only the Balances before the payment. The harness's `payment` backend adds Alex to Maple House, so Sam can record the payment Balances suggest, and answers the payment. Requests stay as before for every existing journey; one ceiling is lowered and two journeys are new, so nothing needs a re-record.
+
+| Journey                            | Requests | Publishes / commits / renders | Sent, in order                                                                                                   |
+| ---------------------------------- | -------: | ----------------------------: | ---------------------------------------------------------------------------------------------------------------- |
+| Sign in and show Home (20 Groups)  |        7 | 8 / 4 / 319 (was 8 / 5 / 461) | as before; Home's list and figures are read together: one commit fewer                                           |
+| Open the payment sheet within 30 s |        1 |                   3 / 2 / 196 | Balances                                                                                                         |
+| Record a payment                   |        6 |                  13 / 6 / 468 | Balances, `POST /api/groups/:id/settlements`, then Group, Expenses page 1, Balances and `GET /api/user/balances` |
+
 ### Requests per journey
 
 What each journey sends, in order, at `d506f6e`. `:id` is the Household Group's id. **Group** is `GET /api/groups/:id`; **Balances** is `GET /api/groups/:id/balances`; **Expenses page N** is `GET /api/groups/:id/expenses?page=N&limit=20&includeMemberBreakdown=1` with the Month on screen as `dateFrom` and `dateTo`; **Activity page N** is `GET /api/groups/:id/activity?page=N&limit=20`. Every request but the persona sign-in is a GET.
