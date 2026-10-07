@@ -68,7 +68,7 @@ export async function getGroupInsights(
   if (!group) return null;
 
   const earliest = await Expense.findOne({ group: groupId, isDeleted: false })
-    .sort({ date: 1, _id: 1 })
+    .sort({ date: 1 })
     .select('date')
     .lean();
   const starts = [group.createdAt, earliest?.date]

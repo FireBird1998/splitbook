@@ -59,6 +59,9 @@ export interface GroupInsightsViewProps {
 
 type CardState = 'ready' | 'loading' | 'failed' | 'empty';
 
+/** The stat cards' columns, as the canvas's .cols-sm: as many 200 px cards as fit. */
+const FIGURE_COLUMNS = 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))';
+
 export default function GroupInsightsView({
   groupId,
   userId,
@@ -99,7 +102,7 @@ export default function GroupInsightsView({
         aria-label={`${monthLong} in figures`}
         sx={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))',
+          gridTemplateColumns: FIGURE_COLUMNS,
           gap: 1.5,
         }}
       >
@@ -127,7 +130,14 @@ export default function GroupInsightsView({
             role="status"
             aria-label={`Loading the figures for ${monthLong}`}
             aria-busy="true"
-            sx={{ display: 'contents' }}
+            // Its own grid, not `display: contents`, which can hide a role from assistive
+            // technology.
+            sx={{
+              gridColumn: '1 / -1',
+              display: 'grid',
+              gridTemplateColumns: FIGURE_COLUMNS,
+              gap: 1.5,
+            }}
           >
             {['Spent', 'Your share', 'Expenses', 'Biggest expense'].map((label) => (
               <StatCard key={label} label={label}>
@@ -146,8 +156,8 @@ export default function GroupInsightsView({
       ) : null}
 
       <HomeRow>
+        {/* Not keyed by the Month: the chosen view stays as the member moves between Months. */}
         <MonthlySpendingCard
-          key={`${address.month}:${address.compare}`}
           model={shown && state === 'ready' ? monthlySpending(shown, { currentMonth }) : null}
           state={state}
           onRetry={onRetry}
