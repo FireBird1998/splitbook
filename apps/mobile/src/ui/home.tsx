@@ -15,7 +15,6 @@ import type {
 } from '../data/types';
 import { notOnPhone } from '../data/home-queries';
 import {
-  Badge,
   Banner,
   Card,
   CompactAvatar,
@@ -30,16 +29,14 @@ import {
   SectionHeader,
   Skeleton,
   SkeletonText,
-  StatusText,
   moneySizes,
   scaledSp,
   useLargeText,
   useLineBox,
 } from './compact';
-import { RetainedNotice } from './financial-views';
+import { ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
-import { refreshedLabel } from './refresh-feedback';
 import { fonts, useTheme } from './theme';
 
 const themeIcons: Record<GroupCategory, IconName> = {
@@ -198,30 +195,23 @@ function CurrencyRow({ bucket }: { bucket: HomeCurrencyBalance }) {
 }
 
 /**
- * When the figures shown were read. "Updated hh:mm" for the server's answer in this session,
- * offline too; this device's saved copy says "Saved hh:mm", never presented as fresh (ADR
- * 0006), and offline it is the badge every saved view shows. "Saved" giving way to "Updated"
- * cross-fades in place (#332).
- */
-function BalancesTime({ state, offline }: { state: HomeFinancialState; offline: boolean }) {
-  if (state.refreshedAt === null) return null;
-  const time = refreshedLabel(state.refreshedAt);
-  if (state.restored && offline) return <Badge label={`Saved ${time}`} />;
-  return <StatusText tone="muted">{`${state.restored ? 'Saved' : 'Updated'} ${time}`}</StatusText>;
-}
-
-/**
- * One row per currency, each kept separate, with when the figures were read (`BalancesTime`).
- * Read again after a change in a Group, they keep their place and their time: the top bar says
- * they're refreshing, so nothing moves (#219).
+ * One row per currency, each kept separate, with when the figures were read (`ReadTime`):
+ * "Updated hh:mm" for the server's answer in this session, offline too; this device's saved
+ * copy says "Saved hh:mm", never presented as fresh (ADR 0006), and offline it is the badge
+ * every saved view shows. "Saved" giving way to "Updated" cross-fades in place (#332). Read
+ * again after a change, or after a Group's Expenses were read, they say "Updating…" where their
+ * time was, in its place, so nothing moves (#219). `silent` keeps an automatic refresh
+ * unannounced.
  */
 export function HomeBalances({
   state,
   offline = false,
+  silent = false,
   onRefresh,
 }: {
   state: HomeFinancialState;
   offline?: boolean;
+  silent?: boolean;
   onRefresh: () => void;
 }) {
   const theme = useTheme();
@@ -268,7 +258,15 @@ export function HomeBalances({
             <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
               Your balances
             </CompactText>
-            {state.data !== null ? <BalancesTime state={state} offline={offline} /> : null}
+            {state.data !== null ? (
+              <ReadTime
+                refreshedAt={state.refreshedAt}
+                restored={state.restored === true}
+                updating={state.stale && state.status === 'loading' && !silent}
+                offline={offline}
+                tone="muted"
+              />
+            ) : null}
           </View>
         }
         loading={placeholder ? 'Loading your balances' : undefined}

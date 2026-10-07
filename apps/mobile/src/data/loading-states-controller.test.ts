@@ -724,9 +724,9 @@ describe('refresh feedback (#127)', () => {
     const back = controller.back();
     await home.reached;
     const state = controller.getSnapshot();
-    // The header says it, once; the figures keep their place and their time (#219).
+    // The Home figures' own label says they're updating; the header stays quiet.
     expect(state.home).toMatchObject({ status: 'loading', stale: true });
-    expect(refreshFeedback(state).quiet).toBe(true);
+    expect(refreshFeedback(state).quiet).toBe(false);
     home.release();
     await back;
   });

@@ -1,6 +1,7 @@
+import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import type { LoadStatus } from '../data/types';
-import { Badge, StatusText, useLargeText, type TextTone } from './compact';
+import { Badge, CompactText, StatusText, useLargeText, type TextTone } from './compact';
 import { Button, Copy, Icon } from './primitives';
 import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
@@ -40,28 +41,85 @@ export function RefreshStatus({
 }
 
 /**
- * When a Group's Expenses or Balances shown were read, in their own slot: "Updated hh:mm" for
- * the server's answer in this session, offline too; this device's restored copy says "Saved
- * hh:mm", never presented as fresh (ADR 0006), and offline it is the badge every saved view
- * shows. It says nothing of a read under way, which the screen's one progress cue says, so the
- * slot never grows into a second line and nothing below it moves (#219, as Home's since #332).
+ * Says `children` in the place `holds` takes: an unseen, unread copy of `holds` keeps that place
+ * at its size, so a short status standing in for a longer text moves nothing around it, whatever
+ * the text size (#219). With `holds` null, `children` take their own place. The same `children`
+ * stay mounted either way, so a status in them fades from one text to the other.
+ */
+function InPlace({ holds, children }: { holds: ReactNode | null; children: ReactNode }) {
+  return (
+    <View>
+      {holds === null ? null : (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{ opacity: 0 }}
+        >
+          {holds}
+        </View>
+      )}
+      <View
+        style={
+          holds === null
+            ? undefined
+            : {
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 0,
+                justifyContent: 'center',
+                alignItems: 'flex-end',
+              }
+        }
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * When a Group's Expenses or Balances, or Home's figures, shown were read, in their own slot:
+ * "Updated hh:mm" for the server's answer in this session, offline too; this device's restored
+ * copy says "Saved hh:mm", never presented as fresh (ADR 0006), and offline it is the badge every
+ * saved view shows (#219, as Home's since #332). An ordinary refresh changes nothing here: the
+ * screen's one progress cue says it. Figures a change has made out of date (`updating`) say
+ * "Updating…" where their time was, in its place, until they're read again, so the member never
+ * takes an old debt for a current one, and nothing below moves.
  */
 export function ReadTime({
   refreshedAt,
   restored = false,
   offline = false,
+  updating = false,
   tone = 'secondary',
 }: {
   refreshedAt: number | null;
   /** The figures are this device's saved copy. */
   restored?: boolean;
   offline?: boolean;
+  /** Out of date since a change, and being read again. */
+  updating?: boolean;
   tone?: TextTone;
 }) {
   if (refreshedAt === null) return null;
   const time = refreshedLabel(refreshedAt);
-  if (restored && offline) return <Badge label={`Saved ${time}`} />;
-  return <StatusText tone={tone}>{`${restored ? 'Saved' : 'Updated'} ${time}`}</StatusText>;
+  if (restored && offline && !updating) return <Badge label={`Saved ${time}`} />;
+  const read = `${restored ? 'Saved' : 'Updated'} ${time}`;
+  return (
+    <InPlace
+      holds={
+        updating ? (
+          <CompactText variant="caption" tone={tone}>
+            {read}
+          </CompactText>
+        ) : null
+      }
+    >
+      <StatusText tone={tone}>{updating ? 'Updating…' : read}</StatusText>
+    </InPlace>
+  );
 }
 
 /**

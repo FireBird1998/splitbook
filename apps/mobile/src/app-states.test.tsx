@@ -119,6 +119,8 @@ function device() {
     refused: [] as string[],
     /** Paths the server fails with a 500: exact, or every path a prefix ending in `?` starts. */
     failing: [] as string[],
+    /** Alex has recorded the ₹30.00 owed to Sam: Balances are settled. */
+    paid: false,
   };
   /** The saved copies can't be removed, as on a full or read-only disk. */
   const storage = { failRemoval: false };
@@ -127,8 +129,11 @@ function device() {
     identity: unknown = null,
     untrusted: unknown = null;
   const cache = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>();
+    drafts = new Map<string, unknown>(),
+    payments = new Map<string, unknown>();
   const holds: { prefix: string; arrive: () => void; response: Promise<void> }[] = [];
+  /** Every request this phone sent, as `METHOD /path?query`. */
+  const sent: string[] = [];
   const respond = (path: string, method: string): FetchResponse => {
     if (path.endsWith('/sign-out')) return json({ success: true });
     if (path.endsWith('/sign-in'))
@@ -143,7 +148,9 @@ function device() {
     if (path === '/api/user/balances')
       return json({
         data: {
-          buckets: network.noGroups ? [] : [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }],
+          buckets: network.noGroups
+            ? []
+            : [{ currency: 'INR', youOwe: network.paid ? 0 : 30, youAreOwed: 0 }],
           ...(network.groupBalances && {
             groups: [
               { groupId: maple, balances: [{ currency: 'INR', balance: -30 }] },
@@ -194,6 +201,29 @@ function device() {
           },
         },
       });
+    if (path === `/api/groups/${id}/settlements` && method === 'POST') {
+      network.paid = true;
+      return json(
+        {
+          status: 201,
+          data: {
+            _id: 'f00000000000000000000001',
+            group: id,
+            paidBy: { _id: alex.id, name: alex.name, image: null },
+            paidTo: { _id: sam._id, name: sam.name, image: null },
+            createdBy: { _id: alex.id, name: alex.name, image: null },
+            amount: 30,
+            amountMinor: 3000,
+            moneyVersion: 1,
+            currency: 'INR',
+            note: '',
+            createdAt: iso,
+            updatedAt: iso,
+          },
+        },
+        201,
+      );
+    }
     if (path === `/api/groups/${id}/balances`)
       return json({
         status: 200,
@@ -202,10 +232,10 @@ function device() {
             {
               currency: 'INR',
               balances: [
-                { user: { ...alex, _id: alex.id }, balance: -30 },
-                { user: sam, balance: 30 },
+                { user: { ...alex, _id: alex.id }, balance: network.paid ? 0 : -30 },
+                { user: sam, balance: network.paid ? 0 : 30 },
               ],
-              debts: [{ from: { ...alex, _id: alex.id }, to: sam, amount: 30 }],
+              debts: network.paid ? [] : [{ from: { ...alex, _id: alex.id }, to: sam, amount: 30 }],
             },
           ],
         },
@@ -261,6 +291,17 @@ function device() {
             identity = null;
           },
         },
+        // A payment's retry identity, stored before it is sent.
+        settlementAttempts: {
+          load: async (account, id) => structuredClone(payments.get(`${account}:${id}`) ?? null),
+          save: async (account, id, value) => {
+            payments.set(`${account}:${id}`, structuredClone(value));
+          },
+          remove: async (account, id) => {
+            payments.delete(`${account}:${id}`);
+          },
+          clear: async () => payments.clear(),
+        },
         savedQueries: savedQueriesIn(cache, {
           remove: async (account, path) => {
             if (storage.failRemoval) throw new Error('The device storage is full');
@@ -309,10 +350,11 @@ function device() {
             },
           },
           // As the app registers them: sign-out and an account change clear the saved copies.
-          stores: [{ clear: async () => cache.clear() }],
+          stores: [{ clear: async () => cache.clear() }, { clear: async () => payments.clear() }],
         },
         fetch: async (url, init) => {
           const path = new URL(url).pathname + new URL(url).search;
+          sent.push(`${init.method ?? 'GET'} ${path}`);
           if (!network.online) throw new Error('Offline');
           const index = holds.findIndex((item) => path.startsWith(item.prefix));
           if (index >= 0) {
@@ -329,6 +371,7 @@ function device() {
   return {
     clock,
     network,
+    sent,
     storage,
     controller,
     /** The saved copy of `path` on this phone, as stored. */
@@ -1578,6 +1621,19 @@ describe('A Group says what is true, without jumps (#219)', () => {
     while (node && !icons(node).length) node = node.parent;
     return node ? icons(node).map((icon) => icon.props.name as string) : [];
   };
+  /**
+   * The scrolling content's text as the member sees it: without what is laid out only to hold a
+   * place, unseen and unread (`accessibilityElementsHidden`), such as a skeleton's sizing copy.
+   */
+  const seen = () => {
+    const words = (node: ReactTestRendererJSON | string): string =>
+      typeof node === 'string'
+        ? node
+        : node.props.accessibilityElementsHidden
+          ? ''
+          : (node.children ?? []).map(words).join('');
+    return words(findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView')[0]!);
+  };
   /** Group options, then Refresh: started, not waited for. */
   const refresh = async (app: Awaited<ReturnType<typeof start>>) => {
     await app.press('Group options');
@@ -1863,12 +1919,104 @@ describe('A Group says what is true, without jumps (#219)', () => {
     app.tap('Back to Home');
     await figures.reached;
     await settle();
+    // The Group's Expenses were read since: Home's figures say in place that they're updating,
+    // where their time was, and the top bar stays quiet.
     expect(contentHeight()).toBe(height);
-    expect(app.text()).not.toContain('Updating');
-    expect(app.content().outside).toContain('Refreshing…');
+    expect(seen()).toContain('Your balancesUpdating…');
+    expect(seen()).not.toContain('Updated');
+    expect(app.content().outside).not.toContain('Refreshing');
     figures.release();
     await settle();
     expect(contentHeight()).toBe(height);
+    expect(seen()).toContain(`Your balancesUpdated ${refreshedLabel(phone.clock.now)}`);
+  });
+
+  // B1 and S2: after a payment, Balances and then Home say the figures shown are being updated.
+  it.each([1, 1.3])(
+    'says Balances and Home are updating after a payment, in place, at %s× text',
+    async (scale) => {
+      setWindow({ fontScale: scale });
+      const phone = device();
+      await usedBefore(phone);
+      const app = await start(phone);
+      await settle();
+      const home = contentHeight(scale);
+      await app.press(open[maple]);
+      await app.press('Balances');
+      const readAt = refreshedLabel(phone.clock.now);
+      const height = contentHeight(scale);
+      expect(seen()).toContain(`All-time balance · INRUpdated ${readAt}You owe₹30.00`);
+      expect(seen()).toContain('Suggested paymentsRecord one once it’s paid');
+
+      // Alex records the ₹30.00 owed to Sam; it is confirmed, and Balances are read again after it.
+      phone.clock.now += 2 * 60_000;
+      await settle(controller().openRecordPayment(alex.id, sam._id, 'INR'));
+      const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
+      const figures = phone.hold('/api/user/balances');
+      const recording = controller().recordSettlement();
+      await expenses.reached;
+      await settle();
+      expect(app.text()).toContain('Payment recorded');
+      // The old debt says it is being updated, where its time was, and Record says why it waits,
+      // where its caption was: nothing moves.
+      expect(seen()).toContain('All-time balance · INRUpdating…You owe₹30.00');
+      expect(seen()).toContain('Suggested paymentsRecord once updated');
+      expect(seen()).not.toContain(`Updated ${readAt}`);
+      expect(app.disabled('Record your payment to Sam Chen')).toBe(true);
+      expect(contentHeight(scale)).toBe(height);
+      // While Balances themselves are read, too.
+      const balances = phone.hold(`/api/groups/${maple}/balances`);
+      expenses.release();
+      await balances.reached;
+      await settle();
+      expect(seen()).toContain('All-time balance · INRUpdating…You owe₹30.00');
+      expect(contentHeight(scale)).toBe(height);
+      balances.release();
+      await figures.reached;
+      await settle();
+      expect(seen()).toContain(`All-time balance · INRUpdated ${refreshedLabel(phone.clock.now)}`);
+      expect(seen()).toContain('Settled up');
+      expect(seen()).not.toContain('Updating');
+
+      // Home's figures, read before the payment, are read again after it: back on Home they say
+      // so in place, and the top bar stays quiet.
+      app.tap('Back to Home');
+      await settle();
+      expect(seen()).toContain('Your balancesUpdating…');
+      expect(seen()).not.toContain(`Updated ${readAt}`);
+      expect(app.content().outside).not.toContain('Refreshing');
+      expect(contentHeight(scale)).toBe(home);
+      figures.release();
+      await settle(recording);
+      expect(seen()).toContain(`Your balancesUpdated ${refreshedLabel(phone.clock.now)}`);
+    },
+  );
+
+  // S1: after a save, the Month's figures say they're being updated until the list is read again.
+  it('says the Expenses are updating after an Expense is saved, in place', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[maple]);
+    const readAt = refreshedLabel(phone.clock.now);
+    const height = contentHeight();
+    expect(seen()).toContain(`0 expenses this monthUpdated ${readAt}`);
+    phone.clock.now += 2 * 60_000;
+    await settle(controller().openExpense(maple));
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId }));
+    const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
+    const saving = controller().saveExpense();
+    await expenses.reached;
+    await settle();
+    expect(app.text()).toContain('Expense saved');
+    expect(seen()).toContain('0 expenses this monthUpdating…');
+    expect(seen()).not.toContain(`Updated ${readAt}`);
+    expect(contentHeight()).toBe(height);
+    expenses.release();
+    await settle(saving);
+    expect(seen()).toContain(`0 expenses this monthUpdated ${refreshedLabel(phone.clock.now)}`);
+    expect(seen()).not.toContain('Updating');
   });
 
   // Item 5: the error icon.

@@ -154,6 +154,11 @@ export interface GroupFinancialState {
      */
     restored?: boolean;
     /**
+     * A change written in this Group made the rows shown out of date: they're shown until read
+     * again, saying so (#219). Unset before any change.
+     */
+    changed?: boolean;
+    /**
      * The first page listed: past 1 once the list has slid past 5 pages, when Load newer reads
      * the page before it (M7-2). `pagination` is the last page listed.
      */

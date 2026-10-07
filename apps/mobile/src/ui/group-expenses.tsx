@@ -231,6 +231,7 @@ const ExpenseSummary = memo(function ExpenseSummary({
   currentUserId,
   refreshedAt,
   restored,
+  updating,
   offline,
   loading,
   opening,
@@ -244,6 +245,8 @@ const ExpenseSummary = memo(function ExpenseSummary({
   refreshedAt: number | null;
   /** The figures are this device's saved copy: "Saved", not "Updated". */
   restored: boolean;
+  /** A change made them out of date, and they're being read again: "Updating…". */
+  updating: boolean;
   offline: boolean;
   loading: boolean;
   /** The Group is first read: its Month isn't known yet. */
@@ -254,7 +257,9 @@ const ExpenseSummary = memo(function ExpenseSummary({
 }) {
   const figures = summary ? summaryStats(summary, currentUserId) : null;
   const large = useLargeText();
-  const updated = <ReadTime refreshedAt={refreshedAt} restored={restored} offline={offline} />;
+  const updated = (
+    <ReadTime refreshedAt={refreshedAt} restored={restored} updating={updating} offline={offline} />
+  );
   const count = summary ? `${summary.count} ${summary.count === 1 ? 'expense' : 'expenses'}` : '';
   const within = !month
     ? ''
@@ -548,6 +553,8 @@ export function GroupExpensesView({
         currentUserId={currentUserId}
         refreshedAt={listed ? expenses.refreshedAt : null}
         restored={expenses.restored === true}
+        // The rows shown are from before a change written here, and being read again.
+        updating={expenses.changed === true && expenses.status === 'loading'}
         offline={offline}
         loading={!listed && expenses.status !== 'error'}
         opening={firstRead}

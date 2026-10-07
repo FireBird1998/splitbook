@@ -16,6 +16,7 @@ import {
   SectionHeader,
   SkeletonOf,
   SkeletonText,
+  StatusText,
 } from './compact';
 import { ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
@@ -25,6 +26,10 @@ import { useTheme } from './theme';
 export const recordNeedsConnection = 'Recording a payment needs a connection.';
 /** Balances not yet read again after a change: their payments wait for the read (#219). */
 export const recordWaitsForBalances = 'Record is available once these balances are updated.';
+/** Above the suggested payments: when to record one. */
+const recordCaption = 'Record one once it’s paid';
+/** The caption while Record waits for the read after a change: no longer, so it fits there. */
+const recordWaitsShort = 'Record once updated';
 /** A Group whose details couldn't be read (owner decision 2A): the sheet needs them (#219). */
 export const recordWaitsForDetails = (name: string) =>
   `Record is available once ${name}’s details load.`;
@@ -138,6 +143,7 @@ function MemberBalanceCard({
   currentUserId,
   refreshedAt,
   restored,
+  updating,
   offline,
   monthLens,
 }: {
@@ -146,6 +152,8 @@ function MemberBalanceCard({
   refreshedAt: number | null;
   /** The figures are this device's saved copy: "Saved", not "Updated". */
   restored: boolean;
+  /** A change made them out of date, and they're being read again: "Updating…". */
+  updating: boolean;
   offline: boolean;
   monthLens: boolean;
 }) {
@@ -159,7 +167,13 @@ function MemberBalanceCard({
           <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
             All-time balance · {bucket.currency}
           </CompactText>
-          <ReadTime refreshedAt={refreshedAt} restored={restored} offline={offline} tone="muted" />
+          <ReadTime
+            refreshedAt={refreshedAt}
+            restored={restored}
+            updating={updating}
+            offline={offline}
+            tone="muted"
+          />
         </View>
         {label ? (
           <View
@@ -217,9 +231,11 @@ function SuggestedPayments({
       <SectionHeader
         title="Suggested payments"
         trailing={
-          <CompactText variant="caption" tone="muted">
-            Record one once it’s paid
-          </CompactText>
+          // While a change keeps Record waiting, its caption says why, in a line no longer than
+          // the caption's, so nothing moves (#219); the full reason is Record's hint.
+          <StatusText variant="caption" tone="muted">
+            {locked && !offline ? recordWaitsShort : recordCaption}
+          </StatusText>
         }
       />
       <Card>
@@ -520,6 +536,8 @@ export function GroupBalancesView({
             currentUserId={currentUserId}
             refreshedAt={balances.refreshedAt}
             restored={balances.restored === true}
+            // The figures shown are from before a change written here, and being read again.
+            updating={balances.changed === true && balances.status === 'loading'}
             offline={offline}
             monthLens={group.category === 'home'}
           />

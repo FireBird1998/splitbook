@@ -1046,7 +1046,7 @@ export function createGroupQueries(session: GroupSession) {
   };
 
   /** The Expenses shown for the Month, from their query, in the snapshot's shape. */
-  const projectExpenses = (shown: Expenses, opened: View, financial: GroupFinancialState) => {
+  const expensesFrom = (shown: Expenses, opened: View, financial: GroupFinancialState) => {
     const key = shownList(financial),
       state = stateOf<Pages>(key);
     if (!key) return shown;
@@ -1146,6 +1146,19 @@ export function createGroupQueries(session: GroupSession) {
       newerStatus: 'idle',
       newerMessage: null,
     });
+  };
+  /**
+   * The Expenses shown, and whether a change written in this Group made them out of date: they
+   * weren't read since by a read begun after it (#219). The rows stay while they're read again,
+   * and say so; Balances' `changed` is the same for their payments.
+   */
+  const projectExpenses = (shown: Expenses, opened: View, financial: GroupFinancialState) => {
+    let next = expensesFrom(shown, opened, financial);
+    const pages = stateOf<Pages>(shownList(financial))?.data;
+    const changed =
+      opened.change !== 0 && !(pages && (answers.get(pages)?.change ?? -1) >= opened.change);
+    if ((next.changed ?? false) !== changed) next = { ...next, changed };
+    return next;
   };
   /** The Group's all-time Balances, from their query, in the snapshot's shape. */
   const balancesFrom = (shown: Balances, opened: View, financial: GroupFinancialState) => {

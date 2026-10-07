@@ -628,6 +628,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
         <HomeBalances
           state={state.home}
           offline={state.offline.active}
+          silent={feedback.silent}
           onRefresh={() => void controller.refreshHome()}
         />
         {state.creation.status === 'uncertain' && (
