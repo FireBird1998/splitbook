@@ -124,6 +124,11 @@ export interface ExpenseEditor {
   blank: ExpenseDraft | null;
   /** The saved Expense's changes, read while its record is shown. */
   history: ExpenseHistoryState;
+  /**
+   * When the record shown was verified, while it is what this device already knew (a saved copy,
+   * or a read before this open) and is read again (#220); null once it is current.
+   */
+  knownAt?: number | null;
 }
 /** Correctable Expense inputs, in the order they appear on screen. */
 export const expenseFields = ['amount', 'description', 'date', 'payers', 'split', 'tag'] as const;

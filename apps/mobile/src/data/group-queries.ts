@@ -50,7 +50,7 @@ type Pages = InfiniteData<PageEnvelope, number>;
  * after the window slides, the pages that stayed keep their rows, which then render as they were
  * (#219). TanStack shares by position, which a dropped page would shift.
  */
-const sharePages = (old: unknown, next: unknown): unknown => {
+export const sharePages = (old: unknown, next: unknown): unknown => {
   const before = old as Pages | undefined,
     after = next as Pages;
   if (!before?.pages || !after?.pages) return next;
@@ -72,7 +72,7 @@ type Balances = GroupFinancialState['balances'];
 const PAGE_SIZE = 20;
 export const MAX_PAGES = 5;
 /** A stale time that is stale whatever the clock says, even moved back past a read. */
-const STALE = -Infinity;
+export const STALE = -Infinity;
 const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
 const balancesNotUpdated = 'Could not update balances. Please try again.';
 
@@ -152,7 +152,7 @@ const inRows = (path: string, groupId: string, scope: GroupRows) => {
  * session count too, and those named in `known`, for a store that can't list its rows. Only the
  * keys are read where the store can, so a row that can't be read never stops a removal.
  */
-const rowPaths = async (
+export const rowPaths = async (
   rows: FindableRecordStore,
   accountId: string,
   known: Iterable<string> = [],
@@ -1348,6 +1348,11 @@ export function createGroupQueries(session: GroupSession) {
     },
     read,
     settle,
+    /**
+     * The Group's query as this view reads it, for another screen that shows the Group (an
+     * Expense, #220): one key per resource, read and saved one way.
+     */
+    groupOptions: (groupId: string) => groupOptions(groupId),
     /**
      * Load more: the next older page. Past 5 pages the window slides and the newest page drops; a
      * page that couldn't be read before is read again, in its place.

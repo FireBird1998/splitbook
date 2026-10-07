@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { homePath, listPath } from './home-queries';
 import { removeGroupRows } from './group-queries';
+import { removeRecordRows } from './expense-queries';
 import type { MobileDependencies } from './types';
 
 const recorded = z.object({ accountId: z.string(), scopes: z.record(z.string(), z.number()) });
@@ -25,8 +26,8 @@ export function untrustedCopies({
   };
   /**
    * A scope's saved copies: a Group's, its ledger's (Balances too), the Groups list or Home's.
-   * A Group's view keeps its rows on the persister (#219), the rest of its ledger in the older
-   * store.
+   * A Group's view (#219) and its Expense records with their changes (#220) keep their rows on
+   * the persister, the rest of its ledger the older store.
    */
   const remove = async (accountId: string, scope: string) => {
     const [name, groupId = ''] = scope.split(':');
@@ -38,6 +39,7 @@ export function untrustedCopies({
     } else {
       await readCache?.invalidateLedger(accountId, groupId);
       await removeGroupRows(rows, accountId, groupId, 'ledger');
+      await removeRecordRows(rows, accountId, groupId);
     }
   };
   return Object.assign(untrusted, {
