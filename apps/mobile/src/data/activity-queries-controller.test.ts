@@ -1497,3 +1497,39 @@ describe('saved copies and cues after review (#222)', () => {
     expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 20));
   });
 });
+
+// The final checks of 9ec19e4 (#222): a refresh's page that falls back to another total, a Trip
+// that turns out to be a Household, and a Trip's saved copy after an online restart.
+describe('final checks (#222)', () => {
+  it('ends a refresh’s list where a page falls back to a copy that counted another total', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 2);
+    // Others add 5 events; page 2's request is then lost, and its saved copy counted 130.
+    for (let n = 0; n < 5; n += 1)
+      f.server.events[mapleId].unshift({
+        ...f.server.events[mapleId][0],
+        _id: hex('b', 500 + n),
+        metadata: { description: `Others ${n}`, amount: 1, currency: 'INR' },
+      });
+    later(31_000);
+    const lost = f.hold(activityPath(2), { lost: true });
+    const pulling = controller.refresh('pull');
+    await lost.reached;
+    lost.release();
+    await pulling;
+    await settle();
+    // Never 40 events with 16 to 20 silently missing: the list ends after event 15.
+    expect(controller.getSnapshot().activity).toMatchObject({
+      status: 'ready',
+      moreStatus: 'error',
+    });
+    expect(listed(controller.getSnapshot())).toEqual([
+      'Others 4',
+      'Others 3',
+      'Others 2',
+      'Others 1',
+      'Others 0',
+      ...mapleEvents(1, 15),
+    ]);
+  });
+});
