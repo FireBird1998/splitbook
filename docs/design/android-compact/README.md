@@ -172,9 +172,9 @@ All sizes are in dp and scale with the Android font size. Layout boxes do not sc
 | State                 | Treatment                                                                                         |
 | --------------------- | ------------------------------------------------------------------------------------------------- |
 | First load            | Skeleton rows plus one linear progress bar; never a full-screen loader                            |
-| Refreshing            | Content stays; freshness reads "Saved hh:mm · refreshing"; automatic refresh is silent            |
+| Refreshing            | Content keeps its time, "Saved" only for this phone's copy; one progress bar; automatic is silent |
 | Offline, saved copy   | Offline banner, saved time on each view, and writes disabled with a stated reason                 |
-| Not available offline | Compact message with Try again; the navigation bar stays                                          |
+| Not available offline | Compact message that it isn't saved on this phone, with Try again; the navigation bar stays       |
 | Draft                 | Info tone; the add button reads "Resume draft"                                                    |
 | Save not confirmed    | Warning tone; fields locked; "Check and finish saving" reuses the same submission                 |
 | Corrections           | Linked summary at the top, messages beside each control; nothing rounded or substituted silently  |
