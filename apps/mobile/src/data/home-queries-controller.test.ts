@@ -86,6 +86,8 @@ function fixture() {
     refuseCreate: 0,
     /** Home's figures name the Groups they were worked out over, as SplitBook's server does. */
     groupFigures: true,
+    /** A status the Groups list answers with, instead of the list. */
+    failList: 0,
   };
   let cookie: string | null = null,
     owner: string | null = null,
@@ -217,7 +219,8 @@ function fixture() {
       const admin = zed.members.map((member) => ({ ...member, role: 'admin' }));
       return json({ status: 201, data: { ...zed, members: admin } }, 201);
     }
-    if (path === listPath) return json({ status: 200, data: listed() });
+    if (path === listPath)
+      return server.failList ? json({}, server.failList) : json({ status: 200, data: listed() });
     if (path === homePath)
       return json({
         status: 200,
@@ -1872,6 +1875,71 @@ describe('Home reads its Groups and its figures together (#333)', () => {
       expect(f.row(homePath)).toMatchObject({ refreshedAt: Date.now() });
     },
   );
+
+  it('reads the list beside the figures on Retry over a saved list after an offline start, and clears offline once both answer', async () => {
+    const f = fixture();
+    const first = f.create();
+    await first.signIn('alex');
+    await settle();
+    first.dispose();
+    // This phone keeps the list, but not Home's figures.
+    f.rows.delete(alex.id + homePath);
+    f.connect(false);
+    const controller = f.create();
+    await controller.restore();
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { restored: true, data: [{}, {}] },
+      home: { status: 'error', data: null, message: balancesNotOnPhone },
+      offline: { active: true },
+    });
+    // SplitBook can be reached again, with no reconnect event, as when a proxy comes back.
+    f.server.offline = false;
+    const sent = f.calls.length;
+    await controller.refreshHome();
+    await settle();
+    expect(sentSince(f, sent)).toEqual([
+      'GET /api/auth/get-session',
+      `GET ${listPath}`,
+      `GET ${homePath}`,
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { status: 'ready', restored: false, data: [{}, {}] },
+      home: { status: 'ready', restored: false, message: null, data: [{ youOwe: 30 }] },
+      offline: { active: false },
+    });
+  });
+
+  it('reads the list beside the figures on Retry when the list’s last read failed', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    later(31_000);
+    // A pull: the list answers with a server error, the figures with a failure of their own.
+    f.server.failList = 500;
+    f.server.expired = false;
+    const figures = f.hold(homePath, { lost: true });
+    const pulling = controller.refresh('pull');
+    await figures.reached;
+    figures.release();
+    await pulling;
+    await settle();
+    expect(controller.getSnapshot().groups).toMatchObject({ status: 'error', data: [{}, {}] });
+    f.server.failList = 0;
+    const sent = f.calls.length;
+    await controller.refreshHome();
+    await settle();
+    expect(sentSince(f, sent).filter((call) => !call.includes('get-session'))).toEqual([
+      `GET ${listPath}`,
+      `GET ${homePath}`,
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { status: 'ready', message: null, data: [{}, {}] },
+      home: { status: 'ready', message: null, data: [{ youOwe: 30 }] },
+      offline: { active: false },
+    });
+  });
 
   it('sends the list and the figures together on a pull, and Retry on the figures reads only them', async () => {
     const f = fixture();

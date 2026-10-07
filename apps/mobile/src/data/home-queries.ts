@@ -839,10 +839,17 @@ export function createHomeQueries(session: HomeSession) {
       show();
       return this.settle(session.generation());
     },
-    /** Retry on Home's figures: read again now, with this device's drafts. */
+    /**
+     * Retry on Home's figures: read again now, with this device's drafts. A list on screen that
+     * SplitBook hasn't answered this session, this device's copy or one whose last read failed,
+     * is read beside them, as on a pull (#333): it would otherwise stay saved, and offline.
+     */
     async refresh() {
-      if (session.snapshot().auth.status !== 'authenticated') return;
-      await Promise.all([listDrafts(), readNow(1, session.generation())]);
+      const { auth, groups } = session.snapshot(),
+        owner = session.generation();
+      if (auth.status !== 'authenticated') return;
+      const list = groups.restored || groups.status !== 'ready' ? readNow(0, owner) : null;
+      await Promise.all([list ? list.then(listDrafts) : listDrafts(), readNow(1, owner)]);
     },
     /** Home's figures are being read. */
     figuresReading: () => held(keys()[1])?.fetchStatus === 'fetching',

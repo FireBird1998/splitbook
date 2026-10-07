@@ -1006,7 +1006,7 @@ describe('account-scoped offline financial views', () => {
     expect(restarted.getSnapshot().detail.data).toBeNull();
     expect(restarted.getSnapshot().detail.message).toContain('not saved');
   });
-  it('keeps cached Groups labelled stale after Home balances reconnect', async () => {
+  it('keeps cached Groups labelled stale after Home balances reconnect, while the list can’t be read', async () => {
     const f = fixture(),
       first = f.create();
     await first.signIn('alex');
@@ -1015,6 +1015,8 @@ describe('account-scoped offline financial views', () => {
     const restarted = f.create();
     await restarted.restore();
     f.goOnline();
+    // Retry reads the saved list beside the balances (#333); SplitBook can't answer it yet.
+    f.failPath('/api/groups');
     await restarted.refreshHome();
     expect(restarted.getSnapshot().offline).toMatchObject({ active: true, refreshedAt: now });
     await restarted.openGroup(groupId);
