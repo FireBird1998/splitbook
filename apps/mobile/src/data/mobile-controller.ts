@@ -369,6 +369,9 @@ const earlierPayment = 'This earlier payment isn’t confirmed yet, so it comes 
 /** Only suggested payments are recorded, so one that's gone from the latest balances isn't. */
 const suggestionChanged =
   'This suggested payment has changed. Close this to see the latest balances.';
+/** The sheet's check found another amount than Balances showed: it says so, never silently. */
+const suggestionMoved =
+  'The suggested amount changed since Balances showed it. Check the amount, then record it.';
 
 /**
  * Session transport and Group/financial reads. Secure credential
@@ -4249,6 +4252,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     selectSettlement(paidBy, paidTo, currency);
     if (!snapshot.settlement.draft)
       publish({ ...snapshot, settlement: { ...snapshot.settlement, message: suggestionChanged } });
+    // The member saw Balances' amount while the sheet checked: a new one says so (#334).
+    else if (chosen.shown !== null && snapshot.settlement.suggested !== chosen.shown)
+      publish({ ...snapshot, settlement: { ...snapshot.settlement, message: suggestionMoved } });
   };
 
   /** Check payment on Balances opens the Group's unconfirmed payment in the sheet, to retry. */

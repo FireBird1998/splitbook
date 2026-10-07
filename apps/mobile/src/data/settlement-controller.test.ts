@@ -1065,6 +1065,37 @@ describe('native payment recording', () => {
     expect(controller.getSnapshot().settlement.draft).toBeNull();
   });
 
+  // #334, review: the sheet showed Balances' ₹30 while it checked, then a ₹20 suggestion silently.
+  it('says so when the sheet’s check finds another amount than Balances showed', async () => {
+    let amount = 30;
+    const { controller, writes } = setup((path) =>
+      path === `/api/groups/${groupId}/balances` ? json(balances(amount)) : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    expect(controller.getSnapshot().financial.balances.data?.[0].debts[0].amount).toBe(30);
+    amount = 20;
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      chosen: { shown: 30 },
+      suggested: 20,
+      draft: { amount: '20' },
+      message:
+        'The suggested amount changed since Balances showed it. Check the amount, then record it.',
+    });
+    // Closed, Balances show ₹20 too: opened again, the same amount says nothing.
+    await controller.back();
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      chosen: { shown: 20 },
+      suggested: 20,
+      message: null,
+    });
+    expect(writes).toHaveLength(0);
+  });
+
   // #334: after a network failure, Retry sends the first attempt's record again, never a new one.
   it('says a Retry that couldn’t reach SplitBook sent nothing, and that the first may already be recorded, then sends its key and revision again only on Retry', async () => {
     let down = false,
