@@ -189,7 +189,7 @@ const rows = (html: string) =>
     [...row.matchAll(/<td\b[^>]*>([\s\S]*?)<\/td>/g)].map(([, cell]) => text(cell)),
   );
 
-function table(recurringExpensesEnabled: boolean, expandedId: string | null = null) {
+function table(recurringExpensesEnabled: boolean, openId: string | null = null) {
   return render(
     createElement(ExpenseTable, {
       expenses: EXPENSES,
@@ -197,10 +197,9 @@ function table(recurringExpensesEnabled: boolean, expandedId: string | null = nu
       recurringExpensesEnabled,
       label: 'Expenses, September 2026',
       caption: 'Expenses in September 2026, newest first. Select an Expense to see its details.',
-      expandedId,
+      openId,
       onToggle: vi.fn(),
-      details: (row: ExpenseRead) => createElement('p', { id: `details-${row._id}` }, 'Opened'),
-      detailsId: (id: string) => `details-${id}`,
+      panelId: 'expense-panel',
     }),
   );
 }
@@ -280,21 +279,20 @@ describe('the Expense table', () => {
     expect(table(false)).not.toContain('Repeats monthly');
   });
 
-  it('opens an Expense from a button in its row, with no control inside another', () => {
+  it('opens an Expense in the side panel from a button in its row, with no control inside another', () => {
     const closed = table(false);
     expect(controlsInsideButtons(closed)).toEqual([]);
     expect(closed.match(/<button\b[^>]*aria-expanded="false"/g)).toHaveLength(4);
     expect(closed).not.toContain('aria-controls');
     expect(closed).not.toMatch(/role="button"/);
 
+    // The open row is marked, and its button names the panel beside the table (#311): nothing
+    // opens below the row any more.
     const open = table(false, EXPENSES[1]._id);
-    expect(open).toMatch(
-      new RegExp(
-        `<button\\b[^>]*aria-expanded="true"[^>]*aria-controls="details-${EXPENSES[1]._id}"`,
-      ),
-    );
-    expect(open).toMatch(/<td\b[^>]*colspan="6"/i);
-    expect(open).toContain(`id="details-${EXPENSES[1]._id}"`);
+    expect(open).toMatch(/<button\b[^>]*aria-expanded="true"[^>]*aria-controls="expense-panel"/);
+    expect(open.match(/aria-expanded="true"/g)).toHaveLength(1);
+    expect(open).not.toMatch(/colspan/i);
+    expect(rows(open)).toHaveLength(4);
     expect(controlsInsideButtons(open)).toEqual([]);
   });
 });

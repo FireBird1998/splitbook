@@ -337,15 +337,24 @@ in exact minor units, who paid, the split, the date and a Tag.
 
 ### Balances & Settlements
 
-| Component           | Description                                                                                     |
-| ------------------- | ----------------------------------------------------------------------------------------------- |
-| `BalancesView`      | The Balances tab: all-time balance, Settle up (suggested payments), net positions               |
-| `RecordPaymentForm` | Record payment on the page: parties-only pairs, suggestion, overpayment tick, unconfirmed saves |
-| `PaymentsTable`     | Payments: date and time, from → to, amount, note and who recorded it (names only)               |
+| Component           | Description                                                                                                |
+| ------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `BalancesView`      | The Balances tab: all-time balance, Settle up (suggested payments), Everyone, Record payment and Payments  |
+| `EveryoneCard`      | Everyone (#313): each position as a diverging bar with a tooltip; its table adds "Settled by"; Chart/Table |
+| `RecordPaymentForm` | Record payment on the page: parties-only pairs, suggestion, overpayment tick, unconfirmed saves            |
+| `PaymentsTable`     | Payments: date and time, from → to, amount, note and who recorded it (names only)                          |
 
 The suggestion, the overpayment check and the positions after come from the shared settlement
 preview (`@splitbook/shared/settlement-preview`). The UI says "Record payment" and "Payments";
 the code and the glossary say Settlement.
+
+Everyone's positions and who settles with whom come from the shared `member-positions` module,
+over the same suggested payments as Settle up, exact and in the currency the tab shows. Owed
+bars grow right in `diverging.positive` and owes bars left in `diverging.negative` (the status
+hues, at least 3:1 on a card in light and dark); each bar carries its exact amount and position
+in words, and a member with no position reads "Settled up". The bars are hidden from assistive
+technology, which reads the table in either view. The card loads and fails with the Balances
+read and says when everyone is settled up.
 
 ### Home (`src/components/dashboard/`)
 

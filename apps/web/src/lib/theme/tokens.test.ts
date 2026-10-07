@@ -74,6 +74,16 @@ describe('semantic design tokens', () => {
     expect(darkTokens.inverse).toEqual({ bg: '#f0f2f8', text: '#151828' });
   });
 
+  it('pins the diverging chart tokens to the canvas’s status hues (#313)', () => {
+    expect(lightTokens.diverging).toEqual({ positive: '#1a9a6e', negative: '#e04f3d' });
+    expect(darkTokens.diverging).toEqual({ positive: '#3dca96', negative: '#f07162' });
+    for (const tokens of [lightTokens, darkTokens])
+      expect(tokens.diverging).toEqual({
+        positive: tokens.positive.main,
+        negative: tokens.negative.main,
+      });
+  });
+
   it('uses light-on-dark text for contained buttons in dark mode', () => {
     expect(lightTokens.brand.contrastText).toBe('#ffffff');
     expect(darkTokens.brand.contrastText).toBe('#0e1016');

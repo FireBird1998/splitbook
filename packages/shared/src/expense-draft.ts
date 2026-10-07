@@ -126,6 +126,59 @@ export class ExpenseDraft {
     });
   }
 
+  /**
+   * A new Expense entered from a saved one (#311's Duplicate): its description, amount, who
+   * paid, split, Tag, Category and notes, dated `context.date` (today). It saves as a new
+   * Expense, with its own idempotency key and the same unconfirmed-save handling as any new
+   * Expense. Anyone no longer in the Group is left out (the viewer pays when no payer is
+   * left), a Tag that isn't active (`activeTagIds`) falls back to the default, and stored money
+   * that can't be read, or is in another currency, leaves the amount to enter again.
+   */
+  static duplicate(
+    context: ExpenseDraftContext,
+    saved: SavedDraftExpense,
+    activeTagIds: readonly string[],
+  ): ExpenseDraft {
+    const blank = ExpenseDraft.open(context).values;
+    const copy = ExpenseDraft.open(context, saved);
+    const members = new Set(context.memberIds);
+    const inGroup = (id: string) => members.has(id);
+    const keep = (values: Record<string, string>) =>
+      Object.fromEntries(Object.entries(values).filter(([id]) => inGroup(id)));
+    const tag =
+      saved.tagId && activeTagIds.includes(saved.tagId) ? saved.tagId : context.defaultTag;
+    const words = {
+      description: copy.values.description,
+      category: copy.values.category,
+      notes: copy.values.notes,
+      tag,
+      date: context.date,
+    };
+    let values: ExpenseDraftValues = { ...blank, ...words };
+    if (!copy.invalidStoredMoney && copy.values.currency === context.currency) {
+      const v = copy.values;
+      const payers = v.payers.filter((payer) => inGroup(payer.user));
+      const selectedMembers = v.selectedMembers.filter(inGroup);
+      values = {
+        ...v,
+        ...words,
+        payers: payers.length ? payers : blank.payers,
+        multiPayerMode: payers.length > 1,
+        selectedMembers: selectedMembers.length ? selectedMembers : blank.selectedMembers,
+        customAmounts: keep(v.customAmounts),
+        customPercentages: keep(v.customPercentages),
+        customShares: keep(v.customShares),
+      };
+    }
+    return new ExpenseDraft({
+      ...copy.state,
+      base: null,
+      values,
+      error: '',
+      invalidStoredMoney: false,
+    });
+  }
+
   get values() {
     return this.state.values;
   }

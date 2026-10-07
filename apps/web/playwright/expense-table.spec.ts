@@ -204,11 +204,15 @@ test('computers get the table, with exact positions; phones keep the cards', asy
     ]);
   }
 
-  // Opening an Expense shows its details, with Edit and Delete, and nothing nested.
+  // Opening an Expense shows its details, with Edit and Delete, and nothing nested: in the side
+  // panel beside the table on a computer (#311), below the card on a phone.
+  const phone = isPhone(testInfo);
   const details = await openExpense(page, 'Seafood dinner at Anjuna');
-  await expect(details).toContainText('Split (By percentage)');
+  await expect(details).toContainText(phone ? 'Split (By percentage)' : 'By percentage · 3');
   await expect(details.getByRole('button', { name: 'Edit', exact: true })).toBeVisible();
-  await expect(details.getByRole('button', { name: 'Delete', exact: true })).toBeVisible();
+  await expect(
+    details.getByRole('button', { name: phone ? 'Delete' : 'Delete Expense', exact: true }),
+  ).toBeVisible();
   await expectThemeApplied(page, testInfo);
   await expectNoSeriousA11yViolations(page, testInfo, 'expenses-opened');
 });

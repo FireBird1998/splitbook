@@ -89,4 +89,16 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
       color: palette.inverse.text,
     });
   });
+
+  it('draws owed and owes bars that stay visible on a card, in the status hues (#313)', () => {
+    const { palette } = createAppTheme(mode);
+    const { positive, negative } = palette.diverging;
+    // Bars are graphics, not text: WCAG 1.4.11 asks 3:1 against the card they sit on.
+    for (const [bar, color] of Object.entries({ positive, negative }))
+      expect(getContrastRatio(color, palette.background.paper), bar).toBeGreaterThanOrEqual(3);
+    // The same meaning as everywhere else: owed is the positive hue, owes the negative one.
+    expect(positive).toBe(palette.success.main);
+    expect(negative).toBe(palette.error.main);
+    expect(positive).not.toBe(negative);
+  });
 });

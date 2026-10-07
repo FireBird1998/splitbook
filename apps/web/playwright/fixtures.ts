@@ -204,7 +204,10 @@ export function expenseItem(page: Page, description: string) {
   return { toggle, item };
 }
 
-/** Open an Expense in the list and return its details, which hold Edit and Delete. */
+/**
+ * Open an Expense in the list and return its details, which hold Edit and Delete: the side
+ * panel on a computer (#311), or below its card on a phone.
+ */
 export async function openExpense(page: Page, description: string) {
   const { toggle } = expenseItem(page, description);
   await toggle.click();

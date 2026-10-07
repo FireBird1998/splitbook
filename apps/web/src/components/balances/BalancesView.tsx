@@ -43,6 +43,8 @@ import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
 import type { SettlementAttempt } from '@/lib/settlement-attempts';
 import { TabCard, PersonAvatar } from './TabCard';
 import PaymentsTable, { type PaymentRead, type PaymentsState } from './PaymentsTable';
+import EveryoneCard, { type EveryoneState } from './EveryoneCard';
+import type { EveryonePerson } from './everyone-chart';
 
 const MIXED_CURRENCY_WARNING =
   'This ledger contains multiple currencies. Each balance is shown separately, without conversion.';
@@ -58,6 +60,9 @@ interface BalancePerson {
   name: string;
 }
 
+/** Someone the read names; null for an account it can no longer identify. */
+type ReadPerson = BalancePerson | null | undefined;
+
 interface CurrencyFigures {
   currency: string;
   balances: Array<{ user: BalancePerson; balance: number }>;
@@ -69,6 +74,32 @@ interface BalancesRead {
     byCurrency?: CurrencyFigures[];
     hasMixedCurrencies?: boolean;
   };
+}
+
+/**
+ * Everyone the Everyone chart may name: the members, viewer first, then anyone else the shown
+ * figures name, such as a former member with an open balance.
+ */
+function everyonePeople(
+  members: GroupRead['members'],
+  userId: string,
+  figures: Partial<CurrencyFigures> | undefined,
+): EveryonePerson[] {
+  const people = viewerFirst(members, userId).map((member) => ({
+    id: member.user._id,
+    name: member.user.name,
+  }));
+  const ids = new Set(people.map((person) => person.id));
+  const named: ReadPerson[] = [
+    ...(figures?.balances ?? []).map((balance) => balance.user as ReadPerson),
+    ...(figures?.debts ?? []).flatMap((debt) => [debt.from as ReadPerson, debt.to as ReadPerson]),
+  ];
+  for (const person of named) {
+    if (!person?._id || ids.has(person._id)) continue;
+    ids.add(person._id);
+    people.push({ id: person._id, name: person.name });
+  }
+  return people;
 }
 
 /** "Your payment of ₹250.25 to Priya Shah may already be recorded…", or the other way round. */
@@ -136,9 +167,9 @@ function CurrencyChip({ currency }: { currency: string }) {
 
 /**
  * The Balances tab (#312): the member's all-time balance, Settle up with the suggested payments
- * (Record fills the form in), Record payment on the page itself, everyone's net position and
- * the Group's Payments. Record payment keeps its place whatever the balances above it are
- * doing (loading, refreshing or failing), so a refresh never loses what the member entered.
+ * (Record fills the form in), Record payment on the page itself, everyone's position as a chart
+ * (#313) and the Group's Payments. Record payment keeps its place whatever the balances above it
+ * are doing (loading, refreshing or failing), so a refresh never loses what the member entered.
  */
 export default function BalancesView({ groupId, userId, group }: BalancesViewProps) {
   const [selectedCurrency, setSelectedCurrency] = useState('');
@@ -210,6 +241,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     id: member.user._id,
     name: member.user.name,
   }));
+  const people = everyonePeople(group.members, userId, shownBucket ?? read);
   // Home's Record (#306) links here for one pair. Once the balances have answered, the form
   // starts with that pair and its suggestion, and the address drops the link, so reloading or
   // coming Back doesn't fill the form in again. A link naming someone outside the Group does
@@ -546,54 +578,27 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     </TabCard>
   );
 
-  const positionsCard = (
-    <TabCard
-      headingId="net-positions-heading"
-      title="Net positions"
-      subtitle={`All-time net · ${currency}`}
-    >
-      <Box component="ul" sx={{ listStyle: 'none', m: 0, px: 2.5, pt: 0, pb: 1.5 }}>
-        {balances.map((balance) => (
-          <Box
-            component="li"
-            key={balance.user._id}
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              gap: 1.5,
-              minHeight: 44,
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, minWidth: 0 }}>
-              <PersonAvatar name={balance.user.name} />
-              <Typography sx={{ m: 0, fontSize: '0.875rem', color: 'text.primary' }}>
-                {displayName(balance.user)}
-              </Typography>
-            </Box>
-            {balance.balance === 0 ? (
-              <Typography
-                sx={{ m: 0, fontSize: '0.875rem', fontWeight: 600, color: 'status.positive' }}
-              >
-                Settled
-              </Typography>
-            ) : (
-              <MoneyText
-                amount={balance.balance}
-                currency={currency}
-                signed
-                variant="body2"
-                fontWeight={600}
-              />
-            )}
-          </Box>
-        ))}
-      </Box>
-    </TabCard>
+  // Everyone's position in the currency shown (#313): loading and failing with the balances,
+  // or failing on its own when the figures don't read exactly.
+  const everyone: EveryoneState = read
+    ? shownLedger
+      ? { status: 'ready', ledger: shownLedger }
+      : { status: 'error' }
+    : error
+      ? { status: 'error' }
+      : { status: 'loading' };
+  const everyoneCard = (
+    <EveryoneCard
+      state={everyone}
+      currency={currency}
+      viewerId={userId}
+      people={people}
+      onRetry={() => void mutate()}
+    />
   );
 
   // Above Record payment on a phone: the balance and Settle up, so a suggestion's Record sits
-  // just above the form it fills in. Below it: everyone's net position.
+  // just above the form it fills in. Below it: everyone's position.
   const [top, rest] = !read
     ? [
         error ? (
@@ -604,7 +609,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
             <Skeleton variant="rounded" height={180} sx={{ borderRadius: '16px' }} />
           </Stack>
         ),
-        null,
+        everyoneCard,
       ]
     : balances.length === 0 && debts.length === 0
       ? [
@@ -638,7 +643,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
             {balanceCard}
             {settleUpCard}
           </>,
-          positionsCard,
+          everyoneCard,
         ];
 
   return (

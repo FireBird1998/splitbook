@@ -54,8 +54,8 @@ Table:   Date | Description + Tag | Paid by | Split | Amount | You
 ## Tab: Balances
 
 The all-time balance, Settle up (the suggested payments, each with Record when the member is
-one of the pair), Record payment on the page itself, net positions and Payments (#312). See
-[balances.md](../features/balances.md) for details.
+one of the pair), Record payment on the page itself (#312), Everyone (#313) and Payments
+(#312). See [balances.md](../features/balances.md) for details.
 
 ```
 All-time balance  INR                      │ Record payment
@@ -64,7 +64,13 @@ All-time balance  INR                      │ Record payment
 Settle up                                   │   (paying more than suggested: warning + tick)
   You pay Sam Chen     ₹1,060.00  [Record]  │   After this payment: You owe ₹420.00 …
   You pay Priya Shah     ₹420.00  [Record]  │   Note, optional
-Net positions                               │   [Record payment ₹1,060.00]
+Everyone          [Chart | Table]           │   [Record payment ₹1,060.00]
+  Owes ■  Gets back ■
+  Sam Chen          │███████      +₹1,060.00 gets back
+  Priya Shah        │███            +₹420.00 gets back
+  You       ████████│             −₹1,480.00 owes
+               −₹1.5K   0   +₹1.5K
+  (Table: Member · All-time net · Position · Settled by, "Pays Sam ₹1,060.00 and Priya ₹420.00")
 ─────────────────
 Payments: date and time · from → to · amount · note · recorded by
 ```

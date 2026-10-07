@@ -57,7 +57,10 @@ const SPLIT_LABELS: Record<ExpenseRead['splitMethod'], string> = {
 };
 
 /** "Equally · 3": the split method and how many people have a share of it. */
-export function expenseSplitSummary(expense: Pick<ExpenseRead, 'splitMethod' | 'splitBetween'>) {
+export function expenseSplitSummary(expense: {
+  splitMethod: ExpenseRead['splitMethod'];
+  splitBetween: ReadonlyArray<{ amount: number }>;
+}) {
   const people = expense.splitBetween.filter((row) => row.amount > 0).length;
   return `${SPLIT_LABELS[expense.splitMethod]} · ${people}`;
 }
