@@ -550,10 +550,23 @@ describe('sign-in and start-up show progress while they wait (#335)', () => {
     expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}`);
     expect(app.text()).not.toContain('Updated');
 
+    // Confirmed, Home is read again: the bar goes with the check, and the top bar says
+    // "Refreshing…" over the saved figures until they're answered (#332).
+    const list = phone.hold('/api/groups');
     check.release();
+    await list.reached;
     await settle();
     expect(app.progress()).toEqual([]);
+    expect(aboveContent('ScrollView').props.accessibilityRole).toBeUndefined();
+    expect(layoutHeight(aboveContent('ScrollView'))).toBe(progressHeight);
+    expect(app.content().outside).toContain('Refreshing…');
     expect(app.text()).not.toContain('Checking…');
+    expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}`);
+    expect(app.text()).not.toContain('Updated');
+
+    list.release();
+    await settle();
+    expect(app.progress()).toEqual([]);
     expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
   });
 
