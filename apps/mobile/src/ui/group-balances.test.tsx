@@ -437,13 +437,29 @@ describe('Record payment sheet states', () => {
     expect(text(root)).toContain('Checking the latest balances…');
   });
 
+  // #334, device check: Check payment named both people "Former member" while it checked.
+  it('names people as this phone knows them while it checks, and “Former member” only for someone the checked Group lacks', () => {
+    const known = { [you]: 'Alex Rivera', [sam]: 'Sam Chen' };
+    const attempt = { key: 'settlement-key-1', body: '{}' };
+    const checking = sheet(
+      base({ status: 'loading', group: null, balances: [], suggested: null, known, attempt }),
+    );
+    expect(labelled(checking.root, 'You pay Sam Chen.')).toHaveLength(1);
+    expect(text(checking.root)).toContain('ARYou');
+    expect(text(checking.root)).toContain('SCSam Chen');
+    expect(text(checking.root)).not.toContain('Former member');
+    act(() => screen?.unmount());
+    // Checked: Sam has left, so the Group it read names him a former member, whatever this
+    // phone knew before.
+    const left = { ...group(), members: group().members.filter(({ user }) => user.id !== sam) };
+    const checked = sheet(base({ status: 'uncertain', group: left, known, attempt }));
+    expect(labelled(checked.root, 'You pay Former member. Suggested ₹1,060.00.')).toHaveLength(1);
+    expect(text(checked.root)).toContain('FMFormer member');
+  });
+
   it('offers Try again when the check couldn’t run, and nothing once access is refused', () => {
-    const chosen = {
-      paidBy: you,
-      paidTo: sam,
-      currency: 'INR',
-      shown: { payer: 'Alex Rivera', recipient: 'Sam Chen', amount: 1060 },
-    };
+    const chosen = { paidBy: you, paidTo: sam, currency: 'INR', shown: 1060 };
+    const known = { [you]: 'Alex Rivera', [sam]: 'Sam Chen' };
     const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
     const failed = sheet(
       base({
@@ -453,6 +469,7 @@ describe('Record payment sheet states', () => {
         draft: null,
         suggested: null,
         chosen,
+        known,
         message: unreachable,
       }),
     );
@@ -471,6 +488,7 @@ describe('Record payment sheet states', () => {
         draft: null,
         suggested: null,
         chosen,
+        known,
         message: 'You no longer have access to this Group.',
       }),
     );

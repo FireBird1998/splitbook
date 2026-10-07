@@ -2553,6 +2553,50 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     expect(app.text()).toContain('Payment recorded');
   });
 
+  // Device check: Check payment read "FM You → FM Former member" until its check landed.
+  it('names who pays whom while Check payment checks an unconfirmed payment', async () => {
+    const { phone, app } = await onBalances();
+    await settle(controller().openRecordPayment(alex.id, sam._id, 'INR'));
+    // The payment is sent, and its reply is lost.
+    const post = phone.hold(`/api/groups/${maple}/settlements`);
+    void button('Record payment ₹30.00')!.props.onPress();
+    await post.reached;
+    phone.network.online = false;
+    post.release();
+    await settle();
+    expect(controller().getSnapshot().settlement.status).toBe('uncertain');
+    phone.network.online = true;
+    void controller().back();
+    await settle();
+    expect(controller().getSnapshot().pendingPayment).toMatchObject({ groupId: maple });
+    const balances = phone.hold(`/api/groups/${maple}/balances`);
+    app.tap('Check payment');
+    await balances.reached;
+    await settle();
+    expect(controller().getSnapshot().settlement).toMatchObject({
+      status: 'loading',
+      group: null,
+    });
+    // The row as drawn, avatars' initials included: who pays whom, as this phone knows them.
+    const [row] = inSheet('You pay Sam Chen.');
+    expect(
+      row!
+        .findAll((node) => (node.type as unknown) === 'Text')
+        .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
+        .join(' '),
+    ).toBe('AR You SC Sam Chen');
+    expect(shown()).not.toContain('Former member');
+    balances.release();
+    await settle();
+    // Checked: the Group it read names them now.
+    expect(controller().getSnapshot().settlement).toMatchObject({
+      status: 'uncertain',
+      group: { id: maple },
+    });
+    expect(inSheet('You pay Sam Chen.')).toHaveLength(1);
+    expect(posts(phone)).toEqual([`POST /api/groups/${maple}/settlements`]);
+  });
+
   // Item 4: after a network failure the sheet showed only "Could not reach SplitBook…".
   it('offers Try again on the sheet when its check can’t reach SplitBook, keeping the figures, and sends nothing', async () => {
     const { phone, app } = await onBalances();

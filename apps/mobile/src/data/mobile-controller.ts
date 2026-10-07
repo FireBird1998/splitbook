@@ -3809,9 +3809,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       lease = accountStorage(),
       storage = dependencies.settlementAttempts;
     const stale = () => !current(owner) || view !== viewRequest || request !== settlementRequest;
+    // Until the check reads the Group, the sheet names people as this phone knows them: from
+    // the Group's Balances, then its members, which win (#334).
+    const known: Record<string, string> = {};
+    if (snapshot.financial.groupId === groupId)
+      for (const bucket of snapshot.financial.balances.data ?? [])
+        for (const person of [
+          ...bucket.balances.map(({ user }) => user),
+          ...bucket.debts.flatMap(({ from, to }) => [from, to]),
+        ])
+          if (person.id) known[person.id] = person.name;
+    if (snapshot.detail.id === groupId)
+      for (const { user } of snapshot.detail.data?.members ?? []) known[user.id] = user.name;
     navigate(
       { screen: 'settlement', groupId, reread: rereadOf(groupId) },
-      { settlement: { ...emptySettlement(), groupId, status: 'loading', chosen } },
+      { settlement: { ...emptySettlement(), groupId, status: 'loading', chosen, known } },
     );
     try {
       if (!lease || !storage) throw new DeviceStorageError(recoveryStorageMissing);
@@ -4207,12 +4219,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const debt = snapshot.financial.balances.data
       ?.find((bucket) => bucket.currency === currency)
       ?.debts.find((item) => item.from.id === paidBy && item.to.id === paidTo);
-    await checkChosenPayment(groupId, {
-      paidBy,
-      paidTo,
-      currency,
-      shown: debt ? { payer: debt.from.name, recipient: debt.to.name, amount: debt.amount } : null,
-    });
+    await checkChosenPayment(groupId, { paidBy, paidTo, currency, shown: debt?.amount ?? null });
   };
 
   /**

@@ -75,15 +75,15 @@ const record = z.object({
 export type SettlementRecord = z.infer<typeof record>;
 /**
  * The suggested payment chosen on Balances, which the sheet checks against the latest balances
- * (#334). `shown` is that suggestion as Balances showed it, when they did: the sheet shows it,
- * locked, until the check confirms it or can't run. Nothing is ever recorded from it; Try again
- * checks this payment again.
+ * (#334). `shown` is that suggestion's amount as Balances showed it, when they did: the sheet
+ * shows it, locked, until the check confirms it or can't run. Nothing is ever recorded from it;
+ * Try again checks this payment again.
  */
 export interface SettlementChoice {
   paidBy: string;
   paidTo: string;
   currency: string;
-  shown: { payer: string; recipient: string; amount: number } | null;
+  shown: number | null;
 }
 export interface SettlementState {
   groupId: string | null;
@@ -103,6 +103,12 @@ export interface SettlementState {
   attempt: SettlementAttempt | null;
   /** The payment chosen on Balances; null when the sheet opened for an unconfirmed payment. */
   chosen: SettlementChoice | null;
+  /**
+   * The Group's people by id, as this phone knew them when the sheet opened: its members, and
+   * anyone its Balances named. They name payer and recipient until the check reads the Group,
+   * which alone names them from then on (#334).
+   */
+  known: Record<string, string>;
   suggested: number | null;
   acknowledged: boolean;
   message: string | null;
@@ -116,6 +122,7 @@ export const emptySettlement = (): SettlementState => ({
   draft: null,
   attempt: null,
   chosen: null,
+  known: {},
   suggested: null,
   acknowledged: false,
   message: null,

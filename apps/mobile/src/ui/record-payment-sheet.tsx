@@ -152,16 +152,16 @@ export function RecordPaymentSheet({
     !draft && (status === 'loading' || status === 'error') ? (chosen?.shown ?? null) : null;
   const figures: SettlementDraft | null =
     draft ??
-    (shown && chosen
+    (shown !== null && chosen
       ? {
           paidBy: chosen.paidBy,
           paidTo: chosen.paidTo,
           currency: chosen.currency,
-          amount: String(shown.amount),
+          amount: String(shown),
           note: '',
         }
       : null);
-  const suggested = draft ? state.suggested : (shown?.amount ?? null);
+  const suggested = draft ? state.suggested : shown;
   const checking = status === 'loading';
   const errors = visibleFieldErrors(settlementFields, state.validation);
   const amountInput = useRef<TextInput | null>(null);
@@ -181,10 +181,12 @@ export function RecordPaymentSheet({
     setAmountFocused(false);
   }, [visible]);
 
+  // Once the check has read the Group, it alone names people; until then, this phone's own
+  // knowledge of the Group does. "Former member" only for someone neither knows (#334).
   const fullName = (id: string) =>
-    state.group?.members.find((member) => member.user.id === id)?.user.name ??
-    (id === chosen?.paidBy ? shown?.payer : id === chosen?.paidTo ? shown?.recipient : null) ??
-    'Former member';
+    (state.group
+      ? state.group.members.find((member) => member.user.id === id)?.user.name
+      : state.known[id]) ?? 'Former member';
   const name = (id: string) => (id === currentUserId ? 'You' : fullName(id));
   const editable = Boolean(draft) && ['editing', 'review'].includes(status) && !state.attempt;
   const extra = draft ? overpayment(state, currentUserId, name(draft.paidBy)) : null;
