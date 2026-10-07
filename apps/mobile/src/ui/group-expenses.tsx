@@ -21,6 +21,7 @@ import {
   ListRow,
   Money,
   RowAmount,
+  Skeleton,
   SkeletonText,
   SummaryStats,
   type SummaryStat,
@@ -130,17 +131,23 @@ const ExpenseRow = memo(function ExpenseRow({
   );
 });
 
-/** Previous and next Month (next stops at the current one), and All time or This month. */
+/**
+ * Previous and next Month (next stops at the current one), and All time or This month. While
+ * the Group is first read (`opening`), its Month isn't known yet: the bar holds its place, with
+ * its label's placeholder and nothing to press (#219).
+ */
 function MonthBar({
   month,
-  now,
+  current,
+  opening = false,
   onSelectMonth,
 }: {
   month: string | null;
-  now: number;
+  /** This Month's key: next stops there. */
+  current: string;
+  opening?: boolean;
   onSelectMonth: (month: string | null) => void;
 }) {
-  const current = currentMonthKey(new Date(now));
   return (
     <View
       style={{
@@ -154,27 +161,39 @@ function MonthBar({
       <IconButton
         icon="chevron-back"
         label="Previous month"
+        disabled={opening}
         onPress={() => onSelectMonth(shiftMonthKey(month ?? current, -1))}
       />
-      <CompactText
-        variant="heading"
-        weight="medium"
-        accessibilityRole="header"
-        accessibilityLiveRegion="polite"
-        style={{ flex: 1, textAlign: 'center' }}
-      >
-        {monthLabel(month)}
-      </CompactText>
+      {opening ? (
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Skeleton width="45%" line="heading" />
+        </View>
+      ) : (
+        <CompactText
+          variant="heading"
+          weight="medium"
+          accessibilityRole="header"
+          accessibilityLiveRegion="polite"
+          style={{ flex: 1, textAlign: 'center' }}
+        >
+          {monthLabel(month)}
+        </CompactText>
+      )}
       <IconButton
         icon="chevron-forward"
         label="Next month"
-        disabled={month === null || month >= current}
+        disabled={opening || month === null || month >= current}
         onPress={() => onSelectMonth(shiftMonthKey(month ?? current, 1))}
       />
-      {month === null ? (
+      {month === null && !opening ? (
         <CompactButton label="This month" variant="text" onPress={() => onSelectMonth(current)} />
       ) : (
-        <CompactButton label="All time" variant="text" onPress={() => onSelectMonth(null)} />
+        <CompactButton
+          label="All time"
+          variant="text"
+          disabled={opening}
+          onPress={() => onSelectMonth(null)}
+        />
       )}
     </View>
   );
@@ -202,9 +221,10 @@ function summaryStats(summary: ExpenseWindowSummary, currentUserId: string) {
 
 /**
  * What the window cost: a Household's Month (or All time) and every other Theme's all time.
- * It describes spending only, never running Balances.
+ * It describes spending only, never running Balances, so it renders again only when what it
+ * says changes, not when Balances land after the Expenses (#219).
  */
-function ExpenseSummary({
+const ExpenseSummary = memo(function ExpenseSummary({
   household,
   month,
   summary,
@@ -213,7 +233,8 @@ function ExpenseSummary({
   restored,
   offline,
   loading,
-  now,
+  opening,
+  current,
   onSelectMonth,
 }: {
   household: boolean;
@@ -225,7 +246,10 @@ function ExpenseSummary({
   restored: boolean;
   offline: boolean;
   loading: boolean;
-  now: number;
+  /** The Group is first read: its Month isn't known yet. */
+  opening: boolean;
+  /** This Month's key. */
+  current: string;
   onSelectMonth: (month: string | null) => void;
 }) {
   const figures = summary ? summaryStats(summary, currentUserId) : null;
@@ -234,13 +258,13 @@ function ExpenseSummary({
   const count = summary ? `${summary.count} ${summary.count === 1 ? 'expense' : 'expenses'}` : '';
   const within = !month
     ? ''
-    : month === currentMonthKey(new Date(now))
+    : month === current
       ? ' this month'
       : ` in ${new Date(`${month}-01T12:00:00`).toLocaleDateString('en', { month: 'long' })}`;
   return (
     <Card>
       {household ? (
-        <MonthBar month={month} now={now} onSelectMonth={onSelectMonth} />
+        <MonthBar month={month} current={current} opening={opening} onSelectMonth={onSelectMonth} />
       ) : (
         <View
           style={{
@@ -322,7 +346,7 @@ function ExpenseSummary({
       )}
     </Card>
   );
-}
+});
 
 /** The kept draft: an ordinary one in info tone; a save that may be recorded in warning tone. */
 function KeptDraftNotice({
@@ -391,6 +415,7 @@ export function GroupExpensesView({
   kept,
   savedExpenseId,
   offline = false,
+  firstRead = false,
   now,
   onSelectMonth,
   onRefreshExpenses,
@@ -410,6 +435,11 @@ export function GroupExpensesView({
   savedExpenseId: string | null;
   /** The app can't reach SplitBook: this device's saved copy shows its badge. */
   offline?: boolean;
+  /**
+   * The Group is first read, shown as Home lists it: these are its placeholders, in the shape
+   * they keep once it answers (#219).
+   */
+  firstRead?: boolean;
   now: number;
   onSelectMonth: (month: string | null) => void;
   onRefreshExpenses: () => void;
@@ -430,6 +460,12 @@ export function GroupExpensesView({
     opening.current = onOpenExpense;
   });
   const open = useCallback((expenseId: string) => opening.current(expenseId), []);
+  // The same for the Month bar, so the summary renders again only when what it says changes.
+  const choosing = useRef(onSelectMonth);
+  useEffect(() => {
+    choosing.current = onSelectMonth;
+  });
+  const choose = useCallback((month: string | null) => choosing.current(month), []);
   // When the window moves (#219), rows above the one on screen go or come: Load more past 5
   // pages drops the newest page, and Load newer brings it back above. The view moves by as much
   // as a row shown on both sides of the change moved, so the row on screen keeps its place.
@@ -514,8 +550,9 @@ export function GroupExpensesView({
         restored={expenses.restored === true}
         offline={offline}
         loading={!listed && expenses.status !== 'error'}
-        now={now}
-        onSelectMonth={onSelectMonth}
+        opening={firstRead}
+        current={currentMonthKey(new Date(now))}
+        onSelectMonth={choose}
       />
       {listed ? (
         <RetainedNotice

@@ -714,6 +714,12 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     state.financial.groupId === state.detail.id &&
     state.financial.expenses.status === 'ready';
   const group = state.detail.data ?? (proven ? known : null);
+  // While the Group is first read, Expenses and Balances show their own placeholders for it as
+  // Home lists it, so they keep their shape when it answers (#219); nothing of it is read yet.
+  // Activity keeps its rows until #222.
+  const opening =
+    !group && state.detail.status === 'loading' && state.destination !== 'activity' ? known : null;
+  const shown = group ?? opening;
   // Not saved on this phone, and offline: the navigation stays, without a banner.
   const unavailable = !group && state.detail.status === 'error' && state.offline.active;
   const userId = state.auth.user!.id;
@@ -889,7 +895,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
           message={state.detail.message ?? 'Please try again.'}
           retry={() => void controller.refresh()}
         />
-      ) : !group ? (
+      ) : !shown ? (
         <SkeletonRows
           label="Loading this Group"
           rows={5}
@@ -900,7 +906,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
           {/* A failed refresh keeps the whole Group readable, with its time and a retry. */}
           {state.detail.status === 'error' && !state.detail.data ? (
             <DetailsNotice
-              subject={group.name}
+              subject={shown.name}
               // Up to date only as the server answered them in this open, never a saved copy.
               balances={state.financial.balances.answeredThisOpen === true}
               onRetry={() => void controller.refresh()}
@@ -911,7 +917,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                 status="error"
                 refreshedAt={state.detail.refreshedAt}
                 message={state.detail.message}
-                subject={group.name}
+                subject={shown.name}
                 retryLabel="Retry Group"
                 offline={state.offline.active}
                 onRetry={() => void controller.refresh()}
@@ -922,8 +928,8 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
             <GroupActivity
               state={state.activity}
               currentUserId={userId}
-              currency={group.defaultCurrency}
-              members={group.members.map(({ user }) => ({ id: user.id, name: user.name }))}
+              currency={shown.defaultCurrency}
+              members={shown.members.map(({ user }) => ({ id: user.id, name: user.name }))}
               offline={state.offline.active}
               refreshing={feedback.quiet}
               now={Date.now()}
@@ -934,14 +940,14 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
             />
           ) : state.destination === 'balances' ? (
             <GroupBalancesView
-              group={group}
+              group={shown}
               currentUserId={userId}
               state={state.financial}
               pending={state.pendingPayment}
               offline={state.offline.active}
-              knownSettled={settledIn(state.home.byGroup[group.id])}
+              knownSettled={settledIn(state.home.byGroup[shown.id])}
               // The sheet needs the Group's details, which 2A can't show (#219).
-              recordUnavailable={state.detail.data ? null : recordWaitsForDetails(group.name)}
+              recordUnavailable={state.detail.data ? null : recordWaitsForDetails(shown.name)}
               onRecord={(paidBy, paidTo, currency) =>
                 void controller.openRecordPayment(paidBy, paidTo, currency)
               }
@@ -950,23 +956,24 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
             />
           ) : (
             <>
-              {getGroupTheme(group.category).header === 'strip' ? (
-                <TripStrip group={group} />
+              {getGroupTheme(shown.category).header === 'strip' ? (
+                <TripStrip group={shown} />
               ) : null}
-              {group.members.length === 1 ? (
+              {shown.members.length === 1 ? (
                 <CompactText variant="small" tone="secondary">
                   Your Group is ready. Invite someone to start sharing it.
                 </CompactText>
               ) : null}
               <GroupExpensesView
-                group={group}
+                group={shown}
                 currentUserId={userId}
                 state={state.financial}
                 kept={kept}
                 savedExpenseId={
-                  state.snackbar?.groupId === group.id ? (state.snackbar.expenseId ?? null) : null
+                  state.snackbar?.groupId === shown.id ? (state.snackbar.expenseId ?? null) : null
                 }
                 offline={state.offline.active}
+                firstRead={opening !== null}
                 now={Date.now()}
                 onSelectMonth={(month) => void controller.selectMonth(month)}
                 onRefreshExpenses={() => void controller.refreshExpenses()}
@@ -979,7 +986,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                   scrollY.current = Math.max(0, from + dy);
                   scroll.current?.scrollTo({ y: scrollY.current, animated: false });
                 }}
-                onOpenExpense={(expenseId) => openExpense(group.id, expenseId)}
+                onOpenExpense={(expenseId) => openExpense(shown.id, expenseId)}
                 onResumeDraft={resumeDraft}
                 onDiscardDraft={discardDraft}
               />

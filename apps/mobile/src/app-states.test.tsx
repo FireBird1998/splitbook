@@ -750,7 +750,8 @@ describe('first load and refresh', () => {
     expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual([
       'Opening Lisbon Offsite',
     ]);
-    expect(app.hosts((p) => p.accessibilityLabel === 'Loading this Group')).toHaveLength(1);
+    // Its Expenses' own placeholders, in the shape they keep once it answers (#219).
+    expect(app.hosts((p) => p.accessibilityLabel === 'Loading all-time expenses')).toHaveLength(1);
     expect(app.hosts((p) => p.accessibilityRole === 'tablist')).toHaveLength(1);
     expect(app.text()).not.toContain('Opening your Group…');
     read.release();
@@ -1533,6 +1534,12 @@ describe('A Group says what is true, without jumps (#219)', () => {
     [maple]: 'Open Maple House, Household · 2 members',
     [lisbon]: 'Open Lisbon Offsite, Work · 2 members',
   };
+  /** Signed in once, with Home read: no Group's view has been opened on this phone. */
+  async function signedIn(phone: ReturnType<typeof device>) {
+    const first = phone.controller();
+    await first.signIn('alex');
+    first.dispose();
+  }
   /**
    * The scrolling content as it lays out on this 360dp phone: its children stacked with its gap,
    * as Yoga stacks them (`layoutHeight`). Sheets lie over it and take no room.
@@ -1550,6 +1557,12 @@ describe('A Group says what is true, without jumps (#219)', () => {
       (style.gap as number) * Math.max(0, children.length - 1)
     );
   };
+  /** What the scrolling content announces as loading. */
+  const busy = () =>
+    findHosts(
+      findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView')[0]!,
+      (props) => (props.accessibilityState as { busy?: boolean } | undefined)?.busy === true,
+    ).map((node) => node.props.accessibilityLabel);
   /** The icons beside the words `words`: in the row, card or notice that holds them. */
   const iconsBeside = (words: string) => {
     let node: ReactTestInstance | null = screen!.root.findAll(
@@ -1775,6 +1788,39 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
     expect(app.text()).not.toContain('Saved');
   });
+
+  // Item 4: no layout jumps.
+  it.each([
+    [maple, 'expenses', 1, ['Loading September 2026 expenses']],
+    [maple, 'expenses', 1.3, ['Loading September 2026 expenses']],
+    [lisbon, 'expenses', 1, ['Loading all-time expenses']],
+    [lisbon, 'expenses', 1.3, ['Loading all-time expenses']],
+    [maple, 'balances', 1, ['Loading balances']],
+    [maple, 'balances', 1.3, ['Loading balances']],
+  ] as const)(
+    'keeps %s’s %s placeholders in their shape while the Group is first read, at %s× text',
+    async (groupId, destination, scale, loading) => {
+      setWindow({ fontScale: scale });
+      const phone = device();
+      await signedIn(phone);
+      await start(phone);
+      await settle();
+      const expenses = phone.hold(`/api/groups/${groupId}/expenses?`);
+      const read = phone.hold(`/api/groups/${groupId}`);
+      void controller().openGroup(groupId, true, destination);
+      await Promise.all([read.reached, expenses.reached]);
+      await settle();
+      const first = { height: contentHeight(scale), busy: busy() };
+      expect(first.busy).toEqual(loading);
+
+      // The Group answered; its Expenses are still read: nothing moves.
+      read.release();
+      await settle();
+      expect({ height: contentHeight(scale), busy: busy() }).toEqual(first);
+      expenses.release();
+      await settle();
+    },
+  );
 
   it.each([1, 1.3])(
     'keeps Balances where they are while they wait for the Expenses to be read again, at %s× text',
