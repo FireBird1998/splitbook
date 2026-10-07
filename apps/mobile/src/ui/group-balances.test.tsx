@@ -157,7 +157,7 @@ describe('Balances destination', () => {
   it('disables Record offline and says why', () => {
     const { root, onRecord } = view({ offline: true });
     const record = labelled(root, 'Record your payment to Sam Chen')[0];
-    expect(record.props.accessibilityState).toEqual({ disabled: true });
+    expect(record.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(record.props.accessibilityHint).toBe(recordNeedsConnection);
     expect(text(root)).toContain(recordNeedsConnection);
     expect(onRecord).not.toHaveBeenCalled();
@@ -169,14 +169,14 @@ describe('Balances destination', () => {
     });
     expect(text(root)).toContain('Updating balances.');
     const record = labelled(root, 'Record your payment to Sam Chen')[0];
-    expect(record.props.accessibilityState).toEqual({ disabled: true });
+    expect(record.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(record.props.accessibilityHint).toBe(recordWaitsForBalances);
   });
 
   it('disables Record while the Group’s details can’t be read, and says why (2A, #219)', () => {
     const { root } = view({ recordUnavailable: recordWaitsForDetails('Maple House') });
     const record = labelled(root, 'Record your payment to Sam Chen')[0];
-    expect(record.props.accessibilityState).toEqual({ disabled: true });
+    expect(record.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(record.props.accessibilityHint).toBe(
       'Record is available once Maple House’s details load.',
     );
@@ -240,7 +240,7 @@ describe('Balances destination', () => {
     }).root;
     expect(text(failed)).toContain('Payment not confirmed');
     const check = labelled(failed, 'Check payment')[0];
-    expect(check.props.accessibilityState).toEqual({ disabled: true });
+    expect(check.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(check.props.accessibilityHint).toBe(recordNeedsConnection);
     act(() => screen?.unmount());
     const loading = view({
@@ -381,7 +381,10 @@ describe('Record payment sheet states', () => {
 
   it('can’t be closed while the payment is being recorded', () => {
     const saving = sheet(base({ status: 'saving' }));
-    expect(labelled(saving.root, 'Close')[0].props.accessibilityState).toEqual({ disabled: true });
+    expect(labelled(saving.root, 'Close')[0].props.accessibilityState).toEqual({
+      disabled: true,
+      busy: false,
+    });
     act(() => labelled(saving.root, 'Close without recording')[0].props.onPress());
     expect(saving.calls.close).not.toHaveBeenCalled();
   });

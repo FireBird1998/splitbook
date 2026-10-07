@@ -328,7 +328,7 @@ describe('A busy button', () => {
   it('says what it’s doing beside a spinner, and announces it busy', async () => {
     const root = await render(save());
     expect(button(root).props.accessibilityLabel).toBe('Save expense ₹1,249.50');
-    expect(button(root).props.accessibilityState).toEqual({ disabled: false });
+    expect(button(root).props.accessibilityState).toEqual({ disabled: false, busy: false });
     expect(hosts(root, 'ActivityIndicator')).toEqual([]);
     update(save('Saving expense…'));
     expect(button(root).props.accessibilityLabel).toBe('Saving expense…');
@@ -352,7 +352,30 @@ describe('A busy button', () => {
     expect(button(root).props.accessibilityLabel).toBe('Joining Group…');
     update(<CompactButton label="Join Group" onPress={onPress} />);
     expect(button(root).props.disabled).toBe(false);
-    expect(button(root).props.accessibilityState).toEqual({ disabled: false });
+    expect(button(root).props.accessibilityState).toEqual({ disabled: false, busy: false });
+  });
+
+  // React Native on Android rewrites a view's ", busy" only when the state it is sent names
+  // `busy`: a Save whose wait ended without saying so went on reading "busy" (#335).
+  it('says it is no longer busy when its wait ends, rather than saying nothing', async () => {
+    const root = await render(save('Saving expense…'));
+    expect(button(root).props.accessibilityState).toEqual({ disabled: true, busy: true });
+    // The same button: the save failed offline, so it stays unavailable, and says why.
+    update(
+      <CompactButton
+        label="Save expense"
+        amount="₹1,249.50"
+        block
+        disabled
+        hint="Saving needs a connection."
+        onPress={vi.fn()}
+      />,
+    );
+    expect(button(root).props.accessibilityState).toEqual({ disabled: true, busy: false });
+    // Connected again: available, and still not busy.
+    update(<CompactButton label="Save expense" amount="₹1,249.50" block onPress={vi.fn()} />);
+    expect(button(root).props.accessibilityState).toEqual({ disabled: false, busy: false });
+    expect(button(root).props.accessibilityLabel).toBe('Save expense ₹1,249.50');
   });
 
   it('keeps its size: the label stays laid out underneath, unseen and unread', async () => {

@@ -928,7 +928,7 @@ describe('offline', () => {
     await app.press('Balances');
     expect(app.text()).toContain(saved);
     const record = app.button('Record your payment to Sam Chen')!;
-    expect(record.props.accessibilityState).toEqual({ disabled: true });
+    expect(record.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(record.props.accessibilityHint).toBe('Recording a payment needs a connection.');
 
     await app.press('Activity');
@@ -938,7 +938,7 @@ describe('offline', () => {
     await app.press('Add expense');
     expect(app.text().match(/You’re offline/g)).toHaveLength(1);
     const save = app.button('Save expense')!;
-    expect(save.props.accessibilityState).toEqual({ disabled: true });
+    expect(save.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(save.props.accessibilityHint).toBe('Saving needs a connection.');
     expect(app.text()).toContain('Saving needs a connection.');
     expect(app.button('Try again')).not.toBeNull();
@@ -967,7 +967,7 @@ describe('offline', () => {
     await settle(Promise.resolve(inSheet('Delete expense').props.onPress()));
     expect(app.text()).toContain('Delete this Expense?');
     const remove = inSheet('Delete expense');
-    expect(remove.props.accessibilityState).toEqual({ disabled: true });
+    expect(remove.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(remove.props.accessibilityHint).toBe('Saving needs a connection.');
     const shown = sheet()
       .findAll((node) => (node.type as unknown) === 'Text')
@@ -989,7 +989,7 @@ describe('offline', () => {
     const name = app.hosts((p) => p.accessibilityLabel === 'Trip name, required')[0];
     await settle(Promise.resolve(name.props.onChangeText('Cabin Weekend')));
     const create = app.button('Create trip')!;
-    expect(create.props.accessibilityState).toEqual({ disabled: true });
+    expect(create.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(create.props.accessibilityHint).toBe('Saving needs a connection.');
     expect(app.text()).toContain('Saving needs a connection.');
     expect(app.hosts((p) => p.accessibilityLabel === 'Trip name, required')[0].props.value).toBe(
@@ -1022,7 +1022,7 @@ describe('offline', () => {
   it('keeps Join disabled while offline, saying why (#286)', async () => {
     const { app } = await invitationOffline();
     const join = app.button('Join Group')!;
-    expect(join.props.accessibilityState).toEqual({ disabled: true });
+    expect(join.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(join.props.accessibilityHint).toBe('Joining needs a connection.');
     expect(app.text()).toContain('Joining needs a connection.');
     expect(app.text()).toContain('Cedar Flat');
@@ -1044,7 +1044,7 @@ describe('offline', () => {
     await settle();
     expect(app.pull().refreshing).toBe(false);
     const join = app.button('Join Group')!;
-    expect(join.props.accessibilityState).toEqual({ disabled: false });
+    expect(join.props.accessibilityState).toEqual({ disabled: false, busy: false });
     expect(join.props.accessibilityHint).toBeUndefined();
     expect(app.text()).not.toContain('Joining needs a connection.');
     expect(app.text()).toContain('Cedar Flat');

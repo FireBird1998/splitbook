@@ -22,7 +22,9 @@ export function BusyMark({ color }: { color: string }) {
  * `busy` is what the button is doing, as in "Saving expense…": a spinner and that label take
  * the label's place, at full strength, and screen readers hear the busy label with the busy
  * state. The label stays laid out underneath, unseen, so the button keeps its size. A busy
- * button can't be pressed.
+ * button can't be pressed. Its accessibility state always says whether it is busy, false as much
+ * as true: React Native on Android rewrites a view's ", busy" only when the state it is sent
+ * names `busy`, so a button whose wait ended without saying so went on reading "busy" (#335).
  */
 export function CompactButton({
   label,
@@ -71,7 +73,7 @@ export function CompactButton({
       accessibilityRole="button"
       accessibilityLabel={busy ?? accessibilityLabel ?? (amount ? `${label} ${amount}` : label)}
       accessibilityHint={hint}
-      accessibilityState={busy ? { disabled: true, busy: true } : { disabled }}
+      accessibilityState={{ disabled: disabled || busy !== undefined, busy: busy !== undefined }}
       disabled={disabled || busy !== undefined}
       onPress={onPress}
       hitSlop={dense ? denseHitSlop : undefined}

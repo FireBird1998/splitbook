@@ -55,7 +55,7 @@ describe('An invitation while offline (#286)', () => {
   it('keeps Join unavailable, saying why', () => {
     const { text, action } = offlineInvitation(true, false);
     expect(action.props.accessibilityLabel).toBe('Join Group');
-    expect(action.props.accessibilityState).toEqual({ disabled: true });
+    expect(action.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(action.props.accessibilityHint).toBe(joinNeedsConnection);
     expect(text).toContain(joinNeedsConnection);
   });
@@ -66,7 +66,7 @@ describe('An invitation while offline (#286)', () => {
   ] as const)('keeps %s available: it isn’t a write', (_, signedIn, alreadyMember) => {
     const { text, action } = offlineInvitation(signedIn, alreadyMember);
     expect(action.props.accessibilityLabel).toBe(signedIn ? 'Open Group' : 'Sign in to continue');
-    expect(action.props.accessibilityState).toEqual({ disabled: false });
+    expect(action.props.accessibilityState).toEqual({ disabled: false, busy: false });
     expect(action.props.accessibilityHint).toBeUndefined();
     expect(text).not.toContain(joinNeedsConnection);
   });
