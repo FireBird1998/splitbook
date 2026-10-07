@@ -9,6 +9,7 @@ import {
   expensePagePath,
   expenseRecordPath,
   groupBalancesPath,
+  groupInsightsPath,
   groupPath,
   groupsPath,
   homeBalancesPath,
@@ -19,6 +20,7 @@ import {
   userActivityPath,
   userSpendingPath,
   type ActivityPageQuery,
+  type GroupInsightsQuery,
   type UserActivityQuery,
   type UserSpendingQuery,
 } from './api-paths';
@@ -130,6 +132,16 @@ export const expenseRecordKey = (account: QueryAccount, groupId: string, expense
 
 export const activityPageKey = (account: QueryAccount, groupId: string, page: ActivityPageQuery) =>
   groupScopedKey('ledger', account, groupId, activityPagePath(groupId, page));
+
+/**
+ * A Group's insights for a Month (#314). In the `ledger` scope: every Expense write that must
+ * reach the Group's Expense pages reaches its Months too.
+ */
+export const groupInsightsKey = (
+  account: QueryAccount,
+  groupId: string,
+  insights: GroupInsightsQuery,
+) => groupScopedKey('ledger', account, groupId, groupInsightsPath(groupId, insights));
 
 export const settlementsKey = (account: QueryAccount, groupId: string) =>
   groupScopedKey('ledger', account, groupId, settlementsPath(groupId));
