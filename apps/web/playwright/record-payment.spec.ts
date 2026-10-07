@@ -4,6 +4,7 @@ import {
   enterAsPersona,
   expectNoSeriousA11yViolations,
   expectThemeApplied,
+  isPhone,
   parseMoneyText,
   reviewScreenshot,
 } from './fixtures';
@@ -199,6 +200,23 @@ test('the Balances tab with Record payment is accessible', async ({ page }, test
   await expect(page.getByRole('region', { name: 'All-time balance' })).toContainText('You owe');
   await expectNoSeriousA11yViolations(page, testInfo, 'record-payment');
   await reviewScreenshot(page, testInfo, 'record-payment');
+
+  // On a phone the form comes straight after Settle up, before net positions; on a computer it
+  // sits beside them, with net positions under Settle up.
+  const box = async (name: string) =>
+    (await page.getByRole('region', { name, exact: true }).boundingBox())!;
+  const settleUp = await box('Settle up');
+  const form = await box('Record payment');
+  const positions = await box('Net positions');
+  if (isPhone(testInfo)) {
+    expect(form.y).toBeGreaterThanOrEqual(settleUp.y + settleUp.height);
+    expect(positions.y).toBeGreaterThanOrEqual(form.y + form.height);
+  } else {
+    expect(form.x).toBeGreaterThanOrEqual(settleUp.x + settleUp.width);
+    expect(form.y).toBeLessThan(settleUp.y);
+    expect(positions.y).toBeGreaterThanOrEqual(settleUp.y + settleUp.height);
+    expect(positions.y).toBeLessThan(settleUp.y + settleUp.height + 40);
+  }
 
   // Keyboard: From, To, the amount, the note, then Record, in that order.
   await tab.from.focus();

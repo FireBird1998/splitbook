@@ -1,7 +1,8 @@
 'use client';
 
 import useSWR from 'swr';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Alert from '@mui/material/Alert';
 import AlertTitle from '@mui/material/AlertTitle';
 import Box from '@mui/material/Box';
@@ -21,6 +22,8 @@ import RecordPaymentForm, {
 import {
   amountInputText,
   firstName,
+  recordPaymentLinkPair,
+  withoutRecordPaymentLink,
   type LedgerState,
 } from '@/components/settlements/record-payment';
 import { viewerFirst } from '@/components/groups/group-tabs';
@@ -30,6 +33,7 @@ import { canRecordSettlement } from '@splitbook/shared/settlement-authorization'
 import {
   previewSettlement,
   settlementLedgerFromRead,
+  suggestedSettlementMinor,
   type SettlementLedger,
 } from '@splitbook/shared/settlement-preview';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -37,7 +41,7 @@ import type { GroupRead } from '@splitbook/shared/group-read';
 import { fetcher } from '@/lib/utils/fetcher';
 import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
 import type { SettlementAttempt } from '@/lib/settlement-attempts';
-import { BalancesCard, PersonAvatar } from './BalancesCard';
+import { TabCard, PersonAvatar } from './TabCard';
 import PaymentsTable, { type PaymentRead, type PaymentsState } from './PaymentsTable';
 
 const MIXED_CURRENCY_WARNING =
@@ -206,6 +210,49 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
     id: member.user._id,
     name: member.user.name,
   }));
+  // Home's Record (#306) links here for one pair. Once the balances have answered, the form
+  // starts with that pair and its suggestion, and the address drops the link, so reloading or
+  // coming Back doesn't fill the form in again. A link naming someone outside the Group does
+  // nothing.
+  const searchParams = useSearchParams();
+  const linkPair = recordPaymentLinkPair(searchParams, userId);
+  const linkFrom = linkPair?.from ?? '';
+  const linkTo = linkPair?.to ?? '';
+  const linkOther = linkFrom === userId ? linkTo : linkFrom;
+  const linkMember = members.some((member) => member.id === linkOther);
+  const linkSuggestion =
+    linkPair && groupLedger ? suggestedSettlementMinor(groupLedger, linkFrom, linkTo) : 0;
+  const linkAmount = linkSuggestion > 0 ? amountInputText(linkSuggestion, groupCurrency) : '';
+  const answered = Boolean(read || error);
+  const appliedLink = useRef<string | null>(null);
+  useEffect(() => {
+    const link = searchParams.toString();
+    if (!linkFrom || !answered || appliedLink.current === link) return;
+    // Deferred, as the Group page applies `?action=add-expense`, so it runs after mount.
+    const timeout = window.setTimeout(() => {
+      appliedLink.current = link;
+      // Next keeps its router in step with the native history API.
+      window.history.replaceState(
+        null,
+        '',
+        `${window.location.pathname}${withoutRecordPaymentLink(link)}`,
+      );
+      if (!linkMember) return;
+      setForm((current) => ({
+        seq: current.seq + 1,
+        outcome: null,
+        start: {
+          from: linkFrom,
+          to: linkTo,
+          amount: linkAmount,
+          purpose: 'record',
+          focus: 'amount',
+        },
+      }));
+    }, 0);
+    return () => window.clearTimeout(timeout);
+  }, [searchParams, linkFrom, linkTo, linkMember, linkAmount, answered]);
+
   const displayName = (person: BalancePerson) => (person._id === userId ? 'You' : person.name);
   const userBalance = balances.find((balance) => balance.user._id === userId);
   const theme = getGroupTheme(group.category);
@@ -325,7 +372,7 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
   })();
 
   const settleUpCard = (
-    <BalancesCard
+    <TabCard
       headingId="settle-up-heading"
       title="Settle up"
       subtitle={debts.length > 0 ? `${currency} · Record one once it’s paid` : currency}
@@ -496,11 +543,11 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
           </Typography>
         </>
       )}
-    </BalancesCard>
+    </TabCard>
   );
 
   const positionsCard = (
-    <BalancesCard
+    <TabCard
       headingId="net-positions-heading"
       title="Net positions"
       subtitle={`All-time net · ${currency}`}
@@ -542,75 +589,107 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
           </Box>
         ))}
       </Box>
-    </BalancesCard>
+    </TabCard>
   );
 
-  const figures = !read ? (
-    error ? (
-      <ErrorState message="Balances could not be loaded." onRetry={() => void mutate()} />
-    ) : (
-      <Stack spacing={2} role="status" aria-label="Loading balances" aria-busy="true">
-        <Skeleton variant="rounded" height={150} sx={{ borderRadius: '16px' }} />
-        <Skeleton variant="rounded" height={180} sx={{ borderRadius: '16px' }} />
-      </Stack>
-    )
-  ) : balances.length === 0 && debts.length === 0 ? (
-    <Box
-      component="section"
-      aria-label="Balances"
-      sx={{ bgcolor: 'background.paper', border: 1, borderColor: 'divider', borderRadius: '16px' }}
-    >
-      <EmptyState
-        title="All settled up"
-        description={`No one owes anyone in this ${theme.nouns.singular} right now.`}
-      />
-    </Box>
-  ) : (
-    <>
-      {error && (
-        <ErrorState
-          severity="warning"
-          message="Balances could not be refreshed. Showing the balances loaded before."
-          onRetry={() => void mutate()}
-        />
-      )}
-      {balanceCard}
-      {settleUpCard}
-      {positionsCard}
-    </>
-  );
+  // Above Record payment on a phone: the balance and Settle up, so a suggestion's Record sits
+  // just above the form it fills in. Below it: everyone's net position.
+  const [top, rest] = !read
+    ? [
+        error ? (
+          <ErrorState message="Balances could not be loaded." onRetry={() => void mutate()} />
+        ) : (
+          <Stack spacing={2} role="status" aria-label="Loading balances" aria-busy="true">
+            <Skeleton variant="rounded" height={150} sx={{ borderRadius: '16px' }} />
+            <Skeleton variant="rounded" height={180} sx={{ borderRadius: '16px' }} />
+          </Stack>
+        ),
+        null,
+      ]
+    : balances.length === 0 && debts.length === 0
+      ? [
+          <Box
+            key="settled"
+            component="section"
+            aria-label="Balances"
+            sx={{
+              bgcolor: 'background.paper',
+              border: 1,
+              borderColor: 'divider',
+              borderRadius: '16px',
+            }}
+          >
+            <EmptyState
+              title="All settled up"
+              description={`No one owes anyone in this ${theme.nouns.singular} right now.`}
+            />
+          </Box>,
+          null,
+        ]
+      : [
+          <>
+            {error && (
+              <ErrorState
+                severity="warning"
+                message="Balances could not be refreshed. Showing the balances loaded before."
+                onRetry={() => void mutate()}
+              />
+            )}
+            {balanceCard}
+            {settleUpCard}
+          </>,
+          positionsCard,
+        ];
 
   return (
     <Stack spacing={2.5}>
       {unconfirmedPayments}
       {currencySelector}
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2.5, alignItems: 'flex-start' }}>
+      {/* Two columns once the tab is wide enough for both (web.css .duo: 600px + 340px), the
+          form beside the figures; one column otherwise, the form straight after Settle up. */}
+      <Box sx={{ containerType: 'inline-size' }}>
         <Box
           sx={{
-            flex: '999 1 560px',
-            minWidth: 0,
-            display: 'flex',
-            flexDirection: 'column',
+            display: 'grid',
             gap: 2.5,
+            alignItems: 'start',
+            gridTemplateColumns: 'minmax(0, 1fr)',
+            gridTemplateAreas: '"top" "form" "rest"',
+            '@container (min-width: 920px)': {
+              gridTemplateColumns: 'minmax(0, 1fr) 340px',
+              gridTemplateRows: 'auto 1fr',
+              gridTemplateAreas: '"top form" "rest form"',
+            },
           }}
         >
-          {figures}
-        </Box>
-        <Box sx={{ flex: '1 1 340px', minWidth: 0 }}>
-          <RecordPaymentForm
-            key={form.seq}
-            groupId={groupId}
-            groupName={group.name}
-            accountId={userId}
-            currency={groupCurrency}
-            members={members}
-            ledger={ledger}
-            start={form.start}
-            outcome={form.outcome}
-            onDone={onFormDone}
-            onRefresh={refresh}
-            onPairChange={setFormPair}
-          />
+          <Box
+            sx={{
+              gridArea: 'top',
+              minWidth: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2.5,
+            }}
+          >
+            {top}
+          </Box>
+          <Box sx={{ gridArea: 'form', minWidth: 0 }}>
+            <RecordPaymentForm
+              key={form.seq}
+              groupId={groupId}
+              groupName={group.name}
+              accountId={userId}
+              currency={groupCurrency}
+              members={members}
+              ledger={ledger}
+              start={form.start}
+              outcome={form.outcome}
+              onDone={onFormDone}
+              onRefresh={refresh}
+              onPairChange={setFormPair}
+            />
+          </Box>
+          {rest && <Box sx={{ gridArea: 'rest', minWidth: 0 }}>{rest}</Box>}
         </Box>
       </Box>
       <PaymentsTable state={payments} viewerId={userId} onRetry={() => void mutateSettlements()} />

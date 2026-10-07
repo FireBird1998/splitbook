@@ -6,7 +6,7 @@ import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import { formatCurrency } from '@splitbook/shared/currency';
 import ErrorState from '@/components/common/ErrorState';
-import { BalancesCard, PaysArrow, PersonAvatar, visuallyHidden } from './BalancesCard';
+import { TabCard, PaysArrow, PersonAvatar, visuallyHidden } from './TabCard';
 
 /** Someone named in a payment, as the settlements read populates them; null for an account gone. */
 type PaymentPerson = { _id: string; name?: string } | null | undefined;
@@ -58,7 +58,7 @@ export default function PaymentsTable({ state, viewerId, onRetry }: PaymentsTabl
   const count = state.status === 'ready' ? state.payments.length : null;
 
   return (
-    <BalancesCard
+    <TabCard
       headingId="payments-heading"
       title="Payments"
       subtitle={
@@ -223,6 +223,6 @@ export default function PaymentsTable({ state, viewerId, onRetry }: PaymentsTabl
           </Box>
         </Box>
       )}
-    </BalancesCard>
+    </TabCard>
   );
 }

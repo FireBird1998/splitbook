@@ -18,6 +18,7 @@ import {
   type SettlementLedger,
   type SettlementPreview,
 } from '@splitbook/shared/settlement-preview';
+import { groupTabHref } from '@/components/groups/group-tabs';
 
 /** The server's limit on a Settlement's note. */
 export const NOTE_MAX_LENGTH = 500;
@@ -240,3 +241,50 @@ export function checkNewPayment(
 
 /** What the amount field's locked currency reads as. */
 export const currencyLabel = (currency: string) => `Currency ${currency}, the Group’s currency`;
+
+/**
+ * A payment between the member and one other person, from the member's side: they pay the
+ * other person, or receive from them. Home's "Needs you" lists suggested payments this way.
+ */
+export interface RecordPaymentLink {
+  direction: 'pay' | 'receive';
+  counterpartyId: string;
+}
+
+const PAID_TO = 'paidTo';
+const PAID_BY = 'paidBy';
+const OBJECT_ID = /^[a-f\d]{24}$/i;
+
+/**
+ * The Group's Balances with Record payment filled in for the pair (#306, #312):
+ * `?paidTo=<id>` when the member pays them, `?paidBy=<id>` when they pay the member. The
+ * member is never in the address, so a link can only name a pair the member is part of.
+ */
+export function recordPaymentHref(groupId: string, link: RecordPaymentLink): string {
+  const query = new URLSearchParams({
+    [link.direction === 'pay' ? PAID_TO : PAID_BY]: link.counterpartyId,
+  });
+  return groupTabHref(groupId, 'balances', query);
+}
+
+/** The pair a Record payment link asks for, From and To, or null when it names none. */
+export function recordPaymentLinkPair(
+  params: { get(name: string): string | null },
+  viewerId: string,
+): { from: string; to: string } | null {
+  const paidTo = params.get(PAID_TO);
+  const paidBy = params.get(PAID_BY);
+  if (Boolean(paidTo) === Boolean(paidBy)) return null;
+  const other = (paidTo ?? paidBy)!;
+  if (!OBJECT_ID.test(other) || other === viewerId) return null;
+  return paidTo ? { from: viewerId, to: other } : { from: other, to: viewerId };
+}
+
+/** The address without a Record payment link's parameters, once the form has taken them. */
+export function withoutRecordPaymentLink(search: string): string {
+  const query = new URLSearchParams(search);
+  query.delete(PAID_TO);
+  query.delete(PAID_BY);
+  const rest = query.toString();
+  return rest ? `?${rest}` : '';
+}

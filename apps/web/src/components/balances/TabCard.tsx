@@ -27,7 +27,7 @@ export const visuallyHidden = {
   border: 0,
 } as const;
 
-interface BalancesCardProps {
+interface TabCardProps {
   /** The heading's id; the card is a region named by it. */
   headingId: string;
   title: ReactNode;
@@ -38,7 +38,7 @@ interface BalancesCardProps {
 }
 
 /** A card with a heading, as a region named by that heading. */
-export function BalancesCard({ headingId, title, subtitle, aside, children }: BalancesCardProps) {
+export function TabCard({ headingId, title, subtitle, aside, children }: TabCardProps) {
   return (
     <Box
       component="section"

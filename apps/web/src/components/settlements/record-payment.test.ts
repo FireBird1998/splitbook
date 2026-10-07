@@ -6,6 +6,9 @@ import {
   overpaymentMessage,
   partyProblem,
   readPaymentAmount,
+  recordPaymentHref,
+  recordPaymentLinkPair,
+  withoutRecordPaymentLink,
   type LedgerState,
   type NewPaymentDraft,
 } from './record-payment';
@@ -224,5 +227,42 @@ describe('checkNewPayment', () => {
       preview: null,
       ready: false,
     });
+  });
+});
+
+describe('a link that opens Record payment for one pair', () => {
+  const GROUP = 'b00000000000000000000010';
+  const params = (query: string) => new URLSearchParams(query);
+
+  it('names only the other person, so the member is always one of the pair', () => {
+    expect(recordPaymentHref(GROUP, { direction: 'pay', counterpartyId: SAM })).toBe(
+      `/groups/${GROUP}/balances?paidTo=${SAM}`,
+    );
+    expect(recordPaymentHref(GROUP, { direction: 'receive', counterpartyId: SAM })).toBe(
+      `/groups/${GROUP}/balances?paidBy=${SAM}`,
+    );
+  });
+
+  it('reads back as From and To from the member’s side', () => {
+    expect(recordPaymentLinkPair(params(`paidTo=${SAM}`), YOU)).toEqual({ from: YOU, to: SAM });
+    expect(recordPaymentLinkPair(params(`paidBy=${SAM}`), YOU)).toEqual({ from: SAM, to: YOU });
+  });
+
+  it('asks for nothing when it names no one, both ways, the member, or something else', () => {
+    for (const query of [
+      '',
+      'month=2026-09',
+      `paidTo=${SAM}&paidBy=${PRIYA}`,
+      `paidTo=${YOU}`,
+      'paidTo=sam',
+      'paidBy=',
+    ]) {
+      expect(recordPaymentLinkPair(params(query), YOU)).toBeNull();
+    }
+  });
+
+  it('leaves the rest of the address once the form has taken the pair', () => {
+    expect(withoutRecordPaymentLink(`paidTo=${SAM}`)).toBe('');
+    expect(withoutRecordPaymentLink(`month=2026-09&paidBy=${SAM}`)).toBe('?month=2026-09');
   });
 });
