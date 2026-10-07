@@ -562,7 +562,8 @@ async function journey(
   return sample;
 }
 
-describe('render and request profile (#177, #206)', () => {
+// These journeys render real lists, and CI's verify job runs every workspace at once: 30 s each.
+describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
   it('Home and Group navigation', async () => {
     let app!: Awaited<ReturnType<typeof renderApp>>;
     const home = () => expect(app.count('Open '), 'Group rows on Home').toBe(groups.length);
