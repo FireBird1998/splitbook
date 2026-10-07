@@ -425,10 +425,9 @@ describe('App refresh rendering', () => {
     await settle();
     expect(app.refreshControl().refreshing).toBe(false);
     // The pull read Expenses and Balances again beside the failed Group read; the retry reads the
-    // Expenses beside the Group again (#219), so Balances wait to follow them.
-    expect(app.text()).toContain(
-      `Updating balances. These figures are from ${refreshedLabel(app.clock.now)} and may change.`,
-    );
+    // Expenses beside the Group again (#219), so Balances wait to follow them, with their time.
+    expect(app.text()).toContain(`Updated ${refreshedLabel(app.clock.now)}`);
+    expect(app.text()).not.toContain('Updating');
     expect(app.text()).toContain('You owe₹30.00');
 
     app.use(() => undefined);
@@ -537,13 +536,15 @@ describe('App refresh rendering', () => {
     await app.press('Open Maple House');
     await groupRead.reached;
     await settle();
-    expect(app.text()).toContain(`Saved ${verifiedAt} · refreshing`);
+    // Read in this session: they say so while they're read again, as the progress bar does (#219).
+    expect(app.text()).toContain(`Updated ${verifiedAt}`);
+    expect(app.text()).not.toContain('Saved');
     expect(app.text()).toContain('September groceries');
     await app.press('Balances');
-    // The Expenses, read beside the Group (#219), have answered: Balances wait to follow them.
-    expect(app.text()).toContain(
-      `Updating balances. These figures are from ${verifiedAt} and may change.`,
-    );
+    // The Expenses, read beside the Group (#219), have answered: Balances wait to follow them,
+    // with their time.
+    expect(app.text()).toContain(`Updated ${verifiedAt}`);
+    expect(app.text()).not.toContain('Updating');
     expect(app.text()).toContain('You owe₹30.00');
     expect(app.refreshControl().refreshing).toBe(false);
     app.use(() => undefined);

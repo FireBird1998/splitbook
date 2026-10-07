@@ -21,12 +21,13 @@ import {
   ListRow,
   Money,
   RowAmount,
+  Skeleton,
   SkeletonText,
   SummaryStats,
   type SummaryStat,
   useLargeText,
 } from './compact';
-import { Freshness, RetainedNotice } from './financial-views';
+import { ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
 import { useTheme } from './theme';
@@ -130,17 +131,23 @@ const ExpenseRow = memo(function ExpenseRow({
   );
 });
 
-/** Previous and next Month (next stops at the current one), and All time or This month. */
+/**
+ * Previous and next Month (next stops at the current one), and All time or This month. While
+ * the Group is first read (`opening`), its Month isn't known yet: the bar holds its place, with
+ * its label's placeholder and nothing to press (#219).
+ */
 function MonthBar({
   month,
-  now,
+  current,
+  opening = false,
   onSelectMonth,
 }: {
   month: string | null;
-  now: number;
+  /** This Month's key: next stops there. */
+  current: string;
+  opening?: boolean;
   onSelectMonth: (month: string | null) => void;
 }) {
-  const current = currentMonthKey(new Date(now));
   return (
     <View
       style={{
@@ -154,27 +161,39 @@ function MonthBar({
       <IconButton
         icon="chevron-back"
         label="Previous month"
+        disabled={opening}
         onPress={() => onSelectMonth(shiftMonthKey(month ?? current, -1))}
       />
-      <CompactText
-        variant="heading"
-        weight="medium"
-        accessibilityRole="header"
-        accessibilityLiveRegion="polite"
-        style={{ flex: 1, textAlign: 'center' }}
-      >
-        {monthLabel(month)}
-      </CompactText>
+      {opening ? (
+        <View style={{ flex: 1, alignItems: 'center' }}>
+          <Skeleton width="45%" line="heading" />
+        </View>
+      ) : (
+        <CompactText
+          variant="heading"
+          weight="medium"
+          accessibilityRole="header"
+          accessibilityLiveRegion="polite"
+          style={{ flex: 1, textAlign: 'center' }}
+        >
+          {monthLabel(month)}
+        </CompactText>
+      )}
       <IconButton
         icon="chevron-forward"
         label="Next month"
-        disabled={month === null || month >= current}
+        disabled={opening || month === null || month >= current}
         onPress={() => onSelectMonth(shiftMonthKey(month ?? current, 1))}
       />
-      {month === null ? (
+      {month === null && !opening ? (
         <CompactButton label="This month" variant="text" onPress={() => onSelectMonth(current)} />
       ) : (
-        <CompactButton label="All time" variant="text" onPress={() => onSelectMonth(null)} />
+        <CompactButton
+          label="All time"
+          variant="text"
+          disabled={opening}
+          onPress={() => onSelectMonth(null)}
+        />
       )}
     </View>
   );
@@ -202,18 +221,21 @@ function summaryStats(summary: ExpenseWindowSummary, currentUserId: string) {
 
 /**
  * What the window cost: a Household's Month (or All time) and every other Theme's all time.
- * It describes spending only, never running Balances.
+ * It describes spending only, never running Balances, so it renders again only when what it
+ * says changes, not when Balances land after the Expenses (#219).
  */
-function ExpenseSummary({
+const ExpenseSummary = memo(function ExpenseSummary({
   household,
   month,
   summary,
   currentUserId,
   refreshedAt,
-  refreshing,
+  restored,
+  updating,
   offline,
   loading,
-  now,
+  opening,
+  current,
   onSelectMonth,
 }: {
   household: boolean;
@@ -221,27 +243,33 @@ function ExpenseSummary({
   summary: ExpenseWindowSummary | null;
   currentUserId: string;
   refreshedAt: number | null;
-  /** Read again while they stay on screen. */
-  refreshing: boolean;
-  /** The figures come from this device: "Saved", not "Updated". */
+  /** The figures are this device's saved copy: "Saved", not "Updated". */
+  restored: boolean;
+  /** A change made them out of date, and they're being read again: "Updating…". */
+  updating: boolean;
   offline: boolean;
   loading: boolean;
-  now: number;
+  /** The Group is first read: its Month isn't known yet. */
+  opening: boolean;
+  /** This Month's key. */
+  current: string;
   onSelectMonth: (month: string | null) => void;
 }) {
   const figures = summary ? summaryStats(summary, currentUserId) : null;
   const large = useLargeText();
-  const updated = <Freshness refreshedAt={refreshedAt} refreshing={refreshing} offline={offline} />;
+  const updated = (
+    <ReadTime refreshedAt={refreshedAt} restored={restored} updating={updating} offline={offline} />
+  );
   const count = summary ? `${summary.count} ${summary.count === 1 ? 'expense' : 'expenses'}` : '';
   const within = !month
     ? ''
-    : month === currentMonthKey(new Date(now))
+    : month === current
       ? ' this month'
       : ` in ${new Date(`${month}-01T12:00:00`).toLocaleDateString('en', { month: 'long' })}`;
   return (
     <Card>
       {household ? (
-        <MonthBar month={month} now={now} onSelectMonth={onSelectMonth} />
+        <MonthBar month={month} current={current} opening={opening} onSelectMonth={onSelectMonth} />
       ) : (
         <View
           style={{
@@ -323,7 +351,7 @@ function ExpenseSummary({
       )}
     </Card>
   );
-}
+});
 
 /** The kept draft: an ordinary one in info tone; a save that may be recorded in warning tone. */
 function KeptDraftNotice({
@@ -391,8 +419,8 @@ export function GroupExpensesView({
   state,
   kept,
   savedExpenseId,
-  refreshing = false,
   offline = false,
+  firstRead = false,
   now,
   onSelectMonth,
   onRefreshExpenses,
@@ -410,10 +438,13 @@ export function GroupExpensesView({
   kept: KeptDraft | null;
   /** Highlighted after a save while its confirmation shows. */
   savedExpenseId: string | null;
-  /** Shown Expenses are read again: their freshness says so. */
-  refreshing?: boolean;
-  /** Figures come from this device's saved copy. */
+  /** The app can't reach SplitBook: this device's saved copy shows its badge. */
   offline?: boolean;
+  /**
+   * The Group is first read, shown as Home lists it: these are its placeholders, in the shape
+   * they keep once it answers (#219).
+   */
+  firstRead?: boolean;
   now: number;
   onSelectMonth: (month: string | null) => void;
   onRefreshExpenses: () => void;
@@ -434,6 +465,12 @@ export function GroupExpensesView({
     opening.current = onOpenExpense;
   });
   const open = useCallback((expenseId: string) => opening.current(expenseId), []);
+  // The same for the Month bar, so the summary renders again only when what it says changes.
+  const choosing = useRef(onSelectMonth);
+  useEffect(() => {
+    choosing.current = onSelectMonth;
+  });
+  const choose = useCallback((month: string | null) => choosing.current(month), []);
   // When the window moves (#219), rows above the one on screen go or come: Load more past 5
   // pages drops the newest page, and Load newer brings it back above. The view moves by as much
   // as a row shown on both sides of the change moved, so the row on screen keeps its place.
@@ -515,20 +552,23 @@ export function GroupExpensesView({
         summary={summary}
         currentUserId={currentUserId}
         refreshedAt={listed ? expenses.refreshedAt : null}
-        refreshing={refreshing}
+        restored={expenses.restored === true}
+        // The rows shown are from before a change written here, and being read again.
+        updating={expenses.changed === true && expenses.status === 'loading'}
         offline={offline}
         loading={!listed && expenses.status !== 'error'}
-        now={now}
-        onSelectMonth={onSelectMonth}
+        opening={firstRead}
+        current={currentMonthKey(new Date(now))}
+        onSelectMonth={choose}
       />
       {listed ? (
         <RetainedNotice
           status={expenses.status}
-          stale={false}
           refreshedAt={expenses.refreshedAt}
           message={expenses.message}
           subject={`${scope} expenses`}
           retryLabel="Retry expenses"
+          offline={offline}
           onRetry={onRefreshExpenses}
         />
       ) : null}
@@ -553,10 +593,12 @@ export function GroupExpensesView({
           expenses.status === 'error' && offline ? (
             <NotAvailableOffline
               compact
+              // True whether they were never saved here, removed by a change or a sign-out, or
+              // withheld (#323): never "hasn't been opened" (#219, #280 item 2).
               message={
                 state.month
-                  ? `${monthLabel(state.month)} hasn’t been opened on this phone yet. Connect to load it.`
-                  : 'These expenses haven’t been opened on this phone yet. Connect to load them.'
+                  ? `Expenses in ${monthLabel(state.month)} aren’t saved on this phone. Connect to load them.`
+                  : 'These expenses aren’t saved on this phone. Connect to load them.'
               }
               onRetry={onRefreshExpenses}
             />

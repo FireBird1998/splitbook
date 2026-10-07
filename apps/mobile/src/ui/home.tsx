@@ -15,7 +15,6 @@ import type {
 } from '../data/types';
 import { notOnPhone } from '../data/home-queries';
 import {
-  Badge,
   Banner,
   Card,
   CompactAvatar,
@@ -30,16 +29,14 @@ import {
   SectionHeader,
   Skeleton,
   SkeletonText,
-  StatusText,
   moneySizes,
   scaledSp,
   useLargeText,
   useLineBox,
 } from './compact';
-import { RetainedNotice } from './financial-views';
+import { readTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
-import { refreshedLabel } from './refresh-feedback';
 import { fonts, useTheme } from './theme';
 
 const themeIcons: Record<GroupCategory, IconName> = {
@@ -201,13 +198,25 @@ function CurrencyRow({ bucket }: { bucket: HomeCurrencyBalance }) {
  * When the figures shown were read. "Updated hh:mm" for the server's answer in this session,
  * offline too; this device's saved copy says "Saved hh:mm", never presented as fresh (ADR
  * 0006), and offline it is the badge every saved view shows. "Saved" giving way to "Updated"
- * cross-fades in place (#332).
+ * cross-fades in place (#332). Read again after a change, or after a Group's Expenses were read,
+ * they say "Updating…" where their time was, in its place, so nothing moves (#219).
  */
-function BalancesTime({ state, offline }: { state: HomeFinancialState; offline: boolean }) {
-  if (state.refreshedAt === null) return null;
-  const time = refreshedLabel(state.refreshedAt);
-  if (state.restored && offline) return <Badge label={`Saved ${time}`} />;
-  return <StatusText tone="muted">{`${state.restored ? 'Saved' : 'Updated'} ${time}`}</StatusText>;
+function BalancesTime({
+  state,
+  offline,
+  updating,
+}: {
+  state: HomeFinancialState;
+  offline: boolean;
+  updating: boolean;
+}) {
+  return readTime({
+    refreshedAt: state.refreshedAt,
+    restored: state.restored === true,
+    updating,
+    offline,
+    tone: 'muted',
+  });
 }
 
 /**
@@ -246,11 +255,11 @@ export function HomeBalances({
       {state.data !== null && (
         <RetainedNotice
           status={state.status}
-          stale={state.stale && !silent}
           refreshedAt={state.refreshedAt}
           message={state.message}
           subject="your balances"
           retryLabel="Retry Home balances"
+          offline={offline}
           onRetry={onRefresh}
         />
       )}
@@ -269,7 +278,15 @@ export function HomeBalances({
             <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
               Your balances
             </CompactText>
-            {state.data !== null ? <BalancesTime state={state} offline={offline} /> : null}
+            {state.data !== null ? (
+              <BalancesTime
+                state={state}
+                offline={offline}
+                // From the frame Home shows them, before their read starts, until it lands or
+                // fails; an automatic refresh says nothing (#219).
+                updating={state.stale && state.status !== 'error' && !silent}
+              />
+            ) : null}
           </View>
         }
         loading={placeholder ? 'Loading your balances' : undefined}

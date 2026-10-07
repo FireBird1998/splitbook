@@ -1,6 +1,7 @@
+import type { ReactNode } from 'react';
 import { View } from 'react-native';
 import type { LoadStatus } from '../data/types';
-import { Badge, StatusText, useLargeText, type TextTone } from './compact';
+import { Badge, CompactText, StatusText, useLargeText, type TextTone } from './compact';
 import { Button, Copy, Icon } from './primitives';
 import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
@@ -40,8 +41,101 @@ export function RefreshStatus({
 }
 
 /**
- * A view's own freshness slot: "Updated hh:mm", "Saved hh:mm · refreshing" while it is read
- * again, or a "Saved hh:mm" badge when its figures come from this device offline.
+ * Says `children` in the place `holds` takes: an unseen, unread copy of `holds` keeps that place
+ * at its size, so a short status standing in for a longer text moves nothing around it, whatever
+ * the text size (#219). With `holds` null, `children` take their own place. The same `children`
+ * stay mounted either way, so a status in them can change its text in place. A plain function,
+ * drawn as part of the component that calls it.
+ */
+export function inPlace({ holds, children }: { holds: ReactNode | null; children: ReactNode }) {
+  return (
+    <View>
+      {holds === null ? null : (
+        <View
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          style={{ opacity: 0 }}
+        >
+          {holds}
+        </View>
+      )}
+      <View
+        style={
+          holds === null
+            ? undefined
+            : {
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                bottom: 0,
+                left: 0,
+                justifyContent: 'center',
+                alignItems: 'flex-end',
+              }
+        }
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
+
+/**
+ * When a Group's Expenses or Balances, or Home's figures, shown were read, in their own slot:
+ * "Updated hh:mm" for the server's answer in this session, offline too; this device's restored
+ * copy says "Saved hh:mm", never presented as fresh (ADR 0006), and offline it is the badge every
+ * saved view shows (#219, as Home's since #332). An ordinary refresh changes nothing here: the
+ * screen's one progress cue says it. Figures a change has made out of date (`updating`) say
+ * "Updating…" where their time was, in its place, until they're read again, so the member never
+ * takes an old debt for a current one, and nothing below moves.
+ */
+export function ReadTime(props: ReadTimeProps) {
+  return readTime(props);
+}
+
+export interface ReadTimeProps {
+  refreshedAt: number | null;
+  /** The figures are this device's saved copy. */
+  restored?: boolean;
+  offline?: boolean;
+  /** Out of date since a change, and being read again. */
+  updating?: boolean;
+  tone?: TextTone;
+}
+
+/**
+ * `ReadTime`'s slot, for a component that draws it as part of its own render, as Home's
+ * balances do, so Home renders no more components than before (#219).
+ */
+export function readTime({
+  refreshedAt,
+  restored = false,
+  offline = false,
+  updating = false,
+  tone = 'secondary',
+}: ReadTimeProps) {
+  if (refreshedAt === null) return null;
+  const time = refreshedLabel(refreshedAt);
+  if (restored && offline && !updating) return <Badge label={`Saved ${time}`} />;
+  const read = `${restored ? 'Saved' : 'Updated'} ${time}`;
+  return inPlace({
+    holds: updating ? (
+      <CompactText variant="caption" tone={tone}>
+        {read}
+      </CompactText>
+    ) : null,
+    children: (
+      // Into "Updating…" at once, never fading from the time beside it; back out with a fade.
+      <StatusText tone={tone} instant={updating}>
+        {updating ? 'Updating…' : read}
+      </StatusText>
+    ),
+  });
+}
+
+/**
+ * Activity's freshness slot (#222 moves it): "Updated hh:mm", "Saved hh:mm · refreshing" while
+ * it is read again, or a "Saved hh:mm" badge when its events come from this device offline.
  */
 export function Freshness({
   refreshedAt,
@@ -105,47 +199,45 @@ export function DetailsNotice({
 }
 
 /**
- * Explains figures that stay visible but are not current: still being verified
- * after a ledger change, or kept after a refresh failed.
+ * Explains figures kept on screen after a refresh failed, with when they were read and a retry:
+ * beside the offline cloud while SplitBook can't be reached, otherwise beside the error icon, so
+ * a server error never looks like a lost connection (#219). Figures read again after a ledger
+ * change say nothing here: they keep their place and their time, and the screen's one progress
+ * cue says they're being read, so nothing moves (#219).
  */
 export function RetainedNotice({
   status,
-  stale,
   refreshedAt,
   message,
   subject,
   retryLabel,
+  offline = false,
   onRetry,
 }: {
   status: LoadStatus;
-  stale: boolean;
   refreshedAt: number | null;
   message: string | null;
   subject: string;
   retryLabel: string;
+  /** The app can't reach SplitBook, as its offline banner says. */
+  offline?: boolean;
   onRetry: () => void;
 }) {
   const theme = useTheme();
   const time = refreshedLabel(refreshedAt);
-  if (status === 'error')
-    return (
-      <View style={{ gap: 12 }}>
-        <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Icon name="cloud-offline-outline" color={theme.status.negative} />
-          <Copy accessibilityRole="alert" style={{ flex: 1, color: theme.status.negative }}>
-            {message ?? `Couldn’t refresh ${subject}.`} Showing {subject} from {time}.
-          </Copy>
-        </View>
-        <Button label={retryLabel} secondary onPress={onRetry} />
-      </View>
-    );
-  if (!stale) return null;
+  if (status !== 'error') return null;
   return (
-    <View style={{ flexDirection: 'row', gap: 10 }}>
-      <Icon name="sync-outline" color={theme.textSecondary} />
-      <Copy style={{ flex: 1, color: theme.textSecondary, fontSize: 14, lineHeight: 21 }}>
-        Updating {subject}. These figures are from {time} and may change.
-      </Copy>
+    <View style={{ gap: 12 }}>
+      <View style={{ flexDirection: 'row', gap: 10 }}>
+        <Icon
+          name={offline ? 'cloud-offline-outline' : 'alert-circle-outline'}
+          color={theme.status.negative}
+        />
+        <Copy accessibilityRole="alert" style={{ flex: 1, color: theme.status.negative }}>
+          {message ?? `Couldn’t refresh ${subject}.`} Showing {subject} from {time}.
+        </Copy>
+      </View>
+      <Button label={retryLabel} secondary onPress={onRetry} />
     </View>
   );
 }

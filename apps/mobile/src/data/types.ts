@@ -148,6 +148,17 @@ export interface GroupFinancialState {
     /** The oldest verification time among the pages listed (#215). */
     refreshedAt: number | null;
     /**
+     * A page listed is this device's saved copy, restored with its own time (ADR 0006, AMEND-2),
+     * not an answer the server gave in this session: the list says "Saved", never "Updated"
+     * (#219, as Home's figures since #332). Unset is the same as false.
+     */
+    restored?: boolean;
+    /**
+     * A change written in this Group made the rows shown out of date: they're shown until read
+     * again, saying so (#219). Unset before any change.
+     */
+    changed?: boolean;
+    /**
      * The first page listed: past 1 once the list has slid past 5 pages, when Load newer reads
      * the page before it (M7-2). `pagination` is the last page listed.
      */
@@ -161,6 +172,8 @@ export interface GroupFinancialState {
     status: LoadStatus;
     data: GroupCurrencyBalance[] | null;
     message: string | null;
+    /** The figures shown are this device's saved copy, as `expenses.restored` (#219). */
+    restored?: boolean;
     /**
      * A change written in this Group made them out of date: no payment is offered on them until
      * they're read again after it (#219). Unset before any change.
@@ -425,6 +438,8 @@ export interface MobileSnapshot {
     data: MobileGroup | null;
     message: string | null;
     refreshedAt: number | null;
+    /** The Group shown is this device's saved copy, as a Group's figures can be (#219). */
+    restored?: boolean;
   };
 }
 

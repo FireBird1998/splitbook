@@ -74,6 +74,16 @@ export const MAX_PAGES = 5;
 /** A stale time that is stale whatever the clock says, even moved back past a read. */
 const STALE = -Infinity;
 const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
+/**
+ * What stays on screen when SplitBook can't be reached and this phone keeps no copy to show
+ * instead: removed by a change, withheld (#323) or never saved. Beside the time it was read, as
+ * Home says of its balances since #332 (#219).
+ */
+const notKept = {
+  group: (name: string) => `Couldn’t refresh ${name}, and this phone no longer keeps a copy of it.`,
+  expenses: 'Couldn’t refresh these expenses, and this phone no longer keeps a copy of them.',
+  balances: 'Couldn’t refresh these balances, and this phone no longer keeps a copy of them.',
+};
 const balancesNotUpdated = 'Could not update balances. Please try again.';
 
 /** One parse per answer (and currency): structural sharing keeps an unchanged answer the same. */
@@ -1037,7 +1047,7 @@ export function createGroupQueries(session: GroupSession) {
   };
 
   /** The Expenses shown for the Month, from their query, in the snapshot's shape. */
-  const projectExpenses = (shown: Expenses, opened: View, financial: GroupFinancialState) => {
+  const expensesFrom = (shown: Expenses, opened: View, financial: GroupFinancialState) => {
     const key = shownList(financial),
       state = stateOf<Pages>(key);
     if (!key) return shown;
@@ -1074,6 +1084,8 @@ export function createGroupQueries(session: GroupSession) {
         firstPage: read[0].page,
         // Never fresher than its oldest page (#215).
         refreshedAt: Math.min(...read.map((page) => page.refreshedAt)),
+        // A page this device restored is never presented as read in this session (#219).
+        restored: read.some((page) => page.source === 'saved'),
         moreStatus: failed ? 'error' : 'idle',
         moreMessage: failed?.message ?? null,
       };
@@ -1122,7 +1134,11 @@ export function createGroupQueries(session: GroupSession) {
       return same(shown, {
         ...base,
         status: 'error',
-        message: messageOf(error, 'Could not load expenses. Please try again.'),
+        // Expenses still on screen: what is true of them, never "not saved" (#219, as #332).
+        message:
+          unreachable(error) && (base.summary !== null || base.data.length > 0)
+            ? notKept.expenses
+            : messageOf(error, 'Could not load expenses. Please try again.'),
       });
     return same(shown, {
       ...base,
@@ -1131,6 +1147,19 @@ export function createGroupQueries(session: GroupSession) {
       newerStatus: 'idle',
       newerMessage: null,
     });
+  };
+  /**
+   * The Expenses shown, and whether a change written in this Group made them out of date: they
+   * weren't read since by a read begun after it (#219). The rows stay while they're read again,
+   * and say so; Balances' `changed` is the same for their payments.
+   */
+  const projectExpenses = (shown: Expenses, opened: View, financial: GroupFinancialState) => {
+    let next = expensesFrom(shown, opened, financial);
+    const pages = stateOf<Pages>(shownList(financial))?.data;
+    const changed =
+      opened.change !== 0 && !(pages && (answers.get(pages)?.change ?? -1) >= opened.change);
+    if ((next.changed ?? false) !== changed) next = { ...next, changed };
+    return next;
   };
   /** The Group's all-time Balances, from their query, in the snapshot's shape. */
   const balancesFrom = (shown: Balances, opened: View, financial: GroupFinancialState) => {
@@ -1160,7 +1189,9 @@ export function createGroupQueries(session: GroupSession) {
     } catch {
       figures = null;
     }
-    const kept = figures ? { data: figures, refreshedAt: state.data!.refreshedAt } : {};
+    // Whether they're this device's copy, as their time says: "Saved", never "Updated" (#219).
+    const restored = state.data?.source === 'saved';
+    const kept = figures ? { data: figures, refreshedAt: state.data!.refreshedAt, restored } : {};
     if (state.fetchStatus === 'fetching')
       return same(shown, {
         ...shown,
@@ -1184,7 +1215,11 @@ export function createGroupQueries(session: GroupSession) {
         ...shown,
         ...kept,
         status: 'error',
-        message: messageOf(error, 'Could not load balances. Please try again.'),
+        // Balances still on screen: what is true of them, never "not saved" (#219, as #332).
+        message:
+          unreachable(error) && (figures ?? shown.data) !== null
+            ? notKept.balances
+            : messageOf(error, 'Could not load balances. Please try again.'),
       });
     return same(shown, {
       status: 'ready',
@@ -1192,6 +1227,7 @@ export function createGroupQueries(session: GroupSession) {
       message: null,
       refreshedAt: state.data!.refreshedAt,
       stale: false,
+      restored,
     });
   };
   /**
@@ -1227,18 +1263,28 @@ export function createGroupQueries(session: GroupSession) {
     }
     const known =
       group && group.id === opened.groupId && lists(group)
-        ? { data: group, refreshedAt: state.data!.refreshedAt }
+        ? {
+            data: group,
+            refreshedAt: state.data!.refreshedAt,
+            // This device's copy: the offline banner says what's shown was saved (#219).
+            restored: state.data!.source === 'saved',
+          }
         : {};
     if (state.fetchStatus === 'fetching' || (!opened.checked && opened.reading))
       return same(shown, { ...shown, ...known, status: 'loading', message: null });
     const error = failure(state);
     if (state.status === 'error' && !error) return shown;
+    // The Group still on screen: what is true of it, never "not saved" (#219, as #332).
+    const kept = 'data' in known ? known.data : shown.data;
     if (error)
       return same(shown, {
         ...shown,
         ...known,
         status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
-        message: messageOf(error, 'The server returned invalid group data. Please try again.'),
+        message:
+          unreachable(error) && kept
+            ? notKept.group(kept.name)
+            : messageOf(error, 'The server returned invalid group data. Please try again.'),
       });
     if (!('data' in known) || (previews.has(state.data as object) && !opened.checked)) return shown;
     return same(shown, { ...shown, ...known, status: 'ready', message: null });

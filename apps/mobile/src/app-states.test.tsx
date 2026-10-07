@@ -9,8 +9,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decodeStoredSession } from './data/cookies';
 import { createMobileController, type MobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
-import { balanceWidth } from './ui/home';
-import { refreshedLabel } from './ui/refresh-feedback';
+import { balanceWidth, HomeBalances } from './ui/home';
+import { refreshFeedback, refreshedLabel } from './ui/refresh-feedback';
 import { findHosts, flatten, layoutHeight, layoutWidth } from './test-utils/layout';
 import { loop, setFileWindow, setReduceMotion, setWindow, timing } from './test-utils/native';
 import { progressHeight, sweepTrack } from './ui/compact';
@@ -117,6 +117,10 @@ function device() {
     groupBalances: false,
     /** Groups that refuse Alex (403): Alex has lost them. */
     refused: [] as string[],
+    /** Paths the server fails with a 500: exact, or every path a prefix ending in `?` starts. */
+    failing: [] as string[],
+    /** Alex has recorded the ₹30.00 owed to Sam: Balances are settled. */
+    paid: false,
   };
   /** The saved copies can't be removed, as on a full or read-only disk. */
   const storage = { failRemoval: false };
@@ -125,8 +129,20 @@ function device() {
     identity: unknown = null,
     untrusted: unknown = null;
   const cache = new Map<string, unknown>(),
-    drafts = new Map<string, unknown>();
+    drafts = new Map<string, unknown>(),
+    payments = new Map<string, unknown>();
   const holds: { prefix: string; arrive: () => void; response: Promise<void> }[] = [];
+  /** Every request this phone sent, as `METHOD /path?query`. */
+  const sent: string[] = [];
+  /** Storage calls to hold, in order: a slow device's next reads, writes or removals. */
+  const slow: { arrive: () => void; response: Promise<void> }[] = [];
+  /** A call to this phone's saved copies or drafts: it waits while a storage hold is set. */
+  const disk = async () => {
+    const held = slow.shift();
+    if (!held) return;
+    held.arrive();
+    await held.response;
+  };
   const respond = (path: string, method: string): FetchResponse => {
     if (path.endsWith('/sign-out')) return json({ success: true });
     if (path.endsWith('/sign-in'))
@@ -141,7 +157,9 @@ function device() {
     if (path === '/api/user/balances')
       return json({
         data: {
-          buckets: network.noGroups ? [] : [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }],
+          buckets: network.noGroups
+            ? []
+            : [{ currency: 'INR', youOwe: network.paid ? 0 : 30, youAreOwed: 0 }],
           ...(network.groupBalances && {
             groups: [
               { groupId: maple, balances: [{ currency: 'INR', balance: -30 }] },
@@ -166,6 +184,12 @@ function device() {
     const found = groups.find((item) => item._id === id);
     if (!found) return json({}, 404);
     if (network.refused.includes(found._id)) return json({}, 403);
+    if (
+      network.failing.some((failing) =>
+        failing.endsWith('?') ? path.startsWith(failing) : path === failing,
+      )
+    )
+      return json({}, 500);
     if (path === `/api/groups/${id}`) return json({ data: found, status: 200 });
     if (path === `/api/groups/${maple}/expenses/${expenseId}`)
       return json({ data: expense, status: 200 });
@@ -186,6 +210,29 @@ function device() {
           },
         },
       });
+    if (path === `/api/groups/${id}/settlements` && method === 'POST') {
+      network.paid = true;
+      return json(
+        {
+          status: 201,
+          data: {
+            _id: 'f00000000000000000000001',
+            group: id,
+            paidBy: { _id: alex.id, name: alex.name, image: null },
+            paidTo: { _id: sam._id, name: sam.name, image: null },
+            createdBy: { _id: alex.id, name: alex.name, image: null },
+            amount: 30,
+            amountMinor: 3000,
+            moneyVersion: 1,
+            currency: 'INR',
+            note: '',
+            createdAt: iso,
+            updatedAt: iso,
+          },
+        },
+        201,
+      );
+    }
     if (path === `/api/groups/${id}/balances`)
       return json({
         status: 200,
@@ -194,10 +241,10 @@ function device() {
             {
               currency: 'INR',
               balances: [
-                { user: { ...alex, _id: alex.id }, balance: -30 },
-                { user: sam, balance: 30 },
+                { user: { ...alex, _id: alex.id }, balance: network.paid ? 0 : -30 },
+                { user: sam, balance: network.paid ? 0 : 30 },
               ],
-              debts: [{ from: { ...alex, _id: alex.id }, to: sam, amount: 30 }],
+              debts: network.paid ? [] : [{ from: { ...alex, _id: alex.id }, to: sam, amount: 30 }],
             },
           ],
         },
@@ -253,8 +300,24 @@ function device() {
             identity = null;
           },
         },
+        // A payment's retry identity, stored before it is sent.
+        settlementAttempts: {
+          load: async (account, id) => structuredClone(payments.get(`${account}:${id}`) ?? null),
+          save: async (account, id, value) => {
+            payments.set(`${account}:${id}`, structuredClone(value));
+          },
+          remove: async (account, id) => {
+            payments.delete(`${account}:${id}`);
+          },
+          clear: async () => payments.clear(),
+        },
         savedQueries: savedQueriesIn(cache, {
+          load: async (account, path) => {
+            await disk();
+            return structuredClone(cache.get(account + path) ?? null);
+          },
           remove: async (account, path) => {
+            await disk();
             if (storage.failRemoval) throw new Error('The device storage is full');
             cache.delete(account + path);
           },
@@ -270,7 +333,10 @@ function device() {
           clear: async () => cache.clear(),
         },
         expenseDrafts: {
-          load: async (account, id) => structuredClone(drafts.get(`${account}:${id}`) ?? null),
+          load: async (account, id) => {
+            await disk();
+            return structuredClone(drafts.get(`${account}:${id}`) ?? null);
+          },
           save: async (account, id, value) => {
             drafts.set(`${account}:${id}`, structuredClone(value));
           },
@@ -301,10 +367,11 @@ function device() {
             },
           },
           // As the app registers them: sign-out and an account change clear the saved copies.
-          stores: [{ clear: async () => cache.clear() }],
+          stores: [{ clear: async () => cache.clear() }, { clear: async () => payments.clear() }],
         },
         fetch: async (url, init) => {
           const path = new URL(url).pathname + new URL(url).search;
+          sent.push(`${init.method ?? 'GET'} ${path}`);
           if (!network.online) throw new Error('Offline');
           const index = holds.findIndex((item) => path.startsWith(item.prefix));
           if (index >= 0) {
@@ -321,10 +388,26 @@ function device() {
   return {
     clock,
     network,
+    sent,
     storage,
     controller,
     /** The saved copy of `path` on this phone, as stored. */
     saved: (path: string) => cache.get(alex.id + path) ?? null,
+    /** This phone loses its saved copy of `path`, as after a write that failed. */
+    lose: (path: string) => cache.delete(alex.id + path),
+    /** The phone's next call to its saved copies or drafts waits until released. */
+    holdStorage() {
+      let arrive!: () => void;
+      let release!: () => void;
+      const reached = new Promise<void>((resolve) => {
+        arrive = resolve;
+      });
+      const response = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      slow.push({ arrive, response });
+      return { reached, release };
+    },
     /** The next request starting with `prefix` waits until released. */
     hold(prefix: string) {
       let arrive!: () => void;
@@ -742,7 +825,8 @@ describe('first load and refresh', () => {
     expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual([
       'Opening Lisbon Offsite',
     ]);
-    expect(app.hosts((p) => p.accessibilityLabel === 'Loading this Group')).toHaveLength(1);
+    // Its Expenses' own placeholders, in the shape they keep once it answers (#219).
+    expect(app.hosts((p) => p.accessibilityLabel === 'Loading all-time expenses')).toHaveLength(1);
     expect(app.hosts((p) => p.accessibilityRole === 'tablist')).toHaveLength(1);
     expect(app.text()).not.toContain('Opening your Group…');
     read.release();
@@ -774,13 +858,14 @@ describe('first load and refresh', () => {
     await settle();
   });
 
-  it('keeps the top bar whole while refreshing, saying so in each destination’s own slot', async () => {
+  it('keeps the top bar whole while refreshing, with one progress bar over each destination’s time', async () => {
     const phone = device();
     await usedBefore(phone);
     const app = await start(phone);
     await settle();
     await app.press('Open Maple House, Household · 2 members');
-    const refresh = async (path: string, destination: string, cue = /Saved .+ · refreshing/) => {
+    // Expenses and Balances keep when they were read; the progress bar says they're read (#219).
+    const refresh = async (path: string, destination: string, cue = /Updated \d/) => {
       if (destination !== 'Expenses') await app.press(destination);
       const read = phone.hold(path);
       await app.press('Group options');
@@ -798,13 +883,11 @@ describe('first load and refresh', () => {
       expect(app.text()).not.toContain('· refreshing');
     };
     await refresh(`/api/groups/${maple}`, 'Expenses');
-    // The Expenses, read beside the Group (#219), have answered: Balances wait to follow them.
-    await refresh(
-      `/api/groups/${maple}`,
-      'Balances',
-      /Updating balances\. These figures are from .+ and may change\./,
-    );
-    await refresh(`/api/groups/${maple}/activity?`, 'Activity');
+    // The Expenses, read beside the Group (#219), have answered: Balances wait to follow them,
+    // with their time, in their place.
+    await refresh(`/api/groups/${maple}`, 'Balances', /Updated \d/);
+    // Activity's own slot still says so, until #222.
+    await refresh(`/api/groups/${maple}/activity?`, 'Activity', /Saved .+ · refreshing/);
   });
 
   it('keeps an empty Home on screen while it refreshes automatically', async () => {
@@ -864,7 +947,7 @@ describe('first load and refresh', () => {
     app.tap('Refresh, Check for the latest changes');
     await read.reached;
     await settle();
-    expect(app.text()).toMatch(/Saved .+ · refreshing/);
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Refreshing']);
     expect(app.disabled('Invite people')).toBe(false);
     read.release();
     await settle();
@@ -1061,7 +1144,7 @@ describe('offline', () => {
     expect(app.headers()).toEqual(
       expect.arrayContaining(['Lisbon Offsite', 'Not available offline']),
     );
-    expect(app.text()).toContain('Lisbon Offsite hasn’t been opened on this phone yet');
+    expect(app.text()).toContain('Lisbon Offsite isn’t saved on this phone. Connect to load it.');
     expect(app.text()).not.toContain('You’re offline');
     expect(app.button('Add expense')).toBeNull();
     expect(app.hosts((p) => p.accessibilityRole === 'tablist')).toHaveLength(1);
@@ -1081,7 +1164,9 @@ describe('offline', () => {
     await settle();
     await app.press('Open Maple House, Household · 2 members');
     await app.press('Previous month');
-    expect(app.text()).toContain('August 2026 hasn’t been opened on this phone yet.');
+    expect(app.text()).toContain(
+      'Expenses in August 2026 aren’t saved on this phone. Connect to load them.',
+    );
     expect(app.text().match(/You’re offline/g)).toHaveLength(1);
     expect(app.button('Try again')).not.toBeNull();
     expect(app.progress()).toHaveLength(0);
@@ -1516,4 +1601,710 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(app.text()).not.toContain('You owe');
     expect(app.text()).not.toContain('yet');
   });
+});
+
+describe('A Group says what is true, without jumps (#219)', () => {
+  const controller = () => runtime.controller as MobileController;
+  const open = {
+    [maple]: 'Open Maple House, Household · 2 members',
+    [lisbon]: 'Open Lisbon Offsite, Work · 2 members',
+  };
+  /** Signed in once, with Home read: no Group's view has been opened on this phone. */
+  async function signedIn(phone: ReturnType<typeof device>) {
+    const first = phone.controller();
+    await first.signIn('alex');
+    first.dispose();
+  }
+  /**
+   * The scrolling content as it lays out on this 360dp phone: its children stacked with its gap,
+   * as Yoga stacks them (`layoutHeight`). Sheets lie over it and take no room.
+   */
+  const contentHeight = (fontScale = 1) => {
+    const [scroll] = findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView');
+    const style = flatten(scroll!.props.contentContainerStyle);
+    const children = (scroll!.children ?? []).filter(
+      (child): child is ReactTestRendererJSON =>
+        typeof child !== 'string' && child.type !== 'Modal',
+    );
+    const room = 360 - 2 * (style.paddingHorizontal as number);
+    return (
+      children.reduce((sum, child) => sum + layoutHeight(child, fontScale, room), 0) +
+      (style.gap as number) * Math.max(0, children.length - 1)
+    );
+  };
+  /** What the scrolling content announces as loading. */
+  const busy = () =>
+    findHosts(
+      findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView')[0]!,
+      (props) => (props.accessibilityState as { busy?: boolean } | undefined)?.busy === true,
+    ).map((node) => node.props.accessibilityLabel);
+  /** The icons beside the words `words`: in the row, card or notice that holds them. */
+  const iconsBeside = (words: string) => {
+    let node: ReactTestInstance | null = screen!.root.findAll(
+      (candidate) =>
+        (candidate.type as unknown) === 'Text' &&
+        candidate.children
+          .filter((child) => typeof child === 'string')
+          .join('')
+          .includes(words),
+    )[0]!;
+    const icons = (at: ReactTestInstance) =>
+      at.findAll((candidate) => (candidate.type as unknown) === 'Ionicons');
+    while (node && !icons(node).length) node = node.parent;
+    return node ? icons(node).map((icon) => icon.props.name as string) : [];
+  };
+  /**
+   * The scrolling content's text as the member sees it: without what is laid out only to hold a
+   * place, such as a skeleton's sizing copy, unseen and unread by TalkBack and VoiceOver alike
+   * (`importantForAccessibility` and `accessibilityElementsHidden`). Hidden from one of them only,
+   * it counts as seen.
+   */
+  const words = (node: ReactTestRendererJSON | ReactTestRendererJSON[] | string | null): string =>
+    node === null
+      ? ''
+      : typeof node === 'string'
+        ? node
+        : Array.isArray(node)
+          ? node.map(words).join('')
+          : node.props.accessibilityElementsHidden === true &&
+              node.props.importantForAccessibility === 'no-hide-descendants'
+            ? ''
+            : (node.children ?? []).map(words).join('');
+  const seen = () =>
+    words(findHosts(screen!.toJSON(), (_props, type) => type === 'ScrollView')[0]!);
+  /**
+   * What the screen's statuses are fading out (#331): text a reader may still see for a moment
+   * beside what replaced it.
+   */
+  const fading = () =>
+    screen!.root
+      .findAll((node) => (node.type as unknown) === 'AnimatedText')
+      .map((node) => node.children.join(''));
+  /**
+   * From the first publish `shows` is true of, this phone's next storage call waits until
+   * released: what that publish drew stays on screen while the reads after it wait on storage.
+   */
+  const slowFrom = (phone: ReturnType<typeof device>, shows: () => boolean) => {
+    let held: ReturnType<ReturnType<typeof device>['holdStorage']> | null = null;
+    let reached!: () => void;
+    const holding = new Promise<void>((resolve) => {
+      reached = resolve;
+    });
+    const stop = controller().subscribe(() => {
+      if (held || !shows()) return;
+      held = phone.holdStorage();
+      void held.reached.then(reached);
+    });
+    return {
+      reached: holding.then(stop),
+      release: () => held?.release(),
+    };
+  };
+  /** Group options, then Refresh: started, not waited for. */
+  const refresh = async (app: Awaited<ReturnType<typeof start>>) => {
+    await app.press('Group options');
+    app.tap('Refresh, Check for the latest changes');
+  };
+
+  /**
+   * Alex opens `groupId` and saves an Expense in it, which removes its ledger's saved copies
+   * (M2-2); the connection drops before its Expenses are read again, and the app is closed.
+   * `withheld`: the phone can't remove them, so they stay on it, never shown (#212, #323).
+   */
+  async function changedOffline(
+    phone: ReturnType<typeof device>,
+    groupId: string,
+    withheld: boolean,
+  ) {
+    const first = phone.controller();
+    await first.restore();
+    await first.openGroup(groupId, true, 'balances');
+    phone.storage.failRemoval = withheld;
+    await first.openExpense(groupId);
+    await first.updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId });
+    const expenses = phone.hold(`/api/groups/${groupId}/expenses?`);
+    const saving = first.saveExpense();
+    await expenses.reached;
+    phone.network.online = false;
+    expenses.release();
+    await saving;
+    expect(first.getSnapshot().expense.status).toBe('saved');
+    await settle();
+    first.dispose();
+  }
+
+  // Item 1: true offline wording (#280 item 2, for Expenses and Balances).
+  it('says a Group isn’t saved on this phone, offline after a sign-out cleared it', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await settle(controller().signOut());
+    await settle(controller().signIn('alex'));
+    // The connection drops before Maple House is opened again.
+    phone.network.online = false;
+    await app.press(open[maple]);
+    expect(app.text()).toContain('Maple House isn’t saved on this phone. Connect to load it.');
+    expect(app.text()).not.toContain('been opened');
+    expect(app.text()).not.toContain('yet');
+  });
+
+  it.each([
+    [
+      'removed',
+      maple,
+      'Expenses in September 2026 aren’t saved on this phone. Connect to load them.',
+    ],
+    [
+      'withheld',
+      maple,
+      'Expenses in September 2026 aren’t saved on this phone. Connect to load them.',
+    ],
+    ['removed', lisbon, 'These expenses aren’t saved on this phone. Connect to load them.'],
+  ] as const)(
+    'says the Expenses and Balances aren’t saved, offline after a change %s their copies (%s)',
+    async (copy, groupId, expenses) => {
+      const phone = device();
+      await usedBefore(phone);
+      await changedOffline(phone, groupId, copy === 'withheld');
+      const app = await start(phone);
+      await settle();
+      await app.press(open[groupId]);
+      expect(app.content().inside).toContain(expenses);
+      // The Group itself is this phone's copy: the banner says what was saved (#219).
+      expect(app.text()).toContain('You’re offlineWhat’s shown was saved on this device at');
+      await app.press('Balances');
+      expect(app.content().inside).toContain(
+        'These balances aren’t saved on this phone. Connect to load them.',
+      );
+      expect(app.text()).not.toContain('been opened');
+      expect(app.text()).not.toContain('yet');
+    },
+  );
+
+  // Items 1 and 3: what stays on screen once its copy was removed was read in this session.
+  it('says one true thing of Expenses and Balances read in this session, offline after a change removed their copies', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[maple]);
+    const readAt = refreshedLabel(phone.clock.now);
+    await settle(controller().openExpense(maple));
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId }));
+    const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
+    const saving = controller().saveExpense();
+    await expenses.reached;
+    phone.network.online = false;
+    expenses.release();
+    await settle(saving);
+
+    const notice =
+      'Couldn’t refresh these expenses, and this phone no longer keeps a copy of them. Showing September 2026 expenses from';
+    expect(app.content().inside).toContain(`${notice} ${readAt}.`);
+    expect(app.content().inside).toContain(`Updated ${readAt}`);
+    expect(app.text()).not.toContain('Saved');
+    expect(app.text()).not.toContain('This view was not saved');
+    // It couldn't be read because SplitBook can't be reached: the offline icon says so.
+    expect(iconsBeside(notice)).toEqual(['cloud-offline-outline']);
+    // Nothing shown is this phone's copy: the banner says only that the app is offline.
+    expect(app.text()).toContain('You’re offlineConnect to load the latest.');
+
+    await app.press('Balances');
+    expect(app.content().inside).toContain(
+      `Couldn’t refresh these balances, and this phone no longer keeps a copy of them. Showing balances from ${readAt}.`,
+    );
+    expect(app.content().inside).toContain(`Updated ${readAt}`);
+    expect(app.text()).not.toContain('Saved');
+  });
+
+  // Item 2: the offline banner.
+  it('says what was saved only over a Group restored from this phone, and nothing once SplitBook answers', async () => {
+    const phone = device();
+    const savedAt = await usedBefore(phone);
+    phone.network.online = false;
+    const app = await start(phone);
+    await settle();
+    // Maple House shows this phone's copy: the banner says when it was saved, as its badge does.
+    await app.press(open[maple]);
+    expect(app.text()).toContain(
+      `You’re offlineWhat’s shown was saved on this device at ${refreshedLabel(savedAt)}`,
+    );
+    expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}\u200a`);
+    await app.press('Back to Home');
+
+    // The connection is back. Lisbon Offsite was never opened here: its read checks the session
+    // first, with nothing of it saved on screen.
+    phone.network.online = true;
+    const check = phone.hold('/api/auth/get-session');
+    app.tap(open[lisbon]);
+    await check.reached;
+    await settle();
+    expect(app.text()).toContain('You’re offlineConnect to load the latest.');
+    expect(app.text()).not.toContain('What’s shown was saved');
+
+    // SplitBook answered the check: the app is online while the Group and its Expenses are
+    // still read.
+    const expenses = phone.hold(`/api/groups/${lisbon}/expenses?`);
+    const read = phone.hold(`/api/groups/${lisbon}`);
+    check.release();
+    await Promise.all([read.reached, expenses.reached]);
+    await settle();
+    expect(app.text()).not.toContain('You’re offline');
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual([
+      'Opening Lisbon Offsite',
+    ]);
+    read.release();
+    expenses.release();
+    await settle();
+    expect(app.text()).not.toContain('You’re offline');
+  });
+
+  it('says it is offline again when the connection drops after SplitBook answered the session check', async () => {
+    const phone = device();
+    const savedAt = await usedBefore(phone);
+    phone.network.online = false;
+    const app = await start(phone);
+    await settle();
+    phone.network.online = true;
+    const check = phone.hold('/api/auth/get-session');
+    app.tap(open[maple]);
+    await check.reached;
+    await settle();
+    const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
+    const read = phone.hold(`/api/groups/${maple}`);
+    check.release();
+    await Promise.all([read.reached, expenses.reached]);
+    await settle();
+    expect(app.text()).not.toContain('You’re offline');
+
+    // The reads then fail: this phone's copy answers for them, and the banner says so again.
+    phone.network.online = false;
+    read.release();
+    expenses.release();
+    await settle();
+    expect(app.text()).toContain(
+      `You’re offlineWhat’s shown was saved on this device at ${refreshedLabel(savedAt)}`,
+    );
+  });
+
+  // Item 3: the summary card's label.
+  it('says “Updated” of figures read in this session while they are read again, on Expenses and Balances', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[maple]);
+    for (const destination of ['Expenses', 'Balances']) {
+      if (destination === 'Balances') await app.press('Balances');
+      const readAt = refreshedLabel(phone.clock.now);
+      phone.clock.now += 5 * 60_000;
+      const read = phone.hold(`/api/groups/${maple}/expenses?`);
+      await refresh(app);
+      await read.reached;
+      await settle();
+      expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Refreshing']);
+      expect(app.content().inside).toContain(`Updated ${readAt}`);
+      expect(app.text()).not.toContain('Saved');
+      read.release();
+      await settle();
+      expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+    }
+  });
+
+  it('labels this phone’s copy of a Group “Saved” while it is read again, then “Updated”', async () => {
+    const phone = device();
+    const savedAt = refreshedLabel(await usedBefore(phone));
+    phone.clock.now += 60 * 60_000;
+    const app = await start(phone);
+    await settle();
+    const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
+    const read = phone.hold(`/api/groups/${maple}`);
+    app.tap(open[maple]);
+    await Promise.all([read.reached, expenses.reached]);
+    await settle();
+    expect(app.content().inside).toContain(`Saved ${savedAt}`);
+    expect(app.text()).not.toContain('refreshing');
+    expect(app.text()).not.toContain('Updated');
+    await app.press('Balances');
+    expect(app.content().inside).toContain(`Saved ${savedAt}`);
+    expect(app.text()).not.toContain('Updated');
+    read.release();
+    expenses.release();
+    await settle();
+    expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+    expect(app.text()).not.toContain('Saved');
+    await app.press('Expenses');
+    expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+    expect(app.text()).not.toContain('Saved');
+  });
+
+  // Item 4: no layout jumps.
+  it.each([
+    [maple, 'expenses', 1, ['Loading September 2026 expenses']],
+    [maple, 'expenses', 1.3, ['Loading September 2026 expenses']],
+    [lisbon, 'expenses', 1, ['Loading all-time expenses']],
+    [lisbon, 'expenses', 1.3, ['Loading all-time expenses']],
+    [maple, 'balances', 1, ['Loading balances']],
+    [maple, 'balances', 1.3, ['Loading balances']],
+  ] as const)(
+    'keeps %s’s %s placeholders in their shape while the Group is first read, at %s× text',
+    async (groupId, destination, scale, loading) => {
+      setWindow({ fontScale: scale });
+      const phone = device();
+      await signedIn(phone);
+      const app = await start(phone);
+      await settle();
+      const expenses = phone.hold(`/api/groups/${groupId}/expenses?`);
+      const read = phone.hold(`/api/groups/${groupId}`);
+      void controller().openGroup(groupId, true, destination);
+      await Promise.all([read.reached, expenses.reached]);
+      await settle();
+      const first = { height: contentHeight(scale), busy: busy() };
+      expect(first.busy).toEqual(loading);
+      // A Household's Month isn't known yet: its bar has nothing to press.
+      const household = groupId === maple && destination === 'expenses';
+      if (household)
+        for (const label of ['Previous month', 'Next month', 'All time'])
+          expect(app.disabled(label), label).toBe(true);
+
+      // The Group answered; its Expenses are still read: nothing moves.
+      read.release();
+      await settle();
+      expect({ height: contentHeight(scale), busy: busy() }).toEqual(first);
+      if (household) {
+        expect(app.disabled('Previous month')).toBe(false);
+        expect(app.disabled('All time')).toBe(false);
+      }
+      expenses.release();
+      await settle();
+    },
+  );
+
+  // N6: a Group Home doesn't list yet, such as one opened from elsewhere, has no Theme to shape
+  // its placeholders by: they take an all-time Group's, the commoner case.
+  it('keeps the placeholders’ shape for a Group Home doesn’t list yet', async () => {
+    const phone = device();
+    phone.network.noGroups = true;
+    await signedIn(phone);
+    await start(phone);
+    await settle();
+    const read = phone.hold(`/api/groups/${lisbon}`);
+    void controller().openGroup(lisbon);
+    await read.reached;
+    await settle();
+    const first = { height: contentHeight(), busy: busy() };
+    expect(first.busy).toEqual(['Loading all-time expenses']);
+
+    // Its Expenses are read once the Group is known: nothing moves meanwhile.
+    const expenses = phone.hold(`/api/groups/${lisbon}/expenses?`);
+    read.release();
+    await expenses.reached;
+    await settle();
+    expect({ height: contentHeight(), busy: busy() }).toEqual(first);
+    expenses.release();
+    await settle();
+  });
+
+  it.each([1, 1.3])(
+    'keeps Balances where they are while they wait for the Expenses to be read again, at %s× text',
+    async (scale) => {
+      setWindow({ fontScale: scale });
+      const phone = device();
+      await usedBefore(phone);
+      const app = await start(phone);
+      await settle();
+      await app.press(open[maple]);
+      await app.press('Balances');
+      const readAt = refreshedLabel(phone.clock.now);
+      const height = contentHeight(scale);
+      phone.clock.now += 5 * 60_000;
+      const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
+      await refresh(app);
+      await expenses.reached;
+      await settle();
+      // Balances wait to follow the Expenses: the screen's one progress bar says they're read.
+      expect(controller().getSnapshot().financial.balances).toMatchObject({ stale: true });
+      expect(contentHeight(scale)).toBe(height);
+      expect(app.content().inside).toContain(`Updated ${readAt}`);
+      expect(app.text()).not.toContain('Updating');
+      expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Refreshing']);
+      expenses.release();
+      await settle();
+      expect(contentHeight(scale)).toBe(height);
+      expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+    },
+  );
+
+  it('keeps Home’s balances where they are while they are read again after a Group', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    const height = contentHeight();
+    await app.press(open[maple]);
+    const figures = phone.hold('/api/user/balances');
+    // Home's balances as each publish back on Home draws them, before their read starts too.
+    const frames: string[] = [];
+    const stop = controller().subscribe(() => {
+      const shown = controller().getSnapshot();
+      if (shown.screen !== 'groups') return;
+      let frame!: ReactTestRenderer;
+      act(() => {
+        frame = create(
+          <HomeBalances
+            state={shown.home}
+            offline={shown.offline.active}
+            silent={refreshFeedback(shown).silent}
+            onRefresh={() => undefined}
+          />,
+        );
+      });
+      frames.push(words(frame.toJSON()));
+      act(() => frame.unmount());
+    });
+    app.tap('Back to Home');
+    await figures.reached;
+    await settle();
+    stop();
+    // The Group's Expenses were read since: Home's figures say in place that they're updating,
+    // where their time was, from the first frame back, and the top bar stays quiet.
+    expect(frames.length).toBeGreaterThan(1);
+    for (const frame of frames) expect(frame).toContain('Your balancesUpdating…');
+    expect(seen()).toContain('Your balancesUpdating…');
+    // Nothing fades from the old time into it.
+    expect(fading().filter((text) => text.startsWith('Updated'))).toEqual([]);
+    expect(app.content().outside).not.toContain('Refreshing');
+    expect(contentHeight()).toBe(height);
+    expect(seen()).toContain('Your balancesUpdating…');
+    expect(seen()).not.toContain('Updated');
+    expect(app.content().outside).not.toContain('Refreshing');
+    figures.release();
+    await settle();
+    expect(contentHeight()).toBe(height);
+    expect(seen()).toContain(`Your balancesUpdated ${refreshedLabel(phone.clock.now)}`);
+  });
+
+  // B1 and S2: after a payment, Balances and then Home say the figures shown are being updated.
+  it.each([1, 1.3])(
+    'says Balances and Home are updating after a payment, in place, at %s× text',
+    async (scale) => {
+      setWindow({ fontScale: scale });
+      const phone = device();
+      await usedBefore(phone);
+      const app = await start(phone);
+      await settle();
+      const home = contentHeight(scale);
+      await app.press(open[maple]);
+      await app.press('Balances');
+      const readAt = refreshedLabel(phone.clock.now);
+      const height = contentHeight(scale);
+      expect(seen()).toContain(`All-time balance · INRUpdated ${readAt}You owe₹30.00`);
+      expect(seen()).toContain('Suggested paymentsRecord one once it’s paid');
+
+      // Alex records the ₹30.00 owed to Sam; it is confirmed, and Balances are read again after it.
+      phone.clock.now += 2 * 60_000;
+      await settle(controller().openRecordPayment(alex.id, sam._id, 'INR'));
+      const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
+      const figures = phone.hold('/api/user/balances');
+      const recording = controller().recordSettlement();
+      await expenses.reached;
+      await settle();
+      expect(app.text()).toContain('Payment recorded');
+      // The old debt says it is being updated, where its time was, and Record says why it waits,
+      // where its caption was: nothing moves.
+      expect(seen()).toContain('All-time balance · INRUpdating…You owe₹30.00');
+      expect(seen()).toContain('Suggested paymentsRecord once updated');
+      expect(seen()).not.toContain(`Updated ${readAt}`);
+      expect(app.disabled('Record your payment to Sam Chen')).toBe(true);
+      expect(contentHeight(scale)).toBe(height);
+      // While Balances themselves are read, too.
+      const balances = phone.hold(`/api/groups/${maple}/balances`);
+      expenses.release();
+      await balances.reached;
+      await settle();
+      expect(seen()).toContain('All-time balance · INRUpdating…You owe₹30.00');
+      expect(contentHeight(scale)).toBe(height);
+      balances.release();
+      await figures.reached;
+      await settle();
+      expect(seen()).toContain(`All-time balance · INRUpdated ${refreshedLabel(phone.clock.now)}`);
+      expect(seen()).toContain('Settled up');
+      expect(seen()).not.toContain('Updating');
+
+      // Home's figures, read before the payment, are read again after it: back on Home they say
+      // so in place, and the top bar stays quiet.
+      app.tap('Back to Home');
+      await settle();
+      expect(seen()).toContain('Your balancesUpdating…');
+      expect(seen()).not.toContain(`Updated ${readAt}`);
+      expect(app.content().outside).not.toContain('Refreshing');
+      expect(contentHeight(scale)).toBe(home);
+      figures.release();
+      await settle(recording);
+      expect(seen()).toContain(`Your balancesUpdated ${refreshedLabel(phone.clock.now)}`);
+    },
+  );
+
+  // Balances' frame gap: a slow device holds the reads after a payment, but not what they say.
+  it('says Balances are updating from the frame that says the payment is recorded', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[maple]);
+    await app.press('Balances');
+    const readAt = refreshedLabel(phone.clock.now);
+    phone.clock.now += 2 * 60_000;
+    await settle(controller().openRecordPayment(alex.id, sam._id, 'INR'));
+    // The payment is confirmed; from the publish that says so, the reads after it wait on this
+    // phone's storage.
+    const storage = slowFrom(
+      phone,
+      () => controller().getSnapshot().snackbar?.message === 'Payment recorded',
+    );
+    const before = phone.sent.length;
+    const recording = controller().recordSettlement();
+    await storage.reached;
+    await settle();
+    expect(app.text()).toContain('Payment recorded');
+    // Neither the Expenses nor Balances have been asked for since the payment.
+    const sent = phone.sent.slice(before);
+    const since = sent.slice(sent.indexOf(`POST /api/groups/${maple}/settlements`) + 1);
+    expect(since.filter((request) => /\/(expenses\?|balances$)/.test(request))).toEqual([]);
+    expect(seen()).toContain('All-time balance · INRUpdating…You owe₹30.00');
+    expect(seen()).toContain('Suggested paymentsRecord once updated');
+    // Nothing fades from the old time or caption into these: neither is drawn at any opacity
+    // beside "Payment recorded".
+    expect(fading()).not.toContain(`Updated ${readAt}`);
+    expect(fading()).not.toContain('Record one once it’s paid');
+    storage.release();
+    await settle(recording);
+    expect(seen()).toContain(`All-time balance · INRUpdated ${refreshedLabel(phone.clock.now)}`);
+  });
+
+  // N2 (MB): once the Expenses are read after a change, they're current, whatever Balances wait on.
+  it('says the Expenses are refreshing plainly once read after a change, while Balances still wait', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[maple]);
+    phone.clock.now += 2 * 60_000;
+    await settle(controller().openExpense(maple));
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId }));
+    const balances = phone.hold(`/api/groups/${maple}/balances`);
+    const saving = controller().saveExpense();
+    await balances.reached;
+    await settle();
+    // The Expenses were read after the save; Balances, read after them, are still on their way.
+    const listedAt = refreshedLabel(phone.clock.now);
+    expect(seen()).toContain(`0 expenses this monthUpdated ${listedAt}`);
+    phone.clock.now += 60_000;
+    const pulled = phone.hold(`/api/groups/${maple}/expenses?`);
+    void controller().refresh('pull');
+    await pulled.reached;
+    await settle();
+    expect(seen()).toContain(`0 expenses this monthUpdated ${listedAt}`);
+    expect(seen()).not.toContain('Updating');
+    pulled.release();
+    balances.release();
+    await settle(saving);
+    await settle();
+  });
+
+  // N3 (MD): an automatic refresh says nothing, even of figures a Group's Expenses made stale.
+  it('keeps an automatic refresh of Home’s figures silent, stale after a Group', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    const readAt = refreshedLabel(phone.clock.now);
+    await app.press(open[maple]);
+    // Offline back on Home, with no copy of its figures to stand in: they stay, stale.
+    phone.lose('/api/user/balances');
+    phone.network.online = false;
+    await app.press('Back to Home');
+    expect(controller().getSnapshot().home).toMatchObject({ status: 'error', stale: true });
+    // Back online, the foreground reads them again, automatically.
+    phone.network.online = true;
+    phone.clock.now += 31_000;
+    const figures = phone.hold('/api/user/balances');
+    void controller().refresh('foreground');
+    await figures.reached;
+    await settle();
+    expect(controller().getSnapshot().home).toMatchObject({ status: 'loading', stale: true });
+    expect(seen()).toContain(`Your balancesUpdated ${readAt}`);
+    expect(seen()).not.toContain('Updating');
+    figures.release();
+    await settle();
+  });
+
+  // S1: after a save, the Month's figures say they're being updated until the list is read again.
+  it('says the Expenses are updating after an Expense is saved, in place', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[maple]);
+    const readAt = refreshedLabel(phone.clock.now);
+    const height = contentHeight();
+    expect(seen()).toContain(`0 expenses this monthUpdated ${readAt}`);
+    phone.clock.now += 2 * 60_000;
+    await settle(controller().openExpense(maple));
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId }));
+    const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
+    const saving = controller().saveExpense();
+    await expenses.reached;
+    await settle();
+    expect(app.text()).toContain('Expense saved');
+    expect(seen()).toContain('0 expenses this monthUpdating…');
+    expect(seen()).not.toContain(`Updated ${readAt}`);
+    expect(contentHeight()).toBe(height);
+    expenses.release();
+    await settle(saving);
+    expect(seen()).toContain(`0 expenses this monthUpdated ${refreshedLabel(phone.clock.now)}`);
+    expect(seen()).not.toContain('Updating');
+  });
+
+  // S3: the Group itself, read in this session, once this phone has lost its copy.
+  it('says what is true of a Group read in this session whose copy this phone lost, refreshed offline', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[maple]);
+    const readAt = refreshedLabel(phone.clock.now);
+    phone.lose(`/api/groups/${maple}`);
+    phone.network.online = false;
+    await refresh(app);
+    await settle();
+    const notice =
+      'Couldn’t refresh Maple House, and this phone no longer keeps a copy of it. Showing Maple House from';
+    expect(app.content().inside).toContain(`${notice} ${readAt}.`);
+    expect(app.text()).not.toContain('This view was not saved');
+    expect(iconsBeside(notice)).toEqual(['cloud-offline-outline']);
+  });
+
+  // Item 5: the error icon.
+  it.each([
+    [`/api/groups/${maple}`, 'Showing Maple House from'],
+    [`/api/groups/${maple}/expenses?`, 'Showing September 2026 expenses from'],
+  ])(
+    'marks a refresh the server failed (%s) with the error icon, not the offline cloud',
+    async (path, words) => {
+      const phone = device();
+      await usedBefore(phone);
+      const app = await start(phone);
+      await settle();
+      await app.press(open[maple]);
+      phone.network.failing.push(path);
+      await refresh(app);
+      await settle();
+      expect(app.content().inside).toContain(
+        `The server could not complete this request. Please try again. ${words}`,
+      );
+      expect(iconsBeside(words)).toEqual(['alert-circle-outline']);
+    },
+  );
 });

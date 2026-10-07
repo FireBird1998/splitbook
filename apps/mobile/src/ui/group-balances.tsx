@@ -16,8 +16,9 @@ import {
   SectionHeader,
   SkeletonOf,
   SkeletonText,
+  StatusText,
 } from './compact';
-import { Freshness, RetainedNotice } from './financial-views';
+import { inPlace, ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
 import { useTheme } from './theme';
@@ -25,6 +26,10 @@ import { useTheme } from './theme';
 export const recordNeedsConnection = 'Recording a payment needs a connection.';
 /** Balances not yet read again after a change: their payments wait for the read (#219). */
 export const recordWaitsForBalances = 'Record is available once these balances are updated.';
+/** Above the suggested payments: when to record one. */
+const recordCaption = 'Record one once it’s paid';
+/** The caption while Record waits for the read after a change: no longer, so it fits there. */
+const recordWaitsShort = 'Record once updated';
 /** A Group whose details couldn't be read (owner decision 2A): the sheet needs them (#219). */
 export const recordWaitsForDetails = (name: string) =>
   `Record is available once ${name}’s details load.`;
@@ -137,16 +142,18 @@ function MemberBalanceCard({
   bucket,
   currentUserId,
   refreshedAt,
-  refreshing,
+  restored,
+  updating,
   offline,
   monthLens,
 }: {
   bucket: GroupCurrencyBalance;
   currentUserId: string;
   refreshedAt: number | null;
-  /** Read again while they stay on screen. */
-  refreshing: boolean;
-  /** The figures come from this device: "Saved", not "Updated". */
+  /** The figures are this device's saved copy: "Saved", not "Updated". */
+  restored: boolean;
+  /** A change made them out of date, and they're being read again: "Updating…". */
+  updating: boolean;
   offline: boolean;
   monthLens: boolean;
 }) {
@@ -160,9 +167,10 @@ function MemberBalanceCard({
           <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
             All-time balance · {bucket.currency}
           </CompactText>
-          <Freshness
+          <ReadTime
             refreshedAt={refreshedAt}
-            refreshing={refreshing}
+            restored={restored}
+            updating={updating}
             offline={offline}
             tone="muted"
           />
@@ -223,9 +231,30 @@ function SuggestedPayments({
       <SectionHeader
         title="Suggested payments"
         trailing={
-          <CompactText variant="caption" tone="muted">
-            Record one once it’s paid
-          </CompactText>
+          // The caption takes the room the title leaves, wrapping there rather than running past
+          // the screen's edge at large text. While a change keeps Record waiting, its reason
+          // takes the caption's place at once, in a box the caption holds, so nothing moves
+          // (#219); the full reason is Record's hint.
+          <View style={{ flex: 1, minWidth: 0 }}>
+            {inPlace({
+              holds:
+                locked && !offline ? (
+                  <CompactText variant="caption" tone="muted" style={{ textAlign: 'right' }}>
+                    {recordCaption}
+                  </CompactText>
+                ) : null,
+              children: (
+                <StatusText
+                  variant="caption"
+                  tone="muted"
+                  instant={locked && !offline}
+                  style={{ textAlign: 'right' }}
+                >
+                  {locked && !offline ? recordWaitsShort : recordCaption}
+                </StatusText>
+              ),
+            })}
+          </View>
         }
       />
       <Card>
@@ -389,7 +418,7 @@ function Everyone({
 /**
  * The Balances destination: an unconfirmed payment first, then the member's all-time balance
  * per currency, the suggested payments they can record, and everyone's net position.
- * Choosing a Month never changes it. `silent` keeps an automatic refresh unannounced.
+ * Choosing a Month never changes it.
  */
 export function GroupBalancesView({
   group,
@@ -397,8 +426,6 @@ export function GroupBalancesView({
   state,
   pending,
   offline,
-  refreshing = false,
-  silent = false,
   knownSettled = false,
   recordUnavailable = null,
   onRecord,
@@ -411,9 +438,6 @@ export function GroupBalancesView({
   /** This Group's unconfirmed payment, if one is stored on the device. */
   pending: PendingPayment | null;
   offline: boolean;
-  /** Shown Balances are read again: their freshness says so. */
-  refreshing?: boolean;
-  silent?: boolean;
   /**
    * The member's last-known balance in this Group is settled (as Home last read it): while the
    * Balances load, their placeholder takes the settled card's shape, with no amount.
@@ -443,7 +467,9 @@ export function GroupBalancesView({
           {notice}
           <NotAvailableOffline
             compact
-            message="These balances haven’t been opened on this phone yet. Connect to load them."
+            // True whether they were never saved here, removed by a change or a sign-out, or
+            // withheld (#323): never "haven't been opened" (#219, #280 item 2).
+            message="These balances aren’t saved on this phone. Connect to load them."
             onRetry={onRefreshBalances}
           />
         </View>
@@ -507,11 +533,11 @@ export function GroupBalancesView({
     <View style={{ gap: 14 }}>
       <RetainedNotice
         status={balances.status}
-        stale={balances.stale && !silent}
         refreshedAt={balances.refreshedAt}
         message={balances.message}
         subject="balances"
         retryLabel="Retry balances"
+        offline={offline}
         onRetry={onRefreshBalances}
       />
       {notice}
@@ -528,8 +554,11 @@ export function GroupBalancesView({
             bucket={bucket}
             currentUserId={currentUserId}
             refreshedAt={balances.refreshedAt}
-            // Unverified Balances already say they're updating.
-            refreshing={refreshing && !balances.stale}
+            restored={balances.restored === true}
+            // The figures shown are from before a change written here: they say so from the
+            // publish that says the change was made, before their reads start, until the read
+            // after it lands or fails (#219).
+            updating={balances.changed === true && balances.status !== 'error'}
             offline={offline}
             monthLens={group.category === 'home'}
           />

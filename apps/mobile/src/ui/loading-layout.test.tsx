@@ -499,6 +499,100 @@ describe('A Household’s Balances', () => {
     },
   );
 
+  /** Balances owing, as read; `after` a change written here, while they're read again. */
+  const changed = (after: boolean) => (
+    <GroupBalancesView
+      group={maple}
+      currentUserId={you}
+      state={{
+        groupId: maple.id,
+        month: '2026-09',
+        expenses: {
+          status: 'ready',
+          data: [],
+          summary: null,
+          pagination: null,
+          message: null,
+          moreStatus: 'idle',
+          moreMessage: null,
+          month: '2026-09',
+          refreshedAt: at.getTime(),
+        },
+        balances: {
+          status: after ? 'loading' : 'ready',
+          data: [owing],
+          message: null,
+          refreshedAt: at.getTime(),
+          stale: after,
+          changed: after,
+        },
+      }}
+      pending={null}
+      offline={false}
+      onRecord={vi.fn()}
+      onCheckPayment={vi.fn()}
+      onRefreshBalances={vi.fn()}
+    />
+  );
+
+  // #219: once a change written here makes them out of date, the balance's time says
+  // "Updating…" in the place of the time it stands in for, and the payments' caption says why
+  // Record waits in the place of the caption it stands in for, so nothing below moves at any
+  // text size.
+  it.each([1, 1.3, 2])(
+    'Balances say they are updating, and why Record waits, in place, at %s× text',
+    (scale) => {
+      const { before, after } = heights(changed(false), changed(true), scale);
+      expect(after).toBeGreaterThan(300);
+      expect(after).toBe(before);
+    },
+  );
+
+  // #219 device check: at 360dp with 130% text, "Record one once it’s paid" ran past the screen's
+  // edge beside the section's title, and "Record once updated" did too. The caption takes the
+  // room the title leaves, wrapping there, and the reason Record waits takes the caption's place.
+  it.each([
+    [360, 1],
+    [360, 1.3],
+    [412, 1.3],
+    [360, 2],
+  ])('the payments’ caption fits beside its title, %sdp wide at %s× text', (width, scale) => {
+    setWindow({ width, fontScale: scale });
+    const room = width - 32;
+    /** The header row, its title, and how tall it lays out, with its caption. */
+    const header = (after: boolean) => {
+      act(() => {
+        renderer = create(changed(after));
+      });
+      const [row] = findHosts(renderer!.toJSON(), (props, type) => {
+        const style = flatten(props.style);
+        return type === 'View' && style.flexDirection === 'row' && style.minHeight === 32;
+      }).filter((node) =>
+        findHosts(node, (_props, type) => type === 'Text').some((title) =>
+          (title.children ?? []).includes('Suggested payments'),
+        ),
+      );
+      const [title, caption] = row!.children as ReactTestRendererJSON[];
+      const style = flatten(row!.props.style);
+      const inner = room - 2 * (style.paddingHorizontal as number);
+      const measured = {
+        height: layoutHeight(row!, scale, room),
+        // The room the title leaves the caption, and the caption laid out in that room alone.
+        left: inner - layoutWidth(title!, scale) - (style.gap as number),
+        caption: caption!,
+      };
+      act(() => renderer!.unmount());
+      renderer = undefined;
+      return measured;
+    };
+    const read = header(false);
+    // Laid out in the room the title leaves, wrapping there: never past the screen's edge.
+    expect(read.left).toBeGreaterThan(0);
+    expect(read.height).toBe(Math.max(32, layoutHeight(read.caption, scale, read.left)));
+    // While Record waits, its reason takes the caption's place: the row keeps its height.
+    expect(header(true).height).toBe(read.height);
+  });
+
   it('reads Home’s last balances: settled only when known and nothing is owed', () => {
     expect(settledIn(undefined)).toBe(false);
     expect(settledIn([])).toBe(true);

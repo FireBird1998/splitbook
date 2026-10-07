@@ -3,7 +3,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse } from '../data/types';
-import { DetailsNotice, Freshness, RefreshStatus } from './financial-views';
+import { DetailsNotice, Freshness, ReadTime, RefreshStatus } from './financial-views';
 import { flatten } from '../test-utils/layout';
 import { GroupBalancesView } from './group-balances';
 import { GroupExpensesView } from './group-expenses';
@@ -267,9 +267,9 @@ describe('rendered refresh feedback', () => {
     expect(shown).toContain('Groceries');
     expect(shown).toContain('1 expense this month');
     expect(shown).toContain('You owe₹30.00');
-    expect(shown).toContain(
-      `Updating balances. These figures are from ${refreshedLabel(verifiedAt)} and may change.`,
-    );
+    // Balances wait for the Expenses with their time, in their place: the one cue says it (#219).
+    expect(shown).toContain(`Updated ${refreshedLabel(verifiedAt)}`);
+    expect(shown).not.toContain('Updating');
     await expenses.release(
       json(
         page([
@@ -377,6 +377,34 @@ describe('Freshness', () => {
     expect(outgoing!.children).toEqual([`Saved ${refreshedLabel(time)} · refreshing`]);
     expect(flatten(outgoing!.parent!.props.style)).toMatchObject(edge);
     act(() => row.unmount());
+  });
+});
+
+// #219: figures a change made out of date say so at once, never beside the time they replace;
+// the time read after the change fades in as any status does (#331).
+describe('ReadTime', () => {
+  it('says “Updating…” at once, with nothing fading from the time it replaces', async () => {
+    const time = new Date(2026, 9, 7, 9, 24).getTime();
+    const later = new Date(2026, 9, 7, 9, 26).getTime();
+    let slot!: ReactTestRenderer;
+    act(() => {
+      slot = create(<ReadTime refreshedAt={time} />);
+    });
+    // Android answers that reduce motion is off.
+    await act(async () => undefined);
+    const drawn = () =>
+      slot.root
+        .findAll((node) => ['Text', 'AnimatedText'].includes(node.type as unknown as string))
+        .map((node) => node.children.join(''));
+    act(() => slot.update(<ReadTime refreshedAt={time} updating />));
+    // The time stays only as the unseen copy that holds its place; nothing fades out over it.
+    expect(drawn()).toEqual([`Updated ${refreshedLabel(time)}`, 'Updating…']);
+    expect(slot.root.findAll((node) => (node.type as unknown) === 'AnimatedText')).toEqual([]);
+    // Read again, the new time fades in where "Updating…" was.
+    act(() => slot.update(<ReadTime refreshedAt={later} />));
+    const [outgoing] = slot.root.findAll((node) => (node.type as unknown) === 'AnimatedText');
+    expect(outgoing!.children).toEqual(['Updating…']);
+    act(() => slot.unmount());
   });
 });
 
