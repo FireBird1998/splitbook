@@ -208,7 +208,7 @@ function ActivityList({
 }: GroupActivityProps) {
   const theme = useTheme();
   const loading = state.status === 'loading';
-  // Read, or being read again with the events it had: those stay shown and open (M1-3).
+  // Read, or being read again with the events it had: those stay shown (M1-3).
   const read = state.pagination !== null && (state.status === 'ready' || loading);
   // Load older stays in place, disabled, while the events shown are read again, so the list
   // never gets shorter under the member: at its end, Android would clamp the view (#219).

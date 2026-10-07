@@ -93,6 +93,8 @@ function fixture() {
     offline: false,
     /** A page of Maple House's Activity that answers 500 instead. */
     failPage: 0,
+    /** Paths that answer 500 instead. */
+    failing: new Set<string>(),
     created: 0,
   };
   let cookie: string | null = null,
@@ -105,6 +107,8 @@ function fixture() {
   /** What the saved-copy databases can't do: remove a row. */
   const device = { failRemoval: false };
   const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [];
+  /** Reads of rows held part-way, as on a slow disk, by path. */
+  const loads: typeof writes = [];
   const pause = async (path: string) => {
     const index = writes.findIndex((step) => step.path === path);
     if (index < 0) return;
@@ -153,6 +157,15 @@ function fixture() {
   };
   const savedQueries = {
     ...records(rows),
+    load: async (account: string, key: string) => {
+      const index = loads.findIndex((step) => step.path === key);
+      if (index >= 0) {
+        const [step] = loads.splice(index, 1);
+        step.arrive();
+        await step.released;
+      }
+      return structuredClone(rows.get(account + key) ?? null);
+    },
     keys: async (account: string) =>
       [...rows.keys()]
         .filter((key) => key.startsWith(account))
@@ -269,7 +282,8 @@ function fixture() {
       return server.groupRefused.has(id) ? json({}, 403) : json({ status: 200, data: group });
     if (path.startsWith(`/api/groups/${id}/activity?`)) {
       const page = pageOf(path);
-      if (id === mapleId && page === server.failPage) return json({}, 500);
+      if ((id === mapleId && page === server.failPage) || server.failing.has(path))
+        return json({}, 500);
       return json(
         activityPage(id, page, new URL(path, 'http://local').searchParams.get('expenseId')),
       );
@@ -445,6 +459,19 @@ function fixture() {
         release = resolve;
       });
       held.push({ path, arrive, answer, lost, exact });
+      return { reached, release };
+    },
+    /** The next read of this path's row waits until released. */
+    holdLoad(path: string) {
+      let arrive!: () => void;
+      let release!: () => void;
+      const reached = new Promise<void>((resolve) => {
+        arrive = resolve;
+      });
+      const released = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      loads.push({ path, arrive, released });
       return { reached, release };
     },
     /** The next write of this path's row waits until released. */
@@ -777,6 +804,36 @@ describe('saved copies on the persister (M3-1, AMEND-2)', () => {
       status: 'ready',
       refreshedAt: start + 60_000,
       restored: false,
+    });
+  });
+
+  it('never shows the saved copy once a read has answered, even a failed one, before the copy was read', async () => {
+    const f = fixture();
+    const first = f.create();
+    await first.signIn('alex');
+    await first.openActivity(cabinId);
+    await settle();
+    first.dispose();
+    later(60_000);
+    const controller = f.create();
+    await controller.restore();
+    // This device reads its saved copy slowly; the server fails the page read beside the Group
+    // before that copy is read.
+    const loading = f.holdLoad(activityPath(1, cabinPath));
+    f.server.failing.add(activityPath(1, cabinPath));
+    const sent = f.calls.length;
+    const opening = controller.openActivity(cabinId);
+    await loading.reached;
+    await settle();
+    expect(f.activityGets(sent)).toEqual(['cabin activity p1']);
+    loading.release();
+    await opening;
+    await settle();
+    expect(controller.getSnapshot().activity).toMatchObject({
+      groupId: cabinId,
+      status: 'error',
+      events: [],
+      pagination: null,
     });
   });
 
