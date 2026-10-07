@@ -5045,6 +5045,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           data: [group, ...snapshot.groups.data.filter((item) => item.id !== group.id)],
           message: null,
           loaded: true,
+          // The rest of the list is still whatever it was: this device's copy, or not (#332).
+          restored: snapshot.groups.restored,
         },
       });
       created = group.id;
