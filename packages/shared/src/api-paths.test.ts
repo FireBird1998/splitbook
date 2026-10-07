@@ -98,6 +98,12 @@ describe("the paths Android's controller builds today", () => {
     );
   });
 
+  it('every page of an Expense history, as one query reads them', () => {
+    expect(activityPagePath(groupId, { expenseId, limit: 20 })).toBe(
+      `/api/groups/${groupId}/activity?expenseId=${expenseId}&limit=20`,
+    );
+  });
+
   it('an Expense record', () => {
     expect(expenseRecordPath(groupId, expenseId)).toBe(
       `/api/groups/${groupId}/expenses/${expenseId}`,
