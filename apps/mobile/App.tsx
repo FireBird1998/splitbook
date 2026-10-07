@@ -69,7 +69,7 @@ import { GroupBalancesView, recordWaitsForDetails, settledIn } from './src/ui/gr
 import { RecordPaymentSheet } from './src/ui/record-payment-sheet';
 import { GroupActivity } from './src/ui/group-activity';
 import { GroupMembers } from './src/ui/group-members';
-import type { MobileSnapshot } from './src/data/types';
+import type { MobileGroup, MobileSnapshot } from './src/data/types';
 import { shownGroup } from './src/data/mobile-controller';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 
@@ -703,6 +703,24 @@ function shareInvite() {
   })();
 }
 
+/**
+ * A Group Home doesn't list yet, while it is first read: its placeholders take the shape of an
+ * all-time Group's, the commoner kind, and nothing of it is shown (#219). `XXX` is ISO 4217's
+ * code for no currency, as wide as any.
+ */
+const unlistedGroup = (id: string): MobileGroup => ({
+  id,
+  name: '',
+  description: '',
+  category: 'other',
+  defaultCurrency: 'XXX',
+  members: [],
+  startDate: null,
+  endDate: null,
+  createdAt: new Date(0),
+  updatedAt: new Date(0),
+});
+
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
 function GroupScreen({ state }: { state: MobileSnapshot }) {
   const feedback = refreshFeedback(state);
@@ -717,9 +735,14 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
   const group = state.detail.data ?? (proven ? known : null);
   // While the Group is first read, Expenses and Balances show their own placeholders for it as
   // Home lists it, so they keep their shape when it answers (#219); nothing of it is read yet.
-  // Activity keeps its rows until #222.
+  // One Home doesn't list yet takes an all-time Group's shape. Activity keeps its rows (#222).
   const opening =
-    !group && state.detail.status === 'loading' && state.destination !== 'activity' ? known : null;
+    !group &&
+    state.detail.status === 'loading' &&
+    state.detail.id &&
+    state.destination !== 'activity'
+      ? (known ?? unlistedGroup(state.detail.id))
+      : null;
   const shown = group ?? opening;
   // Not saved on this phone, and offline: the navigation stays, without a banner.
   const unavailable = !group && state.detail.status === 'error' && state.offline.active;

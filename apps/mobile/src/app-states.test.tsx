@@ -1889,7 +1889,7 @@ describe('A Group says what is true, without jumps (#219)', () => {
       setWindow({ fontScale: scale });
       const phone = device();
       await signedIn(phone);
-      await start(phone);
+      const app = await start(phone);
       await settle();
       const expenses = phone.hold(`/api/groups/${groupId}/expenses?`);
       const read = phone.hold(`/api/groups/${groupId}`);
@@ -1898,15 +1898,49 @@ describe('A Group says what is true, without jumps (#219)', () => {
       await settle();
       const first = { height: contentHeight(scale), busy: busy() };
       expect(first.busy).toEqual(loading);
+      // A Household's Month isn't known yet: its bar has nothing to press.
+      const household = groupId === maple && destination === 'expenses';
+      if (household)
+        for (const label of ['Previous month', 'Next month', 'All time'])
+          expect(app.disabled(label), label).toBe(true);
 
       // The Group answered; its Expenses are still read: nothing moves.
       read.release();
       await settle();
       expect({ height: contentHeight(scale), busy: busy() }).toEqual(first);
+      if (household) {
+        expect(app.disabled('Previous month')).toBe(false);
+        expect(app.disabled('All time')).toBe(false);
+      }
       expenses.release();
       await settle();
     },
   );
+
+  // N6: a Group Home doesn't list yet, such as one opened from elsewhere, has no Theme to shape
+  // its placeholders by: they take an all-time Group's, the commoner case.
+  it('keeps the placeholders’ shape for a Group Home doesn’t list yet', async () => {
+    const phone = device();
+    phone.network.noGroups = true;
+    await signedIn(phone);
+    await start(phone);
+    await settle();
+    const read = phone.hold(`/api/groups/${lisbon}`);
+    void controller().openGroup(lisbon);
+    await read.reached;
+    await settle();
+    const first = { height: contentHeight(), busy: busy() };
+    expect(first.busy).toEqual(['Loading all-time expenses']);
+
+    // Its Expenses are read once the Group is known: nothing moves meanwhile.
+    const expenses = phone.hold(`/api/groups/${lisbon}/expenses?`);
+    read.release();
+    await expenses.reached;
+    await settle();
+    expect({ height: contentHeight(), busy: busy() }).toEqual(first);
+    expenses.release();
+    await settle();
+  });
 
   it.each([1, 1.3])(
     'keeps Balances where they are while they wait for the Expenses to be read again, at %s× text',
