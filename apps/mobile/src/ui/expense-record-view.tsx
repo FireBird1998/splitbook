@@ -1,4 +1,4 @@
-import { Fragment, useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -52,6 +52,7 @@ import {
   type Reveal,
 } from './compact';
 import { WhoOwesWhat, sharesDifferNote } from './expense-form';
+import { Freshness } from './financial-views';
 import type { MobileExpense } from '../data/types';
 import { savingNeedsConnection } from './offline-notice';
 import { Copy, Icon, Label, Panel, type IconName } from './primitives';
@@ -114,6 +115,7 @@ export function ExpenseRecordScreen({
   onResume,
   onRefresh,
   onLoadOlderHistory,
+  onLoadNewerHistory,
   onRetryHistory,
   reveal = null,
 }: {
@@ -132,6 +134,8 @@ export function ExpenseRecordScreen({
   onResume: () => void;
   onRefresh: () => void;
   onLoadOlderHistory?: () => void;
+  /** Reads the changes before the window, once it has slid past the newest (#220). */
+  onLoadNewerHistory?: () => void;
   /** Reads the Expense's changes again after they couldn't be read. */
   onRetryHistory?: () => void;
   /** The record fades in where its skeleton was, when it opened over one. */
@@ -139,6 +143,26 @@ export function ExpenseRecordScreen({
 }) {
   const theme = useTheme();
   const [options, setOptions] = useState(false);
+  const scroll = useRef<ScrollView>(null);
+  // Where the record was scrolled to, from where scrolling stopped as well as while it scrolls: a
+  // throttled scroll event can miss the end of a drag or a fling (#219).
+  const scrollY = useRef(0);
+  // Where it was when the window of changes moved, before Android clamps the offset to a
+  // shorter record: the shift that keeps the change on screen starts from there (#220).
+  const firstPage = state.history.firstPage ?? 1;
+  const shownFirstPage = useRef(firstPage);
+  const slideFrom = useRef<number | null>(null);
+  if (shownFirstPage.current !== firstPage) {
+    slideFrom.current = scrollY.current;
+    shownFirstPage.current = firstPage;
+  }
+  /** The changes above the one on screen moved by `dy`: the view follows, so it stays put. */
+  const shift = (dy: number) => {
+    const from = slideFrom.current ?? scrollY.current;
+    slideFrom.current = null;
+    scrollY.current = Math.max(0, from + dy);
+    scroll.current?.scrollTo({ y: scrollY.current, animated: false });
+  };
   const record = state.draft!.original!;
   const { context } = state;
   const members = context?.group.members.map(({ user }) => user) ?? [];
@@ -211,6 +235,12 @@ export function ExpenseRecordScreen({
               }
             : undefined
         }
+        status={
+          // What this device knew of the record, while it is read again (#220).
+          state.knownAt != null && !offline ? (
+            <Freshness refreshedAt={state.knownAt} refreshing />
+          ) : undefined
+        }
         actions={
           <>
             {!record.isDeleted ? (
@@ -233,6 +263,17 @@ export function ExpenseRecordScreen({
         }
       />
       <ScrollView
+        ref={scroll}
+        scrollEventThrottle={16}
+        onScroll={({ nativeEvent }) => {
+          scrollY.current = nativeEvent.contentOffset.y;
+        }}
+        onScrollEndDrag={({ nativeEvent }) => {
+          scrollY.current = nativeEvent.contentOffset.y;
+        }}
+        onMomentumScrollEnd={({ nativeEvent }) => {
+          scrollY.current = nativeEvent.contentOffset.y;
+        }}
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
       >
         {notice}
@@ -318,8 +359,11 @@ export function ExpenseRecordScreen({
             name={name}
             people={members}
             tags={context?.tags}
+            offline={offline}
             onLoadOlder={onLoadOlderHistory}
+            onLoadNewer={onLoadNewerHistory}
             onRetry={onRetryHistory}
+            onShift={shift}
           />
         </FadeIn>
       </ScrollView>
@@ -495,11 +539,12 @@ export function recordOutline(expense: MobileExpense, currentUserId?: string): R
 
 /**
  * The record's shape while it opens, laid out as the record lays itself out at this text size,
- * so the record takes its place without moving: its summary card with the texts a list row
- * already knows (unseen, under breathing blocks), Who owes what with its people and any
- * rounding note, a Category row, and History with its times and the line that loads the rest.
- * `outline` comes from the list row it opened from; without one, a typical record stands in.
- * Announced as busy under `label`.
+ * so the record takes its place without moving: its summary card, Who owes what with its people
+ * and any rounding note, a Category row, and History with its times and the line that loads the
+ * rest. `outline` comes from the list row it opened from: what it already says of the Expense
+ * shows at once (the loading-state audit, #220), and the rest breathes until the record is read.
+ * Without one, a typical record stands in, unseen under breathing blocks. Announced as busy
+ * under `label`.
  */
 export function ExpenseRecordSkeleton({
   label,
@@ -509,6 +554,15 @@ export function ExpenseRecordSkeleton({
   outline?: RecordOutline | null;
 }) {
   const record = outline ?? typicalRecord;
+  /** A list row's text shows as it is; a typical record's breathes in its place. */
+  const known = (text: ReactNode, align?: 'center') =>
+    outline ? (
+      text
+    ) : (
+      <SkeletonOf bar align={align}>
+        {text}
+      </SkeletonOf>
+    );
   const theme = useTheme();
   const large = useLargeText();
   const { width } = useWindowDimensions();
@@ -528,12 +582,12 @@ export function ExpenseRecordSkeleton({
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
           <Skeleton width={40} height={40} rounded={12} />
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <SkeletonOf bar>
-              <CompactText variant="heading">{record.description}</CompactText>
-            </SkeletonOf>
-            <SkeletonOf bar>
-              <CompactText variant="small">{record.meta}</CompactText>
-            </SkeletonOf>
+            {known(<CompactText variant="heading">{record.description}</CompactText>)}
+            {known(
+              <CompactText variant="small" tone="secondary">
+                {record.meta}
+              </CompactText>,
+            )}
           </View>
         </View>
         <View
@@ -546,13 +600,15 @@ export function ExpenseRecordSkeleton({
             marginTop: 12,
           }}
         >
-          <SkeletonOf bar align="center">
-            <Money size="form">{record.amount}</Money>
-          </SkeletonOf>
+          {known(<Money size="form">{record.amount}</Money>, 'center')}
           {record.badge ? (
-            <SkeletonOf rounded={999} align="center">
+            outline ? (
               <Badge label={record.badge} />
-            </SkeletonOf>
+            ) : (
+              <SkeletonOf rounded={999} align="center">
+                <Badge label={record.badge} />
+              </SkeletonOf>
+            )
           ) : null}
         </View>
       </Card>
@@ -746,7 +802,9 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 /**
  * This Expense's changes, newest first, with who made them and their before and after values.
  * Until they're read, and when they can't be, it says when the Expense was added and last
- * changed; older changes load on request.
+ * changed. Older changes load on request; past 5 pages the window slides, and Load newer above it
+ * brings the newest back (#220). The changes shown stay, marked as refreshing, while they are
+ * read again, and the change on screen keeps its place when the window moves.
  */
 function RecordHistory({
   record,
@@ -755,8 +813,11 @@ function RecordHistory({
   name,
   people,
   tags,
+  offline = false,
   onLoadOlder,
+  onLoadNewer,
   onRetry,
+  onShift,
 }: {
   record: ExpenseRecord;
   history: ExpenseHistoryState;
@@ -764,16 +825,74 @@ function RecordHistory({
   name: (id: string) => string;
   people: { id: string; name: string }[];
   tags?: { id: string; name: string }[];
+  offline?: boolean;
   onLoadOlder?: () => void;
+  onLoadNewer?: () => void;
   onRetry?: () => void;
+  /** Scroll the record by `dy`: the changes above the one on screen moved by as much. */
+  onShift?: (dy: number) => void;
 }) {
   const theme = useTheme();
-  const read = history.status === 'ready' && history.expenseId === record._id;
+  // Read, or being read again with the changes it had: those stay shown (M1-3).
+  const read =
+    history.expenseId === record._id && (history.status === 'ready' || history.events.length > 0);
+  const refreshing = read && history.status === 'loading';
   const events = read
-    ? describeExpenseEvents(history.events, record, { currentUserId, people, tags })
+    ? describeExpenseEvents(history.events, record, {
+        currentUserId,
+        people,
+        tags,
+      })
     : [];
   const more =
     read && !!history.pagination && history.pagination.page < history.pagination.totalPages;
+  const newer = read && (history.firstPage ?? 1) > 1;
+  // When the window moves, changes above the one on screen go or come: Load older past 5 pages
+  // drops the newest page, and Load newer brings it back above. The view moves by as much as a
+  // change shown on both sides of the move moved, so the change on screen keeps its place.
+  const places = useRef({ list: 0, rows: new Map<string, number>() });
+  const anchor = useRef<{
+    id: string;
+    at: number;
+    timer?: ReturnType<typeof setTimeout>;
+  } | null>(null);
+  const firstPage = history.firstPage ?? 1;
+  const shownFirst = useRef(firstPage);
+  /** The changes as last shown: the window's move keeps the first of them still listed. */
+  const shownEvents = useRef(history.events);
+  const top = (id: string) => {
+    const row = places.current.rows.get(id);
+    return row === undefined ? null : places.current.list + row;
+  };
+  useLayoutEffect(() => {
+    const moved = firstPage !== shownFirst.current;
+    shownFirst.current = firstPage;
+    if (anchor.current?.timer) clearTimeout(anchor.current.timer);
+    if (!moved) return;
+    // The first change shown before the move that is still listed: the newest one left after a
+    // slide, or the one that was first before Load newer.
+    const listedNow = new Set(history.events.map(({ _id }) => _id));
+    const id = shownEvents.current.find(({ _id }) => listedNow.has(_id))?._id;
+    // Laid out before the move: where it was.
+    const at = id ? top(id) : null;
+    anchor.current = id && at !== null ? { id, at } : null;
+  }, [firstPage]);
+  useLayoutEffect(() => {
+    shownEvents.current = history.events;
+  });
+  /** A layout changed: once the move's layouts have all arrived, the view follows its change. */
+  const place = (change: { list: number } | { row: string; y: number }) => {
+    if ('list' in change) places.current.list = change.list;
+    else places.current.rows.set(change.row, change.y);
+    const held = anchor.current;
+    if (!held || held.timer) return;
+    // A layout's events arrive together: the shift waits for all of them.
+    held.timer = setTimeout(() => {
+      if (anchor.current === held) anchor.current = null;
+      const at = top(held.id);
+      if (at !== null && at !== held.at) onShift?.(at - held.at);
+    }, 0);
+  };
   const creator = record.createdBy;
   const creatorId = typeof creator === 'object' && creator ? creator._id : creator;
   const creatorName =
@@ -801,59 +920,116 @@ function RecordHistory({
       <CompactText tone="secondary">{label}</CompactText>
     </View>
   );
+  /**
+   * Load older, below the changes, or Load newer, above them: loading, failed with the changes
+   * kept, or offered. Both stay in place, disabled, while the changes shown are read again, so the
+   * record never gets shorter under the member.
+   */
+  const pageControl = (
+    which: 'older' | 'newer',
+    status: 'idle' | 'loading' | 'error',
+    onPress: () => void,
+  ) =>
+    status === 'loading' ? (
+      progress(`Loading ${which} changes…`)
+    ) : (
+      <>
+        {status === 'error' ? (
+          <CompactText variant="small" tone="negative" accessibilityRole="alert">
+            {`Couldn’t load ${which} changes. The changes shown are still here.`}
+          </CompactText>
+        ) : null}
+        <CompactButton
+          label={status === 'error' ? `Try loading ${which} changes` : `Load ${which} changes`}
+          variant="tonal"
+          block
+          disabled={refreshing}
+          onPress={onPress}
+        />
+      </>
+    );
   return (
     <View style={{ gap: 8 }}>
-      <SectionHeader title="History" />
-      <Card>
-        {events.map((event, index) => (
-          <Fragment key={event.key}>
-            {index > 0 ? <Divider inset={58} /> : null}
-            <HistoryRow
-              icon="create-outline"
-              actor={{ name: event.name, label: event.actor }}
-              title={event.action}
-              changes={event.changes}
-              implied={event.implied}
-              time={event.at}
+      <SectionHeader
+        title="History"
+        trailing={
+          // The oldest page's time, while the changes shown are read again or saved here.
+          (offline || refreshing) && events.length > 0 && history.refreshedAt != null ? (
+            <Freshness
+              refreshedAt={history.refreshedAt}
+              refreshing={refreshing}
+              offline={offline}
             />
-          </Fragment>
-        ))}
-        {times && record.isDeleted ? (
-          <>
-            <HistoryRow
-              icon="trash-outline"
-              title="Deleted"
-              time={record.deletedAt ?? record.updatedAt}
-            />
-            <Divider inset={58} />
-          </>
-        ) : times && record.updatedAt !== record.createdAt ? (
-          <>
-            <HistoryRow icon="time-outline" title="Last changed" time={record.updatedAt} />
-            <Divider inset={58} />
-          </>
-        ) : null}
-        {added ? (
-          <>
-            {times ? null : <Divider inset={58} />}
-            <HistoryRow
-              icon="add-outline"
-              actor={
-                creatorName
-                  ? { name: creatorName, label: creatorId === currentUserId ? 'You' : creatorName }
-                  : undefined
-              }
-              title={creatorName ? 'added this Expense' : 'Added'}
-              time={record.createdAt}
-            />
-          </>
-        ) : null}
-      </Card>
-      {history.status === 'loading' ? (
+          ) : undefined
+        }
+      />
+      {newer && onLoadNewer
+        ? pageControl('newer', history.newerStatus ?? 'idle', onLoadNewer)
+        : null}
+      {/* Where the changes lie, for the one kept on screen when the window moves (#220). */}
+      <View onLayout={({ nativeEvent }) => place({ list: nativeEvent.layout.y })}>
+        <Card>
+          {events.map((event, index) => (
+            <View
+              key={event.key}
+              onLayout={({ nativeEvent }) => place({ row: event.key, y: nativeEvent.layout.y })}
+            >
+              {index > 0 ? <Divider inset={58} /> : null}
+              <HistoryRow
+                icon="create-outline"
+                actor={{ name: event.name, label: event.actor }}
+                title={event.action}
+                changes={event.changes}
+                implied={event.implied}
+                time={event.at}
+              />
+            </View>
+          ))}
+          {times && record.isDeleted ? (
+            <>
+              <HistoryRow
+                icon="trash-outline"
+                title="Deleted"
+                time={record.deletedAt ?? record.updatedAt}
+              />
+              <Divider inset={58} />
+            </>
+          ) : times && record.updatedAt !== record.createdAt ? (
+            <>
+              <HistoryRow icon="time-outline" title="Last changed" time={record.updatedAt} />
+              <Divider inset={58} />
+            </>
+          ) : null}
+          {added ? (
+            <>
+              {times ? null : <Divider inset={58} />}
+              <HistoryRow
+                icon="add-outline"
+                actor={
+                  creatorName
+                    ? {
+                        name: creatorName,
+                        label: creatorId === currentUserId ? 'You' : creatorName,
+                      }
+                    : undefined
+                }
+                title={creatorName ? 'added this Expense' : 'Added'}
+                time={record.createdAt}
+              />
+            </>
+          ) : null}
+        </Card>
+      </View>
+      {history.status === 'loading' && !refreshing ? (
         progress('Loading this Expense’s changes…')
       ) : history.status === 'error' ? (
         <View
-          style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: 4 }}
+          style={{
+            flexDirection: 'row',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            columnGap: 4,
+          }}
         >
           <CompactText variant="small" tone="secondary" style={{ flexShrink: 1 }}>
             {history.message ?? 'Couldn’t load this Expense’s changes.'}
@@ -868,29 +1044,12 @@ function RecordHistory({
             />
           ) : null}
         </View>
-      ) : more && history.moreStatus === 'loading' ? (
-        progress('Loading older changes…')
       ) : more && onLoadOlder ? (
-        <>
-          {history.moreStatus === 'error' ? (
-            <CompactText variant="small" tone="negative" accessibilityRole="alert">
-              Couldn’t load older changes. The changes shown are still here.
-            </CompactText>
-          ) : null}
-          <CompactButton
-            label={
-              history.moreStatus === 'error' ? 'Try loading older changes' : 'Load older changes'
-            }
-            variant="tonal"
-            block
-            onPress={onLoadOlder}
-          />
-        </>
+        pageControl('older', history.moreStatus, onLoadOlder)
       ) : null}
     </View>
   );
 }
-
 const moneyFace = { fontFamily: fonts.mono, fontVariant: ['tabular-nums' as const] };
 
 /** "Amount ₹899.00 → ₹999.00", or only the values when the row's title names the change. */

@@ -1037,7 +1037,9 @@ function ExpenseScreen({ state }: { state: MobileSnapshot }) {
       onDelete={() => void controller.deleteExpense()}
       onReconcile={() => void controller.reconcileExpense()}
       onReviewLatest={() => void controller.reviewLatestExpense()}
+      onRefresh={() => void controller.refresh()}
       onLoadOlderHistory={() => void controller.loadOlderExpenseHistory()}
+      onLoadNewerHistory={() => void controller.loadNewerExpenseHistory()}
       onRetryHistory={() => void controller.refreshExpenseHistory()}
       onAcceptCurrent={() =>
         Alert.alert('Use the saved version?', 'Your version is removed from this device.', [

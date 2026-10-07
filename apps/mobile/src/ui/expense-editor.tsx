@@ -161,6 +161,7 @@ function ExpenseTask({
   onDiscard,
   onDiscardUnconfirmed,
   onRetry,
+  onRefresh,
   onEdit,
   onReviewDelete,
   onDelete,
@@ -171,6 +172,7 @@ function ExpenseTask({
   onLeaveField,
   onReveal,
   onLoadOlderHistory,
+  onLoadNewerHistory,
   onRetryHistory,
   outline,
 }: {
@@ -194,6 +196,11 @@ function ExpenseTask({
   /** Offered once the server refused a retry of an unconfirmed save; the app confirms it. */
   onDiscardUnconfirmed?: () => void;
   onRetry: () => void;
+  /**
+   * The record's Refresh: reads it and its changes again where they are, keeping the pages
+   * loaded (#220, M1-3). Without it, the record opens again.
+   */
+  onRefresh?: () => void;
   onEdit: () => void;
   onReviewDelete: () => void;
   onDelete: () => void;
@@ -203,6 +210,8 @@ function ExpenseTask({
   onAcceptCurrent: () => void;
   /** The saved record's older changes, and another read of its changes after a failure. */
   onLoadOlderHistory?: () => void;
+  /** Its newer changes, once the window of changes has slid past the newest (#220). */
+  onLoadNewerHistory?: () => void;
   onRetryHistory?: () => void;
   /** What the list row an Expense opens from already says, so its skeleton takes its shape. */
   outline?: RecordOutline | null;
@@ -285,6 +294,10 @@ function ExpenseTask({
         ? 'Changed'
         : 'Not saved'
       : null;
+  // The offline banner speaks of what's shown: while the Expense opens, or when nothing of it
+  // could be, the screen's own message and its one Try again stand alone (the loading-state
+  // audit, #220).
+  const shownNotice = draft && state.status !== 'loading' ? notice : null;
   const frame = (body: ReactNode, footer?: ReactNode) => (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <TopBar
@@ -335,7 +348,7 @@ function ExpenseTask({
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
       >
-        {notice}
+        {shownNotice}
         {body}
       </ScrollView>
       {footer}
@@ -372,8 +385,9 @@ function ExpenseTask({
         onDelete={onDelete}
         onCancelDelete={onCancelDelete}
         onResume={onResume}
-        onRefresh={onRetry}
+        onRefresh={onRefresh ?? onRetry}
         onLoadOlderHistory={onLoadOlderHistory}
+        onLoadNewerHistory={onLoadNewerHistory}
         onRetryHistory={onRetryHistory}
         reveal={recordReveal}
       />
