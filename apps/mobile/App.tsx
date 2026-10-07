@@ -324,7 +324,7 @@ function SplitBook() {
         ) : !authenticated ? (
           <SignIn
             busy={state.auth.status === 'signing-in'}
-            option={state.auth.option}
+            option={state.auth.status === 'signing-in' ? state.auth.option : undefined}
             message={
               state.auth.message ??
               (state.invitation.code

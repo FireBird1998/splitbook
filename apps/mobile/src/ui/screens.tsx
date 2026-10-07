@@ -10,8 +10,15 @@ import {
   IconTile,
   SectionHeader,
 } from './compact';
+import type { PersonaId, SignInOption } from '../data/types';
 import { Icon } from './primitives';
 import { useTheme } from './theme';
+
+const personas: { id: PersonaId; name: string; detail: string }[] = [
+  { id: 'alex', name: 'Alex Rivera', detail: 'Organizes the shared adventures' },
+  { id: 'sam', name: 'Sam Chen', detail: 'Keeps the household in order' },
+  { id: 'priya', name: 'Priya Shah', detail: 'Always up for the next trip' },
+];
 
 /**
  * The sign-in options: Google for the invited beta, or a test persona in development. While
@@ -26,18 +33,13 @@ export function SignIn({
   onGoogleSignIn,
 }: {
   busy: boolean;
-  /** While busy: the option signing in, a persona's id or 'google'. */
-  option?: string;
+  /** While busy: the option signing in. Ignored otherwise. */
+  option?: SignInOption;
   message: string | null;
-  onSignIn: (id: string) => void;
+  onSignIn: (id: PersonaId) => void;
   onGoogleSignIn?: () => void;
 }) {
   const theme = useTheme();
-  const personas = [
-    { id: 'alex', name: 'Alex Rivera', detail: 'Organizes the shared adventures' },
-    { id: 'sam', name: 'Sam Chen', detail: 'Keeps the household in order' },
-    { id: 'priya', name: 'Priya Shah', detail: 'Always up for the next trip' },
-  ];
   const chosen = busy ? option : undefined;
   const persona = personas.find(({ id }) => id === chosen);
   return (

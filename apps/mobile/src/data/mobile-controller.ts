@@ -127,6 +127,7 @@ import type {
   MobileConfig,
   MobileDependencies,
   MobileSnapshot,
+  PersonaId,
   Route,
 } from './types';
 
@@ -1638,7 +1639,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
 
-  const signIn = async (personaId: string) => {
+  const signIn = async (personaId: PersonaId) => {
     // A sign-in this one replaces may already have its session, saved here.
     const replacing = snapshot.auth.status === 'signing-in';
     const owner = invalidate();
