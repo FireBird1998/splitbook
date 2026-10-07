@@ -31,6 +31,8 @@ import { fonts, useTheme } from './theme';
 export const recordPaymentFootnote = 'Records a payment made outside Splitbook. No money moves.';
 /** Record's reason while the sheet checks the latest balances (#334). */
 export const recordWaitsForCheck = 'Record is available once the latest balances are checked.';
+/** Retry's, for an unconfirmed payment found on this phone. */
+export const retryWaitsForCheck = 'Retry is available once the latest balances are checked.';
 const checkingBalances = 'Checking the latest balances…';
 
 /** Minor units, or null while the entry isn't a valid amount yet. */
@@ -218,7 +220,9 @@ export function RecordPaymentSheet({
             disabled={checking || waitingForTick}
             hint={
               checking
-                ? recordWaitsForCheck
+                ? retrying
+                  ? retryWaitsForCheck
+                  : recordWaitsForCheck
                 : waitingForTick
                   ? 'Tick “I meant to pay more than suggested” first.'
                   : undefined

@@ -13,7 +13,7 @@ import type { PendingPayment } from '../data/settlement';
 import {
   RecordPaymentSheet,
   recordPaymentFootnote,
-  recordWaitsForCheck,
+  retryWaitsForCheck,
 } from './record-payment-sheet';
 
 // #118: the Balances destination and the Record payment sheet's states, rendered.
@@ -432,7 +432,7 @@ describe('Record payment sheet states', () => {
     expect(labelled(root, 'Record payment ₹1,060.00')).toHaveLength(0);
     const [retry] = labelled(root, 'Retry payment');
     expect(retry.props.accessibilityState).toEqual({ disabled: true, busy: false });
-    expect(retry.props.accessibilityHint).toBe(recordWaitsForCheck);
+    expect(retry.props.accessibilityHint).toBe(retryWaitsForCheck);
     expect(retry.props.disabled).toBe(true);
     expect(text(root)).toContain('Checking the latest balances…');
   });
