@@ -88,13 +88,11 @@ function InPlace({ holds, children }: { holds: ReactNode | null; children: React
  * "Updating…" where their time was, in its place, until they're read again, so the member never
  * takes an old debt for a current one, and nothing below moves.
  */
-export function ReadTime({
-  refreshedAt,
-  restored = false,
-  offline = false,
-  updating = false,
-  tone = 'secondary',
-}: {
+export function ReadTime(props: ReadTimeProps) {
+  return readTime(props);
+}
+
+export interface ReadTimeProps {
   refreshedAt: number | null;
   /** The figures are this device's saved copy. */
   restored?: boolean;
@@ -102,7 +100,19 @@ export function ReadTime({
   /** Out of date since a change, and being read again. */
   updating?: boolean;
   tone?: TextTone;
-}) {
+}
+
+/**
+ * `ReadTime`'s slot, for a component that draws it as part of its own render, as Home's
+ * balances do, so Home renders no more components than before (#219).
+ */
+export function readTime({
+  refreshedAt,
+  restored = false,
+  offline = false,
+  updating = false,
+  tone = 'secondary',
+}: ReadTimeProps) {
   if (refreshedAt === null) return null;
   const time = refreshedLabel(refreshedAt);
   if (restored && offline && !updating) return <Badge label={`Saved ${time}`} />;

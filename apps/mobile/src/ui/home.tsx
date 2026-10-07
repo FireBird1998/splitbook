@@ -34,7 +34,7 @@ import {
   useLargeText,
   useLineBox,
 } from './compact';
-import { ReadTime, RetainedNotice } from './financial-views';
+import { readTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
 import { fonts, useTheme } from './theme';
@@ -195,13 +195,33 @@ function CurrencyRow({ bucket }: { bucket: HomeCurrencyBalance }) {
 }
 
 /**
- * One row per currency, each kept separate, with when the figures were read (`ReadTime`):
- * "Updated hh:mm" for the server's answer in this session, offline too; this device's saved
- * copy says "Saved hh:mm", never presented as fresh (ADR 0006), and offline it is the badge
- * every saved view shows. "Saved" giving way to "Updated" cross-fades in place (#332). Read
- * again after a change, or after a Group's Expenses were read, they say "Updating…" where their
- * time was, in its place, so nothing moves (#219). `silent` keeps an automatic refresh
- * unannounced.
+ * When the figures shown were read. "Updated hh:mm" for the server's answer in this session,
+ * offline too; this device's saved copy says "Saved hh:mm", never presented as fresh (ADR
+ * 0006), and offline it is the badge every saved view shows. "Saved" giving way to "Updated"
+ * cross-fades in place (#332). Read again after a change, or after a Group's Expenses were read,
+ * they say "Updating…" where their time was, in its place, so nothing moves (#219).
+ */
+function BalancesTime({
+  state,
+  offline,
+  updating,
+}: {
+  state: HomeFinancialState;
+  offline: boolean;
+  updating: boolean;
+}) {
+  return readTime({
+    refreshedAt: state.refreshedAt,
+    restored: state.restored === true,
+    updating,
+    offline,
+    tone: 'muted',
+  });
+}
+
+/**
+ * One row per currency, each kept separate, with when the figures were read (`BalancesTime`).
+ * `silent` keeps an automatic refresh unannounced.
  */
 export function HomeBalances({
   state,
@@ -259,12 +279,10 @@ export function HomeBalances({
               Your balances
             </CompactText>
             {state.data !== null ? (
-              <ReadTime
-                refreshedAt={state.refreshedAt}
-                restored={state.restored === true}
-                updating={state.stale && state.status === 'loading' && !silent}
+              <BalancesTime
+                state={state}
                 offline={offline}
-                tone="muted"
+                updating={state.stale && state.status === 'loading' && !silent}
               />
             ) : null}
           </View>
