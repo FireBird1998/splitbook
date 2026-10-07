@@ -150,6 +150,8 @@ Authorized non-admin/non-creator controls preserve population, history,
 activity attribution, validation, archived Tags and repeat deletion.
 Denied writes are checked through subsequent authorized Expense/history and
 both Groups' activity requests, not database queries or mocked helpers.
+A lost create reply is retried exactly once from the form (`retry-ui.spec.ts`)
+and from Quick add (`quick-add-retry.spec.ts`), with the same idempotency key.
 
 Isolation is deliberately stricter than the older browser suites:
 
@@ -218,6 +220,13 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   share, You paid, Expenses, never "fronted", no repeat icons while recurring
   Expenses are off); a failed load with Try again; axe throughout, and review
   screenshots of a Household and a Trip at 1440 px and 390 px.
+- **Quick add** (`quick-add.spec.ts`, #320): a line read into chips and added
+  with Enter (the full form's request: idempotency key, Tag id, exact money,
+  the browser's today), the field clearing and the table showing it; the Tag
+  a member must pick when none fits; too many decimal places refused and
+  linked to the field; "More options" opening the form prefilled; axe on each
+  state. Writes go to a Household the test creates for Alex alone. The lost
+  reply is in the expense-access suite (`quick-add-retry.spec.ts`).
 - **Theme + a11y matrix** (`theme-a11y.spec.ts`): persona entry, dashboard,
   and trip workspace at **desktop 1280×800** and **mobile 390×844**, each in
   **light and dark** (driven by `prefers-color-scheme` emulation), plus the

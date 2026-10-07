@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -23,8 +23,6 @@ import AddIcon from '@mui/icons-material/Add';
 import RemoveCircleOutlineIcon from '@mui/icons-material/RemoveCircleOutline';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import { useSWRConfig } from 'swr';
-import { isGroupReadKey } from '@/lib/group-read';
 import { toDateParam } from '@splitbook/shared/date';
 import { PREDEFINED_ITEMS } from '@splitbook/shared/predefined-items';
 import { getCurrency, formatCurrency, getCurrencyPrecision } from '@splitbook/shared/currency';
@@ -35,7 +33,7 @@ import {
   type SavedDraftExpense,
   type ExpenseDraftValues,
 } from '@splitbook/shared/expense-draft';
-import { buildDuplicateCheckUrl } from './expense-duplicate-check';
+import { useExpenseDraftSave } from './use-expense-draft-save';
 import {
   getDefaultExpenseTag,
   tagOptionValue,
@@ -66,6 +64,12 @@ interface ExpenseFormDialogProps {
   showGroupName?: boolean;
   /** Called once the save is confirmed, just before the form closes. */
   onSaved?: () => void;
+  /**
+   * A new Expense's draft begun elsewhere, such as Quick add's "More options" (#320). The form
+   * opens with its values, and an unconfirmed save in it stays the same request, so sending it
+   * unchanged can't record it twice. Ignored in edit mode.
+   */
+  initialDraft?: ExpenseDraft | null;
 }
 
 // ─── Component ─────────────────────────────────────────
@@ -89,8 +93,8 @@ function ExpenseDraftDialog({
   defaultDate = null,
   showGroupName = false,
   onSaved,
+  initialDraft = null,
 }: ExpenseFormDialogProps) {
-  const { mutate } = useSWRConfig();
   const members = group.members;
   const groupTags = group.tags;
   const defaultCurrency = group.defaultCurrency;
@@ -98,17 +102,19 @@ function ExpenseDraftDialog({
   const groupNounTitle = groupNoun.charAt(0).toUpperCase() + groupNoun.slice(1);
 
   const [draft, setDraft] = useState(() =>
-    ExpenseDraft.open(
-      {
-        groupId,
-        accountId: userId,
-        memberIds: members.map((member) => member.user._id),
-        currency: defaultCurrency,
-        defaultTag: getDefaultExpenseTag(groupTags),
-        date: defaultDate ?? toDateParam(new Date()),
-      },
-      initialExpense as unknown as SavedDraftExpense | null,
-    ),
+    initialDraft && !initialExpense
+      ? initialDraft
+      : ExpenseDraft.open(
+          {
+            groupId,
+            accountId: userId,
+            memberIds: members.map((member) => member.user._id),
+            currency: defaultCurrency,
+            defaultTag: getDefaultExpenseTag(groupTags),
+            date: defaultDate ?? toDateParam(new Date()),
+          },
+          initialExpense as unknown as SavedDraftExpense | null,
+        ),
   );
   const {
     description,
@@ -131,14 +137,7 @@ function ExpenseDraftDialog({
   const edit = (change: Partial<ExpenseDraftValues>) => setDraft((current) => current.edit(change));
   const [showSplitOptions, setShowSplitOptions] = useState(isEditMode);
   const [showMoreOptions, setShowMoreOptions] = useState(isEditMode);
-  const transportBusy = useRef(false);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
+  const { save, transportBusy, mounted } = useExpenseDraftSave(setDraft);
 
   // ─── Derived Values ────────────────────────────────
   const parsedAmount = parseFloat(amount) || 0;
@@ -257,89 +256,13 @@ function ExpenseDraftDialog({
   };
 
   const handleSubmit = async () => {
-    if (transportBusy.current) return;
-    const { draft: prepared, submission } = draft.prepare(
+    const outcome = await save(
+      draft,
       groupTags.flatMap((option) => (option._id ? [option._id] : [])),
-      crypto.randomUUID(),
     );
-    setDraft(prepared);
-    if (!submission) return;
-    transportBusy.current = true;
-    try {
-      if (submission.checkDuplicate) {
-        try {
-          const response = await apiFetch(
-            buildDuplicateCheckUrl({
-              groupId: submission.groupId,
-              description: submission.description,
-              amount: submission.amount,
-              date: submission.date,
-              excludeId: submission.expenseId,
-            }),
-          );
-          if (!mounted.current) return;
-          if (response.ok) {
-            const duplicate = await response.json();
-            if (!mounted.current) return;
-            if (
-              duplicate.data?.isDuplicate &&
-              !window.confirm(
-                'This looks like a duplicate expense with the same description, amount, and date. Save it anyway?',
-              )
-            ) {
-              setDraft((current) => current.cancel(submission));
-              return;
-            }
-          }
-        } catch (error) {
-          console.warn('Duplicate expense check failed', error);
-        }
-      }
-      if (!mounted.current) return;
-      setDraft((current) => current.attempt(submission));
-      const url = `/api/groups/${submission.groupId}/expenses${submission.expenseId ? `/${submission.expenseId}` : ''}`;
-      const response = await apiFetch(url, {
-        method: submission.expenseId ? 'PATCH' : 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(submission.expenseId
-            ? { 'X-Splitbook-Revision': String(submission.revision) }
-            : { 'Idempotency-Key': submission.key }),
-        },
-        body: submission.body,
-      });
-      if (!mounted.current) return;
-      if (!response.ok) {
-        const result = await response.json();
-        if (mounted.current)
-          setDraft((current) =>
-            current.fail(
-              submission,
-              result.error || `Failed to ${submission.expenseId ? 'update' : 'add'} expense`,
-              response.status,
-            ),
-          );
-        return;
-      }
-      setDraft((current) => current.complete(submission));
-      void mutate(
-        (key: unknown) =>
-          (typeof key === 'string' && key.startsWith(`/api/groups/${submission.groupId}`)) ||
-          isGroupReadKey(key, `/api/groups/${submission.groupId}`),
-      );
-      onSaved?.();
-      onClose();
-    } catch (error) {
-      if (mounted.current)
-        setDraft((current) =>
-          current.fail(
-            submission,
-            error instanceof Error ? error.message : 'Something went wrong. Please try again.',
-          ),
-        );
-    } finally {
-      transportBusy.current = false;
-    }
+    if (outcome.status !== 'saved') return;
+    onSaved?.();
+    onClose();
   };
 
   const preview = draft.preview();

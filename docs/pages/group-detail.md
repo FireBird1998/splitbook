@@ -157,6 +157,7 @@ if (!isMember) redirect('/dashboard');
 - `TripStrip` (trip theme) **or** `GroupHeader` (all other themes)
 - `MonthCycleBar` + `MonthMemberTable` (Household theme only)
 - MUI `Tabs` for tab navigation
+- `QuickAddExpense` (Expenses tab, above the list's toolbar: Quick add, #320)
 - `ExpenseListView` (Expenses tab)
 - `BalancesView` (Balances tab — balances _and_ simplified debts in one component)
 - `ActivityView` (Activity tab)
