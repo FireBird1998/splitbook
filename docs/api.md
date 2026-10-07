@@ -915,6 +915,140 @@ exactly. The shared path, query key (scope `search`) and decoder are `searchPath
 
 ---
 
+## Export
+
+| Method | Path          | Description                                  |
+| ------ | ------------- | -------------------------------------------- |
+| GET    | `/api/export` | The member's Groups as CSV files, or one zip |
+
+### GET /api/export
+
+The Export page's download (#317). It answers with a file, not JSON: one CSV,
+or a zip when there are several. Refusals and failures use the standard JSON
+error shape.
+
+**Query params:**
+
+| Param     | Required | Value                                                                                                 |
+| --------- | -------- | ----------------------------------------------------------------------------------------------------- |
+| `groups`  | yes      | Group ids joined by commas, 1–50; repeats are ignored and the files follow this order                 |
+| `from`    | no       | First day of the window, `YYYY-MM-DD`, inclusive                                                      |
+| `to`      | no       | Last day of the window, `YYYY-MM-DD`, inclusive. Give both `from` and `to`, or neither for all time   |
+| `include` | no       | Any of `payments`, `shares`, `deleted`, `history`, joined by commas                                   |
+| `format`  | no       | `csv` (the only format; the default)                                                                  |
+| `tz`      | no       | The viewer's IANA time zone, `UTC` by default: the calendar payments, edits and deletions are read in |
+
+A query it can't read (no Groups, an id that isn't one, half a window, a window
+that ends before it starts, a day that doesn't exist, an unknown include, format
+or time zone) is a 422 validation error. The shared path builder is
+`exportPath`; `parseExportQuery` and `planExportFiles` are in
+`@splitbook/shared/export-request`, and the CSV builders in
+`@splitbook/shared/export-csv`.
+
+**Access.** Every Group must be one the member belongs to today, the same check
+as the Group reads. If any Group in the request is one they never joined, have
+left, or that doesn't exist, the whole request is refused with the Group reads'
+`403 { "error": "Forbidden", "status": 403 }`, before anything is read or
+generated. A member can export an archived Group.
+
+**Recurring Expenses.** Before reading, the read adds the recurring Expenses
+that have fallen due in each Group, as the Group, Expense and Balances reads
+do. While recurring Expenses are switched off (#289) it adds none.
+
+**The window.** An Expense is in the window when its date falls on one of the
+window's days. Expense dates are calendar days stored at midnight UTC, so the
+date is compared, and written, as that UTC day: the day the member picked. A
+payment is in the window when the day it was recorded, in `tz`, is one of the
+window's days.
+
+**Size.** The files are built in memory, not streamed. An export of more than
+50,000 rows across every file (Expenses, deleted Expenses when asked, edit rows
+and payments) is refused with `413` and code `EXPORT_TOO_LARGE`, with a message
+that says how many rows it would have and to pick fewer Groups or a shorter
+period. Nothing is built for a refused export.
+
+**Response.** `200` with:
+
+- `Content-Type: text/csv; charset=utf-8` for one CSV, `application/zip` for
+  several.
+- `Content-Disposition: attachment; filename="…"`.
+- `Cache-Control: no-store`.
+
+**Files.** Each Group has an Expenses CSV, and a payments CSV when `payments`
+is included. One file downloads as itself; several come in one zip.
+
+| File                | Example                            |
+| ------------------- | ---------------------------------- |
+| Expenses            | `maple-house-2026-09-expenses.csv` |
+| Payments            | `maple-house-2026-09-payments.csv` |
+| Zip, one Group      | `maple-house-2026-09.zip`          |
+| Zip, several Groups | `splitbook-3-groups-2026-09.zip`   |
+
+The Group part is the Group's name in lower-case ASCII (accents folded, `group`
+if nothing is left); two Groups whose names match get `-2`, `-3`. The window
+part is `2026-09` for a whole calendar month, `2026-09-14` for one day,
+`2026-09-01-to-2026-09-15` for any other window, and `all-time` without one.
+
+**CSV format.** UTF-8 with a byte-order mark (so Excel reads ₹ and €), CRLF line
+ends, and RFC 4180 quoting: a cell with a comma, a double quote or a line break
+is quoted, with quotes doubled. A cell that starts with `=`, `+`, `-`, `@`, a
+tab or a carriage return gets a leading `'`, so a spreadsheet never runs it as a
+formula. Amounts are exact decimals in the currency's minor units, with no
+grouping or symbol (`1249.50`; `2400` for JPY), each beside its own currency
+code, never converted. People appear by name, never by email; someone whose
+account no longer exists is `Former member`. Times are the `tz` wall clock with
+its offset: `2026-09-30T10:30:00+05:30`.
+
+**Expenses CSV columns.** Options add columns after the ones that are always
+there, so no column moves when another option is turned on. Rows are newest
+first (by date, then when they were added).
+
+| #   | Column         | Present   | Value                                                                                                                                                                  |
+| --- | -------------- | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `Date`         | always    | The Expense's day, `YYYY-MM-DD`                                                                                                                                        |
+| 2   | `Description`  | always    |                                                                                                                                                                        |
+| 3   | `Category`     | always    | The Category's name (`Food & Drink`)                                                                                                                                   |
+| 4   | `Tag`          | always    | The Tag's name today                                                                                                                                                   |
+| 5   | `Paid by`      | always    | The payer's name; several payers as `Alex Rivera 600.00, Sam Chen 400.00`                                                                                              |
+| 6   | `Split`        | always    | `Equally`, `Exact amounts`, `Percentages` or `Shares`                                                                                                                  |
+| 7   | `Amount`       | always    | Exact decimal                                                                                                                                                          |
+| 8   | `Currency`     | always    | ISO code                                                                                                                                                               |
+| 9   | `Notes`        | always    |                                                                                                                                                                        |
+| 10  | `Expense ID`   | always    | The Expense's id                                                                                                                                                       |
+| …   | `<Name> share` | `shares`  | One per person: members today in the Group's order, then anyone else with a share, by name. Exact; `0.00` outside the split. Two people with one name: `Sam (2) share` |
+| …   | `Deleted at`   | `deleted` | When it was deleted; blank on other rows                                                                                                                               |
+| …   | `Deleted by`   | `deleted` | Who deleted it                                                                                                                                                         |
+| …   | `Edited at`    | `history` | On an edit row: when                                                                                                                                                   |
+| …   | `Edited by`    | `history` | On an edit row: who                                                                                                                                                    |
+| …   | `Change`       | `history` | On an edit row: what changed, e.g. `Amount: 2680.00 → 2860.00; Tag: Bills → Utilities`                                                                                 |
+
+With `deleted`, deleted Expenses are rows too, with their amounts; without it
+they are left out. With `history`, each edit is a row after its Expense, oldest
+first. An edit row has the Expense's `Date`, `Description` and `Expense ID`
+and leaves every other Expense column blank, `Amount` and the shares included,
+so a total of the `Amount` column counts each Expense once. `Change` names the
+description, amount, currency, date, Category, Tag, payers, split, shares and
+notes that changed; other stored fields are left out (`Other details` when
+nothing else changed).
+
+**Payments CSV columns.** Newest first.
+
+| #   | Column        | Value                            |
+| --- | ------------- | -------------------------------- |
+| 1   | `Date`        | The day it was recorded, in `tz` |
+| 2   | `Recorded at` | When it was recorded, in `tz`    |
+| 3   | `From`        | Who paid                         |
+| 4   | `To`          | Who was paid                     |
+| 5   | `Amount`      | Exact decimal                    |
+| 6   | `Currency`    | ISO code                         |
+| 7   | `Note`        |                                  |
+| 8   | `Recorded by` | Who recorded it                  |
+| 9   | `Payment ID`  | The Settlement's id              |
+
+The zip is made with [`fflate`](https://github.com/101arrowz/fflate) (MIT).
+
+---
+
 ## Not implemented
 
 Documented in earlier drafts but absent from the codebase:

@@ -29,6 +29,7 @@ import {
   type GroupPageValue,
 } from './group-page-context';
 import { groupSettingsHref, groupTabHref } from './group-tabs';
+import { groupExportHref } from '@/components/layout/shell-nav';
 
 interface GroupDetailViewProps {
   groupId: string;
@@ -239,6 +240,7 @@ function GroupDetailContent({
           members={members.map((member) => member.user)}
           userId={userId}
           settingsHref={groupSettingsHref(groupId)}
+          exportHref={groupExportHref(groupId)}
           onInvite={openInvite}
         />
       </Box>

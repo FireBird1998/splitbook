@@ -10,12 +10,19 @@ export const HOME_HREF = '/dashboard';
 export const GROUPS_HREF = '/groups';
 export const NEW_GROUP_HREF = '/groups/new';
 export const SETTINGS_HREF = '/settings';
+export const EXPORT_HREF = '/export';
+/** The Export page with one Group picked: a Group header's Export button (#317). */
+export const groupExportHref = (groupId: string) =>
+  `${EXPORT_HREF}?group=${encodeURIComponent(groupId)}`;
 
 /**
- * The main navigation, in order. #317 adds Export after Home. The design's Receipts item is
+ * The main navigation, in order: Home, then Export (#317). The design's Receipts item is
  * left out until receipt reading exists (#300, Out of Scope).
  */
-export const MAIN_NAV = [{ href: HOME_HREF, label: 'Home' }] as const;
+export const MAIN_NAV = [
+  { href: HOME_HREF, label: 'Home' },
+  { href: EXPORT_HREF, label: 'Export' },
+] as const;
 
 const GROUP_PATH = /^\/groups\/([a-f\d]{24})(\/.*)?$/i;
 

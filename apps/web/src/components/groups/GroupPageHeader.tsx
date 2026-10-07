@@ -8,6 +8,7 @@ import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Typography from '@mui/material/Typography';
 import type { Theme } from '@mui/material/styles';
+import IosShareOutlinedIcon from '@mui/icons-material/IosShareOutlined';
 import PersonAddAltOutlinedIcon from '@mui/icons-material/PersonAddAltOutlined';
 import SettingsOutlinedIcon from '@mui/icons-material/SettingsOutlined';
 import type { GroupCategory } from '@splitbook/shared/types';
@@ -34,6 +35,8 @@ interface GroupPageHeaderProps {
   /** The signed-in member, counted as "you". */
   userId: string;
   settingsHref: string;
+  /** The Export page with this Group picked (#317). */
+  exportHref: string;
   onInvite: () => void;
 }
 
@@ -51,6 +54,7 @@ export default function GroupPageHeader({
   members,
   userId,
   settingsHref,
+  exportHref,
   onInvite,
 }: GroupPageHeaderProps) {
   const people = viewerFirst(
@@ -151,6 +155,15 @@ export default function GroupPageHeader({
         >
           Invite
         </Button>
+        <Button
+          component={Link}
+          href={exportHref}
+          variant="outlined"
+          startIcon={<IosShareOutlinedIcon sx={{ fontSize: 18 }} />}
+          sx={outlinedSx}
+        >
+          Export
+        </Button>
         <IconButton
           component={Link}
           href={settingsHref}
@@ -170,6 +183,18 @@ export default function GroupPageHeader({
     </Box>
   );
 }
+
+/** The Export link, styled as Invite is (web.css: .btn.outline). */
+const outlinedSx = {
+  minHeight: 44,
+  px: 2,
+  borderRadius: CONTROL_RADIUS,
+  borderColor: 'border.strong',
+  bgcolor: 'background.paper',
+  color: 'text.primary',
+  fontWeight: 600,
+  '&:hover': { bgcolor: 'surface.hover', borderColor: 'border.strong' },
+} as const;
 
 const avatarSx = {
   width: AVATAR_SIZE,

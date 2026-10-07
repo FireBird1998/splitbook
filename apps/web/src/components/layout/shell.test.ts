@@ -201,12 +201,19 @@ describe('the Theme icons', () => {
 });
 
 describe('the sidebar', () => {
-  it('leads with the logo linking Home, then Home; no Receipts and, until #317, no Export', () => {
+  it('leads with the logo linking Home, then Home and Export; no Receipts', () => {
     const html = sidebar('/dashboard');
-    const [logo, home] = anchors(html);
+    const [logo, home, exportLink] = anchors(html);
     expect(logo).toMatchObject({ href: '/dashboard', text: '' });
     expect(home).toMatchObject({ href: '/dashboard', text: 'Home' });
-    expect(text(html)).not.toMatch(/Dashboard|Receipts|receipts read|Export/);
+    expect(exportLink).toMatchObject({ href: '/export', text: 'Export' });
+    expect(text(html)).not.toMatch(/Dashboard|Receipts|receipts read/);
+  });
+
+  it('marks Export current on the Export page', () => {
+    expect(anchors(sidebar('/export')).filter(({ current }) => current)).toEqual([
+      { href: '/export', current: 'page', text: 'Export' },
+    ]);
   });
 
   it('lists every Group with the member’s balance line, and how many more currencies a legacy Group has', () => {
