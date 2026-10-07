@@ -97,7 +97,7 @@ export function StatusText({
   const look = [textVariants[variant], { color: toneColor(theme, tone) }, style];
   return (
     <View style={shrink ? { flexShrink: 1, minWidth: 0 } : undefined}>
-      <Animated.View style={{ opacity: change.fade }}>
+      <Animated.View key={`in ${change.key}`} style={{ opacity: change.fade }}>
         <Text {...props} style={look}>
           {children}
         </Text>
@@ -106,6 +106,7 @@ export function StatusText({
         // Anchored at the status's edge and wide enough for any old text, so it is never cut
         // to the new text's box or drawn from its other end.
         <View
+          key={`out ${change.key}`}
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
           pointerEvents="none"

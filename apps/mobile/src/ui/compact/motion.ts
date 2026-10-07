@@ -229,6 +229,13 @@ export function useReveal(loading: boolean): Reveal | null {
 // Status cross-fade -------------------------------------------------------------------------
 
 interface StatusChange {
+  /**
+   * New for each change, so the line draws it on views made for it. A finished fade leaves
+   * its views' opacity where the native driver put it, which React doesn't know: views kept
+   * for the next change, with a new fade, could show the new text at full strength, or the old
+   * one, before the fade reached them (#331).
+   */
+  key: number;
   /** The text fading out; null when there's nothing to fade. */
   from: string | null;
   /** 0 to 1: the new text follows it while the old one takes the reverse (`out`). */
@@ -241,8 +248,9 @@ interface StatusChange {
  * out is the one last shown in full. A change that arrives while a fade is running (a refresh
  * ends a moment before its new time arrives) carries the same fade on to the newer text, so the
  * line never restarts from the old text or shows the one in between at full strength. The fade
- * starts at once, on the native driver, so the view never shows a value left from the last one.
- * A first render, and any change with reduce motion on, shows the new text at once.
+ * starts at once, on the native driver, on views new to it (`key`), so the line never shows an
+ * opacity a finished fade left behind. A first render, and any change with reduce motion on,
+ * shows the new text at once.
  */
 export function useStatusFade(text: string): StatusChange {
   useWatchReducedMotion();
@@ -252,12 +260,14 @@ export function useStatusFade(text: string): StatusChange {
   const running = useRef<StatusChange | null>(null);
   /** The text this line shows now, for when a fade ends. */
   const latest = useRef(text);
+  const changes = useRef(0);
   const change = useMemo(() => {
     if (running.current && settled.current !== text) return running.current;
     const from = settled.current !== text && moving() ? settled.current : null;
     const fade = new Animated.Value(from === null ? 1 : 0);
     const out = fade.interpolate({ inputRange: [0, 1], outputRange: [1, 0] });
-    return { from, fade, out };
+    changes.current += 1;
+    return { key: changes.current, from, fade, out };
   }, [text]);
   useEffect(() => {
     latest.current = text;

@@ -435,6 +435,35 @@ describe('A status change cross-fades', () => {
     expect(outgoing.map((node) => node.children)).toEqual([['Saved 3:21 AM · refreshing']]);
   });
 
+  // On the emulator, going back to "Updated" once drew "Updated" alone at full strength, then
+  // "Saved · refreshing" at full for five frames, then "Updated" with no fade: the views the
+  // last fade had moved were kept for this one, at opacities React no longer knew.
+  it('fades each change on views of its own, never ones a finished fade moved', async () => {
+    const error = vi.spyOn(console, 'error');
+    const root = await render(<StatusText>Updated 6:52 AM</StatusText>);
+    update(<StatusText>Saved 6:52 AM · refreshing</StatusText>);
+    const [forward] = timings();
+    const views = () => [hosts(root, 'AnimatedView')[0], hosts(root, 'AnimatedText')[0]];
+    const before = views();
+    // A change mid-fade keeps the fade's views.
+    update(<StatusText>Saved 6:53 AM · refreshing</StatusText>);
+    expect(views()[0]).toBe(before[0]);
+    expect(views()[1]).toBe(before[1]);
+    act(() => forward.start.mock.calls[0][0]({ finished: true }));
+    update(<StatusText>Updated 6:53 AM</StatusText>);
+    const [incoming, outgoing] = views();
+    expect(incoming).not.toBe(before[0]);
+    expect(outgoing).not.toBe(before[1]);
+    // They start where the new fade does: the new text unseen, the old one in full.
+    const [, back] = timings();
+    expect(back.value.value).toBe(0);
+    expect(style(incoming!).opacity).toBe(back.value);
+    expect(outgoing!.children).toEqual(['Saved 6:53 AM · refreshing']);
+    // Each view's key is its own: React warns of two children with one key.
+    expect(error.mock.calls.flat().join(' ')).not.toContain('same key');
+    error.mockRestore();
+  });
+
   it('stops its fade when the line goes', async () => {
     await render(<StatusText>Updated 10:42</StatusText>);
     update(<StatusText>Saved 10:42 · refreshing</StatusText>);
