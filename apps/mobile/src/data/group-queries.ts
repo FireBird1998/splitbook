@@ -250,11 +250,20 @@ interface View {
   previousMonth: string | null | undefined;
   /** When this open began: what its reads answer before its check of the Group waits for it. */
   since: number;
+  /** Which open this is, counted: a read begun before it was sent for an earlier one (2A). */
+  open: number;
   /**
    * The latest change written in this Group that its Balances haven't been read after (0: none).
    * Counted, not timed, so a clock moved back never holds them (#219).
    */
   change: number;
+}
+/** A fetch's start: whose session, which version of its scope, and the changes and opens before. */
+interface Start {
+  owner: number;
+  version: number;
+  change: number;
+  open: number;
 }
 type Step = 'group' | 'expenses' | 'balances';
 
@@ -273,10 +282,14 @@ export function createGroupQueries(session: GroupSession) {
   const queue = createSavedCopyQueue();
   /** Each query's latest read, by query hash. */
   const runs = new Map<string, Run>();
-  /** Each fetch's start, by its promise: whose session and which version of its scope it read. */
-  const starts = new WeakMap<object, { owner: number; version: number; change: number }>();
+  /** Each fetch's start, by its promise. */
+  const starts = new WeakMap<object, Start>();
   /** How many changes have been written, or may have been, in this session's Group views. */
   let changes = 0;
+  /** How many Group views have opened in this session. */
+  let opens = 0;
+  /** Each Expense list read from the server, by its data: the start of the fetch that read it. */
+  const answers = new WeakMap<object, Start>();
   /** How many pages each fetch of an Expense list has read so far, by its promise. */
   const pagesRead = new WeakMap<object, number>();
   /** Data restored from this device to show while the view is first read: never verified here. */
@@ -482,6 +495,7 @@ export function createGroupQueries(session: GroupSession) {
         owner: session.generation(),
         version: session.versionOf(key),
         change: changes,
+        open: opens,
       });
     return query;
   };
@@ -973,17 +987,18 @@ export function createGroupQueries(session: GroupSession) {
       } catch (error) {
         // The Expense read beside it ends first: nothing this read began runs on after it. When
         // the Group fails, but not as a refusal, that read shows if the Group was checked before,
-        // or if the server answered it in this open, which proves the member belongs (owner
-        // decision 2A, amending #180's Risk 5). Balances then follow it; the Group's details
-        // show the failure.
+        // or if the server answered a request sent in this open, which proves the member belongs
+        // (owner decision 2A, amending #180's Risk 5); one sent before it, which this read
+        // joined, proves nothing about now. Balances then follow it; the Group's details show
+        // the failure.
         const read = early;
         if (read) await read.reading.catch(() => undefined);
         const list = read && shownList();
         const pages = list && hashKey(list) === read.hash ? stateOf<Pages>(list) : undefined;
         const answered =
           pages?.status === 'success' &&
-          pages.dataUpdatedAt >= opened.since &&
-          pages.data?.pages[0]?.source === 'network';
+          !!pages.data &&
+          answers.get(pages.data)?.open === opened.open;
         if (
           (opened.checked || answered) &&
           !refused(error) &&
@@ -1289,6 +1304,7 @@ export function createGroupQueries(session: GroupSession) {
         household: null,
         previousMonth,
         since: Date.now(),
+        open: ++opens,
         // A change still to be read stays so when its Group opens again.
         change: view?.groupId === groupId ? view.change : 0,
       };
@@ -1488,7 +1504,14 @@ export function createGroupQueries(session: GroupSession) {
           // A Group's view owns its Group, its Balances and its Months' Expenses, whoever reads them.
           if (key[0] !== 'group' && key[0] !== 'balances' && !(key[0] === 'ledger' && isList(key)))
             return;
-          if (event.action.type === 'success' && !event.action.manual) saveAnswer(query);
+          if (event.action.type === 'success' && !event.action.manual) {
+            saveAnswer(query);
+            // An Expense list read from the server: when its read began, by its data (#219).
+            const pages = isList(key) ? (query.state.data as Pages | undefined) : undefined,
+              start = query.promise && starts.get(query.promise);
+            if (pages && start && pages.pages.every((page) => page.source !== 'saved'))
+              answers.set(pages, start);
+          }
           if (!view || key[3] !== view.groupId) return;
           if (client.getQueryCache().get(query.queryHash) !== query) return;
           // Balances read from the server, by a read begun after the latest change written here:

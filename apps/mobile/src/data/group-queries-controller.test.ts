@@ -1301,6 +1301,34 @@ describe('a Group read that fails beside Expenses that answer', () => {
     expect(f.gets(sent)).toEqual(['group', 'expenses 2026-09 p1', 'balances']);
   });
 
+  it('never takes an Expense read sent before this open as proof, when the Group read fails', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(mapleId);
+    later(31_000);
+    // A pull's Expense read is slow; Alex goes Home before it answers.
+    const earlier = f.hold(septemberPath(1));
+    const pulling = controller.refresh('pull');
+    await earlier.reached;
+    await controller.back();
+    // Opened again: the Group read fails with a 500, and the Expenses read joins the earlier one.
+    later(31_000);
+    f.server.failGroup = true;
+    const sent = f.calls.length;
+    const opening = controller.openGroup(mapleId);
+    await settle();
+    earlier.release();
+    await Promise.all([opening, pulling]);
+    await settle();
+    // An answer to a request sent before this open proves nothing about now: the Group's failure
+    // shows alone, as before 2A, and nothing follows it.
+    expect(controller.getSnapshot()).toMatchObject({
+      detail: { status: 'error', id: mapleId },
+      financial: { expenses: { status: 'idle' } },
+    });
+    expect(f.gets(sent)).toEqual(['group']);
+  });
   it('keeps Expenses read from this device’s copy hidden when the Group can’t be read', async () => {
     const f = fixture();
     const first = f.create();
