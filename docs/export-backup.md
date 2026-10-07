@@ -65,11 +65,20 @@ recorded payments and match Balances, with that distinction stated on the page. 
 reset debts. Payments are listed oldest first by instant, with recorder names and no Month totals.
 Legacy currencies have a selector and are never combined or converted.
 
-`scope=trip` denotes a whole-trip statement: Expenses before and after the stored Trip dates
-remain included, matching #316. It is refused for non-Trip Groups. Stored Trip dates supply the caption; fabricated query bounds cannot relabel a whole trip.
-Payments are still windowed to those dates, and current balances still include every payment.
-The page explains this scope.
-The Share wrap-up entry point depends on #316/PR #352 being merged before integration.
+`scope=trip` denotes a whole-trip statement. It is refused for non-Trip Groups. Stored Trip
+dates supply the caption; fabricated query bounds cannot relabel a whole trip. It follows the
+Trip summary's rule (#316) for Expenses dated outside the Trip's dates:
+
+- They count in the whole-trip figures: Spent, the Expense count, and each person's Paid,
+  Share and Net.
+- They are named **Before the trip** and **After the trip**: a line each in the Summary
+  (amount and count, "counted in Spent"), and under the date in the Expenses table.
+- Days are read as the Trip summary reads them, by instant in the statement's time zone, so
+  the statement names the same Expenses, with the same totals, as the Insights tab. A shared
+  test checks this against `tripSummary` in several zones.
+
+Payments are still windowed to the Trip's dates, and current balances still include every
+payment. The page explains this scope.
 
 The browser's **Print or save as PDF** calls `window.print()`. Print CSS requests A4 with 15mm
 margins, hides app chrome and controls, repeats table headers and avoids splitting rows. It

@@ -14,9 +14,15 @@ import MoneyText from '@/components/common/MoneyText';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { getSemanticTokens } from '@/lib/theme/tokens';
 import { zonedTimestamp } from '@splitbook/shared/export-csv';
-import type { Statement } from '@splitbook/shared/statement';
+import type { OutsideTrip, Statement } from '@splitbook/shared/statement';
 
 const light = getSemanticTokens('light');
+/** #316's names for a whole trip's Expenses outside the Trip's dates. */
+const OUTSIDE_TRIP: Record<OutsideTrip, string> = {
+  before: 'Before the trip',
+  after: 'After the trip',
+};
+const expenses = (count: number) => `${count} ${count === 1 ? 'Expense' : 'Expenses'}`;
 function StatementTable({
   title,
   headers,
@@ -122,6 +128,15 @@ export default function StatementView({ statement }: { statement: Statement }) {
       <Section title="Summary">
         <Typography>Spent: {amount(bucket.spentMinor)}</Typography>
         <Typography>Expenses: {bucket.expenseCount}</Typography>
+        {(['before', 'after'] as const).map((part) => {
+          const outside = part === 'before' ? bucket.beforeTrip : bucket.afterTrip;
+          return outside ? (
+            <Typography key={part} color="text.secondary">
+              {OUTSIDE_TRIP[part]}: {amount(outside.spentMinor)} · {expenses(outside.expenseCount)},
+              counted in Spent
+            </Typography>
+          ) : null;
+        })}
         <Typography>
           Payments: {bucket.payments.length} · {amount(bucket.paymentTotalMinor)}
         </Typography>
@@ -178,7 +193,14 @@ export default function StatementView({ statement }: { statement: Statement }) {
           >
             {bucket.expenses.map((row) => (
               <TableRow key={row.id}>
-                <TableCell>{row.date}</TableCell>
+                <TableCell>
+                  {row.date}
+                  {row.outsideTrip ? (
+                    <Typography variant="caption" component="div">
+                      {OUTSIDE_TRIP[row.outsideTrip]}
+                    </Typography>
+                  ) : null}
+                </TableCell>
                 <TableCell component="th" scope="row">
                   {row.description}
                   <Typography variant="caption" component="div">

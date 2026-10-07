@@ -833,6 +833,15 @@ describe('export recovery and whole-trip statement bounds', () => {
     );
     expect([result.from, result.to]).toEqual(['2026-09-01', '2026-09-02']);
     expect(result.currencies[0].spentMinor).toBe(202);
+    // Counted in Spent, and named as the Trip summary names them (#316).
+    expect([result.currencies[0].beforeTrip, result.currencies[0].afterTrip]).toEqual([
+      { spentMinor: 101, expenseCount: 1 },
+      { spentMinor: 101, expenseCount: 1 },
+    ]);
+    expect(result.currencies[0].expenses.map((row) => [row.description, row.outsideTrip])).toEqual([
+      ['Before the trip', 'before'],
+      ['After the trip', 'after'],
+    ]);
     expect(result.currencies[0].payments).toEqual([]);
     expect(result.currencies[0].people.map((row) => row.balanceMinor)).toEqual([80, -80]);
   });
