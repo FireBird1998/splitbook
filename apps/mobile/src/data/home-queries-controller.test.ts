@@ -1995,6 +1995,51 @@ describe('Home reads its Groups and its figures together (#333)', () => {
     expect(after.some((state) => owes(state) !== null)).toBe(false);
   });
 
+  it('removes figures that cover a lost Group whose row was still being written when the list landed', async () => {
+    const f = fixture();
+    const controller = f.create();
+    const list = f.hold(listPath, { late: true }),
+      figures = f.hold(homePath);
+    const signingIn = controller.signIn('alex');
+    await list.reached;
+    await figures.reached;
+    f.server.revoked.add(mapleId);
+    // The figures, worked out while Alex was in Maple House, land first; their row is still
+    // being written when the list lands without Maple House.
+    const writing = f.holdWrite(homePath);
+    figures.release();
+    await writing.reached;
+    const again = f.hold(homePath, { lost: true });
+    list.release();
+    await again.reached;
+    // The list has landed, and checked this phone's saved figures, before the row is written.
+    await vi.waitFor(() => expect(controller.getSnapshot().groups.status).toBe('ready'));
+    await settle();
+    expect(f.row(homePath)).toBeNull();
+    writing.release();
+    again.release();
+    await signingIn;
+    await settle();
+    expect(f.row(homePath)).toBeNull();
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+      home: { status: 'error', data: null, message: balancesNotOnPhone },
+    });
+
+    controller.dispose();
+    f.connect(false);
+    const restarted = f.create();
+    const after = record(restarted);
+    await restarted.restore();
+    await settle();
+    expect(restarted.getSnapshot()).toMatchObject({
+      groups: { data: [{ name: 'Cabin Weekend' }] },
+      home: { status: 'error', data: null, message: balancesNotOnPhone },
+      offline: { active: true },
+    });
+    expect(after.some((state) => owes(state) !== null)).toBe(false);
+  });
+
   it.each(['still failing', 'working again'] as const)(
     'never shows figures that cover a lost Group when this phone can’t remove them, after an offline restart with storage %s',
     async (storage) => {
@@ -2160,6 +2205,57 @@ describe('Home reads its Groups and its figures together (#333)', () => {
         offline: { active: true },
       });
       expect(after.some((state) => owes(state) !== null)).toBe(false);
+    },
+  );
+
+  it.each([
+    'no saved list',
+    'a saved list that never named Maple House',
+    'saved figures that don’t say which Groups they cover',
+  ] as const)(
+    'reads Home’s figures again when the list leaves out a Group the saved copy they fell back to may cover, with %s',
+    async (saved) => {
+      const f = fixture();
+      if (saved === 'saved figures that don’t say which Groups they cover')
+        f.server.groupFigures = false;
+      const first = f.create();
+      await first.signIn('alex');
+      await settle();
+      first.dispose();
+      later(60_000);
+      f.server.groupFigures = true;
+      if (saved !== 'a saved list that never named Maple House') f.rows.delete(alex.id + listPath);
+      else (f.rows.get(alex.id + listPath) as { value: { data: unknown[] } }).value.data = [cabin];
+      f.server.revoked.add(mapleId);
+      f.server.owe = 20;
+      const controller = f.create();
+      const published = record(controller);
+      const sent = f.calls.length;
+      const list = f.hold(listPath),
+        figures = f.hold(homePath, { lost: true });
+      const signingIn = controller.signIn('alex');
+      await list.reached;
+      await figures.reached;
+      await settle();
+      // The figures' reply is lost first: Home shows this phone's copy, saved, offline.
+      figures.release();
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        home: { status: 'ready', restored: true, data: [{ youOwe: 30 }] },
+        offline: { active: true },
+      });
+      // The list lands without Maple House: Home reads its figures again, from SplitBook.
+      const landed = published.length;
+      list.release();
+      await signingIn;
+      await settle();
+      expect(f.reads(homePath, sent)).toBe(2);
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+        home: { status: 'ready', restored: false, message: null, data: [{ youOwe: 20 }] },
+        offline: { active: false },
+      });
+      expect(published.slice(landed).some((state) => owes(state)?.[0] === 30)).toBe(false);
     },
   );
 

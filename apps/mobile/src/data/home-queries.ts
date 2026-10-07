@@ -597,13 +597,26 @@ export function createHomeQueries(session: HomeSession) {
       coverUnlisted(figures.data.value)
     )
       await outdated(owner);
-    // This device's saved figures, shown while Home's are read, that name a Group this list
-    // leaves out no longer show: hidden from Home, their row removed below.
+    // This device's saved figures, shown while Home's are read, that may cover a Group this list
+    // leaves out no longer show: hidden from Home, their row removed below. A copy nothing is
+    // reading for any more (an offline answer) is read again, so Home doesn't stay without figures.
     const names = (ids: string[] | null) => ids?.some((id) => !listed.has(id)) ?? false;
-    if (figures?.data?.source === 'saved' && names(namedOf(figures.data.value)))
-      hidden.add(figures.data);
+    let hide = false;
+    if (figures?.data?.source === 'saved') {
+      const named = namedOf(figures.data.value);
+      hide = named === null || names(named);
+      if (hide) hidden.add(figures.data);
+      if (hide && figures.fetchStatus !== 'fetching') {
+        quiet += 1;
+        try {
+          session.invalidate('home');
+        } finally {
+          quiet -= 1;
+        }
+      }
+    }
     const { home } = snapshot();
-    if (home.restored && home.data !== null && names(Object.keys(home.byGroup)))
+    if (hide || (home.restored && home.data !== null && names(Object.keys(home.byGroup))))
       session.publish({ home: emptyHome() });
     const lease = session.lease();
     if (!lease) return;
