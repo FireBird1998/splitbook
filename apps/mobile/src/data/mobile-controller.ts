@@ -989,6 +989,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     read: async (path: string, owner: number, signal?: AbortSignal) => {
       if (offlineSession || snapshot.offline.active) {
         await revalidateSession(owner);
+        assertCurrent(owner);
         // SplitBook answered, so the app is online (ADR 0006: a successful request clears
         // offline): the banner goes while the view is read, unless what's shown is still this
         // device's copy (#219).

@@ -376,6 +376,8 @@ function device() {
     controller,
     /** The saved copy of `path` on this phone, as stored. */
     saved: (path: string) => cache.get(alex.id + path) ?? null,
+    /** This phone loses its saved copy of `path`, as after a write that failed. */
+    lose: (path: string) => cache.delete(alex.id + path),
     /** The next request starting with `prefix` waits until released. */
     hold(prefix: string) {
       let arrive!: () => void;
@@ -1794,6 +1796,34 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expect(app.text()).not.toContain('You’re offline');
   });
 
+  it('says it is offline again when the connection drops after SplitBook answered the session check', async () => {
+    const phone = device();
+    const savedAt = await usedBefore(phone);
+    phone.network.online = false;
+    const app = await start(phone);
+    await settle();
+    phone.network.online = true;
+    const check = phone.hold('/api/auth/get-session');
+    app.tap(open[maple]);
+    await check.reached;
+    await settle();
+    const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
+    const read = phone.hold(`/api/groups/${maple}`);
+    check.release();
+    await Promise.all([read.reached, expenses.reached]);
+    await settle();
+    expect(app.text()).not.toContain('You’re offline');
+
+    // The reads then fail: this phone's copy answers for them, and the banner says so again.
+    phone.network.online = false;
+    read.release();
+    expenses.release();
+    await settle();
+    expect(app.text()).toContain(
+      `You’re offlineWhat’s shown was saved on this device at ${refreshedLabel(savedAt)}`,
+    );
+  });
+
   // Item 3: the summary card's label.
   it('says “Updated” of figures read in this session while they are read again, on Expenses and Balances', async () => {
     const phone = device();
@@ -2017,6 +2047,25 @@ describe('A Group says what is true, without jumps (#219)', () => {
     await settle(saving);
     expect(seen()).toContain(`0 expenses this monthUpdated ${refreshedLabel(phone.clock.now)}`);
     expect(seen()).not.toContain('Updating');
+  });
+
+  // S3: the Group itself, read in this session, once this phone has lost its copy.
+  it('says what is true of a Group read in this session whose copy this phone lost, refreshed offline', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[maple]);
+    const readAt = refreshedLabel(phone.clock.now);
+    phone.lose(`/api/groups/${maple}`);
+    phone.network.online = false;
+    await refresh(app);
+    await settle();
+    const notice =
+      'Couldn’t refresh Maple House, and this phone no longer keeps a copy of it. Showing Maple House from';
+    expect(app.content().inside).toContain(`${notice} ${readAt}.`);
+    expect(app.text()).not.toContain('This view was not saved');
+    expect(iconsBeside(notice)).toEqual(['cloud-offline-outline']);
   });
 
   // Item 5: the error icon.

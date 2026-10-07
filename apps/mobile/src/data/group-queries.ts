@@ -80,6 +80,7 @@ const notSavedHere = 'Could not save this view for offline use. Online data is s
  * Home says of its balances since #332 (#219).
  */
 const notKept = {
+  group: (name: string) => `Couldn’t refresh ${name}, and this phone no longer keeps a copy of it.`,
   expenses: 'Couldn’t refresh these expenses, and this phone no longer keeps a copy of them.',
   balances: 'Couldn’t refresh these balances, and this phone no longer keeps a copy of them.',
 };
@@ -1273,12 +1274,17 @@ export function createGroupQueries(session: GroupSession) {
       return same(shown, { ...shown, ...known, status: 'loading', message: null });
     const error = failure(state);
     if (state.status === 'error' && !error) return shown;
+    // The Group still on screen: what is true of it, never "not saved" (#219, as #332).
+    const kept = 'data' in known ? known.data : shown.data;
     if (error)
       return same(shown, {
         ...shown,
         ...known,
         status: error instanceof RequestError && error.status === 403 ? 'denied' : 'error',
-        message: messageOf(error, 'The server returned invalid group data. Please try again.'),
+        message:
+          unreachable(error) && kept
+            ? notKept.group(kept.name)
+            : messageOf(error, 'The server returned invalid group data. Please try again.'),
       });
     if (!('data' in known) || (previews.has(state.data as object) && !opened.checked)) return shown;
     return same(shown, { ...shown, ...known, status: 'ready', message: null });
