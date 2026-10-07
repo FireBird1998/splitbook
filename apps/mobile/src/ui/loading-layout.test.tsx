@@ -14,7 +14,7 @@ import type {
   MobileExpense,
   MobileGroup,
 } from '../data/types';
-import { findHosts, flatten, layoutHeight } from '../test-utils/layout';
+import { findHosts, flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
 import { setFileWindow, setWindow, timing } from '../test-utils/native';
 import { motion } from './compact';
 import { GroupBalancesView, settledIn } from './group-balances';
@@ -147,6 +147,62 @@ describe('Home', () => {
     expect(faded).toHaveLength(1);
     expect(faded[0]).toContain('Maple House');
     expect(faded[0]).toContain('Sunday Football');
+  });
+
+  // #332: the list can land before Home's figures, which hold each Group's balance.
+  const listed = (landed: boolean) => (
+    <HomeGroups
+      groups={{ status: 'ready', data: [maple, lisbon, football], message: null, loaded: true }}
+      byGroup={
+        landed
+          ? {
+              [maple.id]: [{ currency: 'INR', balance: -1480 }],
+              [lisbon.id]: [{ currency: 'INR', balance: 620 }],
+              [football.id]: [],
+            }
+          : {}
+      }
+      balancesPending={!landed}
+      newGroupLabel="New Group"
+      onNewGroup={vi.fn()}
+      onOpen={vi.fn()}
+      onRetry={vi.fn()}
+    />
+  );
+  /** Each list row's trailing box, as wide as it lays out: 0 for a row with none. */
+  const trailing = (element: ReactElement, fontScale: number) => {
+    setWindow({ fontScale });
+    act(() => {
+      renderer = create(element);
+    });
+    const rows = findHosts(renderer!.toJSON(), (props) => flatten(props.style).minHeight === 60);
+    const widths = rows.map((row) => {
+      const last = row.children?.[row.children.length - 1];
+      return typeof last === 'object' && flatten(last.props.style).alignItems === 'flex-end'
+        ? layoutWidth(last, fontScale)
+        : 0;
+    });
+    act(() => renderer!.unmount());
+    renderer = undefined;
+    return widths;
+  };
+  it.each(scales)(
+    'each Group keeps its balance’s place from its skeleton until the balance lands, at %s× text',
+    (scale) => {
+      // The skeleton rows' place for an amount stays while the figures are read, so the names
+      // are laid out once, in the room they keep.
+      const skeleton = trailing(groups(true), scale);
+      expect(skeleton).toEqual([64, 64, 64]);
+      expect(trailing(listed(false), scale)).toEqual(skeleton);
+      const { before, after: reading } = heights(groups(true), listed(false), scale);
+      const { after: landed } = heights(listed(false), listed(true), scale);
+      expect([reading, landed]).toEqual([before, before]);
+    },
+  );
+
+  it('the balances fade in where their places were held', async () => {
+    const faded = await arrival(listed(false), listed(true));
+    expect(faded).toEqual(['₹1,480.00 you owe', '₹620.00 owed to you', 'Settled up']);
   });
 
   const balances = (patch: Partial<HomeFinancialState>) => (

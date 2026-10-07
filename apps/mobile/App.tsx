@@ -644,6 +644,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
         <HomeGroups
           groups={state.groups}
           byGroup={state.home.byGroup}
+          balancesPending={state.home.status === 'idle' || state.home.status === 'loading'}
           newGroupLabel={state.creation.draft.name ? 'Continue Group form' : 'New Group'}
           offline={state.offline.active}
           disabled={checking}

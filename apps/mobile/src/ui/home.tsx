@@ -418,11 +418,14 @@ function groupPosition(balances: HomeGroupBalance[]) {
 function GroupRow({
   group,
   balances,
+  pending,
   onPress,
 }: {
   group: MobileGroup;
   /** Undefined while the member's balance in this Group is unknown. */
   balances: HomeGroupBalance[] | undefined;
+  /** Home's figures are being read: an unknown balance keeps its place until they land. */
+  pending: boolean;
   onPress?: () => void;
 }) {
   const descriptor = getGroupTheme(group.category);
@@ -440,6 +443,7 @@ function GroupRow({
       leading={<IconTile icon={themeIcons[descriptor.id]} />}
       title={group.name}
       meta={meta}
+      trailingLoading={pending && !balances}
       trailing={
         position ? (
           <RowAmount amount={position.amount} tone={position.tone} caption={position.caption} />
@@ -484,11 +488,14 @@ function NoGroups({ onRefresh }: { onRefresh: () => void }) {
 
 /**
  * The member's Groups, each with their balance in it, and New Group. `disabled` keeps them
- * from opening yet, as while the session is checked.
+ * from opening yet, as while the session is checked. While Home's figures are read
+ * (`balancesPending`), a Group whose balance isn't known yet holds its place, so its row
+ * doesn't lay out again when the balance lands after the list (#332).
  */
 export function HomeGroups({
   groups,
   byGroup,
+  balancesPending = false,
   newGroupLabel,
   offline = false,
   disabled = false,
@@ -498,6 +505,7 @@ export function HomeGroups({
 }: {
   groups: MobileSnapshot['groups'];
   byGroup: HomeFinancialState['byGroup'];
+  balancesPending?: boolean;
   newGroupLabel: string;
   offline?: boolean;
   disabled?: boolean;
@@ -556,6 +564,7 @@ export function HomeGroups({
               <GroupRow
                 group={group}
                 balances={byGroup[group.id]}
+                pending={balancesPending}
                 onPress={disabled ? undefined : () => onOpen(group.id)}
               />
             </View>

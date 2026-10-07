@@ -10,7 +10,7 @@ import { decodeStoredSession } from './data/cookies';
 import { createMobileController, type MobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
-import { layoutWidth } from './test-utils/layout';
+import { findHosts, flatten, layoutWidth } from './test-utils/layout';
 import { setFileWindow } from './test-utils/native';
 import { savedQueriesIn } from './test-utils/saved-queries';
 
@@ -111,6 +111,8 @@ function device() {
     session: 200,
     noGroups: false,
     noActivity: false,
+    /** Home's figures hold Alex's balance in each Group too. */
+    groupBalances: false,
   };
   /** The saved copies can't be removed, as on a full or read-only disk. */
   const storage = { failRemoval: false };
@@ -136,6 +138,12 @@ function device() {
       return json({
         data: {
           buckets: network.noGroups ? [] : [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }],
+          ...(network.groupBalances && {
+            groups: [
+              { groupId: maple, balances: [{ currency: 'INR', balance: -30 }] },
+              { groupId: lisbon, balances: [] },
+            ],
+          }),
         },
         status: 200,
       });
@@ -947,6 +955,33 @@ describe('Home says what is true, without jumps (#332)', () => {
     fits('Refreshing…');
     figures.release();
     await settle();
+  });
+
+  it('holds each Group’s balance in its row while Home’s figures are read after the list', async () => {
+    const phone = device();
+    phone.network.groupBalances = true;
+    const app = await start(phone);
+    await settle();
+    /** Each list row's trailing box, as wide as it lays out: 0 for a row with none. */
+    const trailing = () =>
+      findHosts(screen!.toJSON(), (props) => flatten(props.style).minHeight === 60).map((row) => {
+        const last = row.children?.[row.children.length - 1];
+        return typeof last === 'object' && flatten(last.props.style).alignItems === 'flex-end'
+          ? layoutWidth(last)
+          : 0;
+      });
+    // As after a sign-out: nothing saved, so the list lands first and the figures after it.
+    const figures = phone.hold('/api/user/balances');
+    const signingIn = controller().signIn('alex');
+    await figures.reached;
+    await settle();
+    expect(app.text()).toContain('Lisbon Offsite');
+    expect(trailing()).toEqual([64, 64]);
+
+    figures.release();
+    await settle(signingIn);
+    expect(app.text()).toContain('₹30.00you owe');
+    expect(app.text()).toContain('Settled up');
   });
 
   it('says the balances and Groups aren’t saved, offline after a sign-out cleared them', async () => {
