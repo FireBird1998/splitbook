@@ -18,7 +18,7 @@ import {
   SkeletonText,
   StatusText,
 } from './compact';
-import { ReadTime, RetainedNotice } from './financial-views';
+import { inPlace, ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import { Icon } from './primitives';
 import { useTheme } from './theme';
@@ -231,12 +231,30 @@ function SuggestedPayments({
       <SectionHeader
         title="Suggested payments"
         trailing={
-          // While a change keeps Record waiting, its caption says why at once, never fading from
-          // the caption, in a line no longer than its own, so nothing moves (#219); the full
-          // reason is Record's hint.
-          <StatusText variant="caption" tone="muted" instant={locked && !offline}>
-            {locked && !offline ? recordWaitsShort : recordCaption}
-          </StatusText>
+          // The caption takes the room the title leaves, wrapping there rather than running past
+          // the screen's edge at large text. While a change keeps Record waiting, its reason
+          // takes the caption's place at once, in a box the caption holds, so nothing moves
+          // (#219); the full reason is Record's hint.
+          <View style={{ flex: 1, minWidth: 0 }}>
+            {inPlace({
+              holds:
+                locked && !offline ? (
+                  <CompactText variant="caption" tone="muted" style={{ textAlign: 'right' }}>
+                    {recordCaption}
+                  </CompactText>
+                ) : null,
+              children: (
+                <StatusText
+                  variant="caption"
+                  tone="muted"
+                  instant={locked && !offline}
+                  style={{ textAlign: 'right' }}
+                >
+                  {locked && !offline ? recordWaitsShort : recordCaption}
+                </StatusText>
+              ),
+            })}
+          </View>
         }
       />
       <Card>
