@@ -7,6 +7,8 @@ import {
   joinGroup,
   openAddExpense,
   type Ledger,
+  expenseAction,
+  expenseInList,
 } from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
@@ -525,9 +527,8 @@ const writes: StaleWrite[] = [
       path: expensePath(ledger.groupA, ledger.expenseA),
     }),
     open: async (page: Page) => {
-      const row = page.getByRole('button', { name: /Private rent, ₹1,200\.00/ });
-      await row.getByLabel('Expense actions').click();
-      await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+      await expect(expenseInList(page, 'Private rent')).toContainText('₹1,200.00');
+      await expenseAction(page, 'Private rent', 'Edit');
       const dialog = page.getByRole('dialog');
       await dialog.getByLabel('What was it for?').fill('Edited from a stale tab');
       return dialog.getByRole('button', { name: 'Save changes', exact: true });

@@ -242,8 +242,8 @@ Expense opens `/groups/[id]/expenses?search=…`, which fills the Expense list's
 | `GroupMembersView`         | Read-only roster: names and roles, Invite             |
 | `GroupHeader`              | Neutral header for non-trip Group cards               |
 | `GroupSettingsView`        | Admin page: info, currency, members, tags, recurring  |
-| `MonthCycleBar`            | Household month switcher (`?month=YYYY-MM`)           |
-| `MonthMemberTable`         | Per-member fronted / share / net for the active month |
+| `MonthCycleBar`            | Household Month bar (`?month=YYYY-MM`) and figures    |
+| `MonthMemberTable`         | Per-member paid / share / net for the active month    |
 | `RecurringExpensesSection` | Household recurring templates: list, add, edit, pause |
 | `InviteDialog`             | Email invite + copy invite link                       |
 
@@ -279,8 +279,12 @@ airport codes are derived from the group name and become noise off a trip.
 
 | Component             | Description                                                         |
 | --------------------- | ------------------------------------------------------------------- |
-| `ExpenseListView`     | Filters, summary bar, date-grouped list with pagination             |
-| `ExpenseCard`         | Expandable card with inline detail (paid by, split, notes, history) |
+| `ExpenseListView`     | The list: toolbar, summary, table or cards, states, pagination      |
+| `ExpenseToolbar`      | Search, Paid by, Tag, Amount, Involves me, date window and sort     |
+| `ExpenseTable`        | Computers: date, description and Tag, Paid by, split, amount, You   |
+| `ExpenseCard`         | Phones: one button per Expense that opens its details below it      |
+| `ExpenseDetails`      | An opened Expense: who paid, who owes, notes, history, Edit, Delete |
+| `ExpenseStats`        | The `dl` of figures the Month bar and the summary share             |
 | `ExpenseFormDialog`   | Two-tier create/edit form (simple + advanced)                       |
 | `DeleteExpenseDialog` | Confirmation dialog with undo snackbar                              |
 | `AddExpenseLauncher`  | Top bar Add expense: the current Group's form, or choose one first  |
@@ -289,6 +293,28 @@ airport codes are derived from the group name and become noise off a trip.
 `expense-form-helpers.ts` and `expense-duplicate-check.ts` hold the pure,
 unit-tested logic extracted from the dialog; `add-expense.ts` holds the top bar
 Add expense's (where it adds from a page, which Groups it offers, its wording).
+
+**The Expenses tab (#310).** The view lives in the address, so reloading or
+sharing the link keeps it: `search`, `paidBy` (a member id), `tag` (a Tag id),
+`involvesMe=1`, `min` and `max` (amounts), `sort` (`oldest`, `largest`,
+`smallest`; newest is the default), `page`, and outside a Household the date
+window `when` (with `from` and `to` for a custom one). `expense-list-query.ts`
+reads and writes it and drops whatever doesn't fit the Group. A top-bar search
+link, `/groups/[id]?search=…`, fills the search.
+
+- From MUI's `md` breakpoint the Expenses are a table; below it, cards. Either
+  way each Expense has one button that opens its details below it (until the
+  side panel, #311), and no control sits inside another.
+- Positions ("you lent ₹833.00", "you owe ₹953.33") come from the shared
+  `expense-row` module over the stored minor units, in the status colours,
+  which reach 4.5:1 on every surface a row has, light and dark.
+- Repeat icons show only while recurring Expenses are switched on (#289); the
+  page reads the switch on the server.
+- A Household's Month bar shows the whole Month's Spent, Your share, You paid
+  and Expenses, whatever the toolbar filters; other Groups show a summary of
+  the list as filtered, with "You owe" and "You get back".
+- A failed load says "Expenses could not be loaded." with Try again; a failed
+  refresh keeps the list and says so.
 
 ### Balances & Settlements
 

@@ -18,12 +18,15 @@ import {
   type LeanExpenseContribution,
 } from '@splitbook/shared/expense-summary';
 import {
+  MoneyValidationError,
   assertStoredExpenseMoney,
   normalizeExpenseMoney,
+  parseAmountMinor,
   readStoredAmountMinor,
   sumMinorAmounts,
   toMajorAmount,
 } from '@splitbook/shared/exact-money';
+import { getCurrencyPrecision } from '@splitbook/shared/currency';
 import { decideExpenseMoneyEdit } from '@splitbook/shared/expense-money-edit';
 import {
   assertCreateReplay,
@@ -40,6 +43,35 @@ import {
   findReferencedTag,
   resolveTagReference,
 } from '@splitbook/shared/tag-identity';
+
+/**
+ * The stored-amount bounds for an Expense list's amount range (#310), or null without one.
+ * The range is read exactly, in minor units of the Group's currency, so "1249.50" is 124950
+ * paise; text with more decimal places than the currency has is refused. Every stored amount
+ * is a whole number of minor units, so the bounds sit half a minor unit outside the range:
+ * an older Expense whose amount carries a binary tail (0.30000000000000004) still matches.
+ */
+export function expenseAmountRange(
+  filters: Pick<ExpenseFilters, 'amountMin' | 'amountMax'>,
+  currency: string,
+): { $gte?: number; $lt?: number } | null {
+  if (filters.amountMin === undefined && filters.amountMax === undefined) return null;
+  const min =
+    filters.amountMin === undefined ? null : parseAmountMinor(filters.amountMin, currency);
+  const max =
+    filters.amountMax === undefined ? null : parseAmountMinor(filters.amountMax, currency);
+  if (min !== null && max !== null && min > max) {
+    throw new MoneyValidationError(
+      'INVALID_AMOUNT_RANGE',
+      'The lowest amount must not be more than the highest',
+    );
+  }
+  const scale = 10 ** getCurrencyPrecision(currency);
+  return {
+    ...(min === null ? {} : { $gte: (min - 0.5) / scale }),
+    ...(max === null ? {} : { $lt: (max + 0.5) / scale }),
+  };
+}
 
 /** Single-expense access always pairs a trusted session actor with its requested group. */
 export interface ExpenseAccess {
@@ -214,6 +246,19 @@ export class ExpenseService {
       query['splitBetween.user'] = new mongoose.Types.ObjectId(filters.owedByUser);
     }
 
+    // "Involves me" (#310): the member paid part of it or has a share of it. A row of zero
+    // (a member left out of a split by shares) doesn't count, as in the shared position.
+    if (filters.involvesUser) {
+      const part = {
+        $elemMatch: { user: new mongoose.Types.ObjectId(filters.involvesUser), amount: { $gt: 0 } },
+      };
+      query.$and = [{ $or: [{ paidBy: part }, { splitBetween: part }] }];
+    }
+
+    // Amount range (#310), inclusive, in the Group's currency.
+    const amountRange = expenseAmountRange(filters, tagGroup?.defaultCurrency ?? 'INR');
+    if (amountRange) query.amount = amountRange;
+
     // Sort
     const sortField = filters.sortBy === 'amount' ? 'amount' : 'date';
     const sortOrder = filters.sortOrder === 'asc' ? 1 : -1;
@@ -230,7 +275,9 @@ export class ExpenseService {
         .populate('createdBy', 'name email image')
         .lean(),
       Expense.countDocuments(query),
-      Expense.find(query).select('currency moneyVersion amount amountMinor').lean(),
+      Expense.find(query)
+        .select('currency moneyVersion amount amountMinor recurringExpense')
+        .lean(),
     ]);
 
     // User owe/get-back and the opt-in per-member breakdown come from the
@@ -327,6 +374,9 @@ export class ExpenseService {
         userOwes,
         userGetsBack,
         ...(byMember ? { byMember } : {}),
+        ...(filters.includeRecurringCount
+          ? { recurringCount: summaryAgg.filter((record) => record.recurringExpense).length }
+          : {}),
       },
     };
   }

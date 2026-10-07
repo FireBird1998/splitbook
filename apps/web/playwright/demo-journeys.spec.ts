@@ -8,6 +8,8 @@ import {
   enterAsPersona,
   expectThemeApplied,
   openAddExpense,
+  expenseItem,
+  openExpense,
   parseMoneyText,
   reviewScreenshot,
   switchPersona,
@@ -167,17 +169,17 @@ test('alex: adds an expense to the new trip', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Save expense' }).click();
 
   await expect(dialog).toBeHidden();
-  // The expense row's accessible name carries description + amount.
-  await expect(page.getByRole('button', { name: /QA Dinner, ₹120\.00/ })).toBeVisible();
+  // The Expense's row (a card on phones) shows it with its amount.
+  await expect(expenseItem(page, 'QA Dinner').item).toContainText('₹120.00');
 });
 
 test('alex: edits the expense and sees the update', async ({ page }) => {
   await enterAsPersona(page, 'alex');
   await page.goto(qaTripUrl);
 
-  const row = page.getByRole('button', { name: /QA Dinner/ });
-  await row.getByLabel('Expense actions').click();
-  await page.getByRole('menuitem', { name: 'Edit' }).click();
+  // Opening the Expense shows its details, with Edit (#310; the side panel is #311).
+  const details = await openExpense(page, 'QA Dinner');
+  await details.getByRole('button', { name: 'Edit', exact: true }).click();
 
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByText('Edit expense')).toBeVisible();
@@ -186,7 +188,7 @@ test('alex: edits the expense and sees the update', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Save changes' }).click();
 
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole('button', { name: /QA Dinner — updated, ₹240\.00/ })).toBeVisible();
+  await expect(expenseItem(page, 'QA Dinner — updated').item).toContainText('₹240.00');
 });
 
 test('sam: switches persona and records a settlement; balances update', async ({

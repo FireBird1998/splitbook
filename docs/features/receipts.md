@@ -5,8 +5,8 @@
 >
 > - No upload route (`.../receipt` is not a route), no storage integration, no
 >   upload component.
-> - `Expense.receiptUrl` exists on the Mongoose model and `ExpenseCard` renders a
->   receipt chip when it is set — but the field is **absent from both
+> - `Expense.receiptUrl` exists on the Mongoose model and `ExpenseDetails` shows a
+>   receipt link when it is set — but the field is **absent from both
 >   `createExpenseSchema` and `updateExpenseSchema`**, and Zod strips unrecognized
 >   keys, so **no API request can ever populate it**. The chip is unreachable.
 > - `docs/v2/receipt-upload.md` describes a different endpoint again

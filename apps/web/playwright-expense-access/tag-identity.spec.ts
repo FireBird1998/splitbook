@@ -87,13 +87,14 @@ for (const profile of [
     const group = await dataOf(await ledger.priya.get(`/api/groups/${ledger.groupB}`));
     const tag = group.tags.find((item: { name: string }) => item.name === 'Housing costs');
     await page.goto(`${baseURL}/groups/${ledger.groupB}`);
-    await page.getByRole('button', { name: 'Show filters', exact: true }).click();
+    // The Tag filter is a menu in the list's toolbar (#310).
+    await page.getByRole('button', { name: /^Tag / }).click();
     const response = page.waitForResponse(
       (value) =>
         value.url().includes(`/api/groups/${ledger.groupB}/expenses?`) &&
         new URL(value.url()).searchParams.get('tagId') === tag._id,
     );
-    await page.getByRole('button', { name: 'Housing costs', exact: true }).click();
+    await page.getByRole('menuitemradio', { name: 'Housing costs', exact: true }).click();
     expect((await response).status()).toBe(200);
     await expect(page.getByText('Private rent', { exact: true })).toBeVisible();
   });

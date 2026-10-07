@@ -1,0 +1,1116 @@
+{
+  "android-first-page": {
+    "data": {
+      "expenses": [
+        {
+          "_id": "<expense:Weekly groceries>",
+          "group": "<group>",
+          "description": "Weekly groceries",
+          "amount": 1249.5,
+          "amountMinor": 124950,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "other",
+          "date": "2026-09-30T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 1249.5,
+              "amountMinor": 124950
+            }
+          ],
+          "splitMethod": "equal",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 416.5,
+              "amountMinor": 41650
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 416.5,
+              "amountMinor": 41650
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 416.5,
+              "amountMinor": 41650
+            }
+          ],
+          "tag": "Groceries",
+          "tagId": "<tag:Groceries>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000001",
+            "name": "Alice Tester",
+            "email": "alice.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        },
+        {
+          "_id": "<expense:Electricity bill>",
+          "group": "<group>",
+          "description": "Electricity bill",
+          "amount": 2860,
+          "amountMinor": 286000,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "housing",
+          "date": "2026-09-29T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 2860,
+              "amountMinor": 286000
+            }
+          ],
+          "splitMethod": "equal",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 953.34,
+              "amountMinor": 95334
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 953.33,
+              "amountMinor": 95333
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 953.33,
+              "amountMinor": 95333
+            }
+          ],
+          "tag": "Utilities",
+          "tagId": "<tag:Utilities>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000002",
+            "name": "Bob Tester",
+            "email": "bob.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        },
+        {
+          "_id": "<expense:Takeaway pizza>",
+          "group": "<group>",
+          "description": "Takeaway pizza",
+          "amount": 1180,
+          "amountMinor": 118000,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "other",
+          "date": "2026-09-19T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 1180,
+              "amountMinor": 118000
+            }
+          ],
+          "splitMethod": "exact",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 590,
+              "amountMinor": 59000
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 590,
+              "amountMinor": 59000
+            }
+          ],
+          "tag": "General",
+          "tagId": "<tag:General>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000003",
+            "name": "Carol Tester",
+            "email": "carol.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        },
+        {
+          "_id": "<expense:Plumber>",
+          "group": "<group>",
+          "description": "Plumber",
+          "amount": 1080,
+          "amountMinor": 108000,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "other",
+          "date": "2026-08-12T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 1080,
+              "amountMinor": 108000
+            }
+          ],
+          "splitMethod": "exact",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 540,
+              "amountMinor": 54000
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 540,
+              "amountMinor": 54000
+            }
+          ],
+          "tag": "Household",
+          "tagId": "<tag:Household>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000002",
+            "name": "Bob Tester",
+            "email": "bob.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        },
+        {
+          "_id": "<expense:Water cans>",
+          "group": "<group>",
+          "description": "Water cans",
+          "amount": 320,
+          "amountMinor": 32000,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "other",
+          "date": "2026-08-03T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 320,
+              "amountMinor": 32000
+            }
+          ],
+          "splitMethod": "exact",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 160,
+              "amountMinor": 16000
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 160,
+              "amountMinor": 16000
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 0,
+              "amountMinor": 0
+            }
+          ],
+          "tag": "Household",
+          "tagId": "<tag:Household>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000003",
+            "name": "Carol Tester",
+            "email": "carol.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "limit": 20,
+        "total": 5,
+        "totalPages": 1
+      },
+      "summary": {
+        "totalAmount": 6689.5,
+        "totalsByCurrency": [
+          {
+            "currency": "INR",
+            "totalAmount": 6689.5
+          }
+        ],
+        "count": 5,
+        "userOwes": 1493.34,
+        "userGetsBack": 833
+      }
+    },
+    "status": 200
+  },
+  "android-household-month": {
+    "data": {
+      "expenses": [
+        {
+          "_id": "<expense:Weekly groceries>",
+          "group": "<group>",
+          "description": "Weekly groceries",
+          "amount": 1249.5,
+          "amountMinor": 124950,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "other",
+          "date": "2026-09-30T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 1249.5,
+              "amountMinor": 124950
+            }
+          ],
+          "splitMethod": "equal",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 416.5,
+              "amountMinor": 41650
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 416.5,
+              "amountMinor": 41650
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 416.5,
+              "amountMinor": 41650
+            }
+          ],
+          "tag": "Groceries",
+          "tagId": "<tag:Groceries>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000001",
+            "name": "Alice Tester",
+            "email": "alice.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        },
+        {
+          "_id": "<expense:Electricity bill>",
+          "group": "<group>",
+          "description": "Electricity bill",
+          "amount": 2860,
+          "amountMinor": 286000,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "housing",
+          "date": "2026-09-29T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 2860,
+              "amountMinor": 286000
+            }
+          ],
+          "splitMethod": "equal",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 953.34,
+              "amountMinor": 95334
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 953.33,
+              "amountMinor": 95333
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 953.33,
+              "amountMinor": 95333
+            }
+          ],
+          "tag": "Utilities",
+          "tagId": "<tag:Utilities>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000002",
+            "name": "Bob Tester",
+            "email": "bob.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        },
+        {
+          "_id": "<expense:Takeaway pizza>",
+          "group": "<group>",
+          "description": "Takeaway pizza",
+          "amount": 1180,
+          "amountMinor": 118000,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "other",
+          "date": "2026-09-19T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 1180,
+              "amountMinor": 118000
+            }
+          ],
+          "splitMethod": "exact",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 590,
+              "amountMinor": 59000
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 590,
+              "amountMinor": 59000
+            }
+          ],
+          "tag": "General",
+          "tagId": "<tag:General>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000003",
+            "name": "Carol Tester",
+            "email": "carol.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "limit": 20,
+        "total": 3,
+        "totalPages": 1
+      },
+      "summary": {
+        "totalAmount": 5289.5,
+        "totalsByCurrency": [
+          {
+            "currency": "INR",
+            "totalAmount": 5289.5
+          }
+        ],
+        "count": 3,
+        "userOwes": 953.34,
+        "userGetsBack": 833,
+        "byMember": [
+          {
+            "user": {
+              "_id": "b00000000000000000000001",
+              "name": "Alice Tester"
+            },
+            "paid": 1249.5,
+            "share": 1369.84,
+            "net": 120.34
+          },
+          {
+            "user": {
+              "_id": "b00000000000000000000002",
+              "name": "Bob Tester"
+            },
+            "paid": 2860,
+            "share": 1959.83,
+            "net": -900.17
+          },
+          {
+            "user": {
+              "_id": "b00000000000000000000003",
+              "name": "Carol Tester"
+            },
+            "paid": 1180,
+            "share": 1959.83,
+            "net": 779.83
+          }
+        ]
+      }
+    },
+    "status": 200
+  },
+  "web-header-count": {
+    "data": {
+      "expenses": [
+        {
+          "_id": "<expense:Weekly groceries>",
+          "group": "<group>",
+          "description": "Weekly groceries",
+          "amount": 1249.5,
+          "amountMinor": 124950,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "other",
+          "date": "2026-09-30T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 1249.5,
+              "amountMinor": 124950
+            }
+          ],
+          "splitMethod": "equal",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 416.5,
+              "amountMinor": 41650
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 416.5,
+              "amountMinor": 41650
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 416.5,
+              "amountMinor": 41650
+            }
+          ],
+          "tag": "Groceries",
+          "tagId": "<tag:Groceries>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000001",
+            "name": "Alice Tester",
+            "email": "alice.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "limit": 1,
+        "total": 5,
+        "totalPages": 5
+      },
+      "summary": {
+        "totalAmount": 6689.5,
+        "totalsByCurrency": [
+          {
+            "currency": "INR",
+            "totalAmount": 6689.5
+          }
+        ],
+        "count": 5,
+        "userOwes": 1166.5,
+        "userGetsBack": 2446.67
+      }
+    },
+    "status": 200
+  },
+  "web-filtered": {
+    "data": {
+      "expenses": [
+        {
+          "_id": "<expense:Water cans>",
+          "group": "<group>",
+          "description": "Water cans",
+          "amount": 320,
+          "amountMinor": 32000,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "other",
+          "date": "2026-08-03T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 320,
+              "amountMinor": 32000
+            }
+          ],
+          "splitMethod": "exact",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 160,
+              "amountMinor": 16000
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 160,
+              "amountMinor": 16000
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 0,
+              "amountMinor": 0
+            }
+          ],
+          "tag": "Household",
+          "tagId": "<tag:Household>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000003",
+            "name": "Carol Tester",
+            "email": "carol.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "limit": 20,
+        "total": 1,
+        "totalPages": 1
+      },
+      "summary": {
+        "totalAmount": 320,
+        "totalsByCurrency": [
+          {
+            "currency": "INR",
+            "totalAmount": 320
+          }
+        ],
+        "count": 1,
+        "userOwes": 0,
+        "userGetsBack": 0
+      }
+    },
+    "status": 200
+  },
+  "web-paid-and-owed": {
+    "data": {
+      "expenses": [
+        {
+          "_id": "<expense:Electricity bill>",
+          "group": "<group>",
+          "description": "Electricity bill",
+          "amount": 2860,
+          "amountMinor": 286000,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "housing",
+          "date": "2026-09-29T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 2860,
+              "amountMinor": 286000
+            }
+          ],
+          "splitMethod": "equal",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 953.34,
+              "amountMinor": 95334
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 953.33,
+              "amountMinor": 95333
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 953.33,
+              "amountMinor": 95333
+            }
+          ],
+          "tag": "Utilities",
+          "tagId": "<tag:Utilities>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000002",
+            "name": "Bob Tester",
+            "email": "bob.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        },
+        {
+          "_id": "<expense:Plumber>",
+          "group": "<group>",
+          "description": "Plumber",
+          "amount": 1080,
+          "amountMinor": 108000,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "other",
+          "date": "2026-08-12T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 1080,
+              "amountMinor": 108000
+            }
+          ],
+          "splitMethod": "exact",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 540,
+              "amountMinor": 54000
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 540,
+              "amountMinor": 54000
+            }
+          ],
+          "tag": "Household",
+          "tagId": "<tag:Household>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000002",
+            "name": "Bob Tester",
+            "email": "bob.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        }
+      ],
+      "pagination": {
+        "page": 1,
+        "limit": 20,
+        "total": 2,
+        "totalPages": 1
+      },
+      "summary": {
+        "totalAmount": 3940,
+        "totalsByCurrency": [
+          {
+            "currency": "INR",
+            "totalAmount": 3940
+          }
+        ],
+        "count": 2,
+        "userOwes": 0,
+        "userGetsBack": 2446.67
+      }
+    },
+    "status": 200
+  },
+  "web-second-page": {
+    "data": {
+      "expenses": [
+        {
+          "_id": "<expense:Plumber>",
+          "group": "<group>",
+          "description": "Plumber",
+          "amount": 1080,
+          "amountMinor": 108000,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "other",
+          "date": "2026-08-12T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 1080,
+              "amountMinor": 108000
+            }
+          ],
+          "splitMethod": "exact",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 540,
+              "amountMinor": 54000
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 540,
+              "amountMinor": 54000
+            }
+          ],
+          "tag": "Household",
+          "tagId": "<tag:Household>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000002",
+            "name": "Bob Tester",
+            "email": "bob.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        },
+        {
+          "_id": "<expense:Water cans>",
+          "group": "<group>",
+          "description": "Water cans",
+          "amount": 320,
+          "amountMinor": 32000,
+          "moneyVersion": 1,
+          "currency": "INR",
+          "category": "other",
+          "date": "2026-08-03T06:00:00.000Z",
+          "paidBy": [
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 320,
+              "amountMinor": 32000
+            }
+          ],
+          "splitMethod": "exact",
+          "splitBetween": [
+            {
+              "user": {
+                "_id": "b00000000000000000000002",
+                "name": "Bob Tester",
+                "email": "bob.test@splitbook-test.local"
+              },
+              "amount": 160,
+              "amountMinor": 16000
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000003",
+                "name": "Carol Tester",
+                "email": "carol.test@splitbook-test.local"
+              },
+              "amount": 160,
+              "amountMinor": 16000
+            },
+            {
+              "user": {
+                "_id": "b00000000000000000000001",
+                "name": "Alice Tester",
+                "email": "alice.test@splitbook-test.local"
+              },
+              "amount": 0,
+              "amountMinor": 0
+            }
+          ],
+          "tag": "Household",
+          "tagId": "<tag:Household>",
+          "predefinedItem": null,
+          "receiptUrl": null,
+          "notes": "",
+          "recurringExpense": null,
+          "period": null,
+          "createdBy": {
+            "_id": "b00000000000000000000003",
+            "name": "Carol Tester",
+            "email": "carol.test@splitbook-test.local"
+          },
+          "isDeleted": false,
+          "deletedAt": null,
+          "deletedBy": null,
+          "createdAt": "<time>",
+          "updatedAt": "<time>",
+          "revision": 0
+        }
+      ],
+      "pagination": {
+        "page": 2,
+        "limit": 2,
+        "total": 4,
+        "totalPages": 2
+      },
+      "summary": {
+        "totalAmount": 3829.5,
+        "totalsByCurrency": [
+          {
+            "currency": "INR",
+            "totalAmount": 3829.5
+          }
+        ],
+        "count": 4,
+        "userOwes": 416.5,
+        "userGetsBack": 750
+      }
+    },
+    "status": 200
+  }
+}

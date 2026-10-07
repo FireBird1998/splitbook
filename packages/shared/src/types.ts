@@ -218,6 +218,19 @@ export interface ExpenseFilters {
   limit?: number;
   /** Opt-in: include the per-member paid/share/net breakdown in the summary. */
   includeMemberBreakdown?: boolean;
+  /** Only the Expenses this member paid part of or has a share of (#310). */
+  involvesUser?: string;
+  /**
+   * The lowest and highest amount, inclusive, in the Group's currency's major units, as
+   * decimal text ("500", "1249.50"), so the range is read exactly (#310).
+   */
+  amountMin?: string;
+  amountMax?: string;
+  /**
+   * Opt-in: count the Expenses recurring Expenses added, as `summary.recurringCount`. The
+   * server leaves it out while recurring Expenses are switched off (#289, #310).
+   */
+  includeRecurringCount?: boolean;
 }
 
 // ─── Expense Summary Types ──────────────────────────────

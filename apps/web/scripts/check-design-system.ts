@@ -38,6 +38,14 @@ const adoptedFiles = [
   'src/components/search/SearchLauncher.tsx',
   'src/components/search/SearchDialog.tsx',
   'src/components/search/SearchPanel.tsx',
+  'src/components/groups/MonthCycleBar.tsx',
+  'src/components/expenses/ExpenseListView.tsx',
+  'src/components/expenses/ExpenseToolbar.tsx',
+  'src/components/expenses/ExpenseTable.tsx',
+  'src/components/expenses/ExpenseCard.tsx',
+  'src/components/expenses/ExpenseDetails.tsx',
+  'src/components/expenses/ExpenseStats.tsx',
+  'src/components/expenses/expense-row-parts.tsx',
 ];
 
 let failed = false;

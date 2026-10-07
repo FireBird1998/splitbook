@@ -481,7 +481,7 @@ templates are materialized on read while recurring Expenses are switched on.
 
 ```
 ?page=1
-&limit=20                      // no server-side ceiling
+&limit=20                      // 1–100; larger is cut to 100, anything else is 20
 &dateFrom=2026-01-01
 &dateTo=2026-01-31             // date-only values are treated as end-of-day
 &tag=Food                      // single tag name
@@ -493,7 +493,32 @@ templates are materialized on read while recurring Expenses are switched on.
 &sortBy=date                   // date, amount
 &sortOrder=desc                // asc, desc
 &includeMemberBreakdown=1      // opt-in; adds summary.byMember
+&involvesUser=<userId>         // paid part of it or has a share of it (#310)
+&amountMin=500                 // inclusive, major units of the Group's currency (#310)
+&amountMax=1249.50             // inclusive (#310)
+&includeRecurringCount=1       // opt-in; adds summary.recurringCount (#310)
 ```
+
+**Added by #310, all additive.** A request that sends none of them answers
+exactly as before, byte for byte (the route's integration test compares the
+requests Android and the web made with answers recorded before #310):
+
+- `involvesUser` keeps the Expenses the member paid part of or has a share of. A
+  row of zero (someone left out of a split by shares) doesn't count.
+- `amountMin` and `amountMax` are plain decimal text (`500`, `1249.50`), read
+  exactly in the Group's currency. More decimal places than the currency has
+  answer **422** `INVALID_MONEY_PRECISION`, a range the wrong way round **422**
+  `INVALID_AMOUNT_RANGE`, and anything else that isn't a plain amount **422**
+  `VALIDATION_ERROR`, as does an `involvesUser` that isn't an id. An Expense in
+  another currency (a legacy Group) is compared by its own amount.
+- `limit` is capped at 100 (`EXPENSE_PAGE_MAX_LIMIT` in
+  `@splitbook/shared/expense-page-read`), and `pagination.limit` says what was
+  used. A zero, negative or unreadable `limit` is the default 20.
+- `includeRecurringCount=1` adds `summary.recurringCount`, how many of the
+  filtered Expenses recurring Expenses added. It is left out while recurring
+  Expenses are switched off (#289), even when asked for.
+- Each Expense already carried `recurringExpense` (the template's id, or null);
+  the shared decoder now declares it.
 
 **Response:**
 
@@ -519,7 +544,8 @@ templates are materialized on read while recurring Expenses are switched on.
           "share": 310.0,
           "net": -90.0
         }
-      ]
+      ],
+      "recurringCount": 3
     }
   }
 }
@@ -894,7 +920,7 @@ exactly. The shared path, query key (scope `search`) and decoder are `searchPath
 Documented in earlier drafts but absent from the codebase:
 
 - **Receipt upload** (`POST`/`DELETE .../receipt`). `Expense.receiptUrl` exists in
-  the model and `ExpenseCard` renders a chip for it, but the field is not in
+  the model and `ExpenseDetails` links to it, but the field is not in
   either Zod schema, so no request can populate it. See
   [`features/receipts.md`](features/receipts.md).
 - **`GET /api/groups/[id]/balances/simplified`** — folded into `/balances`.

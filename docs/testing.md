@@ -76,6 +76,12 @@ through the actual service layer (no mocked models):
   boundary, so an expense late on the final day of a range is not dropped.
 - `services/expense-member-breakdown.integration.test.ts` — the opt-in
   `summary.byMember` rows; monthly nets sum to zero.
+- `app/api/groups/[id]/expenses/route.integration.test.ts` — the Expense list
+  read (#310): `involvesUser`, the amount range (inclusive, exact, legacy
+  binary tails), the 100-row page cap, the recurring count with the switch on
+  and off, refusals, and every request Android and the web made before #310
+  answering byte for byte as `list-before-310.golden.json` recorded it on
+  `main` (2c37639).
 - `services/recurring-expense.integration.test.ts` — due-period materialization,
   pause/resume, problem-state skipping, and that two concurrent generations
   produce exactly one expense. Note this suite forces `Expense.createIndexes()`
@@ -192,9 +198,8 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   name, "Theme · N members · currency", avatars, Invite, settings), the tabs
   as links with their own addresses through Back, Forward and reload, the old
   `?tab=balances` and `?action=add-expense` links, the Members roster (names
-  and roles, no emails) with Invite, and axe on every tab. Until #310 rebuilds
-  Expenses, its rows and two summary captions are left out of that tab's axe
-  check.
+  and roles, no emails) with Invite, and axe on every tab, the Expenses tab
+  whole, with nothing left out.
 - **Add expense** (`add-expense.spec.ts`): the top bar's Add expense from Home
   through "Choose a Group" (axe on the chooser; the save keeps Home in place,
   confirms with the Group's name and rereads the balances), from inside a Group
@@ -205,6 +210,14 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   Group, and a clicked Expense opens its Group with the Expense list searched
   for it; a person's result carries no email; Priya never finds the Group she
   isn't in; a failed search offers Try again; axe on the dialog.
+- **Expenses tab** (`expense-table.spec.ts`, read-only, #310): Paid by, Tag,
+  the amount range, sort and search together, kept in the address through a
+  reload and a fresh visit; "Involves me"; the `?search=` link the top bar's
+  search makes; the table on computers (columns, exact positions) and cards on
+  phones; an opened Expense's details; the Household Month bar (Spent, Your
+  share, You paid, Expenses, never "fronted", no repeat icons while recurring
+  Expenses are off); a failed load with Try again; axe throughout, and review
+  screenshots of a Household and a Trip at 1440 px and 390 px.
 - **Theme + a11y matrix** (`theme-a11y.spec.ts`): persona entry, dashboard,
   and trip workspace at **desktop 1280×800** and **mobile 390×844**, each in
   **light and dark** (driven by `prefers-color-scheme` emulation), plus the
