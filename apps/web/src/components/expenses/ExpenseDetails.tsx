@@ -104,8 +104,8 @@ interface ExpenseDetailsProps {
 }
 
 /**
- * An Expense opened in the list (today's inline details, until the side panel, #311): who
- * paid, who owes what, the Category, Notes, a receipt, its history, and Edit and Delete.
+ * An Expense opened below its card on a phone (#310; a computer opens the side panel, #311):
+ * who paid, who owes what, the Category, Notes, a receipt, its history, and Edit and Delete.
  */
 export default function ExpenseDetails({
   id,

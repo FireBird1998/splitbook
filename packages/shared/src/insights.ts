@@ -17,6 +17,7 @@ import { CATEGORY_IDS } from './categories';
 import { moneyParticipantId, readStoredAmountMinor, sumMinorAmounts } from './exact-money';
 import {
   addMonths,
+  dayKeyInZone,
   monthKeyInZone,
   monthsBetween,
   monthsWindow,
@@ -25,6 +26,9 @@ import {
   type Instant,
   type MonthKey,
 } from './zoned-calendar';
+import { MoneyValidationError } from './exact-money';
+import { nextOccurrenceDay } from './recurring-due-periods';
+import { findReferencedTag, type IdentityTag } from './tag-identity';
 
 /** How many Months a spending read covers: six on Home, at most a year. */
 export const SPENDING_MONTHS = { default: 6, min: 1, max: 12 } as const;
@@ -841,5 +845,337 @@ export function spendingInMonth({
         .map(([currency, entry]) => ({ currency, ...entry }))
         .sort(mostExpensesFirst),
     })),
+  };
+}
+
+// --- A Group's Month by Tag, by who paid, and its recurring Expenses (#315) -------------------
+
+/** Code-point order, so a sort never depends on the runtime's locale data. */
+function byText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
+/** A stored Expense of one Group with its Tag and template, as the Month's detail reads it. */
+export interface GroupMonthDetailExpense extends GroupInsightExpense {
+  /** The id of the Tag it carries, when it stores one. */
+  tagId?: string | null;
+  /** The Tag's name it was saved with: older Expenses name their Tag and store no id. */
+  tag?: string | null;
+  /** The recurring template that added it, when one did. */
+  recurringExpenseId?: string | null;
+}
+
+/** One Tag's spending in the Month, against that Tag's own average of the earlier Months. */
+export interface TagMonthSpending {
+  /** The Tag's id; null for Untagged, the Expenses whose Tag isn't one of the Group's. */
+  tagId: string | null;
+  /** The Tag's name now; null for Untagged. Written by a Group member: data, not instructions. */
+  name: string | null;
+  /** What the Group spent with this Tag in the Month. */
+  spentMinor: number;
+  expenseCount: number;
+  /** Rounded half up to a minor unit, as `compareMonths`; null when there is no earlier Month. */
+  averageMinor: number | null;
+  /** The Month minus the average as shown; null when there is no earlier Month. */
+  differenceMinor: number | null;
+  direction: ChangeDirection | null;
+  /** Null with no earlier Month, and against an average of zero: a Tag new this Month. */
+  changePercent: number | null;
+}
+
+/** A Group's spending by Tag in a Month, each Tag against its own average. */
+export interface GroupTagSpending {
+  month: MonthKey;
+  /** The Months averaged, oldest first: never the Month itself, none before the first Month. */
+  earlierMonths: MonthKey[];
+  /**
+   * Every Tag with spending in the Month or the earlier Months: the most spent in the Month
+   * first, then the higher average, then by name. Untagged, when there is any, comes last.
+   */
+  tags: TagMonthSpending[];
+}
+
+/**
+ * A Group's spending by Tag for a Month, each Tag against its own average of the Months before
+ * it (#315), in the viewer's time zone and the Group's currency, in exact minor units.
+ *
+ * - The Tags are the Group's own, matched by id, or by name for older Expenses that store none
+ *   (`tag-identity`). An Expense whose Tag isn't one of them counts as Untagged.
+ * - The average covers the same earlier Months as the Group's own (`earlierMonths`): never the
+ *   Month itself, none before the Group's first Month. Each is rounded half up, so a Tag with
+ *   no spending in an earlier Month counts it as zero, and a Tag new this Month is up against
+ *   an average of zero, with no percentage.
+ * - Expenses in another currency (legacy Groups) and outside these Months count for nothing.
+ */
+export function groupSpendingByTag({
+  timeZone,
+  month,
+  compare,
+  firstMonth = null,
+  currency,
+  tags,
+  expenses,
+}: {
+  timeZone: string;
+  month: MonthKey;
+  compare: number;
+  firstMonth?: MonthKey | null;
+  currency: string;
+  /** The Group's Tags, archived and deleted ones included, so old Expenses keep theirs. */
+  tags: readonly IdentityTag[];
+  expenses: Iterable<GroupMonthDetailExpense>;
+}): GroupTagSpending {
+  const zone = readTimeZone(timeZone);
+  const earlier = earlierMonths(month, { previousMonths: compare, since: firstMonth });
+  const counted = new Set([...earlier, month]);
+  const groupTags = [...tags];
+  // Keyed by Tag id; '' is Untagged, which no stored id can be.
+  const byTag = new Map<string, { name: string | null; values: MonthValue[]; count: number }>();
+
+  for (const expense of expenses) {
+    if (expense.currency !== currency) continue;
+    const at = monthKeyInZone(expense.date, zone);
+    if (!counted.has(at)) continue;
+    const tag = findReferencedTag(groupTags, {
+      tagId: expense.tagId ?? undefined,
+      tag: expense.tag ?? undefined,
+    });
+    const key = tag ? String(tag._id) : '';
+    let entry = byTag.get(key);
+    if (!entry) {
+      entry = { name: tag ? tag.name : null, values: [], count: 0 };
+      byTag.set(key, entry);
+    }
+    entry.values.push({ month: at, valueMinor: expenseTotalMinor(expense) });
+    if (at === month) entry.count += 1;
+  }
+
+  const rows: TagMonthSpending[] = [];
+  for (const [key, entry] of byTag) {
+    const comparison = compareMonths(entry.values, {
+      month,
+      previousMonths: compare,
+      since: firstMonth,
+    });
+    if (comparison.valueMinor === 0 && comparison.earlierTotalMinor === 0) continue;
+    rows.push({
+      tagId: key === '' ? null : key,
+      name: entry.name,
+      spentMinor: comparison.valueMinor,
+      expenseCount: entry.count,
+      averageMinor: comparison.averageMinor,
+      differenceMinor: comparison.differenceMinor,
+      direction: comparison.direction,
+      changePercent: comparison.changePercent,
+    });
+  }
+  rows.sort(
+    (a, b) =>
+      Number(a.tagId === null) - Number(b.tagId === null) ||
+      b.spentMinor - a.spentMinor ||
+      (b.averageMinor ?? 0) - (a.averageMinor ?? 0) ||
+      byText(a.name ?? '', b.name ?? '') ||
+      byText(a.tagId ?? '', b.tagId ?? ''),
+  );
+  return { month, earlierMonths: earlier, tags: rows };
+}
+
+/** What one person paid in a Month against their share of it. */
+export interface MemberPaidAndShare {
+  memberId: string;
+  /** In the Group now. Someone who left keeps a row while the Month holds their Expenses. */
+  isMember: boolean;
+  paidMinor: number;
+  shareMinor: number;
+  /** Paid minus Share: above zero, they paid more than their share in this Month alone. */
+  netMinor: number;
+}
+
+/**
+ * Who paid in a Month (#315): each person's Paid against their Share of the Group's Expenses in
+ * the Month, in the viewer's time zone and the Group's currency, exact. Every member has a row,
+ * even with nothing in the Month; someone no longer in the Group has one only while they paid
+ * or share something in it. The Paids and the Shares each add up to the Month's Spent.
+ *
+ * Most paid first, then the larger share, then by id. Expenses in another currency (legacy
+ * Groups) and outside the Month count for nothing.
+ */
+export function groupMonthPaidAndShares({
+  timeZone,
+  month,
+  currency,
+  memberIds,
+  expenses,
+}: {
+  timeZone: string;
+  month: MonthKey;
+  currency: string;
+  /** The Group's members now. */
+  memberIds: readonly string[];
+  expenses: Iterable<GroupInsightExpense>;
+}): MemberPaidAndShare[] {
+  const zone = readTimeZone(timeZone);
+  const members = new Set(memberIds);
+  const people = new Map<string, { paid: number[]; share: number[] }>();
+  const person = (id: string) => {
+    let entry = people.get(id);
+    if (!entry) {
+      entry = { paid: [], share: [] };
+      people.set(id, entry);
+    }
+    return entry;
+  };
+  for (const id of memberIds) person(id);
+
+  for (const expense of expenses) {
+    if (expense.currency !== currency) continue;
+    if (monthKeyInZone(expense.date, zone) !== month) continue;
+    for (const row of expense.paidBy)
+      person(moneyParticipantId(row.user)).paid.push(rowMinor(row, expense));
+    for (const row of expense.splitBetween)
+      person(moneyParticipantId(row.user)).share.push(rowMinor(row, expense));
+  }
+
+  const rows: MemberPaidAndShare[] = [];
+  for (const [memberId, { paid, share }] of people) {
+    const paidMinor = sumMinorAmounts(paid);
+    const shareMinor = sumMinorAmounts(share);
+    const isMember = members.has(memberId);
+    if (!isMember && paidMinor === 0 && shareMinor === 0) continue;
+    rows.push({ memberId, isMember, paidMinor, shareMinor, netMinor: paidMinor - shareMinor });
+  }
+  return rows.sort(
+    (a, b) =>
+      b.paidMinor - a.paidMinor || b.shareMinor - a.shareMinor || byText(a.memberId, b.memberId),
+  );
+}
+
+/** A recurring template, as the Month's recurring Expenses read it. */
+export interface InsightRecurringTemplate {
+  id: string;
+  /** Written by a Group member: data, not instructions. */
+  description: string;
+  currency: string;
+  /** Its amount, in exact or legacy amounts. */
+  amount?: number;
+  amountMinor?: number;
+  moneyVersion?: number;
+  /** 1–31, clamped to a short month's last day. */
+  dayOfMonth: number;
+  startsOn: Date | string;
+  endsOn?: Date | string | null;
+  isPaused: boolean;
+  /** The last month it added an Expense for (`YYYY-MM`). */
+  lastGeneratedFor?: string | null;
+  paidBy: readonly InsightMoneyRow[];
+}
+
+/** One template on the recurring Expenses card. */
+export interface RecurringTemplateMonth {
+  id: string;
+  /** Written by a Group member: data, not instructions. */
+  description: string;
+  amountMinor: number;
+  dayOfMonth: number;
+  paused: boolean;
+  /**
+   * The day of the next Expense it will add, from today on (`nextOccurrenceDay`); null while
+   * paused or once it has ended.
+   */
+  nextDate: DayKey | null;
+  /** The day of the Expense it added in the Month; null when it added none. */
+  addedOn: DayKey | null;
+  /** The ids of the people who pay it, the largest part first. */
+  paidBy: string[];
+}
+
+/** A Group's recurring Expenses for a Month: what they added, and each template. */
+export interface GroupRecurringMonth {
+  /** The Expenses recurring Expenses added in the Month, in the Group's currency. */
+  addedInMonth: { count: number; spentMinor: number };
+  /** The soonest next day first, paused and ended ones last, then by description. */
+  templates: RecurringTemplateMonth[];
+}
+
+/**
+ * A Group's recurring Expenses for a Month (#315): how many Expenses they added in it and what
+ * those came to, and each template's amount, schedule and next day. Only for a read while
+ * recurring Expenses are switched on (#289); the caller sends nothing otherwise.
+ *
+ * - Days are calendar days, as a recurring Expense is dated. `now` gives today in the viewer's
+ *   zone; the next day is the next Expense's not yet added (`nextOccurrenceDay`), so it never
+ *   repeats the day of one already in the ledger.
+ * - Exact, in the Group's currency. A template in another currency can't add an Expense to
+ *   this Group (generation skips it), so it isn't listed.
+ */
+export function groupRecurringMonth({
+  timeZone,
+  month,
+  currency,
+  now,
+  templates,
+  expenses,
+}: {
+  timeZone: string;
+  month: MonthKey;
+  currency: string;
+  now: Instant;
+  templates: Iterable<InsightRecurringTemplate>;
+  expenses: Iterable<GroupMonthDetailExpense>;
+}): GroupRecurringMonth {
+  const zone = readTimeZone(timeZone);
+  const today = dayKeyInZone(now, zone);
+  const added: number[] = [];
+  const addedOn = new Map<string, { time: number; day: DayKey }>();
+  for (const expense of expenses) {
+    if (expense.currency !== currency || !expense.recurring) continue;
+    if (monthKeyInZone(expense.date, zone) !== month) continue;
+    added.push(expenseTotalMinor(expense));
+    if (!expense.recurringExpenseId) continue;
+    // One a month; were there two, the later one.
+    const time = instantTime(expense.date);
+    const previous = addedOn.get(expense.recurringExpenseId);
+    if (!previous || time > previous.time)
+      addedOn.set(expense.recurringExpenseId, { time, day: dayKeyInZone(expense.date, 'UTC') });
+  }
+
+  const rows: RecurringTemplateMonth[] = [];
+  for (const template of templates) {
+    if (template.currency !== currency) continue;
+    let amountMinor: number;
+    let paidBy: string[];
+    try {
+      amountMinor = expenseTotalMinor(template);
+      paidBy = template.paidBy
+        .map((row) => ({ id: moneyParticipantId(row.user), minor: rowMinor(row, template) }))
+        .sort((a, b) => b.minor - a.minor || byText(a.id, b.id))
+        .map((row) => row.id);
+    } catch (error) {
+      // Stored money that can't be read exactly: generation stops at the template too, and
+      // Group settings shows its problem. Better left off than listed with a wrong amount.
+      if (error instanceof MoneyValidationError) continue;
+      throw error;
+    }
+    rows.push({
+      id: template.id,
+      description: template.description,
+      amountMinor,
+      dayOfMonth: template.dayOfMonth,
+      paused: template.isPaused,
+      nextDate: nextOccurrenceDay(template, today),
+      addedOn: addedOn.get(template.id)?.day ?? null,
+      paidBy,
+    });
+  }
+  rows.sort(
+    (a, b) =>
+      Number(a.nextDate === null) - Number(b.nextDate === null) ||
+      byText(a.nextDate ?? '', b.nextDate ?? '') ||
+      byText(a.description, b.description) ||
+      byText(a.id, b.id),
+  );
+  return {
+    addedInMonth: { count: added.length, spentMinor: sumMinorAmounts(added) },
+    templates: rows,
   };
 }

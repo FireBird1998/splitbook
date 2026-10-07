@@ -26,7 +26,12 @@ async function fetchInsights(path: string): Promise<GroupInsightsRead> {
  * address, so reload, Back and a shared link keep them; the Month is the viewer's own, in their
  * time zone, which only the browser knows, so the server render shows the tab loading.
  */
-export default function GroupInsightsTab() {
+export default function GroupInsightsTab({
+  recurringExpensesEnabled = false,
+}: {
+  /** The product-wide recurring Expenses switch (#289), which only the server reads. */
+  recurringExpensesEnabled?: boolean;
+}) {
   const { groupId, userId, group } = useGroupPage();
   const timeZone = useViewerTimeZone();
   const searchParams = useSearchParams();
@@ -73,6 +78,10 @@ export default function GroupInsightsTab() {
       address={address}
       currentMonth={currentMonth}
       recurringTheme={getGroupTheme(group.category).recurringExpenses}
+      recurringExpensesEnabled={recurringExpensesEnabled}
+      isAdmin={group.members.some(
+        (member) => member.user._id === userId && member.role === 'admin',
+      )}
       read={data}
       failed={!data && Boolean(error)}
       onRetry={() => void mutate()}

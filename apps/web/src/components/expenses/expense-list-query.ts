@@ -4,7 +4,7 @@
  * page. Reading the address is forgiving: a value that doesn't fit this Group (a member who
  * isn't in it, a Tag it doesn't have, an amount with too many decimals) is dropped, so a
  * shared or hand-edited link always opens a view the Group can show. Every other parameter in
- * the address, such as a Household's `month`, is left as it is.
+ * the address, such as a Household's `month` or the open Expense (#311), is left as it is.
  */
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import type { ExpenseFilters } from '@splitbook/shared/types';
@@ -182,6 +182,41 @@ export function writeExpenseListQuery(
     next.delete(PARAM.to);
   }
   return next.toString();
+}
+
+/**
+ * The address parameter naming the open Expense (#311): the side panel on a computer, the
+ * opened card on a phone. It sits beside the view's parameters and never changes them.
+ */
+export const OPEN_EXPENSE_PARAM = 'expense';
+const EXPENSE_ID = /^[a-f\d]{24}$/i;
+
+/** The Expense a link opens, or null when it names none or nothing an Expense id could be. */
+export function readOpenExpense(params: Pick<URLSearchParams, 'get'>): string | null {
+  const id = params.get(OPEN_EXPENSE_PARAM);
+  return id && EXPENSE_ID.test(id) ? id : null;
+}
+
+/** The address's query with this Expense open, or none; every other parameter stays. */
+export function writeOpenExpense(
+  current: URLSearchParams | string,
+  expenseId: string | null,
+): string {
+  const next = new URLSearchParams(current);
+  if (expenseId) next.set(OPEN_EXPENSE_PARAM, expenseId);
+  else next.delete(OPEN_EXPENSE_PARAM);
+  return next.toString();
+}
+
+/**
+ * The query of a link that opens one Expense, with the list searched for it when `search` is
+ * given (#321's results): `expense=…&search=…`, each value encoded so it never changes the
+ * address's shape.
+ */
+export function openExpenseQuery(expenseId: string, { search }: { search?: string } = {}) {
+  const parts = [`${OPEN_EXPENSE_PARAM}=${encodeURIComponent(expenseId)}`];
+  if (search) parts.push(`${PARAM.search}=${encodeURIComponent(search)}`);
+  return parts.join('&');
 }
 
 /** The parts of the view that narrow the list (the sort and page don't). */

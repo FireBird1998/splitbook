@@ -185,7 +185,7 @@ test('alex: edits the expense and sees the update', async ({ page }) => {
   await enterAsPersona(page, 'alex');
   await page.goto(qaTripUrl);
 
-  // Opening the Expense shows its details, with Edit (#310; the side panel is #311).
+  // Opening the Expense shows its details, with Edit: in the side panel on a computer (#311).
   const details = await openExpense(page, 'QA Dinner');
   await details.getByRole('button', { name: 'Edit', exact: true }).click();
 

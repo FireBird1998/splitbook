@@ -5,14 +5,15 @@ import {
   enterAsPersona,
   expectNoSeriousA11yViolations,
   expectThemeApplied,
+  isPhone,
   reviewScreenshot,
 } from './fixtures';
 
 /**
  * Search across the member's Groups (#321): the top bar's search and ⌘K (Ctrl+K off Apple
  * devices) open one dialog, whose results jump to a Group, to the first Group shared with a
- * person, or to an Expense's Group with its Expense list searched for it. Search only reads,
- * so these journeys never change the seed.
+ * person, or to an Expense, open in its Group (#311) with the Expense list searched for it.
+ * Search only reads, so these journeys never change the seed.
  */
 
 const SEARCH = 'Search Expenses, Groups and people';
@@ -136,7 +137,9 @@ test('search the seed with the keyboard and jump to a Group', async ({ page }, t
   await expect(page.getByRole('main').getByText('Kochi to Alleppey').first()).toBeVisible();
 });
 
-test('jump to an Expense’s Group, with its Expense list searched for it', async ({ page }) => {
+test('jump to an Expense: it opens in its Group, with the Expense list searched for it', async ({
+  page,
+}, testInfo) => {
   await enterAsPersona(page, 'alex');
   await openByClick(page);
   await field(page).pressSequentially('anjuna sea');
@@ -150,17 +153,26 @@ test('jump to an Expense’s Group, with its Expense list searched for it', asyn
   await page.waitForURL(
     (url) =>
       url.pathname === `/groups/${DEMO_GROUP_ID}/expenses` &&
-      url.searchParams.get('search') === 'Seafood dinner at Anjuna',
+      url.searchParams.get('search') === 'Seafood dinner at Anjuna' &&
+      /^[a-f\d]{24}$/.test(url.searchParams.get('expense') ?? ''),
   );
   await expect(dialog(page)).toHaveCount(0);
   const main = page.getByRole('main');
   await expect(main.getByRole('searchbox', { name: /^Search Expenses in / })).toHaveValue(
     'Seafood dinner at Anjuna',
   );
-  await expect(main.getByText('Seafood dinner at Anjuna')).toBeVisible();
+  // Open in the side panel on a computer (#311), below its card on a phone.
+  const seafood = main.getByRole('region', { name: 'Seafood dinner at Anjuna details' });
+  await expect(seafood).toBeVisible();
+  if (!isPhone(testInfo))
+    await expect(seafood.getByRole('heading', { level: 2 })).toHaveText('Seafood dinner at Anjuna');
+  await expect(main.getByRole('button', { name: /^Seafood dinner at Anjuna/ })).toHaveAttribute(
+    'aria-expanded',
+    'true',
+  );
   await expect(main.getByText('Scooter rental')).toHaveCount(0);
 
-  // Another Expense of the same Group, chosen from its Expenses tab, searches the list again.
+  // Another Expense of the same Group, chosen from its Expenses tab, opens it in its place.
   await openByShortcut(page);
   await field(page).pressSequentially('scooter');
   await section(page, 'Expenses')
@@ -170,7 +182,7 @@ test('jump to an Expense’s Group, with its Expense list searched for it', asyn
   await expect(main.getByRole('searchbox', { name: /^Search Expenses in / })).toHaveValue(
     'Scooter rental',
   );
-  await expect(main.getByText('Scooter rental')).toBeVisible();
+  await expect(main.getByRole('region', { name: 'Scooter rental details' })).toBeVisible();
   await expect(main.getByText('Seafood dinner at Anjuna')).toHaveCount(0);
 });
 

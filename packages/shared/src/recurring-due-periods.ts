@@ -108,3 +108,43 @@ export function getDuePeriods(schedule: RecurringSchedule, currentPeriod: string
   }
   return due;
 }
+
+const DAY_PATTERN = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+
+/** A date's UTC calendar day, `YYYY-MM-DD`: how a recurring Expense's date reads. */
+function utcDay(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * The day (`YYYY-MM-DD`) of the next Expense a template will add (#315): its first day on or
+ * after `today` in a month it hasn't added yet (after `lastGeneratedFor`), or null when it never
+ * will again, paused or past its end. A read adds a month's Expense on the month's first read,
+ * so an Expense dated later this month can already be in the ledger; the next is then next
+ * month's. Days are the template's own calendar days (its Expenses are dated at UTC midnight on
+ * them), so "the 5th" is the 5th in every zone; the caller passes `today` as the viewer's own
+ * calendar day. Pure, like `getDuePeriods`.
+ */
+export function nextOccurrenceDay(schedule: RecurringSchedule, today: string): string | null {
+  if (schedule.isPaused || !DAY_PATTERN.test(today)) return null;
+
+  const startsOn = startOfUtcDay(new Date(schedule.startsOn));
+  if (Number.isNaN(startsOn.getTime())) return null;
+  const endsOn = schedule.endsOn ? endOfUtcDay(new Date(schedule.endsOn)) : null;
+  if (endsOn && Number.isNaN(endsOn.getTime())) return null;
+  // As in `getDuePeriods`, a malformed stored marker is treated as absent.
+  const lastGenerated =
+    schedule.lastGeneratedFor && PERIOD_PATTERN.test(schedule.lastGeneratedFor)
+      ? schedule.lastGeneratedFor
+      : null;
+
+  const from = utcDay(startsOn) > today ? utcDay(startsOn) : today;
+  let period = from.slice(0, 7);
+  // A month already added: the next is the month after it, whose day is after `from`.
+  if (lastGenerated && period <= lastGenerated) period = nextPeriod(lastGenerated);
+  let date = expenseDateForPeriod(period, schedule.dayOfMonth);
+  // This month's day has passed: the next is next month's, which is always after `from`.
+  if (utcDay(date) < from) date = expenseDateForPeriod(nextPeriod(period), schedule.dayOfMonth);
+  if (endsOn && date > endsOn) return null;
+  return utcDay(date);
+}

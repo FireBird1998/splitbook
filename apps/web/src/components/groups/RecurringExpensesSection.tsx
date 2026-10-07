@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
@@ -53,6 +53,7 @@ import {
 } from '@splitbook/shared/exact-money';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { recurringRefusal } from '@/components/groups/recurring-refusal';
+import { RECURRING_SECTION_ID } from '@/components/groups/group-tabs';
 
 interface RecurringExpensesSectionProps {
   groupId: string;
@@ -165,6 +166,17 @@ export default function RecurringExpensesSection({
 }: RecurringExpensesSectionProps) {
   const { data, mutate } = useSWR(`/api/groups/${groupId}/recurring`, fetcher);
   const templates = (data?.data ?? []) as IRecurringExpense[];
+
+  // Linked to as `#recurring-expenses` (the Insights tab's Manage, #315). The section mounts
+  // only once the Group's read is in, after the browser and the router have looked for the
+  // hash, so it brings itself into view and takes focus when it mounts under that hash.
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (window.location.hash !== `#${RECURRING_SECTION_ID}`) return;
+    sectionRef.current?.scrollIntoView({ block: 'start' });
+    headingRef.current?.focus({ preventScroll: true });
+  }, []);
 
   const activeTags = useMemo(() => tags.filter((tag) => !tag.isArchived && !tag.isDeleted), [tags]);
   const memberIds = useMemo(() => new Set(members.map((m) => m.user._id)), [members]);
@@ -451,10 +463,23 @@ export default function RecurringExpensesSection({
   };
 
   return (
-    <Paper variant="outlined" sx={{ p: 3 }}>
+    <Paper
+      ref={sectionRef}
+      id={RECURRING_SECTION_ID}
+      variant="outlined"
+      // Clear of the sticky top bar when brought into view.
+      sx={{ p: 3, scrollMarginTop: 80 }}
+    >
       <Stack direction="row" alignItems="flex-start" justifyContent="space-between" sx={{ mb: 2 }}>
         <Box>
-          <Typography variant="subtitle1" fontWeight={600} color="text.primary" sx={{ mb: 0.5 }}>
+          <Typography
+            ref={headingRef}
+            tabIndex={-1}
+            variant="subtitle1"
+            fontWeight={600}
+            color="text.primary"
+            sx={{ mb: 0.5 }}
+          >
             Recurring
           </Typography>
           <Typography variant="body2" color="text.secondary">

@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { ExpenseDraft } from './expense-draft';
 
 const context = {
@@ -166,4 +166,100 @@ it('keeps invalid stored currency out of editable money controls', () => {
   const draft = ExpenseDraft.open(context, { ...saved, currency: 'invalid' });
   expect(draft.invalidStoredMoney).toBe(true);
   expect(draft.values.currency).toBe('USD');
+});
+
+describe('a duplicate of a saved Expense (#311)', () => {
+  const today = { ...context, date: '2026-10-07' };
+  const shares = {
+    ...saved,
+    amount: 30,
+    notes: 'Same again',
+    category: 'food',
+    splitMethod: 'shares' as const,
+    paidBy: [{ user: 'bob', amount: 30 }],
+    splitBetween: [
+      { user: 'alice', amount: 10, shares: 1 },
+      { user: 'bob', amount: 20, shares: 2 },
+    ],
+  };
+
+  it('is a new Expense with the saved one’s entries, dated today', () => {
+    const copy = ExpenseDraft.duplicate(today, shares, ['general-id']);
+    expect(copy.base).toBeNull();
+    expect(copy.values).toMatchObject({
+      description: 'Historical lunch',
+      amount: '30',
+      category: 'food',
+      notes: 'Same again',
+      tag: 'general-id',
+      date: '2026-10-07',
+      splitMethod: 'shares',
+      selectedMembers: ['alice', 'bob'],
+      payers: [{ user: 'bob', amount: '30' }],
+      multiPayerMode: false,
+      customShares: { alice: '1', bob: '2' },
+    });
+  });
+
+  it('saves with a new idempotency key and no revision, and a retry after a lost reply resends it', () => {
+    const copy = ExpenseDraft.duplicate(today, shares, ['general-id']);
+    const first = copy.prepare(['general-id'], 'copy-key');
+    expect(first.submission).toMatchObject({
+      expenseId: undefined,
+      revision: undefined,
+      key: 'copy-key',
+      checkDuplicate: true,
+      date: '2026-10-07',
+    });
+    expect(JSON.parse(first.submission!.body)).toMatchObject({
+      description: 'Historical lunch',
+      amount: 30,
+      tagId: 'general-id',
+      date: '2026-10-07',
+      splitMethod: 'shares',
+    });
+    const lost = first.draft.attempt(first.submission!).fail(first.submission!, 'Connection lost');
+    expect(lost.prepare(['general-id'], 'unused').submission).toMatchObject({
+      key: 'copy-key',
+      body: first.submission!.body,
+    });
+  });
+
+  it('leaves out anyone no longer in the Group, and the viewer pays when no payer is left', () => {
+    const left = {
+      ...shares,
+      paidBy: [{ user: 'carol', amount: 30 }],
+      splitBetween: [
+        { user: 'alice', amount: 10, shares: 1 },
+        { user: 'carol', amount: 20, shares: 2 },
+      ],
+    };
+    const copy = ExpenseDraft.duplicate(today, left, ['general-id']);
+    expect(copy.values.selectedMembers).toEqual(['alice']);
+    expect(copy.values.payers).toEqual([{ user: 'alice', amount: '' }]);
+    expect(copy.values.customShares).toEqual({ alice: '1' });
+  });
+
+  it('falls back to the default Tag when the saved one isn’t active', () => {
+    const copy = ExpenseDraft.duplicate({ ...today, defaultTag: 'home-id' }, shares, ['home-id']);
+    expect(copy.values.tag).toBe('home-id');
+  });
+
+  it('leaves the amount to enter again when the stored money can’t be read or is another currency', () => {
+    for (const unreadable of [
+      { ...saved, moneyVersion: 1, amountMinor: 4 },
+      { ...saved, currency: 'INR' },
+    ]) {
+      const copy = ExpenseDraft.duplicate(today, unreadable, ['general-id']);
+      expect(copy.invalidStoredMoney).toBe(false);
+      expect(copy.error).toBe('');
+      expect(copy.values).toMatchObject({
+        description: 'Historical lunch',
+        amount: '',
+        currency: 'USD',
+        splitMethod: 'equal',
+        date: '2026-10-07',
+      });
+    }
+  });
 });

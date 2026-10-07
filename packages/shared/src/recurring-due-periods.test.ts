@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import {
   expenseDateForPeriod,
   getDuePeriods,
+  nextOccurrenceDay,
   previousPeriod,
   toPeriod,
   type RecurringSchedule,
@@ -197,5 +198,62 @@ describe('getDuePeriods', () => {
 
   it('returns nothing for a malformed current period', () => {
     expect(getDuePeriods(schedule(), '2026-8')).toEqual([]);
+  });
+});
+
+describe('nextOccurrenceDay (#315)', () => {
+  it('is this month’s day while it is still ahead, or today itself', () => {
+    expect(nextOccurrenceDay(schedule({ dayOfMonth: 28 }), '2026-10-07')).toBe('2026-10-28');
+    expect(nextOccurrenceDay(schedule({ dayOfMonth: 7 }), '2026-10-07')).toBe('2026-10-07');
+  });
+
+  it('is next month’s day once this month’s has passed, across the year', () => {
+    expect(nextOccurrenceDay(schedule({ dayOfMonth: 5 }), '2026-10-07')).toBe('2026-11-05');
+    expect(nextOccurrenceDay(schedule({ dayOfMonth: 5 }), '2026-12-20')).toBe('2027-01-05');
+  });
+
+  it('skips a month whose Expense is already added, though it is dated later this month', () => {
+    // Added on 1 October, dated the 28th: the next one to add is November's.
+    const added = schedule({ dayOfMonth: 28, lastGeneratedFor: '2026-10' });
+    expect(nextOccurrenceDay(added, '2026-10-07')).toBe('2026-11-28');
+    expect(nextOccurrenceDay(added, '2026-10-29')).toBe('2026-11-28');
+    // A marker behind today (a template held up in a problem state) never gives a past day.
+    const behind = schedule({ dayOfMonth: 5, lastGeneratedFor: '2026-07' });
+    expect(nextOccurrenceDay(behind, '2026-10-07')).toBe('2026-11-05');
+    // A malformed marker is treated as absent, as `getDuePeriods` does.
+    const malformed = schedule({ dayOfMonth: 28, lastGeneratedFor: 'not-a-period' });
+    expect(nextOccurrenceDay(malformed, '2026-10-07')).toBe('2026-10-28');
+  });
+
+  it('clamps to a short month’s last day', () => {
+    expect(nextOccurrenceDay(schedule({ dayOfMonth: 31 }), '2026-02-10')).toBe('2026-02-28');
+    expect(nextOccurrenceDay(schedule({ dayOfMonth: 31 }), '2028-02-10')).toBe('2028-02-29');
+    // 30 April has passed on 1 May: the next is 31 May.
+    expect(nextOccurrenceDay(schedule({ dayOfMonth: 31 }), '2026-05-01')).toBe('2026-05-31');
+  });
+
+  it('starts no earlier than the template’s first day', () => {
+    const later = schedule({ dayOfMonth: 5, startsOn: '2026-12-10T00:00:00.000Z' });
+    expect(nextOccurrenceDay(later, '2026-10-07')).toBe('2027-01-05');
+    const sameDay = schedule({ dayOfMonth: 10, startsOn: '2026-12-10T00:00:00.000Z' });
+    expect(nextOccurrenceDay(sameDay, '2026-10-07')).toBe('2026-12-10');
+  });
+
+  it('is none while paused or once the template has ended', () => {
+    expect(nextOccurrenceDay(schedule({ isPaused: true }), '2026-10-07')).toBeNull();
+    const ending = schedule({ dayOfMonth: 15, endsOn: '2026-11-15T00:00:00.000Z' });
+    expect(nextOccurrenceDay(ending, '2026-11-15')).toBe('2026-11-15');
+    expect(nextOccurrenceDay(ending, '2026-11-16')).toBeNull();
+  });
+
+  it('reads the day as a calendar day, whatever zone the runtime is in', () => {
+    // A template made at 23:30 UTC on 4 October still starts on the 4th.
+    const late = schedule({ dayOfMonth: 4, startsOn: '2026-10-04T23:30:00.000Z' });
+    expect(nextOccurrenceDay(late, '2026-10-04')).toBe('2026-10-04');
+  });
+
+  it('is none for a malformed day', () => {
+    expect(nextOccurrenceDay(schedule(), '2026-10-7')).toBeNull();
+    expect(nextOccurrenceDay(schedule({ startsOn: 'not a date' }), '2026-10-07')).toBeNull();
   });
 });
