@@ -3983,7 +3983,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       groupId = state.groupId,
       draft = state.draft;
     let attempt = state.attempt,
-      completed = false;
+      completed = false,
+      // Whether the payment went out: until then, a failure can't have recorded it (#334).
+      sending = false;
     publish({ ...snapshot, settlement: { ...state, status: 'saving', message: null } });
     try {
       const context = await settlementContext(groupId, owner);
@@ -4060,6 +4062,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       if (!current(owner) || view !== viewRequest) return;
       publish({ ...snapshot, settlement: { ...snapshot.settlement, attempt } });
+      sending = true;
       const response = await ledgerWrite(groupId, `/api/groups/${groupId}/settlements`, owner, {
         method: 'POST',
         serializedBody: attempt.body,
@@ -4131,6 +4134,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         (error instanceof RequestError && [403, 404, 409, 422].includes(error.status)) ||
         (error instanceof Error &&
           ['INVALID_MEMBERS', 'FORBIDDEN_SETTLEMENT', 'SAME_PARTY'].includes(error.message));
+      // A Retry whose checks failed before the payment went out sent nothing: it says why, as
+      // opening the sheet does, and stays unconfirmed, with the same record (#334).
+      const unsent = !sending && error instanceof RequestError ? error.message : null;
       publish({
         ...snapshot,
         settlement: {
@@ -4140,7 +4146,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           message: denied
             ? 'This payment can’t be recorded with your current access or details. Any unconfirmed record stays on this device.'
             : attempt
-              ? unconfirmedPayment
+              ? (unsent ?? unconfirmedPayment)
               : error instanceof Error
                 ? error.message
                 : 'Could not record this payment. Your entries are kept.',

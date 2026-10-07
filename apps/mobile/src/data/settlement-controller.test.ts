@@ -1062,4 +1062,71 @@ describe('native payment recording', () => {
     expect(controller.getSnapshot().screen).toBe('group');
     expect(controller.getSnapshot().settlement.draft).toBeNull();
   });
+
+  // #334: after a network failure, Retry sends the first attempt's record again, never a new one.
+  it('says a Retry that couldn’t reach SplitBook sent nothing, then sends the first attempt’s key and revision again only on Retry', async () => {
+    let down = false,
+      posted = 0;
+    const { controller, writes, records } = setup((path, init) => {
+      if (down && path.startsWith('/api/groups/'))
+        return Promise.reject(new TypeError('Network request failed'));
+      // The first payment's reply never arrives: SplitBook may have recorded it.
+      if (path.endsWith('/settlements') && init.method === 'POST' && ++posted === 1)
+        return Promise.reject(new TypeError('Network request failed'));
+    });
+    const sent = (init: RequestInit) => {
+      const headers = new Headers(init.headers);
+      return {
+        key: headers.get('Idempotency-Key'),
+        revision: headers.get('X-Splitbook-Revision'),
+        body: init.body,
+      };
+    };
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    controller.updateSettlement({ amount: '10', note: 'Paid already' });
+    await controller.recordSettlement();
+    expect(writes).toHaveLength(1);
+    const first = sent(writes[0]);
+    const attempt = { key: first.key, body: first.body };
+    expect(first.key).toBe('settlement-key-1');
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'uncertain',
+      attempt,
+      message:
+        'This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.',
+    });
+
+    // Retry while SplitBook can't be reached: its checks fail before the payment is sent, and the
+    // sheet says so, still offering Retry with the record kept.
+    down = true;
+    await controller.recordSettlement();
+    expect(writes).toHaveLength(1);
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'uncertain',
+      attempt,
+      message: 'Could not reach SplitBook. Check your connection and try again.',
+    });
+    expect([...records.values()]).toEqual([expect.objectContaining(attempt)]);
+
+    // Nothing is sent by itself: not on a refresh, nor once SplitBook answers again.
+    await controller.refresh('foreground');
+    down = false;
+    await controller.refresh('foreground');
+    await controller.refresh('pull');
+    expect(writes).toHaveLength(1);
+    expect(controller.getSnapshot().settlement).toMatchObject({ status: 'uncertain', attempt });
+
+    // Retry: the second payment carries the first one's key, body and revision.
+    await controller.recordSettlement();
+    expect(writes).toHaveLength(2);
+    expect(sent(writes[1])).toEqual(first);
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      snackbar: { message: 'Payment recorded' },
+      settlement: { attempt: null },
+    });
+  });
 });
