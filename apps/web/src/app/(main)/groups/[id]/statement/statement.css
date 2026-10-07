@@ -1,0 +1,54 @@
+@media print {
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+  body:has(.statement-paper),
+  body:has(.statement-paper) main {
+    background: var(--statement-print-paper) !important;
+    color: var(--statement-print-text) !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    max-width: none !important;
+  }
+  body:has(.statement-paper) aside,
+  body:has(.statement-paper) header,
+  body:has(.statement-paper) nav,
+  body:has(.statement-paper) .MuiDrawer-root,
+  body:has(.statement-paper) [role='alert'],
+  body:has(.statement-paper) button,
+  .statement-controls {
+    display: none !important;
+  }
+  .statement-paper,
+  .statement-paper * {
+    color: var(--statement-print-text) !important;
+    background: var(--statement-print-paper) !important;
+    border-color: var(--statement-print-border) !important;
+    box-shadow: none !important;
+  }
+  .statement-paper {
+    padding: 0 !important;
+    border: 0 !important;
+  }
+  .statement-paper section {
+    border: 0 !important;
+    padding: 0 !important;
+  }
+  .statement-paper h2 {
+    break-after: avoid;
+  }
+  .statement-paper tr {
+    break-inside: avoid;
+  }
+  .statement-paper thead {
+    display: table-header-group;
+  }
+  .statement-table-region {
+    overflow: visible !important;
+  }
+  .statement-paper table {
+    width: 100%;
+    font-size: 9pt;
+  }
+}

@@ -13,8 +13,8 @@ import { identity } from './wire-fields';
 export const EXPORT_INCLUDES = ['payments', 'shares', 'deleted', 'history'] as const;
 export type ExportInclude = (typeof EXPORT_INCLUDES)[number];
 
-/** The formats the read can build. The JSON backup (#318) will add its own. */
-export const EXPORT_FORMATS = ['csv'] as const;
+/** Download formats. JSON backups always cover all time. */
+export const EXPORT_FORMATS = ['csv', 'json'] as const;
 export type ExportFormat = (typeof EXPORT_FORMATS)[number];
 
 /** The most Groups one request may name. */
@@ -99,6 +99,10 @@ const exportQuery = z
       .pipe(z.array(z.enum(EXPORT_INCLUDES))),
     format: z.enum(EXPORT_FORMATS).default('csv'),
     tz: z.string().refine(isTimeZone, { message: 'Unknown time zone' }).default('UTC'),
+  })
+  .refine((query) => query.format !== 'json' || (!query.from && !query.to), {
+    message: 'JSON backups cover all time; omit from and to',
+    path: ['from'],
   })
   .refine((query) => (query.from === undefined) === (query.to === undefined), {
     message: 'Give both from and to, or neither for all time',

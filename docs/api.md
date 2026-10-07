@@ -1112,3 +1112,8 @@ Documented in earlier drafts but absent from the codebase:
   either Zod schema, so no request can populate it. See
   [`features/receipts.md`](features/receipts.md).
 - **`GET /api/groups/[id]/balances/simplified`** — folded into `/balances`.
+
+## JSON backups and printable statements
+
+The JSON export format and member-only printable statement are documented in
+[JSON backup and printable statements](export-backup.md).

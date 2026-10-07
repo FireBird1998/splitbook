@@ -10,6 +10,7 @@ import {
   localCalendarDay,
   monthWindow,
   type ExportInclude,
+  type ExportFormat,
   type ExportRequest,
 } from '@splitbook/shared/export-request';
 
@@ -143,12 +144,14 @@ export function exportRequest({
   window,
   include,
   timeZone,
+  format = 'csv',
 }: {
   groups: readonly ExportGroupOption[];
   selected: readonly string[];
   window: PeriodWindow;
   include: Readonly<Record<ExportInclude, boolean>>;
   timeZone: string;
+  format?: ExportFormat;
 }): ExportRequest | null {
   if ('error' in window) return null;
   const groupIds = groups.filter((group) => selected.includes(group.id)).map((group) => group.id);
@@ -157,7 +160,7 @@ export function exportRequest({
     groupIds,
     ...window,
     include: EXPORT_INCLUDES.filter((name) => include[name]),
-    format: 'csv',
+    format,
     timeZone,
   };
 }
