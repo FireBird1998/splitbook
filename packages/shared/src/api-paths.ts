@@ -94,6 +94,13 @@ export const activityPagePath = (groupId: string, { expenseId, page, limit }: Ac
   ])}`;
 
 /**
+ * Every page of a Group's Activity, with no page: the key of the one query that reads them page
+ * by page on Android (#222). Each page's own path is `activityPagePath`.
+ */
+export const groupActivityPath = (groupId: string, limit: number) =>
+  `${group(groupId)}/activity${query([['limit', limit]])}`;
+
+/**
  * Every page of one Expense's history, with no page: the key of the one query that reads them
  * page by page on Android (#220). Each page's own path is `activityPagePath` with `expenseId`.
  */

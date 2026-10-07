@@ -3,6 +3,7 @@ import {
   activityPagePath,
   expenseHistoryPath,
   expensePagePath,
+  groupActivityPath,
   expenseRecordPath,
   groupBalancesPath,
   groupInsightsPath,
@@ -22,6 +23,7 @@ import {
   expenseHistoryKey,
   expensePageKey,
   expenseRecordKey,
+  groupActivityKey,
   groupBalancesKey,
   groupInsightsKey,
   tripSummaryKey,
@@ -119,6 +121,11 @@ describe('key factories', () => {
         maple,
         activityPagePath(maple, { expenseId, page: 1, limit: 20 }),
       ],
+    ],
+    [
+      "every page of a Group's Activity, as one query",
+      groupActivityKey(alex, maple),
+      ['ledger', environment, alex.accountId, maple, groupActivityPath(maple, 20)],
     ],
     [
       "every page of an Expense's history, as one query",
