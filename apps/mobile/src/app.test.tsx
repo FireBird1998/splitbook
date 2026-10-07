@@ -1260,6 +1260,21 @@ describe('App Expense window (#219)', () => {
     },
   );
 
+  it('moves the view down by the rows Load newer brings back above the one on screen', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    for (let number = 2; number <= 6; number += 1) await app.press('Load more expenses');
+    await app.scrollTo(40);
+    await app.scrollEnd(60, 'fling');
+    native.scrollTo.mockClear();
+    await app.press('Load newer expenses');
+    expect(app.text()).toContain('Fictional row 1-1');
+    const view = screen!.root.findByType(GroupExpensesView);
+    act(() => view.props.onShift(1140));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 60 + 1140, animated: false });
+  });
+
   it('returns to where scrolling stopped after an Expense opened from the list', async () => {
     const app = await renderApp();
     app.use(sixPages);

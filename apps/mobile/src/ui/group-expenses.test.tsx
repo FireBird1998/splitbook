@@ -553,17 +553,21 @@ describe('Expense rows', () => {
         disabled: false,
       });
     });
-    it('moves nothing when Load newer brings the newest page back', async () => {
+    it('keeps the row on screen when Load newer brings the newest page back: the view moves down by the rows that came', async () => {
       const onShift = vi.fn();
       const slide = render(2, onShift);
       lay(screen!.root, 2, 260);
+      await tick();
+      expect(onShift).not.toHaveBeenCalled();
+      // Row 21, first under Load newer at 260 + 30 = 290, now has page 1's 20 rows above it, and
+      // Load newer has gone: 200 + 30 + 20 × 60 = 1430.
       slide(1);
       lay(screen!.root, 1, 200);
       await tick();
-      expect(onShift).not.toHaveBeenCalled();
+      expect(onShift).toHaveBeenCalledExactlyOnceWith(1430 - 290);
     });
 
-    it('moves the view for the slide only, not when Load newer brings the newest page back', async () => {
+    it('moves the view up for the slide, and back down by as much when Load newer undoes it', async () => {
       const onShift = vi.fn();
       const slide = render(1, onShift);
       lay(screen!.root, 1, 200);
@@ -571,11 +575,50 @@ describe('Expense rows', () => {
       lay(screen!.root, 2, 260);
       await tick();
       expect(onShift).toHaveBeenCalledExactlyOnceWith(290 - 1430);
-      // Row 1, laid out before the slide, comes back above the window: nothing moves for it.
       slide(1);
       lay(screen!.root, 1, 200);
       await tick();
-      expect(onShift).toHaveBeenCalledOnce();
+      expect(onShift).toHaveBeenCalledTimes(2);
+      expect(onShift).toHaveBeenLastCalledWith(1430 - 290);
+    });
+
+    it('moves nothing when the list is read anew from its first page, with none of its rows', async () => {
+      const onShift = vi.fn();
+      render(2, onShift);
+      lay(screen!.root, 2, 260);
+      // Another list from its first page, such as a Month's: no row it showed is listed.
+      const others = rows.map((row) => ({ ...row, id: `f${row.id.slice(1)}` }));
+      act(() =>
+        screen!.update(
+          <GroupExpensesView
+            group={group()}
+            currentUserId={you}
+            kept={null}
+            savedExpenseId={null}
+            now={now}
+            state={financial({
+              data: others.slice(0, 20),
+              firstPage: 1,
+              pagination: { page: 1, limit: 20, total: 120, totalPages: 6 },
+            })}
+            onSelectMonth={vi.fn()}
+            onRefreshExpenses={vi.fn()}
+            onLoadMore={vi.fn()}
+            onLoadNewer={vi.fn()}
+            onShift={onShift}
+            onOpenExpense={vi.fn()}
+            onResumeDraft={vi.fn()}
+            onDiscardDraft={vi.fn()}
+          />,
+        ),
+      );
+      // Without Load newer, the list now starts 60 higher.
+      const { row, day, list } = places(screen!.root, 1);
+      layout(list, 200);
+      layout(day, 0);
+      layout(row, 30);
+      await tick();
+      expect(onShift).not.toHaveBeenCalled();
     });
   });
 

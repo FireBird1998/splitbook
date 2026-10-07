@@ -713,13 +713,14 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     shownScrollKey.current = scrollKey;
     scrollY.current = 0;
   }
-  // Where the view was when the newest Expense page dropped, before Android clamps the offset to
-  // the shorter list: the shift that keeps the row on screen starts from there (#219).
+  // Where the view was when the Expense window moved (the newest page dropped, or came back),
+  // before Android clamps the offset to a shorter list: the shift that keeps the row on screen
+  // starts from there (#219).
   const firstPage = state.financial.expenses.firstPage ?? 1;
   const shownFirstPage = useRef(firstPage);
   const slideFrom = useRef<number | null>(null);
   if (shownFirstPage.current !== firstPage) {
-    slideFrom.current = firstPage > shownFirstPage.current ? scrollY.current : null;
+    slideFrom.current = scrollY.current;
     shownFirstPage.current = firstPage;
   }
   if (!state.restoreScroll) pendingScroll.current = null;

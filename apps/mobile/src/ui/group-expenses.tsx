@@ -434,9 +434,10 @@ export function GroupExpensesView({
     opening.current = onOpenExpense;
   });
   const open = useCallback((expenseId: string) => opening.current(expenseId), []);
-  // When the newest page drops (Load more past 5 pages), the rows above the one on screen go: the
-  // view scrolls up by as much as the first row left moved, so the row on screen keeps its
-  // place (#219). Where the list, each day and each row lie, as their layouts last said.
+  // When the window moves (#219), rows above the one on screen go or come: Load more past 5
+  // pages drops the newest page, and Load newer brings it back above. The view moves by as much
+  // as a row shown on both sides of the change moved, so the row on screen keeps its place.
+  // Where the list, each day and each row lie, as their layouts last said.
   const places = useRef({
     list: 0,
     days: new Map<string, number>(),
@@ -447,21 +448,30 @@ export function GroupExpensesView({
   );
   const firstPage = expenses.firstPage ?? 1;
   const shownFirst = useRef(firstPage);
+  /** The rows as last shown: the window's change keeps the first of them still listed. */
+  const shownRows = useRef(expenses.data);
   const top = (id: string) => {
     const row = places.current.rows.get(id),
       day = row && places.current.days.get(row.day);
     return row && day !== undefined ? places.current.list + day + row.y : null;
   };
   useLayoutEffect(() => {
-    const slid = firstPage > shownFirst.current,
-      id = expenses.data[0]?.id;
+    const moved = firstPage !== shownFirst.current;
     shownFirst.current = firstPage;
     if (anchor.current?.timer) clearTimeout(anchor.current.timer);
-    // Laid out before the slide: where it was.
-    const at = slid && id ? top(id) : null;
+    if (!moved) return;
+    // The first row shown before the change that is still listed: the newest one left after a
+    // slide, or the one that was first before Load newer.
+    const listedNow = new Set(expenses.data.map(({ id }) => id));
+    const id = shownRows.current.find((row) => listedNow.has(row.id))?.id;
+    // Laid out before the change: where it was.
+    const at = id ? top(id) : null;
     anchor.current = id && at !== null ? { id, at } : null;
-    // Only this commit's slide: the layout it leads to moves the view, once.
+    // Only this commit's change: the layout it leads to moves the view, once.
   }, [firstPage]);
+  useLayoutEffect(() => {
+    shownRows.current = expenses.data;
+  });
   /** A layout changed: once the slide's layouts have all arrived, the view follows its row. */
   const place = (
     change: { list: number } | { day: string; y: number } | { row: string; day: string; y: number },
