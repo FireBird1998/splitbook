@@ -132,7 +132,8 @@ const listOf = memo(parseGroups);
 const figuresOf = memo(parseHomeBalances);
 /** The Groups Home's figures were worked out over, or null when they don't say. */
 const namedOf = memo(
-  (value: unknown) => parseHomeBalancesResponse(value).groups?.map(({ groupId }) => groupId) ?? null,
+  (value: unknown) =>
+    parseHomeBalancesResponse(value).groups?.map(({ groupId }) => groupId) ?? null,
 );
 
 /** `shown` again when nothing in `next` differs from it, so an unchanged read publishes nothing. */
