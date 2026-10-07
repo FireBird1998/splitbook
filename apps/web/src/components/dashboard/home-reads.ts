@@ -1,14 +1,21 @@
 'use client';
 
+import { useSyncExternalStore } from 'react';
 import useSWR from 'swr';
-import { homeBalancesPath, invitationsPath } from '@splitbook/shared/api-paths';
+import { homeBalancesPath, invitationsPath, userSpendingPath } from '@splitbook/shared/api-paths';
 import { homeCurrencyBalances, type HomeCurrencyBalance } from '@splitbook/shared/dashboard';
 import {
   parseHomeBalancesResponse,
   readHomeSuggestedPayments,
   type HomeSuggestedPaymentRead,
 } from '@splitbook/shared/home-balances-read';
+import { SPENDING_MONTHS } from '@splitbook/shared/insights';
 import type { GroupCategory } from '@splitbook/shared/types';
+import {
+  parseUserSpendingResponse,
+  type UserSpendingRead,
+} from '@splitbook/shared/user-spending-read';
+import { isTimeZone } from '@splitbook/shared/zoned-calendar';
 import { fetcher } from '@/lib/utils/fetcher';
 
 /**
@@ -51,7 +58,13 @@ export interface HomeBalances {
   groupCount: number;
 }
 
-/** The balances read, for Your balances and for Needs you's suggested payments. */
+/** The member's balance in one Group, per currency, as the balances read sends it (major units). */
+export type GroupBalanceAmounts = readonly { currency: string; balance: number }[];
+
+/**
+ * The balances read, for Your balances, Needs you's suggested payments and the Groups table's
+ * balance in each Group.
+ */
 export function useHomeBalances() {
   const result = useSWR(HOME_BALANCES_KEY, fetcher, readOptions);
   const retry = () => void result.mutate();
@@ -63,6 +76,16 @@ export function useHomeBalances() {
     }),
     payments: cardRead<HomeSuggestedPaymentRead[]>(result, (data) =>
       readHomeSuggestedPayments(parseHomeBalancesResponse(data)),
+    ),
+    byGroup: cardRead<Map<string, GroupBalanceAmounts>>(
+      result,
+      (data) =>
+        new Map(
+          (parseHomeBalancesResponse(data).groups ?? []).map((group) => [
+            group.groupId,
+            group.balances,
+          ]),
+        ),
     ),
     retry,
   };
@@ -108,4 +131,50 @@ export function useHomeInvitations() {
     invitations: cardRead(result, readInvitations),
     retry: () => void result.mutate(),
   };
+}
+
+/** The viewer's own time zone, read in the browser only: the server's would be wrong. */
+const noSubscription = () => () => {};
+function browserTimeZone(): string {
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  return isTimeZone(zone) ? zone : 'UTC';
+}
+function useViewerTimeZone(): string | null {
+  return useSyncExternalStore(noSubscription, browserTimeZone, () => null);
+}
+
+async function fetchSpending(path: string): Promise<UserSpendingRead> {
+  return parseUserSpendingResponse(await fetcher(path));
+}
+
+/**
+ * The spending read (#307): six Months in the viewer's time zone, so it waits for the browser.
+ * The spending chart, "Where it went" and the Groups table (#308) share its one request; each
+ * reads its own fields from the answer and fails on its own.
+ */
+export function useHomeSpending() {
+  const timeZone = useViewerTimeZone();
+  const { data, error, mutate } = useSWR(
+    timeZone ? userSpendingPath({ months: SPENDING_MONTHS.default, timeZone }) : null,
+    fetchSpending,
+    readOptions,
+  );
+  return { read: data, failed: !data && Boolean(error), retry: () => void mutate() };
+}
+
+/**
+ * One of the fields #308 adds to the spending read, decoded on its own: a field the decoder
+ * refuses fails only the card or column that shows it, never the spending chart.
+ */
+export function spendingField<T>(
+  read: UserSpendingRead | undefined,
+  failed: boolean,
+  field: (read: UserSpendingRead) => T,
+): CardRead<T> {
+  if (!read) return failed ? { status: 'error' } : { status: 'loading' };
+  try {
+    return { status: 'ready', value: field(read) };
+  } catch {
+    return { status: 'error' };
+  }
 }

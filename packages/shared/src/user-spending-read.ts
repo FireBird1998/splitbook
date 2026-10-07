@@ -43,3 +43,77 @@ export function parseUserSpendingResponse(value: unknown): UserSpendingRead {
   if (!result.success) throw new UserSpendingReadError();
   return result.data.data;
 }
+
+/*
+ * Fields the read adds for Home's "Where it went" and Groups table (#308). They are additive:
+ * `parseUserSpendingResponse` keeps them as undeclared fields and never checks them, so the
+ * spending chart reads on whatever they hold. Each card reads its own here, so a malformed
+ * field fails that card alone.
+ */
+
+const count = z.number().int().nonnegative();
+const thisMonth = z.looseObject({
+  month,
+  byCategory: z.array(
+    z.looseObject({
+      currency: currencyCode,
+      totalMinor: minor,
+      expenseCount: count,
+      categories: z.array(
+        z.looseObject({ category: z.string().min(1), shareMinor: minor, expenseCount: count }),
+      ),
+    }),
+  ),
+  groups: z.array(
+    z.looseObject({
+      groupId: identity,
+      spent: z.array(
+        z.looseObject({ currency: currencyCode, totalMinor: minor, expenseCount: count }),
+      ),
+    }),
+  ),
+});
+
+/** The current Month in detail: the member's share by Category, and what each Group spent. */
+export type SpendingThisMonthRead = z.infer<typeof thisMonth>;
+
+/** Keep a malformed or missing Month detail out of the views and out of error messages. */
+export class SpendingThisMonthReadError extends Error {
+  constructor() {
+    super('Unable to load this month’s spending. Please retry.');
+    this.name = 'SpendingThisMonthReadError';
+  }
+}
+
+/**
+ * The current Month in detail, from a decoded spending read. Throws when the read has none (a
+ * server from before #308), when it is malformed, or when it isn't the read's current Month.
+ */
+export function readSpendingThisMonth(read: UserSpendingRead): SpendingThisMonthRead {
+  const result = thisMonth.safeParse((read as { thisMonth?: unknown }).thisMonth);
+  if (!result.success || result.data.month !== read.months[read.months.length - 1])
+    throw new SpendingThisMonthReadError();
+  return result.data;
+}
+
+const lastChanges = z.array(
+  z.looseObject({ groupId: identity, at: z.iso.datetime({ offset: true }).nullable() }),
+);
+
+/** When each Group last changed: the time of its latest Activity, or null when it has none. */
+export type GroupLastChangeRead = z.infer<typeof lastChanges>[number];
+
+/** Keep a malformed or missing list out of the Groups table and out of error messages. */
+export class GroupLastChangesReadError extends Error {
+  constructor() {
+    super('Unable to load when your Groups last changed. Please retry.');
+    this.name = 'GroupLastChangesReadError';
+  }
+}
+
+/** Each Group's last change, from a decoded spending read. Throws when missing or malformed. */
+export function readGroupLastChanges(read: UserSpendingRead): GroupLastChangeRead[] {
+  const result = lastChanges.safeParse((read as { lastChanges?: unknown }).lastChanges);
+  if (!result.success) throw new GroupLastChangesReadError();
+  return result.data;
+}

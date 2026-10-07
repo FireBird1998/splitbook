@@ -5,15 +5,20 @@
  *
  * It covers only the member's own Groups, adds recurring Expenses that have fallen due first
  * (while the switch, #289, is on), keeps currencies apart, buckets Months in the zone the
- * client sends and refuses an unknown one.
+ * client sends and refuses an unknown one. The fields #308 adds (the current Month by Category
+ * and each Group's spending, and each Group's last change) come after the others, which stay
+ * exactly as they were.
  */
 
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import mongoose from 'mongoose';
+import Activity from '@/lib/models/Activity';
 import Expense from '@/lib/models/Expense';
 import Group from '@/lib/models/Group';
 import RecurringExpense from '@/lib/models/RecurringExpense';
+import { expenseService } from '@/lib/services/expense.service';
 import { groupService } from '@/lib/services/group.service';
+import { settlementService } from '@/lib/services/settlement.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { createTestUsers, TEST_USER_IDS } from '@/lib/test-utils/fixtures';
 import { GET } from './route';
@@ -91,7 +96,8 @@ async function insertExpense(
     currency = 'INR',
     legacy = false,
     isDeleted = false,
-  }: { currency?: string; legacy?: boolean; isDeleted?: boolean } = {},
+    category = 'food',
+  }: { currency?: string; legacy?: boolean; isDeleted?: boolean; category?: string } = {},
 ) {
   const people = Object.keys(shares);
   const totalMinor = Object.values(shares).reduce((sum, share) => sum + share, 0);
@@ -103,7 +109,7 @@ async function insertExpense(
     ...money(totalMinor),
     ...(legacy ? {} : { moneyVersion: 1 }),
     currency,
-    category: 'food',
+    category,
     date: new Date(date),
     paidBy: [{ user: oid(people[0]), ...money(totalMinor) }],
     splitMethod: 'exact',
@@ -337,6 +343,290 @@ describe('recurring Expenses that have fallen due', () => {
     expect(await RecurringExpense.findOne({ group: household }).lean()).toMatchObject({
       lastGeneratedFor: null,
     });
+  });
+
+  it("counts this Month's in the Category totals and the Group's spending while the switch is on", async () => {
+    switchRecurringExpenses(true);
+    const household = await householdWithRent();
+
+    const { body } = await read();
+
+    expect(body.data.thisMonth).toEqual({
+      month: '2026-09',
+      byCategory: [
+        {
+          currency: 'INR',
+          totalMinor: 100000,
+          expenseCount: 1,
+          categories: [{ category: 'housing', shareMinor: 100000, expenseCount: 1 }],
+        },
+      ],
+      groups: [
+        {
+          groupId: household,
+          spent: [{ currency: 'INR', totalMinor: 300000, expenseCount: 1 }],
+        },
+      ],
+    });
+  });
+
+  it('counts none of them while the switch is off: nothing spent, no Category', async () => {
+    switchRecurringExpenses(false);
+    const household = await householdWithRent();
+
+    const { body } = await read();
+
+    expect(body.data.thisMonth).toEqual({
+      month: '2026-09',
+      byCategory: [],
+      groups: [{ groupId: household, spent: [] }],
+    });
+  });
+});
+
+describe('this Month in detail (#308)', () => {
+  it("gives the member's share by Category across Groups, and what each Group spent", async () => {
+    const goa = await createGroup('Goa Friends Trip', [alice, bob, carol]);
+    const kerala = await createGroup('Kerala Week', [alice, bob]);
+    const quiet = await createGroup('Quiet Flat', [alice, bob]);
+    // Food in two Groups counts as one Category; Tags are never merged across Groups.
+    await insertExpense(goa, '2026-09-02T12:00:00Z', { [alice]: 33334, [bob]: 33333 });
+    await insertExpense(kerala, '2026-09-03T12:00:00Z', { [alice]: 12000, [bob]: 12000 });
+    await insertExpense(
+      goa,
+      '2026-09-04T12:00:00Z',
+      { [alice]: 250000, [carol]: 250000 },
+      { category: 'accommodation' },
+    );
+    // Not Alice's: it counts toward Goa's spending only.
+    await insertExpense(
+      goa,
+      '2026-09-05T12:00:00Z',
+      { [bob]: 4500, [carol]: 4500 },
+      { category: 'transport' },
+    );
+    // Stored before Categories were checked: counted as Other.
+    await insertExpense(kerala, '2026-09-06T12:00:00Z', { [alice]: 100 }, { category: 'Snacks' });
+    // Last Month, and deleted: neither is this Month's.
+    await insertExpense(goa, '2026-08-20T12:00:00Z', { [alice]: 70000 });
+    await insertExpense(kerala, '2026-09-07T12:00:00Z', { [alice]: 999 }, { isDeleted: true });
+
+    const { status, body } = await read();
+
+    expect(status).toBe(200);
+    expect(body.data.thisMonth).toEqual({
+      month: '2026-09',
+      byCategory: [
+        {
+          currency: 'INR',
+          totalMinor: 295434,
+          expenseCount: 4,
+          categories: [
+            { category: 'accommodation', shareMinor: 250000, expenseCount: 1 },
+            { category: 'food', shareMinor: 45334, expenseCount: 2 },
+            { category: 'other', shareMinor: 100, expenseCount: 1 },
+          ],
+        },
+      ],
+      // In the Groups' order, every one listed.
+      groups: [
+        { groupId: goa, spent: [{ currency: 'INR', totalMinor: 575667, expenseCount: 3 }] },
+        { groupId: kerala, spent: [{ currency: 'INR', totalMinor: 24100, expenseCount: 2 }] },
+        { groupId: quiet, spent: [] },
+      ],
+    });
+  });
+
+  it('keeps currencies apart in a legacy Group, never converting them', async () => {
+    const lisbon = await createGroup('Lisbon Offsite', [alice, bob]);
+    await insertExpense(lisbon, '2026-09-05T12:00:00Z', { [alice]: 150000, [bob]: 150000 });
+    await insertExpense(
+      lisbon,
+      '2026-09-06T12:00:00Z',
+      { [bob]: 1275, [alice]: 1275 },
+      { currency: 'EUR', legacy: true, category: 'travel' },
+    );
+
+    const { body } = await read();
+
+    expect(body.data.thisMonth.byCategory).toEqual([
+      {
+        currency: 'EUR',
+        totalMinor: 1275,
+        expenseCount: 1,
+        categories: [{ category: 'travel', shareMinor: 1275, expenseCount: 1 }],
+      },
+      {
+        currency: 'INR',
+        totalMinor: 150000,
+        expenseCount: 1,
+        categories: [{ category: 'food', shareMinor: 150000, expenseCount: 1 }],
+      },
+    ]);
+    expect(body.data.thisMonth.groups).toEqual([
+      {
+        groupId: lisbon,
+        spent: [
+          { currency: 'EUR', totalMinor: 2550, expenseCount: 1 },
+          { currency: 'INR', totalMinor: 300000, expenseCount: 1 },
+        ],
+      },
+    ]);
+  });
+
+  it('is the Month of the zone sent', async () => {
+    const goa = await createGroup('Goa Friends Trip', [alice, bob]);
+    // 20:00 UTC on 31 August: 1 September in Kolkata, still 31 August in New York.
+    await insertExpense(goa, '2026-08-31T20:00:00Z', { [alice]: 4200 });
+
+    const kolkata = (await read('months=2&tz=Asia%2FKolkata')).body.data.thisMonth;
+    const newYork = (await read('months=2&tz=America%2FNew_York')).body.data.thisMonth;
+
+    expect(kolkata.groups[0].spent).toEqual([
+      { currency: 'INR', totalMinor: 4200, expenseCount: 1 },
+    ]);
+    expect(newYork).toEqual({
+      month: '2026-09',
+      byCategory: [],
+      groups: [{ groupId: goa, spent: [] }],
+    });
+  });
+
+  it('covers only the member’s own Groups', async () => {
+    const theirs = await createGroup('Sunday Football', [bob, carol]);
+    await insertExpense(theirs, '2026-09-05T12:00:00Z', { [bob]: 1000, [alice]: 500 });
+
+    const { body } = await read();
+
+    expect(body.data.thisMonth).toEqual({ month: '2026-09', byCategory: [], groups: [] });
+    expect(body.data.lastChanges).toEqual([]);
+  });
+});
+
+describe('the fields the spending chart reads', () => {
+  it('stay exactly as before #308, with the additions after them', async () => {
+    const goa = await createGroup('Goa Friends Trip', [alice, bob, carol]);
+    const kerala = await createGroup('Kerala Week', [alice, bob]);
+    await insertExpense(goa, '2026-08-10T12:00:00Z', { [alice]: 33334, [bob]: 33333 });
+    await insertExpense(kerala, '2026-09-02T12:00:00Z', { [carol]: 1, [alice]: 2 });
+    // This Month's Expenses Alice doesn't share are now read for the Groups' spending; they
+    // must not reach her figures.
+    await insertExpense(goa, '2026-09-03T12:00:00Z', { [bob]: 50000, [carol]: 50000 });
+    await insertExpense(kerala, '2026-09-04T12:00:00Z', { [bob]: 1200 }, { category: 'transport' });
+    await insertExpense(goa, '2026-09-05T12:00:00Z', { [bob]: 700 }, { currency: 'EUR' });
+
+    const { body } = await read();
+
+    expect(Object.keys(body.data)).toEqual([
+      'timeZone',
+      'months',
+      'window',
+      'groups',
+      'currencies',
+      'thisMonth',
+      'lastChanges',
+    ]);
+    const { timeZone, months, window, groups, currencies } = body.data;
+    const month = (shareMinor: number, byGroup: { groupId: string; shareMinor: number }[]) => ({
+      shareMinor,
+      byGroup,
+    });
+    expect(JSON.stringify({ timeZone, months, window, groups, currencies })).toBe(
+      JSON.stringify({
+        timeZone: 'Asia/Kolkata',
+        months: SIX_MONTHS,
+        window: { from: '2026-04-01', to: '2026-09-30' },
+        groups: [
+          { groupId: goa, name: 'Goa Friends Trip' },
+          { groupId: kerala, name: 'Kerala Week' },
+        ],
+        currencies: [
+          {
+            currency: 'INR',
+            totalMinor: 33336,
+            expenseCount: 2,
+            months: [
+              { month: '2026-04', ...month(0, []) },
+              { month: '2026-05', ...month(0, []) },
+              { month: '2026-06', ...month(0, []) },
+              { month: '2026-07', ...month(0, []) },
+              { month: '2026-08', ...month(33334, [{ groupId: goa, shareMinor: 33334 }]) },
+              { month: '2026-09', ...month(2, [{ groupId: kerala, shareMinor: 2 }]) },
+            ],
+          },
+        ],
+      }),
+    );
+  });
+});
+
+describe("each Group's last change (#308)", () => {
+  const lastChange = async (groupId: string) =>
+    (await read()).body.data.lastChanges.find(
+      (entry: { groupId: string }) => entry.groupId === groupId,
+    ).at;
+
+  it('moves with an Expense, a Settlement and an edit to the Group, and only in that Group', async () => {
+    vi.setSystemTime(new Date('2026-09-10T08:00:00.000Z'));
+    const goa = await createGroup('Goa Friends Trip', [alice, bob]);
+    const quiet = await createGroup('Quiet Flat', [alice, bob]);
+    // Created and joined: the Group's own Activity.
+    expect(await lastChange(goa)).toBe('2026-09-10T08:00:00.000Z');
+
+    vi.setSystemTime(new Date('2026-09-11T09:30:00.000Z'));
+    await expenseService.create(
+      goa,
+      {
+        description: 'Beach shack dinner',
+        amount: 2400,
+        currency: 'INR',
+        category: 'food',
+        date: new Date('2026-09-11T09:30:00.000Z'),
+        splitMethod: 'equal',
+        tag: 'Food',
+        paidBy: [{ user: alice, amount: 2400 }],
+        splitBetween: [{ user: alice }, { user: bob }],
+      },
+      alice,
+    );
+    expect(await lastChange(goa)).toBe('2026-09-11T09:30:00.000Z');
+
+    vi.setSystemTime(new Date('2026-09-12T18:45:00.000Z'));
+    await settlementService.create(goa, { paidTo: alice, amount: 1200, currency: 'INR' }, bob);
+    expect(await lastChange(goa)).toBe('2026-09-12T18:45:00.000Z');
+
+    vi.setSystemTime(new Date('2026-09-14T07:15:00.000Z'));
+    await groupService.update(goa, { name: 'Goa Friends Trip 2026' }, alice);
+    expect(await lastChange(goa)).toBe('2026-09-14T07:15:00.000Z');
+
+    // The other Group never changed.
+    expect(await lastChange(quiet)).toBe('2026-09-10T08:00:00.000Z');
+  });
+
+  it('lists every Group in the Groups’ order, null for one without any Activity', async () => {
+    const goa = await createGroup('Goa Friends Trip', [alice, bob]);
+    const legacy = await createGroup('Kerala Week', [alice, bob]);
+    // A Group from before Activity was recorded.
+    await Activity.deleteMany({ group: legacy });
+
+    const { body } = await read();
+
+    expect(body.data.lastChanges).toEqual([
+      { groupId: goa, at: NOW.toISOString() },
+      { groupId: legacy, at: null },
+    ]);
+  });
+
+  it('leaves out a Group the member has left', async () => {
+    const left = await createGroup('Old Flat', [alice, bob]);
+    const stayed = await createGroup('Goa Friends Trip', [alice, bob]);
+    await Group.updateOne({ _id: left }, { $pull: { members: { user: oid(alice) } } });
+
+    const { body } = await read();
+
+    expect(body.data.lastChanges.map((entry: { groupId: string }) => entry.groupId)).toEqual([
+      stayed,
+    ]);
   });
 });
 

@@ -1,6 +1,19 @@
-import { getContrastRatio } from '@mui/material/styles';
+import { getContrastRatio, getLuminance, hexToRgb } from '@mui/material/styles';
 import { describe, expect, it } from 'vitest';
 import { createAppTheme } from './createAppTheme';
+
+/** A `#rrggbb` colour's hue, in degrees. */
+function hue(color: string): number {
+  const [r, g, b] = hexToRgb(color)
+    .match(/\d+/g)!
+    .map((channel) => Number(channel) / 255);
+  const max = Math.max(r, g, b);
+  const range = max - Math.min(r, g, b);
+  if (range === 0) return 0;
+  const sector =
+    max === r ? (g - b) / range : max === g ? (b - r) / range + 2 : (r - g) / range + 4;
+  return (sector * 60 + 360) % 360;
+}
 
 describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
   it('keeps small status text readable on its tint and ordinary surfaces', () => {
@@ -49,6 +62,21 @@ describe.each(['light', 'dark'] as const)('%s visual theme', (mode) => {
     expect(getContrastRatio(palette.chart.series, palette.background.paper)).toBeGreaterThanOrEqual(
       3,
     );
+  });
+
+  it('keeps the soft series visible on a card, softer than the series, in the same hue (#308)', () => {
+    const { palette } = createAppTheme(mode);
+    const { series, seriesSoft } = palette.chart;
+    // The columns that aren't in focus are graphics too: 3:1 on a card and on the sidebar.
+    for (const surface of [palette.background.paper, palette.surface.elevated])
+      expect(getContrastRatio(seriesSoft, surface), surface).toBeGreaterThanOrEqual(3);
+    // Still plainly not the series colour: the current Month stands out.
+    expect(getContrastRatio(series, seriesSoft)).toBeGreaterThanOrEqual(1.5);
+    const towardCard = (color: string) =>
+      Math.abs(getLuminance(color) - getLuminance(palette.background.paper));
+    expect(towardCard(seriesSoft)).toBeLessThan(towardCard(series));
+    // One hue: a lighter or darker series colour, never a second colour.
+    expect(Math.abs(hue(seriesSoft) - hue(series))).toBeLessThanOrEqual(2);
   });
 
   it('styles every chart from the theme: grid, axes and tooltip', () => {

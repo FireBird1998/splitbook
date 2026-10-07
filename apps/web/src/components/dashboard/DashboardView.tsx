@@ -2,11 +2,12 @@
 
 import Stack from '@mui/material/Stack';
 import BalancesCard from '@/components/dashboard/BalancesCard';
-import GroupCardGrid from '@/components/dashboard/GroupCardGrid';
+import GroupsTableCard from '@/components/dashboard/GroupsTableCard';
 import HomeHeader from '@/components/dashboard/HomeHeader';
 import LatestChangesCard from '@/components/dashboard/LatestChangesCard';
 import NeedsYouCard from '@/components/dashboard/NeedsYouCard';
 import SpendingChartCard from '@/components/dashboard/SpendingChartCard';
+import WhereItWentCard from '@/components/dashboard/WhereItWentCard';
 import { HomeRow, HomeSlot } from '@/components/dashboard/HomeCard';
 
 interface DashboardViewProps {
@@ -29,11 +30,10 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
       </HomeRow>
       <HomeRow>
         <SpendingChartCard />
-        {/* #308: "Where it went", spending by Category (narrow). */}
+        <WhereItWentCard />
       </HomeRow>
       <HomeRow>
-        {/* #308: the Groups table (wide) replaces GroupCardGrid. */}
-        <GroupCardGrid userId={userId} />
+        <GroupsTableCard userId={userId} />
         <HomeSlot width="narrow">
           <LatestChangesCard userId={userId} />
         </HomeSlot>

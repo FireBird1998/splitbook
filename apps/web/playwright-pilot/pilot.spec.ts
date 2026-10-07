@@ -15,7 +15,9 @@ test('pending invitations do not claim nothing needs you', async ({ page }) => {
   });
   try {
     await page.reload();
-    await expect(page.getByRole('heading', { name: 'No groups yet' })).toBeVisible();
+    await expect(
+      page.getByRole('region', { name: 'Groups' }).getByText('No Groups yet', { exact: true }),
+    ).toBeVisible();
     await expect(page.getByRole('status', { name: 'Loading invitations' })).toBeVisible();
     await expect(page.getByText('Nothing needs you')).toHaveCount(0);
   } finally {
@@ -47,7 +49,7 @@ test('pending payments are loading, not an empty result', async ({ page }) => {
 });
 
 for (const section of [
-  { path: '/api/groups', message: 'Groups could not be loaded.', retry: 'Retry' },
+  { path: '/api/groups', message: 'Your Groups could not be loaded.', retry: 'Try again' },
   { path: '/api/invitations', message: 'Invitations could not be loaded.', retry: 'Try again' },
 ]) {
   test(`dashboard recovers ${section.path} without losing loaded balances`, async ({ page }) => {
@@ -119,8 +121,10 @@ test('dashboard keeps loaded groups visible and retries a safe balance error', a
   await expect(page.getByText('Goa Friends Trip', { exact: true }).first()).toBeVisible();
   await expect(page.getByText(/Internal diagnostic/)).toHaveCount(0);
   await expect(page.getByText('Settled', { exact: true })).toHaveCount(0);
-  await expect(page.getByText('Balance unavailable', { exact: true }).first()).toBeVisible();
-  await expect(page.getByText('Create your first group', { exact: true })).toHaveCount(0);
+  // The Groups table keeps its Groups; only the balance column waits, and says so.
+  const groups = page.getByRole('region', { name: 'Groups' });
+  await expect(groups.getByText('Some figures could not be loaded.')).toBeVisible();
+  await expect(groups.getByText('No Groups yet')).toHaveCount(0);
   // Needs you can't list payments without the read, and never says nothing needs you.
   await expect(
     page.getByRole('alert').filter({ hasText: 'Suggested payments could not be loaded.' }),
@@ -141,8 +145,9 @@ test('empty dashboard and settled balances remain distinct from errors', async (
     [`/api/groups/${DEMO_GROUP_ID}/settlements`]: [],
   });
   await enterAsPersona(page, 'alex');
-  await expect(page.getByRole('heading', { name: 'No groups yet' })).toBeVisible();
-  await expect(page.getByRole('link', { name: 'Create your first group' })).toBeVisible();
+  const groups = page.getByRole('region', { name: 'Groups' });
+  await expect(groups.getByText('No Groups yet', { exact: true })).toBeVisible();
+  await expect(groups.getByRole('link', { name: 'New Group' })).toBeVisible();
   await expect(page.getByText('No balances yet')).toBeVisible();
   await expect(page.getByText('Nothing needs you')).toBeVisible();
   await expect(page.getByRole('main').getByRole('alert')).toHaveCount(0);

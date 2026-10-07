@@ -7,6 +7,8 @@ import { TimeZoneError, readTimeZone } from '@splitbook/shared/zoned-calendar';
  * GET /api/user/spending?months=6&tz=Asia/Kolkata — the signed-in member's share of spending
  * across their Groups, by calendar Month in the time zone they send, per currency, with each
  * Group's part (#307). The zone is required: a Month is the viewer's, never the server's.
+ * After those fields, #308 adds `thisMonth` (the member's share by Category and what each Group
+ * spent, in the current Month) and `lastChanges` (each Group's latest Activity time).
  */
 export async function GET(req: Request) {
   try {
