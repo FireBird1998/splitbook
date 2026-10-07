@@ -226,7 +226,7 @@ function SplitBook() {
             splitbook<Copy style={{ color: theme.brand.main, fontSize: 24 }}>.</Copy>
           </Copy>
           {/* In the fixed header, so it stays visible wherever the content is scrolled. */}
-          <RefreshStatus visible={feedback.quiet} savedAt={feedback.savedAt} />
+          <RefreshStatus visible={feedback.quiet} />
         </View>
         {authenticated && state.screen !== 'settings' ? (
           <Pressable
@@ -574,13 +574,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
     <>
       <HomeTopBar
         userName={state.auth.user!.name}
-        status={
-          <RefreshStatus
-            visible={feedback.quiet || checking}
-            savedAt={feedback.savedAt}
-            checking={checking}
-          />
-        }
+        status={<RefreshStatus visible={feedback.quiet || checking} checking={checking} />}
         accountDisabled={
           checking || state.creation.status === 'saving' || state.invitation.status === 'joining'
         }

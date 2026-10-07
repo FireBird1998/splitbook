@@ -6,16 +6,16 @@ import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
 
 /**
- * The one quiet cue for a refresh or retry of content that stays on screen, with when that
- * content was saved when known; `checking` marks the saved Home while the session is checked.
+ * The one quiet cue for a refresh or retry of content that stays on screen; `checking` marks
+ * the saved Home while the session is checked. It gives no time: what is shown says when it
+ * was read, "Saved" only for this device's copy, so a top bar never calls an answer from this
+ * session "Saved", and its status stays on one line (#332).
  */
 export function RefreshStatus({
   visible,
-  savedAt = null,
   checking = false,
 }: {
   visible: boolean;
-  savedAt?: number | null;
   checking?: boolean;
 }) {
   if (!visible) return null;
@@ -23,11 +23,7 @@ export function RefreshStatus({
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
       <Icon name="sync-outline" size={15} />
       <StatusText shrink style={{ fontSize: 13, lineHeight: 20 }}>
-        {savedAt === null
-          ? checking
-            ? 'Checking…'
-            : 'Refreshing…'
-          : `Saved ${refreshedLabel(savedAt)} · ${checking ? 'checking' : 'refreshing'}`}
+        {checking ? 'Checking…' : 'Refreshing…'}
       </StatusText>
     </View>
   );

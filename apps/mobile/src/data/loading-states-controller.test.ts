@@ -533,7 +533,6 @@ describe('cold start (#127 decision): the saved Home while the session is checke
     });
     expect(refreshFeedback(saved)).toMatchObject({
       checking: true,
-      savedAt,
       quiet: false,
       progress: null,
     });
@@ -690,7 +689,6 @@ describe('refresh feedback (#127)', () => {
     const controller = f.create();
     await controller.signIn('alex');
     await controller.openGroup(maple);
-    const verifiedAt = f.clock.now;
     f.clock.now += 31_000;
     const automatic = f.hold(`/api/groups/${maple}/expenses`);
     const foreground = controller.refresh('foreground');
@@ -711,9 +709,7 @@ describe('refresh feedback (#127)', () => {
     expect(refreshFeedback(controller.getSnapshot())).toMatchObject({
       quiet: true,
       silent: false,
-      savedAt: f.clock.now,
     });
-    expect(verifiedAt).toBeLessThan(f.clock.now);
     retry.release();
     await retrying;
   });

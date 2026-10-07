@@ -1,9 +1,16 @@
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decodeStoredSession } from './data/cookies';
 import { createMobileController, type MobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
+import { layoutWidth } from './test-utils/layout';
 import { setFileWindow } from './test-utils/native';
 import { savedQueriesIn } from './test-utils/saved-queries';
 
@@ -386,7 +393,9 @@ describe('cold start', () => {
     await check.reached;
     await settle();
 
-    expect(app.text()).toContain(`Saved ${refreshedLabel(savedAt)} · checking`);
+    // The status says what is happening; the saved figures, when they were saved (#332).
+    expect(app.content().outside).toContain('Checking…');
+    expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}`);
     expect(app.text()).toContain('Maple House');
     expect(app.text()).not.toContain('Checking your session');
     expect(app.button('Open Maple House, Household · 2 members')).toBeNull();
@@ -395,7 +404,7 @@ describe('cold start', () => {
 
     check.release();
     await settle();
-    expect(app.text()).not.toContain('· checking');
+    expect(app.text()).not.toContain('Checking…');
     expect(app.button('Open Maple House, Household · 2 members')).not.toBeNull();
   });
 
@@ -806,6 +815,30 @@ describe('offline', () => {
 });
 
 describe('Home says what is true, without jumps (#332)', () => {
+  /** The top bar as rendered, and its text: the row that holds Refresh Home. */
+  const topBar = () => {
+    const holding = (
+      node: ReactTestRendererJSON | string,
+      parent: ReactTestRendererJSON | null,
+    ): ReactTestRendererJSON | null => {
+      if (typeof node === 'string') return null;
+      if (node.props.accessibilityLabel === 'Refresh Home') return parent;
+      for (const child of node.children ?? []) {
+        const found = holding(child, node);
+        if (found) return found;
+      }
+      return null;
+    };
+    const tree = screen!.toJSON();
+    const bar = (Array.isArray(tree) ? tree : [tree]).reduce<ReactTestRendererJSON | null>(
+      (found, node) => found ?? (node && holding(node, null)),
+      null,
+    )!;
+    const words = (node: ReactTestRendererJSON | string): string =>
+      typeof node === 'string' ? node : (node.children ?? []).map(words).join('');
+    return { bar, text: words(bar) };
+  };
+
   it('labels a restored copy of the balances “Saved” until the server answers, then “Updated”', async () => {
     const phone = device();
     const savedAt = await usedBefore(phone);
@@ -831,5 +864,53 @@ describe('Home says what is true, without jumps (#332)', () => {
     await settle();
     expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
     expect(app.text()).not.toContain(saved);
+  });
+
+  it('says only “Refreshing…” above figures read in this session while they are read again', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    const read = `Updated ${refreshedLabel(phone.clock.now)}`;
+    expect(app.content().inside).toContain(read);
+
+    phone.clock.now += 5 * 60_000;
+    const figures = phone.hold('/api/user/balances');
+    app.tap('Refresh Home');
+    await figures.reached;
+    await settle();
+    expect(app.content().outside).toContain('Refreshing…');
+    expect(app.content().inside).toContain(read);
+    expect(app.text()).not.toContain('Saved');
+
+    figures.release();
+    await settle();
+    expect(app.text()).not.toContain('Refreshing…');
+    expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+  });
+
+  it('keeps the status beside the wordmark on one line, at 100% and 130% text', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    phone.clock.now += 60 * 60_000;
+    const check = phone.hold('/api/auth/get-session');
+    await start(phone);
+    await check.reached;
+    await settle();
+    // Laid out at its natural width, the top bar fits a 360dp phone: its status never wraps.
+    const fits = (status: string) => {
+      const { bar, text } = topBar();
+      for (const scale of [1, 1.3]) expect(layoutWidth(bar, scale)).toBeLessThanOrEqual(360);
+      expect(text).toContain(status);
+    };
+    fits('Checking…');
+
+    const figures = phone.hold('/api/user/balances');
+    check.release();
+    await figures.reached;
+    await settle();
+    fits('Refreshing…');
+    figures.release();
+    await settle();
   });
 });
