@@ -494,9 +494,12 @@ export function GroupExpensesView({
   const summary = current ? expenses.summary : null;
   const listed =
     current && (expenses.status === 'ready' || summary !== null || expenses.data.length > 0);
+  // Load more stays in place, disabled, while the rows shown are read again (a pull, the
+  // foreground, or the window after an edit or delete), so the list never gets shorter under the
+  // member: at its end, Android would clamp the view a control's height up (#219).
   const more =
     listed &&
-    expenses.status === 'ready' &&
+    (expenses.status === 'ready' || expenses.status === 'loading') &&
     expenses.pagination !== null &&
     expenses.pagination.page < expenses.pagination.totalPages;
   // The list has slid past its newest page: the pages before it are read with Load newer. It stays
@@ -616,6 +619,7 @@ export function GroupExpensesView({
         ? pageControl({
             which: 'more',
             status: expenses.moreStatus,
+            disabled: expenses.status !== 'ready',
             message: expenses.moreMessage,
             color: theme.brand.main,
             onPress: onLoadMore,

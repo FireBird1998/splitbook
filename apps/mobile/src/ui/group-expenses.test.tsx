@@ -553,6 +553,39 @@ describe('Expense rows', () => {
         disabled: false,
       });
     });
+
+    // The device recheck of a31f3e8: a return to the list's end came back one row short, as the
+    // list dropped Load more while its rows were read again.
+    it('keeps Load more in place, disabled, while the rows shown are read again', () => {
+      const slide = render(1, vi.fn());
+      const more = () => labelled(screen!.root, 'Load more expenses');
+      expect(more()[0].props.accessibilityState).toEqual({ disabled: false });
+      const refreshing = window(1);
+      refreshing.expenses = { ...refreshing.expenses, status: 'loading' };
+      act(() =>
+        screen!.update(
+          <GroupExpensesView
+            group={group()}
+            currentUserId={you}
+            kept={null}
+            savedExpenseId={null}
+            now={now}
+            state={refreshing}
+            onSelectMonth={vi.fn()}
+            onRefreshExpenses={vi.fn()}
+            onLoadMore={vi.fn()}
+            onLoadNewer={vi.fn()}
+            onOpenExpense={vi.fn()}
+            onResumeDraft={vi.fn()}
+            onDiscardDraft={vi.fn()}
+          />,
+        ),
+      );
+      expect(more()).toHaveLength(1);
+      expect(more()[0].props.accessibilityState).toEqual({ disabled: true });
+      slide(1);
+      expect(more()[0].props.accessibilityState).toEqual({ disabled: false });
+    });
     it('keeps the row on screen when Load newer brings the newest page back: the view moves down by the rows that came', async () => {
       const onShift = vi.fn();
       const slide = render(2, onShift);

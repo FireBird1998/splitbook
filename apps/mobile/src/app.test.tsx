@@ -1275,6 +1275,57 @@ describe('App Expense window (#219)', () => {
     expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 60 + 1140, animated: false });
   });
 
+  // The device recheck of a31f3e8 (#219): an edit at the list's end came back one row short, as the
+  // list dropped Load more while its window was read again.
+  it('returns an edit made at the list’s end to its place: the list keeps Load more while read again', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    for (let number = 2; number <= 5; number += 1) await app.press('Load more expenses');
+    await app.scrollTo(4980);
+    await app.scrollEnd(5000, 'fling');
+    const id = `e${String(5 * 100 + 18).padStart(23, '0')}`;
+    const record = { ...expense(id, 'Fictional row 5-19'), revision: 0, isDeleted: false };
+    // Once the edit is sent, the window's pages answer only when released.
+    let holding = false;
+    const held: (() => void)[] = [];
+    app.use((path, init) => {
+      if (path === `/api/groups/${groupId}/expenses/${id}`)
+        return init.method === 'PATCH'
+          ? json({ status: 200, data: { ...record, description: 'Fictional row 5-19 r' } })
+          : json({ status: 200, data: record });
+      if (holding && path.includes('/expenses?'))
+        return new Promise<FetchResponse>((resolve) => held.push(() => resolve(sixPages(path)!)));
+      return sixPages(path);
+    });
+    await app.press('Fictional row 5-19');
+    await settle(app.controller.editExpense());
+    await settle(app.controller.updateExpenseDraft({ description: 'Fictional row 5-19 r' }));
+    holding = true;
+    native.scrollTo.mockClear();
+    const saving = app.controller.saveExpense();
+    await settle();
+    // Back on Expenses while the window is read again: Load more holds its place, disabled, so
+    // the list is as long as when the member left it, and the return lands where it began.
+    expect(held.length).toBeGreaterThan(0);
+    expect(app.text()).toContain('Expense updated · Fictional row 5-19 r');
+    expect(app.pressable('Load more expenses').props.accessibilityState).toEqual({
+      disabled: true,
+    });
+    await app.layout(700, 5700);
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000, animated: false });
+    holding = false;
+    while (held.length) {
+      held.shift()!();
+      await settle();
+    }
+    await settle(saving);
+    expect(app.text()).toContain('Fictional row 5-19 r');
+    expect(app.pressable('Load more expenses').props.accessibilityState).toEqual({
+      disabled: false,
+    });
+  });
+
   it('returns to where scrolling stopped after an Expense opened from the list', async () => {
     const app = await renderApp();
     app.use(sixPages);
