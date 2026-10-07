@@ -14,6 +14,7 @@ import type {
   MobileSnapshot,
 } from '../data/types';
 import {
+  Badge,
   Banner,
   Card,
   CompactAvatar,
@@ -28,12 +29,14 @@ import {
   SectionHeader,
   Skeleton,
   SkeletonText,
+  StatusText,
   useLargeText,
   useLineBox,
 } from './compact';
-import { Freshness, RetainedNotice } from './financial-views';
+import { RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
+import { refreshedLabel } from './refresh-feedback';
 import { fonts, useTheme } from './theme';
 
 const themeIcons: Record<GroupCategory, IconName> = {
@@ -192,8 +195,20 @@ function CurrencyRow({ bucket }: { bucket: HomeCurrencyBalance }) {
 }
 
 /**
- * One row per currency, each kept separate, with when the figures were read: "Saved" when
- * they come from this device offline. `silent` keeps an automatic refresh unannounced.
+ * When the figures shown were read. "Updated hh:mm" only for the server's answer in this
+ * session; this device's saved copy says "Saved hh:mm", never presented as fresh (ADR 0006),
+ * and offline it is a badge. One replacing the other cross-fades in place (#332).
+ */
+function BalancesTime({ state, offline }: { state: HomeFinancialState; offline: boolean }) {
+  if (state.refreshedAt === null) return null;
+  const time = refreshedLabel(state.refreshedAt);
+  if (offline) return <Badge label={`Saved ${time}`} />;
+  return <StatusText tone="muted">{`${state.restored ? 'Saved' : 'Updated'} ${time}`}</StatusText>;
+}
+
+/**
+ * One row per currency, each kept separate, with when the figures were read (`BalancesTime`).
+ * `silent` keeps an automatic refresh unannounced.
  */
 export function HomeBalances({
   state,
@@ -249,9 +264,7 @@ export function HomeBalances({
             <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
               Your balances
             </CompactText>
-            {state.data !== null ? (
-              <Freshness refreshedAt={state.refreshedAt} offline={offline} tone="muted" />
-            ) : null}
+            {state.data !== null ? <BalancesTime state={state} offline={offline} /> : null}
           </View>
         }
         loading={placeholder ? 'Loading your balances' : undefined}

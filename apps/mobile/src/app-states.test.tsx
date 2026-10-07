@@ -804,3 +804,32 @@ describe('offline', () => {
     expect(app.button('Add expense')).toBeNull();
   });
 });
+
+describe('Home says what is true, without jumps (#332)', () => {
+  it('labels a restored copy of the balances “Saved” until the server answers, then “Updated”', async () => {
+    const phone = device();
+    const savedAt = await usedBefore(phone);
+    phone.clock.now += 60 * 60_000;
+    const check = phone.hold('/api/auth/get-session');
+    const app = await start(phone);
+    await check.reached;
+    await settle();
+    const saved = `Saved ${refreshedLabel(savedAt)}`;
+    expect(app.content().inside).toContain(saved);
+    expect(app.text()).not.toContain('Updated');
+
+    // The session is confirmed and the figures are read again: until they answer, what is
+    // shown is still this phone's copy.
+    const figures = phone.hold('/api/user/balances');
+    check.release();
+    await figures.reached;
+    await settle();
+    expect(app.content().inside).toContain(saved);
+    expect(app.text()).not.toContain('Updated');
+
+    figures.release();
+    await settle();
+    expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+    expect(app.text()).not.toContain(saved);
+  });
+});

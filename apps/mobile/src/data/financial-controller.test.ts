@@ -609,6 +609,8 @@ describe('native financial views', () => {
       message: null,
       refreshedAt: new Date(2026, 8, 27, 12).getTime(),
       stale: false,
+      // The server's answer in this session, not this phone's saved copy (#332).
+      restored: false,
     });
   });
 });

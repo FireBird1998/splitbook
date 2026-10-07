@@ -53,6 +53,7 @@ export function emptyHome(): HomeFinancialState {
     message: null,
     refreshedAt: null,
     stale: false,
+    restored: false,
   };
 }
 
@@ -146,17 +147,24 @@ export function projectGroups(read: Read, shown: MobileSnapshot['groups']) {
 
 /**
  * Home's figures as their query holds them, in the shape Home has always shown. Figures on
- * screen keep their time while they are read again; a saved copy shows until the read lands.
+ * screen keep their time, and whether they are this device's saved copy, while they are read
+ * again; a saved copy shows until the read lands.
  */
 export function projectHome(read: Read, shown: HomeFinancialState): HomeFinancialState {
   const figures = read.data && figuresOf(read.data.value);
+  const restored = read.data?.source === 'saved';
   if (read.fetchStatus === 'fetching')
     return same(shown, {
       ...shown,
       status: 'loading',
       message: null,
       ...(figures && shown.data === null
-        ? { data: figures.buckets, byGroup: figures.byGroup, refreshedAt: read.data!.refreshedAt }
+        ? {
+            data: figures.buckets,
+            byGroup: figures.byGroup,
+            refreshedAt: read.data!.refreshedAt,
+            restored,
+          }
         : {}),
     });
   if (read.status === 'success' && figures)
@@ -167,6 +175,7 @@ export function projectHome(read: Read, shown: HomeFinancialState): HomeFinancia
       message: null,
       refreshedAt: read.data!.refreshedAt,
       stale: false,
+      restored,
     });
   const error = failure(read);
   if (!error) return shown;
@@ -721,6 +730,8 @@ export function createHomeQueries(session: HomeSession) {
               data,
               byGroup,
               refreshedAt: figures.refreshedAt,
+              // Restored, never fresh (AMEND-2): Home says "Saved" until the server answers.
+              restored: true,
             }
           : emptyHome(),
         drafts: draftSummaries(records, accountId, list.value),

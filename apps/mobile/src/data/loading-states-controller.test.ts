@@ -526,7 +526,8 @@ describe('cold start (#127 decision): the saved Home while the session is checke
       auth: { status: 'restoring', user: { id: accountId } },
       screen: 'groups',
       groups: { data: [{ id: maple }, { id: lisbon }] },
-      home: { data: [{ currency: 'INR', youOwe: 30 }], refreshedAt: savedAt },
+      // This device's copy, with its own time: never presented as fresh (#332).
+      home: { data: [{ currency: 'INR', youOwe: 30 }], refreshedAt: savedAt, restored: true },
       drafts: [{ groupId: maple, description: 'Weekly groceries' }],
       offline: { active: false },
     });

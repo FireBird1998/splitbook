@@ -69,6 +69,12 @@ export interface HomeFinancialState extends ReadFreshness {
    */
   byGroup: Record<string, HomeGroupBalance[]>;
   message: string | null;
+  /**
+   * The figures shown are this device's saved copy, restored with their own time (ADR 0006,
+   * AMEND-2), not an answer the server gave in this session: they say "Saved", never "Updated"
+   * (#332). Unset is the same as false.
+   */
+  restored?: boolean;
 }
 
 /** An Expense draft kept on this device, as Home lists it to resume. */
