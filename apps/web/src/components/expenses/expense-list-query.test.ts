@@ -5,9 +5,12 @@ import {
   activeFilterCount,
   customRangeError,
   expenseListFilters,
+  openExpenseQuery,
   readAmount,
   readExpenseListQuery,
+  readOpenExpense,
   writeExpenseListQuery,
+  writeOpenExpense,
   type ExpenseListContext,
 } from './expense-list-query';
 
@@ -248,5 +251,38 @@ describe('the Expense list read for a view', () => {
         { userId: ALEX, pageSize: 50 },
       ),
     ).toMatchObject({ dateFrom: '2026-09-01', dateTo: '2026-09-05', sortOrder: 'desc' });
+  });
+});
+
+describe('the open Expense in the address (#311)', () => {
+  const OPEN = 'e00000000000000000000007';
+
+  it('reads an Expense id, and nothing that couldn’t be one', () => {
+    expect(readOpenExpense(new URLSearchParams(`expense=${OPEN}`))).toBe(OPEN);
+    for (const query of ['', 'expense=', 'expense=7', `expense=${OPEN}x`, 'expense=../balances'])
+      expect(readOpenExpense(new URLSearchParams(query))).toBeNull();
+  });
+
+  it('opens and closes beside the view, which stays as it was, page included', () => {
+    const view = `month=2026-08&search=rent&paidBy=${SAM}&page=2`;
+    expect(writeOpenExpense(view, OPEN)).toBe(`${view}&expense=${OPEN}`);
+    expect(writeOpenExpense(`${view}&expense=${OPEN}`, null)).toBe(view);
+    expect(writeOpenExpense(`expense=${OPEN}`, null)).toBe('');
+  });
+
+  it('stays open when the view changes, and is never a filter', () => {
+    expect(writeExpenseListQuery(`expense=${OPEN}&page=3`, { tag: RENT })).toBe(
+      `expense=${OPEN}&tag=${RENT}`,
+    );
+    expect(read(`expense=${OPEN}`)).toEqual(DEFAULT_EXPENSE_LIST_QUERY);
+    expect(activeFilterCount(read(`expense=${OPEN}`))).toBe(0);
+  });
+
+  it('links to an Expense open, with the list searched for it', () => {
+    expect(openExpenseQuery(OPEN)).toBe(`expense=${OPEN}`);
+    const query = openExpenseQuery(OPEN, { search: 'Tea & toast?' });
+    expect(query).toBe(`expense=${OPEN}&search=Tea%20%26%20toast%3F`);
+    expect(readOpenExpense(new URLSearchParams(query))).toBe(OPEN);
+    expect(read(query).search).toBe('Tea & toast?');
   });
 });

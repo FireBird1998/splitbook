@@ -51,6 +51,7 @@ const adoptedFiles = [
   'src/components/expenses/ExpenseTable.tsx',
   'src/components/expenses/ExpenseCard.tsx',
   'src/components/expenses/ExpenseDetails.tsx',
+  'src/components/expenses/ExpensePanel.tsx',
   'src/components/expenses/ExpenseStats.tsx',
   'src/components/expenses/expense-row-parts.tsx',
   'src/components/expenses/QuickAddExpense.tsx',

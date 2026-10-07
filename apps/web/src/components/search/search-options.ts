@@ -13,6 +13,7 @@ import type {
   SearchRead,
 } from '@splitbook/shared/search-read';
 import type { GroupCategory } from '@splitbook/shared/types';
+import { openExpenseQuery } from '@/components/expenses/expense-list-query';
 import { groupTabHref } from '@/components/groups/group-tabs';
 
 export type SearchSectionKey = 'groups' | 'people' | 'expenses';
@@ -44,11 +45,15 @@ export interface SearchSection {
 export const groupHref = (groupId: string) => `/groups/${encodeURIComponent(groupId)}`;
 
 /**
- * An Expense opens its Group's Expenses tab with the list searched for its description. An
- * address for an open Expense comes with the side panel (#311).
+ * An Expense opens in its Group's Expenses tab (#311): in the side panel on a computer, and
+ * below its card on a phone, with the list searched for its description so its row is in view.
  */
-export const expenseHref = (expense: Pick<SearchExpenseResult, 'groupId' | 'description'>) =>
-  groupTabHref(expense.groupId, 'expenses', `search=${encodeURIComponent(expense.description)}`);
+export const expenseHref = (expense: Pick<SearchExpenseResult, 'id' | 'groupId' | 'description'>) =>
+  groupTabHref(
+    expense.groupId,
+    'expenses',
+    openExpenseQuery(expense.id, { search: expense.description }),
+  );
 
 /** Up to two initials, as the sidebar's account avatar shows them. */
 export function initialsOf(name: string): string {

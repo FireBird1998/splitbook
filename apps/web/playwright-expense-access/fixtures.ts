@@ -149,13 +149,16 @@ export function expenseInList(page: Page, description: string) {
     .filter({ has: page.getByRole('button', named) });
 }
 
-/** Open an Expense in the list and press Edit or Delete in its details. */
+/**
+ * Open an Expense in the list and press Edit or Delete in its details: the side panel on a
+ * computer (#311), whose Delete reads "Delete Expense", or below the card on a phone.
+ */
 export async function expenseAction(page: Page, description: string, action: 'Edit' | 'Delete') {
   const opener = expenseButton(page, description);
   if ((await opener.getAttribute('aria-expanded')) !== 'true') await opener.click();
   await page
     .getByRole('region', { name: `${description} details` })
-    .getByRole('button', { name: action, exact: true })
+    .getByRole('button', { name: action === 'Delete' ? /^Delete( Expense)?$/ : /^Edit$/ })
     .click();
 }
 
