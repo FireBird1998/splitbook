@@ -562,6 +562,21 @@ describe('Expense rows', () => {
       await tick();
       expect(onShift).not.toHaveBeenCalled();
     });
+
+    it('moves the view for the slide only, not when Load newer brings the newest page back', async () => {
+      const onShift = vi.fn();
+      const slide = render(1, onShift);
+      lay(screen!.root, 1, 200);
+      slide(2);
+      lay(screen!.root, 2, 260);
+      await tick();
+      expect(onShift).toHaveBeenCalledExactlyOnceWith(290 - 1430);
+      // Row 1, laid out before the slide, comes back above the window: nothing moves for it.
+      slide(1);
+      lay(screen!.root, 1, 200);
+      await tick();
+      expect(onShift).toHaveBeenCalledOnce();
+    });
   });
 
   it('shows placeholders on a first load, and a retry when it fails', () => {
