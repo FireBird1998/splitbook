@@ -14,12 +14,12 @@ import type {
   MobileExpense,
   MobileGroup,
 } from '../data/types';
-import { findHosts, flatten, layoutHeight } from '../test-utils/layout';
+import { findHosts, flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
 import { setFileWindow, setWindow, timing } from '../test-utils/native';
 import { motion } from './compact';
 import { GroupBalancesView, settledIn } from './group-balances';
 import { GroupExpensesView } from './group-expenses';
-import { HomeBalances, HomeGroups } from './home';
+import { balanceWidth, HomeBalances, HomeGroups } from './home';
 
 // #331: content takes its skeleton's place at the same height, so nothing below it moves when
 // it arrives: Home's Groups and balances, and a Group's Expenses, at 100% and 130% text. The
@@ -147,6 +147,99 @@ describe('Home', () => {
     expect(faded).toHaveLength(1);
     expect(faded[0]).toContain('Maple House');
     expect(faded[0]).toContain('Sunday Football');
+  });
+
+  // #332: the list can land before Home's figures, which hold each Group's balance.
+  const listed = (known: boolean, pending: boolean, owed = -1480) => (
+    <HomeGroups
+      groups={{ status: 'ready', data: [maple, lisbon, football], message: null, loaded: true }}
+      byGroup={
+        known
+          ? {
+              [maple.id]: [{ currency: 'INR', balance: owed }],
+              [lisbon.id]: [{ currency: 'INR', balance: 620 }],
+              [football.id]: [],
+            }
+          : {}
+      }
+      balancesPending={pending}
+      newGroupLabel="New Group"
+      onNewGroup={vi.fn()}
+      onOpen={vi.fn()}
+      onRetry={vi.fn()}
+    />
+  );
+  /**
+   * Each Group row's slot after its tile and title, as wide as it lays out (0 for a row without
+   * one), and the rows' text: the rows that open, found by their label, or the rows of the
+   * list's busy skeleton.
+   */
+  const round = (dp: number) => Math.round(dp * 100) / 100;
+  const rows = (element: ReactElement, fontScale: number) => {
+    setWindow({ fontScale });
+    act(() => {
+      renderer = create(element);
+    });
+    const tree = renderer!.toJSON();
+    const [skeleton] = findHosts(
+      tree,
+      (props) => props.accessibilityLabel === 'Loading your Groups',
+    );
+    const found = skeleton
+      ? (skeleton.children ?? []).map((row) =>
+          typeof row === 'object' ? row.children?.at(-1) : null,
+        )
+      : findHosts(tree, (props) => String(props.accessibilityLabel ?? '').startsWith('Open '));
+    const widths = found.map((row) => {
+      const slot = typeof row === 'object' ? row?.children?.[2] : null;
+      // To a hundredth of a dp: sums of character widths aren't exact.
+      return typeof slot === 'object' && slot ? round(layoutWidth(slot, fontScale)) : 0;
+    });
+    const text = renderer!.root
+      .findAll((node) => (node.type as unknown) === 'Text')
+      .flatMap((node) => node.children.filter((run) => typeof run === 'string'))
+      .join(' ');
+    act(() => renderer!.unmount());
+    renderer = undefined;
+    return { widths, text };
+  };
+  it.each(scales)(
+    'each Group keeps one place for its balance, read or landed, so its name is cut once, at %s× text',
+    (scale) => {
+      // On the device a long name gained or lost characters as each amount landed beside it
+      // (#332 device check, C5): the place is a nine-character amount's, in both states.
+      const width = round(balanceWidth(scale));
+      expect(rows(listed(false, true), scale).widths).toEqual([width, width, width]);
+      expect(rows(listed(true, false), scale).widths).toEqual([width, width, width]);
+      // And nothing below moves.
+      const { before, after: reading } = heights(groups(true), listed(false, true), scale);
+      const { after: landed } = heights(listed(false, true), listed(true, false), scale);
+      expect([reading, landed]).toEqual([before, before]);
+    },
+  );
+
+  it('widens only the row of an amount wider than that place, never cutting the amount', () => {
+    const width = round(balanceWidth(1));
+    const { widths, text } = rows(listed(true, false, -1234567.5), 1);
+    expect(widths[0]).toBeGreaterThan(width);
+    expect(widths.slice(1)).toEqual([width, width]);
+    expect(text).toMatch(/₹[\d,]+67\.50 you owe/);
+  });
+
+  it.each(scales)(
+    'a Group whose balance is known keeps it while Home’s figures are read again, at %s× text',
+    (scale) => {
+      const shown = rows(listed(true, false), scale);
+      const reading = rows(listed(true, true), scale);
+      expect(reading.widths).toEqual(shown.widths);
+      for (const amount of ['₹1,480.00', '₹620.00', 'Settled up'])
+        expect(reading.text).toContain(amount);
+    },
+  );
+
+  it('the balances fade in where their places were held', async () => {
+    const faded = await arrival(listed(false, true), listed(true, false));
+    expect(faded).toEqual(['₹1,480.00 you owe', '₹620.00 owed to you', 'Settled up']);
   });
 
   const balances = (patch: Partial<HomeFinancialState>) => (

@@ -1,33 +1,39 @@
 import { View } from 'react-native';
 import type { LoadStatus } from '../data/types';
-import { Badge, StatusText, type TextTone } from './compact';
+import { Badge, StatusText, useLargeText, type TextTone } from './compact';
 import { Button, Copy, Icon } from './primitives';
 import { refreshedLabel } from './refresh-feedback';
 import { useTheme } from './theme';
 
 /**
- * The one quiet cue for a refresh or retry of content that stays on screen, with when that
- * content was saved when known; `checking` marks the saved Home while the session is checked.
+ * The one quiet cue for a refresh or retry of content that stays on screen; `checking` marks
+ * the saved Home while the session is checked. It gives no time: what is shown says when it
+ * was read, "Saved" only for this device's copy, so a top bar never calls an answer from this
+ * session "Saved".
+ *
+ * It stays on one line (#332). At large text its words say it alone, without the icon: on a
+ * 360dp phone at 130% the icon left "Refreshing…" 6dp short, and it wrapped. Wherever it still
+ * doesn't fit, it shrinks to fit rather than wrap or lose a word.
  */
 export function RefreshStatus({
   visible,
-  savedAt = null,
   checking = false,
 }: {
   visible: boolean;
-  savedAt?: number | null;
   checking?: boolean;
 }) {
+  const large = useLargeText();
   if (!visible) return null;
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 }}>
-      <Icon name="sync-outline" size={15} />
-      <StatusText shrink style={{ fontSize: 13, lineHeight: 20 }}>
-        {savedAt === null
-          ? checking
-            ? 'Checking…'
-            : 'Refreshing…'
-          : `Saved ${refreshedLabel(savedAt)} · ${checking ? 'checking' : 'refreshing'}`}
+      {large ? null : <Icon name="sync-outline" size={15} />}
+      <StatusText
+        shrink
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        style={{ fontSize: 13, lineHeight: 20 }}
+      >
+        {checking ? 'Checking…' : 'Refreshing…'}
       </StatusText>
     </View>
   );

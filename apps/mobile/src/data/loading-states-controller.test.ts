@@ -525,14 +525,14 @@ describe('cold start (#127 decision): the saved Home while the session is checke
     expect(saved).toMatchObject({
       auth: { status: 'restoring', user: { id: accountId } },
       screen: 'groups',
-      groups: { data: [{ id: maple }, { id: lisbon }] },
-      home: { data: [{ currency: 'INR', youOwe: 30 }], refreshedAt: savedAt },
+      // This device's copies, the figures with their own time: never presented as fresh (#332).
+      groups: { data: [{ id: maple }, { id: lisbon }], restored: true },
+      home: { data: [{ currency: 'INR', youOwe: 30 }], refreshedAt: savedAt, restored: true },
       drafts: [{ groupId: maple, description: 'Weekly groceries' }],
       offline: { active: false },
     });
     expect(refreshFeedback(saved)).toMatchObject({
       checking: true,
-      savedAt,
       quiet: false,
       progress: null,
     });
@@ -689,7 +689,6 @@ describe('refresh feedback (#127)', () => {
     const controller = f.create();
     await controller.signIn('alex');
     await controller.openGroup(maple);
-    const verifiedAt = f.clock.now;
     f.clock.now += 31_000;
     const automatic = f.hold(`/api/groups/${maple}/expenses`);
     const foreground = controller.refresh('foreground');
@@ -710,9 +709,7 @@ describe('refresh feedback (#127)', () => {
     expect(refreshFeedback(controller.getSnapshot())).toMatchObject({
       quiet: true,
       silent: false,
-      savedAt: f.clock.now,
     });
-    expect(verifiedAt).toBeLessThan(f.clock.now);
     retry.release();
     await retrying;
   });
@@ -1502,9 +1499,10 @@ describe('Home after navigating while the Groups list loads (#190)', () => {
     await controller.openGroup(maple);
     list.release(new Error('Network request failed'));
     await pulling;
+    // The Groups read earlier stay; never "not saved" beside them (#332).
     expect(controller.getSnapshot().groups).toMatchObject({
       status: 'error',
-      message: 'This view was not saved on this device. Connect to load it.',
+      message: 'This phone no longer keeps a copy of them.',
     });
 
     f.requests.length = 0;

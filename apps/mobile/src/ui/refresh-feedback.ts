@@ -6,11 +6,10 @@ export interface RefreshFeedback {
   pull: boolean;
   /**
    * Visible content is re-read or retried: Home's top bar says so, and in a Group each
-   * destination's own freshness slot reads "Saved hh:mm · refreshing".
+   * destination's own freshness slot reads "Saved hh:mm · refreshing". The top bar gives no
+   * time: what Home shows says itself when it was read (#332).
    */
   quiet: boolean;
-  /** When the oldest figures being re-read on Home were verified, shown with its status. */
-  savedAt: number | null;
   /** An automatic refresh of this view is running: nothing says so, not even an updating label. */
   silent: boolean;
   /** Cold start: the saved Home shows while the session is checked. */
@@ -70,55 +69,27 @@ export function refreshFeedback(state: MobileSnapshot): RefreshFeedback {
   const refreshing =
     state.screen === 'groups'
       ? [
-          { active: groups.status === 'loading' && groups.loaded, time: null },
-          {
-            // Unverified Home figures already carry their own "Updating" label.
-            active: home.status === 'loading' && home.data !== null && !home.stale,
-            time: home.refreshedAt,
-          },
+          groups.status === 'loading' && groups.loaded,
+          // Unverified Home figures already carry their own "Updating" label.
+          home.status === 'loading' && home.data !== null && !home.stale,
         ]
       : !group
         ? []
         : [
-            {
-              active: detail.status === 'loading' && detail.data !== null,
-              time: detail.refreshedAt,
-            },
-            ...(state.destination === 'activity'
-              ? [
-                  {
-                    // Older pages have their own footer; a first load shows its placeholder.
-                    active: activity.status === 'loading' && activity.pagination !== null,
-                    time: activity.refreshedAt,
-                  },
-                ]
+            detail.status === 'loading' && detail.data !== null,
+            state.destination === 'activity'
+              ? // Older pages have their own footer; a first load shows its placeholder.
+                activity.status === 'loading' && activity.pagination !== null
               : state.destination === 'balances'
-                ? [
-                    {
-                      // Unverified Balances already carry their own "Updating" label.
-                      active:
-                        balances.status === 'loading' && balances.data !== null && !balances.stale,
-                      time: balances.refreshedAt,
-                    },
-                  ]
-                : [
-                    {
-                      // Pagination has its own footer.
-                      active:
-                        expenses.status === 'loading' &&
-                        expenses.moreStatus !== 'loading' &&
-                        listed,
-                      time: expenses.refreshedAt,
-                    },
-                  ]),
+                ? // Unverified Balances already carry their own "Updating" label.
+                  balances.status === 'loading' && balances.data !== null && !balances.stale
+                : // Pagination has its own footer.
+                  expenses.status === 'loading' && expenses.moreStatus !== 'loading' && listed,
           ];
-  const active = refreshing.filter((item) => item.active);
-  const times = active.map((item) => item.time).filter((time): time is number => time !== null);
-  const quiet = active.length > 0 && !checking && !pull && !silent;
+  const quiet = refreshing.some(Boolean) && !checking && !pull && !silent;
   return {
     pull,
     quiet,
-    savedAt: checking ? home.refreshedAt : times.length ? Math.min(...times) : null,
     silent,
     checking,
     progress: progress ?? (group && quiet ? 'Refreshing' : null),

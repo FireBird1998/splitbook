@@ -69,6 +69,12 @@ export interface HomeFinancialState extends ReadFreshness {
    */
   byGroup: Record<string, HomeGroupBalance[]>;
   message: string | null;
+  /**
+   * The figures shown are this device's saved copy, restored with their own time (ADR 0006,
+   * AMEND-2), not an answer the server gave in this session: they say "Saved", never "Updated"
+   * (#332). Unset is the same as false.
+   */
+  restored?: boolean;
 }
 
 /** An Expense draft kept on this device, as Home lists it to resume. */
@@ -402,6 +408,8 @@ export interface MobileSnapshot {
     message: string | null;
     /** A list has been read for this account, from the server or this device; it may be empty. */
     loaded: boolean;
+    /** The list shown is this device's saved copy, as Home's figures can be (#332). */
+    restored?: boolean;
   };
   detail: {
     status: LoadStatus;

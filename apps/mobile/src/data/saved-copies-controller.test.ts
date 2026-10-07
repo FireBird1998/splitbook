@@ -654,7 +654,8 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
 
     expect(await restartOffline(f, controller)).toEqual({
       groups: ['Maple House', 'Cabin Weekend'],
-      home: notSaved,
+      // Home's own words for figures this phone has no copy of (#332).
+      home: 'Your balances aren’t saved on this phone. Connect to load them.',
       group: mapleId,
       september: [],
       secondPage: [],

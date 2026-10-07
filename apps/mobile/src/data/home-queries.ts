@@ -44,6 +44,28 @@ export const listPath = '/api/groups',
 /** The server can't be reached, and this device has no saved copy of the view. */
 export const notSaved = 'This view was not saved on this device. Connect to load it.';
 const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
+/**
+ * What stays on Home when SplitBook can't be reached and this phone keeps no copy to show
+ * instead: removed by a change, withheld (#323) or never saved. True beside a "Saved" badge too,
+ * for a copy shown before it was removed (#332).
+ */
+const notKept = {
+  balances: 'Couldn’t refresh your balances, and this phone no longer keeps a copy of them.',
+  // Under "Couldn't load your Groups", before "Showing previously verified Groups."
+  groups: 'This phone no longer keeps a copy of them.',
+};
+/**
+ * Home's own words when it has nothing to show and this phone keeps no copy: never the generic
+ * "This view was not saved on this device", which isn't true once a copy was removed or withheld
+ * (#332). Home's "Not available offline" says the same.
+ */
+export const notOnPhone = {
+  balances: 'Your balances aren’t saved on this phone. Connect to load them.',
+  groups: 'Your Groups aren’t saved on this phone. Connect to load them.',
+};
+/** SplitBook couldn't be reached, and this phone had no saved copy to answer with. */
+const unkept = (error: Error) =>
+  error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE';
 
 export function emptyHome(): HomeFinancialState {
   return {
@@ -53,6 +75,7 @@ export function emptyHome(): HomeFinancialState {
     message: null,
     refreshedAt: null,
     stale: false,
+    restored: false,
   };
 }
 
@@ -121,42 +144,57 @@ const failure = (read: Read) =>
  */
 export function projectGroups(read: Read, shown: MobileSnapshot['groups']) {
   const data = read.data && listOf(read.data.value);
+  // Whether the list shown is this device's saved copy: the read's, or the one kept on screen.
+  const restored = data ? read.data!.source === 'saved' : shown.restored;
   if (read.fetchStatus === 'fetching')
     return same(shown, {
       status: 'loading',
       data: data ?? shown.data,
       message: null,
       loaded: shown.loaded || !!data,
+      restored,
     });
   if (read.status === 'success' && data)
-    return same(shown, { status: 'ready', data, message: null, loaded: true });
+    return same(shown, { status: 'ready', data, message: null, loaded: true, restored });
   const error = failure(read);
   if (!error) return shown;
   const denied = error instanceof RequestError && error.status === 403;
   return same(shown, {
     status: denied ? 'denied' : 'error',
     data: denied ? [] : shown.data,
-    message:
-      error instanceof RequestError
+    // Groups still on screen: what is true of them, never "not saved" (#332).
+    message: unkept(error)
+      ? shown.data.length
+        ? notKept.groups
+        : notOnPhone.groups
+      : error instanceof RequestError
         ? error.message
         : 'The server returned invalid group data. Please refresh.',
     loaded: shown.loaded,
+    restored: denied ? false : shown.restored,
   });
 }
 
 /**
  * Home's figures as their query holds them, in the shape Home has always shown. Figures on
- * screen keep their time while they are read again; a saved copy shows until the read lands.
+ * screen keep their time, and whether they are this device's saved copy, while they are read
+ * again; a saved copy shows until the read lands.
  */
 export function projectHome(read: Read, shown: HomeFinancialState): HomeFinancialState {
   const figures = read.data && figuresOf(read.data.value);
+  const restored = read.data?.source === 'saved';
   if (read.fetchStatus === 'fetching')
     return same(shown, {
       ...shown,
       status: 'loading',
       message: null,
       ...(figures && shown.data === null
-        ? { data: figures.buckets, byGroup: figures.byGroup, refreshedAt: read.data!.refreshedAt }
+        ? {
+            data: figures.buckets,
+            byGroup: figures.byGroup,
+            refreshedAt: read.data!.refreshedAt,
+            restored,
+          }
         : {}),
     });
   if (read.status === 'success' && figures)
@@ -167,6 +205,7 @@ export function projectHome(read: Read, shown: HomeFinancialState): HomeFinancia
       message: null,
       refreshedAt: read.data!.refreshedAt,
       stale: false,
+      restored,
     });
   const error = failure(read);
   if (!error) return shown;
@@ -174,8 +213,12 @@ export function projectHome(read: Read, shown: HomeFinancialState): HomeFinancia
   return {
     ...(denied ? emptyHome() : shown),
     status: denied ? 'denied' : 'error',
-    message:
-      error instanceof RequestError
+    // Figures still on screen: what is true of them, never "not saved" (#332).
+    message: unkept(error)
+      ? shown.data !== null
+        ? notKept.balances
+        : notOnPhone.balances
+      : error instanceof RequestError
         ? error.message
         : 'Could not load your balances. Please try again.',
   };
@@ -713,7 +756,13 @@ export function createHomeQueries(session: HomeSession) {
         return null;
       const { buckets: data = null, byGroup = {} } = figures?.value ?? {};
       return {
-        groups: { status: 'loading' as const, data: list.value, message: null, loaded: true },
+        groups: {
+          status: 'loading' as const,
+          data: list.value,
+          message: null,
+          loaded: true,
+          restored: true,
+        },
         home: figures
           ? {
               ...emptyHome(),
@@ -721,6 +770,8 @@ export function createHomeQueries(session: HomeSession) {
               data,
               byGroup,
               refreshedAt: figures.refreshedAt,
+              // Restored, never fresh (AMEND-2): Home says "Saved" until the server answers.
+              restored: true,
             }
           : emptyHome(),
         drafts: draftSummaries(records, accountId, list.value),

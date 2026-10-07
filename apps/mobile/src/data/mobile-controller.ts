@@ -4750,6 +4750,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         }),
       );
       assertCurrent(owner);
+      // SplitBook answered, so the app is online (ADR 0006: a successful request clears
+      // offline), wherever the member is now. The join made Home's Groups and figures obsolete:
+      // the next time Home shows they're read again, and this device's copies from earlier no
+      // longer make Home say it's offline. Its figures still say when they were read (#332).
+      for (const path of ['/api/groups', '/api/user/balances']) staleReads.delete(path);
       if (view !== viewRequest || pendingCode !== code) return;
       await savePending(null);
       assertCurrent(owner);
@@ -4757,6 +4762,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       publish({
         ...snapshot,
         invitation: { code: null, status: 'idle', preview: null, message: null },
+        // Online again, Home's figures are no longer its earlier failure to reach SplitBook:
+        // the join made them obsolete, and they're read when Home next shows them (#332).
+        home:
+          snapshot.home.status === 'error'
+            ? { ...snapshot.home, status: 'idle', message: null }
+            : snapshot.home,
       });
       // Home, while the Groups list is read again with the joined Group; then that Group.
       const loadingGroups = listOnHome(owner);
@@ -5040,6 +5051,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           data: [group, ...snapshot.groups.data.filter((item) => item.id !== group.id)],
           message: null,
           loaded: true,
+          // The rest of the list is still whatever it was: this device's copy, or not (#332).
+          restored: snapshot.groups.restored,
         },
       });
       created = group.id;

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -13,7 +13,9 @@ import type {
   MobileGroup,
   MobileSnapshot,
 } from '../data/types';
+import { notOnPhone } from '../data/home-queries';
 import {
+  Badge,
   Banner,
   Card,
   CompactAvatar,
@@ -28,12 +30,16 @@ import {
   SectionHeader,
   Skeleton,
   SkeletonText,
+  StatusText,
+  moneySizes,
+  scaledSp,
   useLargeText,
   useLineBox,
 } from './compact';
-import { Freshness, RetainedNotice } from './financial-views';
+import { RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
+import { refreshedLabel } from './refresh-feedback';
 import { fonts, useTheme } from './theme';
 
 const themeIcons: Record<GroupCategory, IconName> = {
@@ -76,7 +82,7 @@ export function HomeTopBar({
         backgroundColor: theme.bg,
       }}
     >
-      {/* Shrinks so a long refresh status wraps instead of pushing the actions off screen. */}
+      {/* Takes the room the actions leave; the status in it is one short line (#332). */}
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <Text
           accessibilityRole="header"
@@ -192,8 +198,21 @@ function CurrencyRow({ bucket }: { bucket: HomeCurrencyBalance }) {
 }
 
 /**
- * One row per currency, each kept separate, with when the figures were read: "Saved" when
- * they come from this device offline. `silent` keeps an automatic refresh unannounced.
+ * When the figures shown were read. "Updated hh:mm" for the server's answer in this session,
+ * offline too; this device's saved copy says "Saved hh:mm", never presented as fresh (ADR
+ * 0006), and offline it is the badge every saved view shows. "Saved" giving way to "Updated"
+ * cross-fades in place (#332).
+ */
+function BalancesTime({ state, offline }: { state: HomeFinancialState; offline: boolean }) {
+  if (state.refreshedAt === null) return null;
+  const time = refreshedLabel(state.refreshedAt);
+  if (state.restored && offline) return <Badge label={`Saved ${time}`} />;
+  return <StatusText tone="muted">{`${state.restored ? 'Saved' : 'Updated'} ${time}`}</StatusText>;
+}
+
+/**
+ * One row per currency, each kept separate, with when the figures were read (`BalancesTime`).
+ * `silent` keeps an automatic refresh unannounced.
  */
 export function HomeBalances({
   state,
@@ -217,7 +236,8 @@ export function HomeBalances({
     return (
       <NotAvailableOffline
         compact
-        message="Your balances haven’t been saved on this phone yet. Connect to load them."
+        // True whether they were never saved, removed by a change or sign-out, or withheld.
+        message={notOnPhone.balances}
         onRetry={onRefresh}
       />
     );
@@ -249,9 +269,7 @@ export function HomeBalances({
             <CompactText variant="overline" accessibilityRole="header" style={{ flex: 1 }}>
               Your balances
             </CompactText>
-            {state.data !== null ? (
-              <Freshness refreshedAt={state.refreshedAt} offline={offline} tone="muted" />
-            ) : null}
+            {state.data !== null ? <BalancesTime state={state} offline={offline} /> : null}
           </View>
         }
         loading={placeholder ? 'Loading your balances' : undefined}
@@ -401,14 +419,31 @@ function groupPosition(balances: HomeGroupBalance[]) {
   };
 }
 
+/**
+ * The width of a Group row's balance, before and after it lands, so a long name is cut once
+ * (#332): a nine-character amount at this text size, such as "₹1,480.00", in IBM Plex Mono,
+ * whose every character is 0.6 of its size. "Settled up" and the captions fit in it; a wider
+ * amount widens its own row, and is never cut.
+ */
+export function balanceWidth(fontScale: number) {
+  const { fontSize, letterSpacing } = moneySizes.list;
+  return 9 * (0.6 * scaledSp(fontSize as number, fontScale) + (letterSpacing as number));
+}
+
 function GroupRow({
   group,
   balances,
+  pending,
+  width,
   onPress,
 }: {
   group: MobileGroup;
   /** Undefined while the member's balance in this Group is unknown. */
   balances: HomeGroupBalance[] | undefined;
+  /** Home's figures are being read: an unknown balance keeps its place until they land. */
+  pending: boolean;
+  /** The balance's width (`balanceWidth`). */
+  width: number;
   onPress?: () => void;
 }) {
   const descriptor = getGroupTheme(group.category);
@@ -426,6 +461,8 @@ function GroupRow({
       leading={<IconTile icon={themeIcons[descriptor.id]} />}
       title={group.name}
       meta={meta}
+      trailingLoading={pending && !balances}
+      trailingWidth={width}
       trailing={
         position ? (
           <RowAmount amount={position.amount} tone={position.tone} caption={position.caption} />
@@ -470,11 +507,14 @@ function NoGroups({ onRefresh }: { onRefresh: () => void }) {
 
 /**
  * The member's Groups, each with their balance in it, and New Group. `disabled` keeps them
- * from opening yet, as while the session is checked.
+ * from opening yet, as while the session is checked. While Home's figures are read
+ * (`balancesPending`), a Group whose balance isn't known yet holds its place, so its row
+ * doesn't lay out again when the balance lands after the list (#332).
  */
 export function HomeGroups({
   groups,
   byGroup,
+  balancesPending = false,
   newGroupLabel,
   offline = false,
   disabled = false,
@@ -484,6 +524,7 @@ export function HomeGroups({
 }: {
   groups: MobileSnapshot['groups'];
   byGroup: HomeFinancialState['byGroup'];
+  balancesPending?: boolean;
   newGroupLabel: string;
   offline?: boolean;
   disabled?: boolean;
@@ -493,6 +534,7 @@ export function HomeGroups({
 }) {
   const known = groups.loaded || groups.data.length > 0;
   const unsaved = groups.status === 'error' && offline && !groups.data.length;
+  const width = balanceWidth(useWindowDimensions().fontScale);
   return (
     <View style={{ gap: 6 }}>
       <SectionHeader
@@ -509,11 +551,7 @@ export function HomeGroups({
         }
       />
       {unsaved ? (
-        <NotAvailableOffline
-          compact
-          message="Your Groups haven’t been saved on this phone yet. Connect to load them."
-          onRetry={onRetry}
-        />
+        <NotAvailableOffline compact message={notOnPhone.groups} onRetry={onRetry} />
       ) : null}
       {(groups.status === 'error' || groups.status === 'denied') && !unsaved && (
         <Banner
@@ -542,6 +580,8 @@ export function HomeGroups({
               <GroupRow
                 group={group}
                 balances={byGroup[group.id]}
+                pending={balancesPending}
+                width={width}
                 onPress={disabled ? undefined : () => onOpen(group.id)}
               />
             </View>

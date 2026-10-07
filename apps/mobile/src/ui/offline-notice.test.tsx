@@ -82,15 +82,11 @@ describe('not available offline', () => {
 });
 
 describe('refresh status', () => {
-  it('reads “Saved hh:mm · refreshing”, or “· checking” for the saved Home at cold start', () => {
-    expect(text(render(<RefreshStatus visible savedAt={savedAt} />))).toBe(
-      `Saved ${refreshedLabel(savedAt)} · refreshing`,
-    );
+  // What is shown says when it was read; the status says only what is happening (#332).
+  it('reads “Refreshing…”, or “Checking…” for the saved Home at cold start', () => {
     expect(text(render(<RefreshStatus visible />))).toBe('Refreshing…');
-    expect(text(render(<RefreshStatus visible savedAt={savedAt} checking />))).toBe(
-      `Saved ${refreshedLabel(savedAt)} · checking`,
-    );
-    expect(render(<RefreshStatus visible={false} savedAt={savedAt} />).children).toEqual([]);
+    expect(text(render(<RefreshStatus visible checking />))).toBe('Checking…');
+    expect(render(<RefreshStatus visible={false} />).children).toEqual([]);
   });
 
   it('draws a first load’s one progress bar under the Group’s top bar', () => {

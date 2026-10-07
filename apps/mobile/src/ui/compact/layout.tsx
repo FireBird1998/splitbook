@@ -215,10 +215,26 @@ const listRow = {
   alignItems: 'center' as const,
   gap: 12,
 };
+/** Where a list row's trailing value sits, and its skeleton: an amount over its caption. */
+const trailingBox = { alignItems: 'flex-end' as const, gap: 1 };
+
+/** An amount and its caption, as a list row's trailing value lays them out, still unknown. */
+function TrailingSkeleton() {
+  return (
+    <>
+      <Skeleton width={64} line="list" />
+      <Skeleton width={44} line="caption" />
+    </>
+  );
+}
 
 /**
  * A compact row: leading icon or avatar, a one-line title and meta, and a trailing value.
  * Pressable rows need an accessibility label that states everything the row shows.
+ *
+ * While `trailingLoading` is set, an amount's skeleton holds the trailing value's place, so the
+ * title is laid out as it will be; when it clears, the value fades in where the skeleton was.
+ * `trailingWidth` keeps that place one width, skeleton or value, unless a value is wider.
  */
 export function ListRow({
   leading,
@@ -226,6 +242,8 @@ export function ListRow({
   meta,
   metaTone = 'secondary',
   trailing,
+  trailingLoading = false,
+  trailingWidth,
   onPress,
   accessibilityLabel,
   highlighted = false,
@@ -235,11 +253,15 @@ export function ListRow({
   meta?: string;
   metaTone?: TextTone;
   trailing?: ReactNode;
+  trailingLoading?: boolean;
+  trailingWidth?: number;
   onPress?: () => void;
   accessibilityLabel?: string;
   highlighted?: boolean;
 }) {
   const theme = useTheme();
+  const reveal = useReveal(trailingLoading);
+  const after = trailingLoading ? <TrailingSkeleton /> : trailing;
   const content = (
     <>
       {leading}
@@ -253,7 +275,16 @@ export function ListRow({
           </CompactText>
         ) : null}
       </View>
-      {trailing ? <View style={{ alignItems: 'flex-end', gap: 1 }}>{trailing}</View> : null}
+      {after ? (
+        <FadeIn
+          reveal={reveal}
+          style={
+            trailingWidth === undefined ? trailingBox : [trailingBox, { minWidth: trailingWidth }]
+          }
+        >
+          {after}
+        </FadeIn>
+      ) : null}
     </>
   );
   const style = { ...listRow, backgroundColor: highlighted ? theme.brand.bg : undefined };
@@ -428,9 +459,8 @@ function SkeletonList({
               <Skeleton width="38%" line="caption" />
             </View>
             {avatar ? null : (
-              <View style={{ alignItems: 'flex-end', gap: 1 }}>
-                <Skeleton width={64} line="list" />
-                <Skeleton width={44} line="caption" />
+              <View style={trailingBox}>
+                <TrailingSkeleton />
               </View>
             )}
           </View>

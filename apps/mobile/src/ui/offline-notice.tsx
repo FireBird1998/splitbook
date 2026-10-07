@@ -11,13 +11,17 @@ export const savingNeedsConnection = 'Saving needs a connection.';
 /**
  * The screen's one offline banner: what's shown was saved on this device, and when. Each write
  * says why it's unavailable where it is. `onRetry` is for screens without pull-to-refresh.
+ * Without `savedShown`, nothing on screen is this device's saved copy: it says only that the app
+ * is offline (#332).
  */
 export function OfflineNotice({
   state,
   onRetry,
+  savedShown = true,
 }: {
   state: MobileSnapshot['offline'];
   onRetry?: () => void;
+  savedShown?: boolean;
 }) {
   if (!state.active && !state.message) return null;
   return (
@@ -26,7 +30,11 @@ export function OfflineNotice({
         <Banner
           tone="offline"
           title="You’re offline"
-          message={`What’s shown was saved on this device${state.refreshedAt === null ? '' : ` at ${refreshedLabel(state.refreshedAt)}`} and may have changed since.`}
+          message={
+            savedShown
+              ? `What’s shown was saved on this device${state.refreshedAt === null ? '' : ` at ${refreshedLabel(state.refreshedAt)}`} and may have changed since.`
+              : 'Connect to load the latest.'
+          }
         >
           {onRetry ? (
             <CompactButton label="Try again" variant="text" dense onPress={onRetry} />

@@ -645,10 +645,8 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
       const restarted = f.create();
       await restarted.restore();
       await settle();
-      const notSaved = {
-        status: 'error',
-        message: 'This view was not saved on this device. Connect to load it.',
-      };
+      // Home's own words for what this phone has no copy of (#332).
+      const notSaved = (message: string) => ({ status: 'error', message });
       expect(restarted.getSnapshot()).toMatchObject({
         auth: { status: 'authenticated', user: { id: alex.id } },
         screen: 'groups',
@@ -658,10 +656,16 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
                 status: 'ready',
                 data: [{ name: 'Maple House' }, { name: 'Cabin Weekend' }],
               },
-              home: { ...notSaved, data: null },
+              home: {
+                ...notSaved('Your balances aren’t saved on this phone. Connect to load them.'),
+                data: null,
+              },
             }
           : {
-              groups: { ...notSaved, data: [] },
+              groups: {
+                ...notSaved('Your Groups aren’t saved on this phone. Connect to load them.'),
+                data: [],
+              },
               home: { status: 'ready', data: [{ youOwe: 30 }] },
             }),
       });
@@ -963,7 +967,8 @@ describe('losing access and leaving the list (#217)', () => {
 describe('a lost Group never returns from the saved Groups list (#323)', () => {
   type Fixture = ReturnType<typeof fixture>;
   type Controller = ReturnType<Fixture['create']>;
-  const notSaved = 'This view was not saved on this device. Connect to load it.';
+  // Home's own words for a list this phone has no copy of (#332).
+  const notSaved = 'Your Groups aren’t saved on this phone. Connect to load them.';
   const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
   const withMaple = (state: MobileSnapshot) => names(state).includes('Maple House');
   /** Maple House anywhere: in the list, or its Group, Expenses or Balances. */
@@ -1446,7 +1451,8 @@ describe('after a write (M2-2)', () => {
       expense: { status: 'uncertain' },
     });
     // The figures from before the save are still on this device, but offline they never stand
-    // in for a read again: Home says they weren't saved here, with no saved time.
+    // in for a read again: Home keeps the figures it read, and says it couldn't refresh them and
+    // has no copy of them, with no saved time (#332).
     expect(f.row(homePath)).toMatchObject({
       value: { data: { buckets: [{ youOwe: 30 }] } },
     });
@@ -1456,7 +1462,9 @@ describe('after a write (M2-2)', () => {
       auth: { status: 'authenticated' },
       home: {
         status: 'error',
-        message: 'This view was not saved on this device. Connect to load it.',
+        data: [{ youOwe: 30 }],
+        message: 'Couldn’t refresh your balances, and this phone no longer keeps a copy of them.',
+        restored: false,
       },
       offline: { active: true, refreshedAt: null },
     });

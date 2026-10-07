@@ -185,7 +185,7 @@ function SplitBook() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
-        {/* Shrinks so a long refresh status wraps instead of pushing Settings off screen. */}
+        {/* Shrinks so the wordmark and its short status never push Settings off screen. */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 }}>
           {state.screen !== 'groups' ? (
             // Disabled while joining: the join finishes and opens its Group.
@@ -226,7 +226,7 @@ function SplitBook() {
             splitbook<Copy style={{ color: theme.brand.main, fontSize: 24 }}>.</Copy>
           </Copy>
           {/* In the fixed header, so it stays visible wherever the content is scrolled. */}
-          <RefreshStatus visible={feedback.quiet} savedAt={feedback.savedAt} />
+          <RefreshStatus visible={feedback.quiet} />
         </View>
         {authenticated && state.screen !== 'settings' ? (
           <Pressable
@@ -574,13 +574,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
     <>
       <HomeTopBar
         userName={state.auth.user!.name}
-        status={
-          <RefreshStatus
-            visible={feedback.quiet || checking}
-            savedAt={feedback.savedAt}
-            checking={checking}
-          />
-        }
+        status={<RefreshStatus visible={feedback.quiet || checking} checking={checking} />}
         accountDisabled={
           checking || state.creation.status === 'saving' || state.invitation.status === 'joining'
         }
@@ -606,7 +600,12 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
           />
         }
       >
-        <OfflineNotice state={state.offline} />
+        {/* Offline, the banner says so; that what's shown was saved on this device, only
+            while some of it is (#332). */}
+        <OfflineNotice
+          state={state.offline}
+          savedShown={!!(state.groups.restored || state.home.restored)}
+        />
         <HomeBalances
           state={state.home}
           offline={state.offline.active}
@@ -646,6 +645,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
         <HomeGroups
           groups={state.groups}
           byGroup={state.home.byGroup}
+          balancesPending={state.home.status === 'idle' || state.home.status === 'loading'}
           newGroupLabel={state.creation.draft.name ? 'Continue Group form' : 'New Group'}
           offline={state.offline.active}
           disabled={checking}
