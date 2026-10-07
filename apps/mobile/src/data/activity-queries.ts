@@ -48,7 +48,7 @@ const refreshFailed =
  * instead: removed by a change, withheld (#323) or never saved (#222, as #219 and #332 say it).
  */
 const notKept =
-  'Couldn’t refresh this Group’s activity, and this phone no longer keeps a copy of it.';
+  'Couldn’t refresh this Group’s activity, and this phone no longer keeps a copy of it. A missing event does not mean the ledger change failed.';
 const olderFailed = 'Couldn’t load older activity.';
 
 /** One parse per answer: structural sharing keeps an unchanged page, and its events, the same. */
@@ -86,6 +86,21 @@ const refused = (error: unknown): error is RequestError =>
 /** A row of a Group's Activity page, never an Expense's history. */
 const ownRow = (path: string, groupId: string) =>
   path.startsWith(`/api/groups/${groupId}/activity?page=`);
+/**
+ * Removes every saved page of a Group's Activity from the persister's rows (M3-1): after a
+ * change, on losing the Group, and at the next start for those this device couldn't remove
+ * (#212, #323).
+ */
+export async function removeActivityRows(
+  rows: FindableRecordStore | undefined,
+  accountId: string,
+  groupId: string,
+  known: Iterable<string> = [],
+) {
+  if (!rows) return;
+  for (const path of await rowPaths(rows, accountId, known))
+    if (ownRow(path, groupId)) await rows.remove(accountId, path);
+}
 
 /** What a Group's Activity needs from the session that owns it: the controller. */
 export interface ActivitySession {
@@ -174,6 +189,8 @@ export function createActivityQueries(session: ActivitySession) {
   const starts = new WeakMap<object, { owner: number; version: number }>();
   /** How many pages each fetch has read so far, by its promise. */
   const pagesRead = new WeakMap<object, number>();
+  /** How many events the first page of each fetch counted, by its promise. */
+  const firstTotals = new WeakMap<object, number>();
   /** Data restored from this device to show while the Group is first read: never verified here. */
   const previews = new WeakSet<object>();
   /**
@@ -384,7 +401,26 @@ export function createActivityQueries(session: ActivitySession) {
     const more = Boolean(query?.state.fetchMeta?.fetchMore);
     run.reading = (async (): Promise<PageEnvelope> => {
       try {
-        return { ...(await fetchOne(key, page, run)), page };
+        const answer = await fetchOne(key, page, run);
+        const total = pageOf(answer.value, key[3] as string, page).pagination.total;
+        if (index === 0 && !more) firstTotals.set(fetch, total);
+        // Offline, an older or newer page shows from this device only while it counted as many
+        // events as the window's first page: otherwise events between them would silently go
+        // missing, or show twice (#222, as #173's pilot did).
+        const first = more ? (query?.state.data as Pages | undefined)?.pages[0] : undefined;
+        const reference = more
+          ? first && first.source !== 'failed'
+            ? pageOf(first.value, key[3] as string, first.page).pagination.total
+            : undefined
+          : index > 0
+            ? firstTotals.get(fetch)
+            : undefined;
+        if (answer.source === 'saved' && reference !== undefined && total !== reference) {
+          const path = pagePath(key, page);
+          session.answered(path, null);
+          throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
+        }
+        return { ...answer, page };
       } catch (error) {
         if (
           index === 0 ||
@@ -526,15 +562,19 @@ export function createActivityQueries(session: ActivitySession) {
    */
   const read = (
     owner: number,
-    { fresh = false, after }: { fresh?: boolean; after?: Promise<unknown> } = {},
-  ) => {
+    {
+      fresh = false,
+      after,
+      saved = false,
+    }: { fresh?: boolean; after?: Promise<unknown>; saved?: boolean } = {},
+  ): Promise<void> => {
     const opened = view;
     if (!opened || opened.lost) return Promise.resolve();
     const key = activityKey(opened.groupId);
     // Only while Activity shows: one a change cancelled is read again only if the member is on it.
     const still = () => view === opened && !opened.lost && session.current(owner) && onScreen();
     opened.reading += 1;
-    const reading = (async () => {
+    const reading = (async (): Promise<boolean> => {
       // What this device saved shows while the Group is first read, with its own time.
       const restoring =
         held(key)?.state.data === undefined
@@ -550,10 +590,10 @@ export function createActivityQueries(session: ActivitySession) {
           try {
             await after;
           } catch {
-            return;
+            return false;
           }
         }
-        if (!still()) return;
+        if (!still()) return false;
         // A read again would join a Load older or newer still on its way: that page lands first,
         // then every page loaded is read again.
         const loading = held<Pages>(key);
@@ -563,7 +603,7 @@ export function createActivityQueries(session: ActivitySession) {
           loading.state.fetchMeta?.fetchMore
         )
           await loading.promise?.catch(() => undefined);
-        if (!still()) return;
+        if (!still()) return false;
         const reread = rereadOf(key),
           before = held(key)?.state.dataUpdatedAt;
         await readNow(listOptions(key, fresh), owner, still);
@@ -578,13 +618,16 @@ export function createActivityQueries(session: ActivitySession) {
         opened.reading -= 1;
         if (session.current(owner)) reproject();
       }
-      // Done once what it read is saved on this device, or removed again, as Activity's reads
-      // always were: a change confirmed meanwhile has removed it by then.
-      if (answered) await queue.idle();
+      return answered;
     })();
     running.add(reading);
     void reading.finally(() => running.delete(reading)).catch(() => undefined);
-    return reading;
+    // `saved`: a command that shows Activity is done once what it read is saved on this device,
+    // or removed again by a change confirmed meanwhile, as Activity's reads always were. A
+    // refresh, whose cue says a read is running, is done when its read lands (#222, review N1).
+    return reading.then(async (answered) => {
+      if (answered && saved) await queue.idle();
+    });
   };
 
   /** Waits until Activity reads nothing, including a read that replaced another. */
@@ -690,7 +733,7 @@ export function createActivityQueries(session: ActivitySession) {
       return same(shown, { ...next, status: 'loading', moreStatus: 'idle' });
     }
     // Not checked by this open yet: a saved copy shows while the Group is read.
-    if (unchecked || !session.checked(groupId) || previewed(data))
+    if (unchecked || !session.checked(groupId) || (previewed(data) && !failure(state)))
       return same(shown, { ...next, status: opened.reading ? 'loading' : 'idle' });
     const error = failure(state);
     if (state.status === 'error' && !error) return shown;
@@ -714,15 +757,24 @@ export function createActivityQueries(session: ActivitySession) {
   /** Activity, projected from its query into `next` while it shows. */
   const project = (next: MobileSnapshot): MobileSnapshot => {
     const opened = view;
+    if (!opened || opened.lost || next.auth.status !== 'authenticated') return next;
     if (
-      !opened ||
-      opened.lost ||
-      next.auth.status !== 'authenticated' ||
       next.screen !== 'group' ||
       next.destination !== 'activity' ||
       next.detail.id !== opened.groupId
-    )
-      return next;
+    ) {
+      // Not shown: events whose query a change, a denial or a Groups list removed go all the
+      // same, so nothing from before this device's own change is kept (#280 item 1).
+      const kept = next.activity;
+      return kept.groupId === opened.groupId &&
+        kept.events.length &&
+        held(activityKey(opened.groupId))?.state.data === undefined
+        ? {
+            ...next,
+            activity: { ...emptyActivity(), groupId: kept.groupId, status: kept.status },
+          }
+        : next;
+    }
     const activity = activityFrom(next.activity, opened);
     return activity === next.activity ? next : { ...next, activity };
   };
@@ -739,8 +791,7 @@ export function createActivityQueries(session: ActivitySession) {
   const removeRows = async (accountId: string, groupId: string) => {
     if (!rows) return;
     forgotten.set(groupId, (forgotten.get(groupId) ?? 0) + 1);
-    for (const path of await rowPaths(rows, accountId, known))
-      if (ownRow(path, groupId)) await rows.remove(accountId, path);
+    await removeActivityRows(rows, accountId, groupId, known);
   };
 
   return {

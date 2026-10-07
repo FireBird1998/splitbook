@@ -1726,10 +1726,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // once the Group's check passes. A Household's follows its Group read, which can add a due
       // recurring Expense and its event, as does a Group not known yet.
       const known = shownGroup(snapshot);
+      const beside = !!known && known.category !== 'home';
+      // Opening (`reuse`) waits for what it read to be saved; a pull or Retry only for the read.
       const activity = showingActivity()
         ? activityQueries.read(owner, {
             fresh: !reuse,
-            ...(known && known.category !== 'home' ? {} : { after: reading }),
+            saved: reuse,
+            ...(beside ? {} : { after: reading }),
           })
         : null;
       await reading;
@@ -1741,8 +1744,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       )
         return;
       // The member may have switched destination while the Group was read.
-      if (showingActivity()) await (activity ?? activityQueries.read(owner, { fresh: !reuse }));
-      else if (overGroup()) await loadPendingPayment(id);
+      if (showingActivity()) {
+        await (activity ?? activityQueries.read(owner, { fresh: !reuse, saved: reuse }));
+        // Read beside a Group that turned out to be a Household: its read can add a due
+        // recurring Expense and its event, so Activity is read again after it (#180, Risk 8).
+        if (activity && beside && snapshot.detail.data?.category === 'home' && showingActivity())
+          await activityQueries.read(owner, { fresh: true, saved: reuse });
+      } else if (overGroup()) await loadPendingPayment(id);
     } catch (error) {
       if (!current(owner) || view !== viewRequest || error instanceof Superseded) return;
       dropDeniedGroup(id, error);
@@ -2031,7 +2039,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     // A Group read still in flight reads the destination shown when it completes.
     if (snapshot.detail.status === 'loading' || !snapshot.detail.data) return;
     // Read unless verified within the freshness window (#181, M1-6).
-    if (destination === 'activity') await activityQueries.read(generation);
+    if (destination === 'activity') await activityQueries.read(generation, { saved: true });
     else if (
       snapshot.financial.groupId === groupId &&
       (at.destination === 'activity' || snapshot.financial.expenses.status === 'idle')

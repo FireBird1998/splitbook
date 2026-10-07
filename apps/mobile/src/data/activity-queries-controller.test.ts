@@ -96,6 +96,8 @@ function fixture() {
     /** Paths that answer 500 instead. */
     failing: new Set<string>(),
     created: 0,
+    /** What a Group's own read answers that differs from the Groups list, such as its Theme. */
+    groupAnswers: {} as Record<string, Record<string, unknown>>,
   };
   let cookie: string | null = null,
     owner: string | null = null,
@@ -279,7 +281,9 @@ function fixture() {
     if (!id || !group) return json({}, 404);
     if (server.revoked.has(id)) return json({}, 403);
     if (path === `/api/groups/${id}`)
-      return server.groupRefused.has(id) ? json({}, 403) : json({ status: 200, data: group });
+      return server.groupRefused.has(id)
+        ? json({}, 403)
+        : json({ status: 200, data: { ...group, ...server.groupAnswers[id] } });
     if (path.startsWith(`/api/groups/${id}/activity?`)) {
       const page = pageOf(path);
       if ((id === mapleId && page === server.failPage) || server.failing.has(path))
@@ -1161,5 +1165,211 @@ describe('the loading-state audit (#280)', () => {
       pagination: null,
     });
     expect(controller.getSnapshot().activity.restored).not.toBe(true);
+  });
+});
+
+// The money-safety review of 90f5c21 (#222): saved copies a change or a loss left behind, a
+// preview whose read fails, older pages offline, and what the cues wait for.
+describe('saved copies and cues after review (#222)', () => {
+  /** Activity's page rows on this device. */
+  const pageRows = (f: ReturnType<typeof fixture>) => f.savedRows(`${maplePath}/activity?page=`);
+
+  it('removes Activity’s pre-change copies at the next start when a change couldn’t remove them (M2-2, #212)', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 2);
+    expect(pageRows(f)).toHaveLength(2);
+    f.device.failRemoval = true;
+    await controller.selectDestination('expenses');
+    await editDinner(controller);
+    await settle();
+    // Still on this device, never shown in this session.
+    expect(pageRows(f)).toHaveLength(2);
+    controller.dispose();
+    f.device.failRemoval = false;
+    later(60_000);
+    f.server.offline = true;
+    const restarted = f.create();
+    await restarted.restore();
+    await settle();
+    expect(pageRows(f)).toEqual([]);
+    await restarted.openActivity(mapleId);
+    await settle();
+    expect(restarted.getSnapshot().activity).toMatchObject({
+      status: 'error',
+      events: [],
+      pagination: null,
+    });
+    expect(restarted.getSnapshot().activity.restored).not.toBe(true);
+  });
+
+  it('removes a lost Group’s row that landed late and couldn’t be removed, at the next start (#323)', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const writing = f.holdWrite(activityPath(1));
+    const opening = controller.openActivity(mapleId);
+    await writing.reached;
+    f.server.revoked.add(mapleId);
+    await controller.refresh();
+    f.device.failRemoval = true;
+    writing.release();
+    await opening;
+    await settle();
+    expect(f.savedRows(maplePath)).toHaveLength(1);
+    controller.dispose();
+    f.device.failRemoval = false;
+    f.server.offline = true;
+    const restarted = f.create();
+    await restarted.restore();
+    await settle();
+    expect(f.savedRows(maplePath)).toEqual([]);
+  });
+
+  it('says a refresh failed when the read after a restored copy fails, keeping what A missing event means', async () => {
+    const f = fixture();
+    const first = await onActivity(f, 1);
+    first.dispose();
+    later(60_000);
+    const controller = f.create();
+    await controller.restore();
+    await settle();
+    f.server.failing.add(activityPath(1));
+    await controller.openActivity(mapleId);
+    await settle();
+    expect(controller.getSnapshot().activity).toMatchObject({
+      status: 'error',
+      message:
+        'Could not refresh Activity. Previously loaded events may be stale. A missing event does not mean the ledger change failed.',
+      restored: true,
+    });
+  });
+
+  it('never fills an older page offline from a copy whose total differs from the first page’s', async () => {
+    const f = fixture();
+    const first = await onActivity(f, 2);
+    // Others record 5 events; this phone reads only the newest page again later.
+    for (let n = 0; n < 5; n += 1)
+      f.server.events[mapleId].unshift({
+        ...f.server.events[mapleId][0],
+        _id: hex('b', 500 + n),
+        metadata: { description: `Others ${n}`, amount: 1, currency: 'INR' },
+      });
+    await first.selectDestination('expenses');
+    later(120_000);
+    await first.back();
+    await first.openActivity(mapleId);
+    await settle();
+    first.dispose();
+    later(60_000);
+    f.server.offline = true;
+    const controller = f.create();
+    await controller.restore();
+    await controller.openActivity(mapleId);
+    await controller.loadMoreActivity();
+    await settle();
+    // Page 2 was saved when there were 5 fewer events: events 16 to 20 would go missing.
+    expect(controller.getSnapshot().activity).toMatchObject({
+      moreStatus: 'error',
+      pagination: { page: 1 },
+    });
+    expect(listed(controller.getSnapshot())).toEqual([
+      'Others 4',
+      'Others 3',
+      'Others 2',
+      'Others 1',
+      'Others 0',
+      ...mapleEvents(1, 15),
+    ]);
+  });
+
+  it('never saves a page row queued behind a slow write once a change is confirmed', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    const writing = f.holdWrite(activityPath(1));
+    void controller.openActivity(mapleId);
+    await writing.reached;
+    // Page 2's row waits behind page 1's on the saved-copy queue.
+    void controller.loadMoreActivity();
+    await settle();
+    await controller.selectDestination('expenses');
+    await editDinner(controller);
+    writing.release();
+    await settle();
+    expect(pageRows(f)).toEqual([]);
+  });
+
+  it('never shows a row still untrusted after a restart while its Group is read', async () => {
+    const f = fixture();
+    const first = await onActivity(f, 1);
+    f.device.failRemoval = true;
+    await first.selectDestination('expenses');
+    await editDinner(first);
+    await settle();
+    first.dispose();
+    later(60_000);
+    const controller = f.create();
+    await controller.restore();
+    await settle();
+    const group = f.hold(maplePath, { exact: true });
+    const shown = published(controller);
+    const opening = controller.openActivity(mapleId);
+    await group.reached;
+    await settle();
+    for (const state of shown.filter((at) => at.screen === 'group'))
+      expect(listed(state)).not.toContain('Maple event 1');
+    group.release();
+    await opening;
+  });
+
+  it('ends a pull when its read lands, though its saved copy is still being written', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 1);
+    later(31_000);
+    const writing = f.holdWrite(activityPath(1));
+    let pulled = false;
+    const pulling = controller.refresh('pull').then(() => (pulled = true));
+    await writing.reached;
+    await settle();
+    expect(pulled).toBe(true);
+    expect(controller.getSnapshot().pull).toBeNull();
+    writing.release();
+    await pulling;
+  });
+
+  it('reads a Group’s Activity again after it, when the Group turns out to be a Household', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    // Home lists Cabin Weekend as a Trip; it has since become a Household.
+    f.server.groupAnswers[cabinId] = { category: 'home' };
+    const sent = f.calls.length;
+    await controller.openActivity(cabinId);
+    await settle();
+    expect(f.gets(sent)).toEqual(['cabin', 'cabin activity p1', 'cabin activity p1']);
+  });
+
+  it('keeps no event from before this device’s own change while Activity isn’t shown', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 1);
+    await controller.selectDestination('expenses');
+    await editDinner(controller);
+    expect(controller.getSnapshot().activity.events).toEqual([]);
+  });
+
+  it('says both what stays on screen and what a missing event means, offline with no copy left', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 1);
+    f.rows.delete(alex.id + activityPath(1));
+    f.server.offline = true;
+    await controller.refresh('pull');
+    await settle();
+    expect(controller.getSnapshot().activity).toMatchObject({
+      status: 'error',
+      message:
+        'Couldn’t refresh this Group’s activity, and this phone no longer keeps a copy of it. A missing event does not mean the ledger change failed.',
+    });
+    expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 20));
   });
 });
