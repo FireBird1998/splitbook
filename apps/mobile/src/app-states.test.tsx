@@ -10,7 +10,7 @@ import { decodeStoredSession } from './data/cookies';
 import { createMobileController, type MobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
-import { findHosts, flatten, layoutWidth } from './test-utils/layout';
+import { findHosts, layoutWidth } from './test-utils/layout';
 import { setFileWindow } from './test-utils/native';
 import { savedQueriesIn } from './test-utils/saved-queries';
 
@@ -957,19 +957,23 @@ describe('Home says what is true, without jumps (#332)', () => {
     await settle();
   });
 
+  /**
+   * Each Group row's slot after its tile and title, as wide as it lays out (0 for a row without
+   * one). Rows are found by their label, so only rows that open.
+   */
+  const trailing = () =>
+    findHosts(screen!.toJSON(), (props) =>
+      String(props.accessibilityLabel ?? '').startsWith('Open '),
+    ).map((row) => {
+      const slot = row.children?.[2];
+      return typeof slot === 'object' ? layoutWidth(slot) : 0;
+    });
+
   it('holds each Group’s balance in its row while Home’s figures are read after the list', async () => {
     const phone = device();
     phone.network.groupBalances = true;
     const app = await start(phone);
     await settle();
-    /** Each list row's trailing box, as wide as it lays out: 0 for a row with none. */
-    const trailing = () =>
-      findHosts(screen!.toJSON(), (props) => flatten(props.style).minHeight === 60).map((row) => {
-        const last = row.children?.[row.children.length - 1];
-        return typeof last === 'object' && flatten(last.props.style).alignItems === 'flex-end'
-          ? layoutWidth(last)
-          : 0;
-      });
     // As after a sign-out: nothing saved, so the list lands first and the figures after it.
     const figures = phone.hold('/api/user/balances');
     const signingIn = controller().signIn('alex');
@@ -982,6 +986,44 @@ describe('Home says what is true, without jumps (#332)', () => {
     await settle(signingIn);
     expect(app.text()).toContain('₹30.00you owe');
     expect(app.text()).toContain('Settled up');
+  });
+
+  it('holds each Group’s balance in its row while its figures wait for the list', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    // Home's figures have no saved copy, so the saved list shows with its balances unknown.
+    await changed(phone);
+    phone.network.online = true;
+    // Confirmed online, Home reads its list again before its figures, which wait for it.
+    const list = phone.hold('/api/groups');
+    const app = await start(phone);
+    await list.reached;
+    await settle();
+    expect(app.text()).not.toContain('Checking…');
+    expect(app.text()).toContain('Lisbon Offsite');
+    expect(trailing()).toEqual([64, 64]);
+    list.release();
+    await settle();
+  });
+
+  it('labels this phone’s copy “Saved” while it stands in for the first read after a sign-in', async () => {
+    const phone = device();
+    const savedAt = await usedBefore(phone);
+    phone.clock.now += 60 * 60_000;
+    // The session has ended; signing in again reads Home with this phone's copy on screen.
+    phone.network.session = 401;
+    const app = await start(phone);
+    await settle();
+    phone.network.session = 200;
+    const figures = phone.hold('/api/user/balances');
+    const signingIn = controller().signIn('alex');
+    await figures.reached;
+    await settle();
+    expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}`);
+    expect(app.text()).not.toContain('Updated');
+    figures.release();
+    await settle(signingIn);
+    expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
   });
 
   // A Badge keeps a hair space after its label; a status line doesn't.

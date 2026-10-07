@@ -150,11 +150,11 @@ describe('Home', () => {
   });
 
   // #332: the list can land before Home's figures, which hold each Group's balance.
-  const listed = (landed: boolean) => (
+  const listed = (known: boolean, pending: boolean) => (
     <HomeGroups
       groups={{ status: 'ready', data: [maple, lisbon, football], message: null, loaded: true }}
       byGroup={
-        landed
+        known
           ? {
               [maple.id]: [{ currency: 'INR', balance: -1480 }],
               [lisbon.id]: [{ currency: 'INR', balance: 620 }],
@@ -162,46 +162,72 @@ describe('Home', () => {
             }
           : {}
       }
-      balancesPending={!landed}
+      balancesPending={pending}
       newGroupLabel="New Group"
       onNewGroup={vi.fn()}
       onOpen={vi.fn()}
       onRetry={vi.fn()}
     />
   );
-  /** Each list row's trailing box, as wide as it lays out: 0 for a row with none. */
-  const trailing = (element: ReactElement, fontScale: number) => {
+  /**
+   * Each Group row's slot after its tile and title, as wide as it lays out (0 for a row without
+   * one), and the rows' text: the rows that open, found by their label, or the rows of the
+   * list's busy skeleton.
+   */
+  const rows = (element: ReactElement, fontScale: number) => {
     setWindow({ fontScale });
     act(() => {
       renderer = create(element);
     });
-    const rows = findHosts(renderer!.toJSON(), (props) => flatten(props.style).minHeight === 60);
-    const widths = rows.map((row) => {
-      const last = row.children?.[row.children.length - 1];
-      return typeof last === 'object' && flatten(last.props.style).alignItems === 'flex-end'
-        ? layoutWidth(last, fontScale)
-        : 0;
+    const tree = renderer!.toJSON();
+    const [skeleton] = findHosts(
+      tree,
+      (props) => props.accessibilityLabel === 'Loading your Groups',
+    );
+    const found = skeleton
+      ? (skeleton.children ?? []).map((row) =>
+          typeof row === 'object' ? row.children?.at(-1) : null,
+        )
+      : findHosts(tree, (props) => String(props.accessibilityLabel ?? '').startsWith('Open '));
+    const widths = found.map((row) => {
+      const slot = typeof row === 'object' ? row?.children?.[2] : null;
+      return typeof slot === 'object' && slot ? layoutWidth(slot, fontScale) : 0;
     });
+    const text = renderer!.root
+      .findAll((node) => (node.type as unknown) === 'Text')
+      .flatMap((node) => node.children.filter((run) => typeof run === 'string'))
+      .join(' ');
     act(() => renderer!.unmount());
     renderer = undefined;
-    return widths;
+    return { widths, text };
   };
   it.each(scales)(
     'each Group keeps its balance’s place from its skeleton until the balance lands, at %s× text',
     (scale) => {
       // The skeleton rows' place for an amount stays while the figures are read, so the names
       // are laid out once, in the room they keep.
-      const skeleton = trailing(groups(true), scale);
+      const skeleton = rows(groups(true), scale).widths;
       expect(skeleton).toEqual([64, 64, 64]);
-      expect(trailing(listed(false), scale)).toEqual(skeleton);
-      const { before, after: reading } = heights(groups(true), listed(false), scale);
-      const { after: landed } = heights(listed(false), listed(true), scale);
+      expect(rows(listed(false, true), scale).widths).toEqual(skeleton);
+      const { before, after: reading } = heights(groups(true), listed(false, true), scale);
+      const { after: landed } = heights(listed(false, true), listed(true, false), scale);
       expect([reading, landed]).toEqual([before, before]);
     },
   );
 
+  it.each(scales)(
+    'a Group whose balance is known keeps it while Home’s figures are read again, at %s× text',
+    (scale) => {
+      const shown = rows(listed(true, false), scale);
+      const reading = rows(listed(true, true), scale);
+      expect(reading.widths).toEqual(shown.widths);
+      for (const amount of ['₹1,480.00', '₹620.00', 'Settled up'])
+        expect(reading.text).toContain(amount);
+    },
+  );
+
   it('the balances fade in where their places were held', async () => {
-    const faded = await arrival(listed(false), listed(true));
+    const faded = await arrival(listed(false, true), listed(true, false));
     expect(faded).toEqual(['₹1,480.00 you owe', '₹620.00 owed to you', 'Settled up']);
   });
 
