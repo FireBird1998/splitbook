@@ -3,6 +3,7 @@ import { BalanceService } from './balance.service';
 import Expense from '@/lib/models/Expense';
 import Settlement from '@/lib/models/Settlement';
 import Group from '@/lib/models/Group';
+import { recurringExpenseService } from './recurring-expense.service';
 
 vi.mock('@/lib/db', () => ({
   default: vi.fn().mockResolvedValue(undefined),
@@ -29,6 +30,13 @@ vi.mock('@/lib/models/Group', () => ({
 
 vi.mock('@/lib/models/User', () => ({
   default: {},
+}));
+
+// Home's read adds due recurring Expenses first (#306); the integration tests cover that.
+vi.mock('./recurring-expense.service', () => ({
+  recurringExpenseService: {
+    generateDueExpensesForGroups: vi.fn().mockResolvedValue({ generated: 0 }),
+  },
 }));
 
 const objectId = (value: string) => ({ toString: () => value });
@@ -176,10 +184,34 @@ describe('BalanceService', () => {
         },
       ],
       hasMixedCurrencies: true,
+      suggestedPayments: [
+        {
+          groupId: 'group-1',
+          groupName: 'Mixed trip',
+          currency: 'USD',
+          direction: 'pay',
+          counterpartyId: 'user-2',
+          counterpartyName: 'Sam',
+          amountMinor: 1000,
+        },
+        {
+          groupId: 'group-1',
+          groupName: 'Mixed trip',
+          currency: 'EUR',
+          direction: 'receive',
+          counterpartyId: 'user-2',
+          counterpartyName: 'Sam',
+          amountMinor: 3000,
+        },
+      ],
     });
 
     expect(Expense.find).toHaveBeenCalledTimes(1);
     expect(Settlement.find).toHaveBeenCalledTimes(1);
+    expect(recurringExpenseService.generateDueExpensesForGroups).toHaveBeenCalledWith(
+      ['group-1', 'group-2'],
+      expect.any(Date),
+    );
   });
 
   it('does not flag a single non-default currency as mixed', async () => {

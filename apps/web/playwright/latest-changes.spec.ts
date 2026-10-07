@@ -106,7 +106,9 @@ test('the card fails on its own, says so, and recovers with Try again', async ({
   await expect(error).toHaveText(/Latest changes could not be loaded\./);
   await expect(page.getByText(/Internal diagnostic/)).toHaveCount(0);
   // The rest of Home is unaffected.
-  await expect(page.getByRole('region', { name: 'Current balance' })).toBeVisible();
+  await expect(
+    page.getByRole('region', { name: 'Your balances' }).getByText('Net', { exact: true }),
+  ).toBeVisible();
 
   failing = false;
   await error.getByRole('button', { name: 'Try again' }).click();

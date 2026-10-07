@@ -1,4 +1,5 @@
 import { apiFetch } from '@/lib/utils/api-fetch';
+import { noteAnswered } from '@/lib/utils/read-times';
 
 export class HttpResponseError extends Error {
   constructor(
@@ -27,5 +28,6 @@ export async function fetcher(url: string) {
       res.status,
     );
   }
+  noteAnswered(url);
   return json;
 }

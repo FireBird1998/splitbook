@@ -101,8 +101,9 @@ test('saved profile currency is selected and persisted when creating a new Group
   await expect(page.getByRole('combobox', { name: /^Currency/ })).toContainText('USD');
   await page.getByLabel('Trip name').fill('Saved currency Group');
   await page.getByRole('button', { name: 'Create trip', exact: true }).click();
-  await expect(page).toHaveURL(/\/groups\/[a-f0-9]{24}$/);
-  const groupId = new URL(page.url()).pathname.split('/').at(-1);
+  // A new Group opens on its Expenses tab: its own address redirects there (#305).
+  await expect(page).toHaveURL(/\/groups\/[a-f0-9]{24}\/expenses$/);
+  const groupId = new URL(page.url()).pathname.split('/').at(-2);
   expect(await dataOf(await ledger.sam.get(`/api/groups/${groupId}`))).toMatchObject({
     defaultCurrency: 'USD',
   });
@@ -254,8 +255,8 @@ for (const chosenCurrency of ['EUR', 'INR']) {
       await loaded;
       await expect(page.getByRole('combobox', { name: /^Currency/ })).toContainText(chosenCurrency);
       await page.getByRole('button', { name: 'Create trip', exact: true }).click();
-      await expect(page).toHaveURL(/\/groups\/[a-f0-9]{24}$/);
-      const groupId = new URL(page.url()).pathname.split('/').at(-1);
+      await expect(page).toHaveURL(/\/groups\/[a-f0-9]{24}\/expenses$/);
+      const groupId = new URL(page.url()).pathname.split('/').at(-2);
       expect(await dataOf(await ledger.sam.get(`/api/groups/${groupId}`))).toMatchObject({
         defaultCurrency: chosenCurrency,
       });

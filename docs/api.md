@@ -89,6 +89,20 @@ See [`auth.md`](auth.md).
 No query params. Balances are bucketed **per currency and never summed across
 currencies** (see [`features/currency.md`](features/currency.md)).
 
+Like a Group's own reads, it first adds the recurring Expenses that have fallen
+due in each of the member's Groups (one generation run per Group that has a
+recurring template, one after another), so Home and the sidebar match each
+Group's page. While recurring Expenses are switched off (#289) it adds nothing.
+
+`suggestedPayments` (#306) lists **every** payment the Groups' Balances suggest
+where the member pays or receives, across their Groups, in Needs you's order:
+what the member pays first, then what they receive; within each, by currency,
+largest first. Amounts are exact minor units (paise, cents). The other person is
+named from the Group's members, or from their account if they left with a
+balance open; never by email. The field is additive: `buckets`, `groups` and
+each Group's `settlement` (still only the largest payment per currency) are
+unchanged, and Android ignores it.
+
 **Response:**
 
 ```json
@@ -111,10 +125,26 @@ currencies** (see [`features/currency.md`](features/currency.md)).
         ]
       }
     ],
-    "hasMixedCurrencies": false
+    "hasMixedCurrencies": false,
+    "suggestedPayments": [
+      {
+        "groupId": "...",
+        "groupName": "Europe Trip 2026",
+        "currency": "EUR",
+        "direction": "receive",
+        "counterpartyId": "...",
+        "counterpartyName": "Jane",
+        "amountMinor": 5000
+      }
+    ]
   }
 }
 ```
+
+`direction` is `"pay"` (the member pays the other person) or `"receive"` (the
+other person pays the member). The web reads the field with
+`readHomeSuggestedPayments` (`@splitbook/shared/home-balances-read`), apart from
+the balances decoder, so a malformed list fails Needs you only.
 
 ---
 

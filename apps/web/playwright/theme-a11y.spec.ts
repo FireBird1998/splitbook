@@ -101,8 +101,16 @@ test('dashboard respects the project theme and is accessible', async ({ page }, 
   const home = page.getByRole('link', { name: 'Splitbook home' });
   await expect(home).toHaveAttribute('href', '/dashboard');
   await expect(home.getByRole('img')).toHaveAttribute('src', logoArtwork(testInfo));
-  await expect(page.getByText('Current balance')).toBeVisible();
-  await expect(page.getByText('Next best action')).toBeVisible();
+  // Home's top section (#306), loaded: the figures and the suggested payments.
+  await expect(
+    page.getByRole('region', { name: 'Your balances' }).getByText('Net', { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', { name: 'Needs you' })
+      .getByRole('link', { name: /^Record payment/ })
+      .first(),
+  ).toBeVisible();
 
   await expectNoSeriousA11yViolations(page, testInfo, 'dashboard');
   await reviewScreenshot(page, testInfo, 'dashboard');

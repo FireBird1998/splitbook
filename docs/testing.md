@@ -174,9 +174,12 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   Expenses switched on for the seed) so every run starts from the known seeded state.
 - **Journeys** (`demo-journeys.spec.ts`, serial): Alex enters and inspects
   her seeded balance (exact amounts asserted once, on desktop-light, before
-  any mutation), creates a trip, adds and edits an expense; Sam switches in
-  and records a settlement, verified by the debt shrinking exactly; Priya
-  verifies her untouched seeded balance.
+  any mutation), follows Needs you's Record to the payment's Group Balances,
+  creates a trip, adds and edits an expense; Sam switches in and records a
+  settlement, verified by the debt shrinking exactly; Priya verifies her
+  untouched seeded balance and the invitation in Needs you. Each persona's Home
+  is checked against the balances read: every currency's figures and every
+  suggested payment (#306).
 - **Shell** (`shell.spec.ts`): the desktop sidebar (logo, Home, the Group
   list with each balance line checked against the balances read, the open
   Group highlighted, Settings, the Groups list link), the phone drawer
