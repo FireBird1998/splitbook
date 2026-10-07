@@ -174,6 +174,10 @@ describe('Expense page filters', () => {
     page: 4,
     limit: 50,
     includeMemberBreakdown: true,
+    involvesUser: 'a00000000000000000000003',
+    amountMin: '500',
+    amountMax: '1249.50',
+    includeRecurringCount: true,
   };
 
   it('sends every filter the server reads', () => {
@@ -192,7 +196,32 @@ describe('Expense page filters', () => {
       page: '4',
       limit: '50',
       includeMemberBreakdown: '1',
+      involvesUser: 'a00000000000000000000003',
+      amountMin: '500',
+      amountMax: '1249.50',
+      includeRecurringCount: '1',
     });
+  });
+
+  it('sends the filters #310 added after every older one, so older paths are unchanged', () => {
+    expect(
+      expensePagePath(groupId, {
+        page: 1,
+        limit: 50,
+        search: 'rent',
+        sortBy: 'amount',
+        sortOrder: 'asc',
+        involvesUser: 'a00000000000000000000001',
+        amountMin: '0.5',
+        includeRecurringCount: true,
+      }),
+    ).toBe(
+      `/api/groups/${groupId}/expenses?page=1&limit=50&search=rent&sortBy=amount&sortOrder=asc` +
+        '&involvesUser=a00000000000000000000001&amountMin=0.5&includeRecurringCount=1',
+    );
+    expect(expensePagePath(groupId, { page: 1, includeRecurringCount: false, amountMax: '' })).toBe(
+      `/api/groups/${groupId}/expenses?page=1`,
+    );
   });
 
   it('sends the same query whatever order the filters are given in', () => {

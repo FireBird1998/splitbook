@@ -7,10 +7,16 @@ import {
   validationError,
   error,
 } from '@/lib/utils/api-response';
+import { z } from 'zod';
 import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { recurringExpenseService } from '@/lib/services/recurring-expense.service';
+import { recurringExpensesEnabled } from '@/lib/recurring-expenses-switch';
 import { createExpenseSchema } from '@splitbook/shared/validators/expense';
+import {
+  EXPENSE_PAGE_DEFAULT_LIMIT,
+  EXPENSE_PAGE_MAX_LIMIT,
+} from '@splitbook/shared/expense-page-read';
 import type { ExpenseFilters } from '@splitbook/shared/types';
 import { parseIdempotencyKey } from '@/lib/financial-write';
 
@@ -52,6 +58,35 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 }
 
+/**
+ * The filters #310 added. Unlike the older ones, a malformed value is refused (422) rather
+ * than ignored: an id must be a whole ObjectId, and an amount plain decimal text in major
+ * units. Whether an amount has more decimal places than the Group's currency allows is
+ * checked by the service, which knows the currency.
+ */
+const addedFilters = z.object({
+  involvesUser: z
+    .string()
+    .regex(/^[a-f\d]{24}$/i)
+    .optional(),
+  amountMin: z
+    .string()
+    .max(32)
+    .regex(/^\d+(\.\d+)?$/)
+    .optional(),
+  amountMax: z
+    .string()
+    .max(32)
+    .regex(/^\d+(\.\d+)?$/)
+    .optional(),
+});
+
+/** A whole number of at least 1, cut to the cap; anything else is the default page size. */
+function pageSize(raw: string | null): number {
+  const requested = parseInt(raw || String(EXPENSE_PAGE_DEFAULT_LIMIT));
+  return requested > 0 ? Math.min(requested, EXPENSE_PAGE_MAX_LIMIT) : EXPENSE_PAGE_DEFAULT_LIMIT;
+}
+
 // GET /api/groups/[id]/expenses — List expenses with filters
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -63,11 +98,17 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     const isMember = await groupService.isMember(id, user.id!);
     if (!isMember) return forbidden();
 
+    const { searchParams } = new URL(req.url);
+    const added = addedFilters.safeParse({
+      involvesUser: searchParams.get('involvesUser') || undefined,
+      amountMin: searchParams.get('amountMin') || undefined,
+      amountMax: searchParams.get('amountMax') || undefined,
+    });
+    if (!added.success) return validationError(added.error);
+
     // Lazy-on-read: materialize due recurring expenses before listing, so the
     // response includes rows that fell due since the last read.
     await recurringExpenseService.generateDueExpenses(id);
-
-    const { searchParams } = new URL(req.url);
 
     const filters: ExpenseFilters = {
       quickFilter: searchParams.get('quickFilter') || undefined,
@@ -82,8 +123,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       sortBy: (searchParams.get('sortBy') as 'date' | 'amount') || 'date',
       sortOrder: (searchParams.get('sortOrder') as 'asc' | 'desc') || 'desc',
       page: parseInt(searchParams.get('page') || '1'),
-      limit: parseInt(searchParams.get('limit') || '20'),
+      limit: pageSize(searchParams.get('limit')),
       includeMemberBreakdown: searchParams.get('includeMemberBreakdown') === '1' || undefined,
+      ...added.data,
+      // The count of Expenses recurring Expenses added is one of the markers the switch hides.
+      includeRecurringCount:
+        (searchParams.get('includeRecurringCount') === '1' && recurringExpensesEnabled()) ||
+        undefined,
     };
 
     const result = await expenseService.getGroupExpenses(id, filters, user.id!);

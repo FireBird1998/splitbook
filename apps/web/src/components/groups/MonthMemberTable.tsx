@@ -17,7 +17,7 @@ interface MonthMemberTableProps {
 }
 
 /**
- * Per-member monthly breakdown (fronted / share / net) for the active month
+ * Per-member monthly breakdown (paid / share / net) for the active month
  * of a Household group. These are descriptive monthly figures — never a
  * balance — so nothing here is labelled "balance"; the header's running
  * balance is the only number that carries that label.
@@ -63,7 +63,7 @@ export default function MonthMemberTable({
           }}
         >
           <Box role="columnheader" />
-          {['Fronted', 'Share', 'Net'].map((heading) => (
+          {['Paid', 'Share', 'Net'].map((heading) => (
             <Typography
               key={heading}
               role="columnheader"
@@ -144,7 +144,7 @@ export default function MonthMemberTable({
       </Box>
 
       <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 1 }}>
-        Net in {monthName} = share − fronted, for this month&apos;s expenses only.
+        Net in {monthName} = share − paid, for this month&apos;s expenses only.
       </Typography>
     </Paper>
   );

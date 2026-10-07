@@ -83,7 +83,27 @@ describe('Expense page read contract', () => {
     expect(parseExpensePageResponse(body)).toStrictEqual(body.data);
   });
 
-  it.each([1, 20, 50])('accepts %i-row pages', (limit) => {
+  it('reads the count of Expenses recurring Expenses added, and the recurring Expense behind one', () => {
+    const body = changed([...summary, 'recurringCount'], 2);
+    body.data.expenses[0] = { ...expense, recurringExpense: 'e00000000000000000000001' } as never;
+    const page = parseExpensePageResponse(body);
+    expect(page.summary.recurringCount).toBe(2);
+    expect(page.expenses[0].recurringExpense).toBe('e00000000000000000000001');
+    expect(
+      parseExpensePageResponse(changed([...row, 'recurringExpense'], null)).expenses[0]
+        .recurringExpense,
+    ).toBeNull();
+  });
+
+  it.each([
+    ['a negative recurring count', [...summary, 'recurringCount'], -1],
+    ['a fractional recurring count', [...summary, 'recurringCount'], 1.5],
+    ['a malformed recurring Expense', [...row, 'recurringExpense'], 'rent'],
+  ])('rejects %s', (_label, path, value) => {
+    expect(() => parseExpensePageResponse(changed(path, value))).toThrow(message);
+  });
+
+  it.each([1, 20, 50, 100])('accepts %i-row pages', (limit) => {
     expect(
       parseExpensePageResponse(changed(['data', 'pagination', 'limit'], limit)).pagination.limit,
     ).toBe(limit);

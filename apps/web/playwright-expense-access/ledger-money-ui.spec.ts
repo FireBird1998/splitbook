@@ -9,6 +9,8 @@ import {
   joinGroup,
   openAddExpense,
   type Ledger,
+  expenseAction,
+  expenseInList,
 } from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
@@ -78,9 +80,7 @@ for (const layout of [
     await dialog.screenshot({ path: testInfo.outputPath(`${layout.name}-weighted-preview.png`) });
     await dialog.getByRole('button', { name: 'Save expense', exact: true }).click();
     await expect(dialog).toBeHidden();
-    await expect(
-      page.getByRole('button', { name: new RegExp(`${description}, ¥100`) }),
-    ).toBeVisible();
+    await expect(expenseInList(page, description)).toContainText('¥100');
     const list = await dataOf(await ledger.priya.get(`/api/groups/${group}/expenses`));
     const stored = list.expenses.find(
       (expense: { description: string }) => expense.description === description,
@@ -102,9 +102,8 @@ test('desktop: conflict feedback retains the draft until Reload latest is select
   const path = expensePath(ledger.groupB, ledger.expenseB);
   const original = await dataOf(await ledger.sam.get(path));
   await enter(page, ledger.sam, `/groups/${ledger.groupB}`);
-  const row = page.getByRole('button', { name: /Private rent, ₹1,200\.00/ });
-  await row.getByLabel('Expense actions').click();
-  await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+  await expect(expenseInList(page, 'Private rent')).toContainText('₹1,200.00');
+  await expenseAction(page, 'Private rent', 'Edit');
   const dialog = page.getByRole('dialog');
   const description = dialog.getByLabel('What was it for?');
   await description.fill('My unsaved correction');
@@ -152,9 +151,17 @@ test('mobile: a one-cent amount remains visible in the expense summary', async (
     201,
   );
   await enter(page, ledger.sam, `/groups/${ledger.groupB}`);
-  const summary = page.getByText('Total expenses', { exact: true }).locator('..').locator('..');
-  await expect(summary.getByText('You owe', { exact: true })).toBeVisible();
-  await expect(summary.getByText('₹0.01', { exact: true })).toBeVisible();
+  // A Household's figures are its Month bar's (#310): Sam's share is the single paisa.
+  const summary = page.getByRole('region', { name: 'All time summary' });
+  await expect(summary.getByRole('term')).toHaveText([
+    'Spent',
+    'Your share',
+    'You paid',
+    'Expenses',
+  ]);
+  await expect(summary.getByRole('definition').nth(1)).toHaveText('₹0.01');
+  // And the Expense's own row says he owes it.
+  await expect(expenseInList(page, 'A single paise')).toContainText(/you\s*owe\s*₹0\.01/);
   await summary.screenshot({ path: testInfo.outputPath('single-minor-unit-summary.png') });
 });
 
@@ -250,9 +257,8 @@ test('legacy currencies are individually visible and never combined into one bal
     .getByRole('navigation', { name: 'Synthetic access household sections' })
     .getByRole('link', { name: 'Expenses', exact: true })
     .click();
-  const historical = page.getByRole('button', { name: /Historical euro allocation, €60\.00/ });
-  await historical.getByLabel('Expense actions').click();
-  await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+  await expect(expenseInList(page, 'Historical euro allocation')).toContainText('€60.00');
+  await expenseAction(page, 'Historical euro allocation', 'Edit');
   const edit = page.getByRole('dialog');
   await expect(edit.getByRole('combobox', { name: /Currency/ })).toContainText('EUR');
   await edit.getByLabel('What was it for?').fill('Historical euro corrected');
@@ -319,9 +325,8 @@ test('legacy binary-tail amounts remain editable without changing their exact al
   });
   const before = await dataOf(await ledger.sam.get(`/api/groups/${ledger.groupB}/balances`));
   await enter(page, ledger.sam, `/groups/${ledger.groupB}`);
-  const row = page.getByRole('button', { name: /Historical fractional calculation, ₹0\.60/ });
-  await row.getByLabel('Expense actions').click();
-  await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+  await expect(expenseInList(page, 'Historical fractional calculation')).toContainText('₹0.60');
+  await expenseAction(page, 'Historical fractional calculation', 'Edit');
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByLabel('Amount')).toHaveValue('0.6');
   await expect(dialog.getByRole('spinbutton')).toHaveCount(5);
@@ -393,11 +398,8 @@ test('manual historical equal preview survives participant reorder and agrees wi
   const balancePath = `/api/groups/${ledger.groupB}/balances`;
   const before = await dataOf(await ledger.sam.get(balancePath));
   await enter(page, ledger.sam, `/groups/${ledger.groupB}`);
-  await page
-    .getByRole('button', { name: /Historical remainder, ₹0\.03/ })
-    .getByLabel('Expense actions')
-    .click();
-  await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+  await expect(expenseInList(page, 'Historical remainder')).toContainText('₹0.03');
+  await expenseAction(page, 'Historical remainder', 'Edit');
   const dialog = page.getByRole('dialog');
   const samRow = dialog.getByText('You', { exact: true }).last().locator('..');
   const priyaRow = dialog.getByText('Priya Shah', { exact: true }).last().locator('..');

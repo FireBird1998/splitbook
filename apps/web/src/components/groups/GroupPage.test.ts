@@ -264,14 +264,14 @@ describe('the Group page around its tabs', () => {
       const expenses = groupPage(`/groups/${GROUP}/expenses`, () =>
         createElement(GroupExpensesTab),
       );
-      expect(expenses).toContain('aria-label="Month view"');
-      expect(expenses.indexOf('aria-label="Month view"')).toBeGreaterThan(
+      expect(expenses).toContain('aria-label="August 2026 summary"');
+      expect(expenses.indexOf('aria-label="August 2026 summary"')).toBeGreaterThan(
         expenses.indexOf('aria-label="Maple House sections"'),
       );
       const balances = groupPage(`/groups/${GROUP}/balances`, () =>
         createElement(GroupBalancesTab),
       );
-      expect(balances).not.toContain('aria-label="Month view"');
+      expect(balances).not.toContain('aria-label="August 2026 summary"');
     } finally {
       navigation.search = '';
     }

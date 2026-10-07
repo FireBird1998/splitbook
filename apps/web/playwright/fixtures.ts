@@ -187,6 +187,33 @@ export async function expectNoSeriousA11yViolations(
   ).toEqual([]);
 }
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * An Expense in a Group's Expenses tab (#310): its row in the table on a computer, or its card
+ * on a phone. Either holds the one button that opens it, whose name starts with its description.
+ */
+export function expenseItem(page: Page, description: string) {
+  const named = { name: new RegExp(`^${escapeRegExp(description)}(\\s|$)`) };
+  const toggle = page.getByRole('main').getByRole('button', named);
+  // `has` is matched inside each item, so it starts from the button itself.
+  const item = page
+    .getByRole('main')
+    .locator('[data-expense-id]')
+    .filter({ has: page.getByRole('button', named) });
+  return { toggle, item };
+}
+
+/** Open an Expense in the list and return its details, which hold Edit and Delete. */
+export async function openExpense(page: Page, description: string) {
+  const { toggle } = expenseItem(page, description);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  const details = page.getByRole('region', { name: `${description} details` });
+  await expect(details).toBeVisible();
+  return details;
+}
+
 /** Parse the first currency amount (e.g. "₹1,480.00") found in a text blob. */
 export function parseMoneyText(text: string): number {
   const match = text.match(/[₹$€£]([\d,]+(?:\.\d{1,2})?)/);

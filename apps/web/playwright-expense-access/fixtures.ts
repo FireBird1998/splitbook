@@ -125,6 +125,40 @@ export const test = base.extend<{ ledger: Ledger }>({
 
 export { expect };
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * The button that opens an Expense in a Group's list (#310): a row's description in the table
+ * on a computer, or the whole card on a phone. Its name starts with the description.
+ */
+export function expenseButton(page: Page, description: string) {
+  return page
+    .getByRole('main')
+    .getByRole('button', { name: new RegExp(`^${escapeRegExp(description)}(\\s|$)`) });
+}
+
+/**
+ * An Expense in the list, row or card, to read its amount and position from. It holds the
+ * button that opens it.
+ */
+export function expenseInList(page: Page, description: string) {
+  const named = { name: new RegExp(`^${escapeRegExp(description)}(\\s|$)`) };
+  return page
+    .getByRole('main')
+    .locator('[data-expense-id]')
+    .filter({ has: page.getByRole('button', named) });
+}
+
+/** Open an Expense in the list and press Edit or Delete in its details. */
+export async function expenseAction(page: Page, description: string, action: 'Edit' | 'Delete') {
+  const opener = expenseButton(page, description);
+  if ((await opener.getAttribute('aria-expanded')) !== 'true') await opener.click();
+  await page
+    .getByRole('region', { name: `${description} details` })
+    .getByRole('button', { name: action, exact: true })
+    .click();
+}
+
 /** Generate through the existing template request, rather than faking origin metadata. */
 export async function generatedExpense(ledger: Ledger): Promise<string> {
   const now = new Date();

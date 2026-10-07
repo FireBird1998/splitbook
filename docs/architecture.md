@@ -151,13 +151,17 @@ src/
 │   │   ├── GroupMembersView.tsx    # Read-only roster with roles and Invite
 │   │   ├── GroupHeader.tsx         # Neutral header — non-trip Group cards
 │   │   ├── GroupSettingsView.tsx   # Admin settings (info, currency, members, tags)
-│   │   ├── MonthCycleBar.tsx       # Household month switcher
-│   │   ├── MonthMemberTable.tsx    # Per-member fronted/share/net for the month
+│   │   ├── MonthCycleBar.tsx       # Household Month bar: Spent, Your share, You paid
+│   │   ├── MonthMemberTable.tsx    # Per-member paid/share/net for the month
 │   │   ├── RecurringExpensesSection.tsx
 │   │   └── InviteDialog.tsx
 │   ├── expenses/
-│   │   ├── ExpenseListView.tsx     # Filters, summary bar, grouped list
-│   │   ├── ExpenseCard.tsx         # Expandable card with inline detail
+│   │   ├── ExpenseListView.tsx     # Toolbar, summary, table or cards (#310)
+│   │   ├── ExpenseToolbar.tsx      # Search, filters and sort, kept in the address
+│   │   ├── ExpenseTable.tsx        # The table on computers
+│   │   ├── ExpenseCard.tsx         # A card on phones
+│   │   ├── ExpenseDetails.tsx      # An opened Expense, with Edit and Delete
+│   │   ├── expense-list-query.ts   # The view ↔ the address (pure)
 │   │   ├── ExpenseFormDialog.tsx   # Create + edit (two-tier form)
 │   │   ├── DeleteExpenseDialog.tsx
 │   │   ├── AddExpenseLauncher.tsx  # Top bar Add expense: the Group's form, or choose a Group first

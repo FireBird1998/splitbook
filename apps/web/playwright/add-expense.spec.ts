@@ -6,6 +6,7 @@ import {
   enterAsPersona,
   expectNoSeriousA11yViolations,
   expectThemeApplied,
+  expenseItem,
   isPhone,
   openAddExpense,
   reviewScreenshot,
@@ -143,11 +144,9 @@ test('from Home: choose a Group, add the Expense, and stay on Home with a confir
   // The Group's figures on Home now count the Expense.
   await expect(card).toContainText('so far · ₹90.00 across 1 expense');
 
-  // The Expense is in the Group.
+  // The Expense is in the Group: its row, or its card on a phone (#310).
   await page.goto(`/groups/${group.id}`);
-  await expect(
-    main.getByRole('button', { name: new RegExp(`^${description}, ₹90\\.00`) }),
-  ).toBeVisible();
+  await expect(expenseItem(page, description).item).toContainText('₹90.00');
 });
 
 test('inside a Group: the form opens for that Group, with no chooser', async ({
@@ -183,10 +182,8 @@ test('inside a Group: the form opens for that Group, with no chooser', async ({
   await expect(page.getByRole('alert').filter({ hasText: 'Expense added to' })).toHaveText(
     `Expense added to ${group.name}`,
   );
-  // The Group's own list refreshes with the new Expense.
-  await expect(
-    main.getByRole('button', { name: new RegExp(`^${description}, ₹240\\.00`) }),
-  ).toBeVisible();
+  // The Group's own list refreshes with the new Expense: its row, or its card on a phone (#310).
+  await expect(expenseItem(page, description).item).toContainText('₹240.00');
   await expect(main.getByText('No expenses yet')).toHaveCount(0);
 });
 

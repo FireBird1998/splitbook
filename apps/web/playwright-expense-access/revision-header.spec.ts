@@ -1,5 +1,13 @@
 import type { APIRequestContext, Page } from '@playwright/test';
-import { test, expect, dataOf, expensePath } from './fixtures';
+import {
+  test,
+  expect,
+  dataOf,
+  expensePath,
+  expenseAction,
+  expenseButton,
+  expenseInList,
+} from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 
 type Write = { method: string; path: string; revision?: string; ifMatch?: string };
@@ -56,19 +64,16 @@ test('the web app edits, deletes and restores an Expense with X-Splitbook-Revisi
     `/groups/${ledger.groupB}`,
   );
 
-  await page
-    .getByRole('button', { name: /Private rent, ₹1,200\.00/ })
-    .getByLabel('Expense actions')
-    .click();
-  await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+  await expect(expenseInList(page, 'Private rent')).toContainText('₹1,200.00');
+  await expenseAction(page, 'Private rent', 'Edit');
   const form = page.getByRole('dialog');
   await form.getByLabel('What was it for?').fill('Corrected rent');
   await form.getByRole('button', { name: 'Save changes', exact: true }).click();
   await expect(form).toBeHidden();
 
-  const corrected = page.getByRole('button', { name: /Corrected rent, ₹1,200\.00/ });
-  await corrected.getByLabel('Expense actions').click();
-  await page.getByRole('menuitem', { name: 'Delete', exact: true }).click();
+  const corrected = expenseButton(page, 'Corrected rent');
+  await expect(expenseInList(page, 'Corrected rent')).toContainText('₹1,200.00');
+  await expenseAction(page, 'Corrected rent', 'Delete');
   const confirm = page.getByRole('dialog', { name: 'Delete Expense' });
   await confirm.getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(confirm).toBeHidden();

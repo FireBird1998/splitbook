@@ -350,8 +350,8 @@ for (const { tab, poll, read, shows, empty } of [
     poll: 10_000,
     read: 'expenses',
     shows: ['Synthetic lantern dinner'],
-    // The list already shows "No expenses yet" under any failed first read.
-    empty: undefined,
+    // A failed first read says the list could not be loaded, never that it is empty.
+    empty: 'No expenses yet',
   },
   {
     tab: 'Balances',
@@ -473,7 +473,11 @@ test('a Household reopened after Sam is back shows no month figures or dialog fr
   const now = new Date();
   const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const main = page.getByRole('main');
-  const monthFigures = main.getByText(/you fronted/);
+  // The Month bar's figures (#310), Spent first. The bar itself stays when they can't load.
+  const monthFigures = main
+    .getByRole('region', { name: / summary$/ })
+    .getByRole('definition')
+    .first();
 
   const sections = main.getByRole('navigation', { name: 'Synthetic lantern household sections' });
   const expensesTab = `/groups/${household._id}/expenses`;

@@ -37,12 +37,16 @@ The main page for interacting with a group. Uses tabs to switch between Expenses
 
 ## Tab: Expenses (Default)
 
-Full expense dashboard with filters. See [dashboard.md](../features/dashboard.md) for details.
+The Expenses as a table on computers and cards on phones (#310), with the
+view kept in the address. See [`docs/ui.md`](../ui.md) for the parameters.
 
 ```
-Quick Filters: [All] [This Week] [Last Week] [This Month] ...
-Advanced Filters: Date range, category, tags, search
-Expense list: Paginated, grouped by date
+Month bar (Household): ‹ September 2026 ›  [This month] [All time]
+                       Spent · Your share · You paid · Expenses
+Toolbar: [Search Maple House] [Paid by] [Tag] [Amount] [Involves me]
+         [Date] (not in a Household) [Newest first]
+Table:   Date | Description + Tag | Paid by | Split | Amount | You
+         (phones: one card per Expense, under day headings)
 ```
 
 ---

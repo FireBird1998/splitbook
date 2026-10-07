@@ -193,8 +193,7 @@ Auth's adapter generates, declared on the Mongoose schema so both agree)
   historical expenses keep pointing at the previous name.
 - **`receiptUrl` cannot be set through the API.** It is absent from both
   `createExpenseSchema` and `updateExpenseSchema`, and Zod strips unrecognized
-  keys, so no request can populate it — despite `ExpenseCard` rendering a chip
-  for it.
+  keys, so no request can populate it — despite `ExpenseDetails` linking to it.
 - Deletion is soft (`isDeleted`), and `PATCH` with `isDeleted: false` restores.
   Balance and summary queries filter on `isDeleted: false`.
 

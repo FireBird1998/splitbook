@@ -1,7 +1,16 @@
 import { MongoClient, ObjectId } from 'mongodb';
 import AxeBuilder from '@axe-core/playwright';
 import type { Page } from '@playwright/test';
-import { test, expect, dataOf, expensePath, openAddExpense, type Ledger } from './fixtures';
+import {
+  test,
+  expect,
+  dataOf,
+  expensePath,
+  openAddExpense,
+  type Ledger,
+  expenseAction,
+  expenseInList,
+} from './fixtures';
 
 async function enterGroup(page: Page, ledger: Ledger) {
   const origin = process.env.EXPENSE_ACCESS_BASE_URL;
@@ -57,11 +66,8 @@ test('stale expense edit keeps its draft and conflict until an explicit reload',
   await enterGroup(page, ledger);
   const path = expensePath(ledger.groupB, ledger.expenseB);
   const expense = await dataOf(await ledger.priya.get(path));
-  await page
-    .getByRole('button', { name: /Private rent, ₹1,200\.00/ })
-    .getByLabel('Expense actions')
-    .click();
-  await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+  await expect(expenseInList(page, 'Private rent')).toContainText('₹1,200.00');
+  await expenseAction(page, 'Private rent', 'Edit');
   const dialog = page.getByRole('dialog');
   const description = dialog.getByLabel('What was it for?');
   await description.fill('Draft awaiting conflict resolution');
@@ -145,11 +151,8 @@ test('editing a historical JPY expense preserves its currency and whole-unit pre
     await client.close();
   }
   await enterGroup(page, ledger);
-  await page
-    .getByRole('button', { name: /Private rent, ¥1,200/ })
-    .getByLabel('Expense actions')
-    .click();
-  await page.getByRole('menuitem', { name: 'Edit', exact: true }).click();
+  await expect(expenseInList(page, 'Private rent')).toContainText('¥1,200');
+  await expenseAction(page, 'Private rent', 'Edit');
   const dialog = page.getByRole('dialog');
   await expect(dialog.getByLabel('Currency')).toContainText('JPY');
   await expect(dialog.getByLabel('Amount')).toHaveAttribute('step', '1');

@@ -13,6 +13,11 @@ import {
   timestamp,
 } from './wire-fields';
 
+/** How many Expenses a page holds when the request doesn't say. */
+export const EXPENSE_PAGE_DEFAULT_LIMIT = 20;
+/** The most Expenses one page holds; a larger `limit` is cut to this (#310). */
+export const EXPENSE_PAGE_MAX_LIMIT = 100;
+
 const allocation = z.looseObject({
   user: financialPerson,
   amount,
@@ -35,6 +40,8 @@ const expense = z.looseObject({
   paidBy: z.array(allocation),
   splitBetween: z.array(allocation),
   splitMethod,
+  /** The recurring Expense that added it, if one did. */
+  recurringExpense: identity.nullish(),
 });
 const summary = z.looseObject({
   count: z.number().int().nonnegative(),
@@ -53,6 +60,8 @@ const summary = z.looseObject({
       }),
     )
     .optional(),
+  /** Sent only on request, and only while recurring Expenses are switched on (#310). */
+  recurringCount: z.number().int().nonnegative().optional(),
 });
 const expensePage = z.looseObject({ expenses: z.array(expense), pagination, summary });
 

@@ -43,7 +43,8 @@ export const groupBalancesPath = (groupId: string) => `${group(groupId)}/balance
 
 /**
  * Every filter the Expense list route reads, in the order they are sent. Android's order
- * comes first: page, limit, member breakdown, then a Month's range.
+ * comes first: page, limit, member breakdown, then a Month's range. The filters #310 added
+ * come last, so every path built before them is unchanged.
  */
 function expenseQuery(filters: ExpenseFilters): {
   [Name in keyof Required<ExpenseFilters>]: string | number | undefined;
@@ -63,6 +64,10 @@ function expenseQuery(filters: ExpenseFilters): {
     owedByUser: filters.owedByUser,
     sortBy: filters.sortBy,
     sortOrder: filters.sortOrder,
+    involvesUser: filters.involvesUser,
+    amountMin: filters.amountMin,
+    amountMax: filters.amountMax,
+    includeRecurringCount: filters.includeRecurringCount ? '1' : undefined,
   };
 }
 

@@ -75,7 +75,9 @@ test('the top bar’s search and the shortcut open the dialog, and Escape closes
 test('the shortcut never fires while typing in another field', async ({ page }) => {
   await enterAsPersona(page, 'alex');
   await page.goto(`/groups/${DEMO_GROUP_ID}/expenses`);
-  const expenseSearch = page.getByRole('main').getByPlaceholder('Search expenses...');
+  const expenseSearch = page
+    .getByRole('main')
+    .getByRole('searchbox', { name: /^Search Expenses in / });
   await expect(expenseSearch).toBeVisible();
   // Hydrated: the shortcut works from the page itself.
   await openByShortcut(page);
@@ -152,7 +154,9 @@ test('jump to an Expense’s Group, with its Expense list searched for it', asyn
   );
   await expect(dialog(page)).toHaveCount(0);
   const main = page.getByRole('main');
-  await expect(main.getByPlaceholder('Search expenses...')).toHaveValue('Seafood dinner at Anjuna');
+  await expect(main.getByRole('searchbox', { name: /^Search Expenses in / })).toHaveValue(
+    'Seafood dinner at Anjuna',
+  );
   await expect(main.getByText('Seafood dinner at Anjuna')).toBeVisible();
   await expect(main.getByText('Scooter rental')).toHaveCount(0);
 
@@ -163,7 +167,9 @@ test('jump to an Expense’s Group, with its Expense list searched for it', asyn
     .getByRole('option', { name: /^Scooter rental, / })
     .click();
   await page.waitForURL((url) => url.searchParams.get('search') === 'Scooter rental');
-  await expect(main.getByPlaceholder('Search expenses...')).toHaveValue('Scooter rental');
+  await expect(main.getByRole('searchbox', { name: /^Search Expenses in / })).toHaveValue(
+    'Scooter rental',
+  );
   await expect(main.getByText('Scooter rental')).toBeVisible();
   await expect(main.getByText('Seafood dinner at Anjuna')).toHaveCount(0);
 });
