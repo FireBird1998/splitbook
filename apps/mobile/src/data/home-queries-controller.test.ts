@@ -1824,14 +1824,25 @@ describe('Home reads its Groups and its figures together (#333)', () => {
             },
       );
 
-      // The figures answer first: they are verified now, while the list is still read.
-      figures.release();
-      await settle();
-      expect(controller.getSnapshot()).toMatchObject({
-        groups: when === 'start-up' ? { status: 'loading', restored: true } : { status: 'loading' },
-        home: { status: 'ready', restored: false, refreshedAt: Date.now() },
-      });
-      list.release();
+      if (when === 'start-up') {
+        // The figures answer first: they are verified now, while the saved list is read again.
+        figures.release();
+        await settle();
+        expect(controller.getSnapshot()).toMatchObject({
+          groups: { status: 'loading', restored: true },
+          home: { status: 'ready', restored: false, refreshedAt: Date.now() },
+        });
+        list.release();
+      } else {
+        // The session's first list answers first, while the figures are still read: they stand.
+        list.release();
+        await settle();
+        expect(controller.getSnapshot()).toMatchObject({
+          groups: { status: 'ready', restored: false },
+          home: { status: 'loading', data: null },
+        });
+        figures.release();
+      }
       await opening;
       await settle();
       expect(controller.getSnapshot()).toMatchObject({
@@ -1971,12 +1982,18 @@ describe('Home reads its Groups and its figures together (#333)', () => {
     f.server.listed = [maple, cabin, zed];
     list.release();
     await settle();
+    // The figures are read again after the list; a third read would mean they never stand.
+    const again = f.hold(homePath),
+      third = f.hold(homePath);
     figures.release();
+    await again.reached;
+    again.release();
     await signingIn;
     await settle();
     // Read again after the list, the figures still name Zed Club: they stand.
     expect(f.reads(listPath)).toBe(1);
     expect(f.reads(homePath)).toBe(2);
+    third.release();
     expect(controller.getSnapshot()).toMatchObject({
       groups: { status: 'ready', data: [{}, {}] },
       home: { status: 'ready', data: [{ youOwe: 30 }] },
