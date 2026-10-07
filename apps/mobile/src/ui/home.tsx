@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -30,6 +30,8 @@ import {
   Skeleton,
   SkeletonText,
   StatusText,
+  moneySizes,
+  scaledSp,
   useLargeText,
   useLineBox,
 } from './compact';
@@ -416,10 +418,22 @@ function groupPosition(balances: HomeGroupBalance[]) {
   };
 }
 
+/**
+ * The width of a Group row's balance, before and after it lands, so a long name is cut once
+ * (#332): a nine-character amount at this text size, such as "₹1,480.00", in IBM Plex Mono,
+ * whose every character is 0.6 of its size. "Settled up" and the captions fit in it; a wider
+ * amount widens its own row, and is never cut.
+ */
+export function balanceWidth(fontScale: number) {
+  const { fontSize, letterSpacing } = moneySizes.list;
+  return 9 * (0.6 * scaledSp(fontSize as number, fontScale) + (letterSpacing as number));
+}
+
 function GroupRow({
   group,
   balances,
   pending,
+  width,
   onPress,
 }: {
   group: MobileGroup;
@@ -427,6 +441,8 @@ function GroupRow({
   balances: HomeGroupBalance[] | undefined;
   /** Home's figures are being read: an unknown balance keeps its place until they land. */
   pending: boolean;
+  /** The balance's width (`balanceWidth`). */
+  width: number;
   onPress?: () => void;
 }) {
   const descriptor = getGroupTheme(group.category);
@@ -445,6 +461,7 @@ function GroupRow({
       title={group.name}
       meta={meta}
       trailingLoading={pending && !balances}
+      trailingWidth={width}
       trailing={
         position ? (
           <RowAmount amount={position.amount} tone={position.tone} caption={position.caption} />
@@ -516,6 +533,7 @@ export function HomeGroups({
 }) {
   const known = groups.loaded || groups.data.length > 0;
   const unsaved = groups.status === 'error' && offline && !groups.data.length;
+  const width = balanceWidth(useWindowDimensions().fontScale);
   return (
     <View style={{ gap: 6 }}>
       <SectionHeader
@@ -566,6 +584,7 @@ export function HomeGroups({
                 group={group}
                 balances={byGroup[group.id]}
                 pending={balancesPending}
+                width={width}
                 onPress={disabled ? undefined : () => onOpen(group.id)}
               />
             </View>

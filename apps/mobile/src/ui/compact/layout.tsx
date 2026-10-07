@@ -234,6 +234,7 @@ function TrailingSkeleton() {
  *
  * While `trailingLoading` is set, an amount's skeleton holds the trailing value's place, so the
  * title is laid out as it will be; when it clears, the value fades in where the skeleton was.
+ * `trailingWidth` keeps that place one width, skeleton or value, unless a value is wider.
  */
 export function ListRow({
   leading,
@@ -242,6 +243,7 @@ export function ListRow({
   metaTone = 'secondary',
   trailing,
   trailingLoading = false,
+  trailingWidth,
   onPress,
   accessibilityLabel,
   highlighted = false,
@@ -252,6 +254,7 @@ export function ListRow({
   metaTone?: TextTone;
   trailing?: ReactNode;
   trailingLoading?: boolean;
+  trailingWidth?: number;
   onPress?: () => void;
   accessibilityLabel?: string;
   highlighted?: boolean;
@@ -273,7 +276,12 @@ export function ListRow({
         ) : null}
       </View>
       {after ? (
-        <FadeIn reveal={reveal} style={trailingBox}>
+        <FadeIn
+          reveal={reveal}
+          style={
+            trailingWidth === undefined ? trailingBox : [trailingBox, { minWidth: trailingWidth }]
+          }
+        >
           {after}
         </FadeIn>
       ) : null}

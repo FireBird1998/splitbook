@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { decodeStoredSession } from './data/cookies';
 import { createMobileController, type MobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
+import { balanceWidth } from './ui/home';
 import { refreshedLabel } from './ui/refresh-feedback';
 import { findHosts, layoutWidth } from './test-utils/layout';
 import { setFileWindow, setWindow } from './test-utils/native';
@@ -982,7 +983,8 @@ describe('Home says what is true, without jumps (#332)', () => {
       String(props.accessibilityLabel ?? '').startsWith('Open '),
     ).map((row) => {
       const slot = row.children?.[2];
-      return typeof slot === 'object' ? layoutWidth(slot) : 0;
+      // To a hundredth of a dp: sums of character widths aren't exact.
+      return typeof slot === 'object' ? Math.round(layoutWidth(slot) * 100) / 100 : 0;
     });
 
   it('holds each Group’s balance in its row while Home’s figures are read after the list', async () => {
@@ -996,12 +998,15 @@ describe('Home says what is true, without jumps (#332)', () => {
     await figures.reached;
     await settle();
     expect(app.text()).toContain('Lisbon Offsite');
-    expect(trailing()).toEqual([64, 64]);
+    const width = Math.round(balanceWidth(1) * 100) / 100;
+    expect(trailing()).toEqual([width, width]);
 
     figures.release();
     await settle(signingIn);
     expect(app.text()).toContain('₹30.00you owe');
     expect(app.text()).toContain('Settled up');
+    // The balances took the places held for them: the names were laid out once.
+    expect(trailing()).toEqual([width, width]);
   });
 
   it('holds each Group’s balance in its row while its figures wait for the list', async () => {
@@ -1017,7 +1022,8 @@ describe('Home says what is true, without jumps (#332)', () => {
     await settle();
     expect(app.text()).not.toContain('Checking…');
     expect(app.text()).toContain('Lisbon Offsite');
-    expect(trailing()).toEqual([64, 64]);
+    const width = Math.round(balanceWidth(1) * 100) / 100;
+    expect(trailing()).toEqual([width, width]);
     list.release();
     await settle();
   });

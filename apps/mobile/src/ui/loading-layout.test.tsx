@@ -19,7 +19,7 @@ import { setFileWindow, setWindow, timing } from '../test-utils/native';
 import { motion } from './compact';
 import { GroupBalancesView, settledIn } from './group-balances';
 import { GroupExpensesView } from './group-expenses';
-import { HomeBalances, HomeGroups } from './home';
+import { balanceWidth, HomeBalances, HomeGroups } from './home';
 
 // #331: content takes its skeleton's place at the same height, so nothing below it moves when
 // it arrives: Home's Groups and balances, and a Group's Expenses, at 100% and 130% text. The
@@ -150,13 +150,13 @@ describe('Home', () => {
   });
 
   // #332: the list can land before Home's figures, which hold each Group's balance.
-  const listed = (known: boolean, pending: boolean) => (
+  const listed = (known: boolean, pending: boolean, owed = -1480) => (
     <HomeGroups
       groups={{ status: 'ready', data: [maple, lisbon, football], message: null, loaded: true }}
       byGroup={
         known
           ? {
-              [maple.id]: [{ currency: 'INR', balance: -1480 }],
+              [maple.id]: [{ currency: 'INR', balance: owed }],
               [lisbon.id]: [{ currency: 'INR', balance: 620 }],
               [football.id]: [],
             }
@@ -174,6 +174,7 @@ describe('Home', () => {
    * one), and the rows' text: the rows that open, found by their label, or the rows of the
    * list's busy skeleton.
    */
+  const round = (dp: number) => Math.round(dp * 100) / 100;
   const rows = (element: ReactElement, fontScale: number) => {
     setWindow({ fontScale });
     act(() => {
@@ -191,7 +192,8 @@ describe('Home', () => {
       : findHosts(tree, (props) => String(props.accessibilityLabel ?? '').startsWith('Open '));
     const widths = found.map((row) => {
       const slot = typeof row === 'object' ? row?.children?.[2] : null;
-      return typeof slot === 'object' && slot ? layoutWidth(slot, fontScale) : 0;
+      // To a hundredth of a dp: sums of character widths aren't exact.
+      return typeof slot === 'object' && slot ? round(layoutWidth(slot, fontScale)) : 0;
     });
     const text = renderer!.root
       .findAll((node) => (node.type as unknown) === 'Text')
@@ -202,18 +204,27 @@ describe('Home', () => {
     return { widths, text };
   };
   it.each(scales)(
-    'each Group keeps its balance’s place from its skeleton until the balance lands, at %s× text',
+    'each Group keeps one place for its balance, read or landed, so its name is cut once, at %s× text',
     (scale) => {
-      // The skeleton rows' place for an amount stays while the figures are read, so the names
-      // are laid out once, in the room they keep.
-      const skeleton = rows(groups(true), scale).widths;
-      expect(skeleton).toEqual([64, 64, 64]);
-      expect(rows(listed(false, true), scale).widths).toEqual(skeleton);
+      // On the device a long name gained or lost characters as each amount landed beside it
+      // (#332 device check, C5): the place is a nine-character amount's, in both states.
+      const width = round(balanceWidth(scale));
+      expect(rows(listed(false, true), scale).widths).toEqual([width, width, width]);
+      expect(rows(listed(true, false), scale).widths).toEqual([width, width, width]);
+      // And nothing below moves.
       const { before, after: reading } = heights(groups(true), listed(false, true), scale);
       const { after: landed } = heights(listed(false, true), listed(true, false), scale);
       expect([reading, landed]).toEqual([before, before]);
     },
   );
+
+  it('widens only the row of an amount wider than that place, never cutting the amount', () => {
+    const width = round(balanceWidth(1));
+    const { widths, text } = rows(listed(true, false, -1234567.5), 1);
+    expect(widths[0]).toBeGreaterThan(width);
+    expect(widths.slice(1)).toEqual([width, width]);
+    expect(text).toMatch(/₹[\d,]+67\.50 you owe/);
+  });
 
   it.each(scales)(
     'a Group whose balance is known keeps it while Home’s figures are read again, at %s× text',
