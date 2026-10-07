@@ -567,6 +567,28 @@ describe('drafts come first (M6-1)', () => {
     });
     expect(f.drafts.get(`${alex.id}${mapleId}`)).toEqual(stored);
   });
+
+  it('shows the version read meanwhile once a delete review over the record is cancelled', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    controller.reviewExpenseDeletion();
+    f.server.records.set(billId, record(billId, 'Electricity bill (August)', 2));
+    await controller.refresh();
+    // The review keeps the version it was shown: Delete would send its revision.
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'delete-review',
+      draft: { original: { revision: 1 } },
+    });
+    controller.cancelExpenseDeletion();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      draft: {
+        description: 'Electricity bill (August)',
+        original: { revision: 2 },
+      },
+    });
+  });
 });
 
 describe('reconnecting and the foreground (M1-4, M1-6)', () => {
