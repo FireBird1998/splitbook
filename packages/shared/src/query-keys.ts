@@ -6,6 +6,7 @@
  */
 import {
   activityPagePath,
+  expenseHistoryPath,
   expensePagePath,
   expenseRecordPath,
   groupBalancesPath,
@@ -134,6 +135,17 @@ export const expenseRecordKey = (account: QueryAccount, groupId: string, expense
 
 export const activityPageKey = (account: QueryAccount, groupId: string, page: ActivityPageQuery) =>
   groupScopedKey('ledger', account, groupId, activityPagePath(groupId, page));
+
+/**
+ * Every page of one Expense's history, as Android reads them in one query (#220): no page in
+ * its path. A single page of it is an `activityPageKey` with `expenseId`.
+ */
+export const expenseHistoryKey = (
+  account: QueryAccount,
+  groupId: string,
+  expenseId: string,
+  limit = 20,
+) => groupScopedKey('ledger', account, groupId, expenseHistoryPath(groupId, expenseId, limit));
 
 /**
  * A Group's insights for a Month (#314). In the `ledger` scope: every Expense write that must

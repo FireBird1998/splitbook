@@ -93,6 +93,16 @@ export const activityPagePath = (groupId: string, { expenseId, page, limit }: Ac
     ['limit', limit],
   ])}`;
 
+/**
+ * Every page of one Expense's history, with no page: the key of the one query that reads them
+ * page by page on Android (#220). Each page's own path is `activityPagePath` with `expenseId`.
+ */
+export const expenseHistoryPath = (groupId: string, expenseId: string, limit: number) =>
+  `${group(groupId)}/activity${query([
+    ['expenseId', expenseId],
+    ['limit', limit],
+  ])}`;
+
 /** Home's totals across the member's Groups. */
 export const homeBalancesPath = () => '/api/user/balances';
 

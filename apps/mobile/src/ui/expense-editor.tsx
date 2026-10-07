@@ -154,6 +154,7 @@ function ExpenseTask({
   currentUserId,
   onClose,
   notice,
+  emptyNotice,
   offline = false,
   onChange,
   onSave,
@@ -161,6 +162,7 @@ function ExpenseTask({
   onDiscard,
   onDiscardUnconfirmed,
   onRetry,
+  onRefresh,
   onEdit,
   onReviewDelete,
   onDelete,
@@ -171,6 +173,7 @@ function ExpenseTask({
   onLeaveField,
   onReveal,
   onLoadOlderHistory,
+  onLoadNewerHistory,
   onRetryHistory,
   outline,
 }: {
@@ -181,6 +184,11 @@ function ExpenseTask({
   onClose?: () => void;
   /** Shown above the content, such as the offline notice. */
   notice?: ReactNode;
+  /**
+   * Shown instead while the Expense opens, or when nothing of it could be: the offline notice
+   * without the saved copy's time or a second Try again (#332's rule, #220).
+   */
+  emptyNotice?: ReactNode;
   /** Saving and checking a save need a connection; the draft stays editable. */
   offline?: boolean;
   onChange: (patch: Partial<ExpenseDraft>) => void;
@@ -194,6 +202,11 @@ function ExpenseTask({
   /** Offered once the server refused a retry of an unconfirmed save; the app confirms it. */
   onDiscardUnconfirmed?: () => void;
   onRetry: () => void;
+  /**
+   * The record's Refresh: reads it and its changes again where they are, keeping the pages
+   * loaded (#220, M1-3). Without it, the record opens again.
+   */
+  onRefresh?: () => void;
   onEdit: () => void;
   onReviewDelete: () => void;
   onDelete: () => void;
@@ -203,6 +216,8 @@ function ExpenseTask({
   onAcceptCurrent: () => void;
   /** The saved record's older changes, and another read of its changes after a failure. */
   onLoadOlderHistory?: () => void;
+  /** Its newer changes, once the window of changes has slid past the newest (#220). */
+  onLoadNewerHistory?: () => void;
   onRetryHistory?: () => void;
   /** What the list row an Expense opens from already says, so its skeleton takes its shape. */
   outline?: RecordOutline | null;
@@ -258,6 +273,9 @@ function ExpenseTask({
   // record: it keeps the spinner it always had.
   const opening = state.status === 'loading' && !!state.requestedExpenseId && !state.draft;
   const recordReveal = useReveal(opening);
+  // Whether the skeleton showed the list row's summary: it stays as it was when the record lands.
+  const outlined = useRef(false);
+  if (opening) outlined.current = !!outline;
   const errors = state.validation.errors;
   const section = (field: ExpenseField) => (node: View | null) => {
     sections.current[field] = node;
@@ -285,6 +303,10 @@ function ExpenseTask({
         ? 'Changed'
         : 'Not saved'
       : null;
+  // The offline banner speaks of what's shown: while the Expense opens, or when nothing of it
+  // could be, it only says the phone is offline, and the screen's own Try again stands alone
+  // (the loading-state audit, #220).
+  const shownNotice = draft && state.status !== 'loading' ? notice : emptyNotice;
   const frame = (body: ReactNode, footer?: ReactNode) => (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <TopBar
@@ -335,7 +357,7 @@ function ExpenseTask({
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
       >
-        {notice}
+        {shownNotice}
         {body}
       </ScrollView>
       {footer}
@@ -372,10 +394,12 @@ function ExpenseTask({
         onDelete={onDelete}
         onCancelDelete={onCancelDelete}
         onResume={onResume}
-        onRefresh={onRetry}
+        onRefresh={onRefresh ?? onRetry}
         onLoadOlderHistory={onLoadOlderHistory}
+        onLoadNewerHistory={onLoadNewerHistory}
         onRetryHistory={onRetryHistory}
         reveal={recordReveal}
+        outlined={outlined.current}
       />
     );
   const locked = state.status !== 'editing';
@@ -541,12 +565,24 @@ function ExpenseTask({
               ))}
             </Banner>
           ) : null}
-          {!context && (
-            <Banner
-              tone="offline"
-              message="Connect to check the current members and Tags. You can still edit your saved text."
-            />
-          )}
+          {/* The Group's details are unknown: offline, refused, or not read. Each says which. */}
+          {!context &&
+            (offline ? (
+              <Banner
+                tone="offline"
+                message="Connect to check the current members and Tags. You can still edit your saved text."
+              />
+            ) : (
+              <Banner
+                tone="warning"
+                standing
+                message={
+                  state.status === 'blocked'
+                    ? 'You no longer have access to this Group’s members and Tags. Your draft is kept.'
+                    : 'Couldn’t check the current members and Tags. You can still edit your saved text.'
+                }
+              />
+            ))}
           <AmountDescriptionCard
             draft={draft}
             locked={locked}

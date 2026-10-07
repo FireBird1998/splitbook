@@ -1,0 +1,705 @@
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { emptyExpenseHistory, parseActivityPage, type ExpenseHistoryState } from '../data/activity';
+import {
+  draftFromExpense,
+  emptyExpenseEditor,
+  parseExpenseContext,
+  type ExpenseEditor as Editor,
+} from '../data/expense-draft';
+import { parseExpenseRecord } from '../data/expense-record';
+import { parseExpensePage } from '../data/financial-dto';
+import { findHosts, flatten, layoutHeight, layoutWidth } from '../test-utils/layout';
+import { setWindow } from '../test-utils/native';
+import { Divider, TopBar } from './compact';
+import { ExpenseEditor } from './expense-editor';
+import { recordOutline } from './expense-record-view';
+import { OfflineNotice } from './offline-notice';
+import { refreshedLabel } from './refresh-feedback';
+
+// #220: an Expense record's history as a window of up to 5 pages, with Load newer above it, and
+// the loading-state audit's items for the record (2026-10-07). Rendered from the snapshot's
+// shape, as the App passes it. Fictional people and Groups only.
+(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+
+const alex = { id: 'a00000000000000000000001', name: 'Alex Rao' };
+const sam = { id: 'a00000000000000000000002', name: 'Sam Chen' };
+const groupId = 'a00000000000000000000010';
+const billId = 'b00000000000000000000001';
+const iso = '2026-09-29T14:32:00.000Z';
+const at = Date.parse('2026-09-30T08:15:00.000Z');
+const group = {
+  _id: groupId,
+  createdBy: alex.id,
+  name: 'Maple House',
+  description: '',
+  category: 'home',
+  defaultCurrency: 'INR',
+  members: [alex, sam].map((user) => ({
+    user: { _id: user.id, name: user.name, email: `${user.id}@example.test`, image: null },
+    role: 'member',
+    joinedAt: iso,
+  })),
+  tags: [{ _id: 'a00000000000000000000020', name: 'Utilities', isArchived: false, createdAt: iso }],
+  createdAt: iso,
+  updatedAt: iso,
+};
+const wire = {
+  _id: billId,
+  group: groupId,
+  revision: 3,
+  description: 'Electricity bill',
+  amount: 2860,
+  amountMinor: 286000,
+  moneyVersion: 1,
+  currency: 'INR',
+  paidBy: [{ user: { _id: sam.id, name: sam.name }, amount: 2860, amountMinor: 286000 }],
+  splitBetween: [
+    { user: { _id: alex.id, name: alex.name }, amount: 1430, amountMinor: 143000 },
+    { user: { _id: sam.id, name: sam.name }, amount: 1430, amountMinor: 143000 },
+  ],
+  splitMethod: 'equal',
+  date: '2026-09-29T06:30:00.000Z',
+  createdAt: iso,
+  updatedAt: iso,
+  category: 'other',
+  tagId: 'a00000000000000000000020',
+  tag: 'Utilities',
+  notes: '',
+  isDeleted: false,
+  createdBy: { _id: sam.id, name: sam.name },
+  editHistory: [],
+};
+const original = parseExpenseRecord({ status: 200, data: wire }, groupId, billId);
+const context = parseExpenseContext({ status: 200, data: group });
+/** 140 fictional changes of the bill, newest first: change `n` is "Note n". */
+const changes = Array.from({ length: 140 }, (_, index) => ({
+  _id: `d${String(index + 1).padStart(23, '0')}`,
+  group: groupId,
+  type: 'expense_updated',
+  actor: { _id: sam.id, name: sam.name },
+  createdAt: new Date(Date.parse('2026-09-29T20:00:00.000Z') - index * 60_000).toISOString(),
+  metadata: {
+    expenseId: billId,
+    changes: { notes: { old: `Note ${index + 2}`, new: `Note ${index + 1}` } },
+  },
+}));
+/** Pages `first` to `first + 4` of the bill's changes, as the snapshot holds them. */
+const windowOf = (first: number, overrides: Partial<ExpenseHistoryState> = {}) => {
+  const pages = Array.from({ length: 5 }, (_, index) =>
+    parseActivityPage(
+      {
+        status: 200,
+        data: {
+          activities: changes.slice((first + index - 1) * 20, (first + index) * 20),
+          pagination: { page: first + index, limit: 20, total: 140, totalPages: 7 },
+        },
+      },
+      groupId,
+      first + index,
+      billId,
+    ),
+  );
+  return {
+    ...emptyExpenseHistory(),
+    expenseId: billId,
+    status: 'ready' as const,
+    events: pages.flatMap((page) => page.events),
+    pagination: pages[4].pagination,
+    firstPage: first,
+    refreshedAt: at,
+    ...overrides,
+  };
+};
+/** The bill as its Group's list of Expenses holds it. */
+const listRow = () =>
+  parseExpensePage(
+    {
+      status: 200,
+      data: {
+        expenses: [wire],
+        pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        summary: { count: 1, totalsByCurrency: [], userOwes: 0, userGetsBack: 0, byMember: [] },
+      },
+    },
+    groupId,
+    'INR',
+  ).expenses[0]!;
+const detail = (history: ExpenseHistoryState, overrides: Partial<Editor> = {}): Editor => ({
+  ...emptyExpenseEditor(),
+  groupId,
+  context,
+  draft: draftFromExpense(original),
+  status: 'detail',
+  requestedExpenseId: billId,
+  history,
+  ...overrides,
+});
+
+const scrollTo = vi.fn();
+let screen: ReactTestRenderer | null = null;
+afterEach(() => {
+  act(() => screen?.unmount());
+  screen = null;
+  scrollTo.mockClear();
+});
+const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
+const text = (scope: ReactTestInstance) =>
+  scope
+    .findAll((node) => isHost(node, 'Text'))
+    .flatMap((node) => node.children.filter((child) => typeof child === 'string'))
+    .join('');
+const pressables = (label: string) =>
+  screen!.root.findAll(
+    (node) => isHost(node, 'Pressable') && node.props.accessibilityLabel === label,
+  );
+/** The record's top bar. */
+const topBar = () => screen!.root.findAllByType(TopBar)[0]!;
+/** The record's History: its header, page controls and changes. */
+const history = () =>
+  screen!.root.find((node) => (node.type as { name?: string }).name === 'RecordHistory');
+/** Whether a reader can reach this node: no ancestor hides it. */
+const readable = (node: ReactTestInstance) => {
+  for (let parent: ReactTestInstance | null = node; parent; parent = parent.parent)
+    if (parent.props?.accessibilityElementsHidden) return false;
+  return true;
+};
+
+function editor(state: Editor, props: Partial<Parameters<typeof ExpenseEditor>[0]> = {}) {
+  return (
+    <ExpenseEditor
+      state={state}
+      currentUserId={alex.id}
+      onChange={() => undefined}
+      onLeaveField={() => undefined}
+      onSave={() => undefined}
+      onResume={() => undefined}
+      onDiscard={() => undefined}
+      onRetry={() => undefined}
+      onEdit={() => undefined}
+      onReviewDelete={() => undefined}
+      onDelete={() => undefined}
+      onCancelDelete={() => undefined}
+      onReconcile={() => undefined}
+      onReviewLatest={() => undefined}
+      onAcceptCurrent={() => undefined}
+      onLoadOlderHistory={() => undefined}
+      onLoadNewerHistory={() => undefined}
+      onRetryHistory={() => undefined}
+      {...props}
+    />
+  );
+}
+function render(state: Editor, props: Partial<Parameters<typeof ExpenseEditor>[0]> = {}) {
+  act(() => {
+    screen = create(editor(state, props), {
+      createNodeMock: () => ({ scrollTo, focus: () => undefined }),
+    });
+  });
+  return (next: Editor) => act(() => screen!.update(editor(next, props)));
+}
+
+describe('an Expense’s changes past 5 pages (#220, M7-2)', () => {
+  const layout = (node: ReactTestInstance, y: number) =>
+    act(() =>
+      node.props.onLayout({ nativeEvent: { layout: { x: 0, y, width: 390, height: 60 } } }),
+    );
+  /** The host Views that report where a change's row and the list of changes lie. */
+  const places = (number: number) => {
+    const found: ReactTestInstance[] = [];
+    let node: ReactTestInstance | null = screen!.root.find(
+      (candidate) =>
+        isHost(candidate, 'View') &&
+        candidate.props.accessible === true &&
+        String(candidate.props.accessibilityLabel).includes(`to “Note ${number}”`),
+    );
+    while (node && found.length < 2) {
+      if (isHost(node, 'View') && node.props.onLayout) found.push(node);
+      node = node.parent;
+    }
+    const [row, list] = found;
+    return { row, list };
+  };
+  /** Lays the window out as a phone would: the list at `listY`, each change 61 high. */
+  const lay = (first: number, listY: number) => {
+    layout(places(first * 20 - 19).list, listY);
+    for (let number = first * 20 - 19; number <= (first + 4) * 20; number += 1)
+      layout(places(number).row, (number - (first * 20 - 19)) * 61);
+  };
+  /** The record's own scroll view reports `event` at `y`: its sheets scroll too. */
+  const scrolledBy = (event: 'onScroll' | 'onScrollEndDrag' | 'onMomentumScrollEnd', y: number) =>
+    act(() =>
+      screen!.root
+        .find((node) => isHost(node, 'ScrollView') && node.props.onScrollEndDrag)
+        .props[event]({ nativeEvent: { contentOffset: { x: 0, y } } }),
+    );
+  const scrolled = (y: number) => scrolledBy('onScrollEndDrag', y);
+  const tick = () => act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+  it('keeps the change on screen in its place when the newest page drops: the view moves up by what left', async () => {
+    const slide = render(detail(windowOf(1)));
+    lay(1, 700);
+    scrolled(1900);
+    await tick();
+    expect(scrollTo).not.toHaveBeenCalled();
+    // Load older read page 6: pages 2 to 6 show, below Load newer, which moved the list down.
+    slide(detail(windowOf(2)));
+    lay(2, 760);
+    await tick();
+    // Change 21 was at 700 + 20 × 61 = 1920; it is now at 760.
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ y: 1900 + 760 - 1920, animated: false });
+  });
+
+  // #219's lessons (app.test.tsx): at the end of a record, Android clamps the view to the shorter
+  // record before the shift lands; and the last throttled scroll event can come up to 50 dp
+  // before where a drag or a fling stopped.
+  it('shifts from where the slide began, though Android clamped the view before the shift landed', async () => {
+    const slide = render(detail(windowOf(1)));
+    lay(1, 700);
+    scrolled(1900);
+    await tick();
+    slide(detail(windowOf(2)));
+    scrolledBy('onScroll', 1500);
+    lay(2, 760);
+    await tick();
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ y: 1900 + 760 - 1920, animated: false });
+  });
+
+  it.each([
+    ['drag', 'onScrollEndDrag'],
+    ['fling', 'onMomentumScrollEnd'],
+  ] as const)(
+    'shifts from where the %s stopped, which the last scroll event can miss',
+    async (_, stopped) => {
+      const slide = render(detail(windowOf(1)));
+      lay(1, 700);
+      scrolledBy('onScroll', 1868);
+      scrolledBy(stopped, 1900);
+      await tick();
+      slide(detail(windowOf(2)));
+      lay(2, 760);
+      await tick();
+      expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ y: 1900 + 760 - 1920, animated: false });
+    },
+  );
+
+  it('keeps the change on screen when Load newer brings the newest page back: the view moves down by what came', async () => {
+    const slide = render(detail(windowOf(2)));
+    lay(2, 760);
+    scrolled(300);
+    await tick();
+    slide(detail(windowOf(1)));
+    lay(1, 700);
+    await tick();
+    // Change 21, first under Load newer at 760, now has page 1's 20 changes above it.
+    expect(scrollTo).toHaveBeenCalledExactlyOnceWith({ y: 300 + 1920 - 760, animated: false });
+  });
+
+  it('offers Load newer above the changes once they have slid, as Load older is offered below', () => {
+    const slide = render(detail(windowOf(1)));
+    expect(pressables('Load newer changes')).toHaveLength(0);
+    slide(detail(windowOf(2)));
+    const newer = pressables('Load newer changes');
+    expect(newer).toHaveLength(1);
+    expect(newer[0].props).toMatchObject({ accessibilityRole: 'button', disabled: false });
+    const order = screen!.root
+      .findAll((node) => isHost(node, 'Pressable') || node.props.accessible === true)
+      .map((node) => String(node.props.accessibilityLabel));
+    expect(order.indexOf('Load newer changes')).toBeLessThan(
+      order.findIndex((label) => label.includes('to “Note 21”')),
+    );
+    expect(pressables('Load older changes')).toHaveLength(1);
+  });
+
+  it('says Load newer is loading as Load older does, and keeps the changes when it fails', () => {
+    render(detail(windowOf(2, { newerStatus: 'loading' })));
+    expect(text(screen!.root)).toContain('Loading newer changes…');
+    expect(pressables('Load newer changes')).toHaveLength(0);
+    act(() => screen!.unmount());
+    const onLoadNewerHistory = vi.fn();
+    render(detail(windowOf(2, { newerStatus: 'error' })), { onLoadNewerHistory });
+    const alert = screen!.root.find(
+      (node) => isHost(node, 'Text') && node.props.accessibilityRole === 'alert',
+    );
+    expect(text(alert)).toBe('Couldn’t load newer changes. The changes shown are still here.');
+    act(() => pressables('Try loading newer changes')[0].props.onPress());
+    expect(onLoadNewerHistory).toHaveBeenCalledOnce();
+    expect(text(screen!.root)).toContain('Note 21');
+  });
+
+  it('keeps Load older and Load newer in place, disabled, while the changes shown are read again', () => {
+    render(detail(windowOf(2, { status: 'loading' })));
+    expect(pressables('Load newer changes')[0].props.accessibilityState).toEqual({
+      disabled: true,
+      busy: false,
+    });
+    expect(pressables('Load older changes')[0].props.accessibilityState).toEqual({
+      disabled: true,
+      busy: false,
+    });
+    // The changes shown stay, with when they were read: in this session, so never "Saved".
+    expect(text(screen!.root)).toContain('Note 21');
+    expect(text(history())).toContain(`Updated ${refreshedLabel(at)} · refreshing`);
+    expect(text(screen!.root)).not.toContain('Saved');
+  });
+
+  it('keeps the time of this device’s saved pages while they are read again, and says it once', () => {
+    // Restored after a restart, read again: their own time stays (ADR 0006).
+    render(detail(windowOf(2, { status: 'loading', restored: true })));
+    expect(text(history())).toContain(`Saved ${refreshedLabel(at)} · refreshing`);
+    act(() => screen!.unmount());
+    // The record is read again too: the top bar says so, and History keeps only the time.
+    render(
+      detail(windowOf(2, { status: 'loading', restored: true }), {
+        known: { refreshedAt: at, refreshing: true, saved: true },
+      }),
+    );
+    expect(text(topBar())).toContain('Refreshing…');
+    expect(text(history())).toContain(`Saved ${refreshedLabel(at)}`);
+    expect(text(screen!.root).match(/refreshing/gi)).toHaveLength(1);
+  });
+
+  // The UI re-review of 0f8c377: rows that are drawn only when they change must still be drawn
+  // when they do, including a Tag renamed once the Group's details arrive (the saved copy path).
+  it('draws a change again when it, the Group’s Tags or its place change, and only then', () => {
+    const tagged = (name: string) =>
+      parseExpenseContext({
+        status: 200,
+        data: {
+          ...group,
+          tags: [
+            ...group.tags,
+            { _id: 'a00000000000000000000021', name, isArchived: false, createdAt: iso },
+          ],
+        },
+      });
+    const first = windowOf(1);
+    const retagged = { ...first.events[0]!, metadata: { ...first.events[0]!.metadata } };
+    retagged.metadata.changes = {
+      tagId: { old: 'a00000000000000000000020', new: 'a00000000000000000000021' },
+    };
+    const events = [retagged, ...first.events.slice(1)];
+    const update = render(detail({ ...first, events }, { context: tagged('Rent') }));
+    expect(text(history())).toContain('Utilities');
+    expect(text(history())).toContain('Rent');
+    // The Group's details change: the Tag's new name shows.
+    update(detail({ ...first, events }, { context: tagged('Housing') }));
+    expect(text(history())).toContain('Housing');
+    expect(text(history())).not.toContain('Rent');
+    // One change is read again with other words, under the same id: it shows them.
+    const edited = { ...events[1]!, metadata: { ...events[1]!.metadata } };
+    edited.metadata.changes = { notes: { old: 'Note 3', new: 'Meter read on the 20th' } };
+    update(
+      detail(
+        { ...first, events: [events[0]!, edited, ...events.slice(2)] },
+        {
+          context: tagged('Housing'),
+        },
+      ),
+    );
+    expect(text(history())).toContain('Meter read on the 20th');
+    // The window slides: the change that was 21st is first now, with no divider above it.
+    /** The divider drawn above change `number`'s row: one, or none for the first. */
+    const dividers = (number: number) =>
+      screen!.root
+        .find(
+          (node) =>
+            isHost(node, 'View') &&
+            node.props.onLayout !== undefined &&
+            node.findAll(
+              (inner) =>
+                isHost(inner, 'View') &&
+                inner.props.accessible === true &&
+                !!inner.props.accessibilityLabel,
+            ).length === 1 &&
+            node.findAll((inner) =>
+              String(inner.props.accessibilityLabel).includes(`to “Note ${number}”`),
+            ).length > 0,
+        )
+        .findAllByType(Divider).length;
+    expect(dividers(21)).toBe(1);
+    update(detail(windowOf(2), { context: tagged('Housing') }));
+    expect(dividers(21)).toBe(0);
+    expect(dividers(22)).toBe(1);
+  });
+
+  it('keeps Load older and Load newer disabled in place from the moment Try again starts', () => {
+    // Try again is reading the session, the Group and the record; the changes aren't read yet.
+    render(detail(windowOf(2), { refreshing: true }));
+    expect(pressables('Load newer changes')[0].props.accessibilityState).toEqual({
+      disabled: true,
+      busy: false,
+    });
+    expect(pressables('Load older changes')[0].props.accessibilityState).toEqual({
+      disabled: true,
+      busy: false,
+    });
+    expect(text(topBar())).toContain('Refreshing…');
+  });
+
+  it('loads newer changes in Load newer’s own place, busy, so the changes below it stay put (N2)', () => {
+    const control = (label: string) =>
+      findHosts(
+        screen!.toJSON(),
+        (props, type) => type === 'Pressable' && props.accessibilityLabel === label,
+      )[0]!;
+    const load = render(detail(windowOf(2)));
+    const idle = layoutHeight(control('Load newer changes'));
+    load(detail(windowOf(2, { newerStatus: 'loading' })));
+    const loading = control('Loading newer changes…');
+    expect(loading.props.accessibilityState).toEqual({ disabled: true, busy: true });
+    expect(layoutHeight(loading)).toBe(idle);
+    // Nothing but the button stands above the changes while the page is read.
+    expect(text(history())).not.toContain('Couldn’t');
+  });
+
+  it('says only that older changes couldn’t be read when a page read again fails, as the changes end before it (N1)', () => {
+    render(detail(windowOf(1, { moreStatus: 'error' })));
+    const alert = screen!.root.find(
+      (node) => isHost(node, 'Text') && node.props.accessibilityRole === 'alert',
+    );
+    expect(text(alert)).toBe('Couldn’t load older changes.');
+    expect(pressables('Try loading older changes')).toHaveLength(1);
+  });
+
+  it('says when the changes shown were read once reading them again failed (review item 3)', () => {
+    // Read earlier in this session: "Updated".
+    render(
+      detail(windowOf(1, { status: 'error', message: 'Couldn’t load this Expense’s changes.' })),
+    );
+    expect(text(history())).toContain(`Updated ${refreshedLabel(at)}`);
+    expect(text(history())).toContain('Note 1');
+    act(() => screen!.unmount());
+    // This device's saved copy, after a restart: "Saved".
+    render(
+      detail(
+        windowOf(1, {
+          status: 'error',
+          message: 'Couldn’t load this Expense’s changes.',
+          restored: true,
+        }),
+      ),
+    );
+    expect(text(history())).toContain(`Saved ${refreshedLabel(at)}`);
+  });
+});
+
+describe('opening an Expense: what is already known shows at once (loading-state audit)', () => {
+  it('shows what the list row says straight away, while the record is read', () => {
+    const row = listRow();
+    render(
+      { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: billId },
+      {
+        outline: recordOutline(row, alex.id),
+      },
+    );
+    for (const shown of ['Electricity bill', '₹2,860.00', 'You owe Sam ₹1,430.00']) {
+      const found = screen!.root.findAll(
+        (node) => isHost(node, 'Text') && node.children.join('').startsWith(shown),
+      );
+      expect(found.length, shown).toBeGreaterThan(0);
+      expect(found.every(readable), shown).toBe(true);
+    }
+  });
+
+  it('says in the top bar only that a record this device knew is read again, and in the body when it was read (B1)', () => {
+    const bar = () => text(topBar());
+    const body = () => text(screen!.root).replace(bar(), '');
+    // This device's saved copy, being read again.
+    render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: true, saved: true } }));
+    expect(bar()).toContain('Refreshing…');
+    expect(bar()).not.toMatch(/Saved|Updated/);
+    expect(body()).toContain(`Saved ${refreshedLabel(at)}`);
+    act(() => screen!.unmount());
+    // Read earlier in this session, perhaps hours ago: "Updated", never "Saved", while it is read
+    // again too (the money-safety re-review).
+    render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: true, saved: false } }));
+    expect(bar()).toContain('Refreshing…');
+    expect(body()).toContain(`Updated ${refreshedLabel(at)}`);
+    expect(text(screen!.root)).not.toContain('Saved');
+    act(() => screen!.unmount());
+    // Its read failed: when it was read stays, in the body.
+    render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: false, saved: false } }));
+    expect(bar()).not.toContain('Refreshing…');
+    expect(body()).toContain(`Updated ${refreshedLabel(at)}`);
+    act(() => screen!.unmount());
+    render(detail(windowOf(1), { known: { refreshedAt: at, refreshing: false, saved: true } }));
+    expect(body()).toContain(`Saved ${refreshedLabel(at)}`);
+    act(() => screen!.unmount());
+    // Read in this open: nothing to say.
+    render(detail(windowOf(1), { known: null }));
+    expect(text(screen!.root)).not.toMatch(/Saved|Updated|Refreshing/);
+  });
+
+  // The device check of 3ac9be2 cut the title to "Expen…" and hid the Group; the UI re-review of
+  // 0f8c377 measured "Refreshing…" doing the same on the App's bar, with its Back button.
+  it.each([
+    [320, 1],
+    [320, 1.3],
+    [360, 1],
+    [360, 1.3],
+    [412, 1],
+    [412, 1.3],
+  ])('keeps the title and the Group whole in the top bar at %sdp and %s× text', (width, scale) => {
+    setWindow({ width, fontScale: scale });
+    const earlier = Date.parse('2026-09-28T09:02:00.000Z');
+    render(
+      detail(windowOf(1), { known: { refreshedAt: earlier, refreshing: true, saved: true } }),
+      { onClose: () => undefined },
+    );
+    const bar = findHosts(
+      screen!.toJSON(),
+      (props, type) =>
+        type === 'View' && props.style !== undefined && flatten(props.style).minHeight === 64,
+    )[0]!;
+    const parts = (bar.children ?? []).filter(
+      (child): child is ReactTestRendererJSON => typeof child !== 'string',
+    );
+    const titles = parts.find((part) => flatten(part.props.style).flex === 1)!;
+    const style = flatten(bar.props.style);
+    // What the title and the Group have: the bar less its padding, gaps and everything else in it.
+    const room =
+      width -
+      Number(style.paddingLeft) -
+      Number(style.paddingRight) -
+      Number(style.gap) * (parts.length - 1) -
+      parts
+        .filter((part) => part !== titles)
+        .reduce((sum, part) => sum + layoutWidth(part, scale, width), 0) -
+      2 * Number(flatten(titles.props.style).paddingHorizontal);
+    const [title, subtitle] = findHosts(titles, (_, type) => type === 'Text');
+    expect(title!.children).toEqual(['Expense']);
+    expect(subtitle!.children).toEqual(['Maple House']);
+    expect(layoutWidth(title!, scale)).toBeLessThanOrEqual(room);
+    expect(layoutWidth(subtitle!, scale)).toBeLessThanOrEqual(room);
+    expect(pressables('Back to Group')).toHaveLength(1);
+    expect(pressables('Expense options')).toHaveLength(1);
+    // The cue is named "Refreshing" either way; on a narrow phone it is the sync mark alone.
+    const cue = findHosts(bar, (props) => props.accessibilityLabel === 'Refreshing');
+    if (width < 380) {
+      expect(cue).toHaveLength(1);
+      expect(text(topBar())).not.toContain('Refreshing…');
+    } else expect(text(topBar())).toContain('Refreshing…');
+    // The earlier day's time is in the body, not the bar.
+    expect(text(topBar())).not.toContain(refreshedLabel(earlier));
+    expect(text(screen!.root)).toContain(`Saved ${refreshedLabel(earlier)}`);
+  });
+
+  it('names the other person in the badge as the list row does, before the Group’s details are known', () => {
+    // A saved copy shows before its Group is checked: the badge already reads as it will after.
+    render(
+      detail(windowOf(1), {
+        context: null,
+        known: { refreshedAt: at, refreshing: true, saved: true },
+      }),
+    );
+    expect(text(screen!.root)).toContain('You owe Sam ₹1,430.00');
+    expect(text(screen!.root)).not.toContain('Sam Chen ₹');
+  });
+
+  it('keeps the list row’s summary as it was when the record lands, in the same colours (S2)', async () => {
+    const row = listRow();
+    const outline = recordOutline(row, alex.id);
+    expect(outline.badge).toEqual({ label: 'You owe Sam ₹1,430.00', tone: 'negative' });
+    // Shown over its skeleton first, once Android has said reduce motion is off.
+    await act(async () => {
+      screen = create(
+        editor(
+          { ...emptyExpenseEditor(), status: 'loading', requestedExpenseId: billId },
+          { outline },
+        ),
+        { createNodeMock: () => ({ scrollTo, focus: () => undefined }) },
+      );
+    });
+    const badgeColour = () =>
+      flatten(
+        screen!.root.find(
+          (node) => isHost(node, 'Text') && text(node).startsWith('You owe Sam ₹1,430.00'),
+        ).props.style,
+      ).color;
+    const before = badgeColour();
+    act(() => screen!.update(editor(detail(windowOf(1)), { outline })));
+    expect(badgeColour()).toBe(before);
+    // Only what the row didn't show fades in.
+    const faded = screen!.root.findAll(
+      (node) => isHost(node, 'AnimatedView') && flatten(node.props.style).opacity !== undefined,
+    );
+    expect(faded.length).toBeGreaterThan(0);
+    for (const node of faded) {
+      expect(text(node)).not.toContain('Electricity bill');
+      expect(text(node)).not.toContain('Utilities');
+      expect(text(node)).not.toContain('You owe Sam');
+    }
+    expect(text(faded[0]!)).toContain('Who owes what');
+  });
+
+  it('says it is offline above the one Try again when nothing of the Expense shows (S1)', () => {
+    const offline = { active: true, refreshedAt: at, message: null };
+    render(
+      {
+        ...emptyExpenseEditor(),
+        groupId,
+        status: 'blocked',
+        requestedExpenseId: billId,
+        message: 'This Expense isn’t saved on this phone. Connect to load it.',
+      },
+      {
+        notice: <OfflineNotice state={offline} onRetry={() => undefined} />,
+        emptyNotice: <OfflineNotice state={offline} savedShown={false} />,
+      },
+    );
+    expect(text(screen!.root)).toContain('You’re offline');
+    expect(text(screen!.root)).toContain('Connect to load the latest.');
+    expect(text(screen!.root)).toContain('Couldn’t open this Expense');
+    expect(text(screen!.root)).toContain(
+      'This Expense isn’t saved on this phone. Connect to load it.',
+    );
+    expect(text(screen!.root)).not.toContain('What’s shown was saved');
+    expect(
+      screen!.root.findAll((node) => isHost(node, 'Pressable') && /Try again/.test(text(node))),
+    ).toHaveLength(1);
+  });
+});
+
+describe('the Group’s details unknown beside a draft (the device check of 3ac9be2)', () => {
+  const draft = (status: Editor['status']): Editor => ({
+    ...emptyExpenseEditor(),
+    groupId,
+    context: null,
+    draft: { ...draftFromExpense(original), description: 'Electricity bill draft' },
+    status,
+    requestedExpenseId: billId,
+  });
+
+  it('says to connect only while offline', () => {
+    render(draft('resume'), { offline: true });
+    expect(text(screen!.root)).toContain('Connect to check the current members and Tags.');
+  });
+
+  it('says access was lost, with no offline cue, when the Group refused the member', () => {
+    render(draft('blocked'));
+    expect(text(screen!.root)).toContain(
+      'You no longer have access to this Group’s members and Tags. Your draft is kept.',
+    );
+    expect(text(screen!.root)).not.toContain('Connect to check');
+    expect(
+      screen!.root.findAll(
+        (node) => isHost(node, 'Ionicons') && node.props.name === 'cloud-offline-outline',
+      ),
+    ).toEqual([]);
+  });
+
+  it('says the details couldn’t be checked when they weren’t read online', () => {
+    render(draft('resume'));
+    expect(text(screen!.root)).toContain(
+      'Couldn’t check the current members and Tags. You can still edit your saved text.',
+    );
+    expect(text(screen!.root)).not.toContain('Connect to check');
+  });
+});

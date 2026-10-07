@@ -1074,6 +1074,11 @@ function ExpenseScreen({ state }: { state: MobileSnapshot }) {
       currentUserId={state.auth.user?.id}
       outline={row ? recordOutline(row, state.auth.user?.id) : null}
       notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
+      emptyNotice={
+        state.offline.active || state.offline.message ? (
+          <OfflineNotice state={state.offline} savedShown={false} />
+        ) : null
+      }
       offline={state.offline.active}
       onClose={() => void controller.back()}
       onEdit={() => void controller.editExpense()}
@@ -1082,7 +1087,9 @@ function ExpenseScreen({ state }: { state: MobileSnapshot }) {
       onDelete={() => void controller.deleteExpense()}
       onReconcile={() => void controller.reconcileExpense()}
       onReviewLatest={() => void controller.reviewLatestExpense()}
+      onRefresh={() => void controller.refresh()}
       onLoadOlderHistory={() => void controller.loadOlderExpenseHistory()}
+      onLoadNewerHistory={() => void controller.loadNewerExpenseHistory()}
       onRetryHistory={() => void controller.refreshExpenseHistory()}
       onAcceptCurrent={() =>
         Alert.alert('Use the saved version?', 'Your version is removed from this device.', [

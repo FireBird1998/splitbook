@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   activityPagePath,
+  expenseHistoryPath,
   expensePagePath,
   expenseRecordPath,
   groupBalancesPath,
@@ -95,6 +96,12 @@ describe("the paths Android's controller builds today", () => {
     );
     expect(activityPagePath(groupId, { expenseId, page: 1, limit: 20 })).toBe(
       `/api/groups/${groupId}/activity?expenseId=${expenseId}&page=1&limit=20`,
+    );
+  });
+
+  it('every page of an Expense history, as one query reads them', () => {
+    expect(expenseHistoryPath(groupId, expenseId, 20)).toBe(
+      `/api/groups/${groupId}/activity?expenseId=${expenseId}&limit=20`,
     );
   });
 

@@ -46,7 +46,7 @@ pnpm mobile ceilings:compare --base "$(git merge-base HEAD origin/main)"        
    - ask an approver for the `re-record-ceilings` label. It must be on the pull request and applied by an account in the repository variable `CEILINGS_APPROVERS` (default: the repository owner). If anyone else applies it, the check stays red and names who applied it, and an approver removes the label and applies it again. Adding the label reruns PR checks, which then pass;
    - an approver approves each re-record on its own pull request, so a later pull request needs the label again.
 
-Re-records already planned: a refresh re-reads the loaded pages, up to 5 (ADR 0006), so the refresh journeys send more requests. #219 did it for Expenses ([below](#re-recorded-for-219)); #220 (an Expense's history) and #222 (Activity) still will.
+Re-records already planned: a refresh re-reads the loaded pages, up to 5 (ADR 0006), so the refresh journeys send more requests. #219 did it for Expenses ([below](#re-recorded-for-219)); #222 (Activity) still will. No journey measured an Expense's history before #220, so #220 added its journeys instead ([below](#added-for-220)).
 
 ## Baseline
 
@@ -97,6 +97,19 @@ Publishes / commits / component renders, and requests, for every journey whose c
 The two journeys #219 added send, in order: Expenses page 6 then Balances, and Expenses page 1 then Balances (Balances follow every Expense read, finding 6).
 
 Rebased on #331's loading motion (`d41424b`), one count moved: Change Month renders 325, not 328, with #331's Month summary skeleton. Its ceiling came down; no other count moved.
+
+### Added for #220
+
+**Build:** `swarm/220-expense-record-queries`, on `main` at `a948168`, recorded with `RENDER_PROFILE=record`. An Expense record and its history moved to declarative queries (ADR 0006): the record is read beside its Group, a refresh re-reads the pages of changes already loaded (M1-3), and the changes slide past 5 pages, with Load newer (M7-2). The harness serves each Expense's record and 6 pages of its changes. No existing journey's count moved; the four journeys below are new, so they need no re-record.
+
+| Journey                                                  | Requests | Publishes / commits / renders | Sent, in order                                                               |
+| -------------------------------------------------------- | -------: | ----------------------------: | ---------------------------------------------------------------------------- |
+| Open an Expense from Expenses                            |        3 |                   5 / 3 / 261 | Group and the record together, then the changes' page 1                      |
+| Refresh an Expense with 2 pages of changes               |        5 |                   5 / 5 / 331 | the session check, Group, the record, then the changes' pages 1 and 2 (M1-3) |
+| Load the 6th page of an Expense’s changes (pages 2 to 6) |        1 |                   2 / 2 / 238 | the changes' page 6; page 1 drops                                            |
+| Load newer changes (pages 1 to 5)                        |        1 |                   2 / 2 / 240 | the changes' page 1; page 6 drops                                            |
+
+A change's row is drawn again only when what it says changes, so a slide or a refresh draws only the changes it adds. Refresh publishes once more than first recorded: the top bar says "Refreshing…" from the tap, before the session check (the device check of #220).
 
 ### Requests per journey
 
@@ -200,4 +213,4 @@ The owner confirms or changes this budget in [#194](https://github.com/FireBird1
 
 - Each #178 pull request lowers the ceilings to its new numbers and updates the baseline table.
 - #206 added request counts per journey, the six journeys above, the data file and the ratchet. #214 moves the "after 30 s" journeys to fake timers once freshness follows `Date.now`.
-- #220 and #222 re-record their refresh journeys, with an approver's `re-record-ceilings` label, when a refresh re-reads the loaded pages; #219 did it for Expenses.
+- #222 re-records its refresh journeys, with an approver's `re-record-ceilings` label, when a refresh re-reads the loaded pages; #219 did it for Expenses, and #220 added the Expense record's journeys.

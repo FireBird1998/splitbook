@@ -74,6 +74,17 @@ export interface ExpenseHistoryState {
   pagination: ActivityState['pagination'];
   message: string | null;
   moreStatus: 'idle' | 'loading' | 'error';
+  /** The oldest verification time among the pages shown (#215): a saved copy keeps its own. */
+  refreshedAt?: number | null;
+  /**
+   * The first page shown: past 1 once the changes have slid past 5 pages, when Load newer reads
+   * the page before it (#220, M7-2). `pagination` is the last page shown.
+   */
+  firstPage?: number;
+  /** Load newer, above the changes: reading the page before the window, or failed to. */
+  newerStatus?: 'idle' | 'loading' | 'error';
+  /** A page shown is this device's saved copy, not a read in this session: "Saved", not "Updated". */
+  restored?: boolean;
 }
 export function emptyExpenseHistory(): ExpenseHistoryState {
   return {
@@ -83,6 +94,10 @@ export function emptyExpenseHistory(): ExpenseHistoryState {
     pagination: null,
     message: null,
     moreStatus: 'idle',
+    refreshedAt: null,
+    firstPage: 1,
+    newerStatus: 'idle',
+    restored: false,
   };
 }
 const PAGE_SIZE = 20;
