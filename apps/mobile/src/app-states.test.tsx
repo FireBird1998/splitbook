@@ -11,7 +11,7 @@ import { createMobileController, type MobileController } from './data/mobile-con
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
 import { findHosts, layoutWidth } from './test-utils/layout';
-import { setFileWindow } from './test-utils/native';
+import { setFileWindow, setWindow } from './test-utils/native';
 import { savedQueriesIn } from './test-utils/saved-queries';
 
 // #127: the App's loading, refreshing, offline and cold-start states, rendered through the real
@@ -935,30 +935,43 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
   });
 
-  it('keeps the status beside the wordmark on one line, at 100% and 130% text', async () => {
-    const phone = device();
-    await usedBefore(phone);
-    phone.clock.now += 60 * 60_000;
-    const check = phone.hold('/api/auth/get-session');
-    await start(phone);
-    await check.reached;
-    await settle();
-    // Laid out at its natural width, the top bar fits a 360dp phone: its status never wraps.
-    const fits = (status: string) => {
-      const { bar, text } = topBar();
-      for (const scale of [1, 1.3]) expect(layoutWidth(bar, scale)).toBeLessThanOrEqual(360);
-      expect(text).toContain(status);
-    };
-    fits('Checking…');
+  // On a 360×640dp phone at 130% text, "Refreshing…" wrapped onto two lines on the device
+  // (#332 device check, C6): the widths here are calibrated to what it measured there.
+  it.each([1, 1.3])(
+    'keeps the status beside the wordmark on one line, at %s× text',
+    async (scale) => {
+      setWindow({ fontScale: scale });
+      const phone = device();
+      await usedBefore(phone);
+      phone.clock.now += 60 * 60_000;
+      const check = phone.hold('/api/auth/get-session');
+      await start(phone);
+      await check.reached;
+      await settle();
+      // Laid out at its natural width, the top bar fits a 360dp phone, so its status needs no
+      // second line; past that, it is one line that shrinks to fit rather than wrap or lose a word.
+      const fits = (status: string) => {
+        const { bar, text } = topBar();
+        expect(layoutWidth(bar, scale)).toBeLessThanOrEqual(360);
+        expect(text).toContain(status);
+        const [line] = findHosts(
+          bar,
+          (props, type) => type === 'Text' && props.numberOfLines === 1,
+        );
+        expect(line?.props).toMatchObject({ numberOfLines: 1, adjustsFontSizeToFit: true });
+        expect(line?.children).toEqual([status]);
+      };
+      fits('Checking…');
 
-    const figures = phone.hold('/api/user/balances');
-    check.release();
-    await figures.reached;
-    await settle();
-    fits('Refreshing…');
-    figures.release();
-    await settle();
-  });
+      const figures = phone.hold('/api/user/balances');
+      check.release();
+      await figures.reached;
+      await settle();
+      fits('Refreshing…');
+      figures.release();
+      await settle();
+    },
+  );
 
   /**
    * Each Group row's slot after its tile and title, as wide as it lays out (0 for a row without

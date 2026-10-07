@@ -186,11 +186,15 @@ const hairSpace = String.fromCodePoint(0x200a);
  * measured on an emulator at 100% and 130% (#331), each within 3.5%: "0 expenses this month"
  * at 130% measured 171.0dp (this gives 171.3), "Updated 3:22 AM" at 100% 92.2dp (92.2), "QA U1
  * rerun 3 e" as a 130% heading 141.0dp (141.4); and "Shares differ by the smallest unit so the
- * whole amount is shared." fits a 349dp line at 100%, as it did there.
+ * whole amount is shared." fits a 349dp line at 100%, as it did there. The ellipsis and bold
+ * come from the #332 device check (2026-10-07): "Refreshing…" in 13sp measured 72dp at 100%
+ * (this gives 71.9) and 96.8dp at 130% (95.1); the bold 24sp wordmark "splitbook." 104.5dp at
+ * 100% (104.1) and 114dp at 130% (115.1).
  */
 function outfitAdvance(character: string) {
   // A hair space, as a badge keeps after its label: 4px of a 32px label there.
   if (character === hairSpace) return 0.125;
+  if (character === '…') return 0.85;
   if ('iljtfr'.includes(character)) return 0.22;
   if ('mw'.includes(character)) return 0.8;
   if (/[a-z]/.test(character)) return 0.55;
@@ -208,10 +212,12 @@ function textWidth(node: Node, fontScale: number, hanging = false) {
   const style = flatten(node.props.style);
   const size = scaledSp(number(style.fontSize), fontScale);
   const mono = String(style.fontFamily ?? '').includes('Mono');
+  // Outfit's bold is wider than the weights the advances were fitted to.
+  const weight = String(style.fontFamily ?? '').includes('Bold') ? 1.09 : 1;
   const characters = hanging ? text(node).trimEnd() : text(node);
   return [...characters].reduce(
     (width, character) =>
-      width + size * (mono ? 0.6 : outfitAdvance(character)) + number(style.letterSpacing),
+      width + size * (mono ? 0.6 : outfitAdvance(character) * weight) + number(style.letterSpacing),
     0,
   );
 }
