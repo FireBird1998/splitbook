@@ -423,7 +423,7 @@ describe('recurring Expenses that have fallen due', () => {
     return rows.map((row) => row.period!);
   }
 
-  it('adds them first while the switch is on, so Home matches the Group, in one run per Group with templates', async () => {
+  it('adds them first while the switch is on, so Home matches the Group, in one run per Group with a month due', async () => {
     const { householdId, templateId } = await householdWithRentDue();
     const runs = vi.spyOn(recurringExpenseService, 'generateDueExpenses');
 
@@ -485,9 +485,48 @@ describe('recurring Expenses that have fallen due', () => {
     });
   });
 
+  it('runs no Group whose templates have nothing due, however many Households the member has', async () => {
+    switchRecurringExpenses(true);
+    const households: string[] = [];
+    for (const name of ['Lakeview Flat', 'Harbour Flat', 'Garden Flat']) {
+      const householdId = await createGroup(name, 'home', 'INR', [bob]);
+      // Created this month: its Rent is added at once, so the next read has nothing to add.
+      await recurringExpenseService.create(
+        householdId,
+        {
+          description: 'Rent',
+          amount: 20000,
+          currency: 'INR',
+          category: 'housing',
+          tag: 'Rent',
+          paidBy: [{ user: alice, amount: 20000 }],
+          splitMethod: 'equal',
+          splitBetween: [{ user: alice }, { user: bob }],
+          dayOfMonth: 1,
+          startsOn: expenseDateForPeriod(CURRENT_PERIOD, 1),
+        },
+        alice,
+      );
+      households.push(householdId);
+    }
+    const runs = vi.spyOn(recurringExpenseService, 'generateDueExpenses');
+
+    const forBob = await home(bob);
+
+    expect(runs).not.toHaveBeenCalled();
+    expect(forBob.buckets).toEqual([
+      { currency: 'INR', youOwe: 30000, youAreOwed: 0, net: -30000 },
+    ]);
+    expect(forBob.suggestedPayments.map(({ groupId }) => groupId).sort()).toEqual(
+      [...households].sort(),
+    );
+  });
+
   it('still answers when generation fails, with the Expenses already there', async () => {
     const { templateId } = await householdWithRentDue();
-    vi.spyOn(RecurringExpense, 'distinct').mockRejectedValueOnce(new Error('unavailable'));
+    vi.spyOn(RecurringExpense, 'find').mockImplementationOnce(() => {
+      throw new Error('unavailable');
+    });
     vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const forBob = await home(bob);

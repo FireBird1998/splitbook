@@ -315,9 +315,9 @@ export class RecurringExpenseService {
    * `generateDueExpenses` for every Group a read across Groups covers, such as the member's
    * balances on Home (#306), so its figures agree with each Group's own reads.
    *
-   * It costs one query for the whole list, plus one generation run per Group that has a
-   * recurring template, one Group after another: a Group without templates has nothing to add,
-   * so it is never run. The switch (#289) is read once. While it is off nothing is generated
+   * It costs one query for the whole list, plus one generation run per Group that has a month
+   * to add, one Group after another: a Group with nothing due (or no template) is never run,
+   * so a member with many Households pays nothing extra on most reads. The switch (#289) is read once. While it is off nothing is generated
    * and the run only records that it is off, as a single Group's read does; while it is on, the
    * first run after it was turned back on records when, even if none of these Groups has a
    * template. Like `generateDueExpenses`, this never throws into the read path.
@@ -340,11 +340,21 @@ export class RecurringExpenseService {
       );
       if (groupIds.length === 0) return { generated };
 
-      const withTemplates = new Set(
-        (await RecurringExpense.distinct('group', { group: { $in: groupIds } })).map(String),
+      // One read of every template's schedule finds the Groups with a month to add. Most reads
+      // find none, so no Group is run at all. A Group with one is run as its own read would be,
+      // which applies everything this check leaves out (the Theme, the turn-on month, problem
+      // states), so the check only has to never miss a due month.
+      const currentPeriod = toPeriod(now);
+      const schedules = await RecurringExpense.find({ group: { $in: groupIds } })
+        .select('group dayOfMonth startsOn endsOn isPaused lastGeneratedFor')
+        .lean();
+      const due = new Set(
+        schedules
+          .filter((schedule) => getDuePeriods(schedule, currentPeriod).length > 0)
+          .map((schedule) => String(schedule.group)),
       );
       for (const groupId of groupIds) {
-        if (!withTemplates.has(groupId)) continue;
+        if (!due.has(groupId)) continue;
         generated += (await this.generateDueExpenses(groupId, now)).generated;
       }
     } catch (err) {
