@@ -34,6 +34,11 @@ const maple = {
   updatedAt: iso,
 };
 const maplePath = `/api/groups/${mapleId}`;
+/** A second Group of Alex's, with one Expense and an Activity event about it. */
+const cabinId = 'b00000000000000000000002';
+const fareId = 'c00000000000000000000003';
+const cabin = { ...maple, _id: cabinId, name: 'Cabin Weekend', category: 'trip' };
+const cabinPath = `/api/groups/${cabinId}`;
 const recordPath = (id: string) => `${maplePath}/expenses/${id}`;
 const historyPath = (id: string, page: number) =>
   `${maplePath}/activity?expenseId=${id}&page=${page}&limit=20`;
@@ -103,6 +108,12 @@ function fixture() {
     offline: false,
     /** An edit or deletion is recorded, but its reply never arrives: the connection drops. */
     loseWrites: false,
+    /** Groups the Groups list leaves out, as it does archived Groups; they still answer. */
+    archived: new Set<string>(),
+    /** Maple House's answer no longer lists Alex, though its other reads still answer. */
+    left: false,
+    /** Expenses created so far. */
+    created: 0,
   };
   let cookie: string | null = null,
     owner: string | null = null,
@@ -208,13 +219,34 @@ function fixture() {
         session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' },
       });
     // Sam belongs to no Group here.
-    const mine = user.id === alex.id && server.group === 200;
-    if (path === '/api/groups') return json({ status: 200, data: mine ? [maple] : [] });
+    const mine = user.id === alex.id;
+    if (path === '/api/groups')
+      return json({
+        status: 200,
+        data: mine
+          ? [maple, cabin].filter(
+              ({ _id }) => !server.archived.has(_id) && (_id !== mapleId || server.group === 200),
+            )
+          : [],
+      });
     if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
+    if (path.startsWith(cabinPath)) return mine ? cabinAnswer(path) : json({}, 403);
     if (!path.startsWith(maplePath)) return json({}, 404);
     if (user.id !== alex.id) return json({}, 403);
     if (server.group !== 200) return json({}, server.group);
-    if (path === maplePath) return json({ status: 200, data: maple });
+    if (path === maplePath)
+      return json({
+        status: 200,
+        data: server.left
+          ? { ...maple, members: maple.members.filter(({ user }) => user._id !== alex.id) }
+          : maple,
+      });
+    if (path === `${maplePath}/expenses` && method === 'POST') {
+      server.created += 1;
+      const id = hex('c', 900 + server.created);
+      server.records.set(id, record(id, 'Fresh groceries'));
+      return json({ status: 201, data: { _id: id, group: mapleId } }, 201);
+    }
     const id = /\/expenses\/([a-f\d]{24})$/.exec(path)?.[1];
     if (id) {
       const current = server.records.get(id);
@@ -274,6 +306,30 @@ function fixture() {
       });
     return json({}, 404);
   };
+  /** Cabin Weekend: its one Expense, and an Activity event about it. */
+  const cabinAnswer = (path: string): FetchResponse => {
+    if (path === cabinPath) return json({ status: 200, data: cabin });
+    if (path === `${cabinPath}/expenses/${fareId}`)
+      return json({ status: 200, data: { ...record(fareId, 'Ferry'), group: cabinId } });
+    if (path.startsWith(`${cabinPath}/activity?`))
+      return json({
+        status: 200,
+        data: {
+          activities: [
+            {
+              _id: hex('f', 1),
+              group: cabinId,
+              actor: person(sam),
+              createdAt: iso,
+              type: 'expense_added',
+              metadata: { expenseId: fareId, description: 'Ferry', amount: 30, currency: 'INR' },
+            },
+          ],
+          pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        },
+      });
+    return json({}, 404);
+  };
   const create = () =>
     createMobileController(
       {
@@ -282,6 +338,8 @@ function fixture() {
         developmentPersonaEnabled: true,
       },
       {
+        newSubmissionKey: () =>
+          `expense-record-queries-${String(server.created + 1).padStart(4, '0')}`,
         credentials: {
           load: async () => cookie,
           save: async (value) => {
@@ -1157,5 +1215,184 @@ describe('reads that fail, and a member who moves on, while the record opens', (
       pagination: { page: 1 },
     });
     expect(shownChanges(controller)).toEqual(billChanges(1, 20));
+  });
+});
+
+// The money-safety review of #220 (2026-10-07): an open that fails never overwrites a save in
+// flight, no row is saved for a Group lost or left out of the list, and an Expense gone stays gone.
+describe('a save in flight while the record’s open fails (D6)', () => {
+  /**
+   * Alex opens the bill again a minute later, beside a new Expense drafted in its Group with
+   * `draft`; its Group's check, held, will answer `status`.
+   */
+  async function reopened(f: Fixture, { draft = false, status = 500 } = {}) {
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    await controller.back();
+    if (draft) {
+      await controller.openExpense(mapleId);
+      await controller.updateExpenseDraft({ description: 'Fresh groceries', amount: '30', tagId });
+      await controller.back();
+    }
+    await settle();
+    later(60_000);
+    f.server.group = status;
+    const check = f.hold(maplePath, { exact: true });
+    const opening = controller.openExpense(mapleId, billId);
+    await check.reached;
+    await settle();
+    f.server.group = 200;
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      draft: { original: { _id: billId } },
+      known: { refreshing: true },
+      groupDraft: draft ? { description: 'Fresh groceries' } : null,
+    });
+    return { controller, check, opening };
+  }
+
+  it('keeps a delete being sent from the record this device knew, and sends it once', async () => {
+    const f = fixture();
+    const { controller, check, opening } = await reopened(f);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      known: { refreshing: true },
+    });
+    controller.reviewExpenseDeletion();
+    const from = f.calls.length;
+    const sent = f.hold(recordPath(billId), { exact: true });
+    const deleting = controller.deleteExpense();
+    await sent.reached;
+    check.release();
+    await opening;
+    // The open's failure lands while the DELETE is on its way: the save is untouched.
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'saving',
+      mutation: { kind: 'delete', revision: 1 },
+      message: null,
+    });
+    controller.resumeExpenseDraft();
+    expect(controller.getSnapshot().expense.status).toBe('saving');
+    sent.release();
+    await deleting;
+    await settle();
+    expect(f.writes(from)).toEqual([{ method: 'DELETE', path: recordPath(billId) }]);
+    expect(f.server.records.get(billId)).toMatchObject({ revision: 2, isDeleted: true });
+    expect(controller.getSnapshot().screen).toBe('group');
+  });
+
+  it('keeps a delete whose own check is still on its way, and sends nothing else meanwhile', async () => {
+    const f = fixture();
+    const { controller, check, opening } = await reopened(f);
+    controller.reviewExpenseDeletion();
+    const from = f.calls.length;
+    const deleteCheck = f.hold(maplePath, { exact: true });
+    const deleting = controller.deleteExpense();
+    await deleteCheck.reached;
+    check.release();
+    await opening;
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'saving',
+      mutation: null,
+      message: null,
+    });
+    // Nothing offers Resume, an edit or another save while the delete runs.
+    controller.resumeExpenseDraft();
+    await controller.updateExpenseDraft({ notes: 'Meter read on the 20th' });
+    await controller.saveExpense();
+    expect(controller.getSnapshot().expense.status).toBe('saving');
+    deleteCheck.release();
+    await deleting;
+    await settle();
+    expect(f.writes(from)).toEqual([{ method: 'DELETE', path: recordPath(billId) }]);
+    expect(f.server.records.get(billId)).toMatchObject({ revision: 2, isDeleted: true });
+  });
+
+  it('keeps a new Expense being saved from the Group’s draft, and records it once', async () => {
+    const f = fixture();
+    const { controller, check, opening } = await reopened(f, { draft: true });
+    controller.resumeExpenseDraft();
+    const from = f.calls.length;
+    const post = f.hold(`${maplePath}/expenses`, { exact: true });
+    const saving = controller.saveExpense();
+    await post.reached;
+    check.release();
+    await opening;
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'saving',
+      draft: { description: 'Fresh groceries' },
+      message: null,
+    });
+    post.release();
+    await saving;
+    await settle();
+    expect(f.writes(from)).toEqual([{ method: 'POST', path: `${maplePath}/expenses` }]);
+    expect(f.server.created).toBe(1);
+    expect(controller.getSnapshot().screen).toBe('group');
+  });
+
+  it('keeps the Group’s draft resumed while the record’s open completes, and reads none of the record’s changes', async () => {
+    const f = fixture();
+    const { controller, check, opening } = await reopened(f, { draft: true, status: 200 });
+    controller.resumeExpenseDraft();
+    const from = f.calls.length;
+    check.release();
+    await opening;
+    await settle();
+    expect(f.gets(from)).toEqual([]);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      draft: { description: 'Fresh groceries' },
+      context: { group: { id: mapleId } },
+    });
+  });
+
+  it('keeps an edit begun from the record this device knew, and says why it couldn’t be read', async () => {
+    const f = fixture();
+    const { controller, check, opening } = await reopened(f);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Meter read on the 20th' });
+    check.release();
+    await opening;
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      draft: { notes: 'Meter read on the 20th', original: { revision: 1 } },
+      message: 'The server could not complete this request. Please try again.',
+    });
+  });
+
+  it('leaves an edit being saved alone when a read on reconnecting finds the Expense gone', async () => {
+    const f = fixture();
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    later(31_000);
+    // The Expense was deleted elsewhere: the reconnect's read, then the PATCH, answer 404.
+    f.server.gone.add(billId);
+    const reread = f.hold(recordPath(billId), { exact: true });
+    f.connect(false);
+    f.connect(true);
+    await reread.reached;
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ notes: 'Meter read on the 20th' });
+    const sent = f.hold(recordPath(billId), { exact: true });
+    const saving = controller.saveExpense();
+    await sent.reached;
+    reread.release();
+    await settle();
+    // Its form keeps the Group's details, as an edit does.
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'saving',
+      draft: { notes: 'Meter read on the 20th' },
+      mutation: { kind: 'edit', revision: 1 },
+      context: { group: { id: mapleId } },
+    });
+    // The save meets the 404 itself, and keeps the member's draft.
+    sent.release();
+    await saving;
+    expect(controller.getSnapshot().expense).toMatchObject({
+      draft: { notes: 'Meter read on the 20th' },
+      message:
+        'This Expense is unavailable or you no longer have access. Your draft is kept; saving is disabled.',
+    });
   });
 });

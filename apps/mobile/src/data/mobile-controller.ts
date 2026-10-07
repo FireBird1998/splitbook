@@ -1080,8 +1080,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // The Group was just read: what's missing is this Expense, and nothing saved of it shows.
       for (const path of staleReads.keys())
         if (paths.some((prefix) => path.startsWith(prefix))) staleReads.delete(path);
-      // An edit stays with its Group's details; saving it is refused as for any missing Expense.
-      if (snapshot.expense.status !== 'editing')
+      // An edit stays with its Group's details, and a save in flight is its own: saving either is
+      // refused as for any missing Expense.
+      if (['detail', 'delete-review'].includes(snapshot.expense.status))
         publish({ ...snapshot, expense: withdrawExpense('This Expense isn’t available.') });
     },
   });
@@ -2596,11 +2597,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           })
         : null;
       if (!showing()) return;
-      // The member went on from what this device knew (Edit, Delete): theirs stays (M6-1), and
-      // the record's changes are read all the same.
+      // The member went on from what this device knew (Edit, Delete, or the Group's draft): what
+      // they do stays (M6-1), and the record's changes are read.
       if (known && latest().expense.status !== 'detail') {
         publish({ ...snapshot, expense: { ...snapshot.expense, context } });
-        return await expenseQueries.history(owner, { fresh: true, wanted });
+        if (latest().expense.draft?.original?._id === expenseId)
+          await expenseQueries.history(owner, { fresh: true, wanted });
+        return;
       }
       const draft = original ? draftFromExpense(original) : (record?.draft ?? blank);
       publish({
@@ -2639,22 +2642,26 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     } catch (error) {
       if (!showing() || error instanceof Superseded) return;
       const denied = error instanceof RequestError && [403, 404].includes(error.status);
-      const shown = latest().expense,
-        mine = known && shown.draft?.original?._id === expenseId;
+      const shown = latest().expense;
+      const message = expenseFailureMessage(
+        error,
+        'Could not open this Expense. Please try again.',
+      );
+      // The member went on from what this device knew: what they do is theirs (M6-1). A save in
+      // flight, or one unconfirmed, is never touched; an edit or a delete review is told why.
+      if (known && shown.status !== 'detail' && shown.draft) {
+        if (['editing', 'delete-review'].includes(shown.status))
+          publish({ ...snapshot, expense: { ...shown, message } });
+        return;
+      }
       // What this device knew of the record stays, beside its changes, when the record can't be
       // read now; it goes once the Expense is gone, or the Group refuses or can't check the member.
-      if (mine && checked && !denied) {
-        const message = expenseFailureMessage(error, 'Could not refresh this Expense. Try again.');
+      if (known && shown.status === 'detail' && checked && !denied) {
         publish({ ...snapshot, expense: { ...shown, message } });
         return await expenseQueries.history(owner, { fresh: true, wanted }).catch(() => undefined);
       }
-      if (mine && ['detail', 'delete-review'].includes(shown.status))
-        return publish({
-          ...snapshot,
-          expense: withdrawExpense(
-            expenseFailureMessage(error, 'Could not open this Expense. Please try again.'),
-          ),
-        });
+      if (known && shown.status === 'detail')
+        return publish({ ...snapshot, expense: withdrawExpense(message) });
       publish({
         ...snapshot,
         expense: {
