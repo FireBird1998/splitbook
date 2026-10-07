@@ -1,4 +1,12 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  memo,
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -21,6 +29,7 @@ import {
   describeExpenseEvents,
   describeExpenseHistory,
   type ExpenseHistoryChange,
+  type ExpenseHistoryEvent,
 } from '../data/expense-history';
 import { canEditExpense, storedExpenseMoney, type ExpenseRecord } from '../data/expense-record';
 import {
@@ -165,7 +174,8 @@ export function ExpenseRecordScreen({
   };
   const record = state.draft!.original!;
   const { context } = state;
-  const members = context?.group.members.map(({ user }) => user) ?? [];
+  // The same list while the Group's details stay the same: History's rows are kept, not redrawn.
+  const members = useMemo(() => context?.group.members.map(({ user }) => user) ?? [], [context]);
   const name = (id: string) =>
     members.find((member) => member.id === id)?.name ??
     [...record.paidBy, ...record.splitBetween].find((row) => row.user === id)?.name ??
@@ -841,13 +851,13 @@ function RecordHistory({
   const read =
     history.expenseId === record._id && (history.status === 'ready' || history.events.length > 0);
   const refreshing = read && history.status === 'loading';
-  const events = read
-    ? describeExpenseEvents(history.events, record, {
-        currentUserId,
-        people,
-        tags,
-      })
-    : [];
+  // Described again only when the changes, the record or the names change: a slide or a refresh
+  // that keeps them redraws no row (#220).
+  const events = useMemo(
+    () =>
+      read ? describeExpenseEvents(history.events, record, { currentUserId, people, tags }) : [],
+    [read, history.events, record, currentUserId, people, tags],
+  );
   const more =
     read && !!history.pagination && history.pagination.page < history.pagination.totalPages;
   const newer = read && (history.firstPage ?? 1) > 1;
@@ -897,6 +907,10 @@ function RecordHistory({
       if (at !== null && at !== held.at) onShift?.(at - held.at);
     }, 0);
   };
+  // The same for every render, so a row that didn't change isn't drawn again (#220).
+  const placing = useRef(place);
+  placing.current = place;
+  const placeRow = useCallback((row: string, y: number) => placing.current({ row, y }), []);
   const creator = record.createdBy;
   const creatorId = typeof creator === 'object' && creator ? creator._id : creator;
   const creatorName =
@@ -974,20 +988,7 @@ function RecordHistory({
       <View onLayout={({ nativeEvent }) => place({ list: nativeEvent.layout.y })}>
         <Card>
           {events.map((event, index) => (
-            <View
-              key={event.key}
-              onLayout={({ nativeEvent }) => place({ row: event.key, y: nativeEvent.layout.y })}
-            >
-              {index > 0 ? <Divider inset={58} /> : null}
-              <HistoryRow
-                icon="create-outline"
-                actor={{ name: event.name, label: event.actor }}
-                title={event.action}
-                changes={event.changes}
-                implied={event.implied}
-                time={event.at}
-              />
-            </View>
+            <ChangeRow key={event.key} event={event} divider={index > 0} onPlace={placeRow} />
           ))}
           {times && record.isDeleted ? (
             <>
@@ -1009,13 +1010,9 @@ function RecordHistory({
               {times ? null : <Divider inset={58} />}
               <HistoryRow
                 icon="add-outline"
+                name={creatorName ?? undefined}
                 actor={
-                  creatorName
-                    ? {
-                        name: creatorName,
-                        label: creatorId === currentUserId ? 'You' : creatorName,
-                      }
-                    : undefined
+                  creatorName ? (creatorId === currentUserId ? 'You' : creatorName) : undefined
                 }
                 title={creatorName ? 'added this Expense' : 'Added'}
                 time={record.createdAt}
@@ -1092,11 +1089,54 @@ const spokenChange = ({ label, before, after }: ExpenseHistoryChange) =>
       ? `${label} ${after}`
       : `${label} changed`;
 
+/** Two descriptions of a change that say the same: its row isn't drawn again. */
+const sameChange = (a: ExpenseHistoryEvent, b: ExpenseHistoryEvent) =>
+  a === b ||
+  (a.key === b.key &&
+    a.name === b.name &&
+    a.actor === b.actor &&
+    a.action === b.action &&
+    a.implied === b.implied &&
+    a.at === b.at &&
+    JSON.stringify(a.changes) === JSON.stringify(b.changes));
+/**
+ * One change in History, with where it lies for the change kept on screen when the window moves.
+ * A slide or a refresh describes every change again; one that reads the same isn't drawn again.
+ */
+const ChangeRow = memo(
+  function ChangeRow({
+    event,
+    divider,
+    onPlace,
+  }: {
+    event: ExpenseHistoryEvent;
+    divider: boolean;
+    onPlace: (row: string, y: number) => void;
+  }) {
+    return (
+      <View onLayout={({ nativeEvent }) => onPlace(event.key, nativeEvent.layout.y)}>
+        {divider ? <Divider inset={58} /> : null}
+        <HistoryRow
+          icon="create-outline"
+          name={event.name}
+          actor={event.actor}
+          title={event.action}
+          changes={event.changes}
+          implied={event.implied}
+          time={event.at}
+        />
+      </View>
+    );
+  },
+  (a, b) => a.divider === b.divider && a.onPlace === b.onPlace && sameChange(a.event, b.event),
+);
+
 /**
  * "{actor} {title}" with what changed and its time; a row without an actor leads with an icon.
  * One change shares the time's line, as in "₹2,680.00 → ₹2,860.00 · 29 Sep, 21:10".
  */
 function HistoryRow({
+  name,
   actor,
   icon,
   title,
@@ -1104,7 +1144,9 @@ function HistoryRow({
   implied = false,
   time,
 }: {
-  actor?: { name: string; label: string };
+  /** Who acted, for their avatar; `actor` is how the row names them ("You"). */
+  name?: string;
+  actor?: string;
   icon: IconName;
   title: string;
   changes?: ExpenseHistoryChange[];
@@ -1117,7 +1159,7 @@ function HistoryRow({
     <View
       accessible
       accessibilityLabel={[
-        actor ? `${actor.label} ${title}` : title,
+        actor ? `${actor} ${title}` : title,
         ...changes.map(spokenChange),
         when,
       ].join(', ')}
@@ -1131,7 +1173,7 @@ function HistoryRow({
       }}
     >
       {actor ? (
-        <CompactAvatar name={actor.name} />
+        <CompactAvatar name={name ?? actor} />
       ) : (
         <View
           style={{
@@ -1150,7 +1192,7 @@ function HistoryRow({
         <CompactText>
           {actor ? (
             <>
-              <Text style={{ fontFamily: fonts.semibold }}>{actor.label}</Text> {title}
+              <Text style={{ fontFamily: fonts.semibold }}>{actor}</Text> {title}
             </>
           ) : (
             title

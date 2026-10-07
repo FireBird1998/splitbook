@@ -119,19 +119,19 @@
       "requests": 5,
       "publishes": 4,
       "commits": 5,
-      "renders": 1316
+      "renders": 331
     },
     "Load the 6th page of an Expense’s changes (pages 2 to 6)": {
       "requests": 1,
       "publishes": 2,
       "commits": 2,
-      "renders": 1132
+      "renders": 238
     },
     "Load newer changes (pages 1 to 5)": {
       "requests": 1,
       "publishes": 2,
       "commits": 2,
-      "renders": 1132
+      "renders": 240
     },
     "Type 20 characters into Description": {
       "requests": 0,
