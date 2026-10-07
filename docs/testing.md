@@ -220,7 +220,8 @@ helpers live in [`playwright/`](../apps/web/playwright/).
   checked against the insights read; no Recurring Expenses card while recurring
   Expenses are off; axe in both views. The pilot suite, which runs with them on,
   checks the card itself (`playwright-pilot/insights-recurring.spec.ts`): each
-  template's amount and next date, Manage for an admin, and axe.
+  template's amount and next date, Manage for an admin (landing on the Recurring
+  section of the settings, in view and focused), the note for a member, and axe.
 - **Add expense** (`add-expense.spec.ts`): the top bar's Add expense from Home
   through "Choose a Group" (axe on the chooser; the save keeps Home in place,
   confirms with the Group's name and rereads the balances), from inside a Group

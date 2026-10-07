@@ -44,6 +44,14 @@ export function groupSettingsHref(groupId: string): string {
   return `${groupPath(groupId)}/settings`;
 }
 
+/** The Group settings' Recurring section, where recurring Expenses are managed (#315). */
+export const RECURRING_SECTION_ID = 'recurring-expenses';
+
+/** The Recurring section of a Group's settings: the Insights tab's Manage (#315). */
+export function recurringSettingsHref(groupId: string): string {
+  return `${groupSettingsHref(groupId)}#${RECURRING_SECTION_ID}`;
+}
+
 const TAB_PATH = /^\/groups\/[^/]+\/([^/]+)\/?$/;
 
 /** The tab a path shows, or null when the path is not one of a Group's tabs. */

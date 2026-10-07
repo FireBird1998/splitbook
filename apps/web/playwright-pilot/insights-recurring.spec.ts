@@ -93,6 +93,11 @@ test('the Recurring Expenses card lists the Household’s templates, and an admi
   const section = page.locator('#recurring-expenses');
   await expect(section).toContainText('Flat rent', { timeout: 30_000 });
   await expect(section).toContainText('Broadband (300 Mbps)');
+  // An in-app navigation: the section, which mounts after the Group's read, still brings
+  // itself into view and takes focus at its heading.
+  await expect(section).toBeInViewport();
+  await expect(section.getByText('Recurring', { exact: true })).toBeFocused();
+  await expect(section.getByText('Recurring', { exact: true })).toBeInViewport();
 });
 
 test('a member who isn’t an admin sees the templates, and who can change them', async ({

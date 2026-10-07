@@ -18,7 +18,7 @@ import {
   HomeCardLoading,
   HomeList,
 } from '@/components/dashboard/HomeCard';
-import { groupSettingsHref } from '@/components/groups/group-tabs';
+import { recurringSettingsHref } from '@/components/groups/group-tabs';
 import { RADIUS } from '@/lib/theme/tokens';
 import { recurringModel, type InsightsCardState, type RecurringModel } from './insights-cards';
 
@@ -34,11 +34,6 @@ import { recurringModel, type InsightsCardState, type RecurringModel } from './i
  */
 
 const CARD_ID = 'recurring-expenses';
-
-/** Where recurring Expenses are managed on the web: the Group settings' Recurring section. */
-export function manageRecurringHref(groupId: string): string {
-  return `${groupSettingsHref(groupId)}#recurring-expenses`;
-}
 
 export interface RecurringExpensesCardProps {
   groupId: string;
@@ -90,7 +85,7 @@ export default function RecurringExpensesCard({
         canManage ? (
           <Button
             component={Link}
-            href={manageRecurringHref(groupId)}
+            href={recurringSettingsHref(groupId)}
             variant="text"
             aria-label="Manage recurring Expenses"
           >
