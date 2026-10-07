@@ -183,6 +183,8 @@ interface View {
   preview: { data: Pages; version: number } | null;
   /** How many reads of its Activity had answered when this open began: a copy shows before more. */
   answers: number;
+  /** This device's copy being read for this open, once: from the open, so a switch shows it. */
+  restoring: Promise<void> | null;
 }
 
 /**
@@ -357,6 +359,21 @@ export function createActivityQueries(session: ActivitySession) {
     known.add(row.path);
     client.setQueryData(key, data);
     return data;
+  };
+  /**
+   * This device's copy for this open, read once. The open starts it, so a switch to Activity shows
+   * the copy from its first frame, never after its Group's read or a placeholder (device check of
+   * 99f96d6, A7); a read waits for it.
+   */
+  const restoreOnce = (opened: View, owner: number) => {
+    const key = activityKey(opened.groupId);
+    opened.restoring ??= restore(key, owner, opened.answers)
+      .then((data) => {
+        if (data && view === opened) opened.preview = { data, version: session.versionOf(key) };
+        reproject();
+      })
+      .catch(() => undefined);
+    return opened.restoring;
   };
   /** Records a read, and its fetch's start, so its answer is saved only while current. */
   const track = (key: QueryKey, run: Run) => {
@@ -606,15 +623,7 @@ export function createActivityQueries(session: ActivitySession) {
     const reading = (async (): Promise<boolean> => {
       // What this device saved shows while the Group is first read, with its own time.
       const restoring =
-        held(key)?.state.data === undefined
-          ? restore(key, owner, opened.answers)
-              .then((data) => {
-                if (data && view === opened)
-                  opened.preview = { data, version: session.versionOf(key) };
-                reproject();
-              })
-              .catch(() => undefined)
-          : null;
+        held(key)?.state.data === undefined || opened.restoring ? restoreOnce(opened, owner) : null;
       /** This read answered with pages read now, which are being saved on this device. */
       let answered = false;
       /** It read after this open's check of the Group passed. */
@@ -713,7 +722,11 @@ export function createActivityQueries(session: ActivitySession) {
     return target;
   };
   /** Activity as its query holds it, in the snapshot's shape. */
-  const activityFrom = (shown: ActivityState, opened: View, household: boolean): ActivityState => {
+  const activityFrom = (
+    shown: ActivityState,
+    opened: View,
+    { household, groupReading }: { household: boolean; groupReading: boolean },
+  ): ActivityState => {
     const { groupId } = opened,
       state = stateOf<Pages>(activityKey(groupId)),
       selected = opened.detail?.event ?? null,
@@ -728,7 +741,9 @@ export function createActivityQueries(session: ActivitySession) {
     };
     // Nothing read, or what was read went with a change, a denial or a Groups list: no event
     // shows, never one from before this device's own change (#280 item 1).
-    if (!state) return same(shown, { ...base, status: opened.reading ? 'loading' : 'idle' });
+    // While the Group is read, Activity's own read follows it: loading, never a blank.
+    const waiting = opened.reading > 0 || groupReading;
+    if (!state) return same(shown, { ...base, status: waiting ? 'loading' : 'idle' });
     const data = state.data;
     // Read beside the Group in this open, before its check passed: shown only once it has.
     const unchecked =
@@ -786,7 +801,7 @@ export function createActivityQueries(session: ActivitySession) {
     if (recheck) return same(shown, { ...next, status: 'loading' });
     // Not checked by this open yet: a saved copy shows while the Group is read.
     if (unchecked || !session.checked(groupId) || (previewed(data) && !failure(state)))
-      return same(shown, { ...next, status: opened.reading ? 'loading' : 'idle' });
+      return same(shown, { ...next, status: waiting ? 'loading' : 'idle' });
     const error = failure(state);
     if (state.status === 'error' && !error) return shown;
     if (error && direction === 'forward')
@@ -834,7 +849,10 @@ export function createActivityQueries(session: ActivitySession) {
           }
         : next;
     }
-    const activity = activityFrom(next.activity, opened, next.detail.data?.category === 'home');
+    const activity = activityFrom(next.activity, opened, {
+      household: next.detail.data?.category === 'home',
+      groupReading: next.detail.status === 'loading',
+    });
     return activity === next.activity ? next : { ...next, activity };
   };
   /** A fetch that answered from the server: each page saved as its row while still current. */
@@ -887,6 +905,7 @@ export function createActivityQueries(session: ActivitySession) {
           beside: false,
           preview: null,
           answers: answerOf(activityKey(groupId)),
+          restoring: null,
         };
         const key = activityKey(groupId),
           query = held<Pages>(key),
@@ -908,6 +927,16 @@ export function createActivityQueries(session: ActivitySession) {
           exact: true,
           refetchType: 'none',
         });
+      // Opened anew with nothing of Activity held: this device's copy is read now, after the
+      // Group's own read has started, so it is there when the member switches to Activity.
+      const opened = view;
+      if (opened && !opened.restoring && held(activityKey(groupId))?.state.data === undefined) {
+        const owner = session.generation();
+        void Promise.resolve().then(() => {
+          if (view === opened && !opened.lost && session.current(owner))
+            void restoreOnce(opened, owner);
+        });
+      }
     },
     read,
     settle,

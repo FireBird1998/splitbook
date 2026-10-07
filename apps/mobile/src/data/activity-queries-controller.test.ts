@@ -1702,6 +1702,95 @@ describe('final checks (#222)', () => {
 // The device check of 99f96d6 (#222): this phone's copy after a cold restart in the usual
 // order, and the page controls when a re-read fails at the list end.
 describe('device check (#222)', () => {
+  /** Alex opened Maple House's Activity once; the app starts again, online, a minute later. */
+  async function restartedOnMaple(f: ReturnType<typeof fixture>) {
+    const first = f.create();
+    await first.signIn('alex');
+    await first.openActivity(mapleId);
+    await settle();
+    first.dispose();
+    later(60_000);
+    const controller = f.create();
+    await controller.restore();
+    await settle();
+    return controller;
+  }
+  /** The first snapshot published on Activity. */
+  const onArrival = (shown: MobileSnapshot[]) =>
+    shown.find((state) => state.screen === 'group' && state.destination === 'activity')!;
+
+  it('shows this phone’s copy from the first frame of a switch to Activity once the Group was read, after a cold restart (A7)', async () => {
+    const f = fixture();
+    const controller = await restartedOnMaple(f);
+    await controller.openGroup(mapleId);
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      destination: 'expenses',
+      detail: { status: 'ready' },
+    });
+    const page = f.hold(activityPath(1));
+    const shown = published(controller);
+    const switching = controller.selectDestination('activity');
+    expect(onArrival(shown).activity).toMatchObject({ restored: true, refreshedAt: start });
+    expect(onArrival(shown).activity.events).toHaveLength(20);
+    await page.reached;
+    await settle();
+    // Read, and not answered yet: still this phone's copy.
+    expect(controller.getSnapshot().activity).toMatchObject({ status: 'loading', restored: true });
+    expect(controller.getSnapshot().activity.events).toHaveLength(20);
+    page.release();
+    await switching;
+    await settle();
+    expect(controller.getSnapshot().activity).toMatchObject({
+      status: 'ready',
+      restored: false,
+      refreshedAt: start + 60_000,
+    });
+  });
+
+  it('shows it from the first frame of a switch made while the Group is still read (A7s)', async () => {
+    const f = fixture();
+    const controller = await restartedOnMaple(f);
+    const group = f.hold(maplePath, { exact: true });
+    const opening = controller.openGroup(mapleId);
+    await group.reached;
+    await settle();
+    const shown = published(controller);
+    const switching = controller.selectDestination('activity');
+    expect(onArrival(shown).activity).toMatchObject({ restored: true, refreshedAt: start });
+    expect(onArrival(shown).activity.events).toHaveLength(20);
+    await settle();
+    expect(controller.getSnapshot().activity.events).toHaveLength(20);
+    group.release();
+    await Promise.all([opening, switching]);
+    await settle();
+    expect(controller.getSnapshot().activity).toMatchObject({ status: 'ready', restored: false });
+  });
+
+  it('holds the placeholder, never a blank, on a switch to Activity while the Group is read with nothing saved', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    const group = f.hold(maplePath, { exact: true });
+    const opening = controller.openGroup(mapleId);
+    await group.reached;
+    await settle();
+    void controller.selectDestination('activity');
+    await settle();
+    expect(controller.getSnapshot().activity).toMatchObject({
+      groupId: mapleId,
+      status: 'loading',
+      events: [],
+      pagination: null,
+    });
+    group.release();
+    await opening;
+    await settle();
+    expect(controller.getSnapshot().activity).toMatchObject({ status: 'ready' });
+    expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 20));
+  });
+
   // A15: a foreground past the window with SplitBook out of reach, the member at the list's end.
   it('keeps the list and its Load older when a foreground re-read fails offline at the list end (A15)', async () => {
     const f = fixture();
