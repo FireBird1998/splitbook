@@ -52,10 +52,12 @@ Re-records already planned: a refresh re-reads the loaded pages, up to 5 (ADR 00
 
 **Build:** `main` at `d506f6e` (`CI: one fast PR check; the full suite nightly and on demand (#277) (#279)`), with #206's harness. Node 22.22.2, React 19.2.3, `react-test-renderer` 19.2.3, Vitest 4.1.10. Counted modules: 29. The 11 journeys recorded at `7e69be8` count the same at `d506f6e`, so their render ceilings didn't change; the 6 journeys #206 added, and every request count, were first recorded at `d506f6e`. No journey moved the harness clock before #206; the two "after 30 s" journeys move it 31 s, and #214 moves that to fake timers once freshness follows `Date.now`.
 
+**The data file is authoritative**; this table follows it. The pilot ([#218](https://github.com/FireBird1998/splitbook/issues/218)) lowered two publish counts after `d506f6e`: Sign in and show Home from 9 to 8, and Foreground on Home within 30 s from 6 to 2. Both rows show `main`'s data file.
+
 | Journey                                       | Requests | Publishes | Commits | Component renders | Distinct components | Most rendered                               |
 | --------------------------------------------- | -------: | --------: | ------: | ----------------: | ------------------: | ------------------------------------------- |
-| Sign in and show Home (20 Groups)             |        7 |         9 |       5 |               461 |                  25 | CompactText 148, Icon 68, ListRow 60        |
-| Foreground on Home within 30 s                |        0 |         6 |       1 |               146 |                  19 | CompactText 49, Icon 22, ListRow 20         |
+| Sign in and show Home (20 Groups)             |        7 |         8 |       5 |               461 |                  25 | CompactText 148, Icon 68, ListRow 60        |
+| Foreground on Home within 30 s                |        0 |         2 |       1 |               146 |                  19 | CompactText 49, Icon 22, ListRow 20         |
 | Open a Group on Expenses                      |        3 |        11 |       4 |               512 |                  24 | CompactText 155, Icon 82, ListRow 48        |
 | Change Month                                  |        2 |         8 |       3 |               468 |                  24 | CompactText 141, Icon 73, ListRow 46        |
 | Switch to Balances                            |        0 |         1 |       1 |                57 |                  21 | CompactText 21, Icon 8, IconButton 3        |
@@ -76,7 +78,7 @@ Re-records already planned: a refresh re-reads the loaded pages, up to 5 (ADR 00
 
 **Build:** `swarm/219-group-queries`, rebased on `main` (7 October 2026), recorded three times with `RENDER_PROFILE=record`; the three runs gave identical counts. A Group's Expenses and Balances moved to declarative queries (ADR 0006): a refresh re-reads the loaded Expense pages (M1-3), a list slides past 5 pages (M7-2), each Expense row renders again only when its Expense changes, and the Group view publishes only when what it shows changes. The "after 30 s" journeys move both the harness clock and, with fake timers, `Date.now`, which the Group view's queries follow.
 
-Publishes / commits / component renders, and requests, for every journey whose count moved, and the two journeys #219 added. Every other journey counts as in the table above.
+Publishes / commits / component renders, and requests, for every journey whose count moved, and the two journeys #219 added. Every other journey counts as `main`'s data file has it, which the table above shows.
 
 | Journey                                      | Requests | Before (`d506f6e`) |         #219 | Why                                                                      |
 | -------------------------------------------- | -------: | -----------------: | -----------: | ------------------------------------------------------------------------ |
