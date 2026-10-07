@@ -32,6 +32,7 @@ import {
   settlementSuggestion,
   validateSettlementDraft,
   type PendingPayment,
+  type SettlementChoice,
   type SettlementDraft,
   type SettlementField,
 } from './settlement';
@@ -3792,9 +3793,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
   /**
    * The Record payment sheet over Balances. Its reads are live; they never cancel the Group's
-   * own reads, and leaving the Group or closing the sheet cancels them.
+   * own reads, and leaving the Group or closing the sheet cancels them. `chosen` is the payment
+   * chosen on Balances, which the sheet shows as Balances did while it checks (#334).
    */
-  const openSettlements = async (groupId: string) => {
+  const openSettlements = async (groupId: string, chosen: SettlementChoice | null = null) => {
     if (snapshot.auth.status !== 'authenticated') return;
     const owner = generation,
       view = viewRequest,
@@ -3804,7 +3806,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const stale = () => !current(owner) || view !== viewRequest || request !== settlementRequest;
     navigate(
       { screen: 'settlement', groupId, reread: rereadOf(groupId) },
-      { settlement: { ...emptySettlement(), groupId, status: 'loading' } },
+      { settlement: { ...emptySettlement(), groupId, status: 'loading', chosen } },
     );
     try {
       if (!lease || !storage) throw new DeviceStorageError(recoveryStorageMissing);
@@ -4183,7 +4185,25 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.financial.balances.changed
     )
       return;
-    await openSettlements(groupId);
+    // The sheet shows the payment as Balances show it until its check lands (#334).
+    const debt = snapshot.financial.balances.data
+      ?.find((bucket) => bucket.currency === currency)
+      ?.debts.find((item) => item.from.id === paidBy && item.to.id === paidTo);
+    await checkChosenPayment(groupId, {
+      paidBy,
+      paidTo,
+      currency,
+      shown: debt ? { payer: debt.from.name, recipient: debt.to.name, amount: debt.amount } : null,
+    });
+  };
+
+  /**
+   * The sheet's check of the payment chosen on Balances, then that payment pre-filled from the
+   * latest balances: on Record, and on Try again after the check couldn't run (#334).
+   */
+  const checkChosenPayment = async (groupId: string, chosen: SettlementChoice) => {
+    const { paidBy, paidTo, currency } = chosen;
+    await openSettlements(groupId, chosen);
     // Closed while the live read ran.
     const { screen, settlement: state } = latest();
     if (screen !== 'settlement' || state.groupId !== groupId) return;
@@ -4218,6 +4238,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.offline.active
     )
       return;
+    await checkPendingPayment(groupId);
+  };
+
+  /** The sheet's check of the Group's unconfirmed payment: on Check payment, and on Try again. */
+  const checkPendingPayment = async (groupId: string) => {
     await openSettlements(groupId);
     const { screen, settlement: state } = latest();
     // Resolved since Balances showed it: nothing is waiting any more.
@@ -4229,6 +4254,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           message: 'Nothing is waiting to be retried. Close this to see the latest balances.',
         },
       });
+  };
+
+  /**
+   * Try again, once the sheet couldn't check the latest balances (#334): the same check, with
+   * the same reads, for the same payment. It sends nothing, and Record waits for it as it does
+   * when the sheet opens. An unconfirmed payment is retried by Record instead, with its own key.
+   */
+  const retrySettlementCheck = async () => {
+    const { status, groupId, chosen } = snapshot.settlement;
+    if (
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.screen !== 'settlement' ||
+      status !== 'error' ||
+      !groupId
+    )
+      return;
+    await (chosen ? checkChosenPayment(groupId, chosen) : checkPendingPayment(groupId));
   };
 
   /**
@@ -5454,6 +5496,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     openSettlements,
     openRecordPayment,
     openPendingPayment,
+    retrySettlementCheck,
     closeSettlement,
     selectSettlement,
     updateSettlement,

@@ -2312,6 +2312,66 @@ describe('A Group says what is true, without jumps (#219)', () => {
 describe('The Expense form and Record payment say what they are doing (#334)', () => {
   const controller = () => runtime.controller as MobileController;
   const openMaple = 'Open Maple House, Household · 2 members';
+  const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+  const footnote = 'Records a payment made outside Splitbook. No money moves.';
+  /** Maple House on Balances, where Alex owes Sam ₹30.00. */
+  async function onBalances() {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(openMaple);
+    await app.press('Balances');
+    return { phone, app };
+  }
+  /**
+   * Text as the member sees it: without what is laid out only to hold a place, unseen and unread
+   * (`importantForAccessibility` and `accessibilityElementsHidden`).
+   */
+  const words = (node: ReactTestRendererJSON | ReactTestRendererJSON[] | string | null): string =>
+    node === null
+      ? ''
+      : typeof node === 'string'
+        ? node
+        : Array.isArray(node)
+          ? node.map(words).join('')
+          : node.props.accessibilityElementsHidden === true &&
+              node.props.importantForAccessibility === 'no-hide-descendants'
+            ? ''
+            : (node.children ?? []).map(words).join('');
+  /** The Record payment sheet as rendered, while it is open. */
+  const sheet = () =>
+    findHosts(screen!.toJSON(), (props, type) => type === 'Modal' && props.visible === true).find(
+      (modal) =>
+        findHosts(modal, (props) => props.accessibilityRole === 'header').some(
+          (header) => words(header) === 'Record payment',
+        ),
+    ) ?? null;
+  /** What the open sheet shows. */
+  const shown = () => words(sheet());
+  /** The open sheet's live hosts labelled `label`, to read their props or press them. */
+  const inSheet = (label: string) =>
+    screen!.root
+      .findAll((node) => (node.type as unknown) === 'Modal' && node.props.visible === true)
+      .flatMap((modal) =>
+        modal.findAll(
+          (node) => typeof node.type === 'string' && node.props.accessibilityLabel === label,
+        ),
+      );
+  /** The open sheet's one button labelled `label`, or null. */
+  const button = (label: string) => {
+    const found = inSheet(label).filter((node) => node.props.accessibilityRole === 'button');
+    return found.length === 1 ? found[0]! : null;
+  };
+  const progress = () =>
+    findHosts(sheet(), (props) => props.accessibilityRole === 'progressbar').map(
+      (bar) => bar.props.accessibilityLabel,
+    );
+  /** How tall the open sheet lays out on this 360dp phone. */
+  const sheetHeight = (fontScale = 1) => layoutHeight(sheet(), fontScale, 360);
+  /** The payments this phone has sent. */
+  const posts = (phone: ReturnType<typeof device>) =>
+    phone.sent.filter((request) => request === `POST /api/groups/${maple}/settlements`);
 
   // Item 1: "Opening your draft…" showed for a brand-new Expense.
   it('opens a new Expense without saying “draft”, and says it only for a kept draft', async () => {
@@ -2346,5 +2406,112 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     expect(app.text()).not.toContain('new Expense');
     group.release();
     await settle();
+  });
+
+  // Item 2: "Checking the latest balances…" hid the balances already on screen for about 6 s.
+  it('shows the chosen payment while the sheet checks the latest balances, with Record waiting, and nothing moves when the check lands', async () => {
+    const { phone, app } = await onBalances();
+    const before = phone.sent.length;
+    const balances = phone.hold(`/api/groups/${maple}/balances`);
+    app.tap('Record your payment to Sam Chen');
+    await balances.reached;
+    await settle();
+    // The payment as Balances shows it, locked, under the progress bar, with a quiet status.
+    expect(controller().getSnapshot().settlement).toMatchObject({ status: 'loading', draft: null });
+    expect(progress()).toEqual(['Checking the latest balances']);
+    expect(inSheet('You pay Sam Chen. Suggested ₹30.00.')).toHaveLength(1);
+    expect(inSheet('Amount paid, required')[0]!.props).toMatchObject({
+      value: '30',
+      editable: false,
+    });
+    const record = button('Record payment ₹30.00')!;
+    expect(record.props.accessibilityState).toEqual({ disabled: true, busy: false });
+    expect(record.props.accessibilityHint).toBe(
+      'Record is available once the latest balances are checked.',
+    );
+    expect(shown()).toContain('Checking the latest balances…');
+    expect(shown()).not.toContain(footnote);
+    const checking = [sheetHeight(), sheetHeight(1.3)];
+    // A tap that gets through records nothing from figures the check hasn't confirmed.
+    record.props.onPress();
+    await settle();
+    expect(posts(phone)).toEqual([]);
+
+    balances.release();
+    await settle();
+    expect(controller().getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      draft: { amount: '30' },
+    });
+    expect(progress()).toEqual([]);
+    expect(inSheet('Amount paid, required')[0]!.props).toMatchObject({
+      value: '30',
+      editable: true,
+    });
+    expect(button('Record payment ₹30.00')!.props.accessibilityState).toEqual({
+      disabled: false,
+      busy: false,
+    });
+    expect(shown()).toContain(footnote);
+    expect(shown()).not.toContain('Checking');
+    expect([sheetHeight(), sheetHeight(1.3)]).toEqual(checking);
+    // The same reads as before: the Group, then its Balances.
+    expect(phone.sent.slice(before)).toEqual([
+      `GET /api/groups/${maple}`,
+      `GET /api/groups/${maple}/balances`,
+    ]);
+  });
+
+  // Item 4: after a network failure the sheet showed only "Could not reach SplitBook…".
+  it('offers Try again on the sheet when its check can’t reach SplitBook, keeping the figures, and sends nothing', async () => {
+    const { phone, app } = await onBalances();
+    phone.network.online = false;
+    app.tap('Record your payment to Sam Chen');
+    await settle();
+    expect(controller().getSnapshot().settlement).toMatchObject({
+      status: 'error',
+      draft: null,
+      attempt: null,
+      message: unreachable,
+    });
+    // Said plainly, not as a payment that may be recorded: nothing was sent.
+    expect(shown()).toContain(unreachable);
+    expect(shown()).not.toContain('Payment not confirmed');
+    expect(inSheet('You pay Sam Chen. Suggested ₹30.00.')).toHaveLength(1);
+    expect(inSheet('Amount paid, required')[0]!.props.editable).toBe(false);
+    expect(button('Record payment ₹30.00')).toBeNull();
+    const retry = button('Try again')!;
+    expect(retry.props.accessibilityState).toEqual({ disabled: false, busy: false });
+    expect(progress()).toEqual([]);
+
+    // Try again checks again, with the same reads, and Record waits for them.
+    phone.network.online = true;
+    const before = phone.sent.length;
+    const balances = phone.hold(`/api/groups/${maple}/balances`);
+    void retry.props.onPress();
+    await balances.reached;
+    await settle();
+    expect(shown()).not.toContain(unreachable);
+    expect(progress()).toEqual(['Checking the latest balances']);
+    expect(inSheet('You pay Sam Chen. Suggested ₹30.00.')).toHaveLength(1);
+    expect(button('Record payment ₹30.00')!.props.accessibilityState).toEqual({
+      disabled: true,
+      busy: false,
+    });
+    balances.release();
+    await settle();
+    expect(controller().getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      draft: { paidBy: alex.id, paidTo: sam._id, amount: '30' },
+    });
+    expect(button('Record payment ₹30.00')!.props.accessibilityState).toEqual({
+      disabled: false,
+      busy: false,
+    });
+    expect(phone.sent.slice(before)).toEqual([
+      `GET /api/groups/${maple}`,
+      `GET /api/groups/${maple}/balances`,
+    ]);
+    expect(posts(phone)).toEqual([]);
   });
 });

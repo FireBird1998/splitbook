@@ -73,6 +73,18 @@ const record = z.object({
   createdAt: z.iso.datetime({ offset: true }),
 });
 export type SettlementRecord = z.infer<typeof record>;
+/**
+ * The suggested payment chosen on Balances, which the sheet checks against the latest balances
+ * (#334). `shown` is that suggestion as Balances showed it, when they did: the sheet shows it,
+ * locked, until the check confirms it or can't run. Nothing is ever recorded from it; Try again
+ * checks this payment again.
+ */
+export interface SettlementChoice {
+  paidBy: string;
+  paidTo: string;
+  currency: string;
+  shown: { payer: string; recipient: string; amount: number } | null;
+}
 export interface SettlementState {
   groupId: string | null;
   group: MobileGroup | null;
@@ -89,6 +101,8 @@ export interface SettlementState {
     | 'error';
   draft: SettlementDraft | null;
   attempt: SettlementAttempt | null;
+  /** The payment chosen on Balances; null when the sheet opened for an unconfirmed payment. */
+  chosen: SettlementChoice | null;
   suggested: number | null;
   acknowledged: boolean;
   message: string | null;
@@ -101,6 +115,7 @@ export const emptySettlement = (): SettlementState => ({
   status: 'idle',
   draft: null,
   attempt: null,
+  chosen: null,
   suggested: null,
   acknowledged: false,
   message: null,

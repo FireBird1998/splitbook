@@ -1027,6 +1027,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         onLeaveField={controller.touchSettlementField}
         onAcknowledge={controller.acknowledgeSettlement}
         onRecord={() => void controller.recordSettlement()}
+        onRetry={() => void controller.retrySettlementCheck()}
         onClose={() => void controller.back()}
       />
     </GroupShell>

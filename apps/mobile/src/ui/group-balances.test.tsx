@@ -10,7 +10,11 @@ import {
   recordWaitsForDetails,
 } from './group-balances';
 import type { PendingPayment } from '../data/settlement';
-import { RecordPaymentSheet, recordPaymentFootnote } from './record-payment-sheet';
+import {
+  RecordPaymentSheet,
+  recordPaymentFootnote,
+  recordWaitsForCheck,
+} from './record-payment-sheet';
 
 // #118: the Balances destination and the Record payment sheet's states, rendered.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -286,7 +290,13 @@ describe('Record payment sheet states', () => {
     ...overrides,
   });
   const sheet = (state: SettlementState) => {
-    const calls = { record: vi.fn(), close: vi.fn(), change: vi.fn(), leave: vi.fn() };
+    const calls = {
+      record: vi.fn(),
+      retry: vi.fn(),
+      close: vi.fn(),
+      change: vi.fn(),
+      leave: vi.fn(),
+    };
     const root = render(
       <RecordPaymentSheet
         visible
@@ -297,6 +307,7 @@ describe('Record payment sheet states', () => {
         onLeaveField={calls.leave}
         onAcknowledge={() => undefined}
         onRecord={calls.record}
+        onRetry={calls.retry}
         onClose={calls.close}
       />,
     );
@@ -405,6 +416,66 @@ describe('Record payment sheet states', () => {
     expect(labelled(root, 'Record payment ₹1,060.00')).toHaveLength(0);
     act(() => labelled(root, 'Retry payment')[0].props.onPress());
     expect(calls.record).toHaveBeenCalledOnce();
+  });
+
+  // #334: an unconfirmed payment found on this phone waits for the check too, as Retry.
+  it('keeps Retry waiting while it checks an unconfirmed payment, saying why', () => {
+    const { root } = sheet(
+      base({
+        status: 'loading',
+        group: null,
+        balances: [],
+        suggested: null,
+        attempt: { key: 'settlement-key-1', body: '{}' },
+      }),
+    );
+    expect(labelled(root, 'Record payment ₹1,060.00')).toHaveLength(0);
+    const [retry] = labelled(root, 'Retry payment');
+    expect(retry.props.accessibilityState).toEqual({ disabled: true, busy: false });
+    expect(retry.props.accessibilityHint).toBe(recordWaitsForCheck);
+    expect(retry.props.disabled).toBe(true);
+    expect(text(root)).toContain('Checking the latest balances…');
+  });
+
+  it('offers Try again when the check couldn’t run, and nothing once access is refused', () => {
+    const chosen = {
+      paidBy: you,
+      paidTo: sam,
+      currency: 'INR',
+      shown: { payer: 'Alex Rivera', recipient: 'Sam Chen', amount: 1060 },
+    };
+    const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+    const failed = sheet(
+      base({
+        status: 'error',
+        group: null,
+        balances: [],
+        draft: null,
+        suggested: null,
+        chosen,
+        message: unreachable,
+      }),
+    );
+    expect(text(failed.root)).toContain(unreachable);
+    expect(labelled(failed.root, 'You pay Sam Chen. Suggested ₹1,060.00.')).toHaveLength(1);
+    expect(labelled(failed.root, 'Record payment ₹1,060.00')).toHaveLength(0);
+    act(() => labelled(failed.root, 'Try again')[0].props.onPress());
+    expect(failed.calls.retry).toHaveBeenCalledOnce();
+    expect(failed.calls.record).not.toHaveBeenCalled();
+    act(() => screen?.unmount());
+    const refused = sheet(
+      base({
+        status: 'blocked',
+        group: null,
+        balances: [],
+        draft: null,
+        suggested: null,
+        chosen,
+        message: 'You no longer have access to this Group.',
+      }),
+    );
+    expect(labelled(refused.root, 'Try again')).toHaveLength(0);
+    expect(labelled(refused.root, 'You pay Sam Chen. Suggested ₹1,060.00.')).toHaveLength(0);
   });
 
   it('says so, without a Record button, when the suggestion is gone', () => {
