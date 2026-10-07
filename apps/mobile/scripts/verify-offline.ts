@@ -42,6 +42,15 @@ async function run() {
   };
   const entries = async (file = cache) =>
     z.record(z.string(), z.unknown()).parse((await file.load()) ?? {});
+  // The persister's rows are each written whole, as SQLite writes a row (#220). This file holds
+  // them all, so its reads and writes take turns: the views' saved-copy queues write side by
+  // side, and a write must never read the file half-written by another, or lose its rows.
+  let rowsTurn: Promise<unknown> = Promise.resolve();
+  const inTurn = <T>(operation: () => Promise<T>): Promise<T> => {
+    const result = rowsTurn.then(operation, operation);
+    rowsTurn = result.catch(() => undefined);
+    return result;
+  };
   let offline = false,
     writes = 0,
     cleanup = false;
@@ -59,22 +68,27 @@ async function run() {
         },
         offlineIdentity: identity,
         savedQueries: {
-          load: async (account, path) => (await entries(rows))[account + path] ?? null,
-          save: async (account, path, value) => {
-            const saved = await entries(rows);
-            saved[account + path] = value;
-            await rows.save(saved);
-          },
-          remove: async (account, path) => {
-            const saved = await entries(rows);
-            delete saved[account + path];
-            await rows.save(saved);
-          },
-          clear: rows.clear,
-          list: async (account) =>
-            Object.entries(await entries(rows))
-              .filter(([key]) => key.startsWith(account))
-              .map(([key, value]) => ({ groupId: key.slice(account.length), value })),
+          load: (account, path) =>
+            inTurn(async () => (await entries(rows))[account + path] ?? null),
+          save: (account, path, value) =>
+            inTurn(async () => {
+              const saved = await entries(rows);
+              saved[account + path] = value;
+              await rows.save(saved);
+            }),
+          remove: (account, path) =>
+            inTurn(async () => {
+              const saved = await entries(rows);
+              delete saved[account + path];
+              await rows.save(saved);
+            }),
+          clear: () => inTurn(rows.clear),
+          list: (account) =>
+            inTurn(async () =>
+              Object.entries(await entries(rows))
+                .filter(([key]) => key.startsWith(account))
+                .map(([key, value]) => ({ groupId: key.slice(account.length), value })),
+            ),
         },
         readCache: {
           load: async (account, path) => (await entries())[account + path] ?? null,
