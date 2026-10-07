@@ -249,6 +249,7 @@ export function HomeBalances({
           message={state.message}
           subject="your balances"
           retryLabel="Retry Home balances"
+          offline={offline}
           onRetry={onRefresh}
         />
       )}

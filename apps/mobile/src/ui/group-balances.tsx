@@ -502,6 +502,7 @@ export function GroupBalancesView({
         message={balances.message}
         subject="balances"
         retryLabel="Retry balances"
+        offline={offline}
         onRetry={onRefreshBalances}
       />
       {notice}

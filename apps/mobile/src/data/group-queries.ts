@@ -74,6 +74,15 @@ export const MAX_PAGES = 5;
 /** A stale time that is stale whatever the clock says, even moved back past a read. */
 const STALE = -Infinity;
 const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
+/**
+ * What stays on screen when SplitBook can't be reached and this phone keeps no copy to show
+ * instead: removed by a change, withheld (#323) or never saved. Beside the time it was read, as
+ * Home says of its balances since #332 (#219).
+ */
+const notKept = {
+  expenses: 'Couldn’t refresh these expenses, and this phone no longer keeps a copy of them.',
+  balances: 'Couldn’t refresh these balances, and this phone no longer keeps a copy of them.',
+};
 const balancesNotUpdated = 'Could not update balances. Please try again.';
 
 /** One parse per answer (and currency): structural sharing keeps an unchanged answer the same. */
@@ -1124,7 +1133,11 @@ export function createGroupQueries(session: GroupSession) {
       return same(shown, {
         ...base,
         status: 'error',
-        message: messageOf(error, 'Could not load expenses. Please try again.'),
+        // Expenses still on screen: what is true of them, never "not saved" (#219, as #332).
+        message:
+          unreachable(error) && (base.summary !== null || base.data.length > 0)
+            ? notKept.expenses
+            : messageOf(error, 'Could not load expenses. Please try again.'),
       });
     return same(shown, {
       ...base,
@@ -1188,7 +1201,11 @@ export function createGroupQueries(session: GroupSession) {
         ...shown,
         ...kept,
         status: 'error',
-        message: messageOf(error, 'Could not load balances. Please try again.'),
+        // Balances still on screen: what is true of them, never "not saved" (#219, as #332).
+        message:
+          unreachable(error) && (figures ?? shown.data) !== null
+            ? notKept.balances
+            : messageOf(error, 'Could not load balances. Please try again.'),
       });
     return same(shown, {
       status: 'ready',

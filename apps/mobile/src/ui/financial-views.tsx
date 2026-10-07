@@ -130,9 +130,11 @@ export function DetailsNotice({
 }
 
 /**
- * Explains figures kept on screen after a refresh failed, with when they were read and a retry.
- * Figures read again after a ledger change say nothing here: they keep their place and their
- * time, and the screen's one progress cue says they're being read, so nothing moves (#219).
+ * Explains figures kept on screen after a refresh failed, with when they were read and a retry:
+ * beside the offline cloud while SplitBook can't be reached, otherwise beside the error icon, so
+ * a server error never looks like a lost connection (#219). Figures read again after a ledger
+ * change say nothing here: they keep their place and their time, and the screen's one progress
+ * cue says they're being read, so nothing moves (#219).
  */
 export function RetainedNotice({
   status,
@@ -140,6 +142,7 @@ export function RetainedNotice({
   message,
   subject,
   retryLabel,
+  offline = false,
   onRetry,
 }: {
   status: LoadStatus;
@@ -147,6 +150,8 @@ export function RetainedNotice({
   message: string | null;
   subject: string;
   retryLabel: string;
+  /** The app can't reach SplitBook, as its offline banner says. */
+  offline?: boolean;
   onRetry: () => void;
 }) {
   const theme = useTheme();
@@ -155,7 +160,10 @@ export function RetainedNotice({
   return (
     <View style={{ gap: 12 }}>
       <View style={{ flexDirection: 'row', gap: 10 }}>
-        <Icon name="cloud-offline-outline" color={theme.status.negative} />
+        <Icon
+          name={offline ? 'cloud-offline-outline' : 'alert-circle-outline'}
+          color={theme.status.negative}
+        />
         <Copy accessibilityRole="alert" style={{ flex: 1, color: theme.status.negative }}>
           {message ?? `Couldn’t refresh ${subject}.`} Showing {subject} from {time}.
         </Copy>

@@ -913,6 +913,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                 message={state.detail.message}
                 subject={group.name}
                 retryLabel="Retry Group"
+                offline={state.offline.active}
                 onRetry={() => void controller.refresh()}
               />
             )

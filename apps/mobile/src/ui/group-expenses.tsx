@@ -524,6 +524,7 @@ export function GroupExpensesView({
           message={expenses.message}
           subject={`${scope} expenses`}
           retryLabel="Retry expenses"
+          offline={offline}
           onRetry={onRefreshExpenses}
         />
       ) : null}

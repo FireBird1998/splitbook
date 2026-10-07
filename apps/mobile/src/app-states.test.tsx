@@ -1550,6 +1550,21 @@ describe('A Group says what is true, without jumps (#219)', () => {
       (style.gap as number) * Math.max(0, children.length - 1)
     );
   };
+  /** The icons beside the words `words`: in the row, card or notice that holds them. */
+  const iconsBeside = (words: string) => {
+    let node: ReactTestInstance | null = screen!.root.findAll(
+      (candidate) =>
+        (candidate.type as unknown) === 'Text' &&
+        candidate.children
+          .filter((child) => typeof child === 'string')
+          .join('')
+          .includes(words),
+    )[0]!;
+    const icons = (at: ReactTestInstance) =>
+      at.findAll((candidate) => (candidate.type as unknown) === 'Ionicons');
+    while (node && !icons(node).length) node = node.parent;
+    return node ? icons(node).map((icon) => icon.props.name as string) : [];
+  };
   /** Group options, then Refresh: started, not waited for. */
   const refresh = async (app: Awaited<ReturnType<typeof start>>) => {
     await app.press('Group options');
@@ -1631,6 +1646,42 @@ describe('A Group says what is true, without jumps (#219)', () => {
       expect(app.text()).not.toContain('yet');
     },
   );
+
+  // Items 1 and 3: what stays on screen once its copy was removed was read in this session.
+  it('says one true thing of Expenses and Balances read in this session, offline after a change removed their copies', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[maple]);
+    const readAt = refreshedLabel(phone.clock.now);
+    await settle(controller().openExpense(maple));
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId }));
+    const expenses = phone.hold(`/api/groups/${maple}/expenses?`);
+    const saving = controller().saveExpense();
+    await expenses.reached;
+    phone.network.online = false;
+    expenses.release();
+    await settle(saving);
+
+    const notice =
+      'Couldn’t refresh these expenses, and this phone no longer keeps a copy of them. Showing September 2026 expenses from';
+    expect(app.content().inside).toContain(`${notice} ${readAt}.`);
+    expect(app.content().inside).toContain(`Updated ${readAt}`);
+    expect(app.text()).not.toContain('Saved');
+    expect(app.text()).not.toContain('This view was not saved');
+    // It couldn't be read because SplitBook can't be reached: the offline icon says so.
+    expect(iconsBeside(notice)).toEqual(['cloud-offline-outline']);
+    // Nothing shown is this phone's copy: the banner says only that the app is offline.
+    expect(app.text()).toContain('You’re offlineConnect to load the latest.');
+
+    await app.press('Balances');
+    expect(app.content().inside).toContain(
+      `Couldn’t refresh these balances, and this phone no longer keeps a copy of them. Showing balances from ${readAt}.`,
+    );
+    expect(app.content().inside).toContain(`Updated ${readAt}`);
+    expect(app.text()).not.toContain('Saved');
+  });
 
   // Item 2: the offline banner.
   it('says what was saved only over a Group restored from this phone, and nothing once SplitBook answers', async () => {
@@ -1773,4 +1824,26 @@ describe('A Group says what is true, without jumps (#219)', () => {
     await settle();
     expect(contentHeight()).toBe(height);
   });
+
+  // Item 5: the error icon.
+  it.each([
+    [`/api/groups/${maple}`, 'Showing Maple House from'],
+    [`/api/groups/${maple}/expenses?`, 'Showing September 2026 expenses from'],
+  ])(
+    'marks a refresh the server failed (%s) with the error icon, not the offline cloud',
+    async (path, words) => {
+      const phone = device();
+      await usedBefore(phone);
+      const app = await start(phone);
+      await settle();
+      await app.press(open[maple]);
+      phone.network.failing.push(path);
+      await refresh(app);
+      await settle();
+      expect(app.content().inside).toContain(
+        `The server could not complete this request. Please try again. ${words}`,
+      );
+      expect(iconsBeside(words)).toEqual(['alert-circle-outline']);
+    },
+  );
 });
