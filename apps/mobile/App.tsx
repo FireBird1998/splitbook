@@ -738,7 +738,11 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
   // Activity shows this phone's saved copy at once (#222). One Home doesn't list yet takes an
   // all-time Group's shape.
   const opening =
-    !group && state.detail.status === 'loading' && state.detail.id
+    !group &&
+    state.detail.status === 'loading' &&
+    state.detail.id &&
+    // Activity's events need the Group's currency and members: not one Home doesn't list yet.
+    (state.destination !== 'activity' || known)
       ? (known ?? unlistedGroup(state.detail.id))
       : null;
   const shown = group ?? opening;

@@ -542,10 +542,10 @@ export function createActivityQueries(session: ActivitySession) {
               .then(() => reproject())
               .catch(() => undefined)
           : null;
-      reproject();
       /** This read answered with pages read now, which are being saved on this device. */
       let answered = false;
       try {
+        reproject();
         if (after) {
           try {
             await after;
@@ -772,8 +772,9 @@ export function createActivityQueries(session: ActivitySession) {
         const key = activityKey(groupId),
           query = held<Pages>(key),
           pages = query?.state.data;
-        if (query && pages && pages.pages.length > 1 && query.state.fetchStatus !== 'fetching') {
-          if (pages.pageParams[0] === 1)
+        // As a Group's Months do (#219): a window being read, or slid, goes; its read with it.
+        if (query && pages && pages.pages.length > 1) {
+          if (pages.pageParams[0] === 1 && query.state.fetchStatus !== 'fetching')
             client.setQueryData<Pages>(
               key,
               { pages: pages.pages.slice(0, 1), pageParams: [1] },

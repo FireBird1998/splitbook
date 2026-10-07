@@ -574,6 +574,24 @@ describe('Activity reuses reads verified inside the window (#181, M1-6)', () => 
     expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 40));
   });
 
+  it('lists Activity from its newest page when the Group opens again while an older page is read', async () => {
+    const f = fixture();
+    const controller = await onActivity(f, 2);
+    const older = f.hold(activityPath(3));
+    const loading = controller.loadMoreActivity();
+    await older.reached;
+    await controller.back();
+    const opening = controller.openActivity(mapleId);
+    older.release();
+    await Promise.all([loading, opening]);
+    await settle();
+    expect(controller.getSnapshot().activity).toMatchObject({
+      firstPage: 1,
+      pagination: { page: 1 },
+    });
+    expect(listed(controller.getSnapshot())).toEqual(mapleEvents(1, 20));
+  });
+
   it('reads nothing of the Group or its Activity when it is opened again from Home inside the window', async () => {
     const f = fixture();
     const controller = await onActivity(f, 1);
