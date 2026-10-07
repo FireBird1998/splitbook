@@ -73,6 +73,35 @@ describe('the persona signing in', () => {
   });
 });
 
+describe('An option named while nothing runs', () => {
+  it('shows nothing busy: every option is ready, as when none is named', async () => {
+    const root = await render(<SignIn busy={false} option="alex" {...options} />);
+    for (const name of ['Alex Rivera', 'Sam Chen', 'Priya Shah']) {
+      const [row] = root.findAll(
+        (node) =>
+          typeof node.type === 'string' && node.props.accessibilityLabel === `Continue as ${name}`,
+      );
+      expect(row!.props.accessibilityState).toEqual({ disabled: false });
+      expect(row!.props.disabled).toBe(false);
+      expect(flatten(row!.props.style).opacity).toBe(1);
+      expect(icons(row!)).toEqual(['arrow-forward-outline']);
+    }
+    expect(ofType(root, 'ActivityIndicator')).toEqual([]);
+    expect(text(root)).not.toContain('Signing in');
+
+    const google = await render(
+      <SignIn busy={false} option="google" {...options} onGoogleSignIn={vi.fn()} />,
+    );
+    expect(ofType(google, 'GoogleSignInButton')[0]!.props).toMatchObject({
+      accessibilityLabel: 'Sign in with Google',
+      accessibilityState: { disabled: false },
+      disabled: false,
+    });
+    expect(ofType(google, 'ActivityIndicator')).toEqual([]);
+    expect(text(google)).not.toContain('Signing in');
+  });
+});
+
 describe('Google signing in', () => {
   it('says so on its own button, which keeps its size and label, with the busy mark at its end', async () => {
     const onGoogleSignIn = vi.fn();
