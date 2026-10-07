@@ -185,7 +185,7 @@ function SplitBook() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
-        {/* Shrinks so a long refresh status wraps instead of pushing Settings off screen. */}
+        {/* Shrinks so the wordmark and its short status never push Settings off screen. */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, flexShrink: 1 }}>
           {state.screen !== 'groups' ? (
             // Disabled while joining: the join finishes and opens its Group.

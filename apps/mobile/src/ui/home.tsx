@@ -79,7 +79,7 @@ export function HomeTopBar({
         backgroundColor: theme.bg,
       }}
     >
-      {/* Shrinks so a long refresh status wraps instead of pushing the actions off screen. */}
+      {/* Takes the room the actions leave; the status in it is one short line (#332). */}
       <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 10 }}>
         <Text
           accessibilityRole="header"
