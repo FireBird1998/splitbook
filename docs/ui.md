@@ -318,10 +318,15 @@ link, `/groups/[id]?search=…`, fills the search.
 
 ### Balances & Settlements
 
-| Component        | Description                                |
-| ---------------- | ------------------------------------------ |
-| `BalancesView`   | Net balances per member + simplified debts |
-| `SettleUpDialog` | Record a payment dialog                    |
+| Component           | Description                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| `BalancesView`      | The Balances tab: all-time balance, Settle up (suggested payments), net positions               |
+| `RecordPaymentForm` | Record payment on the page: parties-only pairs, suggestion, overpayment tick, unconfirmed saves |
+| `PaymentsTable`     | Payments: date and time, from → to, amount, note and who recorded it (names only)               |
+
+The suggestion, the overpayment check and the positions after come from the shared settlement
+preview (`@splitbook/shared/settlement-preview`). The UI says "Record payment" and "Payments";
+the code and the glossary say Settlement.
 
 ### Home (`src/components/dashboard/`)
 
@@ -334,16 +339,16 @@ is empty on its own. A new card joins `DashboardView` on one line, in a
 brings its own frame, such as Latest changes (#309), sits in a `HomeSlot` of its
 width.
 
-| Component           | Description                                                                                                                                                                                                             |
-| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `DashboardView`     | Home's layout: the heading, then the rows of cards in the canvas's order                                                                                                                                                |
-| `HomeHeader`        | "Home", how many Groups, "Updated" (when the balances read last answered) and Refresh, which reads every read on screen again                                                                                           |
-| `HomeCard`          | The cards' frame: `HomeRow`, `HomeCard` (wide or narrow), `HomeSlot`, `HomeList` rows, and the loading, error and empty states                                                                                          |
-| `BalancesCard`      | Your balances: per currency, Net (large, signed), You owe and Owed to you, exact and never converted, and "N Groups": the Groups where the member's balance in that currency isn't zero (a settled Group isn't counted) |
-| `NeedsYouCard`      | Needs you: every suggested payment the member makes or receives, with the other person, the Group, the amount and Record (the Group's Balances), then invitations; "Nothing needs you" when there is neither            |
-| `InvitationRow`     | An invitation in Needs you, answered with Join or Decline                                                                                                                                                               |
-| `GroupCardGrid`     | The Group cards, kept until #308 replaces them with the Groups table                                                                                                                                                    |
-| `LatestChangesCard` | Latest changes (#309): the newest Activity across the member's Groups                                                                                                                                                   |
+| Component           | Description                                                                                                                                                                                                                                              |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DashboardView`     | Home's layout: the heading, then the rows of cards in the canvas's order                                                                                                                                                                                 |
+| `HomeHeader`        | "Home", how many Groups, "Updated" (when the balances read last answered) and Refresh, which reads every read on screen again                                                                                                                            |
+| `HomeCard`          | The cards' frame: `HomeRow`, `HomeCard` (wide or narrow), `HomeSlot`, `HomeList` rows, and the loading, error and empty states                                                                                                                           |
+| `BalancesCard`      | Your balances: per currency, Net (large, signed), You owe and Owed to you, exact and never converted, and "N Groups": the Groups where the member's balance in that currency isn't zero (a settled Group isn't counted)                                  |
+| `NeedsYouCard`      | Needs you: every suggested payment the member makes or receives, with the other person, the Group, the amount and Record (the Group's Balances, with Record payment filled in for the pair), then invitations; "Nothing needs you" when there is neither |
+| `InvitationRow`     | An invitation in Needs you, answered with Join or Decline                                                                                                                                                                                                |
+| `GroupCardGrid`     | The Group cards, kept until #308 replaces them with the Groups table                                                                                                                                                                                     |
+| `LatestChangesCard` | Latest changes (#309): the newest Activity across the member's Groups                                                                                                                                                                                    |
 
 ### Activity (`src/components/activity/`)
 

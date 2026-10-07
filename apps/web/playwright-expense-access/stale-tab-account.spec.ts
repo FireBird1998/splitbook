@@ -124,8 +124,9 @@ async function giveSamDistinctFigures(ledger: Ledger): Promise<Marker[]> {
   return [
     ...samTotals.map((text) => ({ within: totals, text })),
     { within: sharedGroupCard, text: money(633.33) }, // Sam's balance in the Group they share
-    // Sam's suggested payment to Priya in Needs you: Record opens a Group Alex isn't in.
-    { within: `a[href="/groups/${ledger.groupB}/balances"]` },
+    // Sam's suggested payment to Priya in Needs you: Record opens a Group Alex isn't in, with
+    // Record payment filled in for Sam paying Priya (#312).
+    { within: `a[href="/groups/${ledger.groupB}/balances?paidTo=${PRIYA}"]` },
     { within: 'body', text: INVITATION_GROUP }, // Sam's invitation
     { within: `a[href="/groups/${ledger.groupB}"]` }, // a Group only Sam belongs to
   ];
@@ -292,7 +293,7 @@ async function expectAlexDashboard(page: Page, ledger: Ledger) {
   await expect(
     page
       .getByRole('region', { name: 'Needs you' })
-      .locator(`a[href="/groups/${ledger.groupA}/balances"]`),
+      .locator(`a[href="/groups/${ledger.groupA}/balances?paidTo=${SAM}"]`),
   ).toHaveAccessibleName(/^Record payment: You pay Sam Chen, ₹300\.00, in /);
 }
 
@@ -543,12 +544,14 @@ const writes: StaleWrite[] = [
       path: `/api/groups/${ledger.groupA}/settlements`,
     }),
     open: async (page: Page) => {
-      await page.getByRole('button', { name: 'Record settlement', exact: true }).click();
-      const dialog = page.getByRole('dialog').filter({
-        has: page.getByRole('heading', { name: 'Record settlement', exact: true }),
-      });
-      await expect(dialog.getByRole('spinbutton', { name: 'Amount' })).toHaveValue('300');
-      return dialog.getByRole('button', { name: 'Save settlement', exact: true });
+      // Record payment is a form on the Balances tab (#312); Record on a suggestion fills it.
+      await page
+        .getByRole('region', { name: 'Settle up', exact: true })
+        .getByRole('button', { name: /^Record .*payment to/ })
+        .click();
+      const form = page.getByRole('region', { name: 'Record payment', exact: true });
+      await expect(form.getByRole('textbox', { name: 'Amount paid' })).toHaveValue('300.00');
+      return form.getByRole('button', { name: /^Record payment/ });
     },
   },
   {
@@ -599,6 +602,8 @@ for (const write of writes) {
     const before = await ledgerSnapshot(ledger, group);
     const dialogFeedback = await watchCurrentDocument(page, [
       { within: '[role="dialog"] [role="alert"]' },
+      // Record payment is a form on the Balances tab (#312), not a dialog.
+      { within: '[aria-labelledby="record-payment-heading"] [role="alert"]' },
     ]);
     // Hold every timer, so no poll or focus refetch notices the switch before the save does.
     await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000);

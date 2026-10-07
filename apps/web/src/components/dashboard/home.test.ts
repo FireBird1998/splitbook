@@ -202,11 +202,11 @@ describe('Needs you', () => {
         'SC AR Sam Chen pays you Goa Friends Trip · suggested payment ₹620.00 Record ' +
         'Diwali at Priya’s Invitation from Priya Shah · General Join Decline',
     );
-    // Record opens the payment's Group on its Balances.
+    // Record opens the payment's Group on its Balances, with Record payment filled in (#312).
     expect(anchors(html).map(({ href }) => href)).toEqual([
-      `/groups/${id(1)}/balances`,
-      `/groups/${id(1)}/balances`,
-      `/groups/${id(2)}/balances`,
+      `/groups/${id(1)}/balances?paidTo=${SAM}`,
+      `/groups/${id(1)}/balances?paidTo=${PRIYA}`,
+      `/groups/${id(2)}/balances?paidBy=${SAM}`,
     ]);
     expect(html).toContain(
       'aria-label="Record payment: You pay Sam Chen, ₹1,060.00, in Maple House"',
@@ -262,7 +262,12 @@ describe('Needs you', () => {
   it('words each payment from the member’s side and links Record to the Group’s Balances', () => {
     expect(paymentTitle(payment({}))).toBe('You pay Sam Chen');
     expect(paymentTitle(payment({ direction: 'receive' }))).toBe('Sam Chen pays you');
-    expect(recordPaymentHref(id(3))).toBe(`/groups/${id(3)}/balances`);
+    expect(recordPaymentHref(payment({ groupId: id(3) }))).toBe(
+      `/groups/${id(3)}/balances?paidTo=${SAM}`,
+    );
+    expect(recordPaymentHref(payment({ groupId: id(3), direction: 'receive' }))).toBe(
+      `/groups/${id(3)}/balances?paidBy=${SAM}`,
+    );
   });
 
   it('describes an invitation with what the read sent', () => {

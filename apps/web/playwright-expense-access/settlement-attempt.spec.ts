@@ -5,7 +5,8 @@ import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 /*
  * #198: a payment whose reply was lost is stored in the browser before its
  * first send, with its Idempotency-Key and exact body, and is only ever sent
- * again unchanged, by an explicit Save. Modelled on ledger-recovery-ui.spec.ts.
+ * again unchanged, by an explicit Record. Modelled on ledger-recovery-ui.spec.ts.
+ * Record payment is a form on the Balances tab (#312), no longer a dialog.
  */
 
 const ALEX = DEMO_PERSONA_IDS.alex;
@@ -98,42 +99,56 @@ async function openBalancesAsSam(page: Page, ledger: Ledger) {
   await page.goto(balancesURL(ledger));
 }
 
-function settleDialog(page: Page) {
-  const dialog = page.getByRole('dialog').filter({
-    has: page.getByRole('heading', { name: 'Record settlement', exact: true }),
+/** Record payment, on the Balances tab (#312). */
+function paymentForm(page: Page) {
+  const form = page.getByRole('region', {
+    name: 'Record payment',
+    exact: true,
   });
   return {
-    dialog,
-    amount: dialog.getByRole('spinbutton', { name: 'Amount' }),
-    note: dialog.getByLabel('Note (optional)'),
-    save: dialog.getByRole('button', { name: 'Save settlement', exact: true }),
-    cancel: dialog.getByRole('button', { name: 'Cancel', exact: true }),
+    form,
+    amount: form.getByRole('textbox', { name: 'Amount paid' }),
+    note: form.getByRole('textbox', { name: 'Note, optional' }),
+    meantMore: form.getByRole('checkbox', {
+      name: 'I meant to pay more than suggested',
+    }),
+    save: form.getByRole('button', { name: /^Record payment/ }),
+    startOver: form.getByRole('button', {
+      name: 'Start a new payment',
+      exact: true,
+    }),
+    /** What the form says once a payment is confirmed, as it starts afresh. */
+    recorded: form.getByRole('status').filter({ hasText: 'Payment recorded.' }),
   };
 }
 
+const settleUp = (page: Page) => page.getByRole('region', { name: 'Settle up', exact: true });
+/** Record on a suggested payment the member is part of: it fills Record payment in. */
 const recordSettlement = (page: Page) =>
-  page.getByRole('button', { name: 'Record settlement', exact: true });
+  settleUp(page).getByRole('button', { name: /^Record .*payment to/ });
 const checkPayment = (page: Page) =>
   page.getByRole('button', { name: 'Check payment', exact: true });
 
 /** The suggested payment row naming `name`, for Groups with more than one suggestion. */
 const debtRow = (page: Page, name: string) =>
-  page
-    .locator('div')
-    .filter({ hasText: name })
-    .filter({ has: recordSettlement(page) })
-    .last();
+  settleUp(page).getByRole('listitem').filter({ hasText: name });
 
-/** Sam enters a payment on the first suggested row and saves it; its reply is lost. */
-async function loseFirstReply(page: Page, amount: string, note = 'Paid via UPI') {
-  const { dialog, amount: amountField, note: noteField, save } = settleDialog(page);
+/** Sam enters a payment on the first suggested row and records it; its reply is lost. */
+async function loseFirstReply(
+  page: Page,
+  amount: string,
+  note = 'Paid via UPI',
+  { meantMore = false } = {},
+) {
+  const form = paymentForm(page);
   await recordSettlement(page).click();
-  await amountField.fill(amount);
-  await noteField.fill(note);
-  await save.click();
-  await expect(dialog.getByRole('alert')).toBeVisible();
+  await form.amount.fill(amount);
+  await form.note.fill(note);
+  // Paying more than suggested waits for the explicit tick.
+  if (meantMore) await form.meantMore.check();
+  await form.save.click();
+  await expect(form.form.getByRole('alert')).toBeVisible();
 }
-
 async function ledgerState(actor: APIRequestContext, ledger: Ledger) {
   const group = `/api/groups/${ledger.groupB}`;
   const settlements = await dataOf(await actor.get(`${group}/settlements`));
@@ -185,7 +200,7 @@ const samOwesPriya = (amount: number) => [
   }),
 ];
 
-test('(a) Cancel, then Record settlement and Save, resends the payment whose reply was lost', async ({
+test('(a) Record on the suggestion again, then Record payment, resends the payment whose reply was lost', async ({
   page,
   ledger,
 }) => {
@@ -193,15 +208,19 @@ test('(a) Cancel, then Record settlement and Save, resends the payment whose rep
   const posts = await settlementPosts(page.context(), ledger, ['lose']);
   await openBalancesAsSam(page, ledger);
   await loseFirstReply(page, '250.25');
-  const { dialog, save, cancel } = settleDialog(page);
-  await cancel.click();
-  await expect(dialog).toBeHidden();
+  const { amount, save, recorded } = paymentForm(page);
 
+  // Starting the suggested payment again opens the stored one, never a new payment.
   await recordSettlement(page).click();
+  await expect(amount).toHaveValue('250.25');
+  await expect(amount).not.toBeEditable();
   await save.click();
-  await expect(dialog).toBeHidden();
+  await expect(recorded).toBeVisible();
 
-  await expectRecordedOnce(ledger, posts, { amountMinor: 25025, debts: samOwesPriya(749.75) });
+  await expectRecordedOnce(ledger, posts, {
+    amountMinor: 25025,
+    debts: samOwesPriya(749.75),
+  });
   expectStoredBeforeFirstSend(ledger, posts);
   expect(await storedAttempts(page)).toEqual([]);
 });
@@ -221,9 +240,9 @@ test('(b) after paying the whole debt and reloading, Balances still offers the p
   await expect(recordSettlement(page)).toHaveCount(0);
   await expect(checkPayment(page)).toBeVisible();
   await checkPayment(page).click();
-  const { dialog, save } = settleDialog(page);
+  const { save, recorded } = paymentForm(page);
   await save.click();
-  await expect(dialog).toBeHidden();
+  await expect(recorded).toBeVisible();
 
   await expectRecordedOnce(ledger, posts, { amountMinor: 100000, debts: [] });
   expectStoredBeforeFirstSend(ledger, posts);
@@ -243,17 +262,20 @@ test('(c) a second tab of the same browser offers the payment and saves it under
   await second.goto(balancesURL(ledger));
   await expect(checkPayment(second)).toBeVisible();
   await checkPayment(second).click();
-  expect(posts).toHaveLength(1); // Opening the tab and the dialog sent nothing.
-  const { dialog, save } = settleDialog(second);
+  expect(posts).toHaveLength(1); // Opening the tab and the payment sent nothing.
+  const { save, recorded } = paymentForm(second);
   await save.click();
-  await expect(dialog).toBeHidden();
+  await expect(recorded).toBeVisible();
 
-  await expectRecordedOnce(ledger, posts, { amountMinor: 25025, debts: samOwesPriya(749.75) });
+  await expectRecordedOnce(ledger, posts, {
+    amountMinor: 25025,
+    debts: samOwesPriya(749.75),
+  });
   expect(await storedAttempts(second)).toEqual([]);
 });
 
 for (const opened of ['record', 'check'] as const) {
-  test(`once another tab confirms the payment, this tab's open dialog sends nothing (${opened})`, async ({
+  test(`once another tab confirms the payment, this tab's form sends nothing (${opened})`, async ({
     page,
     ledger,
   }) => {
@@ -261,11 +283,9 @@ for (const opened of ['record', 'check'] as const) {
     const posts = await settlementPosts(page.context(), ledger, ['lose']);
     await openBalancesAsSam(page, ledger);
     await loseFirstReply(page, '250.25');
-    const here = settleDialog(page);
+    const here = paymentForm(page);
     if (opened === 'check') {
-      // Opened again from the stored payment rather than kept open from the first Save.
-      await here.cancel.click();
-      await expect(here.dialog).toBeHidden();
+      // Opened again from the stored payment rather than kept from the first Record.
       await checkPayment(page).click();
     }
     await expect(here.amount).not.toBeEditable();
@@ -273,32 +293,37 @@ for (const opened of ['record', 'check'] as const) {
     const other = await page.context().newPage();
     await other.goto(balancesURL(ledger));
     await checkPayment(other).click();
-    const there = settleDialog(other);
+    const there = paymentForm(other);
     await there.save.click();
-    await expect(there.dialog).toBeHidden();
+    await expect(there.recorded).toBeVisible();
     expect(posts).toHaveLength(2);
 
-    // This tab hears the payment is gone. Its dialog must not turn into a new payment.
-    await expect(here.dialog).toContainText('confirmed or discarded in another tab');
+    // This tab hears the payment is gone. Its form must not turn into a new payment.
+    await expect(here.form).toContainText('confirmed or discarded in another tab');
     if (await here.save.isEnabled()) {
       await here.save.click();
-      await expect(here.dialog).toBeHidden();
+      await expect(here.recorded).toBeVisible();
     }
     expect(posts).toHaveLength(2);
     await expect(here.save).toBeDisabled();
     await expect(here.amount).toHaveValue('250.25');
     await expect(here.amount).not.toBeEditable();
 
-    await here.cancel.click();
-    await expect(here.dialog).toBeHidden();
+    await here.startOver.click();
+    await expect(here.amount).toBeEditable();
     // Balances read again at once: the stored payment is gone and the debt fell once.
     await expect(checkPayment(page)).toHaveCount(0);
-    await expect(page.getByText('₹749.75', { exact: true })).toBeVisible({ timeout: 5_000 });
-    await expectRecordedOnce(ledger, posts, { amountMinor: 25025, debts: samOwesPriya(749.75) });
+    await expect(settleUp(page).getByText('₹749.75', { exact: true })).toBeVisible({
+      timeout: 5_000,
+    });
+    await expectRecordedOnce(ledger, posts, {
+      amountMinor: 25025,
+      debts: samOwesPriya(749.75),
+    });
   });
 }
 
-test('the payment survives Cancel, a Group tab switch, a reload and a closed window, and only Save sends it', async ({
+test('the payment survives leaving it, a Group tab switch, a reload and a closed window, and only Record sends it', async ({
   page,
   ledger,
 }) => {
@@ -306,11 +331,12 @@ test('the payment survives Cancel, a Group tab switch, a reload and a closed win
   const posts = await settlementPosts(page.context(), ledger, ['lose']);
   await openBalancesAsSam(page, ledger);
   await loseFirstReply(page, '250.25', 'Rent share');
-  await settleDialog(page).cancel.click();
   const pending = page.getByText(/Your payment of ₹250\.25 to Priya Shah may already be recorded/);
   await expect(pending).toBeVisible();
 
-  const sections = page.getByRole('navigation', { name: 'Synthetic access household sections' });
+  const sections = page.getByRole('navigation', {
+    name: 'Synthetic access household sections',
+  });
   await sections.getByRole('link', { name: 'Expenses' }).click();
   await expect(pending).toBeHidden();
   await sections.getByRole('link', { name: 'Balances' }).click();
@@ -324,17 +350,20 @@ test('the payment survives Cancel, a Group tab switch, a reload and a closed win
   const reopened = await context.newPage();
   await reopened.goto(balancesURL(ledger));
   await checkPayment(reopened).click();
-  const shown = settleDialog(reopened);
+  const shown = paymentForm(reopened);
   await expect(shown.amount).toHaveValue('250.25');
   await expect(shown.amount).not.toBeEditable();
   await expect(shown.note).toHaveValue('Rent share');
   await expect(shown.note).not.toBeEditable();
-  await expect(shown.dialog).toContainText('This payment may already be recorded');
+  await expect(shown.form).toContainText('This payment may already be recorded');
   expect(posts).toHaveLength(1);
 
   await shown.save.click();
-  await expect(shown.dialog).toBeHidden();
-  await expectRecordedOnce(ledger, posts, { amountMinor: 25025, debts: samOwesPriya(749.75) });
+  await expect(shown.recorded).toBeVisible();
+  await expectRecordedOnce(ledger, posts, {
+    amountMinor: 25025,
+    debts: samOwesPriya(749.75),
+  });
 });
 
 test('a stored payment blocks a different one between the same two members, either way, but not other pairs', async ({
@@ -344,34 +373,40 @@ test('a stored payment blocks a different one between the same two members, eith
   await owes(ledger, 'priya', SAM, 500);
   const posts = await settlementPosts(page.context(), ledger, ['lose']);
   await openBalancesAsSam(page, ledger);
-  // Sam overpays: once recorded, Priya owes Sam 100.
-  await loseFirstReply(page, '600', 'Overpaid');
-  const { dialog, amount, note, save, cancel } = settleDialog(page);
-  await cancel.click();
+  // Sam overpays, ticking that he meant to: once recorded, Priya owes Sam 100.
+  await loseFirstReply(page, '600', 'Overpaid', { meantMore: true });
+  const { form, amount, note, save, recorded } = paymentForm(page);
 
   await joinGroup(ledger.priya, ledger.alex, ledger.groupB);
   await owes(ledger, 'sam', ALEX, 300);
   await page.reload();
 
   // The reverse suggestion between the same pair opens the earlier payment, read-only.
-  await debtRow(page, 'Priya Shah').getByRole('button', { name: 'Record settlement' }).click();
-  await expect(amount).toHaveValue('600');
+  await debtRow(page, 'Priya Shah')
+    .getByRole('button', { name: /^Record/ })
+    .click();
+  await expect(amount).toHaveValue('600.00');
   await expect(amount).not.toBeEditable();
   await expect(note).toHaveValue('Overpaid');
   await expect(note).not.toBeEditable();
-  await expect(dialog).toContainText('isn’t confirmed yet, so it comes first');
-  await cancel.click();
+  await expect(form).toContainText('isn’t confirmed yet, so it comes first');
   expect(posts).toHaveLength(1);
 
   // Alex and Sam are another pair: their payment saves at once under its own key.
-  await debtRow(page, 'Alex Rivera').getByRole('button', { name: 'Record settlement' }).click();
+  await debtRow(page, 'Alex Rivera')
+    .getByRole('button', { name: /^Record/ })
+    .click();
   await expect(amount).toBeEditable();
-  await expect(amount).toHaveValue('300');
+  await expect(amount).toHaveValue('300.00');
   await save.click();
-  await expect(dialog).toBeHidden();
+  await expect(recorded).toBeVisible();
   expect(posts).toHaveLength(2);
   expect(posts[1].key).not.toBe(posts[0].key);
-  expect(JSON.parse(posts[1].body)).toMatchObject({ paidBy: ALEX, paidTo: SAM, amount: 300 });
+  expect(JSON.parse(posts[1].body)).toMatchObject({
+    paidBy: ALEX,
+    paidTo: SAM,
+    amount: 300,
+  });
   expect(await storedAttempts(page)).toEqual([
     expect.objectContaining({ key: posts[0].key, body: posts[0].body }),
   ]);
@@ -379,7 +414,7 @@ test('a stored payment blocks a different one between the same two members, eith
   // Confirming the earlier payment resends it as it was.
   await checkPayment(page).click();
   await save.click();
-  await expect(dialog).toBeHidden();
+  await expect(recorded).toBeVisible();
   expect(posts).toHaveLength(3);
   expect(posts[2]).toMatchObject({ key: posts[0].key, body: posts[0].body });
   const state = await ledgerState(ledger.sam, ledger);
@@ -394,7 +429,7 @@ test('a stored payment blocks a different one between the same two members, eith
   ]);
 });
 
-test('Discard is offered only after the dialog says to check the Group’s payments, and the next payment gets a new key', async ({
+test('Discard is offered only after the form says to check the Group’s payments, and the next payment gets a new key', async ({
   page,
   ledger,
 }) => {
@@ -402,17 +437,19 @@ test('Discard is offered only after the dialog says to check the Group’s payme
   const posts = await settlementPosts(page.context(), ledger, ['lose']);
   await openBalancesAsSam(page, ledger);
   await loseFirstReply(page, '250.25');
-  const { dialog, amount, save, cancel } = settleDialog(page);
-  await cancel.click();
+  const { form, amount, save, recorded } = paymentForm(page);
 
   await checkPayment(page).click();
-  const discard = dialog.getByRole('button', { name: 'Discard payment', exact: true });
+  const discard = form.getByRole('button', {
+    name: 'Discard payment',
+    exact: true,
+  });
   await expect(discard).toHaveCount(0);
-  await dialog.getByRole('button', { name: 'Discard this payment', exact: true }).click();
-  await expect(dialog).toContainText('Check the Group’s payments first');
-  await expect(dialog).toContainText('Settlement history');
+  await form.getByRole('button', { name: 'Discard this payment', exact: true }).click();
+  await expect(form).toContainText('Check the Group’s payments first');
+  await expect(form).toContainText('If Payments shows Sam Chen paying Priya Shah ₹250.25');
   await discard.click();
-  await expect(dialog).toBeHidden();
+  await expect(form).toContainText('This browser’s copy of the payment was discarded.');
   expect(await storedAttempts(page)).toEqual([]);
   await expect(checkPayment(page)).toHaveCount(0);
 
@@ -420,7 +457,7 @@ test('Discard is offered only after the dialog says to check the Group’s payme
   await expect(amount).toBeEditable();
   await amount.fill('100');
   await save.click();
-  await expect(dialog).toBeHidden();
+  await expect(recorded).toBeVisible();
   expect(posts).toHaveLength(2);
   expect(posts[1].key).toBeTruthy();
   expect(posts[1].key).not.toBe(posts[0].key);
@@ -428,7 +465,7 @@ test('Discard is offered only after the dialog says to check the Group’s payme
   expect(state.settlements.map((row) => row.amountMinor).sort()).toEqual([10000, 25025]);
 });
 
-test('a 4xx on a retry keeps the payment and shows why, and a later Save still sends the same key', async ({
+test('a 4xx on a retry keeps the payment and shows why, and a later Record still sends the same key', async ({
   page,
   ledger,
 }) => {
@@ -440,12 +477,12 @@ test('a 4xx on a retry keeps the payment and shows why, and a later Save still s
 
   // The server rechecks both parties before it looks for the replay.
   await dataOf(await ledger.priya.delete(`/api/groups/${ledger.groupB}/members/${ALEX}`));
-  const { dialog, amount, save } = settleDialog(page);
+  const { form, amount, save, recorded } = paymentForm(page);
   await save.click();
-  await expect(dialog.getByRole('alert')).toContainText(
+  await expect(form.getByRole('alert')).toContainText(
     'Both payer and recipient must be group members',
   );
-  await expect(amount).toHaveValue('300');
+  await expect(amount).toHaveValue('300.00');
   await expect(amount).not.toBeEditable();
   expect(await storedAttempts(page)).toEqual([
     expect.objectContaining({ key: posts[0].key, body: posts[0].body }),
@@ -453,7 +490,7 @@ test('a 4xx on a retry keeps the payment and shows why, and a later Save still s
 
   await joinGroup(ledger.priya, ledger.alex, ledger.groupB);
   await save.click();
-  await expect(dialog).toBeHidden();
+  await expect(recorded).toBeVisible();
   expect(posts.map((post) => post.key)).toEqual([posts[0].key, posts[0].key, posts[0].key]);
   const state = await ledgerState(ledger.sam, ledger);
   expect(state.settlements).toHaveLength(1);
@@ -461,7 +498,7 @@ test('a 4xx on a retry keeps the payment and shows why, and a later Save still s
   expect(await storedAttempts(page)).toEqual([]);
 });
 
-test('a 5xx keeps the payment, and Save sends it again under the same key', async ({
+test('a 5xx keeps the payment, and Record sends it again under the same key', async ({
   page,
   ledger,
 }) => {
@@ -471,38 +508,50 @@ test('a 5xx keeps the payment, and Save sends it again under the same key', asyn
   ]);
   await openBalancesAsSam(page, ledger);
   await loseFirstReply(page, '250.25');
-  const { dialog, amount, save } = settleDialog(page);
-  await expect(dialog.getByRole('alert')).toContainText('Synthetic outage');
-  await expect(dialog).toContainText('This payment may already be recorded');
-  await expect(dialog).not.toContainText('comes first'); // It is this dialog's own payment.
+  const { form, amount, save, recorded } = paymentForm(page);
+  await expect(form.getByRole('alert')).toContainText('Synthetic outage');
+  await expect(form).toContainText('This payment may already be recorded');
+  await expect(form).not.toContainText('comes first'); // It is this form's own payment.
   await expect(amount).not.toBeEditable();
   expectStoredBeforeFirstSend(ledger, posts);
   expect(await storedAttempts(page)).toHaveLength(1);
 
   await save.click();
-  await expect(dialog).toBeHidden();
-  await expectRecordedOnce(ledger, posts, { amountMinor: 25025, debts: samOwesPriya(749.75) });
+  await expect(recorded).toBeVisible();
+  await expectRecordedOnce(ledger, posts, {
+    amountMinor: 25025,
+    debts: samOwesPriya(749.75),
+  });
 });
 
 test('a 422 on the first send removes the payment and keeps the entries to correct', async ({
   page,
   ledger,
 }) => {
-  await owes(ledger, 'priya', SAM, 1000);
+  // The form keeps a note to 500 characters itself, so the server's refusal here is a party
+  // who left the Group between the page loading and the first send.
+  await joinGroup(ledger.priya, ledger.alex, ledger.groupB);
+  await owes(ledger, 'sam', ALEX, 300);
   const posts = await settlementPosts(page.context(), ledger, ['pass']);
   await openBalancesAsSam(page, ledger);
-  const tooLong = 'x'.repeat(501);
-  await loseFirstReply(page, '250.25', tooLong);
-  const { dialog, amount, note, save } = settleDialog(page);
-  await expect(dialog.getByRole('alert')).toContainText('Validation error');
+  const { form, amount, note, save, recorded } = paymentForm(page);
+  await recordSettlement(page).click();
+  await amount.fill('250.25');
+  await note.fill('Paid in cash');
+  await dataOf(await ledger.priya.delete(`/api/groups/${ledger.groupB}/members/${ALEX}`));
+  await save.click();
+  await expect(form.getByRole('alert')).toContainText(
+    'Both payer and recipient must be group members',
+  );
   expect(await storedAttempts(page)).toEqual([]);
   await expect(amount).toBeEditable();
   await expect(amount).toHaveValue('250.25');
-  await expect(note).toHaveValue(tooLong);
+  await expect(note).toHaveValue('Paid in cash');
 
+  await joinGroup(ledger.priya, ledger.alex, ledger.groupB);
   await note.fill('Paid via UPI');
   await save.click();
-  await expect(dialog).toBeHidden();
+  await expect(recorded).toBeVisible();
   expect(posts).toHaveLength(2);
   expect(posts[1].key).not.toBe(posts[0].key);
   const state = await ledgerState(ledger.sam, ledger);
@@ -514,7 +563,6 @@ test('sign-out removes every stored payment from the browser', async ({ page, le
   await settlementPosts(page.context(), ledger, [{ status: 503, error: 'Synthetic outage' }]);
   await openBalancesAsSam(page, ledger);
   await loseFirstReply(page, '250.25');
-  await settleDialog(page).cancel.click();
   expect(await storedAttempts(page)).toHaveLength(1);
 
   await page.getByRole('button', { name: 'Account menu' }).click();
@@ -532,7 +580,6 @@ test('another account signing in removes the previous account’s payments on it
   await settlementPosts(page.context(), ledger, [{ status: 503, error: 'Synthetic outage' }]);
   await openBalancesAsSam(page, ledger);
   await loseFirstReply(page, '250.25');
-  await settleDialog(page).cancel.click();
   expect(await storedAttempts(page)).toHaveLength(1);
 
   // A persona switch without signing out (as from a persona picker left open in another tab).

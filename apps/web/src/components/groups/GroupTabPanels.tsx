@@ -8,8 +8,8 @@ import { groupSettingsHref } from './group-tabs';
 
 /*
  * The Group page's tabs other than Expenses (#305), each rendered by its own route under the
- * Group's layout, which owns the Group read, the header and the dialogs. The Balances and
- * Activity content is today's, unchanged (#312 and #313 rebuild Balances).
+ * Group's layout, which owns the Group read, the header and the dialogs. Balances records a
+ * payment on the page itself (#312); its "Everyone" chart comes with #313.
  */
 
 export function GroupBalancesTab() {

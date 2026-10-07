@@ -44,10 +44,10 @@ for (const colorScheme of ['light', 'dark'] as const) {
       expect(response.status()).toBe(200);
       await response.finished();
     }
-    const positions = page.getByText('Net positions', { exact: true }).locator('..');
+    const positions = page.getByRole('region', { name: 'Net positions', exact: true });
     const amounts = positions.getByText(/₹100\.00/);
     await expect(amounts).toHaveCount(2);
-    await expect(page.getByRole('status', { name: 'Loading settlement history' })).toBeHidden();
+    await expect(page.getByRole('status', { name: 'Loading payments' })).toBeHidden();
     for (const amount of await amounts.all()) {
       // Put each right-aligned amount where the former fixed action obscured it.
       await amount.evaluate((element) => {
