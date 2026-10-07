@@ -259,3 +259,40 @@ describe('when the newest page drops (#222, #215)', () => {
     expect(onShift).not.toHaveBeenCalled();
   });
 });
+
+// The UI review of 90f5c21 (#222): what a row draws again (D6), the page controls after a failed
+// read, the header at large text, and a server's failure with nothing shown.
+describe('a row is drawn again only when what it says changes (#222, D6)', () => {
+  /** The row naming `description`, by its spoken label. */
+  const row = (root: ReactTestInstance, description: string) =>
+    pressables(root).filter((node) =>
+      String(node.props.accessibilityLabel).includes(`${description},`),
+    );
+
+  it('shows an event read again with new words under the same id', () => {
+    const { root, update } = render();
+    expect(row(root, 'Fictional event 1')).toHaveLength(1);
+    // The same event, read again as a new object: what it says now shows, spoken and drawn.
+    const renamed = {
+      ...events[0],
+      metadata: { ...events[0].metadata, description: 'Lake dinner' },
+    };
+    update({ state: activity({ events: [renamed, ...events.slice(1, 20)] }) });
+    expect(row(root, 'Fictional event 1')).toHaveLength(0);
+    expect(row(root, 'Lake dinner')).toHaveLength(1);
+    expect(text(row(root, 'Lake dinner')[0])).toContain('Lake dinner');
+  });
+
+  it('opens an event only once read: rows are disabled while read again, and enabled when it lands', () => {
+    const { root, update } = render({ state: activity({ status: 'loading' }) });
+    for (const shown of [row(root, 'Fictional event 1')[0], row(root, 'Fictional event 20')[0]]) {
+      expect(shown.props.disabled).toBe(true);
+      expect(shown.props.accessibilityState).toEqual({ disabled: true });
+    }
+    update({ state: activity() });
+    for (const shown of [row(root, 'Fictional event 1')[0], row(root, 'Fictional event 20')[0]]) {
+      expect(shown.props.disabled).toBe(false);
+      expect(shown.props.accessibilityState).toEqual({ disabled: false });
+    }
+  });
+});
