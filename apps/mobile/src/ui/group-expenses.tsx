@@ -553,10 +553,12 @@ export function GroupExpensesView({
           expenses.status === 'error' && offline ? (
             <NotAvailableOffline
               compact
+              // True whether they were never saved here, removed by a change or a sign-out, or
+              // withheld (#323): never "hasn't been opened" (#219, #280 item 2).
               message={
                 state.month
-                  ? `${monthLabel(state.month)} hasn’t been opened on this phone yet. Connect to load it.`
-                  : 'These expenses haven’t been opened on this phone yet. Connect to load them.'
+                  ? `Expenses in ${monthLabel(state.month)} aren’t saved on this phone. Connect to load them.`
+                  : 'These expenses aren’t saved on this phone. Connect to load them.'
               }
               onRetry={onRefreshExpenses}
             />

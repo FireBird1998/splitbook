@@ -117,6 +117,8 @@ function device() {
     groupBalances: false,
     /** Groups that refuse Alex (403): Alex has lost them. */
     refused: [] as string[],
+    /** Paths the server fails with a 500: exact, or every path a prefix ending in `?` starts. */
+    failing: [] as string[],
   };
   /** The saved copies can't be removed, as on a full or read-only disk. */
   const storage = { failRemoval: false };
@@ -166,6 +168,12 @@ function device() {
     const found = groups.find((item) => item._id === id);
     if (!found) return json({}, 404);
     if (network.refused.includes(found._id)) return json({}, 403);
+    if (
+      network.failing.some((failing) =>
+        failing.endsWith('?') ? path.startsWith(failing) : path === failing,
+      )
+    )
+      return json({}, 500);
     if (path === `/api/groups/${id}`) return json({ data: found, status: 200 });
     if (path === `/api/groups/${maple}/expenses/${expenseId}`)
       return json({ data: expense, status: 200 });
@@ -1061,7 +1069,7 @@ describe('offline', () => {
     expect(app.headers()).toEqual(
       expect.arrayContaining(['Lisbon Offsite', 'Not available offline']),
     );
-    expect(app.text()).toContain('Lisbon Offsite hasn’t been opened on this phone yet');
+    expect(app.text()).toContain('Lisbon Offsite isn’t saved on this phone. Connect to load it.');
     expect(app.text()).not.toContain('You’re offline');
     expect(app.button('Add expense')).toBeNull();
     expect(app.hosts((p) => p.accessibilityRole === 'tablist')).toHaveLength(1);
@@ -1081,7 +1089,9 @@ describe('offline', () => {
     await settle();
     await app.press('Open Maple House, Household · 2 members');
     await app.press('Previous month');
-    expect(app.text()).toContain('August 2026 hasn’t been opened on this phone yet.');
+    expect(app.text()).toContain(
+      'Expenses in August 2026 aren’t saved on this phone. Connect to load them.',
+    );
     expect(app.text().match(/You’re offline/g)).toHaveLength(1);
     expect(app.button('Try again')).not.toBeNull();
     expect(app.progress()).toHaveLength(0);
@@ -1516,4 +1526,85 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(app.text()).not.toContain('You owe');
     expect(app.text()).not.toContain('yet');
   });
+});
+
+describe('A Group says what is true, without jumps (#219)', () => {
+  const controller = () => runtime.controller as MobileController;
+  const open = {
+    [maple]: 'Open Maple House, Household · 2 members',
+    [lisbon]: 'Open Lisbon Offsite, Work · 2 members',
+  };
+  /**
+   * Alex opens `groupId` and saves an Expense in it, which removes its ledger's saved copies
+   * (M2-2); the connection drops before its Expenses are read again, and the app is closed.
+   * `withheld`: the phone can't remove them, so they stay on it, never shown (#212, #323).
+   */
+  async function changedOffline(
+    phone: ReturnType<typeof device>,
+    groupId: string,
+    withheld: boolean,
+  ) {
+    const first = phone.controller();
+    await first.restore();
+    await first.openGroup(groupId, true, 'balances');
+    phone.storage.failRemoval = withheld;
+    await first.openExpense(groupId);
+    await first.updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId });
+    const expenses = phone.hold(`/api/groups/${groupId}/expenses?`);
+    const saving = first.saveExpense();
+    await expenses.reached;
+    phone.network.online = false;
+    expenses.release();
+    await saving;
+    expect(first.getSnapshot().expense.status).toBe('saved');
+    await settle();
+    first.dispose();
+  }
+
+  // Item 1: true offline wording (#280 item 2, for Expenses and Balances).
+  it('says a Group isn’t saved on this phone, offline after a sign-out cleared it', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await settle(controller().signOut());
+    await settle(controller().signIn('alex'));
+    // The connection drops before Maple House is opened again.
+    phone.network.online = false;
+    await app.press(open[maple]);
+    expect(app.text()).toContain('Maple House isn’t saved on this phone. Connect to load it.');
+    expect(app.text()).not.toContain('been opened');
+    expect(app.text()).not.toContain('yet');
+  });
+
+  it.each([
+    [
+      'removed',
+      maple,
+      'Expenses in September 2026 aren’t saved on this phone. Connect to load them.',
+    ],
+    [
+      'withheld',
+      maple,
+      'Expenses in September 2026 aren’t saved on this phone. Connect to load them.',
+    ],
+    ['removed', lisbon, 'These expenses aren’t saved on this phone. Connect to load them.'],
+  ] as const)(
+    'says the Expenses and Balances aren’t saved, offline after a change %s their copies (%s)',
+    async (copy, groupId, expenses) => {
+      const phone = device();
+      await usedBefore(phone);
+      await changedOffline(phone, groupId, copy === 'withheld');
+      const app = await start(phone);
+      await settle();
+      await app.press(open[groupId]);
+      expect(app.content().inside).toContain(expenses);
+      await app.press('Balances');
+      expect(app.content().inside).toContain(
+        'These balances aren’t saved on this phone. Connect to load them.',
+      );
+      expect(app.text()).not.toContain('been opened');
+      expect(app.text()).not.toContain('yet');
+    },
+  );
 });

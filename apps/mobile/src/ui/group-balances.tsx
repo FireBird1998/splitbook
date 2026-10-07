@@ -443,7 +443,9 @@ export function GroupBalancesView({
           {notice}
           <NotAvailableOffline
             compact
-            message="These balances haven’t been opened on this phone yet. Connect to load them."
+            // True whether they were never saved here, removed by a change or a sign-out, or
+            // withheld (#323): never "haven't been opened" (#219, #280 item 2).
+            message="These balances aren’t saved on this phone. Connect to load them."
             onRetry={onRefreshBalances}
           />
         </View>

@@ -715,7 +715,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     state.financial.groupId === state.detail.id &&
     state.financial.expenses.status === 'ready';
   const group = state.detail.data ?? (proven ? known : null);
-  // Never opened on this phone, and offline: the navigation stays, without a banner.
+  // Not saved on this phone, and offline: the navigation stays, without a banner.
   const unavailable = !group && state.detail.status === 'error' && state.offline.active;
   const userId = state.auth.user!.id;
   const eventOpen = state.destination === 'activity' && state.activity.selected !== null;
@@ -863,7 +863,8 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         />
       ) : unavailable ? (
         <NotAvailableOffline
-          message={`${known?.name ?? 'This Group'} hasn’t been opened on this phone yet, so there’s no saved copy. Connect to load it.`}
+          // True whether it was never saved here, removed by a sign-out or withheld (#219).
+          message={`${known?.name ?? 'This Group'} isn’t saved on this phone. Connect to load it.`}
           onRetry={() => void controller.refresh()}
         />
       ) : state.detail.status === 'error' && !group ? (
