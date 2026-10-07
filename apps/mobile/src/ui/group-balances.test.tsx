@@ -3,7 +3,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSemanticTokens } from '@splitbook/shared/design-tokens';
 import { emptySettlement, type SettlementState } from '../data/settlement';
 import type { GroupCurrencyBalance, GroupFinancialState, MobileGroup } from '../data/types';
-import { GroupBalancesView, recordNeedsConnection, recordWaitsForBalances } from './group-balances';
+import {
+  GroupBalancesView,
+  recordNeedsConnection,
+  recordWaitsForBalances,
+  recordWaitsForDetails,
+} from './group-balances';
 import type { PendingPayment } from '../data/settlement';
 import { RecordPaymentSheet, recordPaymentFootnote } from './record-payment-sheet';
 
@@ -166,6 +171,24 @@ describe('Balances destination', () => {
     const record = labelled(root, 'Record your payment to Sam Chen')[0];
     expect(record.props.accessibilityState).toEqual({ disabled: true });
     expect(record.props.accessibilityHint).toBe(recordWaitsForBalances);
+  });
+
+  it('disables Record while the Group’s details can’t be read, and says why (2A, #219)', () => {
+    const { root } = view({ recordUnavailable: recordWaitsForDetails('Maple House') });
+    const record = labelled(root, 'Record your payment to Sam Chen')[0];
+    expect(record.props.accessibilityState).toEqual({ disabled: true });
+    expect(record.props.accessibilityHint).toBe(
+      'Record is available once Maple House’s details load.',
+    );
+    expect(text(root)).toContain('Record is available once Maple House’s details load.');
+    // Offline says so first.
+    const offline = view({
+      offline: true,
+      recordUnavailable: recordWaitsForDetails('Maple House'),
+    });
+    expect(
+      labelled(offline.root, 'Record your payment to Sam Chen')[0].props.accessibilityHint,
+    ).toBe(recordNeedsConnection);
   });
 
   it('offers an unconfirmed payment even once nothing is suggested', () => {

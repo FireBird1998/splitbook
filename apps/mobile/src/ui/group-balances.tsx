@@ -25,6 +25,9 @@ import { useTheme } from './theme';
 export const recordNeedsConnection = 'Recording a payment needs a connection.';
 /** Balances not yet read again after a change: their payments wait for the read (#219). */
 export const recordWaitsForBalances = 'Record is available once these balances are updated.';
+/** A Group whose details couldn't be read (owner decision 2A): the sheet needs them (#219). */
+export const recordWaitsForDetails = (name: string) =>
+  `Record is available once ${name}’s details load.`;
 
 /**
  * Whether Home last read the member as settled up in a Group: its balances there are known,
@@ -201,6 +204,7 @@ function SuggestedPayments({
   currentUserId,
   offline,
   locked,
+  unavailable,
   onRecord,
 }: {
   payments: ReturnType<typeof recordablePayments>;
@@ -208,8 +212,11 @@ function SuggestedPayments({
   offline: boolean;
   /** A change written in this Group made the Balances shown out of date: Record waits for them. */
   locked: boolean;
+  /** Why Record can't be used here, said under the payments too; null when it can. */
+  unavailable: string | null;
   onRecord: (paidBy: string, paidTo: string, currency: string) => void;
 }) {
+  const reason = offline ? recordNeedsConnection : unavailable;
   const theme = useTheme();
   return (
     <View style={{ gap: 6 }}>
@@ -262,9 +269,13 @@ function SuggestedPayments({
                   label="Record"
                   variant="tonal"
                   dense
-                  disabled={offline || locked}
+                  disabled={offline || locked || unavailable !== null}
                   hint={
-                    offline ? recordNeedsConnection : locked ? recordWaitsForBalances : undefined
+                    offline
+                      ? recordNeedsConnection
+                      : locked
+                        ? recordWaitsForBalances
+                        : (unavailable ?? undefined)
                   }
                   accessibilityLabel={
                     youPay
@@ -277,13 +288,13 @@ function SuggestedPayments({
             </View>
           );
         })}
-        {offline ? (
+        {reason ? (
           <CompactText
             variant="small"
             tone="secondary"
             style={{ paddingHorizontal: 14, paddingBottom: 12 }}
           >
-            {recordNeedsConnection}
+            {reason}
           </CompactText>
         ) : null}
       </Card>
@@ -389,6 +400,7 @@ export function GroupBalancesView({
   refreshing = false,
   silent = false,
   knownSettled = false,
+  recordUnavailable = null,
   onRecord,
   onCheckPayment,
   onRefreshBalances,
@@ -407,6 +419,8 @@ export function GroupBalancesView({
    * Balances load, their placeholder takes the settled card's shape, with no amount.
    */
   knownSettled?: boolean;
+  /** Why Record can't be used, such as a Group whose details couldn't be read (2A, #219). */
+  recordUnavailable?: string | null;
   onRecord: (paidBy: string, paidTo: string, currency: string) => void;
   onCheckPayment: () => void;
   onRefreshBalances: () => void;
@@ -527,6 +541,7 @@ export function GroupBalancesView({
           currentUserId={currentUserId}
           offline={offline}
           locked={balances.changed === true}
+          unavailable={recordUnavailable}
           onRecord={onRecord}
         />
       ) : null}

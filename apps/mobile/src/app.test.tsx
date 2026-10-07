@@ -468,6 +468,36 @@ describe('App refresh rendering', () => {
     expect(app.text()).toContain('September groceries');
   });
 
+  it('keeps Record disabled, and says why, while the Group’s details can’t be read (2A)', async () => {
+    const app = await renderApp();
+    // Alex is a member too, so Sam's debt to Alex is a payment Sam can record.
+    const both = {
+      ...group,
+      members: [
+        ...group.members,
+        { user: { ...alex, email: 'alex@x.test' }, role: 'member', joinedAt: iso },
+      ],
+    };
+    app.use((path) =>
+      path === '/api/groups'
+        ? json({ data: [both], status: 200 })
+        : path === `/api/groups/${groupId}`
+          ? json({}, 500)
+          : undefined,
+    );
+    await settle(Promise.resolve(app.refreshControl().onRefresh()));
+    await app.press('Open Maple House');
+    await app.press('Balances');
+    const record = app.pressable('Record your payment to Alex');
+    expect(record.props.accessibilityState).toEqual({ disabled: true });
+    expect(record.props.accessibilityHint).toBe(
+      'Record is available once Maple House’s details load.',
+    );
+    expect(app.text()).toContain('Record is available once Maple House’s details load.');
+    await app.press('Record your payment to Alex');
+    expect(app.controller.getSnapshot().screen).toBe('group');
+  });
+
   it('reopens a recent Group without a request, then shows it with its time while it is read again', async () => {
     const app = await renderApp();
     const reads: string[] = [];

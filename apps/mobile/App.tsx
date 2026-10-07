@@ -65,7 +65,7 @@ import { GroupSnackbar, HomeSnackbar } from './src/ui/group-snackbar';
 import { visibleFieldErrors } from './src/data/field-feedback';
 import { groupFields } from './src/data/group-draft';
 import { GroupShell } from './src/ui/group-shell';
-import { GroupBalancesView, settledIn } from './src/ui/group-balances';
+import { GroupBalancesView, recordWaitsForDetails, settledIn } from './src/ui/group-balances';
 import { RecordPaymentSheet } from './src/ui/record-payment-sheet';
 import { GroupActivity } from './src/ui/group-activity';
 import { GroupMembers } from './src/ui/group-members';
@@ -896,6 +896,8 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
               refreshing={feedback.quiet}
               silent={feedback.silent}
               knownSettled={settledIn(state.home.byGroup[group.id])}
+              // The sheet needs the Group's details, which 2A can't show (#219).
+              recordUnavailable={state.detail.data ? null : recordWaitsForDetails(group.name)}
               onRecord={(paidBy, paidTo, currency) =>
                 void controller.openRecordPayment(paidBy, paidTo, currency)
               }
