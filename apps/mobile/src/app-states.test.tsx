@@ -984,6 +984,76 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(app.text()).toContain('Settled up');
   });
 
+  // A Badge keeps a hair space after its label; a status line doesn't.
+  const badge = (label: string) => `${label}\u200a`;
+
+  it('marks only this phone’s copy of the balances “Saved” while offline, with the badge', async () => {
+    const phone = device();
+    const savedAt = await usedBefore(phone);
+    phone.network.online = false;
+    const app = await start(phone);
+    await settle();
+    expect(app.content().inside).toContain(badge(`Saved ${refreshedLabel(savedAt)}`));
+    expect(app.text()).not.toContain('Updated');
+  });
+
+  it('says one true thing of balances read in this session, offline after a change removed their copy', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    const readAt = refreshedLabel(phone.clock.now);
+    // Alex saves an Expense, which removes Home's saved figures; the connection drops before
+    // they are read again, and Alex goes back to Home.
+    await settle(controller().openExpense(maple));
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId }));
+    const figures = phone.hold('/api/user/balances');
+    const saving = controller().saveExpense();
+    await figures.reached;
+    phone.network.online = false;
+    figures.release();
+    await settle(saving);
+    expect(phone.saved('/api/user/balances')).toBeNull();
+    await settle(Promise.resolve(controller().back()));
+
+    expect(app.content().inside).toContain('You owe');
+    expect(app.content().inside).toContain(`Updated ${readAt}`);
+    expect(app.text()).not.toContain(`Saved ${readAt}`);
+    expect(app.content().inside).toContain(
+      `Couldn’t refresh your balances. They aren’t saved on this phone. Showing your balances from ${readAt}.`,
+    );
+    expect(app.text()).not.toContain('This view was not saved');
+    // Nothing shown is this phone's copy, so no banner says it was saved.
+    expect(app.text()).not.toContain('What’s shown was saved');
+  });
+
+  it('keeps the offline banner over saved figures beside a list read in this session', async () => {
+    const phone = device();
+    const savedAt = await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    // Offline, only the figures are read again: this phone's copy stands in for them.
+    phone.network.online = false;
+    await settle(controller().refreshHome());
+    expect(app.content().inside).toContain(badge(`Saved ${refreshedLabel(savedAt)}`));
+    expect(app.text()).toContain('You’re offline');
+    expect(app.text()).toContain('What’s shown was saved on this device');
+  });
+
+  it('keeps the offline banner over an empty Groups list and its saved figures', async () => {
+    const phone = device();
+    phone.network.noGroups = true;
+    const first = phone.controller();
+    await first.signIn('alex');
+    first.dispose();
+    phone.network.online = false;
+    const app = await start(phone);
+    await settle();
+    expect(app.text()).toContain('A shared space starts here.');
+    expect(app.text()).toContain('Nothing outstanding in your Groups');
+    expect(app.text()).toContain('You’re offline');
+  });
+
   it('says the balances and Groups aren’t saved, offline after a sign-out cleared them', async () => {
     const phone = device();
     await usedBefore(phone);

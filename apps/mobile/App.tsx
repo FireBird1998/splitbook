@@ -600,11 +600,16 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
           />
         }
       >
-        {/* With nothing of Home to show, each part says it isn't saved on this phone, and no
-            banner says what's shown was saved, as on a Group never opened here (#332). */}
-        {!state.groups.loaded && !state.groups.data.length && state.home.data === null ? null : (
-          <OfflineNotice state={state.offline} />
-        )}
+        {/* The banner says what's shown was saved on this device: only while some of it is.
+            Otherwise each part says what is true of it, as on a Group never opened here (#332).
+            A warning that a view couldn't be saved stays. */}
+        <OfflineNotice
+          state={
+            state.groups.restored || state.home.restored
+              ? state.offline
+              : { ...state.offline, active: false }
+          }
+        />
         <HomeBalances
           state={state.home}
           offline={state.offline.active}

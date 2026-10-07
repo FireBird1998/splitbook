@@ -525,8 +525,8 @@ describe('cold start (#127 decision): the saved Home while the session is checke
     expect(saved).toMatchObject({
       auth: { status: 'restoring', user: { id: accountId } },
       screen: 'groups',
-      groups: { data: [{ id: maple }, { id: lisbon }] },
-      // This device's copy, with its own time: never presented as fresh (#332).
+      // This device's copies, the figures with their own time: never presented as fresh (#332).
+      groups: { data: [{ id: maple }, { id: lisbon }], restored: true },
       home: { data: [{ currency: 'INR', youOwe: 30 }], refreshedAt: savedAt, restored: true },
       drafts: [{ groupId: maple, description: 'Weekly groceries' }],
       offline: { active: false },

@@ -1435,6 +1435,8 @@ describe('native session and Group boundary', () => {
       data: verified,
       message: null,
       loaded: true,
+      // From the server, not this device's saved copy (#332).
+      restored: false,
     });
     await controller.signOut();
     expect(controller.getSnapshot().groups.data).toEqual([]);
@@ -1453,6 +1455,7 @@ describe('native session and Group boundary', () => {
       data: [],
       message: null,
       loaded: true,
+      restored: false,
     });
     expect(fetch.mock.calls[0][0]).toContain('/api/auth/get-session');
   });

@@ -408,6 +408,8 @@ export interface MobileSnapshot {
     message: string | null;
     /** A list has been read for this account, from the server or this device; it may be empty. */
     loaded: boolean;
+    /** The list shown is this device's saved copy, as Home's figures can be (#332). */
+    restored?: boolean;
   };
   detail: {
     status: LoadStatus;

@@ -44,6 +44,8 @@ export const listPath = '/api/groups',
 /** The server can't be reached, and this device has no saved copy of the view. */
 export const notSaved = 'This view was not saved on this device. Connect to load it.';
 const notSavedHere = 'Could not save this view for offline use. Online data is still available.';
+/** Home's figures on screen stay; SplitBook can't be reached, and this phone has no copy of them. */
+const notRefreshed = 'Couldn’t refresh your balances. They aren’t saved on this phone.';
 
 export function emptyHome(): HomeFinancialState {
   return {
@@ -122,15 +124,18 @@ const failure = (read: Read) =>
  */
 export function projectGroups(read: Read, shown: MobileSnapshot['groups']) {
   const data = read.data && listOf(read.data.value);
+  // Whether the list shown is this device's saved copy: the read's, or the one kept on screen.
+  const restored = data ? read.data!.source === 'saved' : shown.restored;
   if (read.fetchStatus === 'fetching')
     return same(shown, {
       status: 'loading',
       data: data ?? shown.data,
       message: null,
       loaded: shown.loaded || !!data,
+      restored,
     });
   if (read.status === 'success' && data)
-    return same(shown, { status: 'ready', data, message: null, loaded: true });
+    return same(shown, { status: 'ready', data, message: null, loaded: true, restored });
   const error = failure(read);
   if (!error) return shown;
   const denied = error instanceof RequestError && error.status === 403;
@@ -142,6 +147,7 @@ export function projectGroups(read: Read, shown: MobileSnapshot['groups']) {
         ? error.message
         : 'The server returned invalid group data. Please refresh.',
     loaded: shown.loaded,
+    restored: denied ? false : shown.restored,
   });
 }
 
@@ -180,11 +186,16 @@ export function projectHome(read: Read, shown: HomeFinancialState): HomeFinancia
   const error = failure(read);
   if (!error) return shown;
   const denied = error instanceof RequestError && error.status === 403;
+  // Figures still on screen that this phone holds no saved copy of: never "not saved" beside
+  // them, but what is true of them (#332).
+  const unsaved =
+    error instanceof RequestError && error.code === 'OFFLINE_UNAVAILABLE' && shown.data !== null;
   return {
     ...(denied ? emptyHome() : shown),
     status: denied ? 'denied' : 'error',
-    message:
-      error instanceof RequestError
+    message: unsaved
+      ? notRefreshed
+      : error instanceof RequestError
         ? error.message
         : 'Could not load your balances. Please try again.',
   };
@@ -722,7 +733,13 @@ export function createHomeQueries(session: HomeSession) {
         return null;
       const { buckets: data = null, byGroup = {} } = figures?.value ?? {};
       return {
-        groups: { status: 'loading' as const, data: list.value, message: null, loaded: true },
+        groups: {
+          status: 'loading' as const,
+          data: list.value,
+          message: null,
+          loaded: true,
+          restored: true,
+        },
         home: figures
           ? {
               ...emptyHome(),

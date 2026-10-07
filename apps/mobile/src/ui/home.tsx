@@ -195,14 +195,15 @@ function CurrencyRow({ bucket }: { bucket: HomeCurrencyBalance }) {
 }
 
 /**
- * When the figures shown were read. "Updated hh:mm" only for the server's answer in this
- * session; this device's saved copy says "Saved hh:mm", never presented as fresh (ADR 0006),
- * and offline it is a badge. One replacing the other cross-fades in place (#332).
+ * When the figures shown were read. "Updated hh:mm" for the server's answer in this session,
+ * offline too; this device's saved copy says "Saved hh:mm", never presented as fresh (ADR
+ * 0006), and offline it is the badge every saved view shows. "Saved" giving way to "Updated"
+ * cross-fades in place (#332).
  */
 function BalancesTime({ state, offline }: { state: HomeFinancialState; offline: boolean }) {
   if (state.refreshedAt === null) return null;
   const time = refreshedLabel(state.refreshedAt);
-  if (offline) return <Badge label={`Saved ${time}`} />;
+  if (state.restored && offline) return <Badge label={`Saved ${time}`} />;
   return <StatusText tone="muted">{`${state.restored ? 'Saved' : 'Updated'} ${time}`}</StatusText>;
 }
 

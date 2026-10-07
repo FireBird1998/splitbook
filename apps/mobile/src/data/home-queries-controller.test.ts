@@ -1446,7 +1446,8 @@ describe('after a write (M2-2)', () => {
       expense: { status: 'uncertain' },
     });
     // The figures from before the save are still on this device, but offline they never stand
-    // in for a read again: Home says they weren't saved here, with no saved time.
+    // in for a read again: Home keeps the figures it read, and says it couldn't refresh them and
+    // has no copy of them, with no saved time (#332).
     expect(f.row(homePath)).toMatchObject({
       value: { data: { buckets: [{ youOwe: 30 }] } },
     });
@@ -1456,7 +1457,9 @@ describe('after a write (M2-2)', () => {
       auth: { status: 'authenticated' },
       home: {
         status: 'error',
-        message: 'This view was not saved on this device. Connect to load it.',
+        data: [{ youOwe: 30 }],
+        message: 'Couldn’t refresh your balances. They aren’t saved on this phone.',
+        restored: false,
       },
       offline: { active: true, refreshedAt: null },
     });
