@@ -6,6 +6,11 @@ import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
 import type { GroupValidation } from './group-draft';
 import type { GroupCategory } from '@splitbook/shared/types';
 
+/** A development persona the local backend seeds. */
+export type PersonaId = 'alex' | 'sam' | 'priya';
+/** A way to sign in: a development persona, or Google for the invited beta. */
+export type SignInOption = PersonaId | 'google';
+
 export interface SessionUser {
   id: string;
   name: string;
@@ -352,17 +357,19 @@ export interface MobileSnapshot {
    * the session. Nothing of the account shows; Try again re-sends the revoke (`restore`), and
    * Continue (`continueSignedOut`) sends nothing more.
    */
-  auth: {
-    status:
-      | 'restoring'
-      | 'signed-out'
-      | 'signing-in'
-      | 'authenticated'
-      | 'error'
-      | 'sign-out-unconfirmed';
-    user: SessionUser | null;
-    message: string | null;
-  };
+  auth:
+    | {
+        status: 'restoring' | 'signed-out' | 'authenticated' | 'error' | 'sign-out-unconfirmed';
+        user: SessionUser | null;
+        message: string | null;
+      }
+    | {
+        status: 'signing-in';
+        user: SessionUser | null;
+        message: string | null;
+        /** The option chosen, which the sign-in screen shows busy (#335). */
+        option: SignInOption;
+      };
   /** 'members' is the Group's Members and Group details page; Back returns to the Group. */
   screen: Route['screen'];
   /**

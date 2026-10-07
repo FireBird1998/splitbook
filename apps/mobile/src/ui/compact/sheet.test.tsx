@@ -104,7 +104,7 @@ describe('Bottom sheet dismissal keeps entries', () => {
     expect(
       host(root, (p) => p.accessibilityRole === 'button' && p.accessibilityLabel === 'Done').props
         .accessibilityState,
-    ).toEqual({ disabled: true });
+    ).toEqual({ disabled: true, busy: false });
     const scrim = host(root, (p) => p.accessibilityLabel === 'Close Tag, keeping your entries');
     expect(scrim.props.accessibilityState).toEqual({ disabled: true });
     act(() => {

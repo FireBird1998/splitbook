@@ -139,6 +139,14 @@ function SplitBook() {
   // Cold start: the saved Home of the account that last signed in, while its session is checked.
   const checking = state.auth.status === 'restoring' && state.auth.user !== null;
   const joining = state.invitation.status === 'joining';
+  // The session check, or a sign-in, with nothing of the account on screen yet (#335).
+  const waiting = !configurationReady
+    ? null
+    : state.auth.status === 'restoring'
+      ? 'Checking your session'
+      : state.auth.status === 'signing-in'
+        ? 'Signing in'
+        : null;
   if (configurationReady && authenticated && state.screen === 'expense')
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -268,6 +276,9 @@ function SplitBook() {
           </View>
         )}
       </View>
+      {/* #331's one progress cue while the session is checked or a sign-in runs. Its room
+          stays when nothing runs, so the screen never moves (#335). */}
+      {waiting ? <LinearProgress label={waiting} /> : <View style={{ height: progressHeight }} />}
       <KeyboardAvoidingView
         style={{ flex: 1 }}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -279,7 +290,14 @@ function SplitBook() {
             message="This build is missing its connection settings. Ask the beta organizer for the configured app, or follow the development setup guide."
           />
         ) : state.auth.status === 'restoring' ? (
-          <Loading label="Checking your session…" />
+          // The bar above is the check's progress, still with reduce motion on; this says what
+          // it is, where the spinner was (#335).
+          <View
+            accessibilityLiveRegion="polite"
+            style={{ alignItems: 'center', paddingHorizontal: 20, paddingVertical: 48 }}
+          >
+            <CompactText tone="secondary">Checking your session…</CompactText>
+          </View>
         ) : state.auth.status === 'error' ? (
           <View style={{ paddingHorizontal: 24 }}>
             <Notice
@@ -306,6 +324,7 @@ function SplitBook() {
         ) : !authenticated ? (
           <SignIn
             busy={state.auth.status === 'signing-in'}
+            option={state.auth.status === 'signing-in' ? state.auth.option : undefined}
             message={
               state.auth.message ??
               (state.invitation.code

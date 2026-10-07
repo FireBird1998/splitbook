@@ -11,8 +11,9 @@ import { createMobileController, type MobileController } from './data/mobile-con
 import type { FetchResponse } from './data/types';
 import { balanceWidth } from './ui/home';
 import { refreshedLabel } from './ui/refresh-feedback';
-import { findHosts, layoutWidth } from './test-utils/layout';
-import { setFileWindow, setWindow } from './test-utils/native';
+import { findHosts, flatten, layoutHeight, layoutWidth } from './test-utils/layout';
+import { loop, setFileWindow, setReduceMotion, setWindow, timing } from './test-utils/native';
+import { progressHeight, sweepTrack } from './ui/compact';
 import { savedQueriesIn } from './test-utils/saved-queries';
 
 // #127: the App's loading, refreshing, offline and cold-start states, rendered through the real
@@ -466,6 +467,262 @@ describe('cold start', () => {
   });
 });
 
+describe('sign-in and start-up show progress while they wait (#335)', () => {
+  /** What the App's controller publishes. */
+  const shown = () => (runtime.controller as MobileController).getSnapshot();
+  /** The host just above the screen's content: the progress bar, or the room it keeps. */
+  const aboveContent = (content: string) => {
+    const json = screen!.toJSON() as ReactTestRendererJSON;
+    const [frame] = findHosts(json, () => true).filter((node) =>
+      (node.children ?? []).some((child) => typeof child !== 'string' && child.type === content),
+    );
+    const children = frame!.children as ReactTestRendererJSON[];
+    return children[children.findIndex((child) => child.type === content) - 1]!;
+  };
+  const spinners = () =>
+    screen!.root.findAll((node) => (node.type as unknown) === 'ActivityIndicator');
+  const icons = (node: ReactTestInstance) =>
+    node.findAll((child) => (child.type as unknown) === 'Ionicons').map((icon) => icon.props.name);
+  /** The polite live regions' text, as a screen reader hears it change. */
+  const announced = (app: Awaited<ReturnType<typeof start>>) =>
+    app
+      .hosts((p) => p.accessibilityLiveRegion === 'polite')
+      .map((node) =>
+        node
+          .findAll((child) => (child.type as unknown) === 'Text')
+          .flatMap((text) => text.children.filter((part) => typeof part === 'string'))
+          .join(''),
+      );
+  /** Nothing moves: no loop or fade started, no spinner, and the bar's segment where it rests. */
+  const still = (app: Awaited<ReturnType<typeof start>>) => {
+    expect(loop).not.toHaveBeenCalled();
+    expect(timing).not.toHaveBeenCalled();
+    expect(spinners()).toEqual([]);
+    for (const bar of app.progress()) {
+      const [segment] = bar.findAll((node) => (node.type as unknown) === 'AnimatedView');
+      const [{ translateX }] = flatten(segment!.props.style).transform as [
+        { translateX: { multiply: [{ value: number }] } },
+      ];
+      expect(translateX.multiply[0].value).toBe(sweepTrack.rest);
+    }
+  };
+
+  it('shows the progress bar while the session is checked, saying what it checks', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    // A session without a verified account shows no saved Home: the check has the screen.
+    phone.unverifySession();
+    const check = phone.hold('/api/auth/get-session');
+    const app = await start(phone);
+    await check.reached;
+    await settle();
+
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual([
+      'Checking your session',
+    ]);
+    expect(layoutHeight(aboveContent('KeyboardAvoidingView'))).toBe(progressHeight);
+    expect(announced(app)).toContain('Checking your session…');
+    // The bar is the one progress cue: no spinner beside it.
+    expect(spinners()).toEqual([]);
+
+    check.release();
+    await settle();
+    expect(app.text()).not.toContain('Checking your session');
+    expect(app.progress()).toEqual([]);
+    expect(app.text()).toContain('Maple House');
+  });
+
+  it('shows the progress bar over the saved Home while its session is checked, labelled as saved', async () => {
+    const phone = device();
+    const savedAt = await usedBefore(phone);
+    phone.clock.now += 60 * 60_000;
+    const check = phone.hold('/api/auth/get-session');
+    const app = await start(phone);
+    await check.reached;
+    await settle();
+
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual([
+      'Checking your session',
+    ]);
+    expect(aboveContent('ScrollView').props.accessibilityRole).toBe('progressbar');
+    // #332's labels: the top bar says what is happening, the saved figures when they were saved.
+    expect(app.content().outside).toContain('Checking…');
+    expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}`);
+    expect(app.text()).not.toContain('Updated');
+
+    // Confirmed, Home is read again: the bar goes with the check, and the top bar says
+    // "Refreshing…" over the saved figures until they're answered (#332).
+    const list = phone.hold('/api/groups');
+    check.release();
+    await list.reached;
+    await settle();
+    expect(app.progress()).toEqual([]);
+    expect(aboveContent('ScrollView').props.accessibilityRole).toBeUndefined();
+    expect(layoutHeight(aboveContent('ScrollView'))).toBe(progressHeight);
+    expect(app.content().outside).toContain('Refreshing…');
+    expect(app.text()).not.toContain('Checking…');
+    expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}`);
+    expect(app.text()).not.toContain('Updated');
+
+    list.release();
+    await settle();
+    expect(app.progress()).toEqual([]);
+    expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+  });
+
+  it('keeps the session check still with reduce motion on, its states still shown', async () => {
+    setReduceMotion(true);
+    const phone = device();
+    const savedAt = await usedBefore(phone);
+    phone.clock.now += 60 * 60_000;
+    const check = phone.hold('/api/auth/get-session');
+    const app = await start(phone);
+    await check.reached;
+    await settle();
+
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual([
+      'Checking your session',
+    ]);
+    expect(app.content().outside).toContain('Checking…');
+    expect(app.content().inside).toContain(`Saved ${refreshedLabel(savedAt)}`);
+    still(app);
+
+    // The fresh figures replace the saved ones at once.
+    check.release();
+    await settle();
+    expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
+    still(app);
+  });
+
+  it('shows the progress bar and the chosen persona busy until Home opens; the others wait', async () => {
+    const phone = device();
+    const app = await start(phone);
+    await settle();
+    expect(app.progress()).toEqual([]);
+    // The bar's room stays while nothing runs, so the options never move.
+    expect(layoutHeight(aboveContent('KeyboardAvoidingView'))).toBe(progressHeight);
+
+    const posted = phone.hold('/api/auth/demo-persona/sign-in');
+    const check = phone.hold('/api/auth/get-session');
+    app.tap('Continue as Alex Rivera');
+    await posted.reached;
+    await settle();
+
+    const waiting = () => {
+      expect(shown().auth).toMatchObject({
+        status: 'signing-in',
+        option: 'alex',
+      });
+      expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Signing in']);
+      expect(layoutHeight(aboveContent('KeyboardAvoidingView'))).toBe(progressHeight);
+      // The chosen option: at full strength, busy and saying so, with a spinner for its arrow.
+      const chosen = app.button('Signing in as Alex Rivera')!;
+      expect(chosen.props.accessibilityState).toEqual({
+        disabled: true,
+        busy: true,
+      });
+      expect(chosen.props.disabled).toBe(true);
+      expect(flatten(chosen.props.style).opacity).toBe(1);
+      expect(chosen.findAll((node) => (node.type as unknown) === 'ActivityIndicator')).toHaveLength(
+        1,
+      );
+      expect(icons(chosen)).not.toContain('arrow-forward-outline');
+      expect(app.button('Continue as Alex Rivera')).toBeNull();
+      // The others are disabled and dimmed.
+      for (const other of ['Continue as Sam Chen', 'Continue as Priya Shah']) {
+        expect(app.button(other)!.props.accessibilityState).toEqual({
+          disabled: true,
+          busy: false,
+        });
+        expect(app.button(other)!.props.disabled).toBe(true);
+        expect(flatten(app.button(other)!.props.style).opacity).toBe(0.45);
+      }
+      expect(announced(app)).toContain('Signing in as Alex Rivera…');
+    };
+    waiting();
+    // The sign-in's session check is part of the same wait.
+    posted.release();
+    await check.reached;
+    await settle();
+    waiting();
+
+    check.release();
+    await settle();
+    expect(shown().auth).toEqual({
+      status: 'authenticated',
+      user: alex,
+      message: null,
+    });
+    expect(app.text()).not.toContain('Signing in');
+    expect(app.progress()).toEqual([]);
+    expect(app.text()).toContain('Maple House');
+  });
+
+  it('ends the busy state when a sign-in fails, so any option can be chosen again', async () => {
+    const phone = device();
+    const app = await start(phone);
+    await settle();
+    const posted = phone.hold('/api/auth/demo-persona/sign-in');
+    app.tap('Continue as Sam Chen');
+    await posted.reached;
+    await settle();
+    expect(app.button('Signing in as Sam Chen')!.props.accessibilityState).toEqual({
+      disabled: true,
+      busy: true,
+    });
+    expect(app.progress()).toHaveLength(1);
+
+    // The connection drops before the reply.
+    phone.network.online = false;
+    posted.release();
+    await settle();
+    expect(shown().auth).toEqual({
+      status: 'signed-out',
+      user: null,
+      message: 'Could not reach SplitBook. Check your connection and try again.',
+    });
+    expect(app.progress()).toEqual([]);
+    expect(layoutHeight(aboveContent('KeyboardAvoidingView'))).toBe(progressHeight);
+    expect(spinners()).toEqual([]);
+    expect(app.text()).not.toContain('Signing in');
+    for (const name of ['Alex Rivera', 'Sam Chen', 'Priya Shah']) {
+      const option = app.button(`Continue as ${name}`)!;
+      // Busy is sent as false, not dropped: Android keeps a key no longer sent, and Sam's row
+      // read "busy" on the emulator after this failure while it showed ready.
+      expect(option.props.accessibilityState).toEqual({ disabled: false, busy: false });
+      expect(flatten(option.props.style).opacity).toBe(1);
+      expect(icons(option)).toEqual(['arrow-forward-outline']);
+    }
+  });
+
+  it('keeps a sign-in still with reduce motion on: the busy option shows a still mark', async () => {
+    setReduceMotion(true);
+    const phone = device();
+    const app = await start(phone);
+    await settle();
+    const posted = phone.hold('/api/auth/demo-persona/sign-in');
+    app.tap('Continue as Priya Shah');
+    await posted.reached;
+    await settle();
+
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Signing in']);
+    const chosen = app.button('Signing in as Priya Shah')!;
+    expect(chosen.props.accessibilityState).toEqual({
+      disabled: true,
+      busy: true,
+    });
+    expect(icons(chosen)).toContain('hourglass-outline');
+    expect(app.disabled('Continue as Alex Rivera')).toBe(true);
+    expect(app.disabled('Continue as Sam Chen')).toBe(true);
+    expect(announced(app)).toContain('Signing in as Priya Shah…');
+    still(app);
+
+    posted.release();
+    await settle();
+    expect(app.text()).toContain('Maple House');
+    still(app);
+  });
+});
 describe('first load and refresh', () => {
   it('keeps the Group’s top bar during a first load, with one progress bar and placeholders', async () => {
     const phone = device();
@@ -671,7 +928,7 @@ describe('offline', () => {
     await app.press('Balances');
     expect(app.text()).toContain(saved);
     const record = app.button('Record your payment to Sam Chen')!;
-    expect(record.props.accessibilityState).toEqual({ disabled: true });
+    expect(record.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(record.props.accessibilityHint).toBe('Recording a payment needs a connection.');
 
     await app.press('Activity');
@@ -681,7 +938,7 @@ describe('offline', () => {
     await app.press('Add expense');
     expect(app.text().match(/You’re offline/g)).toHaveLength(1);
     const save = app.button('Save expense')!;
-    expect(save.props.accessibilityState).toEqual({ disabled: true });
+    expect(save.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(save.props.accessibilityHint).toBe('Saving needs a connection.');
     expect(app.text()).toContain('Saving needs a connection.');
     expect(app.button('Try again')).not.toBeNull();
@@ -710,7 +967,7 @@ describe('offline', () => {
     await settle(Promise.resolve(inSheet('Delete expense').props.onPress()));
     expect(app.text()).toContain('Delete this Expense?');
     const remove = inSheet('Delete expense');
-    expect(remove.props.accessibilityState).toEqual({ disabled: true });
+    expect(remove.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(remove.props.accessibilityHint).toBe('Saving needs a connection.');
     const shown = sheet()
       .findAll((node) => (node.type as unknown) === 'Text')
@@ -732,7 +989,7 @@ describe('offline', () => {
     const name = app.hosts((p) => p.accessibilityLabel === 'Trip name, required')[0];
     await settle(Promise.resolve(name.props.onChangeText('Cabin Weekend')));
     const create = app.button('Create trip')!;
-    expect(create.props.accessibilityState).toEqual({ disabled: true });
+    expect(create.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(create.props.accessibilityHint).toBe('Saving needs a connection.');
     expect(app.text()).toContain('Saving needs a connection.');
     expect(app.hosts((p) => p.accessibilityLabel === 'Trip name, required')[0].props.value).toBe(
@@ -765,7 +1022,7 @@ describe('offline', () => {
   it('keeps Join disabled while offline, saying why (#286)', async () => {
     const { app } = await invitationOffline();
     const join = app.button('Join Group')!;
-    expect(join.props.accessibilityState).toEqual({ disabled: true });
+    expect(join.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(join.props.accessibilityHint).toBe('Joining needs a connection.');
     expect(app.text()).toContain('Joining needs a connection.');
     expect(app.text()).toContain('Cedar Flat');
@@ -787,7 +1044,7 @@ describe('offline', () => {
     await settle();
     expect(app.pull().refreshing).toBe(false);
     const join = app.button('Join Group')!;
-    expect(join.props.accessibilityState).toEqual({ disabled: false });
+    expect(join.props.accessibilityState).toEqual({ disabled: false, busy: false });
     expect(join.props.accessibilityHint).toBeUndefined();
     expect(app.text()).not.toContain('Joining needs a connection.');
     expect(app.text()).toContain('Cedar Flat');

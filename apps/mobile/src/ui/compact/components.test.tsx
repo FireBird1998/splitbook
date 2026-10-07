@@ -235,7 +235,7 @@ describe('Buttons and rows', () => {
       />,
     );
     const button = one(byRole(root, 'button', 'Save expense ₹1,249.50'));
-    expect(button.props.accessibilityState).toEqual({ disabled: true });
+    expect(button.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(button.props.accessibilityHint).toBe('Saving needs a connection.');
   });
 

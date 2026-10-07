@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { gatewayReply } from '../test-utils/transport-faults';
 import { decodeStoredSession } from './cookies';
 import { createMobileController } from './mobile-controller';
-import type { GoogleIdentityResult, MobileDependencies, MobileFetch } from './types';
+import type {
+  GoogleIdentityResult,
+  MobileDependencies,
+  MobileFetch,
+  MobileSnapshot,
+} from './types';
 
 const base = 'https://staging.splitbook.test';
 const user = {
@@ -177,6 +182,39 @@ describe('Google login within the native session boundary', () => {
     expect(test.fetch).toHaveBeenCalledTimes(1);
     expect(test.saved()).toBeNull();
     expect(test.controller.getSnapshot().auth.status).toBe('signed-out');
+  });
+  it('records Google as the option signing in until the sign-in ends (#335)', async () => {
+    const selection = deferred<GoogleIdentityResult>();
+    const test = setup({ acquire: () => selection.promise });
+    const signingIn = test.controller.signInWithGoogle();
+    await vi.waitFor(() => expect(test.acquire).toHaveBeenCalledOnce());
+    // The sign-in screen shows this option busy.
+    expect(test.controller.getSnapshot().auth).toEqual({
+      status: 'signing-in',
+      user: null,
+      message: null,
+      option: 'google',
+    });
+    selection.resolve(identity);
+    await signingIn;
+    expect(test.controller.getSnapshot().auth).toEqual({
+      status: 'authenticated',
+      user,
+      message: null,
+    });
+  });
+  it('names an option only on a sign-in that is running (type checks, #335)', () => {
+    // Type checks only: each refusal fails `pnpm typecheck` if the auth type loosens.
+    const auth = (value: MobileSnapshot['auth']) => value;
+    // @ts-expect-error A finished sign-in names no option.
+    auth({ status: 'authenticated', user, message: null, option: 'google' });
+    // @ts-expect-error A running sign-in names the option chosen.
+    auth({ status: 'signing-in', user: null, message: null });
+    // @ts-expect-error Only a seeded persona or Google.
+    auth({ status: 'signing-in', user: null, message: null, option: 'nobody' });
+    expect(auth({ status: 'signing-in', user: null, message: null, option: 'sam' })).toMatchObject({
+      option: 'sam',
+    });
   });
   it('ignores a late server cookie after logout', async () => {
     const exchange = deferred<Response>();

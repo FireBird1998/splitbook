@@ -499,7 +499,7 @@ describe('App refresh rendering', () => {
     await app.press('Open Maple House');
     await app.press('Balances');
     const record = app.pressable('Record your payment to Alex');
-    expect(record.props.accessibilityState).toEqual({ disabled: true });
+    expect(record.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(record.props.accessibilityHint).toBe(
       'Record is available once Maple House’s details load.',
     );
@@ -1311,6 +1311,7 @@ describe('App Expense window (#219)', () => {
     expect(app.text()).toContain('Expense updated · Fictional row 5-19 r');
     expect(app.pressable('Load more expenses').props.accessibilityState).toEqual({
       disabled: true,
+      busy: false,
     });
     await app.layout(700, 5700);
     expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000, animated: false });
@@ -1323,6 +1324,7 @@ describe('App Expense window (#219)', () => {
     expect(app.text()).toContain('Fictional row 5-19 r');
     expect(app.pressable('Load more expenses').props.accessibilityState).toEqual({
       disabled: false,
+      busy: false,
     });
   });
 

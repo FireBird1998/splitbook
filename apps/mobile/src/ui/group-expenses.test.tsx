@@ -547,10 +547,11 @@ describe('Expense rows', () => {
       );
       const newer = labelled(screen!.root, 'Load newer expenses');
       expect(newer).toHaveLength(1);
-      expect(newer[0].props.accessibilityState).toEqual({ disabled: true });
+      expect(newer[0].props.accessibilityState).toEqual({ disabled: true, busy: false });
       slide(2);
       expect(labelled(screen!.root, 'Load newer expenses')[0].props.accessibilityState).toEqual({
         disabled: false,
+        busy: false,
       });
     });
 
@@ -559,7 +560,7 @@ describe('Expense rows', () => {
     it('keeps Load more in place, disabled, while the rows shown are read again', () => {
       const slide = render(1, vi.fn());
       const more = () => labelled(screen!.root, 'Load more expenses');
-      expect(more()[0].props.accessibilityState).toEqual({ disabled: false });
+      expect(more()[0].props.accessibilityState).toEqual({ disabled: false, busy: false });
       const refreshing = window(1);
       refreshing.expenses = { ...refreshing.expenses, status: 'loading' };
       act(() =>
@@ -582,9 +583,9 @@ describe('Expense rows', () => {
         ),
       );
       expect(more()).toHaveLength(1);
-      expect(more()[0].props.accessibilityState).toEqual({ disabled: true });
+      expect(more()[0].props.accessibilityState).toEqual({ disabled: true, busy: false });
       slide(1);
-      expect(more()[0].props.accessibilityState).toEqual({ disabled: false });
+      expect(more()[0].props.accessibilityState).toEqual({ disabled: false, busy: false });
     });
     it('keeps the row on screen when Load newer brings the newest page back: the view moves down by the rows that came', async () => {
       const onShift = vi.fn();

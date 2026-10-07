@@ -162,7 +162,7 @@ describe('Members and Group details', () => {
   it('invites through the share flow', () => {
     const { root, props } = page();
     const invite = one(byRole(root, 'button', 'Invite people'));
-    expect(invite.props.accessibilityState).toEqual({ disabled: false });
+    expect(invite.props.accessibilityState).toEqual({ disabled: false, busy: false });
     act(() => {
       invite.props.onPress();
     });
@@ -172,7 +172,7 @@ describe('Members and Group details', () => {
   it('says Invite needs a connection while offline', () => {
     const { root } = page({ invite: { onPress: vi.fn(), disabled: false, offline: true } });
     const invite = one(byRole(root, 'button', 'Invite people'));
-    expect(invite.props.accessibilityState).toEqual({ disabled: true });
+    expect(invite.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(invite.props.accessibilityHint).toBe('Inviting needs a connection.');
     expect(text(root)).toContain('Inviting needs a connection.');
   });
@@ -181,6 +181,7 @@ describe('Members and Group details', () => {
     const { root } = page({ invite: { onPress: vi.fn(), disabled: true, offline: false } });
     expect(one(byRole(root, 'button', 'Invite people')).props.accessibilityState).toEqual({
       disabled: true,
+      busy: false,
     });
     expect(text(root)).not.toContain('Inviting needs a connection.');
   });
@@ -203,7 +204,7 @@ describe('Leave Group', () => {
     const buttons = byRole(root, 'button');
     const leave = buttons.at(-1)!;
     expect(leave.props.accessibilityLabel).toBe('Leave Group');
-    expect(leave.props.accessibilityState).toEqual({ disabled: false });
+    expect(leave.props.accessibilityState).toEqual({ disabled: false, busy: false });
     expect(sheet(root).props.visible).toBe(false);
     act(() => {
       leave.props.onPress();
@@ -214,7 +215,7 @@ describe('Leave Group', () => {
   it('says leaving needs a connection while offline', () => {
     const { root } = page({ leave: leaveActions({}, true) });
     const leave = one(byRole(root, 'button', 'Leave Group'));
-    expect(leave.props.accessibilityState).toEqual({ disabled: true });
+    expect(leave.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(leave.props.accessibilityHint).toBe(leaveNeedsConnection);
     expect(text(root)).toContain(leaveNeedsConnection);
   });
@@ -228,7 +229,7 @@ describe('Leave Group', () => {
     expect(text(modal)).not.toContain(leaveDiscardsDraft);
     expect(byRole(modal, 'button', 'Go to Balances')).toHaveLength(0);
     const confirm = one(byRole(modal, 'button', 'Leave Group'));
-    expect(confirm.props.accessibilityState).toEqual({ disabled: false });
+    expect(confirm.props.accessibilityState).toEqual({ disabled: false, busy: false });
     act(() => {
       confirm.props.onPress();
     });
@@ -249,9 +250,11 @@ describe('Leave Group', () => {
     const modal = sheet(root);
     expect(one(byRole(modal, 'button', 'Leave Group')).props.accessibilityState).toEqual({
       disabled: true,
+      busy: false,
     });
     expect(one(byRole(modal, 'button', 'Cancel')).props.accessibilityState).toEqual({
       disabled: true,
+      busy: false,
     });
     expect(one(byRole(modal, 'progressbar')).props.accessibilityLabel).toBe('Leaving this Group');
   });
@@ -259,7 +262,7 @@ describe('Leave Group', () => {
   it('can’t be confirmed offline', () => {
     const { root } = page({ leave: leaveActions({ status: 'confirm' }, true) });
     const confirm = one(byRole(sheet(root), 'button', 'Leave Group'));
-    expect(confirm.props.accessibilityState).toEqual({ disabled: true });
+    expect(confirm.props.accessibilityState).toEqual({ disabled: true, busy: false });
     expect(confirm.props.accessibilityHint).toBe(leaveNeedsConnection);
   });
 
@@ -300,6 +303,7 @@ describe('Leave Group', () => {
     });
     expect(one(byRole(sheet(root), 'button', 'Leave Group')).props.accessibilityState).toEqual({
       disabled: false,
+      busy: false,
     });
   });
 
