@@ -50,7 +50,7 @@ import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/
 import { ExpenseEditor } from './src/ui/expense-editor';
 import { scrollToShow } from './src/ui/scroll';
 import { recordOutline } from './src/ui/expense-record-view';
-import { RefreshStatus, RetainedNotice } from './src/ui/financial-views';
+import { DetailsNotice, RefreshStatus, RetainedNotice } from './src/ui/financial-views';
 import { GroupExpensesView } from './src/ui/group-expenses';
 import { TripStrip } from './src/ui/trip-strip';
 import {
@@ -852,16 +852,28 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
       ) : (
         <>
           {/* A failed refresh keeps the whole Group readable, with its time and a retry. */}
-          {state.detail.status === 'error' && (
-            <RetainedNotice
-              status="error"
-              stale={false}
-              refreshedAt={state.detail.refreshedAt}
-              message={state.detail.message}
+          {state.detail.status === 'error' && !state.detail.data ? (
+            <DetailsNotice
               subject={group.name}
-              retryLabel="Retry Group"
+              balances={
+                state.financial.balances.status === 'ready' &&
+                !state.financial.balances.stale &&
+                !state.financial.balances.changed
+              }
               onRetry={() => void controller.refresh()}
             />
+          ) : (
+            state.detail.status === 'error' && (
+              <RetainedNotice
+                status="error"
+                stale={false}
+                refreshedAt={state.detail.refreshedAt}
+                message={state.detail.message}
+                subject={group.name}
+                retryLabel="Retry Group"
+                onRetry={() => void controller.refresh()}
+              />
+            )
           )}
           {state.destination === 'activity' ? (
             <GroupActivity

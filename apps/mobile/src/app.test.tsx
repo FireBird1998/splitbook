@@ -436,8 +436,18 @@ describe('App refresh rendering', () => {
     const app = await renderApp();
     app.use((path) => (path === `/api/groups/${groupId}` ? json({}, 500) : undefined));
     await app.press('Open Maple House');
-    expect(app.text()).toContain('The server could not complete this request. Please try again.');
+    // The note says what failed and what is current; no time it can't know, no offline icon.
+    expect(app.text()).toContain(
+      'Couldn’t load Maple House’s details. Expenses and balances below are up to date.',
+    );
+    expect(app.text()).not.toContain('unknown time');
     expect(app.text()).not.toContain('Couldn’t open this Group');
+    const icons = screen!.root
+      .findAll((node) => (node.type as unknown) === 'Ionicons')
+      .map((node) => node.props.name as string);
+    expect(icons).toContain('alert-circle-outline');
+    expect(icons).not.toContain('cloud-offline-outline');
+    expect(app.pressable('Retry Group')).toBeDefined();
     expect(app.text()).toContain('September groceries');
     await app.press('Balances');
     expect(app.text()).toContain('You owe₹30.00');

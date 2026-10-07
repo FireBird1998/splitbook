@@ -3,7 +3,7 @@ import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse } from '../data/types';
-import { Freshness, RefreshStatus } from './financial-views';
+import { DetailsNotice, Freshness, RefreshStatus } from './financial-views';
 import { flatten } from '../test-utils/layout';
 import { GroupBalancesView } from './group-balances';
 import { GroupExpensesView } from './group-expenses';
@@ -377,5 +377,30 @@ describe('Freshness', () => {
     expect(outgoing!.children).toEqual([`Saved ${refreshedLabel(time)} · refreshing`]);
     expect(flatten(outgoing!.parent!.props.style)).toMatchObject(edge);
     act(() => row.unmount());
+  });
+});
+
+// Owner decision 2A (#219): only the Group's details failed; what shows was read in this open.
+describe('the notice of a Group whose details couldn’t be read', () => {
+  it('says what failed and what is current, with no time and not as a lost connection', async () => {
+    const cases = [
+      [true, 'Couldn’t load Maple House’s details. Expenses and balances below are up to date.'],
+      [false, 'Couldn’t load Maple House’s details. Expenses below are up to date.'],
+    ] as const;
+    for (const [balances, says] of cases) {
+      await act(async () => {
+        screen = create(
+          <DetailsNotice subject="Maple House" balances={balances} onRetry={() => undefined} />,
+        );
+      });
+      const root = screen!.root;
+      expect(text(root)).toBe(`${says}Retry Group`);
+      expect(
+        root.findAll((node) => isHost(node, 'Ionicons')).map((node) => node.props.name),
+      ).toEqual(['alert-circle-outline']);
+      expect(buttons(root)).toEqual(['Retry Group']);
+      act(() => screen?.unmount());
+      screen = null;
+    }
   });
 });
