@@ -1396,3 +1396,35 @@ describe('a save in flight while the record’s open fails (D6)', () => {
     });
   });
 });
+
+describe('rows saved only while their Group is kept here', () => {
+  it('never writes a page row queued behind one being written when the Group is lost', async () => {
+    const f = fixture();
+    const controller = await withPages(f, 2);
+    await settle();
+    const writing = f.holdWrite(historyPath(billId, 1));
+    const refreshing = controller.refreshExpenseHistory();
+    await writing.reached;
+    // Page 2's row waits behind page 1's, which lands after the loss's removal.
+    f.server.group = 403;
+    await controller.refresh();
+    writing.release();
+    await refreshing;
+    await settle();
+    expect(f.savedRows(maplePath)).toEqual([]);
+  });
+
+  it('saves nothing of an Expense in a Group the Groups list leaves out, as it does archived ones', async () => {
+    const f = fixture();
+    f.server.archived.add(mapleId);
+    const controller = await signedIn(f);
+    await controller.openExpense(mapleId, billId);
+    await controller.loadOlderExpenseHistory();
+    await settle();
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'detail',
+      history: { status: 'ready', pagination: { page: 2 } },
+    });
+    expect(f.savedRows(maplePath)).toEqual([]);
+  });
+});
