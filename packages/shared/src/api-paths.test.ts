@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   activityPagePath,
+  expenseHistoryPath,
   expensePagePath,
   expenseRecordPath,
   groupBalancesPath,
@@ -99,7 +100,7 @@ describe("the paths Android's controller builds today", () => {
   });
 
   it('every page of an Expense history, as one query reads them', () => {
-    expect(activityPagePath(groupId, { expenseId, limit: 20 })).toBe(
+    expect(expenseHistoryPath(groupId, expenseId, 20)).toBe(
       `/api/groups/${groupId}/activity?expenseId=${expenseId}&limit=20`,
     );
   });

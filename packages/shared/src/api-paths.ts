@@ -80,11 +80,7 @@ export const expenseRecordPath = (groupId: string, expenseId: string) =>
   `${group(groupId)}/expenses/${segment(expenseId)}`;
 
 export interface ActivityPageQuery {
-  /**
-   * Left out, the path names every page of the read: the key of one query that reads them page
-   * by page, such as an Expense's history on Android (#220).
-   */
-  page?: number;
+  page: number;
   limit: number;
   /** Only this Expense's events: its history. */
   expenseId?: string;
@@ -94,6 +90,16 @@ export const activityPagePath = (groupId: string, { expenseId, page, limit }: Ac
   `${group(groupId)}/activity${query([
     ['expenseId', expenseId],
     ['page', page],
+    ['limit', limit],
+  ])}`;
+
+/**
+ * Every page of one Expense's history, with no page: the key of the one query that reads them
+ * page by page on Android (#220). Each page's own path is `activityPagePath` with `expenseId`.
+ */
+export const expenseHistoryPath = (groupId: string, expenseId: string, limit: number) =>
+  `${group(groupId)}/activity${query([
+    ['expenseId', expenseId],
     ['limit', limit],
   ])}`;
 

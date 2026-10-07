@@ -12,8 +12,9 @@ import {
   type QueryObserverOptions,
   type QueryState,
 } from '@tanstack/query-core';
+import { activityPagePath } from '@splitbook/shared/api-paths';
 import {
-  activityPageKey,
+  expenseHistoryKey,
   expenseRecordKey,
   queryKeyPath,
   type QueryAccount,
@@ -214,10 +215,10 @@ export function createExpenseQueries(session: ExpenseSession) {
     expenseRecordKey(session.account(), groupId, expenseId);
   /** Every page of one Expense's changes: its Group's Activity, filtered to it. */
   const historyKey = (groupId: string, expenseId: string) =>
-    activityPageKey(session.account(), groupId, { expenseId, limit: PAGE_SIZE });
+    expenseHistoryKey(session.account(), groupId, expenseId, PAGE_SIZE);
   /** A page of them, with the page before the size, as Android has always sent it. */
   const pagePath = (key: QueryKey, page: number) =>
-    queryKeyPath(key).replace('&limit=', `&page=${page}&limit=`);
+    activityPagePath(key[3] as string, { expenseId: expenseOf(key), page, limit: PAGE_SIZE });
   const isHistory = (key: QueryKey) => queryKeyPath(key).includes('/activity?expenseId=');
   const expenseOf = (key: QueryKey) =>
     isHistory(key)

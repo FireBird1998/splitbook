@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   activityPagePath,
+  expenseHistoryPath,
   expensePagePath,
   expenseRecordPath,
   groupBalancesPath,
@@ -18,6 +19,7 @@ import {
 } from './api-paths';
 import {
   activityPageKey,
+  expenseHistoryKey,
   expensePageKey,
   expenseRecordKey,
   groupBalancesKey,
@@ -117,6 +119,11 @@ describe('key factories', () => {
         maple,
         activityPagePath(maple, { expenseId, page: 1, limit: 20 }),
       ],
+    ],
+    [
+      "every page of an Expense's history, as one query",
+      expenseHistoryKey(alex, maple, expenseId),
+      ['ledger', environment, alex.accountId, maple, expenseHistoryPath(maple, expenseId, 20)],
     ],
     [
       "a Group's insights",
