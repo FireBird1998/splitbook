@@ -337,9 +337,11 @@ describe('an Expense’s changes past 5 pages (#220, M7-2)', () => {
     render(detail(windowOf(2, { status: 'loading' })));
     expect(pressables('Load newer changes')[0].props.accessibilityState).toEqual({
       disabled: true,
+      busy: false,
     });
     expect(pressables('Load older changes')[0].props.accessibilityState).toEqual({
       disabled: true,
+      busy: false,
     });
     // The changes shown stay, with when they were read: in this session, so never "Saved".
     expect(text(screen!.root)).toContain('Note 21');
@@ -432,9 +434,11 @@ describe('an Expense’s changes past 5 pages (#220, M7-2)', () => {
     render(detail(windowOf(2), { refreshing: true }));
     expect(pressables('Load newer changes')[0].props.accessibilityState).toEqual({
       disabled: true,
+      busy: false,
     });
     expect(pressables('Load older changes')[0].props.accessibilityState).toEqual({
       disabled: true,
+      busy: false,
     });
     expect(text(topBar())).toContain('Refreshing…');
   });
