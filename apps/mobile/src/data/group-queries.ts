@@ -1496,6 +1496,11 @@ export function createGroupQueries(session: GroupSession) {
       client.setQueryData(key, verified, { updatedAt: read.refreshedAt });
       saveRow(key, { owner: read.owner, version: read.version }, verified);
     },
+    /**
+     * This open of the Group's view has passed its check of the Group, and hasn't lost it since:
+     * what another destination reads beside the Group shows from now on (#222).
+     */
+    checked: (groupId: string) => !!view && view.groupId === groupId && view.checked && !view.lost,
     /** The first page of the Month's window shown for this Group: past 1 once it has slid. */
     firstPage(groupId: string) {
       const key = view?.groupId === groupId ? shownList() : null;

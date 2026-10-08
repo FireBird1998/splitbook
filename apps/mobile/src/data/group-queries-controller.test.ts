@@ -758,12 +758,29 @@ describe('Balances follow every read of the Group or its Expense list (M1-5, AME
     later(5_000);
     let sent = f.calls.length;
     await controller.openRecordPayment(alex.id, sam.id, 'INR');
-    // The sheet's reads are its own: the Balances under it don't read while it shows.
+    // The sheet's reads are its own: the Balances under it don't read while it shows. It checks
+    // the Group the view verified within 30 s, and reads only the Balances (#333).
+    expect(f.gets(sent)).toEqual(['balances']);
+    sent = f.calls.length;
+    await controller.back();
+    await settle();
+    // The same Balances: nothing read the Group since the view's, so the view's stand, with the
+    // time it verified them, and are not read again.
+    expect(f.gets(sent)).toEqual([]);
+    expect(controller.getSnapshot().financial.balances).toMatchObject({
+      status: 'ready',
+      stale: false,
+      refreshedAt: Date.now() - 5_000,
+    });
+    // Past the window, the sheet reads the Group, then the Balances: those it read stand
+    // verified then, as the view's, and are not read again.
+    later(31_000);
+    sent = f.calls.length;
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
     expect(f.gets(sent)).toEqual(['group', 'balances']);
     sent = f.calls.length;
     await controller.back();
     await settle();
-    // The same Balances, read after the sheet's check: verified then, and not read again.
     expect(f.gets(sent)).toEqual([]);
     expect(controller.getSnapshot().financial.balances).toMatchObject({
       status: 'ready',

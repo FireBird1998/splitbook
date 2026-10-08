@@ -117,8 +117,32 @@ export function Divider({ inset = 14 }: { inset?: number }) {
   );
 }
 
-/** An overline title with an optional trailing action or note. */
-export function SectionHeader({ title, trailing }: { title: string; trailing?: ReactNode }) {
+/**
+ * An overline title with an optional trailing action or note. With `below`, the note goes under
+ * the title, at every width and text size: never cut at the screen's edge beside a long title,
+ * and in a line as tall as a badge, so nothing below moves as the note changes (#222).
+ */
+export function SectionHeader({
+  title,
+  trailing,
+  below = false,
+}: {
+  title: string;
+  trailing?: ReactNode;
+  below?: boolean;
+}) {
+  const heading = (
+    <CompactText variant="overline" accessibilityRole="header">
+      {title}
+    </CompactText>
+  );
+  if (below)
+    return (
+      <View style={{ minHeight: 32, justifyContent: 'center', gap: 2, paddingHorizontal: 2 }}>
+        {heading}
+        <NoteLine>{trailing}</NoteLine>
+      </View>
+    );
   return (
     <View
       style={{
@@ -130,10 +154,18 @@ export function SectionHeader({ title, trailing }: { title: string; trailing?: R
         paddingHorizontal: 2,
       }}
     >
-      <CompactText variant="overline" accessibilityRole="header">
-        {title}
-      </CompactText>
+      {heading}
       {trailing}
+    </View>
+  );
+}
+
+/** A note's line under a section's title: as tall as a badge, its caption line and padding. */
+function NoteLine({ children }: { children: ReactNode }) {
+  const { height } = useLineBox('caption');
+  return (
+    <View style={{ minHeight: height + 6, alignItems: 'flex-start', justifyContent: 'center' }}>
+      {children}
     </View>
   );
 }

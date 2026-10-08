@@ -20,6 +20,7 @@ import type { AccountGroupRecordStore } from './account-record-storage';
 import { parseStoredExpenseDraft } from './expense-draft';
 import { parseGroups } from './dto';
 import { parseHomeBalances } from './financial-dto';
+import { parseHomeBalancesResponse } from '@splitbook/shared/home-balances-read';
 import { cachedRead } from './offline-cache';
 import { RequestError, Superseded } from './transport';
 import type {
@@ -129,6 +130,11 @@ const memo = <T>(parse: (value: unknown) => T) => {
 };
 const listOf = memo(parseGroups);
 const figuresOf = memo(parseHomeBalances);
+/** The Groups Home's figures were worked out over, or null when they don't say. */
+const namedOf = memo(
+  (value: unknown) =>
+    parseHomeBalancesResponse(value).groups?.map(({ groupId }) => groupId) ?? null,
+);
 
 /** `shown` again when nothing in `next` differs from it, so an unchanged read publishes nothing. */
 const same = <T extends object>(shown: T, next: T): T =>
@@ -292,10 +298,13 @@ export interface HomeSession {
   now(): number;
 }
 
-/** Each of Home's reads: whether its request answered, and when it ends. */
-type HomeRead = { answered: boolean; ended?: boolean; reading: Promise<Envelope> };
+/**
+ * Each of Home's reads: whether its request answered, and when it ends. `since` counts the
+ * Groups lists that had answered when its request was sent.
+ */
+type HomeRead = { answered: boolean; ended?: boolean; reading: Promise<Envelope>; since?: number };
 /** Checks an answer, and returns what it sets off, which runs only if it is still current. */
-type Accept = (value: unknown, owner: number) => (() => Promise<void>) | void;
+type Accept = (value: unknown, owner: number, read: HomeRead) => (() => unknown) | void;
 
 /** Which `listen` wired NetInfo to TanStack's online manager: only it unwires it. */
 const wired = new WeakMap<object, object>();
@@ -317,8 +326,11 @@ export function createHomeQueries(session: HomeSession) {
     stop: (() => void)[] = [],
     pending = false,
     rebinding = false,
-    /** Home's figures wait for a Groups list read first, as on a sign-in or a restore. */
-    figuresWait = false;
+    /** Home's figures wait for a Groups list read first, as on joining or Check Groups. */
+    figuresWait = false,
+    /** How many Groups lists the server has answered this session, and the latest one's Groups. */
+    answers = 0,
+    latest: Set<string> | null = null;
 
   const keys = () => [groupsKey(session.account()), homeBalancesKey(session.account())] as const;
   const memberOfAll = (groups: MobileGroup[]) =>
@@ -326,16 +338,27 @@ export function createHomeQueries(session: HomeSession) {
       group.members.some((member) => member.user.id === session.snapshot().auth.user?.id),
     );
   const held = (key: QueryKey) => client.getQueryCache().get<Envelope, Error>(hashKey(key))?.state;
-  /** A saved copy shows only if its decoder reads it, and a Groups list lists the member. */
+  /**
+   * A saved copy shows only if its decoder reads it, a Groups list lists the member, and, once a
+   * list from SplitBook has landed, Home's figures name only Groups it lists (#323): one being
+   * restored, or read for an offline answer, while that list removed it, never shows, nor one
+   * that doesn't say which Groups it covers.
+   */
   const readable = (key: QueryKey, value: unknown) => {
     try {
-      return key[0] === 'groups' ? memberOfAll(listOf(value)) : Boolean(figuresOf(value));
+      if (key[0] === 'groups') return memberOfAll(listOf(value));
+      void figuresOf(value);
+      if (latest === null) return true;
+      const named = namedOf(value);
+      return named !== null && named.every((id) => latest!.has(id));
     } catch {
       return false;
     }
   };
   /** How often `forget` removed each row: one being written meanwhile goes once it lands. */
   const forgotten = new Map<string, number>();
+  /** This device's saved figures hidden from Home: they name a Group a newer list leaves out. */
+  const hidden = new WeakSet<object>();
   /** The persister's row for `path`, read on the account queue, checked like every saved copy. */
   const savedRow = async (lease: AccountStorageLease, path: string) =>
     cachedRead(
@@ -355,6 +378,21 @@ export function createHomeQueries(session: HomeSession) {
       return read ? listOf(read.value).map(({ id }) => id) : row == null ? [] : null;
     } catch {
       return null;
+    }
+  };
+  /**
+   * Whether this device's saved Home figures may cover a Group `listed` leaves out, inside a lease
+   * write: they name one, don't say which Groups they cover, or can't be read (#323).
+   */
+  const savedFiguresCover = async (accountId: string, listed: Set<string>) => {
+    try {
+      const row = await rows?.load(accountId, homePath);
+      if (row == null) return false;
+      const read = cachedRead(row, accountId, homePath, session.now()),
+        named = read && namedOf(read.value);
+      return !named || named.some((id) => !listed.has(id));
+    } catch {
+      return true;
     }
   };
   /**
@@ -434,6 +472,7 @@ export function createHomeQueries(session: HomeSession) {
     const obsolete = () => !session.current(owner) || version !== session.versionOf(key);
     if (!shown()) void restoreRow(key, owner, read).catch(() => undefined);
     let value: unknown;
+    read.since = answers;
     try {
       value = await session.read(path, owner);
       read.answered = true;
@@ -454,7 +493,7 @@ export function createHomeQueries(session: HomeSession) {
     }
     // An answer a change, a denial or a newer Groups list overtook sets off nothing.
     if (obsolete()) throw new Superseded();
-    await accept(value, owner)?.();
+    await accept(value, owner, read)?.();
     const verified: Envelope = { source: 'network', refreshedAt: Date.now(), value };
     if (obsolete()) throw new Superseded();
     session.answered(path);
@@ -489,10 +528,57 @@ export function createHomeQueries(session: HomeSession) {
       throw new RequestError('The server returned invalid group membership. Please refresh.');
     return () => trim(groups, owner);
   };
+  /**
+   * Home's figures name the Groups they were worked out over. Figures that name one the latest
+   * Groups list leaves out were worked out before it, when the member still had that Group;
+   * figures that don't say which Groups they cover may cover such a Group too.
+   */
+  const coverUnlisted = (value: unknown) => {
+    if (latest === null) return false;
+    void figuresOf(value);
+    const named = namedOf(value);
+    return named === null || named.some((id) => !latest!.has(id));
+  };
+  /**
+   * Figures that may cover a Group the latest list leaves out are out of date, on screen and on
+   * this device: they leave Home, their saved row goes (or is never trusted again), and they are
+   * read again, so neither the read again nor an offline start brings that Group's balance back
+   * (#323).
+   */
+  const outdated = async (owner: number) => {
+    // Their query goes, its read again starting unpublished; then Home shows none of them.
+    quiet += 1;
+    try {
+      session.invalidate('home');
+    } finally {
+      quiet -= 1;
+    }
+    session.publish({ home: emptyHome() });
+    const lease = session.lease();
+    if (!lease || !rows) return;
+    try {
+      await lease.write(() => forget(lease.accountId, [homePath]));
+    } catch (error) {
+      if (session.current(owner) && !(error instanceof Superseded))
+        session.distrust(lease.accountId, ['home']);
+    }
+  };
+  /**
+   * Home's figures, read beside the Groups list rather than after it (#333). Figures sent before
+   * a list answered, that may cover a Group it leaves out, are out of date (`outdated`) and read
+   * again, after it: so a lost Group never counts in Home's figures beside the list that left it
+   * out (#323). Figures read after the list stand, so they are read again at most once.
+   */
+  const acceptFigures: Accept = (value, owner, read) => {
+    if ((read.since ?? answers) < answers && coverUnlisted(value)) return () => outdated(owner);
+    void figuresOf(value);
+  };
   const trim = async (groups: MobileGroup[], owner: number) => {
     const { snapshot } = session,
       listed = new Set(groups.map((group) => group.id)),
       lost = new Set<string>();
+    answers += 1;
+    latest = listed;
     const reading = client.getQueryCache().findAll({
       predicate: ({ state }) => state.data !== undefined || state.fetchStatus === 'fetching',
     });
@@ -502,24 +588,59 @@ export function createHomeQueries(session: HomeSession) {
     ])
       if (!listed.has(id)) lost.add(id);
     session.listed(listed, lost);
-    // With no list known yet, this device may hold Groups the trim drops, and Home's saved
-    // figures with them: figures still being read are read again after it.
-    if (!snapshot().groups.loaded && held(keys()[1])?.fetchStatus === 'fetching')
-      session.invalidate('home');
+    // Figures that answered before this list are checked against it here; figures still being
+    // read are checked as they answer (`acceptFigures`).
+    const figures = held(keys()[1]);
+    if (
+      figures?.fetchStatus !== 'fetching' &&
+      figures?.data?.source === 'network' &&
+      coverUnlisted(figures.data.value)
+    )
+      await outdated(owner);
+    // This device's saved figures, shown while Home's are read, that may cover a Group this list
+    // leaves out no longer show: hidden from Home, their row removed below. A copy nothing is
+    // reading for any more (an offline answer) is read again, so Home doesn't stay without figures.
+    const names = (ids: string[] | null) => ids?.some((id) => !listed.has(id)) ?? false;
+    let hide = false;
+    if (figures?.data?.source === 'saved') {
+      const named = namedOf(figures.data.value);
+      hide = named === null || names(named);
+      if (hide) hidden.add(figures.data);
+      if (hide && figures.fetchStatus !== 'fetching') {
+        quiet += 1;
+        try {
+          session.invalidate('home');
+        } finally {
+          quiet -= 1;
+        }
+      }
+    }
+    const { home } = snapshot();
+    if (hide || (home.restored && home.data !== null && names(Object.keys(home.byGroup))))
+      session.publish({ home: emptyHome() });
     const lease = session.lease();
     if (!lease) return;
     let unchecked = false;
     try {
       await lease.write(async () => {
         // The saved list may list a Group lost while it wasn't on screen: lost too (#323). One
-        // this device can't read goes as well, since it may.
-        const saved = await savedIds(lease.accountId);
+        // this device can't read goes as well, since it may. The saved figures are read beside
+        // it, so checking them adds no wait before the list shows (#333).
+        const [saved, figuresCover] = await Promise.all([
+          savedIds(lease.accountId),
+          savedFiguresCover(lease.accountId, listed),
+        ]);
         // They join the Set the session holds as this list's unlisted Groups, which only keeps
         // them unsaved, as Groups off screen already are.
         for (const id of saved ?? []) if (!listed.has(id)) lost.add(id);
         unchecked = !saved;
         await session.retain(lease.accountId, [...listed]);
-        if (!lost.size && saved) return;
+        if (!lost.size && saved) {
+          // Saved figures that name a Group this list leaves out go too, whatever the saved list
+          // says, so no fallback or offline start counts that Group again (#323).
+          if (figuresCover) await forget(lease.accountId, [homePath]);
+          return;
+        }
         // An older list still waiting to be saved would list them again: this list moves no
         // version, so nothing else refuses it.
         queue.drop(listPath);
@@ -543,10 +664,7 @@ export function createHomeQueries(session: HomeSession) {
     },
     {
       queryKey: keys()[1],
-      queryFn: queryFn(
-        (value) => void figuresOf(value),
-        () => session.snapshot().home.data !== null,
-      ),
+      queryFn: queryFn(acceptFigures, () => session.snapshot().home.data !== null),
       enabled: !figuresWait,
     },
   ];
@@ -646,7 +764,8 @@ export function createHomeQueries(session: HomeSession) {
     if (!user) return next;
     const at = { environment: session.environment, accountId: user.id };
     const list = held(groupsKey(at)),
-      figures = held(homeBalancesKey(at));
+      read = held(homeBalancesKey(at)),
+      figures = read?.data && hidden.has(read.data) ? { ...read, data: undefined } : read;
     const groups = list ? projectGroups(list, next.groups) : next.groups;
     const home = figures ? projectHome(figures, next.home) : next.home;
     return groups === next.groups && home === next.home ? next : { ...next, groups, home };
@@ -681,23 +800,24 @@ export function createHomeQueries(session: HomeSession) {
     rebind,
     readNow,
     /**
-     * Home once its reads have settled, and this device's drafts are listed. The Groups list
-     * comes first when `list` waits for it, as for a session's first list; `fresh` reads both
-     * now, as a pull or Retry does.
+     * Home once its reads have settled, and this device's drafts are listed. The Groups list and
+     * Home's figures are read together (#333), unless the figures wait for the list (`listFirst`);
+     * `fresh` reads both now, as a pull or Retry does.
      */
-    async settle(
-      owner: number,
-      { fresh = false, list = fresh || figuresWait }: { fresh?: boolean; list?: boolean } = {},
-    ) {
+    async settle(owner: number, { fresh = false }: { fresh?: boolean } = {}) {
       if (session.snapshot().auth.status !== 'authenticated') return;
       bind();
-      if (list) await (fresh ? readNow(0, owner) : settle(0, owner));
+      const listing = fresh ? readNow(0, owner) : settle(0, owner);
+      if (figuresWait) {
+        await listing;
+        if (!session.current(owner)) return;
+        release();
+      }
+      const figures = fresh ? readNow(1, owner) : settle(1, owner);
+      await listing;
       if (!session.current(owner)) return;
-      release();
-      await Promise.all([listDrafts(), fresh ? readNow(1, owner) : settle(1, owner)]);
+      await Promise.all([listDrafts(), figures]);
     },
-    /** Home's figures wait for the next Groups list read. */
-    hold: () => void (figuresWait = true),
     /**
      * The Groups list after a change this device confirmed, which removed its query (a Group
      * created, #283): read now and saved like any list, so an offline restart lists what the
@@ -720,12 +840,19 @@ export function createHomeQueries(session: HomeSession) {
     back(show: () => void) {
       release();
       show();
-      return this.settle(session.generation(), { list: true });
+      return this.settle(session.generation());
     },
-    /** Retry on Home's figures: read again now, with this device's drafts. */
+    /**
+     * Retry on Home's figures: read again now, with this device's drafts. A list on screen that
+     * SplitBook hasn't answered this session, this device's copy or one whose last read failed,
+     * is read beside them, as on a pull (#333): it would otherwise stay saved, and offline.
+     */
     async refresh() {
-      if (session.snapshot().auth.status !== 'authenticated') return;
-      await Promise.all([listDrafts(), readNow(1, session.generation())]);
+      const { auth, groups } = session.snapshot(),
+        owner = session.generation();
+      if (auth.status !== 'authenticated') return;
+      const list = groups.restored || groups.status !== 'ready' ? readNow(0, owner) : null;
+      await Promise.all([list ? list.then(listDrafts) : listDrafts(), readNow(1, owner)]);
     },
     /** Home's figures are being read. */
     figuresReading: () => held(keys()[1])?.fetchStatus === 'fetching',
@@ -817,6 +944,8 @@ export function createHomeQueries(session: HomeSession) {
       queue.cancel();
       reads.clear();
       figuresWait = false;
+      answers = 0;
+      latest = null;
     },
   };
 }

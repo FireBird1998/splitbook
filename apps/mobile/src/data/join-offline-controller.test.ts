@@ -66,7 +66,9 @@ function phone() {
       return json({ user: alex, session: { userId: alex.id, expiresAt: '2030-01-01T00:00:00Z' } });
     const groups = joined ? [cedarFlat, mapleHouse] : [cedarFlat];
     if (path === '/api/groups') return json({ status: 200, data: groups });
-    if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
+    // Home's figures say which Groups they cover, as SplitBook's do (#333): none here.
+    if (path === '/api/user/balances')
+      return json({ status: 200, data: { buckets: [], groups: [] } });
     if (path === `/api/join/${code}` && method === 'POST') {
       joined = true;
       return json({ status: 201, data: { groupId: maple } }, 201);

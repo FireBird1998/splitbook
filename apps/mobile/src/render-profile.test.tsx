@@ -229,7 +229,7 @@ const expensePage = (page: number, total = pages) => ({
     },
   },
 });
-const activityPage = (page: number) => ({
+const activityPage = (page: number, total = pages) => ({
   status: 200,
   data: {
     activities: Array.from({ length: 20 }, (_, row) => ({
@@ -244,7 +244,7 @@ const activityPage = (page: number) => ({
         currency: 'INR',
       },
     })),
-    pagination: { page, limit: 20, total: 20 * pages, totalPages: pages },
+    pagination: { page, limit: 20, total: 20 * total, totalPages: total },
   },
 });
 /** An Expense of the list as its own record reads it (#220). */
@@ -289,11 +289,26 @@ const historyPage = (expenseId: string, page: number) => ({
 });
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
-/** `expensePages`: how many pages of Expenses Maple House has; 5 unless a journey needs more. */
-function backend({ expensePages = pages } = {}) {
+/**
+ * `expensePages` and `activityPages`: how many pages of Expenses and Activity Maple House has; 5
+ * unless a journey needs more.
+ * `payment`: Alex is in Maple House too, so Sam can record the payment Balances suggest (#333).
+ */
+function backend({ expensePages = pages, activityPages = pages, payment = false } = {}) {
   let cookie: string | null = null;
   let account: string | null = null;
-  const drafts = new Map<string, unknown>();
+  let paid = false;
+  const drafts = new Map<string, unknown>(),
+    attempts = new Map<string, unknown>();
+  const shown = payment
+    ? {
+        ...group,
+        members: [
+          ...group.members,
+          { user: { ...alex, email: 'a@x.test' }, role: 'member', joinedAt: iso },
+        ],
+      }
+    : group;
   const clock = { now: new Date(2026, 8, 27, 12).getTime() };
   const controller = createMobileController(
     {
@@ -327,6 +342,21 @@ function backend({ expensePages = pages } = {}) {
         stores: [],
       },
       newSubmissionKey: () => 'render-profile-0001',
+      ...(payment
+        ? {
+            settlementAttempts: {
+              load: async (accountId: string, id: string) =>
+                structuredClone(attempts.get(`${accountId}:${id}`) ?? null),
+              save: async (accountId: string, id: string, value: unknown) => {
+                attempts.set(`${accountId}:${id}`, structuredClone(value));
+              },
+              remove: async (accountId: string, id: string) => {
+                attempts.delete(`${accountId}:${id}`);
+              },
+              clear: async () => attempts.clear(),
+            },
+          }
+        : {}),
       credentials: {
         load: async () => cookie,
         save: async (value) => {
@@ -349,10 +379,37 @@ function backend({ expensePages = pages } = {}) {
         if (path.endsWith('/get-session'))
           return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
         if (path === '/api/groups') return json({ data: groups, status: 200 });
-        if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
+        if (path === `/api/groups/${groupId}`) return json({ data: shown, status: 200 });
+        if (path === `/api/groups/${groupId}/settlements` && init.method === 'POST') {
+          paid = true;
+          const body = JSON.parse(String(init.body)) as { amount: number; note?: string };
+          return json(
+            {
+              status: 201,
+              data: {
+                _id: hex('e', 1),
+                group: groupId,
+                paidBy: person,
+                paidTo: alex,
+                createdBy: person,
+                amount: body.amount,
+                amountMinor: Math.round(body.amount * 100),
+                moneyVersion: 1,
+                currency: 'INR',
+                note: body.note ?? '',
+                createdAt: iso,
+                updatedAt: iso,
+              },
+            },
+            201,
+          );
+        }
+        // Home's figures say which Groups they cover, as SplitBook's do (#333): none here, so no
+        // Group the list leaves out, and each row's balance stays unknown, as this profile has
+        // always measured it.
         if (path === '/api/user/balances')
           return json({
-            data: { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }] },
+            data: { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }], groups: [] },
             status: 200,
           });
         if (path.startsWith(`/api/groups/${groupId}/expenses?`))
@@ -360,7 +417,9 @@ function backend({ expensePages = pages } = {}) {
         const expenseId = new URL(path, 'http://local').searchParams.get('expenseId');
         if (path.startsWith(`/api/groups/${groupId}/activity?`))
           return json(
-            expenseId ? historyPage(expenseId, pageOf(path)) : activityPage(pageOf(path)),
+            expenseId
+              ? historyPage(expenseId, pageOf(path))
+              : activityPage(pageOf(path), activityPages),
           );
         if (path.startsWith(`/api/groups/${groupId}/expenses/`))
           return json(expenseRecord(path.split('/').pop()!));
@@ -370,8 +429,8 @@ function backend({ expensePages = pages } = {}) {
               byCurrency: [
                 {
                   currency: 'INR',
-                  balances: [{ user: person, balance: -30 }],
-                  debts: [{ from: person, to: alex, amount: 30 }],
+                  balances: [{ user: person, balance: paid ? 0 : -30 }],
+                  debts: paid ? [] : [{ from: person, to: alex, amount: 30 }],
                 },
               ],
             },
@@ -469,7 +528,11 @@ const settle = async (pending?: Promise<unknown>) => {
   }
 };
 
-async function renderApp(options?: { expensePages?: number }) {
+async function renderApp(options?: {
+  expensePages?: number;
+  activityPages?: number;
+  payment?: boolean;
+}) {
   const harness = backend(options);
   await harness.controller.signIn('sam');
   runtime.controller = harness.controller;
@@ -681,10 +744,11 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
       () => app.press('Load older activity'),
       activityRows(100),
     );
+    // Within the freshness window nothing is read again, and the 5 loaded pages stay (#222, M1-6).
     await journey(
       'Foreground within 30 s after 5 Activity pages',
       () => app.foreground(),
-      activityRows(20),
+      activityRows(100),
     );
   });
 
@@ -702,9 +766,8 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
     await journey('Reopen the Group within 30 s', () => app.press('Open Maple House'), expenseRows);
   });
 
-  // The journeys a refresh of loaded pages (ADR 0006, #215) changes. A refresh of Expenses
-  // re-reads the 5 loaded pages and keeps their 100 rows (M1-3, #219). Activity still starts
-  // again from the first page (#104), so its list shrinks to 20 rows until #222.
+  // The journeys a refresh of loaded pages (ADR 0006, #215) changes. A refresh re-reads the 5
+  // loaded pages and keeps their 100 rows, of Expenses (M1-3, #219) and of Activity (#222).
   it('refreshing 5 loaded pages', async () => {
     const app = await renderApp();
     const expenseRows = (rows: number) => () =>
@@ -733,12 +796,11 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
     );
     await app.press('Activity');
     await load('Load older activity', activityRows(100));
-    await journey('Pull to refresh with 5 Activity pages', () => app.pull(), activityRows(20));
-    await load('Load older activity', activityRows(100));
+    await journey('Pull to refresh with 5 Activity pages', () => app.pull(), activityRows(100));
     await journey(
       'Foreground after 30 s with 5 Activity pages',
       foregroundAfter30s,
-      activityRows(20),
+      activityRows(100),
     );
   });
 
@@ -761,6 +823,31 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
     await journey(
       'Load newer Expenses (pages 1 to 5)',
       () => app.press('Load newer expenses'),
+      window(1),
+    );
+  });
+  // Past 5 pages Activity slides too (M7-2, #222): Load older reads page 6, then Load newer page 1.
+  it('sliding past 5 Activity pages', async () => {
+    const app = await renderApp({ activityPages: 6 });
+    const window = (first: number) => () => {
+      expect(app.count('You added'), 'Activity rows').toBe(100);
+      expect(app.count(`You added Fictional expense ${first}-`), `Page ${first} first`).toBe(20);
+      expect(app.count(`You added Fictional expense ${first + 4}-`), `Page ${first + 4} last`).toBe(
+        20,
+      );
+      expect(app.count('Load newer activity'), 'Load newer').toBe(first > 1 ? 1 : 0);
+    };
+    await app.press('Open Maple House');
+    await app.press('Activity');
+    for (let page = 2; page <= pages; page += 1) await app.press('Load older activity');
+    await journey(
+      'Load the 6th Activity page (pages 2 to 6)',
+      () => app.press('Load older activity'),
+      window(2),
+    );
+    await journey(
+      'Load newer Activity (pages 1 to 5)',
+      () => app.press('Load newer activity'),
       window(1),
     );
   });
@@ -802,6 +889,36 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
       changes(100, 1),
     );
   });
+  // #333: the sheet checks the Group its view verified within 30 s, and reads only its Balances;
+  // Record reads only the Balances before it sends the payment.
+  it('the Record payment sheet', async () => {
+    const app = await renderApp({ payment: true });
+    await app.press('Open Maple House');
+    await app.press('Balances');
+    expect(app.shows('All-time balance'), 'Balances on screen').toBe(true);
+    await journey(
+      'Open the payment sheet within 30 s',
+      () => app.press('Record your payment to Alex'),
+      () => {
+        expect(app.controller.getSnapshot().settlement.status, 'The sheet is ready').toBe(
+          'editing',
+        );
+        expect(app.count('Record payment ₹30.00'), 'Record on the sheet').toBe(1);
+      },
+    );
+    await journey(
+      'Record a payment',
+      () => app.press('Record payment ₹30.00'),
+      () =>
+        expect(app.controller.getSnapshot(), 'Recorded, back on Balances').toMatchObject({
+          screen: 'group',
+          destination: 'balances',
+          snackbar: { message: 'Payment recorded' },
+        }),
+      { allow: [`POST /api/groups/${groupId}/settlements`] },
+    );
+  });
+
   it('typing in the Expense form', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');
