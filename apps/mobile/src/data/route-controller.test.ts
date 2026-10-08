@@ -179,7 +179,17 @@ function world({ google = false } = {}) {
       return json({ status: 201, data: group(createdId, 'Corner Flat', 'home') }, 201);
     if (path === '/api/groups')
       return json({ status: 200, data: groups.filter(({ _id }) => !server.refused.has(_id)) });
-    if (path === '/api/user/balances') return json({ status: 200, data: { buckets: [] } });
+    // Like SplitBook's, Home's figures name the Groups they were worked out over (#333).
+    if (path === '/api/user/balances')
+      return json({
+        status: 200,
+        data: {
+          buckets: [],
+          groups: groups
+            .filter(({ _id }) => !server.refused.has(_id))
+            .map(({ _id }) => ({ groupId: _id, balances: [] })),
+        },
+      });
     if (path === `/api/join/${code}`)
       return method === 'POST'
         ? json({ status: 200, data: { groupId: tripId } })

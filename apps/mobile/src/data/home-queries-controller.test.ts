@@ -84,6 +84,10 @@ function fixture() {
     failGroup: 0,
     /** A status Create Group answers with, instead of the new Group. */
     refuseCreate: 0,
+    /** Home's figures name the Groups they were worked out over, as SplitBook's server does. */
+    groupFigures: true,
+    /** A status the Groups list answers with, instead of the list. */
+    failList: 0,
   };
   let cookie: string | null = null,
     owner: string | null = null,
@@ -98,6 +102,8 @@ function fixture() {
    * read a row.
    */
   const device = { failRemoval: false, failSave: false, failRetain: false, failLoad: false };
+  /** Paths whose next load of a row fails, once. */
+  const failOnce = new Set<string>();
   /** Loads, writes and removals of rows held part-way, as on a slow disk, by path. */
   const writes: { path: string; arrive: () => void; released: Promise<void> }[] = [],
     removals: typeof writes = [],
@@ -113,7 +119,13 @@ function fixture() {
   /** Every request sent, answered or not. */
   const calls: { method: string; path: string; account: string }[] = [];
   /** Requests held until released, by path. */
-  const held: { path: string; arrive: () => void; answer: Promise<void>; lost: boolean }[] = [];
+  const held: {
+    path: string;
+    arrive: () => void;
+    answer: Promise<void>;
+    lost: boolean;
+    late: boolean;
+  }[] = [];
   const connection = new Set<(state: { isConnected: boolean | null }) => void>();
   const records = (map: Map<string, unknown>) => ({
     load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
@@ -140,7 +152,8 @@ function fixture() {
   const savedQueries = {
     ...records(rows),
     load: async (account: string, key: string) => {
-      if (device.failLoad) throw new Error('The device storage can’t be read');
+      if (device.failLoad || failOnce.delete(key))
+        throw new Error('The device storage can’t be read');
       await pause(loads, key);
       return structuredClone(rows.get(account + key) ?? null);
     },
@@ -206,12 +219,16 @@ function fixture() {
       const admin = zed.members.map((member) => ({ ...member, role: 'admin' }));
       return json({ status: 201, data: { ...zed, members: admin } }, 201);
     }
-    if (path === listPath) return json({ status: 200, data: listed() });
+    if (path === listPath)
+      return server.failList ? json({}, server.failList) : json({ status: 200, data: listed() });
     if (path === homePath)
       return json({
         status: 200,
         data: {
           buckets: [{ currency: 'INR', youOwe: user === sam ? 50 : server.owe, youAreOwed: 0 }],
+          ...(server.groupFigures
+            ? { groups: listed().map(({ _id }) => ({ groupId: _id, balances: [] })) }
+            : {}),
         },
       });
     const id = /^\/api\/groups\/([a-f\d]{24})/.exec(path)?.[1];
@@ -349,13 +366,14 @@ function fixture() {
           if (server.offline) throw new TypeError('Network request failed');
           const index = held.findIndex((request) => path === request.path);
           if (index >= 0) {
-            // The server answers as it is when the request arrives; the reply comes on release.
+            // The server answers as it is when the request arrives, unless it answers `late`, as it
+            // is on release; the reply comes on release.
             const [request] = held.splice(index, 1),
-              reply = respond(path, init);
+              reply = request.late ? null : respond(path, init);
             request.arrive();
             return request.answer.then(() => {
               if (request.lost) throw new TypeError('Network request failed');
-              return reply;
+              return reply ?? respond(path, init);
             });
           }
           return respond(path, init);
@@ -391,9 +409,10 @@ function fixture() {
       calls.slice(from).filter((call) => call.method === 'GET' && call.path === path).length,
     /**
      * The next request for exactly this path is answered by the server at once, and its reply
-     * arrives when released: late, or `lost` on the way, as when the connection drops.
+     * arrives when released: late, or `lost` on the way, as when the connection drops. A `late`
+     * one is answered by the server as it is on release.
      */
-    hold(path: string, { lost = false } = {}) {
+    hold(path: string, { lost = false, late = false } = {}) {
       let arrive!: () => void;
       let release!: () => void;
       const reached = new Promise<void>((resolve) => {
@@ -402,7 +421,7 @@ function fixture() {
       const answer = new Promise<void>((resolve) => {
         release = resolve;
       });
-      held.push({ path, arrive, answer, lost });
+      held.push({ path, arrive, answer, lost, late });
       return { reached, release };
     },
     /** The next write of this path's row waits until released. */
@@ -411,6 +430,8 @@ function fixture() {
     holdRemoval: (path: string) => holdRow(removals, path),
     /** The next load of this path's row waits until released. */
     holdLoad: (path: string) => holdRow(loads, path),
+    /** The next load of this path's row fails, as a read of the device's storage can. */
+    failLoadOnce: (path: string) => void failOnce.add(path),
     /** NetInfo reports the device's connection. */
     connect(isConnected: boolean) {
       server.offline = !isConnected;
@@ -466,7 +487,16 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
       path: homePath,
       groupId: null,
       refreshedAt: start,
-      value: { status: 200, data: { buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }] } },
+      value: {
+        status: 200,
+        data: {
+          buckets: [{ currency: 'INR', youOwe: 30, youAreOwed: 0 }],
+          groups: [
+            { groupId: mapleId, balances: [] },
+            { groupId: cabinId, balances: [] },
+          ],
+        },
+      },
     });
     // The older store keeps neither.
     expect(
@@ -780,11 +810,15 @@ describe('sessions and late answers (#173 gates)', () => {
     await controller.signIn('alex');
     await settle();
     later(31_000);
-    // A pull: the list's row is still being written, and Home's waits behind it.
+    // A pull: the list's row is still being written, and Home's waits behind it. Home's figures
+    // are read beside the list (#333), so their answer is held until then.
     f.server.owe = 31;
     const writing = f.holdWrite(listPath);
-    await controller.refresh('pull');
+    const figures = f.hold(homePath);
+    const pulling = controller.refresh('pull');
     await writing.reached;
+    figures.release();
+    await pulling;
     // The session ends on the server: the next read gets a 401.
     f.server.expired = true;
     await controller.refreshHome();
@@ -1746,21 +1780,785 @@ describe('Balances and Home follow every read of a Group (M1-5, AMEND-1)', () =>
     await controller.signIn('alex');
     await controller.openGroup(mapleId);
     await controller.back();
+    // Home's figures are verified 10 s after the Group, and the view shows the Group 20 s after
+    // it. Record comes past the window for the Group only, so the sheet reads it (#333).
+    later(10_000);
+    await controller.refreshHome();
+    later(10_000);
     await controller.openGroup(mapleId, true, 'balances');
+    later(11_000);
     let sent = f.calls.length;
     await controller.openRecordPayment(alex.id, sam.id, 'INR');
     expect(f.calls.slice(sent).map(({ method, path }) => `${method} ${path}`)).toEqual([
       `GET ${maplePath}`,
       `GET ${maplePath}/balances`,
     ]);
+    // The Group's Balances are not read again: the sheet read them after its check of the
+    // Group, and they stand verified as the view's (#219).
+    sent = f.calls.length;
     await controller.closeSettlement();
-    // Within the window, Home's figures are read again. The Group's Balances are not: the sheet
-    // read them after its check of the Group, and they stand verified as the view's (#219).
+    expect(f.reads(`${maplePath}/balances`, sent)).toBe(0);
+    // Within the window, Home's figures are read again.
     sent = f.calls.length;
     await controller.back();
     expect(f.reads(homePath, sent)).toBe(1);
+  });
+});
+
+describe('Home reads its Groups and its figures together (#333)', () => {
+  /** What Home says when this phone keeps no copy of its figures (#332). */
+  const balancesNotOnPhone = 'Your balances aren’t saved on this phone. Connect to load them.';
+  /** Requests sent since `from`, as `METHOD /path`. */
+  const sentSince = (f: ReturnType<typeof fixture>, from: number) =>
+    f.calls.slice(from).map(({ method, path }) => `${method} ${path}`);
+
+  it.each(['sign-in', 'start-up'] as const)(
+    'sends the list and the figures together at %s, once each, and says “Saved” only of a saved copy',
+    async (when) => {
+      const f = fixture();
+      f.server.groupFigures = true;
+      let controller = f.create();
+      if (when === 'start-up') {
+        await controller.signIn('alex');
+        await settle();
+        controller.dispose();
+        later(60_000);
+        controller = f.create();
+      }
+      const sent = f.calls.length;
+      const list = f.hold(listPath),
+        figures = f.hold(homePath);
+      const opening = when === 'sign-in' ? controller.signIn('alex') : controller.restore();
+      await list.reached;
+      await settle();
+      // Both are on their way before either answers.
+      expect(f.reads(listPath, sent)).toBe(1);
+      expect(f.reads(homePath, sent)).toBe(1);
+      expect(controller.getSnapshot()).toMatchObject(
+        when === 'sign-in'
+          ? { groups: { status: 'loading', data: [] }, home: { data: null } }
+          : {
+              groups: { status: 'loading', restored: true, data: [{}, {}] },
+              home: { status: 'loading', restored: true, refreshedAt: start },
+            },
+      );
+
+      if (when === 'start-up') {
+        // The figures answer first: they are verified now, while the saved list is read again.
+        figures.release();
+        await settle();
+        expect(controller.getSnapshot()).toMatchObject({
+          groups: { status: 'loading', restored: true },
+          home: { status: 'ready', restored: false, refreshedAt: Date.now() },
+        });
+        list.release();
+      } else {
+        // The session's first list answers first, while the figures are still read: they stand.
+        list.release();
+        await settle();
+        expect(controller.getSnapshot()).toMatchObject({
+          groups: { status: 'ready', restored: false },
+          home: { status: 'loading', data: null },
+        });
+        figures.release();
+      }
+      await opening;
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', restored: false, data: [{}, { name: 'Cabin Weekend' }] },
+        home: { status: 'ready', restored: false, data: [{ youOwe: 30 }] },
+      });
+      // Figures that name only listed Groups stand: nothing is read twice.
+      expect(f.reads(listPath, sent)).toBe(1);
+      expect(f.reads(homePath, sent)).toBe(1);
+      expect(f.row(listPath)).toMatchObject({ refreshedAt: Date.now() });
+      expect(f.row(homePath)).toMatchObject({ refreshedAt: Date.now() });
+    },
+  );
+
+  it('reads the list beside the figures on Retry over a saved list after an offline start, and clears offline once both answer', async () => {
+    const f = fixture();
+    const first = f.create();
+    await first.signIn('alex');
+    await settle();
+    first.dispose();
+    // This phone keeps the list, but not Home's figures.
+    f.rows.delete(alex.id + homePath);
+    f.connect(false);
+    const controller = f.create();
+    await controller.restore();
+    await settle();
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { restored: true, data: [{}, {}] },
+      home: { status: 'error', data: null, message: balancesNotOnPhone },
+      offline: { active: true },
+    });
+    // SplitBook can be reached again, with no reconnect event, as when a proxy comes back.
+    f.server.offline = false;
+    const sent = f.calls.length;
+    await controller.refreshHome();
+    await settle();
+    expect(sentSince(f, sent)).toEqual([
+      'GET /api/auth/get-session',
+      `GET ${listPath}`,
+      `GET ${homePath}`,
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { status: 'ready', restored: false, data: [{}, {}] },
+      home: { status: 'ready', restored: false, message: null, data: [{ youOwe: 30 }] },
+      offline: { active: false },
+    });
+  });
+
+  it('reads this phone’s saved figures beside its saved list when a list lands, so the check adds no wait before the list shows', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    later(31_000);
+    const savedList = f.holdLoad(listPath),
+      savedFigures = f.holdLoad(homePath);
+    let both = false;
+    void Promise.all([savedList.reached, savedFigures.reached]).then(() => (both = true));
+    const pulling = controller.refresh('pull');
+    await savedList.reached;
+    await settle();
+    // Both rows are being read before either answers.
+    expect(both).toBe(true);
+    savedList.release();
+    savedFigures.release();
+    await pulling;
+    expect(controller.getSnapshot().groups).toMatchObject({ status: 'ready' });
+  });
+
+  it('reads the list beside the figures on Retry when the list’s last read failed', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    later(31_000);
+    // A pull: the list answers with a server error, the figures with a failure of their own.
+    f.server.failList = 500;
+    f.server.expired = false;
+    const figures = f.hold(homePath, { lost: true });
+    const pulling = controller.refresh('pull');
+    await figures.reached;
+    figures.release();
+    await pulling;
+    await settle();
+    expect(controller.getSnapshot().groups).toMatchObject({ status: 'error', data: [{}, {}] });
+    f.server.failList = 0;
+    const sent = f.calls.length;
+    await controller.refreshHome();
+    await settle();
+    expect(sentSince(f, sent).filter((call) => !call.includes('get-session'))).toEqual([
+      `GET ${listPath}`,
+      `GET ${homePath}`,
+    ]);
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { status: 'ready', message: null, data: [{}, {}] },
+      home: { status: 'ready', message: null, data: [{ youOwe: 30 }] },
+      offline: { active: false },
+    });
+  });
+
+  it('sends the list and the figures together on a pull, and Retry on the figures reads only them', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await settle();
+    later(31_000);
+    let sent = f.calls.length;
+    const list = f.hold(listPath),
+      figures = f.hold(homePath);
+    const pulling = controller.refresh('pull');
+    await list.reached;
+    await settle();
+    expect(sentSince(f, sent)).toEqual([`GET ${listPath}`, `GET ${homePath}`]);
+    list.release();
+    figures.release();
+    await pulling;
+    expect(sentSince(f, sent)).toEqual([`GET ${listPath}`, `GET ${homePath}`]);
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { status: 'ready' },
+      home: { status: 'ready', refreshedAt: start + 31_000 },
+    });
+
     sent = f.calls.length;
+    await controller.refreshHome();
+    expect(sentSince(f, sent)).toEqual([`GET ${homePath}`]);
+  });
+
+  it.each(['before', 'after'] as const)(
+    'reads the figures again, once, when they name a Group the list beside them leaves out, landing %s it',
+    async (order) => {
+      const f = fixture();
+      f.server.groupFigures = true;
+      const controller = f.create();
+      const published = record(controller);
+      // The figures are worked out while Alex is still in Maple House, the list once Alex has
+      // lost it.
+      const list = f.hold(listPath, { late: true }),
+        figures = f.hold(homePath);
+      const signingIn = controller.signIn('alex');
+      await list.reached;
+      await settle();
+      expect(f.reads(homePath)).toBe(1);
+      await figures.reached;
+      f.server.revoked.add(mapleId);
+      f.server.owe = 20;
+      if (order === 'before') {
+        figures.release();
+        await settle();
+        list.release();
+      } else {
+        list.release();
+        await settle();
+        figures.release();
+      }
+      await signingIn;
+      await settle();
+      expect(f.reads(listPath)).toBe(1);
+      expect(f.reads(homePath)).toBe(2);
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+        home: { status: 'ready', data: [{ youOwe: 20 }] },
+      });
+      // Figures that cover the lost Group never stand beside the list that left it out.
+      expect(
+        published.some(
+          (state) =>
+            state.groups.status === 'ready' &&
+            state.home.status === 'ready' &&
+            owes(state)?.[0] !== 20,
+        ),
+      ).toBe(false);
+      expect(f.row(homePath)).toMatchObject({ value: { data: { buckets: [{ youOwe: 20 }] } } });
+    },
+  );
+
+  it('removes figures that cover a lost Group from this phone too, so a lost read again or an offline start never shows them', async () => {
+    const f = fixture();
+    const controller = f.create();
+    const published = record(controller);
+    // The figures are worked out while Alex is still in Maple House, the list once Alex has
+    // lost it.
+    const list = f.hold(listPath, { late: true }),
+      figures = f.hold(homePath);
+    const signingIn = controller.signIn('alex');
+    await list.reached;
+    await figures.reached;
+    f.server.revoked.add(mapleId);
+    // The figures land first, and are saved here.
+    figures.release();
+    await settle();
+    expect(f.row(homePath)).toMatchObject({ value: { data: { buckets: [{ youOwe: 30 }] } } });
+    // The list leaves Maple House out; the figures' read again never answers.
+    const again = f.hold(homePath, { lost: true });
+    const landed = published.length;
+    list.release();
+    await again.reached;
+    again.release();
+    await signingIn;
+    await settle();
+    expect(f.reads(homePath)).toBe(2);
+    expect(f.row(homePath)).toBeNull();
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+      home: { status: 'error', data: null, restored: false },
+    });
+    expect(published.slice(landed).some((state) => owes(state) !== null)).toBe(false);
+
+    // Started again offline, Home shows the list it saved, and no figures from before.
+    controller.dispose();
+    f.connect(false);
+    const restarted = f.create();
+    const after = record(restarted);
+    await restarted.restore();
+    await settle();
+    expect(restarted.getSnapshot()).toMatchObject({
+      auth: { status: 'authenticated', user: { id: alex.id } },
+      groups: { data: [{ name: 'Cabin Weekend' }] },
+      home: { data: null },
+    });
+    expect(after.some((state) => owes(state) !== null)).toBe(false);
+  });
+
+  it('removes figures that cover a lost Group whose row was still being written when the list landed', async () => {
+    const f = fixture();
+    const controller = f.create();
+    const list = f.hold(listPath, { late: true }),
+      figures = f.hold(homePath);
+    const signingIn = controller.signIn('alex');
+    await list.reached;
+    await figures.reached;
+    f.server.revoked.add(mapleId);
+    // The figures, worked out while Alex was in Maple House, land first; their row is still
+    // being written when the list lands without Maple House.
+    const writing = f.holdWrite(homePath);
+    figures.release();
+    await writing.reached;
+    const again = f.hold(homePath, { lost: true });
+    list.release();
+    await again.reached;
+    // The list has landed, and checked this phone's saved figures, before the row is written.
+    await vi.waitFor(() => expect(controller.getSnapshot().groups.status).toBe('ready'));
+    await settle();
+    expect(f.row(homePath)).toBeNull();
+    writing.release();
+    again.release();
+    await signingIn;
+    await settle();
+    expect(f.row(homePath)).toBeNull();
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+      home: { status: 'error', data: null, message: balancesNotOnPhone },
+    });
+
+    controller.dispose();
+    f.connect(false);
+    const restarted = f.create();
+    const after = record(restarted);
+    await restarted.restore();
+    await settle();
+    expect(restarted.getSnapshot()).toMatchObject({
+      groups: { data: [{ name: 'Cabin Weekend' }] },
+      home: { status: 'error', data: null, message: balancesNotOnPhone },
+      offline: { active: true },
+    });
+    expect(after.some((state) => owes(state) !== null)).toBe(false);
+  });
+
+  it.each(['still failing', 'working again'] as const)(
+    'never shows figures that cover a lost Group when this phone can’t remove them, after an offline restart with storage %s',
+    async (storage) => {
+      const f = fixture();
+      const controller = f.create();
+      const list = f.hold(listPath, { late: true }),
+        figures = f.hold(homePath);
+      const signingIn = controller.signIn('alex');
+      await list.reached;
+      await figures.reached;
+      f.server.revoked.add(mapleId);
+      // The figures, worked out while Alex was in Maple House, land first and are saved here.
+      figures.release();
+      await settle();
+      expect(f.row(homePath)).toMatchObject({ value: { data: { buckets: [{ youOwe: 30 }] } } });
+      // The list leaves Maple House out; this phone can't remove the figures' row, and their
+      // read again never answers.
+      later(1_000);
+      f.device.failRemoval = true;
+      const again = f.hold(homePath, { lost: true });
+      list.release();
+      await again.reached;
+      again.release();
+      await signingIn;
+      await settle();
+      expect(f.row(homePath)).toMatchObject({ value: { data: { buckets: [{ youOwe: 30 }] } } });
+      expect(controller.getSnapshot()).toMatchObject({
+        auth: { status: 'authenticated', user: { id: alex.id } },
+        home: { data: null },
+      });
+
+      controller.dispose();
+      if (storage === 'working again') f.device.failRemoval = false;
+      f.connect(false);
+      const restarted = f.create();
+      const after = record(restarted);
+      await restarted.restore();
+      await settle();
+      expect(restarted.getSnapshot()).toMatchObject({
+        auth: { status: 'authenticated', user: { id: alex.id } },
+        groups: { data: [{ name: 'Cabin Weekend' }] },
+        home: { data: null },
+      });
+      expect(after.some((state) => owes(state) !== null)).toBe(false);
+      // Once this phone can, the row goes before anything reads it.
+      if (storage === 'working again') expect(f.row(homePath)).toBeNull();
+    },
+  );
+
+  it.each(['no saved list', 'a saved list that never named Maple House'] as const)(
+    'never brings back saved figures that name a Group the list leaves out, when their read fails, after a sign-in with %s and an offline restart',
+    async (saved) => {
+      const f = fixture();
+      const first = f.create();
+      await first.signIn('alex');
+      await settle();
+      first.dispose();
+      later(60_000);
+      // This phone's saved figures name Maple House; its saved list doesn't, or there is none.
+      if (saved === 'no saved list') f.rows.delete(alex.id + listPath);
+      else (f.rows.get(alex.id + listPath) as { value: { data: unknown[] } }).value.data = [cabin];
+      expect(f.row(homePath)).toMatchObject({
+        value: { data: { groups: [{ groupId: mapleId }, {}] } },
+      });
+      // Alex has lost Maple House.
+      f.server.revoked.add(mapleId);
+      const controller = f.create();
+      const published = record(controller);
+      const list = f.hold(listPath),
+        figures = f.hold(homePath, { lost: true });
+      const signingIn = controller.signIn('alex');
+      await list.reached;
+      await figures.reached;
+      // The list lands without Maple House; then the figures' reply is lost.
+      const landed = published.length;
+      list.release();
+      await settle();
+      figures.release();
+      await signingIn;
+      await settle();
+      // Home says it has no balances to show, offline, and offers Retry (its error state).
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+        home: { status: 'error', data: null, message: balancesNotOnPhone },
+        offline: { active: true },
+      });
+      expect(f.row(listPath)).toMatchObject({ value: { data: [{ name: 'Cabin Weekend' }] } });
+      expect(published.slice(landed).some((state) => owes(state) !== null)).toBe(false);
+
+      // Started again offline: the saved list, and no figures from before.
+      controller.dispose();
+      f.connect(false);
+      const restarted = f.create();
+      const after = record(restarted);
+      await restarted.restore();
+      await settle();
+      expect(restarted.getSnapshot()).toMatchObject({
+        auth: { status: 'authenticated', user: { id: alex.id } },
+        groups: { data: [{ name: 'Cabin Weekend' }] },
+        home: { status: 'error', data: null, message: balancesNotOnPhone },
+        offline: { active: true },
+      });
+      expect(after.some((state) => owes(state) !== null)).toBe(false);
+    },
+  );
+
+  it.each([
+    ['the Home row can’t be read while the list is checked', 'unreadable'],
+    ['the saved figures don’t say which Groups they cover', 'unnamed'],
+  ] as const)(
+    'never brings back saved figures that may cover a Group the list leaves out when %s, after a lost read and an offline restart',
+    async (_, how) => {
+      const f = fixture();
+      if (how === 'unnamed') f.server.groupFigures = false;
+      const first = f.create();
+      await first.signIn('alex');
+      await settle();
+      first.dispose();
+      later(60_000);
+      f.server.groupFigures = true;
+      // This phone's saved list never named Maple House; its saved figures cover it.
+      (f.rows.get(alex.id + listPath) as { value: { data: unknown[] } }).value.data = [cabin];
+      f.server.revoked.add(mapleId);
+      const controller = f.create();
+      const published = record(controller);
+      const list = f.hold(listPath),
+        figures = f.hold(homePath, { lost: true });
+      // Unnamed: their restore is slow, and lands once the list has.
+      const restoring = how === 'unnamed' ? f.holdLoad(homePath) : null;
+      const signingIn = controller.signIn('alex');
+      await list.reached;
+      await figures.reached;
+      if (restoring) await restoring.reached;
+      else await settle();
+      // Unreadable: the list's check of the saved figures can't read them.
+      if (how === 'unreadable') f.failLoadOnce(homePath);
+      const landed = published.length;
+      list.release();
+      await settle();
+      restoring?.release();
+      await settle();
+      figures.release();
+      await signingIn;
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+        home: { status: 'error', data: null, message: balancesNotOnPhone },
+        offline: { active: true },
+      });
+      expect(published.slice(landed).some((state) => owes(state) !== null)).toBe(false);
+      expect(f.row(homePath)).toBeNull();
+
+      controller.dispose();
+      f.connect(false);
+      const restarted = f.create();
+      const after = record(restarted);
+      await restarted.restore();
+      await settle();
+      expect(restarted.getSnapshot()).toMatchObject({
+        auth: { status: 'authenticated', user: { id: alex.id } },
+        groups: { data: [{ name: 'Cabin Weekend' }] },
+        home: { status: 'error', data: null, message: balancesNotOnPhone },
+        offline: { active: true },
+      });
+      expect(after.some((state) => owes(state) !== null)).toBe(false);
+    },
+  );
+
+  it.each([
+    'no saved list',
+    'a saved list that never named Maple House',
+    'saved figures that don’t say which Groups they cover',
+  ] as const)(
+    'reads Home’s figures again when the list leaves out a Group the saved copy they fell back to may cover, with %s',
+    async (saved) => {
+      const f = fixture();
+      if (saved === 'saved figures that don’t say which Groups they cover')
+        f.server.groupFigures = false;
+      const first = f.create();
+      await first.signIn('alex');
+      await settle();
+      first.dispose();
+      later(60_000);
+      f.server.groupFigures = true;
+      if (saved !== 'a saved list that never named Maple House') f.rows.delete(alex.id + listPath);
+      else (f.rows.get(alex.id + listPath) as { value: { data: unknown[] } }).value.data = [cabin];
+      f.server.revoked.add(mapleId);
+      f.server.owe = 20;
+      const controller = f.create();
+      const published = record(controller);
+      const sent = f.calls.length;
+      const list = f.hold(listPath),
+        figures = f.hold(homePath, { lost: true });
+      const signingIn = controller.signIn('alex');
+      await list.reached;
+      await figures.reached;
+      await settle();
+      // The figures' reply is lost first: Home shows this phone's copy, saved, offline.
+      figures.release();
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        home: { status: 'ready', restored: true, data: [{ youOwe: 30 }] },
+        offline: { active: true },
+      });
+      // The list lands without Maple House: Home reads its figures again, from SplitBook.
+      const landed = published.length;
+      list.release();
+      await signingIn;
+      await settle();
+      expect(f.reads(homePath, sent)).toBe(2);
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+        home: { status: 'ready', restored: false, message: null, data: [{ youOwe: 20 }] },
+        offline: { active: false },
+      });
+      expect(published.slice(landed).some((state) => owes(state)?.[0] === 30)).toBe(false);
+    },
+  );
+
+  it.each(['a restart', 'a sign-in without the saved list'] as const)(
+    'takes this phone’s saved figures that name a Group the list leaves out off Home, and off this phone, once the list lands, after %s',
+    async (when) => {
+      const f = fixture();
+      const first = f.create();
+      await first.signIn('alex');
+      await settle();
+      first.dispose();
+      later(60_000);
+      // Alex loses Maple House; this phone's saved figures still name it.
+      f.server.revoked.add(mapleId);
+      f.server.owe = 20;
+      if (when !== 'a restart') f.rows.delete(alex.id + listPath);
+      const controller = f.create();
+      const published = record(controller);
+      const list = f.hold(listPath),
+        figures = f.hold(homePath);
+      const opening = when === 'a restart' ? controller.restore() : controller.signIn('alex');
+      await list.reached;
+      await figures.reached;
+      await settle();
+      // While both are read, the saved figures show, saved.
+      expect(controller.getSnapshot().home).toMatchObject({
+        restored: true,
+        data: [{ youOwe: 30 }],
+      });
+      const landed = published.length;
+      list.release();
+      await settle();
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', data: [{ name: 'Cabin Weekend' }] },
+        home: { data: null },
+      });
+      // Their row goes too, so no fallback or offline start shows them again (#323).
+      expect(f.row(homePath)).toBeNull();
+      figures.release();
+      await opening;
+      await settle();
+      expect(controller.getSnapshot().home).toMatchObject({
+        status: 'ready',
+        restored: false,
+        data: [{ youOwe: 20 }],
+      });
+      expect(published.slice(landed).some((state) => owes(state)?.[0] === 30)).toBe(false);
+    },
+  );
+
+  it.each(['before', 'after'] as const)(
+    'reads figures that don’t say which Groups they cover again, once, landing %s the list beside them',
+    async (order) => {
+      const f = fixture();
+      f.server.groupFigures = false;
+      const controller = f.create();
+      const list = f.hold(listPath),
+        figures = f.hold(homePath);
+      const signingIn = controller.signIn('alex');
+      await list.reached;
+      await figures.reached;
+      if (order === 'before') {
+        figures.release();
+        await settle();
+        list.release();
+      } else {
+        list.release();
+        await settle();
+        figures.release();
+      }
+      await signingIn;
+      await settle();
+      // They may cover a Group the list leaves out: read again after it, they stand.
+      expect(f.reads(listPath)).toBe(1);
+      expect(f.reads(homePath)).toBe(2);
+      expect(controller.getSnapshot()).toMatchObject({
+        groups: { status: 'ready', data: [{}, {}] },
+        home: { status: 'ready', data: [{ youOwe: 30 }] },
+      });
+    },
+  );
+
+  describe('the payment sheet reuses only a Group its view verified from SplitBook', () => {
+    const sheetReads = [`GET ${maplePath}`, `GET ${maplePath}/balances`];
+
+    it('reads the Group, then the Balances, over the view’s saved copy of the Group', async () => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(mapleId, true, 'balances');
+      later(5_000);
+      // A pull on the view: the Group's reply is lost, so its saved copy, from 5 s ago, stands
+      // in for it.
+      const group = f.hold(maplePath, { lost: true });
+      const pulling = controller.refresh('pull');
+      await group.reached;
+      group.release();
+      await pulling;
+      expect(controller.getSnapshot()).toMatchObject({
+        detail: { id: mapleId, refreshedAt: start },
+        offline: { active: true },
+      });
+      // Home's figures are read again from SplitBook, which clears offline.
+      await controller.back();
+      await controller.refreshHome();
+      expect(controller.getSnapshot().offline.active).toBe(false);
+      const sent = f.calls.length;
+      await controller.openSettlements(mapleId);
+      expect(sentSince(f, sent)).toEqual(sheetReads);
+      expect(controller.getSnapshot().settlement).toMatchObject({ status: 'ready' });
+    });
+
+    it('reads the Group, then the Balances, while the app is offline', async () => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(mapleId, true, 'balances');
+      await controller.back();
+      // Home's pull can't reach SplitBook, though the Group the view read is still recent.
+      f.server.offline = true;
+      await controller.refresh('pull');
+      expect(controller.getSnapshot().offline.active).toBe(true);
+      f.server.offline = false;
+      const sent = f.calls.length;
+      await controller.openSettlements(mapleId);
+      expect(sentSince(f, sent)).toEqual(sheetReads);
+      expect(controller.getSnapshot().settlement).toMatchObject({ status: 'ready' });
+    });
+
+    it('reads the Group, then the Balances, while the view reads the Group again', async () => {
+      const f = fixture();
+      const controller = f.create();
+      await controller.signIn('alex');
+      await controller.openGroup(mapleId, true, 'balances');
+      // A pull reads the Group again; its answer is late.
+      const group = f.hold(maplePath);
+      const pulling = controller.refresh('pull');
+      await group.reached;
+      // Its Expenses are read beside it; its Balances wait for it.
+      await settle();
+      const sent = f.calls.length;
+      await controller.openRecordPayment(alex.id, sam.id, 'INR');
+      expect(sentSince(f, sent)).toEqual(sheetReads);
+      expect(controller.getSnapshot().settlement).toMatchObject({ status: 'editing' });
+      group.release();
+      await pulling;
+    });
+  });
+
+  it('reads Home’s figures again after the payment sheet saw newer Balances, and only then', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
     await controller.openGroup(mapleId, true, 'balances');
-    expect(f.reads(`${maplePath}/balances`, sent)).toBe(0);
+    // Home's figures are read again after the view's read of the Group (AMEND-1).
+    await controller.back();
+    await controller.openGroup(mapleId, true, 'balances');
+    // The sheet checks the Group its view verified within 30 s, reading only the Balances, the
+    // same as the view's: nothing makes Home's figures out of date.
+    let sent = f.calls.length;
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    await controller.closeSettlement();
+    expect(f.reads(`${maplePath}/balances`, sent)).toBe(1);
+    sent = f.calls.length;
+    await controller.back();
+    expect(f.reads(homePath, sent)).toBe(0);
+
+    // A change elsewhere: the sheet sees newer Balances, so on closing it the view's Balances,
+    // and then Home's figures, are read again.
+    await controller.openGroup(mapleId, true, 'balances');
+    f.server.owe = 45;
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    sent = f.calls.length;
+    await controller.closeSettlement();
+    expect(f.reads(`${maplePath}/balances`, sent)).toBe(1);
+    sent = f.calls.length;
+    await controller.back();
+    expect(f.reads(homePath, sent)).toBe(1);
+    expect(controller.getSnapshot().home).toMatchObject({
+      status: 'ready',
+      data: [{ youOwe: 45 }],
+    });
+  });
+
+  it('reads the figures again only once when the list beside them is the older one', async () => {
+    const f = fixture();
+    f.server.groupFigures = true;
+    const controller = f.create();
+    // The list is worked out before Alex joins Zed Club, the figures after it.
+    const list = f.hold(listPath),
+      figures = f.hold(homePath, { late: true });
+    const signingIn = controller.signIn('alex');
+    await list.reached;
+    await settle();
+    expect(f.reads(homePath)).toBe(1);
+    await figures.reached;
+    f.server.listed = [maple, cabin, zed];
+    list.release();
+    await settle();
+    // The figures are read again after the list; a third read would mean they never stand.
+    const again = f.hold(homePath),
+      third = f.hold(homePath);
+    figures.release();
+    await again.reached;
+    again.release();
+    await signingIn;
+    await settle();
+    // Read again after the list, the figures still name Zed Club: they stand.
+    expect(f.reads(listPath)).toBe(1);
+    expect(f.reads(homePath)).toBe(2);
+    third.release();
+    expect(controller.getSnapshot()).toMatchObject({
+      groups: { status: 'ready', data: [{}, {}] },
+      home: { status: 'ready', data: [{ youOwe: 30 }] },
+    });
   });
 });

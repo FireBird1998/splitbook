@@ -165,12 +165,14 @@ function device() {
           buckets: network.noGroups
             ? []
             : [{ currency: 'INR', youOwe: network.paid ? 0 : 30, youAreOwed: 0 }],
-          ...(network.groupBalances && {
-            groups: [
-              { groupId: maple, balances: [{ currency: 'INR', balance: -30 }] },
-              { groupId: lisbon, balances: [] },
-            ],
-          }),
+          // Home's figures say which Groups they cover, as SplitBook's do (#333): with no Group
+          // balances, none, so each row's balance stays unknown.
+          groups: network.groupBalances
+            ? [
+                { groupId: maple, balances: [{ currency: 'INR', balance: -30 }] },
+                { groupId: lisbon, balances: [] },
+              ]
+            : [],
         },
         status: 200,
       });
@@ -646,8 +648,10 @@ describe('sign-in and start-up show progress while they wait (#335)', () => {
     expect(app.text()).not.toContain('Updated');
 
     // Confirmed, Home is read again: the bar goes with the check, and the top bar says
-    // "Refreshing…" over the saved figures until they're answered (#332).
+    // "Refreshing…" over the saved figures until they're answered (#332). Its list and figures
+    // are read together (#333).
     const list = phone.hold('/api/groups');
+    const figures = phone.hold('/api/user/balances');
     check.release();
     await list.reached;
     await settle();
@@ -660,6 +664,7 @@ describe('sign-in and start-up show progress while they wait (#335)', () => {
     expect(app.text()).not.toContain('Updated');
 
     list.release();
+    figures.release();
     await settle();
     expect(app.progress()).toEqual([]);
     expect(app.content().inside).toContain(`Updated ${refreshedLabel(phone.clock.now)}`);
@@ -1369,14 +1374,15 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(trailing()).toEqual([width, width]);
   });
 
-  it('holds each Group’s balance in its row while its figures wait for the list', async () => {
+  it('holds each Group’s balance in its row while its figures are read beside the list', async () => {
     const phone = device();
     await usedBefore(phone);
     // Home's figures have no saved copy, so the saved list shows with its balances unknown.
     await changed(phone);
     phone.network.online = true;
-    // Confirmed online, Home reads its list again before its figures, which wait for it.
+    // Confirmed online, Home reads its list and its figures again, together (#333).
     const list = phone.hold('/api/groups');
+    const figures = phone.hold('/api/user/balances');
     const app = await start(phone);
     await list.reached;
     await settle();
@@ -1385,6 +1391,9 @@ describe('Home says what is true, without jumps (#332)', () => {
     const width = Math.round(balanceWidth(1) * 100) / 100;
     expect(trailing()).toEqual([width, width]);
     list.release();
+    await settle();
+    expect(trailing()).toEqual([width, width]);
+    figures.release();
     await settle();
   });
 
@@ -1554,12 +1563,14 @@ describe('Home says what is true, without jumps (#332)', () => {
     expect(phone.saved('/api/groups')).toBeNull();
     expect(phone.saved('/api/user/balances')).toBeNull();
 
-    // Alex signs in again; the connection drops before Home is read.
+    // Alex signs in again; the connection drops before Home's list and figures are answered.
     const list = phone.hold('/api/groups');
+    const figures = phone.hold('/api/user/balances');
     const signingIn = controller().signIn('alex');
-    await list.reached;
+    await Promise.all([list.reached, figures.reached]);
     phone.network.online = false;
     list.release();
+    figures.release();
     await settle(signingIn);
     expect(app.text()).toContain(notSaved.balances);
     expect(app.text()).toContain(notSaved.groups);
@@ -2534,11 +2545,8 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     expect(shown()).toContain(footnote);
     expect(shown()).not.toContain('Checking');
     expect([sheetHeight(), sheetHeight(1.3)]).toEqual(checking);
-    // The same reads as before: the Group, then its Balances.
-    expect(phone.sent.slice(before)).toEqual([
-      `GET /api/groups/${maple}`,
-      `GET /api/groups/${maple}/balances`,
-    ]);
+    // Only its Balances: the Group its view verified within 30 s stands (#333).
+    expect(phone.sent.slice(before)).toEqual([`GET /api/groups/${maple}/balances`]);
   });
 
   // Item 3 (#331): already true, and kept pinned through the App.
@@ -2690,10 +2698,8 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
       disabled: false,
       busy: false,
     });
-    expect(phone.sent.slice(before)).toEqual([
-      `GET /api/groups/${maple}`,
-      `GET /api/groups/${maple}/balances`,
-    ]);
+    // The same check: the Balances, over the Group its view verified within 30 s (#333).
+    expect(phone.sent.slice(before)).toEqual([`GET /api/groups/${maple}/balances`]);
     expect(posts(phone)).toEqual([]);
   });
 });

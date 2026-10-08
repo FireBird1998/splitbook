@@ -10,6 +10,8 @@ const user = {
   image: null,
 };
 const groupId = 'a00000000000000000000010';
+/** The Groups Home's figures were worked out over: the one Group the list holds. */
+const named = [{ groupId, balances: [] }];
 const iso = '2026-09-27T10:00:00.000Z';
 const group = {
   _id: groupId,
@@ -125,7 +127,9 @@ function setup(
         if (path.endsWith('/sign-out')) return json({ success: true });
         if (path === '/api/groups') return json({ data: [group], status: 200 });
         if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
-        if (path === '/api/user/balances') return json({ data: { buckets: [] }, status: 200 });
+        // Like SplitBook's, Home's figures name the Groups they were worked out over (#333).
+        if (path === '/api/user/balances')
+          return json({ data: { buckets: [], groups: named }, status: 200 });
         if (path.startsWith(`/api/groups/${groupId}/expenses?`)) return json(expensePage());
         if (path === `/api/groups/${groupId}/balances`) return json(balances);
         return json({}, 404);
@@ -374,7 +378,7 @@ describe('native financial views', () => {
         return failHome
           ? json({}, 503)
           : json({
-              data: { buckets: [{ currency: 'INR', youOwe: owe, youAreOwed: 50 }] },
+              data: { buckets: [{ currency: 'INR', youOwe: owe, youAreOwed: 50 }], groups: named },
               status: 200,
             });
     });
@@ -409,7 +413,7 @@ describe('native financial views', () => {
       if (path.includes('/expenses?')) owe = 30;
       if (path === '/api/user/balances')
         return json({
-          data: { buckets: [{ currency: 'INR', youOwe: owe, youAreOwed: 50 }] },
+          data: { buckets: [{ currency: 'INR', youOwe: owe, youAreOwed: 50 }], groups: named },
           status: 200,
         });
     });

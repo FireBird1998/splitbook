@@ -751,8 +751,9 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
       else await controller.saveExpense();
 
       // It was sent and refused, so nothing changed on the server, and nothing is read again.
+      // A payment is checked against its live Balances only (#333).
       expect(f.calls.slice(sent).map((call) => call.method)).toEqual(
-        change === 'a payment' ? ['GET', 'GET', 'POST'] : ['GET', 'PATCH'],
+        change === 'a payment' ? ['GET', 'POST'] : ['GET', 'PATCH'],
       );
       expect(f.server.ledger).toBe(0);
       expect(
