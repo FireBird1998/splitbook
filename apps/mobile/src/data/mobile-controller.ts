@@ -4173,6 +4173,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         error instanceof RequestError && error.status === 422 && error.code
           ? correctionCodes[error.code]
           : undefined;
+      // Refused because the Group changed elsewhere, a member left or its currency changed: the
+      // Group the sheet checked against is out of date. It is read again, as on main the check
+      // before the payment would have read it, and the refused payment is no longer offered (#333).
+      const changedGroup =
+        error instanceof RequestError &&
+        error.status === 422 &&
+        ['INVALID_MEMBERS', 'CURRENCY_MISMATCH'].includes(error.code ?? '');
+      if (changedGroup && current(owner)) invalidateReads(`group:${groupId}`);
       if (attempt && !state.attempt && correction) {
         try {
           await lease.write(async () => {
@@ -4189,7 +4197,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             settlement: {
               ...snapshot.settlement,
               attempt: null,
-              status: 'editing',
+              // A payment the changed Group refused ends, as one whose suggestion is gone does.
+              ...(changedGroup
+                ? {
+                    status: 'ready' as const,
+                    draft: null,
+                    suggested: null,
+                    validation: emptyFormValidation(),
+                  }
+                : { status: 'editing' as const }),
               acknowledged: false,
               message: correction,
             },

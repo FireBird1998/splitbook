@@ -318,9 +318,11 @@ describe('native payment recording', () => {
   });
 
   it('unlocks a definitively rejected new submission for correction without losing input', async () => {
+    // A refusal its entries can correct. One the Group's change made (a member left, the currency
+    // changed) ends the payment instead (#333).
     const { controller, records } = setup((path, init) =>
       path.endsWith('/settlements') && init.method === 'POST'
-        ? json({ status: 422, code: 'CURRENCY_MISMATCH', error: 'Currency changed' }, 422)
+        ? json({ status: 422, code: 'VALIDATION_ERROR', error: 'Invalid payment' }, 422)
         : undefined,
     );
     await controller.signIn('alex');
@@ -1528,4 +1530,77 @@ describe('the Record payment sheet reads only what it checks (#333)', () => {
       snackbar: { message: 'Payment recorded' },
     });
   });
+
+  it.each([
+    [
+      'INVALID_MEMBERS',
+      'the payee has left the Group',
+      'The payer or recipient is no longer a Group member. Close this and choose another payment.',
+    ],
+    [
+      'CURRENCY_MISMATCH',
+      'the Group’s currency has changed',
+      'The Group currency changed. Close this and choose the payment again.',
+    ],
+  ] as const)(
+    'ends a payment SplitBook refuses with %s, as %s: no Record for it again, and the Group is read again',
+    async (code, _, correction) => {
+      let changed = false;
+      const { controller, sent, writes, records } = setup((path, init) => {
+        if (!changed) return;
+        if (path === paymentPath && init.method === 'POST')
+          return json({ status: 422, code, error: 'Refused' }, 422);
+        if (path === groupPath)
+          return json({
+            status: 200,
+            data:
+              code === 'INVALID_MEMBERS'
+                ? {
+                    ...group,
+                    members: group.members.filter(({ user }) => user._id !== recipient),
+                  }
+                : { ...group, defaultCurrency: 'EUR' },
+          });
+      });
+      await controller.signIn('alex');
+      await controller.openGroup(groupId, true, 'balances');
+      await controller.openRecordPayment(actor, recipient, 'INR');
+      expect(controller.getSnapshot().settlement).toMatchObject({ status: 'editing' });
+      // Elsewhere, and within the 30 s the sheet reuses the view's Group for, the Group changes.
+      changed = true;
+      let from = sent.length;
+      await controller.recordSettlement();
+      const refused = sent.indexOf(`POST ${paymentPath}`, from);
+      expect(upTo(sent, from)).toEqual([`GET ${balancesPath}`, `POST ${paymentPath}`]);
+      // The correction shows; the payment is no longer offered, and its key is dropped: it was
+      // sent and refused, so it can't be recorded.
+      expect(controller.getSnapshot().settlement).toMatchObject({
+        status: 'ready',
+        draft: null,
+        attempt: null,
+        suggested: null,
+        message: correction,
+      });
+      expect(records.size).toBe(0);
+      // A second tap sends nothing.
+      from = sent.length;
+      await controller.recordSettlement();
+      expect(writes).toHaveLength(1);
+      expect(sent.slice(from).filter((request) => !request.startsWith('GET '))).toEqual([]);
+      // The Group is read again, at the latest by Close, so it's current there.
+      await controller.back();
+      expect(sent.slice(refused)).toContain(`GET ${groupPath}`);
+      expect(controller.getSnapshot().detail.data).toMatchObject(
+        code === 'INVALID_MEMBERS'
+          ? { members: [{ user: { id: actor } }, { user: { id: other } }] }
+          : { defaultCurrency: 'EUR' },
+      );
+      // Opened again, the sheet doesn't offer the refused payment.
+      from = sent.length;
+      await controller.openRecordPayment(actor, recipient, 'INR');
+      expect(controller.getSnapshot().settlement).toMatchObject({ draft: null });
+      expect(sent.slice(from).filter((request) => !request.startsWith('GET '))).toEqual([]);
+      expect(writes).toHaveLength(1);
+    },
+  );
 });
