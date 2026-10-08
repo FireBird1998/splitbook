@@ -9,6 +9,7 @@ import {
   expenseHistoryPath,
   expensePagePath,
   expenseRecordPath,
+  groupActivityPath,
   groupBalancesPath,
   groupInsightsPath,
   groupPath,
@@ -135,6 +136,13 @@ export const expenseRecordKey = (account: QueryAccount, groupId: string, expense
 
 export const activityPageKey = (account: QueryAccount, groupId: string, page: ActivityPageQuery) =>
   groupScopedKey('ledger', account, groupId, activityPagePath(groupId, page));
+
+/**
+ * Every page of a Group's Activity, as Android reads them in one query (#222): no page in its
+ * path. A single page of it is an `activityPageKey`.
+ */
+export const groupActivityKey = (account: QueryAccount, groupId: string, limit = 20) =>
+  groupScopedKey('ledger', account, groupId, groupActivityPath(groupId, limit));
 
 /**
  * Every page of one Expense's history, as Android reads them in one query (#220): no page in

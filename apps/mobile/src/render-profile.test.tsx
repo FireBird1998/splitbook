@@ -229,7 +229,7 @@ const expensePage = (page: number, total = pages) => ({
     },
   },
 });
-const activityPage = (page: number) => ({
+const activityPage = (page: number, total = pages) => ({
   status: 200,
   data: {
     activities: Array.from({ length: 20 }, (_, row) => ({
@@ -244,7 +244,7 @@ const activityPage = (page: number) => ({
         currency: 'INR',
       },
     })),
-    pagination: { page, limit: 20, total: 20 * pages, totalPages: pages },
+    pagination: { page, limit: 20, total: 20 * total, totalPages: total },
   },
 });
 /** An Expense of the list as its own record reads it (#220). */
@@ -290,10 +290,11 @@ const historyPage = (expenseId: string, page: number) => ({
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 
 /**
- * `expensePages`: how many pages of Expenses Maple House has; 5 unless a journey needs more.
+ * `expensePages` and `activityPages`: how many pages of Expenses and Activity Maple House has; 5
+ * unless a journey needs more.
  * `payment`: Alex is in Maple House too, so Sam can record the payment Balances suggest (#333).
  */
-function backend({ expensePages = pages, payment = false } = {}) {
+function backend({ expensePages = pages, activityPages = pages, payment = false } = {}) {
   let cookie: string | null = null;
   let account: string | null = null;
   let paid = false;
@@ -416,7 +417,9 @@ function backend({ expensePages = pages, payment = false } = {}) {
         const expenseId = new URL(path, 'http://local').searchParams.get('expenseId');
         if (path.startsWith(`/api/groups/${groupId}/activity?`))
           return json(
-            expenseId ? historyPage(expenseId, pageOf(path)) : activityPage(pageOf(path)),
+            expenseId
+              ? historyPage(expenseId, pageOf(path))
+              : activityPage(pageOf(path), activityPages),
           );
         if (path.startsWith(`/api/groups/${groupId}/expenses/`))
           return json(expenseRecord(path.split('/').pop()!));
@@ -525,7 +528,11 @@ const settle = async (pending?: Promise<unknown>) => {
   }
 };
 
-async function renderApp(options?: { expensePages?: number; payment?: boolean }) {
+async function renderApp(options?: {
+  expensePages?: number;
+  activityPages?: number;
+  payment?: boolean;
+}) {
   const harness = backend(options);
   await harness.controller.signIn('sam');
   runtime.controller = harness.controller;
@@ -737,10 +744,11 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
       () => app.press('Load older activity'),
       activityRows(100),
     );
+    // Within the freshness window nothing is read again, and the 5 loaded pages stay (#222, M1-6).
     await journey(
       'Foreground within 30 s after 5 Activity pages',
       () => app.foreground(),
-      activityRows(20),
+      activityRows(100),
     );
   });
 
@@ -758,9 +766,8 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
     await journey('Reopen the Group within 30 s', () => app.press('Open Maple House'), expenseRows);
   });
 
-  // The journeys a refresh of loaded pages (ADR 0006, #215) changes. A refresh of Expenses
-  // re-reads the 5 loaded pages and keeps their 100 rows (M1-3, #219). Activity still starts
-  // again from the first page (#104), so its list shrinks to 20 rows until #222.
+  // The journeys a refresh of loaded pages (ADR 0006, #215) changes. A refresh re-reads the 5
+  // loaded pages and keeps their 100 rows, of Expenses (M1-3, #219) and of Activity (#222).
   it('refreshing 5 loaded pages', async () => {
     const app = await renderApp();
     const expenseRows = (rows: number) => () =>
@@ -789,12 +796,11 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
     );
     await app.press('Activity');
     await load('Load older activity', activityRows(100));
-    await journey('Pull to refresh with 5 Activity pages', () => app.pull(), activityRows(20));
-    await load('Load older activity', activityRows(100));
+    await journey('Pull to refresh with 5 Activity pages', () => app.pull(), activityRows(100));
     await journey(
       'Foreground after 30 s with 5 Activity pages',
       foregroundAfter30s,
-      activityRows(20),
+      activityRows(100),
     );
   });
 
@@ -817,6 +823,31 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
     await journey(
       'Load newer Expenses (pages 1 to 5)',
       () => app.press('Load newer expenses'),
+      window(1),
+    );
+  });
+  // Past 5 pages Activity slides too (M7-2, #222): Load older reads page 6, then Load newer page 1.
+  it('sliding past 5 Activity pages', async () => {
+    const app = await renderApp({ activityPages: 6 });
+    const window = (first: number) => () => {
+      expect(app.count('You added'), 'Activity rows').toBe(100);
+      expect(app.count(`You added Fictional expense ${first}-`), `Page ${first} first`).toBe(20);
+      expect(app.count(`You added Fictional expense ${first + 4}-`), `Page ${first + 4} last`).toBe(
+        20,
+      );
+      expect(app.count('Load newer activity'), 'Load newer').toBe(first > 1 ? 1 : 0);
+    };
+    await app.press('Open Maple House');
+    await app.press('Activity');
+    for (let page = 2; page <= pages; page += 1) await app.press('Load older activity');
+    await journey(
+      'Load the 6th Activity page (pages 2 to 6)',
+      () => app.press('Load older activity'),
+      window(2),
+    );
+    await journey(
+      'Load newer Activity (pages 1 to 5)',
+      () => app.press('Load newer activity'),
       window(1),
     );
   });

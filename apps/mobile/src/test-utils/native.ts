@@ -213,7 +213,10 @@ export const reactNative = {
   RefreshControl: 'RefreshControl',
   ScrollView: 'ScrollView',
   Share: { share: spies.share },
-  StyleSheet: { create: <T>(styles: T) => styles },
+  StyleSheet: {
+    create: <T>(styles: T) => styles,
+    absoluteFill: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
+  },
   Text: 'Text',
   TextInput: 'TextInput',
   View: 'View',

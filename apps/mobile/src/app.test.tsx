@@ -5,7 +5,7 @@ import {
   type ReactTestRenderer,
   type ReactTestRendererJSON,
 } from 'react-test-renderer';
-import { findHosts, layoutHeight } from './test-utils/layout';
+import { findHosts, flatten, layoutHeight } from './test-utils/layout';
 import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
@@ -14,6 +14,7 @@ import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
 import { emitAppState, pressBack } from './test-utils/native';
 import { GroupExpensesView } from './ui/group-expenses';
+import { GroupActivity } from './ui/group-activity';
 
 // The real App tree renders through the shared host stand-ins; only native modules are replaced.
 // What the mocked `./runtime` serves: the controller under test and the appearance.
@@ -767,6 +768,8 @@ describe('App Group Activity refresh', () => {
     const app = await onActivity();
     const read = hold();
     app.use((path) => (path.includes('/activity?') ? read.respond() : undefined));
+    // Past the display freshness window: inside it, the foreground reads nothing (#222, M1-6).
+    app.clock.now += 31_000;
     app.foreground();
     await read.reached;
     await settle();
@@ -783,7 +786,8 @@ describe('App Group Activity refresh', () => {
     app.pressable('Refresh').props.onPress();
     await retried.reached;
     await settle();
-    expect(app.text()).toMatch(/Saved .+ · refreshing/);
+    // Read in this session: "Updated", and the progress bar says it is read again (#222).
+    expect(app.text()).toMatch(/Updated \d/);
     expect(app.progressbars()).toBe(1);
     app.use(() => undefined);
     retried.release(json(activityPage));
@@ -1339,6 +1343,173 @@ describe('App Expense window (#219)', () => {
     expect(await app.androidBack()).toBe(true);
     await app.layout(700, 2600);
     expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 240, animated: false });
+  });
+});
+describe('App Activity window (#222)', () => {
+  // Maple House has 6 pages of 20 fictional events.
+  const sixPages = (path: string) => {
+    if (!path.startsWith(`/api/groups/${groupId}/activity?`)) return undefined;
+    const number = Number(new URL(path, 'http://local').searchParams.get('page'));
+    const [event] = activityPage.data.activities;
+    return json({
+      status: 200,
+      data: {
+        activities: Array.from({ length: 20 }, (_, row) => ({
+          ...event,
+          _id: `d${String(number * 100 + row).padStart(23, '0')}`,
+          metadata: { ...event.metadata, description: `Fictional event ${number}-${row + 1}` },
+        })),
+        pagination: { page: number, limit: 20, total: 120, totalPages: 6 },
+      },
+    });
+  };
+
+  it('keeps the event on screen when the newest page drops: it scrolls from where the slide began', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    await app.press('Activity');
+    for (let number = 2; number <= 5; number += 1) await app.press('Load older activity');
+    await app.scrollTo(4968);
+    await app.scrollEnd(5000, 'fling');
+    native.scrollTo.mockClear();
+    await app.press('Load older activity');
+    expect(app.text()).toContain('Fictional event 6-20');
+    expect(app.text()).not.toContain('Fictional event 1-1');
+    expect(app.pressable('Load newer activity')).toBeTruthy();
+    // The list is shorter now, so Android has already clamped the offset before the shift lands.
+    await app.scrollTo(4200);
+    const view = screen!.root.findByType(GroupActivity);
+    act(() => view.props.onShift(-1140));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000 - 1140, animated: false });
+    // Only the slide's own shift starts from there.
+    act(() => view.props.onShift(-60));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 5000 - 1140 - 60, animated: false });
+  });
+
+  // The device check of 99f96d6 (A15): at the list's end, a foreground past the window with
+  // SplitBook out of reach. Load older stays, below the events kept; what moved the list there
+  // was the offline banner shown above it.
+  it('keeps Load older at the list end when a foreground re-read fails offline', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    await app.press('Activity');
+    for (let number = 2; number <= 5; number += 1) await app.press('Load older activity');
+    app.clock.now += 34_000;
+    app.use(() => Promise.reject(new TypeError('Network request failed')));
+    app.foreground();
+    await settle();
+    expect(app.text()).toContain('Couldn’t update Activity');
+    expect(app.text()).toContain('Fictional event 5-20');
+    const older = app.pressable('Load older activity');
+    expect(older.props.accessibilityState).toMatchObject({ disabled: true });
+    // Back online, it is offered again once the events are read.
+    app.use(sixPages);
+    await settle(app.controller.refresh('pull'));
+    expect(app.pressable('Load older activity').props.accessibilityState).toMatchObject({
+      disabled: false,
+    });
+  });
+
+  // The device checks of 99f96d6 (A11j-l) and 048bf59 (R2): a payment recorded on page 2 opened
+  // in the list's place, and Back returned to the list's top, every time once the same event was
+  // opened again without scrolling (R2b, R2h, R2j, R2l). It opens over the list instead.
+  it.each(['the top bar', 'the detail', 'Android'] as const)(
+    'returns to the payment it opened from Back on %s, opened twice without scrolling',
+    async (by) => {
+      const app = await renderApp();
+      app.use((path) => {
+        const answer = sixPages(path);
+        if (!answer || !path.includes('page=2&')) return answer;
+        // Page 2's first event is a payment, which opens what was recorded.
+        return answer.json().then((body: typeof activityPage) => {
+          const [first, ...rest] = body.data.activities;
+          const payment = {
+            ...first,
+            type: 'settlement_recorded',
+            metadata: { paidByName: 'Sam', paidToName: 'Alex', amount: 100, currency: 'INR' },
+          };
+          return json({ ...body, data: { ...body.data, activities: [payment, ...rest] } });
+        });
+      });
+      await app.press('Open Maple House');
+      await app.press('Activity');
+      await app.press('Load older activity');
+      await app.scrollTo(1700);
+      await app.scrollEnd(1700, 'fling');
+      const scrollViews = () =>
+        app.root().findAll((node) => (node.type as unknown) === 'ScrollView');
+      const textOf = (node: ReactTestInstance) =>
+        node
+          .findAll((child) => (child.type as unknown) === 'Text')
+          .flatMap((child) => child.children.filter((part) => typeof part === 'string'))
+          .join('');
+      native.scrollTo.mockClear();
+      for (let round = 1; round <= 2; round += 1) {
+        await app.press('You recorded a payment');
+        const [under, ...others] = scrollViews();
+        const cover = others.find((view) =>
+          textOf(view).includes('This records a payment made outside Splitbook.'),
+        );
+        expect(cover).toBeDefined();
+        // It fills the list's place, in the View that holds the list: never measured, so never
+        // over the top bar, short of the navigation, or 0 high (#222's UI review of 32e99ad).
+        const [place] = findHosts(screen!.toJSON(), (_props, type) => type === 'View').filter(
+          (node) =>
+            (node.children ?? []).filter(
+              (child) => typeof child !== 'string' && child.type === 'ScrollView',
+            ).length === 2,
+        );
+        expect(flatten(place?.props.style)).toEqual({ flex: 1 });
+        const [, over] = place!.children as ReactTestRendererJSON[];
+        expect(flatten(over.props.style)).toEqual({
+          position: 'absolute',
+          left: 0,
+          right: 0,
+          top: 0,
+          bottom: 0,
+          backgroundColor: expect.any(String),
+        });
+        // The list stays mounted under it with every row, out of TalkBack's reach.
+        expect(under.props.importantForAccessibility).toBe('no-hide-descendants');
+        expect(textOf(under)).toContain('Fictional event 2-20');
+        const backs = app
+          .root()
+          .findAll(
+            (node) =>
+              (node.type as unknown) === 'Pressable' &&
+              node.props.accessibilityLabel === 'Back to Activity',
+          );
+        if (by === 'Android') expect(await app.androidBack()).toBe(true);
+        else await settle(Promise.resolve(backs[by === 'the top bar' ? 0 : 1].props.onPress()));
+        const [shown, ...rest] = scrollViews();
+        expect(rest.some((view) => textOf(view).includes('This records a payment'))).toBe(false);
+        expect(shown.props.importantForAccessibility).toBe('auto');
+        expect(textOf(shown)).toContain('Fictional event 2-20');
+        // Never shortened or scrolled, it is where the member left it.
+        expect(native.scrollTo).not.toHaveBeenCalled();
+      }
+      // And the App still knows where that is: a slide moves the view from there.
+      act(() => screen!.root.findByType(GroupActivity).props.onShift(10));
+      expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 1710, animated: false });
+    },
+  );
+
+  it('moves the view down by the events Load newer brings back above the one on screen', async () => {
+    const app = await renderApp();
+    app.use(sixPages);
+    await app.press('Open Maple House');
+    await app.press('Activity');
+    for (let number = 2; number <= 6; number += 1) await app.press('Load older activity');
+    await app.scrollTo(40);
+    await app.scrollEnd(60, 'drag');
+    native.scrollTo.mockClear();
+    await app.press('Load newer activity');
+    expect(app.text()).toContain('Fictional event 1-1');
+    const view = screen!.root.findByType(GroupActivity);
+    act(() => view.props.onShift(1140));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 60 + 1140, animated: false });
   });
 });
 describe('App invitation', () => {

@@ -33,7 +33,7 @@
     },
     "Switch to Activity": {
       "requests": 1,
-      "publishes": 4,
+      "publishes": 3,
       "commits": 3,
       "renders": 173
     },
@@ -51,15 +51,15 @@
     },
     "Load the 5th Activity page (80 → 100 events)": {
       "requests": 1,
-      "publishes": 3,
+      "publishes": 2,
       "commits": 2,
-      "renders": 811
+      "renders": 171
     },
     "Foreground within 30 s after 5 Activity pages": {
-      "requests": 1,
-      "publishes": 5,
-      "commits": 2,
-      "renders": 572
+      "requests": 0,
+      "publishes": 2,
+      "commits": 1,
+      "renders": 45
     },
     "Back to Home from a Group": {
       "requests": 1,
@@ -86,16 +86,16 @@
       "renders": 203
     },
     "Pull to refresh with 5 Activity pages": {
-      "requests": 1,
-      "publishes": 5,
+      "requests": 5,
+      "publishes": 4,
       "commits": 2,
-      "renders": 572
+      "renders": 90
     },
     "Foreground after 30 s with 5 Activity pages": {
-      "requests": 1,
-      "publishes": 5,
+      "requests": 5,
+      "publishes": 4,
       "commits": 2,
-      "renders": 572
+      "renders": 90
     },
     "Load the 6th Expense page (pages 2 to 6)": {
       "requests": 2,
@@ -108,6 +108,18 @@
       "publishes": 5,
       "commits": 3,
       "renders": 301
+    },
+    "Load the 6th Activity page (pages 2 to 6)": {
+      "requests": 1,
+      "publishes": 2,
+      "commits": 2,
+      "renders": 173
+    },
+    "Load newer Activity (pages 1 to 5)": {
+      "requests": 1,
+      "publishes": 2,
+      "commits": 2,
+      "renders": 175
     },
     "Open an Expense from Expenses": {
       "requests": 3,

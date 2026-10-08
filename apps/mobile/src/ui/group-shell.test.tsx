@@ -110,14 +110,19 @@ describe('Group shell', () => {
     /** What sits between the top bar and the scrolling content, and how tall it is. */
     const above = () => {
       const json = renderer!.toJSON() as ReactTestRendererJSON;
-      // The host that holds the screen's own ScrollView; the closed options sheet has another.
-      const [frame] = findHosts(json, (_props, type) => type === 'View').filter((node) =>
+      // The content's place: the View that holds the screen's own ScrollView (and a cover over
+      // it, #222); the closed options sheet has another.
+      const holdsScroll = (node: ReactTestRendererJSON | string) =>
+        typeof node !== 'string' &&
+        node.type === 'View' &&
         (node.children ?? []).some(
           (child) => typeof child !== 'string' && child.type === 'ScrollView',
-        ),
+        );
+      const [frame] = findHosts(json, (_props, type) => type === 'View').filter((node) =>
+        (node.children ?? []).some(holdsScroll),
       );
       const children = frame!.children as ReactTestRendererJSON[];
-      const slot = children[children.findIndex((child) => child.type === 'ScrollView') - 1]!;
+      const slot = children[children.findIndex(holdsScroll) - 1]!;
       return [slot.props.accessibilityRole ?? null, layoutHeight(slot)];
     };
     shell({ progress: 'Opening Maple House' });

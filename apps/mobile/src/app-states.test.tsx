@@ -851,7 +851,7 @@ describe('first load and refresh', () => {
     expect(app.progress()).toHaveLength(0);
   });
 
-  it('keeps a pull on Balances there: Activity shows its own first load', async () => {
+  it('keeps a pull on Balances there: Activity says its own read', async () => {
     const phone = device();
     await usedBefore(phone);
     const app = await start(phone);
@@ -869,7 +869,10 @@ describe('first load and refresh', () => {
     await activity.reached;
     await settle();
     expect(app.pull().refreshing).toBe(false);
-    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Loading Activity']);
+    // This phone's copy of Activity shows at once while it is read (M3-1, #222), so its own bar
+    // says it is refreshing.
+    expect(app.progress().map((bar) => bar.props.accessibilityLabel)).toEqual(['Refreshing']);
+    expect(app.text()).toMatch(/Saved \d/);
     activity.release();
     expenses.release();
     await settle();
@@ -903,8 +906,8 @@ describe('first load and refresh', () => {
     // The Expenses, read beside the Group (#219), have answered: Balances wait to follow them,
     // with their time, in their place.
     await refresh(`/api/groups/${maple}`, 'Balances', /Updated \d/);
-    // Activity's own slot still says so, until #222.
-    await refresh(`/api/groups/${maple}/activity?`, 'Activity', /Saved .+ · refreshing/);
+    // Activity keeps when its events were read too, as the others do (#222).
+    await refresh(`/api/groups/${maple}/activity?`, 'Activity');
   });
 
   it('keeps an empty Home on screen while it refreshes automatically', async () => {
@@ -1209,7 +1212,10 @@ describe('offline', () => {
     await app.press('Open Lisbon Offsite, Work · 2 members');
     expect(app.text()).toContain('No expenses yet');
     await app.press('Activity');
-    expect(app.text()).toContain('This Group’s activity hasn’t been opened on this phone yet.');
+    // True whether it was never saved here, removed or withheld (#280 item 2, #222).
+    expect(app.text()).toContain(
+      'This Group’s activity isn’t saved on this phone. Connect to load it.',
+    );
     expect(app.button('Try again')).not.toBeNull();
     expect(app.button('Add expense')).toBeNull();
   });
@@ -2695,5 +2701,60 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     // The same check: the Balances, over the Group its view verified within 30 s (#333).
     expect(phone.sent.slice(before)).toEqual([`GET /api/groups/${maple}/balances`]);
     expect(posts(phone)).toEqual([]);
+  });
+});
+
+// #222 and the loading-state audit (2026-10-07): Activity says what is true of its events, as a
+// Group's other destinations do since #219.
+describe('Activity says what is true (#222)', () => {
+  const controller = () => runtime.controller as MobileController;
+  const openMaple = 'Open Maple House, Household · 2 members';
+  const activityPage = `/api/groups/${maple}/activity?page=1&limit=20`;
+
+  // #280 item 1: older events stayed on screen, labelled "Saved", after this device's own change.
+  it('shows nothing from before this device’s own change when Activity can’t be read offline', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(openMaple);
+    await app.press('Activity');
+    expect(app.text()).toContain('created');
+    await settle(controller().selectDestination('expenses'));
+    await settle(controller().openExpense(maple));
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12', tagId }));
+    await settle(controller().saveExpense());
+    expect(controller().getSnapshot().expense.status).toBe('saved');
+    phone.network.online = false;
+    await app.press('Activity');
+    expect(app.text()).toContain(
+      'This Group’s activity isn’t saved on this phone. Connect to load it.',
+    );
+    expect(app.text()).not.toContain('created');
+    expect(app.text()).not.toContain('Saved');
+  });
+
+  it('says what was saved only over this phone’s copy, and one true thing of events read in this session', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(openMaple);
+    await app.press('Activity');
+    const readAt = refreshedLabel(phone.clock.now);
+    expect(app.text()).toContain(`Updated ${readAt}`);
+    // This phone no longer keeps a copy of them, and the connection drops.
+    phone.lose(activityPage);
+    phone.network.online = false;
+    await settle(controller().refresh('pull'));
+    expect(app.text()).toContain(
+      'Couldn’t refresh this Group’s activity, and this phone no longer keeps a copy of it.',
+    );
+    expect(app.text()).toContain('created');
+    expect(app.text()).toContain(`Updated ${readAt}`);
+    expect(app.text()).not.toContain('Saved');
+    // Nothing shown is this phone's copy: the banner says only that the app is offline.
+    expect(app.text()).toContain('You’re offlineConnect to load the latest.');
+    expect(app.text()).not.toContain('What’s shown was saved');
   });
 });

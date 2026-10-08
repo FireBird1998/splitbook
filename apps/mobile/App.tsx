@@ -1,5 +1,12 @@
 import { NotAvailableOffline, OfflineNotice } from './src/ui/offline-notice';
-import { useCallback, useEffect, useRef, useSyncExternalStore, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useSyncExternalStore,
+  type RefObject,
+} from 'react';
 import {
   AppState,
   Appearance,
@@ -733,14 +740,16 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     state.financial.groupId === state.detail.id &&
     state.financial.expenses.status === 'ready';
   const group = state.detail.data ?? (proven ? known : null);
-  // While the Group is first read, Expenses and Balances show their own placeholders for it as
-  // Home lists it, so they keep their shape when it answers (#219); nothing of it is read yet.
-  // One Home doesn't list yet takes an all-time Group's shape. Activity keeps its rows (#222).
+  // While the Group is first read, each destination shows its own placeholders for it as Home
+  // lists it, so they keep their shape when it answers (#219); nothing of it is read yet, but
+  // Activity shows this phone's saved copy at once (#222). One Home doesn't list yet takes an
+  // all-time Group's shape.
   const opening =
     !group &&
     state.detail.status === 'loading' &&
     state.detail.id &&
-    state.destination !== 'activity'
+    // Activity's events need the Group's currency and members: not one Home doesn't list yet.
+    (state.destination !== 'activity' || known)
       ? (known ?? unlistedGroup(state.detail.id))
       : null;
   const shown = group ?? opening;
@@ -755,18 +764,29 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
   const pendingScroll = useRef<number | null>(null);
   const restoreRequest = useRef<number | null>(null);
   const shownScrollKey = useRef<string | null>(null);
-  const scrollKey = `${state.detail.id}:${state.destination}:${state.activity.selected?._id ?? ''}`;
+  const scrollKey = `${state.detail.id}:${state.destination}`;
+  // An event opens over the list, which stays as it was underneath (#222's device check).
+  const listed = useMemo(
+    () => (state.activity.selected ? { ...state.activity, selected: null } : state.activity),
+    [state.activity],
+  );
+  // Where the view was when the list's window moved (the newest page dropped, or came back),
+  // before Android clamps the offset to a shorter list: the shift that keeps the row on screen
+  // starts from there (#219). The list is the Month's Expenses, or Activity's events (#222).
+  const firstPage =
+    (state.destination === 'activity'
+      ? state.activity.firstPage
+      : state.financial.expenses.firstPage) ?? 1;
+  const shownFirstPage = useRef(firstPage);
+  const slideFrom = useRef<number | null>(null);
   // Synced during render, before the remounted ScrollView can report its content size.
   if (shownScrollKey.current !== scrollKey) {
     shownScrollKey.current = scrollKey;
     scrollY.current = 0;
+    // Another view: where its window starts is no slide.
+    shownFirstPage.current = firstPage;
+    slideFrom.current = null;
   }
-  // Where the view was when the Expense window moved (the newest page dropped, or came back),
-  // before Android clamps the offset to a shorter list: the shift that keeps the row on screen
-  // starts from there (#219).
-  const firstPage = state.financial.expenses.firstPage ?? 1;
-  const shownFirstPage = useRef(firstPage);
-  const slideFrom = useRef<number | null>(null);
   if (shownFirstPage.current !== firstPage) {
     slideFrom.current = scrollY.current;
     shownFirstPage.current = firstPage;
@@ -786,6 +806,13 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     const shown = controller.getSnapshot();
     const { status } = shown.destination === 'activity' ? shown.activity : shown.financial.expenses;
     if (reachable >= y || status === 'ready' || status === 'error') pendingScroll.current = null;
+  };
+  /** The window moved: the view scrolls by `dy` from where it was then, so the row stays put. */
+  const shift = (dy: number) => {
+    const from = slideFrom.current ?? scrollY.current;
+    slideFrom.current = null;
+    scrollY.current = Math.max(0, from + dy);
+    scroll.current?.scrollTo({ y: scrollY.current, animated: false });
   };
   const openExpense = (groupId: string, expenseId?: string) =>
     void controller.openExpense(groupId, expenseId, { scrollY: scrollY.current });
@@ -816,6 +843,69 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         },
       ],
     );
+  // Offline, the banner says so; that what's shown was saved on this device, only while some of
+  // it is: the Group's details, or the destination's own content (#219, #222, as Home since #332).
+  const notice = unavailable ? null : (
+    <OfflineNotice
+      state={state.offline}
+      savedShown={
+        (!!state.detail.data && state.detail.restored === true) ||
+        (state.destination === 'expenses'
+          ? state.financial.expenses.month === state.financial.month &&
+            state.financial.expenses.restored === true
+          : state.destination === 'balances'
+            ? state.financial.balances.data !== null && state.financial.balances.restored === true
+            : state.activity.restored === true && state.activity.events.length > 0)
+      }
+    />
+  );
+  /** A failed refresh keeps the whole Group readable, with its time and a retry. */
+  const groupNotice = (shown: MobileGroup) =>
+    state.detail.status === 'error' && !state.detail.data ? (
+      <DetailsNotice
+        subject={shown.name}
+        // Up to date only as the server answered them in this open, never a saved copy.
+        balances={state.financial.balances.answeredThisOpen === true}
+        onRetry={() => void controller.refresh()}
+      />
+    ) : (
+      state.detail.status === 'error' && (
+        <RetainedNotice
+          status="error"
+          refreshedAt={state.detail.refreshedAt}
+          message={state.detail.message}
+          subject={shown.name}
+          retryLabel="Retry Group"
+          offline={state.offline.active}
+          onRetry={() => void controller.refresh()}
+        />
+      )
+    );
+  /** Activity's list, or an event of it. */
+  const activity = (shown: MobileGroup, activityState: MobileSnapshot['activity']) => (
+    <GroupActivity
+      state={activityState}
+      currentUserId={userId}
+      currency={shown.defaultCurrency}
+      members={shown.members.map(({ user }) => ({ id: user.id, name: user.name }))}
+      offline={state.offline.active}
+      now={Date.now()}
+      onRetry={() => void controller.refreshActivity()}
+      onMore={() => void controller.loadMoreActivity()}
+      onLoadNewer={() => void controller.loadNewerActivity()}
+      // The newest page dropped, or came back: the event on screen keeps its place.
+      onShift={shift}
+      onSelect={(id) => void controller.openActivityEvent(id, { scrollY: scrollY.current })}
+      onClose={controller.closeActivityDetail}
+    />
+  );
+  // Where the Group shows its destination, an open event shows over Activity's list, with what is
+  // said of the Group above it; the list stays at its place underneath (#222's device check).
+  const showsContent =
+    !!shown &&
+    state.detail.status !== 'denied' &&
+    !unavailable &&
+    !(state.detail.status === 'error' && !group);
   return (
     <GroupShell
       group={known}
@@ -827,6 +917,15 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
       }}
       progress={feedback.progress}
       floating={floating !== null}
+      cover={
+        eventOpen && showsContent && shown ? (
+          <>
+            {notice}
+            {groupNotice(shown)}
+            {activity(shown, state.activity)}
+          </>
+        ) : null
+      }
       invite={{
         onPress: shareInvite,
         // Known is enough: a refresh in flight doesn't change who can be invited.
@@ -881,24 +980,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         </>
       }
     >
-      {/* Offline, the banner says so; that what's shown was saved on this device, only while some
-          of it is: the Group's details, or the destination's own content (#219, as Home since
-          #332). Activity's events are taken as saved until #222 says which are. */}
-      {unavailable ? null : (
-        <OfflineNotice
-          state={state.offline}
-          savedShown={
-            (!!state.detail.data && state.detail.restored === true) ||
-            (state.destination === 'expenses'
-              ? state.financial.expenses.month === state.financial.month &&
-                state.financial.expenses.restored === true
-              : state.destination === 'balances'
-                ? state.financial.balances.data !== null &&
-                  state.financial.balances.restored === true
-                : state.activity.events.length > 0)
-          }
-        />
-      )}
+      {notice}
       {state.detail.status === 'denied' ? (
         <Notice
           title="This Group isn’t available"
@@ -927,41 +1009,9 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         />
       ) : (
         <>
-          {/* A failed refresh keeps the whole Group readable, with its time and a retry. */}
-          {state.detail.status === 'error' && !state.detail.data ? (
-            <DetailsNotice
-              subject={shown.name}
-              // Up to date only as the server answered them in this open, never a saved copy.
-              balances={state.financial.balances.answeredThisOpen === true}
-              onRetry={() => void controller.refresh()}
-            />
-          ) : (
-            state.detail.status === 'error' && (
-              <RetainedNotice
-                status="error"
-                refreshedAt={state.detail.refreshedAt}
-                message={state.detail.message}
-                subject={shown.name}
-                retryLabel="Retry Group"
-                offline={state.offline.active}
-                onRetry={() => void controller.refresh()}
-              />
-            )
-          )}
+          {groupNotice(shown)}
           {state.destination === 'activity' ? (
-            <GroupActivity
-              state={state.activity}
-              currentUserId={userId}
-              currency={shown.defaultCurrency}
-              members={shown.members.map(({ user }) => ({ id: user.id, name: user.name }))}
-              offline={state.offline.active}
-              refreshing={feedback.quiet}
-              now={Date.now()}
-              onRetry={() => void controller.refreshActivity()}
-              onMore={() => void controller.loadMoreActivity()}
-              onSelect={(id) => void controller.openActivityEvent(id, { scrollY: scrollY.current })}
-              onClose={controller.closeActivityDetail}
-            />
+            activity(shown, listed)
           ) : state.destination === 'balances' ? (
             <GroupBalancesView
               group={shown}
@@ -1004,12 +1054,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                 onLoadMore={() => void controller.loadMoreExpenses()}
                 onLoadNewer={() => void controller.loadNewerExpenses()}
                 // The newest page dropped: the row on screen keeps its place (#219).
-                onShift={(dy) => {
-                  const from = slideFrom.current ?? scrollY.current;
-                  slideFrom.current = null;
-                  scrollY.current = Math.max(0, from + dy);
-                  scroll.current?.scrollTo({ y: scrollY.current, animated: false });
-                }}
+                onShift={shift}
                 onOpenExpense={(expenseId) => openExpense(shown.id, expenseId)}
                 onResumeDraft={resumeDraft}
                 onDiscardDraft={discardDraft}
