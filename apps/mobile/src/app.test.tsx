@@ -1220,6 +1220,137 @@ describe('App Expense window (#219)', () => {
     return json(answer);
   };
 
+  const layReturnRow = (
+    app: Awaited<ReturnType<typeof renderApp>>,
+    label: string,
+    rowY: number,
+  ) => {
+    let node: ReactTestInstance | null = app.pressable(label);
+    const places: ReactTestInstance[] = [];
+    while (node && places.length < 4) {
+      if ((node.type as unknown) === 'View' && node.props.onLayout) places.push(node);
+      node = node.parent;
+    }
+    act(() =>
+      places.forEach((place, index) =>
+        place.props.onLayout({
+          nativeEvent: { layout: { y: [rowY, 0, 200, 80][index], height: 60 } },
+        }),
+      ),
+    );
+  };
+
+  it.each(['deleted', 'moved to another Month'])(
+    'falls back to the clamped offset when its anchor was %s (#225)',
+    async () => {
+      const app = await renderApp();
+      const anchorId = `e${String(5 * 100).padStart(23, '0')}`;
+      const expenseId = `e${String(5 * 100 + 4).padStart(23, '0')}`;
+      let gone = false;
+      app.use((path) => {
+        if (path === `/api/groups/${groupId}/expenses/${expenseId}`)
+          return json({
+            status: 200,
+            data: { ...expense(expenseId, 'Fictional row 5-5'), revision: 0, isDeleted: false },
+          });
+        if (!path.includes('/expenses?')) return undefined;
+        const number = Number(new URL(path, 'http://local').searchParams.get('page'));
+        const answer = septemberPage(number);
+        answer.data.pagination = { page: number, limit: 20, total: 120, totalPages: 6 };
+        answer.data.summary = { ...answer.data.summary, count: 120 };
+        if (gone)
+          answer.data.expenses = answer.data.expenses.filter(
+            (row) => !(row && typeof row === 'object' && '_id' in row && row._id === anchorId),
+          );
+        return json(answer);
+      });
+      await app.press('Open Maple House');
+      for (let number = 2; number <= 6; number++) await app.press('Load more expenses');
+      layReturnRow(app, 'Fictional row 5-1,', 4200);
+      await app.scrollTo(4500);
+      await app.press('Fictional row 5-5');
+      expect(app.controller.getSnapshot().expense.returnTo?.anchor?.key).toBe(anchorId);
+      gone = true;
+      await app.androidBack();
+      native.scrollTo.mockClear();
+      await app.layout(700, 1200);
+      await settle(new Promise((resolve) => setTimeout(resolve, 0)));
+      expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 500, animated: false });
+    },
+  );
+
+  it.each(['drag', 'Month change'])(
+    'cancels a row return after layout when the member chooses a %s (#225)',
+    async (choice) => {
+      const app = await renderApp();
+      const expenseId = `e${String(5 * 100 + 4).padStart(23, '0')}`;
+      app.use((path) =>
+        path === `/api/groups/${groupId}/expenses/${expenseId}`
+          ? json({
+              status: 200,
+              data: { ...expense(expenseId, 'Fictional row 5-5'), revision: 0, isDeleted: false },
+            })
+          : sixPages(path),
+      );
+      await app.press('Open Maple House');
+      for (let number = 2; number <= 6; number++) await app.press('Load more expenses');
+      layReturnRow(app, 'Fictional row 5-1,', 4200);
+      await app.scrollTo(4500);
+      await app.press('Fictional row 5-5');
+      await app.androidBack();
+      native.scrollTo.mockClear();
+      layReturnRow(app, 'Fictional row 5-1,', 4500);
+      await app.layout(700, 6500);
+      if (choice === 'drag')
+        act(() =>
+          app
+            .root()
+            .findAll((node) => (node.type as unknown) === 'ScrollView')[0]
+            .props.onScrollBeginDrag(),
+        );
+      else await settle(app.controller.selectMonth('2026-08'));
+      await settle(new Promise((resolve) => setTimeout(resolve, 0)));
+      expect(native.scrollTo).not.toHaveBeenCalled();
+      // Subsequent native layout callbacks cannot resurrect the cancelled return.
+      await app.layout(700, 7000);
+      await settle(new Promise((resolve) => setTimeout(resolve, 0)));
+      expect(native.scrollTo).not.toHaveBeenCalled();
+    },
+  );
+
+  it('returns to the first visible Expense row after layouts above it grow (#225)', async () => {
+    const app = await renderApp();
+    const expenseId = `e${String(5 * 100 + 4).padStart(23, '0')}`;
+    app.use((path) =>
+      path === `/api/groups/${groupId}/expenses/${expenseId}`
+        ? json({
+            status: 200,
+            data: { ...expense(expenseId, 'Fictional row 5-5'), revision: 0, isDeleted: false },
+          })
+        : sixPages(path),
+    );
+    await app.press('Open Maple House');
+    for (let number = 2; number <= 6; number++) await app.press('Load more expenses');
+    layReturnRow(app, 'Fictional row 5-1,', 4200);
+    layReturnRow(app, 'Fictional row 5-5', 4440);
+    await app.layout(700, 6500);
+    await app.scrollTo(4500);
+    await app.press('Fictional row 5-5');
+    expect(app.controller.getSnapshot().expense.status).toBe('detail');
+    expect(app.controller.getSnapshot().expense.returnTo?.anchor).toEqual({
+      key: `e${String(5 * 100).padStart(23, '0')}`,
+      offset: 19,
+    });
+    await app.androidBack();
+    native.scrollTo.mockClear();
+    // The first visible row moved down by 300 dp; Back keeps the same point in that row.
+    layReturnRow(app, 'Fictional row 5-1,', 4500);
+    layReturnRow(app, 'Fictional row 5-5', 4740);
+    await app.layout(700, 6500);
+    await settle(new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 4800, animated: false });
+  });
+
   it('keeps the row on screen when the newest page drops: it scrolls from where the slide began', async () => {
     const app = await renderApp();
     app.use(sixPages);
@@ -1363,6 +1494,66 @@ describe('App Activity window (#222)', () => {
       },
     });
   };
+
+  it('returns to the same Activity row after its Expense opens from a slid window (#225)', async () => {
+    const app = await renderApp();
+    const expenseId = september._id;
+    app.use((path) => {
+      if (path === `/api/groups/${groupId}/expenses/${expenseId}`)
+        return json({ status: 200, data: { ...september, revision: 0, isDeleted: false } });
+      if (!path.startsWith(`/api/groups/${groupId}/activity?`)) return undefined;
+      const number = Number(new URL(path, 'http://local').searchParams.get('page'));
+      const [event] = activityPage.data.activities;
+      return json({
+        status: 200,
+        data: {
+          activities: Array.from({ length: 20 }, (_, row) => ({
+            ...event,
+            _id: `d${String(number * 100 + row).padStart(23, '0')}`,
+            metadata: {
+              ...event.metadata,
+              expenseId,
+              description: `Fictional event ${number}-${row + 1}`,
+            },
+          })),
+          pagination: { page: number, limit: 20, total: 120, totalPages: 6 },
+        },
+      });
+    });
+    await app.press('Open Maple House');
+    await app.press('Activity');
+    for (let number = 2; number <= 6; number++) await app.press('Load older activity');
+    const lay = (rowY: number) => {
+      let node: ReactTestInstance | null = app.pressable('You added Fictional event 5-5,');
+      const places: ReactTestInstance[] = [];
+      while (node && places.length < 4) {
+        if ((node.type as unknown) === 'View' && node.props.onLayout) places.push(node);
+        node = node.parent;
+      }
+      act(() =>
+        places.forEach((place, index) =>
+          place.props.onLayout({
+            nativeEvent: { layout: { y: [rowY, 0, 200, 80][index], height: 160 } },
+          }),
+        ),
+      );
+    };
+    lay(4200);
+    await app.layout(700, 6500);
+    await app.scrollTo(4500);
+    await app.press('You added Fictional event 5-5,');
+    expect(app.controller.getSnapshot().expense.status).toBe('detail');
+    expect(app.controller.getSnapshot().expense.returnTo?.anchor).toEqual({
+      key: `d${String(5 * 100 + 4).padStart(23, '0')}`,
+      offset: 19,
+    });
+    await app.androidBack();
+    native.scrollTo.mockClear();
+    lay(4500);
+    await app.layout(700, 6500);
+    await settle(new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 4800, animated: false });
+  });
 
   it('keeps the event on screen when the newest page drops: it scrolls from where the slide began', async () => {
     const app = await renderApp();
