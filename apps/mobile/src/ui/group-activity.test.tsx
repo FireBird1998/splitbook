@@ -1,3 +1,4 @@
+import type { RowPlaces } from './return-scroll';
 import {
   act,
   create,
@@ -271,6 +272,48 @@ describe('when the newest page drops (#222, #215)', () => {
 
 // The UI review of 90f5c21 (#222): what a row draws again (D6), the page controls after a failed
 // read, the header at large text, and a server's failure with nothing shown.
+it.each(['direct', 'after a placeholder'])(
+  'records native row coordinates once inside a Card %s (#225 coordinate)',
+  (shape) => {
+    const reported = vi.fn<(rows: RowPlaces) => void>();
+    const view = render({
+      onRowsLayout: reported,
+      ...(shape === 'after a placeholder'
+        ? { state: activity({ status: 'loading', events: [], pagination: null }) }
+        : {}),
+    });
+    if (shape === 'after a placeholder') view.update({ state: activity() });
+    let node: ReactTestInstance | null = pressables(view.root).find((candidate) =>
+      String(candidate.props.accessibilityLabel).includes('Fictional event 1,'),
+    )!;
+    const places: ReactTestInstance[] = [];
+    while (node && places.length < 4) {
+      if (isHost(node, 'View') && node.props.onLayout) places.push(node);
+      node = node.parent;
+    }
+    let parent = places[1].parent;
+    while (parent && typeof parent.type !== 'string') parent = parent.parent;
+    expect(parent!.type).toBe(shape === 'direct' ? 'View' : 'AnimatedView');
+    if (shape === 'after a placeholder')
+      act(() =>
+        parent!.props.onLayout({
+          nativeEvent: { layout: { y: 1, height: 1500 } },
+        }),
+      );
+    // Native direct days include the Card border; a day under the fade body starts at zero.
+    act(() =>
+      places.forEach((place, index) =>
+        place.props.onLayout({
+          nativeEvent: {
+            layout: { y: [30, shape === 'direct' ? 1 : 0, 200, 80][index], height: 60 },
+          },
+        }),
+      ),
+    );
+    expect(reported.mock.lastCall?.[0].get(events[0]._id)).toEqual({ top: 311, height: 60 });
+  },
+);
+
 describe('a row is drawn again only when what it says changes (#222, D6)', () => {
   /** The row naming `description`, by its spoken label. */
   const row = (root: ReactTestInstance, description: string) =>

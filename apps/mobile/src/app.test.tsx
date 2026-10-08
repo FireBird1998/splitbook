@@ -1199,6 +1199,42 @@ describe('App return from an Expense', () => {
   });
 });
 
+/** Native parent-relative coordinates through either of Card's body shapes. */
+function layNativeRow(pressed: ReactTestInstance, rowY: number, height = 60) {
+  let node: ReactTestInstance | null = pressed;
+  const places: ReactTestInstance[] = [];
+  while (node && places.length < 4) {
+    if ((node.type as unknown) === 'View' && node.props.onLayout) places.push(node);
+    node = node.parent;
+  }
+  let parent = places[1].parent;
+  while (parent && typeof parent.type !== 'string') parent = parent.parent;
+  const dayY = Number(flatten(parent!.props.style).borderWidth ?? 0);
+  // The fade body is itself laid out inside the Card; direct day children need no intermediate y.
+  if (parent!.props.onLayout) {
+    let card = parent!.parent;
+    while (card && typeof card.type !== 'string') card = card.parent;
+    act(() =>
+      parent!.props.onLayout({
+        nativeEvent: {
+          layout: {
+            y: Number(flatten(card!.props.style).borderWidth ?? 0),
+            height,
+          },
+        },
+      }),
+    );
+  }
+  act(() =>
+    places.forEach((place, index) =>
+      place.props.onLayout({
+        nativeEvent: { layout: { y: [rowY, dayY, 200, 80][index], height } },
+      }),
+    ),
+  );
+  return parent!.type;
+}
+
 describe('App Expense window (#219)', () => {
   // September has 6 pages of 20 fictional Expenses.
   const septemberPage = (number: number) => ({
@@ -1225,19 +1261,7 @@ describe('App Expense window (#219)', () => {
     label: string,
     rowY: number,
   ) => {
-    let node: ReactTestInstance | null = app.pressable(label);
-    const places: ReactTestInstance[] = [];
-    while (node && places.length < 4) {
-      if ((node.type as unknown) === 'View' && node.props.onLayout) places.push(node);
-      node = node.parent;
-    }
-    act(() =>
-      places.forEach((place, index) =>
-        place.props.onLayout({
-          nativeEvent: { layout: { y: [rowY, 0, 200, 80][index], height: 60 } },
-        }),
-      ),
-    );
+    layNativeRow(app.pressable(label), rowY);
   };
 
   it.each(['deleted', 'moved to another Month'])(
@@ -1317,6 +1341,43 @@ describe('App Expense window (#219)', () => {
       expect(native.scrollTo).not.toHaveBeenCalled();
     },
   );
+
+  it('keeps the same row point when Back changes a faded Card to direct children (#225 coordinate)', async () => {
+    const app = await renderApp();
+    const expenseId = `e${String(5 * 100 + 4).padStart(23, '0')}`;
+    const first = hold();
+    let pendingFirst = true;
+    app.use((path) =>
+      pendingFirst && path.includes('/expenses?')
+        ? first.respond()
+        : path === `/api/groups/${groupId}/expenses/${expenseId}`
+          ? json({
+              status: 200,
+              data: { ...expense(expenseId, 'Fictional row 5-5'), revision: 0, isDeleted: false },
+            })
+          : sixPages(path),
+    );
+    await app.press('Open Maple House');
+    await first.reached;
+    await settle();
+    pendingFirst = false;
+    first.release(sixPages(`/api/groups/${groupId}/expenses?page=1`)!);
+    await settle();
+    for (let number = 2; number <= 6; number++) await app.press('Load more expenses');
+    const layNative = (label: string, rowY: number) => layNativeRow(app.pressable(label), rowY);
+    expect(layNative('Fictional row 5-1,', 4200)).toBe('AnimatedView');
+    layNative('Fictional row 5-5', 4440);
+    await app.layout(700, 6500);
+    await app.scrollTo(4500);
+    await app.press('Fictional row 5-5');
+    await app.androidBack();
+    native.scrollTo.mockClear();
+    expect(layNative('Fictional row 5-1,', 4500)).toBe('View');
+    layNative('Fictional row 5-5', 4740);
+    await app.layout(700, 6500);
+    await settle(new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 4800, animated: false });
+  });
 
   it('returns to the first visible Expense row after layouts above it grow (#225)', async () => {
     const app = await renderApp();
@@ -1523,21 +1584,8 @@ describe('App Activity window (#222)', () => {
     await app.press('Open Maple House');
     await app.press('Activity');
     for (let number = 2; number <= 6; number++) await app.press('Load older activity');
-    const lay = (rowY: number) => {
-      let node: ReactTestInstance | null = app.pressable('You added Fictional event 5-5,');
-      const places: ReactTestInstance[] = [];
-      while (node && places.length < 4) {
-        if ((node.type as unknown) === 'View' && node.props.onLayout) places.push(node);
-        node = node.parent;
-      }
-      act(() =>
-        places.forEach((place, index) =>
-          place.props.onLayout({
-            nativeEvent: { layout: { y: [rowY, 0, 200, 80][index], height: 160 } },
-          }),
-        ),
-      );
-    };
+    const lay = (rowY: number) =>
+      layNativeRow(app.pressable('You added Fictional event 5-5,'), rowY, 160);
     lay(4200);
     await app.layout(700, 6500);
     await app.scrollTo(4500);

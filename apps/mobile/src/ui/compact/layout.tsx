@@ -1,4 +1,4 @@
-import { Children, type ReactNode } from 'react';
+import { Children, useLayoutEffect, type ReactNode } from 'react';
 import {
   Animated,
   Pressable,
@@ -52,6 +52,7 @@ export function Card({
   header,
   loading,
   skeleton,
+  onBodyOffset,
 }: {
   children?: ReactNode;
   state?: 'default' | 'error' | 'locked';
@@ -59,9 +60,15 @@ export function Card({
   header?: ReactNode;
   loading?: string;
   skeleton?: SkeletonShape;
+  /** Offset of an optional fade body; direct children already use Card-relative coordinates. */
+  onBodyOffset?: (y: number) => void;
 }) {
   const theme = useTheme();
   const reveal = useReveal(loading !== undefined);
+  useLayoutEffect(() => {
+    // No intermediate body: a child's native layout is already relative to the Card.
+    if (!reveal) onBodyOffset?.(0);
+  }, [reveal, onBodyOffset]);
   const body =
     loading !== undefined ? (
       <View accessibilityLabel={loading} accessibilityState={{ busy: true }}>
@@ -82,7 +89,18 @@ export function Card({
       }}
     >
       {header}
-      {reveal ? <Animated.View style={{ opacity: reveal }}>{body}</Animated.View> : body}
+      {reveal ? (
+        <Animated.View
+          style={{ opacity: reveal }}
+          onLayout={
+            onBodyOffset ? ({ nativeEvent }) => onBodyOffset(nativeEvent.layout.y) : undefined
+          }
+        >
+          {body}
+        </Animated.View>
+      ) : (
+        body
+      )}
     </View>
   );
 }

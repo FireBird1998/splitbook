@@ -482,6 +482,7 @@ export function GroupExpensesView({
   const places = useRef({
     origin: 0,
     list: 0,
+    body: null as number | null,
     days: new Map<string, number>(),
     rows: new Map<string, { day: string; y: number; height: number }>(),
   });
@@ -495,7 +496,9 @@ export function GroupExpensesView({
   const top = (id: string) => {
     const row = places.current.rows.get(id),
       day = row && places.current.days.get(row.day);
-    return row && day !== undefined ? places.current.list + day + row.y : null;
+    return row && day !== undefined && places.current.body !== null
+      ? places.current.list + places.current.body + day + row.y
+      : null;
   };
   useLayoutEffect(() => {
     const moved = firstPage !== shownFirst.current;
@@ -519,20 +522,21 @@ export function GroupExpensesView({
     change:
       | { origin: number }
       | { list: number }
+      | { body: number }
       | { day: string; y: number }
       | { row: string; day: string; y: number; height: number },
   ) => {
     if ('origin' in change) places.current.origin = change.origin;
     else if ('list' in change) places.current.list = change.list;
+    else if ('body' in change) places.current.body = change.body;
     else if ('row' in change) places.current.rows.set(change.row, change);
     else places.current.days.set(change.day, change.y);
     const rows = new Map<string, { top: number; height: number }>();
     for (const { id: key } of expenses.data) {
       const at = top(key),
         row = places.current.rows.get(key);
-      // The default unpadded Card adds its 1 dp border above the day layouts.
       if (at !== null && row)
-        rows.set(key, { top: places.current.origin + at + 1, height: row.height });
+        rows.set(key, { top: places.current.origin + at, height: row.height });
     }
     onRowsLayout?.(rows);
     const held = anchor.current;
@@ -633,10 +637,14 @@ export function GroupExpensesView({
               <CompactButton label="Retry expenses" variant="tonal" onPress={onRefreshExpenses} />
             </View>
           ) : (
-            <Card loading={`Loading ${scope} expenses`} skeleton={{ heading: true }} />
+            <Card
+              loading={`Loading ${scope} expenses`}
+              skeleton={{ heading: true }}
+              onBodyOffset={(body) => place({ body })}
+            />
           )
         ) : expenses.data.length ? (
-          <Card>
+          <Card onBodyOffset={(body) => place({ body })}>
             {expenseDays(expenses.data, now).map((day) => (
               <View
                 key={day.key}

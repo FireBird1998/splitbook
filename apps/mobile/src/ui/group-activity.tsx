@@ -235,6 +235,7 @@ function ActivityList({
   const places = useRef({
     origin: 0,
     list: 0,
+    body: null as number | null,
     days: new Map<string, number>(),
     rows: new Map<string, { day: string; y: number; height: number }>(),
   });
@@ -250,7 +251,9 @@ function ActivityList({
   const top = (id: string) => {
     const row = places.current.rows.get(id),
       day = row && places.current.days.get(row.day);
-    return row && day !== undefined ? places.current.list + day + row.y : null;
+    return row && day !== undefined && places.current.body !== null
+      ? places.current.list + places.current.body + day + row.y
+      : null;
   };
   useLayoutEffect(() => {
     const moved = firstPage !== shownFirst.current;
@@ -274,20 +277,21 @@ function ActivityList({
     change:
       | { origin: number }
       | { list: number }
+      | { body: number }
       | { day: string; y: number }
       | { row: string; day: string; y: number; height: number },
   ) => {
     if ('origin' in change) places.current.origin = change.origin;
     else if ('list' in change) places.current.list = change.list;
+    else if ('body' in change) places.current.body = change.body;
     else if ('row' in change) places.current.rows.set(change.row, change);
     else places.current.days.set(change.day, change.y);
     const rows = new Map<string, { top: number; height: number }>();
     for (const { _id: key } of state.events) {
       const at = top(key),
         row = places.current.rows.get(key);
-      // The default unpadded Card adds its 1 dp border above the day layouts.
       if (at !== null && row)
-        rows.set(key, { top: places.current.origin + at + 1, height: row.height });
+        rows.set(key, { top: places.current.origin + at, height: row.height });
     }
     onRowsLayout?.(rows);
     const held = anchor.current;
@@ -403,7 +407,11 @@ function ActivityList({
       <View onLayout={({ nativeEvent }) => place({ list: nativeEvent.layout.y })}>
         {/* Activity read empty stays empty while it's read again. */}
         {loading && state.pagination === null ? (
-          <Card loading="Loading Activity" skeleton={{ avatar: true, heading: true }} />
+          <Card
+            loading="Loading Activity"
+            skeleton={{ avatar: true, heading: true }}
+            onBodyOffset={(body) => place({ body })}
+          />
         ) : (state.status === 'ready' || loading) && !state.events.length ? (
           <Card padded>
             <CompactText weight="semibold">No changes yet</CompactText>
@@ -412,7 +420,7 @@ function ActivityList({
             </CompactText>
           </Card>
         ) : state.events.length ? (
-          <Card>
+          <Card onBodyOffset={(body) => place({ body })}>
             {activityDays(state.events, now).map((day, index) => (
               <View
                 key={day.key}
