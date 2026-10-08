@@ -3841,7 +3841,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         }
         attempt = pending;
       }
-      if (!current(owner) || view !== route) return;
+      if (!current(owner) || view !== route || !owns()) return;
       publish({ ...snapshot, settlement: { ...snapshot.settlement, attempt } });
       sending = true;
       const response = await ledgerWrite(groupId, `/api/groups/${groupId}/settlements`, owner, {
@@ -3863,7 +3863,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         pendingRequest += 1;
         publish({ ...snapshot, pendingPayment: null });
       }
-      if (!current(owner) || view !== route) return;
+      if (!current(owner) || view !== route || !owns()) return;
       // The sheet closes onto Balances, which the refresh below reads again.
       showSettlementGroup(
         groupAt(groupId, 'balances'),

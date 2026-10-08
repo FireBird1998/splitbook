@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gatewayReply } from '../test-utils/transport-faults';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse } from './types';
 const actor = 'a00000000000000000000001',
@@ -57,12 +58,14 @@ function setup(
     path: string,
     init: RequestInit,
   ) => FetchResponse | Promise<FetchResponse> | undefined = () => undefined,
+  withSavedQueries = false,
 ) {
   let cookie: string | null = null,
     account: string | null = null,
     cleanup = false,
     key = 0;
   const records = new Map<string, unknown>();
+  const savedRows = new Map<string, unknown>();
   const store = {
     load: async (a: string, g: string) => structuredClone(records.get(a + g) ?? null),
     save: async (a: string, g: string, v: unknown) => {
@@ -98,6 +101,7 @@ function setup(
           },
         },
         settlementAttempts: store,
+        savedQueries: withSavedQueries ? savedQueriesIn(savedRows) : undefined,
         netInfo: {
           // As NetInfo does, a new listener hears the connection as it is now.
           addEventListener: (listener) => {
@@ -176,6 +180,152 @@ function setup(
   return { controller: create(), create, store, records, writes, sent, connect };
 }
 describe('native payment recording', () => {
+  it('finishes confirmed receipt cleanup without reopening a Group denied while device removal is pending', async () => {
+    let holdGroup = false,
+      groupArrived!: () => void,
+      releaseGroup!: (value: FetchResponse) => void;
+    const groupWaiting = new Promise<void>((resolve) => {
+      groupArrived = resolve;
+    });
+    const { controller, store, records, writes } = setup(
+      (path) =>
+        holdGroup && path === `/api/groups/${groupId}`
+          ? new Promise((resolve) => {
+              releaseGroup = resolve;
+              groupArrived();
+            })
+          : undefined,
+      true,
+    );
+    await controller.signIn('alex');
+    await controller.openSettlements(groupId);
+    controller.selectSettlement(actor, recipient, 'INR');
+    controller.updateSettlement({ amount: '10', note: 'Paid already' });
+    let cleanupArrived!: () => void, releaseCleanup!: () => void;
+    const cleanupWaiting = new Promise<void>((resolve) => {
+      cleanupArrived = resolve;
+    });
+    const cleanupReleased = new Promise<void>((resolve) => {
+      releaseCleanup = resolve;
+    });
+    const remove = store.remove;
+    store.remove = async (account, id) => {
+      cleanupArrived();
+      await cleanupReleased;
+      await remove(account, id);
+    };
+    holdGroup = true;
+    const refreshing = controller.refresh('foreground');
+    await groupWaiting;
+    const recording = controller.recordSettlement();
+    await cleanupWaiting;
+    expect(writes).toHaveLength(1);
+    expect(controller.getSnapshot().settlement.group).not.toBeNull();
+    const denied = new Promise<void>((resolve) => {
+      const unsubscribe = controller.subscribe(() => {
+        if (controller.getSnapshot().settlement.group === null) {
+          unsubscribe();
+          resolve();
+        }
+      });
+    });
+    releaseGroup(json({ status: 403, error: 'Access removed' }, 403));
+    await denied;
+    const afterDenial: string[] = [];
+    const unsubscribe = controller.subscribe(() =>
+      afterDenial.push(controller.getSnapshot().screen),
+    );
+    holdGroup = false;
+    releaseCleanup();
+    await Promise.all([recording, refreshing]);
+    expect(records.size).toBe(0);
+    expect(afterDenial).not.toContain('group');
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      settlement: { group: null, draft: null, attempt: null },
+    });
+    unsubscribe();
+    controller.dispose();
+  });
+  it('keeps a payment unsent and recoverable when Group access is denied while its attempt is stored', async () => {
+    let holdGroup = false,
+      groupArrived!: () => void,
+      releaseGroup!: (value: FetchResponse) => void;
+    const groupWaiting = new Promise<void>((resolve) => {
+      groupArrived = resolve;
+    });
+    const { controller, store, records, writes } = setup(
+      (path) =>
+        holdGroup && path === `/api/groups/${groupId}`
+          ? new Promise((resolve) => {
+              releaseGroup = resolve;
+              groupArrived();
+            })
+          : undefined,
+      true,
+    );
+    await controller.signIn('alex');
+    await controller.openSettlements(groupId);
+    controller.selectSettlement(actor, recipient, 'INR');
+    let savingArrived!: () => void, releaseSave!: () => void;
+    const saveWaiting = new Promise<void>((resolve) => {
+      savingArrived = resolve;
+    });
+    const saveReleased = new Promise<void>((resolve) => {
+      releaseSave = resolve;
+    });
+    const save = store.save;
+    store.save = async (account, id, value) => {
+      savingArrived();
+      await saveReleased;
+      await save(account, id, value);
+    };
+    holdGroup = true;
+    const refreshing = controller.refresh('foreground');
+    await groupWaiting;
+    const recording = controller.recordSettlement();
+    await saveWaiting;
+    expect(controller.getSnapshot().settlement.group).not.toBeNull();
+    const denied = new Promise<void>((resolve) => {
+      const unsubscribe = controller.subscribe(() => {
+        if (controller.getSnapshot().settlement.group === null) {
+          unsubscribe();
+          resolve();
+        }
+      });
+    });
+    releaseGroup(json({ status: 403, error: 'Access removed' }, 403));
+    await denied;
+    holdGroup = false;
+    releaseSave();
+    await Promise.all([recording, refreshing]);
+    expect(writes).toHaveLength(0);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      settlement: {
+        status: 'blocked',
+        group: null,
+        draft: { amount: '30' },
+        attempt: { key: 'settlement-key-1' },
+      },
+    });
+    expect([...records.values()]).toEqual([
+      expect.objectContaining({
+        version: 1,
+        accountId: actor,
+        groupId,
+        key: 'settlement-key-1',
+      }),
+    ]);
+    expect(JSON.parse(controller.getSnapshot().settlement.attempt?.body ?? 'null')).toEqual({
+      paidBy: actor,
+      paidTo: recipient,
+      amount: 30,
+      currency: 'INR',
+      note: '',
+    });
+    controller.dispose();
+  });
   it('unlocks a definitely rejected first submission even when a warm invitation interrupts its response', async () => {
     let release!: (value: FetchResponse) => void, entered!: () => void;
     const dispatched = new Promise<void>((resolve) => {
