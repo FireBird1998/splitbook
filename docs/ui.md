@@ -293,8 +293,10 @@ tabs on the server and `InsightsForTheme` picks one with
 `trip-summary.ts` holds the wording and figures, `trip-days.ts` the day labels
 ("Day 2 · Fri 18 Sep", the Expense table's date pattern). Each card has its own
 loading, empty and failed (Try again) state; a Trip has one currency, so there is
-no second-currency row. On the Expenses tab, a Trip's rows in date order sit under
-trip-day headings with the day's total (`expense-trip-days.ts`, `TripDayRow`).
+no second-currency row. Share wrap-up, at the foot of the wrap-up, opens the
+Trip's whole-trip statement (#319) for any member, in the viewer's time zone. On
+the Expenses tab, a Trip's rows in date order sit under trip-day headings with
+the day's total (`expense-trip-days.ts`, `TripDayRow`).
 
 ### Expenses (`src/components/expenses/`)
 

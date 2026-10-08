@@ -4,9 +4,11 @@
  * recurring Expenses, the window, the CSVs and the zip run against stored records.
  */
 
+import { backupSchema } from '@splitbook/shared/export-backup';
 import { unzipSync } from 'fflate';
 import { Types } from 'mongoose';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import Group from '@/lib/models/Group';
 import Expense from '@/lib/models/Expense';
 import RecurringExpense from '@/lib/models/RecurringExpense';
 import Settlement from '@/lib/models/Settlement';
@@ -316,6 +318,25 @@ describe('GET /api/export', () => {
       raw('Tram passes', 12.5, 'EUR'),
       raw('Airport taxi', 2150, 'INR'),
       raw('Ramen', 2400, 'JPY'),
+    ]);
+    const backup = backupSchema.parse(
+      json(await request(bob, `/api/export?groups=${legacy}&format=json`)),
+    );
+    expect(backup.groups[0].expenses.map((row) => [row.currency, row.amountMinor]).sort()).toEqual([
+      ['EUR', 1250],
+      ['INR', 215000],
+      ['JPY', 2400],
+    ]);
+    const statement = await exportService.statement(bob, {
+      groupIds: [legacy],
+      format: 'csv',
+      include: [],
+      timeZone: 'UTC',
+    });
+    expect(statement.currencies.map((row) => [row.currency, row.spentMinor])).toEqual([
+      ['EUR', 1250],
+      ['INR', 215000],
+      ['JPY', 2400],
     ]);
     const { records } = await csv(bob, exportOf([legacy], { include: ['shares'] }));
     expect(
@@ -643,3 +664,185 @@ async function householdWithRentDue() {
 function rentFor(templateId: string, period: string) {
   return Expense.countDocuments({ recurringExpense: templateId, period, isDeleted: false });
 }
+
+describe('JSON backup and statement (#318, #319)', () => {
+  it('round-trips a seeded backup without contacts and leaves the CSV bytes unchanged', async () => {
+    const id = await createGroup('Ferry Trip', alice, [bob]);
+    await addExpense(id, alice, 'Tickets', 1.01, alice, [alice, bob], '2026-09-20');
+    const before = await request(alice, exportOf([id]));
+    const backup = await request(
+      alice,
+      `/api/export?groups=${id}&format=json&include=payments,history`,
+    );
+    expect(backup.status).toBe(200);
+    const parsed = backupSchema.parse(json(backup));
+    expect(parsed.groups[0].expenses[0].amountMinor).toBe(101);
+    expect(parsed.groups[0].members.map((person) => person.name)).toEqual([
+      'Alice Tester',
+      'Bob Tester',
+    ]);
+    expect(JSON.stringify(parsed)).not.toMatch(/@|email/i);
+    const after = await request(alice, exportOf([id]));
+    expect(after.bytes).toEqual(before.bytes);
+    // A literal CSV contract from #317; the generated Expense identity is the sole variable.
+    const expenseId = parsed.groups[0].expenses[0].id;
+    expect(decoder.decode(after.bytes)).toBe(
+      '﻿Date,Description,Category,Tag,Paid by,Split,Amount,Currency,Notes,Expense ID\r\n' +
+        `2026-09-20,Tickets,Food & Drink,General,Alice Tester,Equally,1.01,INR,,${expenseId}\r\n`,
+    );
+    expect(
+      (await request(alice, `/api/export?groups=${id}&format=json&from=2026-09-01&to=2026-09-30`))
+        .status,
+    ).toBe(422);
+  });
+  it('backs up deleted Expenses, stored Tag identities, history and former members on request', async () => {
+    const id = await createGroup('Ferry Trip', alice, [bob]);
+    const expense = await addExpense(id, alice, 'Tickets', 3, bob, [alice, bob]);
+    await expenseService.update(
+      { actorId: alice, groupId: id, expenseId: expense },
+      { notes: 'Revised' },
+      0,
+    );
+    await expenseService.delete({ actorId: alice, groupId: id, expenseId: expense }, 1);
+    await Group.updateOne({ _id: id }, { $pull: { members: { user: bob } } });
+    const backup = backupSchema.parse(
+      json(await request(alice, `/api/export?groups=${id}&format=json&include=deleted,history`)),
+    );
+    expect(backup.groups[0].members.find((person) => person.id === bob)).toMatchObject({
+      name: 'Bob Tester',
+      former: true,
+    });
+    expect(backup.groups[0].expenses[0]).toMatchObject({
+      notes: 'Revised',
+      deleted: { byId: alice },
+    });
+    expect(backup.groups[0].expenses[0].edits).toHaveLength(1);
+    expect(backup.groups[0].expenses[0].tagId).toBeTruthy();
+    expect(
+      backupSchema.parse(json(await request(alice, `/api/export?groups=${id}&format=json`)))
+        .groups[0].expenses,
+    ).toEqual([]);
+  });
+  it('counts backup history and payments toward the same row cap', async () => {
+    const id = await createGroup('Ferry Trip', alice, [bob]);
+    await addExpense(id, alice, 'Tickets', 1, alice, [alice, bob]);
+    await expect(
+      exportService.backup(
+        alice,
+        { groupIds: [id], format: 'json', include: [], timeZone: 'UTC' },
+        { maxRows: 0 },
+      ),
+    ).rejects.toEqual(new ExportTooLargeError(1, 0));
+  });
+  it('statement contributions and current positions match Balances in each currency', async () => {
+    const id = await createGroup('Ferry Trip', alice, [bob]);
+    await addExpense(id, alice, 'Tickets', 1.01, alice, [alice, bob]);
+    const statement = await exportService.statement(alice, {
+      groupIds: [id],
+      format: 'csv',
+      include: [],
+      timeZone: 'UTC',
+    });
+    expect(statement.currencies[0].spentMinor).toBe(101);
+    expect(statement.currencies[0].people.map((person) => person.netMinor)).toEqual([50, -50]);
+  });
+  it.each(['outsider', 'left', 'missing', 'anonymous'] as const)(
+    'JSON backup refuses %s as CSV does',
+    async (scenario) => {
+      const id = await createGroup('Private Ferry', alice, [bob]);
+      const actor = scenario === 'outsider' ? dave : scenario === 'anonymous' ? null : bob;
+      if (scenario === 'left')
+        await Group.updateOne({ _id: id }, { $pull: { members: { user: bob } } });
+      const target = scenario === 'missing' ? 'f00000000000000000000000' : id;
+      const response = await request(actor, `/api/export?groups=${target}&format=json`);
+      expect(response.status).toBe(scenario === 'anonymous' ? 401 : 403);
+      if (actor)
+        await expect(
+          exportService.statement(actor, {
+            groupIds: [target],
+            format: 'csv',
+            include: [],
+            timeZone: 'UTC',
+          }),
+        ).rejects.toThrow('FORBIDDEN');
+    },
+  );
+});
+
+describe('new exports honor recurring switch', () => {
+  it.each([true, false])('materializes due Expenses only when enabled: %s', async (enabled) => {
+    vi.stubEnv('RECURRING_EXPENSES_ENABLED', 'true');
+    const { groupId } = await householdWithRentDue();
+    vi.stubEnv('RECURRING_EXPENSES_ENABLED', enabled ? 'true' : 'false');
+    const backup = backupSchema.parse(
+      json(await request(bob, `/api/export?groups=${groupId}&format=json`)),
+    );
+    expect(backup.groups[0].expenses).toHaveLength(enabled ? 2 : 1);
+    const statement = await exportService.statement(bob, {
+      groupIds: [groupId],
+      format: 'csv',
+      include: [],
+      timeZone: 'UTC',
+    });
+    expect(statement.currencies[0].expenseCount).toBe(enabled ? 2 : 1);
+  });
+});
+
+describe('export recovery and whole-trip statement bounds', () => {
+  it('returns the real 413 for an oversized JSON backup without preparing a file', async () => {
+    const id = await createGroup('Large backup', alice);
+    await Expense.collection.insertMany(
+      Array.from({ length: 50_001 }, () => ({
+        group: new Types.ObjectId(id),
+        isDeleted: false,
+      })),
+    );
+    const response = await request(alice, `/api/export?groups=${id}&format=json`);
+    expect(response.status).toBe(413);
+    expect(json(response)).toMatchObject({ code: 'EXPORT_TOO_LARGE', status: 413 });
+    expect(response.headers.get('content-disposition')).toBeNull();
+  });
+  it('uses stored Trip dates, retaining before/after Expenses but windowing dated Payments', async () => {
+    const id = await createGroup('Ferry Trip', alice, [bob]);
+    await Group.updateOne(
+      { _id: id },
+      { $set: { startDate: new Date('2026-09-01'), endDate: new Date('2026-09-02') } },
+    );
+    await addExpense(id, alice, 'Before the trip', 1.01, alice, [alice, bob], '2026-08-31');
+    await addExpense(id, alice, 'After the trip', 1.01, alice, [alice, bob], '2026-09-03');
+    const payment = await settlementService.create(
+      id,
+      { paidTo: alice, amount: 0.2, currency: 'INR' },
+      bob,
+    );
+    await Settlement.collection.updateOne(
+      { _id: payment!._id },
+      { $set: { createdAt: new Date('2026-09-03T10:00:00Z') } },
+    );
+    const result = await exportService.statement(
+      alice,
+      {
+        groupIds: [id],
+        format: 'csv',
+        include: [],
+        from: '2026-01-01',
+        to: '2026-12-31',
+        timeZone: 'UTC',
+      },
+      { wholeTrip: true },
+    );
+    expect([result.from, result.to]).toEqual(['2026-09-01', '2026-09-02']);
+    expect(result.currencies[0].spentMinor).toBe(202);
+    // Counted in Spent, and named as the Trip summary names them (#316).
+    expect([result.currencies[0].beforeTrip, result.currencies[0].afterTrip]).toEqual([
+      { spentMinor: 101, expenseCount: 1 },
+      { spentMinor: 101, expenseCount: 1 },
+    ]);
+    expect(result.currencies[0].expenses.map((row) => [row.description, row.outsideTrip])).toEqual([
+      ['Before the trip', 'before'],
+      ['After the trip', 'after'],
+    ]);
+    expect(result.currencies[0].payments).toEqual([]);
+    expect(result.currencies[0].people.map((row) => row.balanceMinor)).toEqual([80, -80]);
+  });
+});

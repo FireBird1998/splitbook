@@ -66,6 +66,12 @@ const adoptedFiles = [
   'src/components/expenses/QuickAddExpense.tsx',
   'src/components/export/ExportView.tsx',
   'src/components/expenses/TripDayRow.tsx',
+  'src/components/export/ExportFormatOptions.tsx',
+  'src/components/export/BackupOption.tsx',
+  'src/components/export/StatementOption.tsx',
+  'src/components/statement/StatementView.tsx',
+  'src/components/groups/GroupUnavailable.tsx',
+  'src/app/(main)/groups/[id]/forbidden.tsx',
 ];
 
 let failed = false;

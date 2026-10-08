@@ -1,5 +1,8 @@
 'use client';
 
+import ExportFormatOptions, { type ExportChoice } from './ExportFormatOptions';
+import BackupOption from './BackupOption';
+import StatementOption from './StatementOption';
 import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
@@ -30,6 +33,7 @@ import {
   planExportFiles,
   type ExportFilePlan,
   type ExportInclude,
+  type ExportRequest,
 } from '@splitbook/shared/export-request';
 import {
   DEFAULT_INCLUDE,
@@ -107,6 +111,7 @@ export default function ExportView({ userId, preselectedGroupId }: ExportViewPro
   // The page's "this month" stays the month it was opened in.
   const [now] = useState(() => new Date());
   const [picked, setPicked] = useState<string[] | null>(null);
+  const [format, setFormat] = useState<ExportChoice>('csv');
   const [period, setPeriod] = useState<ExportPeriod>('this');
   const [custom, setCustom] = useState<CustomRange>(() => initialCustomRange(now));
   const [include, setInclude] = useState<Record<ExportInclude, boolean>>({ ...DEFAULT_INCLUDE });
@@ -124,15 +129,28 @@ export default function ExportView({ userId, preselectedGroupId }: ExportViewPro
   );
 
   const options = useMemo(() => periodOptions(now), [now]);
-  const days = periodWindow(period, now, custom);
+  const days = format === 'json' ? {} : periodWindow(period, now, custom);
   const request = groups
-    ? exportRequest({ groups, selected, window: days, include, timeZone: viewerTimeZone() })
+    ? exportRequest({
+        groups,
+        selected,
+        window: days,
+        include,
+        timeZone: viewerTimeZone(),
+        format: format === 'json' ? 'json' : 'csv',
+      })
     : null;
   const groupNames = request
     ? request.groupIds.map((id) => groups!.find((group) => group.id === id)!.name)
     : [];
   const plan: ExportFiles | null = request
-    ? { ...planExportFiles(groupNames, request), groupNames }
+    ? {
+        ...planExportFiles(groupNames, request),
+        groupNames,
+        ...(format === 'json'
+          ? { download: `splitbook-${groupNames.length}-groups-backup.json`, zipped: false }
+          : {}),
+      }
     : null;
 
   /** Any change of choice starts over: the last download's status no longer applies. */
@@ -188,7 +206,10 @@ export default function ExportView({ userId, preselectedGroupId }: ExportViewPro
           ),
         )
       }
-      period={period}
+      format={format}
+      onFormat={(next) => change(() => setFormat(next))}
+      statementRequest={request}
+      period={format === 'json' ? 'all' : period}
       periodOptions={options}
       onPeriod={(next) => change(() => setPeriod(next))}
       custom={custom}
@@ -205,6 +226,9 @@ export default function ExportView({ userId, preselectedGroupId }: ExportViewPro
 }
 
 export interface ExportPageViewProps {
+  format?: ExportChoice;
+  onFormat?: (format: ExportChoice) => void;
+  statementRequest?: ExportRequest | null;
   groups: ExportGroupsState;
   onRetryGroups: () => void;
   selected: readonly string[];
@@ -245,7 +269,7 @@ export function ExportPageView(props: ExportPageViewProps) {
           Export
         </Typography>
         <Typography sx={{ m: 0, color: 'text.secondary' }}>
-          Take your Group data with you as CSV files, ready for any spreadsheet.
+          Take your Group data with you as CSV, a JSON backup, or a printable statement.
         </Typography>
       </Box>
 
@@ -271,7 +295,13 @@ export function ExportPageView(props: ExportPageViewProps) {
             subtitle="What the download holds"
             sx={{ flex: '999 1 520px', minWidth: 0 }}
           >
-            <FilesSummary plan={props.plan} include={props.include} groups={props.groups} />
+            {props.format === 'json' ? (
+              <BackupOption />
+            ) : props.format === 'statement' ? (
+              <StatementOption request={props.statementRequest ?? null} />
+            ) : (
+              <FilesSummary plan={props.plan} include={props.include} groups={props.groups} />
+            )}
           </Card>
         </Box>
       )}
@@ -351,11 +381,13 @@ function CheckRow({
   onChange,
   label,
   meta,
+  disabled = false,
 }: {
   checked: boolean;
   onChange: (checked: boolean) => void;
   label: string;
   meta?: string;
+  disabled?: boolean;
 }) {
   return (
     <Box
@@ -370,6 +402,7 @@ function CheckRow({
       }}
     >
       <Checkbox
+        disabled={disabled}
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}
         sx={{ p: 1, ml: -1 }}
@@ -473,8 +506,12 @@ function ExportForm(props: ExportPageViewProps) {
         </Box>
       </Box>
 
+      {props.onFormat ? (
+        <ExportFormatOptions value={props.format ?? 'csv'} onChange={props.onFormat} />
+      ) : null}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0 }}>
         <TextField
+          disabled={props.format === 'json'}
           select
           id="export-period"
           label="Period"
@@ -529,29 +566,32 @@ function ExportForm(props: ExportPageViewProps) {
         ) : null}
       </Box>
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
-        <Typography id="export-include-heading" component="h3" sx={sectionHeadingSx}>
-          Include
-        </Typography>
-        <Box
-          role="group"
-          aria-labelledby="export-include-heading"
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(min(160px, 100%), 1fr))',
-            columnGap: 1.5,
-          }}
-        >
-          {EXPORT_INCLUDES.map((name) => (
-            <CheckRow
-              key={name}
-              checked={props.include[name]}
-              onChange={(on) => props.onInclude(name, on)}
-              label={INCLUDE_LABELS[name]}
-            />
-          ))}
+      {props.format !== 'statement' ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 0 }}>
+          <Typography id="export-include-heading" component="h3" sx={sectionHeadingSx}>
+            Include
+          </Typography>
+          <Box
+            role="group"
+            aria-labelledby="export-include-heading"
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(min(160px, 100%), 1fr))',
+              columnGap: 1.5,
+            }}
+          >
+            {EXPORT_INCLUDES.map((name) => (
+              <CheckRow
+                key={name}
+                checked={props.format === 'json' && name === 'shares' ? true : props.include[name]}
+                onChange={(on) => props.onInclude(name, on)}
+                label={INCLUDE_LABELS[name]}
+                disabled={props.format === 'json' && name === 'shares'}
+              />
+            ))}
+          </Box>
         </Box>
-      </Box>
+      ) : null}
 
       <Box
         role="note"
@@ -579,35 +619,45 @@ function ExportForm(props: ExportPageViewProps) {
         </Box>
       </Box>
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-        <Button
-          variant="contained"
-          fullWidth
-          startIcon={<FileDownloadOutlinedIcon />}
-          disabled={!plan || preparing}
-          aria-describedby="export-file"
-          onClick={props.onDownload}
-          sx={{ minHeight: 44, borderRadius: CONTROL_RADIUS, fontWeight: 600 }}
-        >
-          {preparing ? 'Preparing…' : 'Download CSV'}
-        </Button>
-        <Typography
-          id="export-file"
-          sx={{ fontSize: '0.75rem', color: 'text.secondary', textAlign: 'center' }}
-        >
-          {nothingPicked ? (
-            'Pick at least one Group.'
-          ) : plan ? (
-            <>
-              <FileName>{plan.download}</FileName> ·{' '}
-              {plan.zipped ? `${plan.files.length} CSV files in a .zip` : '1 CSV file'}
-            </>
-          ) : (
-            'Finish the period to download.'
-          )}
-        </Typography>
-        <DownloadStatus download={download} onRetry={props.onDownload} />
-      </Box>
+      {props.format !== 'statement' ? (
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Button
+            variant="contained"
+            fullWidth
+            startIcon={<FileDownloadOutlinedIcon />}
+            disabled={!plan || preparing}
+            aria-describedby="export-file"
+            onClick={props.onDownload}
+            sx={{ minHeight: 44, borderRadius: CONTROL_RADIUS, fontWeight: 600 }}
+          >
+            {preparing
+              ? 'Preparing…'
+              : props.format === 'json'
+                ? 'Download JSON backup'
+                : 'Download CSV'}
+          </Button>
+          <Typography
+            id="export-file"
+            sx={{ fontSize: '0.75rem', color: 'text.secondary', textAlign: 'center' }}
+          >
+            {nothingPicked ? (
+              'Pick at least one Group.'
+            ) : plan ? (
+              <>
+                <FileName>{plan.download}</FileName> ·{' '}
+                {props.format === 'json'
+                  ? '1 JSON file · all time'
+                  : plan.zipped
+                    ? `${plan.files.length} CSV files in a .zip`
+                    : '1 CSV file'}
+              </>
+            ) : (
+              'Finish the period to download.'
+            )}
+          </Typography>
+          <DownloadStatus download={download} onRetry={props.onDownload} />
+        </Box>
+      ) : null}
     </Box>
   );
 }

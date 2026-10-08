@@ -219,3 +219,17 @@ describe('file names', () => {
     expect(plan.download).toBe('splitbook-4-groups-2026-09-01-to-2026-09-15.zip');
   });
 });
+
+it('refuses a period on an all-time JSON backup', () => {
+  const request = new Map([
+    ['groups', 'aaaaaaaaaaaaaaaaaaaaaaaa'],
+    ['format', 'json'],
+    ['from', '2026-09-01'],
+    ['to', '2026-09-30'],
+  ]);
+  const values = { get: (key: string) => request.get(key) ?? null };
+  expect(parseExportQuery(values).success).toBe(false);
+  request.delete('from');
+  request.delete('to');
+  expect(parseExportQuery(values)).toMatchObject({ success: true, data: { format: 'json' } });
+});

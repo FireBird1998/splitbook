@@ -1,6 +1,9 @@
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
+  // `forbidden()`: a Group's server page (the statement, #319) refuses a non-member with a
+  // real HTTP 403 and `groups/[id]/forbidden.tsx`, without exposing any Group data.
+  experimental: { authInterrupts: true },
   // @splitbook/shared ships TypeScript source; compile it together with the app.
   // Load-bearing beyond the in-repo dev/build: the expense-access suite copies the
   // app to a temp directory and runs webpack there, where the package sits outside

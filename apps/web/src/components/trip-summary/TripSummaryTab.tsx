@@ -64,6 +64,7 @@ export default function TripSummaryTab() {
       groupId={groupId}
       userId={userId}
       today={today}
+      timeZone={timeZone}
       read={data}
       failed={!data && Boolean(error)}
       onRetry={() => void mutate()}

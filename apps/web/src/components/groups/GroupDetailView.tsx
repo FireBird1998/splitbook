@@ -23,6 +23,7 @@ import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import GroupPageHeader from './GroupPageHeader';
 import GroupTabs from './GroupTabs';
+import GroupUnavailable from './GroupUnavailable';
 import {
   GroupPageContext,
   type GroupBalancesRead,
@@ -97,18 +98,7 @@ function GroupDetailPage({ groupId, userId, children }: GroupDetailViewProps) {
     return <ErrorState message="Group could not be loaded." onRetry={() => void mutate()} />;
   }
 
-  if (!group) {
-    return (
-      <Box sx={{ textAlign: 'center', py: 6 }}>
-        <Typography variant="h6" fontWeight={500} color="text.primary" sx={{ mb: 1 }}>
-          Group not found
-        </Typography>
-        <Typography color="text.secondary">
-          This group may have been deleted or you don&apos;t have access.
-        </Typography>
-      </Box>
-    );
-  }
+  if (!group) return <GroupUnavailable />;
 
   return (
     <GroupDetailContent
