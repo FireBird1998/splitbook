@@ -330,33 +330,6 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
                 },
               },
               savedQueries: savedQueriesIn(copies),
-              readCache: {
-                load: async (account: string, path: string) =>
-                  structuredClone(copies.get(account + path) ?? null),
-                save: async (account: string, path: string, value: unknown) => {
-                  copies.set(account + path, structuredClone(value));
-                },
-                clear: async () => copies.clear(),
-                invalidateGroup: async (account: string, id: string) => {
-                  for (const key of [...copies.keys()])
-                    if (
-                      key.startsWith(`${account}/api/groups/${id}`) ||
-                      key === `${account}/api/groups` ||
-                      key === `${account}/api/user/balances`
-                    )
-                      copies.delete(key);
-                },
-                invalidateLedger: async (account: string, id: string) => {
-                  for (const key of [...copies.keys()])
-                    if (
-                      key.startsWith(`${account}/api/groups/${id}/`) ||
-                      key.startsWith(`${account}/api/groups/${id}?`) ||
-                      key === `${account}/api/user/balances`
-                    )
-                      copies.delete(key);
-                },
-                retainGroups: async () => undefined,
-              },
             }
           : {}),
         expenseDrafts: {

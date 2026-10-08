@@ -133,16 +133,6 @@ function phone() {
           },
         },
         savedQueries: savedQueriesIn(disk),
-        readCache: {
-          retainGroups: async () => undefined,
-          invalidateGroup: async () => undefined,
-          invalidateLedger: async () => undefined,
-          load: async (account, key) => structuredClone(disk.get(account + key) ?? null),
-          save: async (account, key, value) => {
-            disk.set(account + key, structuredClone(value));
-          },
-          clear: async () => disk.clear(),
-        },
         accountLocal: {
           owner: {
             load: async () => owner,

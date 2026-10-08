@@ -195,34 +195,13 @@ function fixture(options: { freshness?: number } = {}) {
             cookie = null;
           },
         },
-        savedQueries: savedQueriesIn(disk),
-        readCache: {
-          ...records(disk),
-          invalidateGroup: async (account, id) => {
-            purges += 1;
-            for (const key of disk.keys())
-              if (
-                key.startsWith(`${account}/api/groups/${id}`) ||
-                key === `${account}/api/groups` ||
-                key === `${account}/api/user/balances`
-              )
-                disk.delete(key);
+        savedQueries: savedQueriesIn(disk, {
+          remove: async (account, path) => {
+            // Observes the per-query removal of the Group row, once per denial purge.
+            if (path === groupPath) purges += 1;
+            disk.delete(account + path);
           },
-          invalidateLedger: async (account, id) => {
-            for (const key of disk.keys())
-              if (
-                key.startsWith(`${account}/api/groups/${id}/`) ||
-                key === `${account}/api/user/balances`
-              )
-                disk.delete(key);
-          },
-          retainGroups: async (account, ids) => {
-            for (const key of disk.keys()) {
-              const id = /^\/api\/groups\/([a-f\d]{24})/.exec(key.slice(account.length))?.[1];
-              if (key.startsWith(account) && id && !ids.includes(id)) disk.delete(key);
-            }
-          },
-        },
+        }),
         offlineIdentity: {
           load: async () => null,
           save: async () => undefined,

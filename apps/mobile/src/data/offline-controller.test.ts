@@ -53,7 +53,17 @@ const expense = {
   isDeleted: false,
   editHistory: [],
 };
-function fixture(options: { timer?: MobileTimer } = {}) {
+function fixture(
+  options: {
+    timer?: MobileTimer;
+    rowSizes?: Map<string, number>;
+    rowUsed?: Map<string, number>;
+    usageWait?: () => Promise<void>;
+    removed?: string[];
+    clock?: { now: number };
+    extraGroups?: (typeof group)[];
+  } = {},
+) {
   let offline = false,
     revoked = false,
     deleted = false,
@@ -77,7 +87,8 @@ function fixture(options: { timer?: MobileTimer } = {}) {
   const requests: string[] = [];
   const cache = new Map<string, unknown>(),
     drafts = new Map<string, unknown>(),
-    creations = new Map<string, unknown>();
+    creations = new Map<string, unknown>(),
+    attempts = new Map<string, unknown>();
   const create = () =>
     createMobileController(
       {
@@ -86,7 +97,7 @@ function fixture(options: { timer?: MobileTimer } = {}) {
         developmentPersonaEnabled: true,
       },
       {
-        now: () => now,
+        now: () => options.clock?.now ?? now,
         timer: options.timer,
         credentials: {
           load: async () => cookie,
@@ -106,43 +117,40 @@ function fixture(options: { timer?: MobileTimer } = {}) {
             identity = null;
           },
         },
-        savedQueries: savedQueriesIn(cache),
-        readCache: {
-          retainGroups: async (account, ids) => {
-            for (const key of cache.keys()) {
-              const id = /^\/api\/groups\/([a-f\d]{24})(?:\/|\?|$)/i.exec(
-                key.slice(account.length),
-              )?.[1];
-              if (key.startsWith(account) && id && !ids.includes(id)) {
-                cache.delete(key);
-                cache.delete(account + '/api/user/balances');
-              }
-            }
+        savedQueries: {
+          ...savedQueriesIn(cache),
+          usage: async (account: string) => {
+            await options.usageWait?.();
+            return [...cache.keys()]
+              .filter((key) => key.startsWith(account))
+              .map((key) => ({
+                path: key.slice(account.length),
+                bytes: options.rowSizes?.get(key.slice(account.length)) ?? 0,
+                lastUsed: options.rowUsed?.get(key.slice(account.length)) ?? 0,
+              }));
           },
-          invalidateGroup: async (account, id) => {
-            for (const key of cache.keys())
-              if (
-                key.startsWith(account + '/api/groups/' + id) ||
-                key === account + '/api/groups' ||
-                key === account + '/api/user/balances'
-              )
-                cache.delete(key);
+          touch: async (account: string, path: string, time: number) => {
+            if (cache.has(account + path)) options.rowUsed?.set(path, time);
           },
-          invalidateLedger: async (account, id) => {
-            for (const key of cache.keys())
-              if (
-                key.startsWith(account + '/api/groups/' + id + '/') ||
-                key.startsWith(account + '/api/groups/' + id + '?') ||
-                key === account + '/api/user/balances'
-              )
-                cache.delete(key);
+          save: async (account: string, path: string, value: unknown) => {
+            cache.set(account + path, structuredClone(value));
+            options.rowUsed?.set(path, options.clock?.now ?? now);
           },
-          load: async (account, key) => structuredClone(cache.get(account + key) ?? null),
-          save: async (account, key, value) => {
-            cache.set(account + key, structuredClone(value));
+          remove: async (account: string, path: string) => {
+            options.removed?.push(path);
+            cache.delete(account + path);
+          },
+        },
+        settlementAttempts: {
+          load: async (account, group) => structuredClone(attempts.get(account + group) ?? null),
+          save: async (account, group, value) => {
+            attempts.set(account + group, structuredClone(value));
+          },
+          remove: async (account, group) => {
+            attempts.delete(account + group);
           },
           clear: async () => {
-            cache.clear();
+            attempts.clear();
           },
         },
         expenseDrafts: {
@@ -196,6 +204,7 @@ function fixture(options: { timer?: MobileTimer } = {}) {
                 identity = null;
                 drafts.clear();
                 creations.clear();
+                attempts.clear();
               },
             },
           ],
@@ -252,13 +261,19 @@ function fixture(options: { timer?: MobileTimer } = {}) {
               data:
                 activeUser.id !== accountId
                   ? []
-                  : [...(revoked ? [] : [group]), ...(created ? [created] : [])],
+                  : [
+                      ...(revoked ? [] : [group]),
+                      ...(options.extraGroups ?? []),
+                      ...(created ? [created] : []),
+                    ],
             });
           if (path === '/api/user/balances')
             return Response.json({
               status: 200,
               data: { buckets: [{ currency: 'INR', youOwe: 0, youAreOwed: 12 }] },
             });
+          const extra = options.extraGroups?.find((item) => path === `/api/groups/${item._id}`);
+          if (extra) return Response.json({ status: 200, data: extra });
           if (path === `/api/groups/${groupId}`) return Response.json({ status: 200, data: group });
           if (path === `/api/groups/${groupId}/expenses/${expenseId}`) {
             if (init.method === 'DELETE') deleted = true;
@@ -335,6 +350,7 @@ function fixture(options: { timer?: MobileTimer } = {}) {
     },
     cache,
     drafts,
+    attempts,
     failPath: (path: string) => {
       failedPaths.add(path);
     },
@@ -1055,4 +1071,254 @@ describe('account-scoped offline financial views', () => {
     await restarted.openGroup(groupId);
     expect(restarted.getSnapshot().detail.data).toBeNull();
   });
+});
+
+/** A stored-size inspection held by the boundary adapter, before any eviction can be made. */
+function heldUsage() {
+  let active = false;
+  let arrive!: () => void, release!: () => void;
+  const arrived = new Promise<void>((resolve) => {
+    arrive = resolve;
+  });
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    arrived,
+    release,
+    arm: () => {
+      active = true;
+    },
+    wait: async () => {
+      if (!active) return;
+      active = false;
+      arrive();
+      await released;
+    },
+  };
+}
+
+describe('saved-copy storage budget (#223)', () => {
+  it('evicts the least recently used rows while keeping Home and the open Group at 20 MB', async () => {
+    const mb = 1_000_000;
+    const oldPath = '/api/groups/b00000000000000000000002';
+    const recentPath = '/api/groups/b00000000000000000000003';
+    const openPath = `/api/groups/${groupId}`;
+    const rowSizes = new Map([
+      [oldPath, 8 * mb],
+      [recentPath, 8 * mb],
+      [openPath, 8 * mb],
+      ['/api/groups', 2 * mb],
+      ['/api/user/balances', 2 * mb],
+    ]);
+    const f = fixture({
+      rowSizes,
+      rowUsed: new Map([
+        [oldPath, 1],
+        [recentPath, 2],
+      ]),
+    });
+    const controller = f.create();
+    await controller.signIn('alex');
+    f.cache.set(accountId + oldPath, { version: 1, accountId, path: oldPath, value: {} });
+    f.cache.set(accountId + recentPath, { version: 1, accountId, path: recentPath, value: {} });
+    await controller.openGroup(groupId);
+    await vi.waitFor(() => expect(f.cache.has(accountId + oldPath)).toBe(false));
+    expect(f.cache.has(accountId + recentPath)).toBe(true);
+    expect(f.cache.has(accountId + openPath)).toBe(true);
+    expect(f.cache.has(accountId + '/api/groups')).toBe(true);
+    expect(f.cache.has(accountId + '/api/user/balances')).toBe(true);
+    expect(f.writes()).toBe(0);
+    controller.dispose();
+  });
+
+  it('uses the last time a saved row was shown, including a fresh query reused without another request', async () => {
+    const a = { ...group, _id: 'b00000000000000000000002', name: 'Maple House' };
+    const b = { ...group, _id: 'b00000000000000000000003', name: 'Cabin Weekend' };
+    const pathA = `/api/groups/${a._id}`,
+      pathB = `/api/groups/${b._id}`;
+    const clock = { now };
+    const rowUsed = new Map<string, number>();
+    const f = fixture({
+      clock,
+      rowUsed,
+      extraGroups: [a, b],
+      rowSizes: new Map([
+        [pathA, 8_000_000],
+        [pathB, 8_000_000],
+        [`/api/groups/${groupId}`, 8_000_000],
+        ['/api/groups', 2_000_000],
+        ['/api/user/balances', 2_000_000],
+      ]),
+    });
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(a._id);
+    const verified = (f.cache.get(accountId + pathA) as { refreshedAt: number }).refreshedAt;
+    clock.now += 1;
+    await controller.openGroup(b._id);
+    const before = f.requests().filter((request) => request === `GET ${pathA}`).length;
+    clock.now += 1;
+    await controller.openGroup(a._id);
+    await vi.waitFor(() => expect(rowUsed.get(pathA)).toBe(clock.now));
+    expect(f.requests().filter((request) => request === `GET ${pathA}`).length).toBe(before);
+    expect((f.cache.get(accountId + pathA) as { refreshedAt: number }).refreshedAt).toBe(verified);
+    clock.now += 1;
+    await controller.openGroup(groupId);
+    await vi.waitFor(() => expect(f.cache.has(accountId + pathB)).toBe(false));
+    expect(f.cache.has(accountId + pathA)).toBe(true);
+    controller.dispose();
+  });
+
+  it.each(['Group', 'Expense', 'payment'] as const)(
+    'keeps Home and the %s route’s Group even when protected rows alone exceed the budget',
+    async (screen) => {
+      const oldPath = '/api/groups/b00000000000000000000002';
+      const openPath = `/api/groups/${groupId}`;
+      const held = heldUsage();
+      const f = fixture({
+        usageWait: held.wait,
+        rowSizes: new Map([
+          [oldPath, 8_000_000],
+          [openPath, 26_000_000],
+          ['/api/groups', 2_000_000],
+          ['/api/user/balances', 2_000_000],
+        ]),
+      });
+      const controller = f.create();
+      await controller.signIn('alex');
+      f.cache.set(accountId + oldPath, { version: 1, accountId, path: oldPath, value: {} });
+      held.arm();
+      if (screen === 'Group') await controller.openGroup(groupId);
+      else if (screen === 'Expense') await controller.openExpense(groupId, expenseId);
+      else {
+        // Payments open over a Group view; an incoming Home copy finishes while that sheet is open.
+        await controller.openGroup(groupId);
+        await controller.openSettlements(groupId);
+      }
+      await within(held.arrived);
+      expect(controller.getSnapshot().screen).toBe(
+        screen === 'Group' ? 'group' : screen === 'Expense' ? 'expense' : 'settlement',
+      );
+      held.release();
+      await vi.waitFor(() => expect(f.cache.has(accountId + oldPath)).toBe(false));
+      expect(f.cache.has(accountId + openPath)).toBe(true);
+      expect(f.cache.has(accountId + '/api/groups')).toBe(true);
+      expect(f.cache.has(accountId + '/api/user/balances')).toBe(true);
+      expect(f.writes()).toBe(0);
+      controller.dispose();
+    },
+  );
+
+  it('shows an evicted view’s offline miss as an error, never an indefinite loader', async () => {
+    const path = `/api/groups/${groupId}`;
+    const f = fixture({ rowSizes: new Map([[path, 20_000_001]]) });
+    const first = f.create();
+    await first.signIn('alex');
+    await first.openGroup(groupId);
+    await vi.waitFor(() => expect(f.cache.has(accountId + path)).toBe(true));
+    await first.back();
+    await first.refreshHome();
+    await vi.waitFor(() => expect(f.cache.has(accountId + path)).toBe(false));
+    first.dispose();
+    f.goOffline();
+    const restarted = f.create();
+    await restarted.restore();
+    await restarted.openGroup(groupId);
+    expect(restarted.getSnapshot().detail.status).toBe('error');
+    expect(restarted.getSnapshot().detail.data).toBeNull();
+    expect(restarted.getSnapshot().detail.message).toBe(
+      'This view was not saved on this device. Connect to load it.',
+    );
+    restarted.dispose();
+  });
+
+  it('keeps any-age copies with original verification time while there is room, and reads them again when active', async () => {
+    const path = `/api/groups/${groupId}`;
+    const f = fixture();
+    const first = f.create();
+    await first.signIn('alex');
+    await first.openGroup(groupId);
+    const saved = f.cache.get(accountId + path) as { refreshedAt: number };
+    f.cache.set(accountId + path, { ...saved, refreshedAt: 1 });
+    first.dispose();
+    f.goOffline();
+    const restarted = f.create();
+    await restarted.restore();
+    const before = f.requests().filter((request) => request === `GET ${path}`).length;
+    await restarted.openGroup(groupId);
+    expect(restarted.getSnapshot().detail).toMatchObject({ status: 'ready', refreshedAt: 1 });
+    expect(restarted.getSnapshot().offline).toMatchObject({ active: true, refreshedAt: 1 });
+    f.goOnline();
+    await restarted.refresh();
+    expect(f.requests().filter((request) => request === `GET ${path}`).length).toBeGreaterThan(
+      before,
+    );
+    expect(restarted.getSnapshot().detail.refreshedAt).toBe(now);
+    restarted.dispose();
+  });
+
+  it('lets a draft write finish while eviction is held, without evicting drafts or unconfirmed saves', async () => {
+    const path = '/api/groups/b00000000000000000000002';
+    const held = heldUsage();
+    const f = fixture({ usageWait: held.wait, rowSizes: new Map([[path, 21_000_000]]) });
+    const controller = f.create();
+    await controller.signIn('alex');
+    f.cache.set(accountId + path, { version: 1, accountId, path, value: {} });
+    f.attempts.set(accountId + groupId, { submissionKey: 'unconfirmed-same-key' });
+    held.arm();
+    await controller.openExpense(groupId);
+    await within(held.arrived);
+    await within(controller.updateExpenseDraft({ description: 'Keep this dinner', amount: '12' }));
+    expect(f.drafts.get(accountId + groupId)).toMatchObject({
+      draft: { description: 'Keep this dinner' },
+    });
+    expect(f.cache.has(accountId + path)).toBe(true);
+    held.release();
+    await vi.waitFor(() => expect(f.cache.has(accountId + path)).toBe(false));
+    expect(f.drafts.get(accountId + groupId)).toMatchObject({
+      draft: { description: 'Keep this dinner' },
+    });
+    expect(f.attempts.get(accountId + groupId)).toEqual({ submissionKey: 'unconfirmed-same-key' });
+    expect(f.writes()).toBe(0);
+    controller.dispose();
+  });
+
+  it.each(['sign-out', '401'] as const)(
+    'refuses held eviction when the account lease retires through %s',
+    async (retirement) => {
+      const path = '/api/groups/b00000000000000000000002';
+      const held = heldUsage(),
+        removed: string[] = [];
+      const f = fixture({ usageWait: held.wait, removed, rowSizes: new Map([[path, 21_000_000]]) });
+      const controller = f.create();
+      await controller.signIn('alex');
+      f.cache.set(accountId + path, { version: 1, accountId, path, value: {} });
+      held.arm();
+      await controller.openExpense(groupId);
+      await within(held.arrived);
+      await controller.updateExpenseDraft({ description: 'Retained after expiry' });
+      removed.length = 0;
+      if (retirement === 'sign-out') {
+        const leaving = controller.signOut();
+        expect(controller.getSnapshot().auth.status).toBe('signed-out');
+        held.release();
+        await within(leaving);
+        expect(f.cache.size).toBe(0);
+        expect(f.drafts.size).toBe(0);
+      } else {
+        f.expireSession();
+        await within(controller.refresh());
+        expect(controller.getSnapshot().auth.status).toBe('signed-out');
+        expect(f.drafts.get(accountId + groupId)).toMatchObject({
+          draft: { description: 'Retained after expiry' },
+        });
+        held.release();
+        // The explicit purge waits for every running saved-copy operation, exposing any late delete.
+        await within(controller.signOut());
+      }
+      expect(removed).toEqual([]);
+      controller.dispose();
+    },
+  );
 });

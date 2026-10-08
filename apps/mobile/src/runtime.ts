@@ -1,4 +1,3 @@
-import { createFinancialReadStore } from './data/read-cache-storage';
 import { createSettlementAttemptStore } from './data/settlement-storage';
 import { randomUUID, getRandomBytes } from 'expo-crypto';
 import { createExpenseDraftStore } from './data/expense-storage';
@@ -51,8 +50,7 @@ export const appearance = createAppearanceController({
 const expenseDrafts = createExpenseDraftStore(controllerConfig.apiBaseUrl);
 const settlementAttempts = createSettlementAttemptStore(controllerConfig.apiBaseUrl);
 const groupCreations = createGroupCreationStore(controllerConfig.apiBaseUrl);
-const readCache = createFinancialReadStore(controllerConfig.apiBaseUrl);
-// The persister's rows (ADR 0006, M3-1), in the same database as the older saved copies.
+// The persister is the sole saved-copy store (ADR 0006, #223).
 const savedQueries = createAccountGroupRecordStore(controllerConfig.apiBaseUrl, 'saved');
 // Saved copies this device couldn't remove (#212): kept apart from the database that failed.
 const untrustedKey = storageKey.replace('splitbook.session.', 'splitbook.untrusted-copies.');
@@ -79,7 +77,6 @@ export const controller = createMobileController(controllerConfig, {
       )
     : undefined,
   fetch,
-  readCache,
   savedQueries,
   netInfo: NetInfo,
   offlineIdentity,
@@ -114,7 +111,6 @@ export const controller = createMobileController(controllerConfig, {
       expenseDrafts,
       settlementAttempts,
       groupCreations,
-      readCache,
       savedQueries,
       untrustedCopies,
       offlineIdentity,

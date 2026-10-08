@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './mobile-controller';
-import { createFinancialReadStore } from './read-cache-storage';
 import { createAccountGroupRecordStore } from './account-record-storage';
-import type { FinancialReadStore } from './offline-cache';
 import type { FetchResponse } from './types';
 
 // #191: a member's own confirmed or unconfirmed change leaves no saved copy older than it.
@@ -22,8 +20,8 @@ vi.mock('./account-record-storage', () => ({
         structuredClone(device.records.get(key(accountId, id)) ?? null),
       save: async (accountId: string, id: string, value: unknown) => {
         const stall = device.stall;
-        // Saved copies: the older document's, and the persister's rows since #222 moved Activity.
-        if ((kind === 'cache' || kind === 'saved') && stall?.environment === environment) {
+        // All saved copies are now per-query persister rows (#223).
+        if (kind === 'saved' && stall?.environment === environment) {
           device.stall = null;
           stall.arrive();
           await stall.released;
@@ -126,14 +124,13 @@ function fixture() {
   const drafts = memory(),
     attempts = memory();
   const environment = `http://localhost:4138/${Math.random()}`;
-  const store = createFinancialReadStore(environment);
-  const savedQueries = createAccountGroupRecordStore(environment, 'saved');
-  const readCache: FinancialReadStore = {
+  const store = createAccountGroupRecordStore(environment, 'saved');
+  const savedQueries = {
     ...store,
-    invalidateLedger: (accountId, groupId) =>
+    remove: (accountId: string, path: string) =>
       server.failInvalidation
         ? Promise.reject(new Error('The device storage is full'))
-        : store.invalidateLedger(accountId, groupId),
+        : store.remove(accountId, path),
   };
   const offlineIdentity = {
     load: async () => structuredClone(identity),
@@ -339,7 +336,6 @@ function fixture() {
             cookie = null;
           },
         },
-        readCache,
         savedQueries,
         offlineIdentity,
         expenseDrafts: drafts,
@@ -363,7 +359,7 @@ function fixture() {
               cleanup = false;
             },
           },
-          stores: [readCache, savedQueries, offlineIdentity, drafts, attempts],
+          stores: [savedQueries, offlineIdentity, drafts, attempts],
         },
         fetch: async (url, init) => {
           if (server.offline) throw new Error('Offline');
@@ -409,11 +405,6 @@ function fixture() {
 
   /** This device's saved copies for Alex, by path: the older document's, then the persister's rows. */
   const saved = (): Record<string, { refreshedAt: number; value: unknown }> => ({
-    ...(
-      device.records.get(`${environment}|cache|${alex.id}|reads`) as
-        | { entries: Record<string, { refreshedAt: number; value: unknown }> }
-        | undefined
-    )?.entries,
     ...Object.fromEntries(
       [...device.records]
         .filter(([key]) => key.startsWith(`${environment}|saved|${alex.id}|`))

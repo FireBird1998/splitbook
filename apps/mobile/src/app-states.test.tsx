@@ -335,16 +335,6 @@ function device() {
             cache.delete(account + path);
           },
         }),
-        readCache: {
-          retainGroups: async () => undefined,
-          invalidateGroup: async () => undefined,
-          invalidateLedger: async () => undefined,
-          load: async (account, key) => structuredClone(cache.get(account + key) ?? null),
-          save: async (account, key, value) => {
-            cache.set(account + key, structuredClone(value));
-          },
-          clear: async () => cache.clear(),
-        },
         expenseDrafts: {
           load: async (account, id) => {
             await disk();

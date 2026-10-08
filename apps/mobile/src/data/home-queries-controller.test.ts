@@ -150,6 +150,9 @@ function fixture() {
     },
   };
   const savedQueries = {
+    retainGroups: async () => {
+      if (device.failRetain) throw new Error('The device storage is full');
+    },
     ...records(rows),
     load: async (account: string, key: string) => {
       if (device.failLoad || failOnce.delete(key))
@@ -174,25 +177,6 @@ function fixture() {
           groupId: key.slice(account.length),
           value: structuredClone(value),
         })),
-  };
-  const readCache = {
-    ...records(disk),
-    invalidateGroup: async (account: string, id: string) => {
-      for (const key of [...disk.keys()])
-        if (key.startsWith(`${account}/api/groups/${id}`)) disk.delete(key);
-    },
-    invalidateLedger: async (account: string, id: string) => {
-      if (device.failRemoval) throw new Error('The device storage is full');
-      for (const key of [...disk.keys()])
-        if (key.startsWith(`${account}/api/groups/${id}/`)) disk.delete(key);
-    },
-    retainGroups: async (account: string, ids: string[]) => {
-      if (device.failRetain) throw new Error('The device storage is full');
-      for (const key of [...disk.keys()]) {
-        const id = /^\/api\/groups\/([a-f\d]{24})/.exec(key.slice(account.length))?.[1];
-        if (key.startsWith(account) && id && !ids.includes(id)) disk.delete(key);
-      }
-    },
   };
   const signedIn = (init: RequestInit) =>
     String((init.headers as Record<string, string>).Cookie ?? '').includes('sam.') ? sam : alex;
@@ -299,7 +283,6 @@ function fixture() {
           },
         },
         savedQueries,
-        readCache,
         netInfo: {
           // As NetInfo does, a new listener hears the connection as it is now.
           addEventListener: (listener) => {
@@ -358,7 +341,7 @@ function fixture() {
             },
           },
           untrustedCopies,
-          stores: [savedQueries, readCache, records(drafts), records(attempts), untrustedCopies],
+          stores: [savedQueries, records(drafts), records(attempts), untrustedCopies],
         },
         fetch: async (url, init) => {
           const path = new URL(url).pathname + new URL(url).search;

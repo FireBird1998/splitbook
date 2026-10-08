@@ -289,7 +289,7 @@ export interface HomeSession {
   answered(path: string, saved?: number | null): void;
   /** A Groups list from the server holds `listed`, and leaves out `lost`: they go from memory. */
   listed(listed: Set<string>, lost: Set<string>): void;
-  /** The older saved-copy store keeps only these Groups' copies (inside a lease write). */
+  /** The persister keeps only these Groups' copies (inside a lease write). */
   retain(accountId: string, listed: string[]): Promise<void> | undefined;
   /** This account's saved copies in these scopes couldn't be removed: never shown again. */
   distrust(accountId: string, scopes: string[]): void;
@@ -517,7 +517,7 @@ export function createHomeQueries(session: HomeSession) {
     };
   /**
    * A Groups list from the server. One in which a Group doesn't list the member is refused, as
-   * malformed. The Groups it leaves out lose their reads and saved copies, in both stores, and
+   * malformed. The Groups it leaves out lose their reads and saved copies, and
    * the saved list and Home's figures with them, so no older list shows them even when this one
    * can't be saved; a removal that fails leaves those copies untrusted, and never signs the
    * member out (#212, #323).

@@ -76,9 +76,8 @@ async function run() {
     ),
   ).data._id;
   // Persisted (disk-like) stores survive a controller restart; the session cookie too.
-  const cache = memoryStore(),
-    // The persister's rows: the Groups list and Home (#217).
-    savedRows = memoryStore(),
+  // Every view keeps per-query rows in the persister (#223).
+  const savedRows = memoryStore(),
     drafts = memoryStore(),
     attempts = memoryStore();
   let cookie: string | null = null,
@@ -106,30 +105,6 @@ async function run() {
           },
         },
         savedQueries: savedRows,
-        readCache: {
-          load: (account, path) => cache.load(account, path),
-          save: (account, path, value) => cache.save(account, path, value),
-          clear: cache.clear,
-          invalidateGroup: async (account, group) => {
-            for (const key of [...cache.records.keys()])
-              if (
-                key.startsWith(`${account}:/api/groups/${group}`) ||
-                key === `${account}:/api/groups` ||
-                key === `${account}:/api/user/balances`
-              )
-                cache.records.delete(key);
-          },
-          invalidateLedger: async (account, group) => {
-            for (const key of [...cache.records.keys()])
-              if (
-                key.startsWith(`${account}:/api/groups/${group}/`) ||
-                key.startsWith(`${account}:/api/groups/${group}?`) ||
-                key === `${account}:/api/user/balances`
-              )
-                cache.records.delete(key);
-          },
-          retainGroups: async () => undefined,
-        },
         offlineIdentity: {
           load: async () => null,
           save: async () => undefined,
@@ -157,7 +132,7 @@ async function run() {
               cleanup = false;
             },
           },
-          stores: [cache, savedRows, drafts, attempts],
+          stores: [savedRows, drafts, attempts],
         },
         fetch: async (url, init) => {
           const target = new URL(url);
