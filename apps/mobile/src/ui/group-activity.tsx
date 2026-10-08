@@ -1,3 +1,4 @@
+import type { RowPlaces } from './return-scroll';
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { activityExpenseId, type ActivityEvent, type ActivityState } from '../data/activity';
@@ -41,6 +42,8 @@ interface GroupActivityProps {
   onLoadNewer?: () => void;
   /** Scroll the view by `dy`: the events above the one on screen moved by as much. */
   onShift?: (dy: number) => void;
+  /** Current row layouts in scroll-content coordinates, for memory-only return anchors. */
+  onRowsLayout?: (rows: RowPlaces) => void;
   /** Opens an event: its Expense's record when it names one, otherwise what was recorded. */
   onSelect: (id: string) => void;
   onClose: () => void;
@@ -204,6 +207,7 @@ function ActivityList({
   onMore,
   onLoadNewer,
   onShift,
+  onRowsLayout,
   onSelect,
 }: GroupActivityProps) {
   const theme = useTheme();
@@ -229,9 +233,11 @@ function ActivityList({
   // event shown on both sides of the move moved, so the event on screen keeps its place (#215).
   // Where the list, each day and each event lie, as their layouts last said.
   const places = useRef({
+    origin: 0,
     list: 0,
+    body: null as number | null,
     days: new Map<string, number>(),
-    rows: new Map<string, { day: string; y: number }>(),
+    rows: new Map<string, { day: string; y: number; height: number }>(),
   });
   const anchor = useRef<{
     id: string;
@@ -245,7 +251,9 @@ function ActivityList({
   const top = (id: string) => {
     const row = places.current.rows.get(id),
       day = row && places.current.days.get(row.day);
-    return row && day !== undefined ? places.current.list + day + row.y : null;
+    return row && day !== undefined && places.current.body !== null
+      ? places.current.list + places.current.body + day + row.y
+      : null;
   };
   useLayoutEffect(() => {
     const moved = firstPage !== shownFirst.current;
@@ -266,11 +274,26 @@ function ActivityList({
   });
   /** A layout changed: once the move's layouts have all arrived, the view follows its event. */
   const place = (
-    change: { list: number } | { day: string; y: number } | { row: string; day: string; y: number },
+    change:
+      | { origin: number }
+      | { list: number }
+      | { body: number }
+      | { day: string; y: number }
+      | { row: string; day: string; y: number; height: number },
   ) => {
-    if ('list' in change) places.current.list = change.list;
+    if ('origin' in change) places.current.origin = change.origin;
+    else if ('list' in change) places.current.list = change.list;
+    else if ('body' in change) places.current.body = change.body;
     else if ('row' in change) places.current.rows.set(change.row, change);
     else places.current.days.set(change.day, change.y);
+    const rows = new Map<string, { top: number; height: number }>();
+    for (const { _id: key } of state.events) {
+      const at = top(key),
+        row = places.current.rows.get(key);
+      if (at !== null && row)
+        rows.set(key, { top: places.current.origin + at, height: row.height });
+    }
+    onRowsLayout?.(rows);
     const held = anchor.current;
     if (!held || held.timer) return;
     // A layout's events arrive together: the shift waits for all of them.
@@ -330,7 +353,10 @@ function ActivityList({
     );
   return (
     // A first load's progress bar is the screen's, under the top bar.
-    <View style={{ gap: 12 }}>
+    <View
+      style={{ gap: 12 }}
+      onLayout={({ nativeEvent }) => place({ origin: nativeEvent.layout.y })}
+    >
       <SectionHeader
         title="Changes in this Group"
         // Under the title: beside it, the time was cut at the screen's edge at 130% text on a
@@ -381,7 +407,11 @@ function ActivityList({
       <View onLayout={({ nativeEvent }) => place({ list: nativeEvent.layout.y })}>
         {/* Activity read empty stays empty while it's read again. */}
         {loading && state.pagination === null ? (
-          <Card loading="Loading Activity" skeleton={{ avatar: true, heading: true }} />
+          <Card
+            loading="Loading Activity"
+            skeleton={{ avatar: true, heading: true }}
+            onBodyOffset={(body) => place({ body })}
+          />
         ) : (state.status === 'ready' || loading) && !state.events.length ? (
           <Card padded>
             <CompactText weight="semibold">No changes yet</CompactText>
@@ -390,7 +420,7 @@ function ActivityList({
             </CompactText>
           </Card>
         ) : state.events.length ? (
-          <Card>
+          <Card onBodyOffset={(body) => place({ body })}>
             {activityDays(state.events, now).map((day, index) => (
               <View
                 key={day.key}
@@ -417,6 +447,7 @@ function ActivityList({
                         row: event._id,
                         day: day.key,
                         y: nativeEvent.layout.y,
+                        height: nativeEvent.layout.height,
                       })
                     }
                   >

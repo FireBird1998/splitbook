@@ -507,7 +507,8 @@ export function createActivityQueries(session: ActivitySession) {
   const listOptions = (key: QueryKey, fresh = false) => {
     const reread = rereadOf(key);
     // A return reads every page it left again, from the window's first (#215).
-    const first = stateOf<Pages>(key)?.data?.pageParams[0] ?? 1;
+    const start = reread?.first ?? 1;
+    const first = stateOf<Pages>(key)?.data?.pageParams[0] ?? start;
     const pages = reread ? Math.max(1, reread.pages - first + 1) : undefined;
     return {
       staleTime,
@@ -517,7 +518,7 @@ export function createActivityQueries(session: ActivitySession) {
       refetchOnReconnect: false,
       queryKey: key,
       queryFn: readPage,
-      initialPageParam: 1,
+      initialPageParam: start,
       getNextPageParam: (last: PageEnvelope) => {
         if (last.source === 'failed') return undefined;
         const { pagination } = pageOf(last.value, key[3] as string, last.page);

@@ -1,3 +1,4 @@
+import type { RowPlaces } from './return-scroll';
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
@@ -427,6 +428,7 @@ export function GroupExpensesView({
   onLoadMore,
   onLoadNewer,
   onShift,
+  onRowsLayout,
   onOpenExpense,
   onResumeDraft,
   onDiscardDraft,
@@ -453,6 +455,8 @@ export function GroupExpensesView({
   onLoadNewer: () => void;
   /** Scroll the view by `dy`: the rows above the one on screen changed by as much. */
   onShift?: (dy: number) => void;
+  /** Current row layouts in scroll-content coordinates, for memory-only return anchors. */
+  onRowsLayout?: (rows: RowPlaces) => void;
   onOpenExpense: (expenseId: string) => void;
   onResumeDraft: () => void;
   onDiscardDraft: () => void;
@@ -476,9 +480,11 @@ export function GroupExpensesView({
   // as a row shown on both sides of the change moved, so the row on screen keeps its place.
   // Where the list, each day and each row lie, as their layouts last said.
   const places = useRef({
+    origin: 0,
     list: 0,
+    body: null as number | null,
     days: new Map<string, number>(),
-    rows: new Map<string, { day: string; y: number }>(),
+    rows: new Map<string, { day: string; y: number; height: number }>(),
   });
   const anchor = useRef<{ id: string; at: number; timer?: ReturnType<typeof setTimeout> } | null>(
     null,
@@ -490,7 +496,9 @@ export function GroupExpensesView({
   const top = (id: string) => {
     const row = places.current.rows.get(id),
       day = row && places.current.days.get(row.day);
-    return row && day !== undefined ? places.current.list + day + row.y : null;
+    return row && day !== undefined && places.current.body !== null
+      ? places.current.list + places.current.body + day + row.y
+      : null;
   };
   useLayoutEffect(() => {
     const moved = firstPage !== shownFirst.current;
@@ -511,11 +519,26 @@ export function GroupExpensesView({
   });
   /** A layout changed: once the slide's layouts have all arrived, the view follows its row. */
   const place = (
-    change: { list: number } | { day: string; y: number } | { row: string; day: string; y: number },
+    change:
+      | { origin: number }
+      | { list: number }
+      | { body: number }
+      | { day: string; y: number }
+      | { row: string; day: string; y: number; height: number },
   ) => {
-    if ('list' in change) places.current.list = change.list;
+    if ('origin' in change) places.current.origin = change.origin;
+    else if ('list' in change) places.current.list = change.list;
+    else if ('body' in change) places.current.body = change.body;
     else if ('row' in change) places.current.rows.set(change.row, change);
     else places.current.days.set(change.day, change.y);
+    const rows = new Map<string, { top: number; height: number }>();
+    for (const { id: key } of expenses.data) {
+      const at = top(key),
+        row = places.current.rows.get(key);
+      if (at !== null && row)
+        rows.set(key, { top: places.current.origin + at, height: row.height });
+    }
+    onRowsLayout?.(rows);
     const held = anchor.current;
     if (!held || held.timer) return;
     // A layout's events arrive together: the shift waits for all of them.
@@ -545,7 +568,10 @@ export function GroupExpensesView({
 
   const scope = state.month ? monthLabel(state.month) : 'all-time';
   return (
-    <View style={{ gap: 12 }}>
+    <View
+      style={{ gap: 12 }}
+      onLayout={({ nativeEvent }) => place({ origin: nativeEvent.layout.y })}
+    >
       <ExpenseSummary
         household={household}
         month={state.month}
@@ -611,10 +637,14 @@ export function GroupExpensesView({
               <CompactButton label="Retry expenses" variant="tonal" onPress={onRefreshExpenses} />
             </View>
           ) : (
-            <Card loading={`Loading ${scope} expenses`} skeleton={{ heading: true }} />
+            <Card
+              loading={`Loading ${scope} expenses`}
+              skeleton={{ heading: true }}
+              onBodyOffset={(body) => place({ body })}
+            />
           )
         ) : expenses.data.length ? (
-          <Card>
+          <Card onBodyOffset={(body) => place({ body })}>
             {expenseDays(expenses.data, now).map((day) => (
               <View
                 key={day.key}
@@ -632,7 +662,12 @@ export function GroupExpensesView({
                   <View
                     key={expense.id}
                     onLayout={({ nativeEvent }) =>
-                      place({ row: expense.id, day: day.key, y: nativeEvent.layout.y })
+                      place({
+                        row: expense.id,
+                        day: day.key,
+                        y: nativeEvent.layout.y,
+                        height: nativeEvent.layout.height,
+                      })
                     }
                   >
                     <ExpenseRow

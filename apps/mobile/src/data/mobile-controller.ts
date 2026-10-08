@@ -110,6 +110,7 @@ import type {
   GroupDraft,
   GroupFinancialState,
   GroupReturnContext,
+  ScrollAnchor,
   GroupSnackbar,
   KeptDraft,
   LeaveGroupState,
@@ -2085,7 +2086,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * An event about an Expense opens that Expense's record, and Back returns to Activity;
    * any other event, such as a payment, opens what was recorded.
    */
-  const openActivityEvent = async (eventId: string, origin: { scrollY?: number } = {}) => {
+  const openActivityEvent = async (
+    eventId: string,
+    origin: { scrollY?: number; anchor?: ScrollAnchor } = {},
+  ) => {
     const { activity } = snapshot;
     const event = activity.events.find((item) => item._id === eventId);
     const expenseId = event && activityExpenseId(event);
@@ -2174,7 +2178,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /** Opening from the Group's own view records where to return; other entry is direct. */
-  const expenseReturn = (groupId: string, scrollY = 0): GroupReturnContext | null => {
+  const expenseReturn = (
+    groupId: string,
+    scrollY = 0,
+    anchor?: ScrollAnchor,
+  ): GroupReturnContext | null => {
     // Retry, Discard and Use saved version reopen the same task, which keeps its origin.
     if (route.screen === 'expense' && route.groupId === groupId) return route.returnTo;
     if (
@@ -2190,10 +2198,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       groupId,
       month,
       scrollY: Number.isFinite(scrollY) ? Math.max(0, scrollY) : 0,
+      ...(anchor && anchor.key && Number.isFinite(anchor.offset)
+        ? { anchor: { key: anchor.key, offset: anchor.offset } }
+        : {}),
       pages: expenses.month === month && expenses.pagination ? expenses.pagination.page : 1,
       // Only once the list has slid past the newest page (#215).
       ...(firstPage > 1 ? { firstPage } : {}),
       destination,
+      ...(destination === 'activity' &&
+      activity.groupId === groupId &&
+      (activity.firstPage ?? 1) > 1
+        ? { activityFirstPage: activity.firstPage }
+        : {}),
       activityPages:
         destination === 'activity' && activity.groupId === groupId && activity.pagination
           ? activity.pagination.page
@@ -2204,14 +2220,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const openExpense = async (
     groupId: string,
     expenseId?: string,
-    origin: { scrollY?: number } = {},
+    origin: { scrollY?: number; anchor?: ScrollAnchor } = {},
   ) => {
     if (snapshot.auth.status !== 'authenticated' || !snapshot.auth.user) return;
     const owner = generation;
     const view = ++viewRequest;
     const accountId = snapshot.auth.user.id;
     const month = snapshot.financial.groupId === groupId ? snapshot.financial.month : null;
-    const returnTo = expenseReturn(groupId, origin.scrollY);
+    const returnTo = expenseReturn(groupId, origin.scrollY, origin.anchor);
     const showing = () => current(owner) && view === viewRequest;
     const wanted = () => view === viewRequest;
     startReadView();
@@ -2644,7 +2660,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * Resume draft, from the Group's Expenses: opens its kept draft straight into the form, or
    * a save that may already be recorded into its recovery.
    */
-  const resumeKeptDraft = async (origin: { scrollY?: number } = {}) => {
+  const resumeKeptDraft = async (origin: { scrollY?: number; anchor?: ScrollAnchor } = {}) => {
     const groupId = snapshot.screen === 'group' ? snapshot.detail.id : null;
     if (!groupId) return;
     const opening = openExpense(groupId, undefined, origin);
@@ -2736,7 +2752,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     screen: 'group',
     groupId,
     destination,
-    restoreScroll: origin && { groupId, y: origin.scrollY, request: scrollRequests + 1 },
+    restoreScroll: origin && {
+      groupId,
+      y: origin.scrollY,
+      request: scrollRequests + 1,
+      ...(origin.anchor && origin.destination === destination ? { anchor: origin.anchor } : {}),
+    },
     reread: origin && {
       groupId,
       expenses: {
@@ -2744,7 +2765,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         pages: origin.pages,
         ...(origin.firstPage ? { first: origin.firstPage } : {}),
       },
-      activity: destination === 'activity' ? { pages: origin.activityPages } : null,
+      activity:
+        destination === 'activity'
+          ? {
+              pages: origin.activityPages,
+              ...(origin.activityFirstPage ? { first: origin.activityFirstPage } : {}),
+            }
+          : null,
     },
   });
   /** Where the Expense task on screen began, when it opened from this Group's view. */
@@ -2763,7 +2790,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       groupId,
       'expenses',
       kind === 'create' && origin?.firstPage
-        ? { ...origin, firstPage: undefined, scrollY: 0, pages: 1 }
+        ? { ...origin, firstPage: undefined, anchor: undefined, scrollY: 0, pages: 1 }
         : origin,
     );
   };
@@ -4156,14 +4183,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * Shows the Group as known so far; a Group read still in flight updates the page. The route
    * keeps where it returns: the Group view, Month and scroll it opened from.
    */
-  const openMembers = (origin: { scrollY?: number } = {}) => {
+  const openMembers = (origin: { scrollY?: number; anchor?: ScrollAnchor } = {}) => {
     const groupId = shownGroup(snapshot)?.id;
     if (snapshot.auth.status !== 'authenticated' || route.screen !== 'group' || !groupId) return;
     navigate({
       screen: 'members',
       groupId,
       destination: route.destination,
-      returnTo: expenseReturn(groupId, origin.scrollY),
+      returnTo: expenseReturn(groupId, origin.scrollY, origin.anchor),
       reread: rereadOf(groupId),
     });
   };

@@ -56,6 +56,7 @@ import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
 import { ExpenseEditor } from './src/ui/expense-editor';
 import { scrollToShow } from './src/ui/scroll';
+import { returnScrollTarget, visibleRowAnchor, type RowPlaces } from './src/ui/return-scroll';
 import { recordOutline } from './src/ui/expense-record-view';
 import { DetailsNotice, RefreshStatus, RetainedNotice } from './src/ui/financial-views';
 import { GroupExpensesView } from './src/ui/group-expenses';
@@ -761,10 +762,13 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
   // The destination's offset, recorded when an Expense opens so returning can restore it.
   const scrollY = useRef(0);
   const viewportHeight = useRef(0);
-  const pendingScroll = useRef<number | null>(null);
+  const contentHeight = useRef(0);
+  const rowPlaces = useRef<RowPlaces>(new Map());
+  const restoreTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingScroll = useRef<MobileSnapshot['restoreScroll']>(null);
   const restoreRequest = useRef<number | null>(null);
   const shownScrollKey = useRef<string | null>(null);
-  const scrollKey = `${state.detail.id}:${state.destination}`;
+  const scrollKey = `${state.detail.id}:${state.destination}:${state.financial.month}`;
   // An event opens over the list, which stays as it was underneath (#222's device check).
   const listed = useMemo(
     () => (state.activity.selected ? { ...state.activity, selected: null } : state.activity),
@@ -783,6 +787,8 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
   if (shownScrollKey.current !== scrollKey) {
     shownScrollKey.current = scrollKey;
     scrollY.current = 0;
+    rowPlaces.current = new Map();
+    contentHeight.current = 0;
     // Another view: where its window starts is no slide.
     shownFirstPage.current = firstPage;
     slideFrom.current = null;
@@ -794,18 +800,68 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
   if (!state.restoreScroll) pendingScroll.current = null;
   else if (state.restoreScroll.request !== restoreRequest.current) {
     restoreRequest.current = state.restoreScroll.request;
-    pendingScroll.current = state.restoreScroll.y;
+    pendingScroll.current = state.restoreScroll;
   }
-  /** Applied once the returning view's content is laid out; dragging or a new view cancels it. */
-  const restorePendingScroll = (contentHeight: number) => {
-    const y = pendingScroll.current;
-    if (y === null) return;
-    const reachable = Math.max(0, contentHeight - viewportHeight.current);
-    scroll.current?.scrollTo({ y: Math.min(y, reachable), animated: false });
-    scrollY.current = Math.min(y, reachable);
+  /** Applied once the returning view's content and row are laid out; a drag cancels it. */
+  const restorePendingScroll = (height: number) => {
+    contentHeight.current = height;
+    const restore = pendingScroll.current;
+    if (!restore || viewportHeight.current <= 0) return;
     const shown = controller.getSnapshot();
-    const { status } = shown.destination === 'activity' ? shown.activity : shown.financial.expenses;
-    if (reachable >= y || status === 'ready' || status === 'error') pendingScroll.current = null;
+    if (
+      shown.restoreScroll?.request !== restore.request ||
+      shown.restoreScroll.groupId !== restore.groupId
+    ) {
+      pendingScroll.current = null;
+      return;
+    }
+    const { status, data } = shown.financial.expenses;
+    const events = shown.activity;
+    const activity = shown.destination === 'activity';
+    const settled =
+      (activity ? events.status : status) === 'ready' ||
+      (activity ? events.status : status) === 'error';
+    let places = rowPlaces.current;
+    if (restore.anchor) {
+      // Rows may still be arriving after Back. A row still listed waits for its native layout;
+      // a row removed or moved to another Month falls back only once the read has settled.
+      const exists = activity
+        ? events.events.some((row) => row._id === restore.anchor!.key)
+        : data.some((row) => row.id === restore.anchor!.key);
+      if (!settled || (exists && !places.has(restore.anchor.key))) return;
+      if (!exists) places = new Map();
+    }
+    const y = returnScrollTarget(restore, places, {
+      content: height,
+      viewport: viewportHeight.current,
+    });
+    scroll.current?.scrollTo({ y, animated: false });
+    scrollY.current = y;
+    if (restore.anchor || Math.max(0, height - viewportHeight.current) >= restore.y || settled)
+      pendingScroll.current = null;
+  };
+  /** Native layout events arrive together; apply a row return after their last update. */
+  const scheduleRestore = () => {
+    if (restoreTimer.current !== null) clearTimeout(restoreTimer.current);
+    restoreTimer.current = setTimeout(() => {
+      restoreTimer.current = null;
+      restorePendingScroll(contentHeight.current);
+    }, 0);
+  };
+  useEffect(() => {
+    if (pendingScroll.current?.anchor) scheduleRestore();
+    return () => {
+      if (restoreTimer.current !== null) clearTimeout(restoreTimer.current);
+    };
+  }, [state.restoreScroll, state.financial.expenses.status, state.activity.status]);
+  const onRowsLayout = (rows: RowPlaces) => {
+    if (shownScrollKey.current !== scrollKey) return;
+    rowPlaces.current = rows;
+    if (pendingScroll.current?.anchor) scheduleRestore();
+  };
+  const origin = () => {
+    const anchor = visibleRowAnchor(rowPlaces.current, scrollY.current, viewportHeight.current);
+    return { scrollY: scrollY.current, ...(anchor ? { anchor } : {}) };
   };
   /** The window moved: the view scrolls by `dy` from where it was then, so the row stays put. */
   const shift = (dy: number) => {
@@ -815,13 +871,13 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     scroll.current?.scrollTo({ y: scrollY.current, animated: false });
   };
   const openExpense = (groupId: string, expenseId?: string) =>
-    void controller.openExpense(groupId, expenseId, { scrollY: scrollY.current });
+    void controller.openExpense(groupId, expenseId, origin());
   const kept = state.keptDraft?.groupId === known?.id ? state.keptDraft : null;
   // Both open the kept record; a save that may already be recorded is checked, not resumed.
   const keptAction = kept?.unconfirmed
     ? { label: 'Check save', icon: 'alert-circle-outline' as const }
     : { label: 'Resume draft', icon: 'pencil-outline' as const };
-  const resumeDraft = () => void controller.resumeKeptDraft({ scrollY: scrollY.current });
+  const resumeDraft = () => void controller.resumeKeptDraft(origin());
   // On Expenses, also while the Group is first read; not when it can't be.
   const floating =
     known && (group || state.detail.status === 'loading') && state.destination === 'expenses'
@@ -895,7 +951,8 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
       onLoadNewer={() => void controller.loadNewerActivity()}
       // The newest page dropped, or came back: the event on screen keeps its place.
       onShift={shift}
-      onSelect={(id) => void controller.openActivityEvent(id, { scrollY: scrollY.current })}
+      onRowsLayout={activityState.selected ? undefined : onRowsLayout}
+      onSelect={(id) => void controller.openActivityEvent(id, origin())}
       onClose={controller.closeActivityDetail}
     />
   );
@@ -932,7 +989,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         disabled: state.share.status === 'loading' || !known,
         offline: state.offline.active,
       }}
-      onMembers={() => controller.openMembers({ scrollY: scrollY.current })}
+      onMembers={() => controller.openMembers(origin())}
       onRefresh={() => void controller.refresh()}
       pull={{ refreshing: feedback.pull, onRefresh: () => void controller.refresh('pull') }}
       scrollRef={scroll}
@@ -956,7 +1013,11 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         onLayout: (event) => {
           viewportHeight.current = event.nativeEvent.layout.height;
         },
-        onContentSizeChange: (_width, height) => restorePendingScroll(height),
+        onContentSizeChange: (_width, height) => {
+          contentHeight.current = height;
+          if (pendingScroll.current?.anchor) scheduleRestore();
+          else restorePendingScroll(height);
+        },
       }}
       overlay={
         <>
@@ -1055,6 +1116,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                 onLoadNewer={() => void controller.loadNewerExpenses()}
                 // The newest page dropped: the row on screen keeps its place (#219).
                 onShift={shift}
+                onRowsLayout={onRowsLayout}
                 onOpenExpense={(expenseId) => openExpense(shown.id, expenseId)}
                 onResumeDraft={resumeDraft}
                 onDiscardDraft={discardDraft}

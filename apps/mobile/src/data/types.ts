@@ -191,6 +191,13 @@ export interface GroupFinancialState {
 /** The three Group-scoped places the bottom navigation switches between. */
 export type GroupDestination = 'expenses' | 'balances' | 'activity';
 
+/** A row’s position in the view, held only in the in-memory route (#225). */
+export interface ScrollAnchor {
+  key: string;
+  /** Distance from the row’s top into the view’s scroll offset. */
+  offset: number;
+}
+
 /**
  * Where a full-screen Expense task returns: captured when it opens from that Group's view.
  * `null` is direct entry, which returns to the Group at its default Month.
@@ -201,7 +208,8 @@ export interface GroupReturnContext {
   month: string | null;
   /** The Group view's vertical scroll offset at entry. */
   scrollY: number;
-  /** Expense pages loaded at entry, read again on return so that position still exists. */
+  anchor?: ScrollAnchor;
+  /** The last Expense page at entry, read again from firstPage on return. */
   pages: number;
   /**
    * The first Expense page listed at entry, only when the list had slid past the newest page: a
@@ -210,8 +218,10 @@ export interface GroupReturnContext {
   firstPage?: number;
   /** The bottom-navigation destination at entry; Back and close return to it. */
   destination: GroupDestination;
-  /** Activity pages loaded at entry from Activity, read again on return. */
+  /** The last Activity page at entry, read again from activityFirstPage on return. */
   activityPages: number;
+  /** The first Activity page at entry, only after its window slid. */
+  activityFirstPage?: number;
 }
 
 /**
@@ -226,7 +236,7 @@ export interface GroupReread {
    * slid past the newest page; reading starts there (#219, owner decision 1A).
    */
   expenses: { month: string | null; pages: number; first?: number } | null;
-  activity: { pages: number } | null;
+  activity: { pages: number; first?: number } | null;
 }
 
 /**
@@ -242,7 +252,7 @@ export type Route =
       groupId: string;
       destination: GroupDestination;
       /** Set by a return from a task over the Group: where its view scrolls back to. */
-      restoreScroll: { groupId: string; y: number; request: number } | null;
+      restoreScroll: { groupId: string; y: number; request: number; anchor?: ScrollAnchor } | null;
       /** Kept on Members and the Record payment sheet over this Group too. */
       reread: GroupReread | null;
     }
