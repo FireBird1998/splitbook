@@ -26,6 +26,7 @@ import { objectId, parseGroup } from './dto';
 import { parseExpensePage, parseGroupBalances } from './financial-dto';
 import { createSavedCopyQueue, notSaved, type Envelope } from './home-queries';
 import { cachedRead } from './offline-cache';
+import { keepInvalidated, queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';
 import type {
   AccountStorageLease,
@@ -210,7 +211,6 @@ export interface GroupSession {
   lease(): AccountStorageLease | null;
   /** The account lease's own checks, at write time: still this account, with no clean-up. */
   owns(accountId: string): boolean;
-  versionOf(key: QueryKey): number;
   /** Saved copies of `key` verified at or before this are never shown (see `HomeSession`). */
   distrusted(key: QueryKey, early: boolean): number;
   /** These saved copies couldn't be removed: never shown again, and deleted at the next start. */
@@ -270,10 +270,10 @@ interface View {
    */
   change: number;
 }
-/** A fetch's start: whose session, which version of its scope, and the changes and opens before. */
+/** A fetch's start: whose session, which query owns it, and the changes and opens before. */
 interface Start {
   owner: number;
-  version: number;
+  owns(): boolean;
   change: number;
   open: number;
 }
@@ -327,7 +327,7 @@ export function createGroupQueries(session: GroupSession) {
   let sheetRead: {
     groupId: string;
     owner: number;
-    version: number;
+    owns(): boolean;
     refreshedAt: number;
     value: unknown;
   } | null = null;
@@ -422,7 +422,7 @@ export function createGroupQueries(session: GroupSession) {
    */
   const saveRow = (
     key: QueryKey,
-    { owner, version }: { owner: number; version: number },
+    { owner, owns }: { owner: number; owns(): boolean },
     { refreshedAt, value }: { refreshedAt: number; value: unknown },
     page?: number,
   ) => {
@@ -431,7 +431,7 @@ export function createGroupQueries(session: GroupSession) {
     if (!lease || !rows) return;
     queue.push(path, async () => {
       if (!session.current(owner) || !session.owns(lease.accountId)) return;
-      if (version !== session.versionOf(key) || !session.savable(key)) return;
+      if (!owns() || !session.savable(key)) return;
       const { accountId } = lease,
         before = removals(key),
         row = {
@@ -463,7 +463,7 @@ export function createGroupQueries(session: GroupSession) {
    */
   const restore = async (key: QueryKey, owner: number) => {
     const lease = session.lease(),
-      version = session.versionOf(key),
+      owns = queryOwner(client, key),
       started = runs.get(hashKey(key));
     if (!lease || !rows) return;
     const list = isList(key);
@@ -475,7 +475,7 @@ export function createGroupQueries(session: GroupSession) {
       !row ||
       (latest && (latest !== started || latest.answered)) ||
       !session.current(owner) ||
-      version !== session.versionOf(key) ||
+      !owns() ||
       held(key)?.state.data !== undefined ||
       row.refreshedAt <= session.distrusted(key, true) ||
       !readable(key, row.value)
@@ -509,7 +509,7 @@ export function createGroupQueries(session: GroupSession) {
     if (query?.promise && !starts.has(query.promise))
       starts.set(query.promise, {
         owner: session.generation(),
-        version: session.versionOf(key),
+        owns: queryOwner(client, key),
         change: changes,
         open: opens,
       });
@@ -535,9 +535,9 @@ export function createGroupQueries(session: GroupSession) {
   ): Promise<Envelope> => {
     if (run.before) await run.before.catch(() => undefined);
     const owner = session.generation(),
-      version = session.versionOf(key),
+      owns = queryOwner(client, key),
       lease = session.lease();
-    const obsolete = () => !session.current(owner) || version !== session.versionOf(key);
+    const obsolete = () => !session.current(owner) || !owns();
     let value: unknown;
     try {
       value = await session.read(path, owner, run.abort?.signal);
@@ -552,6 +552,7 @@ export function createGroupQueries(session: GroupSession) {
         row && row.refreshedAt > session.distrusted(key, false) && readable(key, row.value)
           ? row
           : null;
+      keepInvalidated(client, key);
       session.answered(path, saved?.refreshedAt ?? null);
       if (!saved)
         throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
@@ -873,13 +874,14 @@ export function createGroupQueries(session: GroupSession) {
         continue;
       }
       // Balances follow a list that just settled: their observer reads them now.
+      const balanceState = stateOf(balancesKey(view.groupId));
       if (
         !shown.sheet &&
         shown.destination !== 'activity' &&
         view.checked &&
         !view.lost &&
         listSettled(list) &&
-        !stateOf(balancesKey(view.groupId))
+        (!balanceState || balanceState.status === 'pending')
       ) {
         bind();
         if (held(balancesKey(view.groupId))?.state.fetchStatus === 'fetching') continue;
@@ -1338,6 +1340,30 @@ export function createGroupQueries(session: GroupSession) {
 
   return {
     project,
+    /** The existing Group open survives destination switches; a later open owns its own tasks. */
+    ownsView() {
+      const opened = view;
+      return () => view === opened;
+    },
+    shownKeys(next: MobileSnapshot): QueryKey[] {
+      if (
+        !view ||
+        view.lost ||
+        !['group', 'members', 'settlement'].includes(next.screen) ||
+        view.groupId !== (next.screen === 'settlement' ? next.settlement.groupId : next.detail.id)
+      )
+        return [];
+      const keys = [groupQueryKey(view.groupId)];
+      if (
+        next.screen !== 'members' &&
+        !(next.screen === 'group' && next.destination === 'activity')
+      ) {
+        keys.push(balancesKey(view.groupId));
+        const list = shownList(next.financial);
+        if (list) keys.push(list);
+      }
+      return keys;
+    },
     /** After the publish that showed the view, and what runs in the same turn (a denial's purge). */
     bindLater,
     /**
@@ -1461,13 +1487,13 @@ export function createGroupQueries(session: GroupSession) {
     },
     /**
      * The Record payment sheet read the Group's Balances live, after its own check of the Group:
-     * kept with the version of their scope then, for `adoptSheetBalances`.
+     * kept with their actual query owner, for `adoptSheetBalances`.
      */
     sheetBalances(groupId: string, value: unknown) {
       sheetRead = {
         groupId,
         owner: session.generation(),
-        version: session.versionOf(balancesKey(groupId)),
+        owns: queryOwner(client, balancesKey(groupId)),
         refreshedAt: Date.now(),
         value,
       };
@@ -1484,8 +1510,8 @@ export function createGroupQueries(session: GroupSession) {
       if (
         read?.groupId !== groupId ||
         !session.current(read.owner) ||
-        read.version !== session.versionOf(key) ||
-        stateOf(key)
+        !read.owns() ||
+        stateOf(key)?.data !== undefined
       )
         return;
       const verified: Envelope = {
@@ -1494,7 +1520,7 @@ export function createGroupQueries(session: GroupSession) {
         value: read.value,
       };
       client.setQueryData(key, verified, { updatedAt: read.refreshedAt });
-      saveRow(key, { owner: read.owner, version: read.version }, verified);
+      saveRow(key, { owner: read.owner, owns: read.owns }, verified);
     },
     /**
      * This open of the Group's view has passed its check of the Group, and hasn't lost it since:
@@ -1592,7 +1618,8 @@ export function createGroupQueries(session: GroupSession) {
             reading.get(event.query)?.forEach((abort) => abort.abort());
             return;
           }
-          if (event.type !== 'updated') return;
+          // Invalidation changes preview eligibility, not the content a response projects.
+          if (event.type !== 'updated' || event.action.type === 'invalidate') return;
           const { query } = event,
             key = query.queryKey as QueryKey;
           // A Group's view owns its Group, its Balances and its Months' Expenses, whoever reads them.
