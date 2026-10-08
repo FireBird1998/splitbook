@@ -1409,6 +1409,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const openHome = (user: NonNullable<MobileSnapshot['auth']['user']>, start = {}) => {
     const signedIn = cleanSnapshot({ status: 'authenticated', user, message: null });
     navigate(home, { ...signedIn, ...savedHome(user.id), ...start });
+    savedCopies.adopted();
   };
   /** Home, with the Groups list read again now (Check Groups, joining): it shows it loading. */
   const listOnHome = (owner: number) => {

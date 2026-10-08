@@ -120,8 +120,15 @@ export function savedCopyBudget({
         if (held?.accountId !== accountId) return Promise.resolve();
         shownAt.set(accountId + path, now());
         await held.writeSavedCopy(() => rows.save(accountId, path, value));
-        await queued(() => trim(held));
+        // A cap inspection must not hold the view's next row behind this save. Its own lane
+        // still drains before account purge, and every eviction checks the captured lease.
+        void queued(() => trim(held)).catch(() => undefined);
       },
+    },
+    /** Old persister rows must be capped even if this restored account only reads offline. */
+    adopted() {
+      const held = lease();
+      if (rows && held) void queued(() => trim(held)).catch(() => undefined);
     },
     /** A query already in memory has just become visible again, without a network read. */
     shown(key: QueryKey, data: unknown) {

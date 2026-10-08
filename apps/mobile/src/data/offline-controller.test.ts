@@ -1099,6 +1099,73 @@ function heldUsage() {
 }
 
 describe('saved-copy storage budget (#223)', () => {
+  it('saves both Home rows while an earlier cap inspection is held, then restores them after a restart', async () => {
+    const held = heldUsage();
+    const f = fixture({ usageWait: held.wait });
+    const first = f.create();
+    held.arm();
+    await first.signIn('alex');
+    await within(held.arrived);
+    expect(first.getSnapshot().home.status).toBe('ready');
+    expect(f.cache.has(accountId + '/api/groups')).toBe(true);
+    expect(f.cache.has(accountId + '/api/user/balances')).toBe(true);
+    first.dispose();
+    held.release();
+    f.goOffline();
+    const restarted = f.create();
+    await restarted.restore();
+    expect(restarted.getSnapshot().home.status).toBe('ready');
+    expect(restarted.getSnapshot().offline.refreshedAt).toBe(now);
+    expect(f.writes()).toBe(0);
+    restarted.dispose();
+  });
+
+  it('caps pre-existing persister rows on offline account restoration without any new network saves', async () => {
+    const a = { ...group, _id: 'b00000000000000000000002', name: 'Maple House' };
+    const b = { ...group, _id: 'b00000000000000000000003', name: 'Cabin Weekend' };
+    const pathA = `/api/groups/${a._id}`,
+      pathB = `/api/groups/${b._id}`;
+    const f = fixture({
+      extraGroups: [a, b],
+      rowUsed: new Map([
+        [pathA, 1],
+        [pathB, 2],
+      ]),
+      rowSizes: new Map([
+        [pathA, 12_000_000],
+        [pathB, 12_000_000],
+        ['/api/groups', 2_000_000],
+        ['/api/user/balances', 2_000_000],
+      ]),
+    });
+    const first = f.create();
+    await first.signIn('alex');
+    first.dispose();
+    for (const [path, data] of [
+      [pathA, a],
+      [pathB, b],
+    ] as const)
+      f.cache.set(accountId + path, {
+        version: 1,
+        accountId,
+        path,
+        groupId: data._id,
+        refreshedAt: now - 86_400_000,
+        value: { status: 200, data },
+      });
+    const verifiedHome = f.cache.get(accountId + '/api/user/balances');
+    f.goOffline();
+    const restarted = f.create();
+    await restarted.restore();
+    expect(restarted.getSnapshot().home.status).toBe('ready');
+    await vi.waitFor(() => expect(f.cache.has(accountId + pathA)).toBe(false));
+    expect(f.cache.get(accountId + pathB)).toMatchObject({ refreshedAt: now - 86_400_000 });
+    expect(f.cache.get(accountId + '/api/user/balances')).toEqual(verifiedHome);
+    expect(restarted.getSnapshot().home.refreshedAt).toBe(now);
+    expect(f.writes()).toBe(0);
+    restarted.dispose();
+  });
+
   it('evicts the least recently used rows while keeping Home and the open Group at 20 MB', async () => {
     const mb = 1_000_000;
     const oldPath = '/api/groups/b00000000000000000000002';
