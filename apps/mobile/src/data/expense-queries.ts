@@ -28,6 +28,7 @@ import { parseExpenseRecord, type ExpenseRecord } from './expense-record';
 import { MAX_PAGES, rowPaths, sharePages, STALE, type PageEnvelope } from './group-queries';
 import { createSavedCopyQueue, notSaved, type Envelope } from './home-queries';
 import { cachedRead } from './offline-cache';
+import { keepInvalidated, queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';
 import type { AccountStorageLease, MobileSnapshot, Route } from './types';
 
@@ -112,7 +113,6 @@ export interface ExpenseSession {
   route(): Route;
   lease(): AccountStorageLease | null;
   owns(accountId: string): boolean;
-  versionOf(key: QueryKey): number;
   distrusted(key: QueryKey, early: boolean): number;
   savable(key: QueryKey): boolean;
   freshness: number;
@@ -184,8 +184,8 @@ export function createExpenseQueries(session: ExpenseSession) {
   const { client, rows } = session;
   const queue = createSavedCopyQueue();
   const runs = new Map<string, Run>();
-  /** Each fetch's start, by its promise: whose session, and which version of its scope. */
-  const starts = new WeakMap<object, { owner: number; version: number }>();
+  /** Each fetch's start, by its promise: whose session, and which query owns it. */
+  const starts = new WeakMap<object, { owner: number; owns(): boolean }>();
   /** How many pages each fetch of the changes has read so far, by its promise. */
   const pagesRead = new WeakMap<object, number>();
   /**
@@ -264,12 +264,12 @@ export function createExpenseQueries(session: ExpenseSession) {
 
   /**
    * Saves an answer as its row on the saved-copy queue, where a newer answer replaces it: the
-   * record, or one page of its changes (`page`). The session, the account, the read's version and
+   * record, or one page of its changes (`page`). The session, the account, the read's query owner and
    * whether its Group is kept here are checked at write time.
    */
   const saveRow = (
     key: QueryKey,
-    { owner, version }: { owner: number; version: number },
+    { owner, owns }: { owner: number; owns(): boolean },
     { refreshedAt, value }: { refreshedAt: number; value: unknown },
     page?: number,
   ) => {
@@ -278,7 +278,7 @@ export function createExpenseQueries(session: ExpenseSession) {
     if (!lease || !rows) return;
     queue.push(path, async () => {
       if (!session.current(owner) || !session.owns(lease.accountId)) return;
-      if (version !== session.versionOf(key) || !session.savable(key)) return;
+      if (!owns() || !session.savable(key)) return;
       const { accountId } = lease,
         before = removals(key);
       known.add(path);
@@ -304,7 +304,7 @@ export function createExpenseQueries(session: ExpenseSession) {
    */
   const restore = async (key: QueryKey, owner: number) => {
     const lease = session.lease(),
-      version = session.versionOf(key),
+      owns = queryOwner(client, key),
       started = runs.get(hashKey(key));
     if (!lease || !rows) return;
     const history = isHistory(key);
@@ -316,7 +316,7 @@ export function createExpenseQueries(session: ExpenseSession) {
       !row ||
       (latest && (latest !== started || latest.answered)) ||
       !session.current(owner) ||
-      version !== session.versionOf(key) ||
+      !owns() ||
       held(key)?.state.data !== undefined ||
       row.refreshedAt <= session.distrusted(key, true) ||
       !readable(key, row.value)
@@ -345,7 +345,7 @@ export function createExpenseQueries(session: ExpenseSession) {
     if (query?.promise && !starts.has(query.promise))
       starts.set(query.promise, {
         owner: session.generation(),
-        version: session.versionOf(key),
+        owns: queryOwner(client, key),
       });
     return query;
   };
@@ -363,9 +363,9 @@ export function createExpenseQueries(session: ExpenseSession) {
   ): Promise<Envelope> => {
     if (run.before) await run.before.catch(() => undefined);
     const owner = session.generation(),
-      version = session.versionOf(key),
+      owns = queryOwner(client, key),
       lease = session.lease();
-    const obsolete = () => !session.current(owner) || version !== session.versionOf(key);
+    const obsolete = () => !session.current(owner) || !owns();
     let value: unknown;
     try {
       value = await session.read(path, owner, run.abort?.signal);
@@ -380,6 +380,7 @@ export function createExpenseQueries(session: ExpenseSession) {
         row && row.refreshedAt > session.distrusted(key, false) && readable(key, row.value, page)
           ? row
           : null;
+      keepInvalidated(client, key);
       session.answered(path, saved?.refreshedAt ?? null);
       if (!saved)
         throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
@@ -814,6 +815,14 @@ export function createExpenseQueries(session: ExpenseSession) {
 
   const api = {
     project,
+    shownKeys(next: MobileSnapshot): QueryKey[] {
+      const { groupId, requestedExpenseId, draft } = next.expense;
+      if (next.screen !== 'expense' || !groupId) return [];
+      const keys = [session.group.options(groupId).queryKey!];
+      const id = requestedExpenseId ?? draft?.original?._id;
+      if (id) keys.push(recordKey(groupId, id), historyKey(groupId, id));
+      return keys;
+    },
     bindLater,
     /**
      * The observers take their queries again: removing a query never tells them (module-4 brief
@@ -1090,7 +1099,8 @@ export function createExpenseQueries(session: ExpenseSession) {
             reading.get(event.query)?.forEach((abort) => abort.abort());
             return;
           }
-          if (event.type !== 'updated') return;
+          // Invalidation changes preview eligibility, not the content a response projects.
+          if (event.type !== 'updated' || event.action.type === 'invalidate') return;
           const { query } = event,
             key = query.queryKey as QueryKey;
           if (!isOwn(key)) return;

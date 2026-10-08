@@ -31,6 +31,7 @@ import { parseGroup } from './dto';
 import { MAX_PAGES, rowPaths, sharePages, STALE, type PageEnvelope } from './group-queries';
 import { createSavedCopyQueue, notSaved, type Envelope } from './home-queries';
 import { cachedRead } from './offline-cache';
+import { keepInvalidated, queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';
 import type { AccountStorageLease, MobileSnapshot, Route } from './types';
 
@@ -117,7 +118,6 @@ export interface ActivitySession {
   route(): Route;
   lease(): AccountStorageLease | null;
   owns(accountId: string): boolean;
-  versionOf(key: QueryKey): number;
   distrusted(key: QueryKey, early: boolean): number;
   distrust(accountId: string, scopes: string[]): void;
   savable(key: QueryKey): boolean;
@@ -177,10 +177,10 @@ interface View {
    */
   beside: boolean;
   /**
-   * This device's copy shown at once in this open (M3-1), and the version of its scope then: it
+   * This device's copy shown at once in this open (M3-1), and the query that owned it then: it
    * stays while what this open read can't show yet, so the list never empties to a placeholder.
    */
-  preview: { data: Pages; version: number } | null;
+  preview: { data: Pages; owns(): boolean } | null;
   /** How many reads of its Activity had answered when this open began: a copy shows before more. */
   answers: number;
   /** This device's copy being read for this open, once: from the open, so a switch shows it. */
@@ -210,8 +210,8 @@ export function createActivityQueries(session: ActivitySession) {
     run.answered = true;
     answeredReads.set(hashKey(key), answerOf(key) + 1);
   };
-  /** Each fetch's start, by its promise: whose session, and which version of its scope. */
-  const starts = new WeakMap<object, { owner: number; version: number }>();
+  /** Each fetch's start, by its promise: whose session, and which query owns it. */
+  const starts = new WeakMap<object, { owner: number; owns(): boolean }>();
   /** How many pages each fetch has read so far, by its promise. */
   const pagesRead = new WeakMap<object, number>();
   /** How many events the first page of each fetch counted, by its promise. */
@@ -298,13 +298,13 @@ export function createActivityQueries(session: ActivitySession) {
 
   /**
    * Saves one page of an answer as its row on the saved-copy queue, where a newer answer
-   * replaces it. The session, the account, the read's version and whether its Group is kept here
+   * replaces it. The session, the account, the read's query owner and whether its Group is kept here
    * are checked at write time, so nothing lands after sign-out, an account change, a change or a
    * denial.
    */
   const saveRow = (
     key: QueryKey,
-    { owner, version }: { owner: number; version: number },
+    { owner, owns }: { owner: number; owns(): boolean },
     { refreshedAt, value }: { refreshedAt: number; value: unknown },
     page: number,
   ) => {
@@ -313,7 +313,7 @@ export function createActivityQueries(session: ActivitySession) {
     if (!lease || !rows) return;
     queue.push(path, async () => {
       if (!session.current(owner) || !session.owns(lease.accountId)) return;
-      if (version !== session.versionOf(key) || !session.savable(key)) return;
+      if (!owns() || !session.savable(key)) return;
       const { accountId } = lease,
         before = removals(key);
       known.add(path);
@@ -340,7 +340,7 @@ export function createActivityQueries(session: ActivitySession) {
    */
   const restore = async (key: QueryKey, owner: number, answers: number): Promise<Pages | null> => {
     const lease = session.lease(),
-      version = session.versionOf(key);
+      owns = queryOwner(client, key);
     if (!lease || !rows) return null;
     const row = await savedRow(lease, pagePath(key, 1)).catch(() => null);
     if (
@@ -348,7 +348,7 @@ export function createActivityQueries(session: ActivitySession) {
       runs.get(hashKey(key))?.answered ||
       answerOf(key) !== answers ||
       !session.current(owner) ||
-      version !== session.versionOf(key) ||
+      !owns() ||
       held(key)?.state.data !== undefined ||
       row.refreshedAt <= session.distrusted(key, true) ||
       !readable(key, row.value, 1)
@@ -369,7 +369,7 @@ export function createActivityQueries(session: ActivitySession) {
     const key = activityKey(opened.groupId);
     opened.restoring ??= restore(key, owner, opened.answers)
       .then((data) => {
-        if (data && view === opened) opened.preview = { data, version: session.versionOf(key) };
+        if (data && view === opened) opened.preview = { data, owns: queryOwner(client, key) };
         reproject();
       })
       .catch(() => undefined);
@@ -393,7 +393,7 @@ export function createActivityQueries(session: ActivitySession) {
     if (query?.promise && !starts.has(query.promise))
       starts.set(query.promise, {
         owner: session.generation(),
-        version: session.versionOf(key),
+        owns: queryOwner(client, key),
       });
     return query;
   };
@@ -404,10 +404,10 @@ export function createActivityQueries(session: ActivitySession) {
   const fetchOne = async (key: QueryKey, page: number, run: Run): Promise<Envelope> => {
     if (run.before) await run.before.catch(() => undefined);
     const owner = session.generation(),
-      version = session.versionOf(key),
+      owns = queryOwner(client, key),
       lease = session.lease(),
       path = pagePath(key, page);
-    const obsolete = () => !session.current(owner) || version !== session.versionOf(key);
+    const obsolete = () => !session.current(owner) || !owns();
     let value: unknown;
     try {
       value = await session.read(path, owner, run.abort?.signal);
@@ -422,6 +422,7 @@ export function createActivityQueries(session: ActivitySession) {
         row && row.refreshedAt > session.distrusted(key, false) && readable(key, row.value, page)
           ? row
           : null;
+      keepInvalidated(client, key);
       session.answered(path, saved?.refreshedAt ?? null);
       if (!saved)
         throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
@@ -757,10 +758,7 @@ export function createActivityQueries(session: ActivitySession) {
     const recheck = opened.beside && session.checked(groupId) && household;
     // Until what this open read can show, the copy it showed at once stays, never a placeholder
     // in its place (M3-1); without one, the placeholder holds, as on a Household's first open.
-    const preview =
-      opened.preview?.version === session.versionOf(activityKey(groupId))
-        ? opened.preview.data.pages
-        : [];
+    const preview = opened.preview?.owns() ? opened.preview.data.pages : [];
     const pages = unchecked || recheck ? preview : (data?.pages ?? []);
     const read = pages.filter((page) => page.source !== 'failed');
     const failedPage = pages.find((page) => page.source === 'failed');
@@ -874,6 +872,21 @@ export function createActivityQueries(session: ActivitySession) {
 
   return {
     project,
+    shownKeys(next: MobileSnapshot): QueryKey[] {
+      if (
+        next.screen !== 'group' ||
+        next.destination !== 'activity' ||
+        !view ||
+        view.lost ||
+        next.activity.groupId !== view.groupId ||
+        next.detail.id !== view.groupId
+      )
+        return [];
+      const keys = [activityKey(view.groupId)];
+      const id = next.activity.selected && activityExpenseId(next.activity.selected);
+      if (id) keys.push(expenseRecordKey(session.account(), view.groupId, id));
+      return keys;
+    },
     bindLater,
     /**
      * The observer takes its query again: removing a query never tells it (module-4 brief F5), so
@@ -1082,7 +1095,8 @@ export function createActivityQueries(session: ActivitySession) {
             reading.get(event.query)?.forEach((abort) => abort.abort());
             return;
           }
-          if (event.type !== 'updated') return;
+          // Invalidation changes preview eligibility, not the content a response projects.
+          if (event.type !== 'updated' || event.action.type === 'invalidate') return;
           const { query } = event,
             key = query.queryKey as QueryKey;
           if (!isActivity(key)) return;

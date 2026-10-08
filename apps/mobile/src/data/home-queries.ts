@@ -22,6 +22,7 @@ import { parseGroups } from './dto';
 import { parseHomeBalances } from './financial-dto';
 import { parseHomeBalancesResponse } from '@splitbook/shared/home-balances-read';
 import { cachedRead } from './offline-cache';
+import { keepInvalidated, queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';
 import type {
   AccountStorageLease,
@@ -277,7 +278,6 @@ export interface HomeSession {
   lease(): AccountStorageLease | null;
   /** The account lease's own checks, at write time: still this account, with no clean-up. */
   owns(accountId: string): boolean;
-  versionOf(key: QueryKey): number;
   /**
    * A saved copy of `key` stands in for a read only when verified after this: a removal this
    * device couldn't make, and when only shown early, a change or denial too.
@@ -397,13 +397,13 @@ export function createHomeQueries(session: HomeSession) {
   };
   /**
    * Saves an answer as its row on the saved-copy queue, where a newer answer replaces it. The
-   * session, the account and the read's version are checked at write time, so nothing lands
+   * session, the account and the read's query owner are checked at write time, so nothing lands
    * after sign-out, an account change or a change that made it obsolete.
    */
   const saveRow = (
     key: QueryKey,
     owner: number,
-    version: number,
+    owns: () => boolean,
     { refreshedAt, value }: Envelope,
   ) => {
     const lease = session.lease(),
@@ -411,7 +411,7 @@ export function createHomeQueries(session: HomeSession) {
     if (!lease || !rows) return;
     queue.push(path, async () => {
       if (!session.current(owner) || !session.owns(lease.accountId)) return;
-      if (version !== session.versionOf(key)) return;
+      if (!owns()) return;
       const { accountId } = lease,
         removed = forgotten.get(path),
         row = { version: 1, accountId, path, groupId: null, refreshedAt, value };
@@ -432,7 +432,7 @@ export function createHomeQueries(session: HomeSession) {
    */
   const restoreRow = async (key: QueryKey, owner: number, read: HomeRead) => {
     const lease = session.lease(),
-      version = session.versionOf(key);
+      owns = queryOwner(client, key);
     if (!lease || !rows) return;
     const row = await savedRow(lease, queryKeyPath(key)).catch(() => null);
     const state = held(key);
@@ -441,7 +441,7 @@ export function createHomeQueries(session: HomeSession) {
       !row ||
       read.answered ||
       !session.current(owner) ||
-      version !== session.versionOf(key) ||
+      !owns() ||
       state?.fetchStatus !== 'fetching' ||
       state.data !== undefined ||
       row.refreshedAt <= session.distrusted(key, true) ||
@@ -467,9 +467,9 @@ export function createHomeQueries(session: HomeSession) {
     if (before) await before.catch(() => undefined);
     const path = queryKeyPath(key),
       owner = session.generation(),
-      version = session.versionOf(key),
+      owns = queryOwner(client, key),
       lease = session.lease();
-    const obsolete = () => !session.current(owner) || version !== session.versionOf(key);
+    const obsolete = () => !session.current(owner) || !owns();
     if (!shown()) void restoreRow(key, owner, read).catch(() => undefined);
     let value: unknown;
     read.since = answers;
@@ -486,6 +486,7 @@ export function createHomeQueries(session: HomeSession) {
         row && row.refreshedAt > session.distrusted(key, false) && readable(key, row.value)
           ? row
           : null;
+      keepInvalidated(client, key);
       session.answered(path, saved?.refreshedAt ?? null);
       if (!saved)
         throw new RequestError(notSaved, 0, 'OFFLINE_UNAVAILABLE', false, null, 'network');
@@ -497,7 +498,7 @@ export function createHomeQueries(session: HomeSession) {
     const verified: Envelope = { source: 'network', refreshedAt: Date.now(), value };
     if (obsolete()) throw new Superseded();
     session.answered(path);
-    saveRow(key, owner, version, verified);
+    saveRow(key, owner, owns, verified);
     return verified;
   };
   const queryFn =
@@ -642,7 +643,7 @@ export function createHomeQueries(session: HomeSession) {
           return;
         }
         // An older list still waiting to be saved would list them again: this list moves no
-        // version, so nothing else refuses it.
+        // query owner, so nothing else refuses it.
         queue.drop(listPath);
         await forget(lease.accountId);
       });
@@ -734,7 +735,7 @@ export function createHomeQueries(session: HomeSession) {
    * Removes these rows (both, unless named), inside a lease write: a lost Group, a shorter Groups
    * list or a write (M2-2). It never waits for the saved-copy queue, so a confirmed change never
    * waits on a saved copy: one being written goes once it lands (`saveRow`), and any still waiting
-   * is refused, since what made these obsolete has already moved their version (or, for a list
+   * is refused, since what made these obsolete has already removed their query owner (or, for a list
    * that lost a Group, `trim` dropped it).
    */
   const forget = async (accountId: string, paths = [listPath, homePath]) => {
@@ -913,9 +914,16 @@ export function createHomeQueries(session: HomeSession) {
     listen(focus: typeof focusManager, online: typeof onlineManager, netInfo?: NetworkState) {
       const stops = [
         // Their reads publish their answer wherever the member is (#190).
-        client.getQueryCache().subscribe(({ type, query }) => {
+        client.getQueryCache().subscribe((event) => {
+          const { type, query } = event;
           const [scope] = query.queryKey;
-          if (quiet || type !== 'updated' || (scope !== 'groups' && scope !== 'home')) return;
+          if (
+            quiet ||
+            type !== 'updated' ||
+            event.action.type === 'invalidate' ||
+            (scope !== 'groups' && scope !== 'home')
+          )
+            return;
           if (project(session.snapshot()) !== session.snapshot()) session.publish({});
         }),
         focus.subscribe((focused) => focused && client.getQueryCache().onFocus()),
