@@ -4197,10 +4197,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             settlement: {
               ...snapshot.settlement,
               attempt: null,
-              // A payment the changed Group refused ends, as one whose suggestion is gone does.
+              // A payment the changed Group refused ends, as one whose suggestion is gone does,
+              // and nothing is offered from the Group it was checked against until Close.
               ...(changedGroup
                 ? {
                     status: 'ready' as const,
+                    group: null,
                     draft: null,
                     suggested: null,
                     validation: emptyFormValidation(),

@@ -1582,8 +1582,17 @@ describe('the Record payment sheet reads only what it checks (#333)', () => {
         message: correction,
       });
       expect(records.size).toBe(0);
-      // A second tap sends nothing.
+      // A second tap sends nothing, nor does choosing the same payment again on this sheet: it
+      // offers nothing until it is closed.
       from = sent.length;
+      await controller.recordSettlement();
+      controller.selectSettlement(actor, recipient, 'INR');
+      expect(controller.getSnapshot().settlement).toMatchObject({
+        status: 'ready',
+        draft: null,
+        group: null,
+        message: correction,
+      });
       await controller.recordSettlement();
       expect(writes).toHaveLength(1);
       expect(sent.slice(from).filter((request) => !request.startsWith('GET '))).toEqual([]);
