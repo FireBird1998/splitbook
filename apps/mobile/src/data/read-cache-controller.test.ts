@@ -238,33 +238,6 @@ function fixture(options: { freshness?: number; pendingInvitation?: PendingInvit
           },
         },
         savedQueries: savedQueriesIn(disk),
-        readCache: {
-          ...records(disk),
-          invalidateGroup: async (account, id) => {
-            for (const key of disk.keys())
-              if (
-                key.startsWith(`${account}/api/groups/${id}`) ||
-                key === `${account}/api/groups` ||
-                key === `${account}/api/user/balances`
-              )
-                disk.delete(key);
-          },
-          invalidateLedger: async (account, id) => {
-            for (const key of disk.keys())
-              if (
-                key.startsWith(`${account}/api/groups/${id}/`) ||
-                key.startsWith(`${account}/api/groups/${id}?`) ||
-                key === `${account}/api/user/balances`
-              )
-                disk.delete(key);
-          },
-          retainGroups: async (account, ids) => {
-            for (const key of disk.keys()) {
-              const id = /^\/api\/groups\/([a-f\d]{24})/.exec(key.slice(account.length))?.[1];
-              if (key.startsWith(account) && id && !ids.includes(id)) disk.delete(key);
-            }
-          },
-        },
         offlineIdentity: {
           load: async () => null,
           save: async () => undefined,

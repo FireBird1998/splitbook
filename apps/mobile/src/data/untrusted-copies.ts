@@ -15,9 +15,8 @@ const recorded = z.object({ accountId: z.string(), scopes: z.record(z.string(), 
  */
 export function untrustedCopies({
   accountLocal,
-  readCache,
   savedQueries: rows,
-}: Pick<MobileDependencies, 'accountLocal' | 'readCache' | 'savedQueries'>) {
+}: Pick<MobileDependencies, 'accountLocal' | 'savedQueries'>) {
   const record = accountLocal?.untrustedCopies,
     untrusted = new Map<string, number>();
   let recording = Promise.resolve();
@@ -28,17 +27,15 @@ export function untrustedCopies({
   /**
    * A scope's saved copies: a Group's, its ledger's (Balances too), the Groups list or Home's.
    * A Group's view (#219), its Expense records with their changes (#220) and its Activity (#222)
-   * keep their rows on the persister, the rest of its ledger the older store.
+   * keep every saved row on the persister (#223).
    */
   const remove = async (accountId: string, scope: string) => {
     const [name, groupId = ''] = scope.split(':');
     if (name === 'groups' || name === 'home')
       await rows?.remove(accountId, name === 'groups' ? listPath : homePath);
     else if (name === 'group') {
-      await readCache?.invalidateGroup(accountId, groupId);
       await removeGroupRows(rows, accountId, groupId, 'group');
     } else {
-      await readCache?.invalidateLedger(accountId, groupId);
       await removeGroupRows(rows, accountId, groupId, 'ledger');
       await removeRecordRows(rows, accountId, groupId);
       await removeActivityRows(rows, accountId, groupId);

@@ -1,4 +1,5 @@
 import { focusManager, onlineManager, QueryClient } from '@tanstack/query-core';
+import { savedCopyBudget } from './saved-copy-budget';
 import {
   groupKey,
   matchGroup,
@@ -584,6 +585,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     generation += 1;
     offlineSession = false;
     staleReads.clear();
+    savedCopies.retire();
     versions.clear();
     invalidatedAt.clear();
     untrusted.clear();
@@ -641,23 +643,35 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       return null;
     const owner = generation;
     const accountId = snapshot.auth.user.id;
+    const checked = async <T>(operation: () => Promise<T>) => {
+      assertCurrent(owner);
+      if (
+        snapshot.auth.status !== 'authenticated' ||
+        snapshot.auth.user?.id !== accountId ||
+        accountCleanupRequired
+      )
+        throw new Superseded();
+      const result = await operation();
+      assertCurrent(owner);
+      return result;
+    };
     return {
       accountId,
-      write: <T>(operation: () => Promise<T>) =>
-        queueAccount(async () => {
-          assertCurrent(owner);
-          if (
-            snapshot.auth.status !== 'authenticated' ||
-            snapshot.auth.user?.id !== accountId ||
-            accountCleanupRequired
-          )
-            throw new Superseded();
-          const result = await operation();
-          assertCurrent(owner);
-          return result;
-        }),
+      write: (operation) => queueAccount(() => checked(operation)),
+      writeSavedCopy: checked,
     };
   };
+
+  const savedCopies = savedCopyBudget({
+    rows: dependencies.savedQueries,
+    lease: accountStorage,
+    openGroup: () => ('groupId' in route ? route.groupId : null),
+    now,
+  });
+  const stopSavedUsage = queryClient.getQueryCache().subscribe((event) => {
+    if (event.type === 'observerAdded')
+      savedCopies.shown(event.query.queryKey as QueryKey, event.query.state.data);
+  });
 
   /** The session cookie in the saved session, or null when there is none to send. */
   const savedCookie = async (owner: number) => {
@@ -768,6 +782,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         expenseQueries.idle(),
         activityQueries.idle(),
       ]);
+      await savedCopies.idle();
       const cleanup = await Promise.allSettled([
         Promise.resolve().then(() => dependencies.accountLocal?.owner.clear()),
         ...(dependencies.accountLocal?.stores.map((storage) =>
@@ -843,6 +858,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    */
   const finishSignOut = async (owner: number, once = false) => {
     try {
+      if (dependencies.savedQueries?.prepare) await dependencies.savedQueries.prepare();
       const [marked, recorded] = await Promise.all([
         dependencies.accountLocal?.cleanupMarker.load(),
         // A sign-out record this device can't read blocks nothing: the marker is the main record.
@@ -963,7 +979,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   /** The session the declarative views read in: their queries, saved copies and checks. */
   const session = {
     client: queryClient,
-    rows: dependencies.savedQueries,
+    rows: savedCopies.rows,
     account: () => account(),
     generation: () => generation,
     current,
@@ -1001,9 +1017,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       for (const id of lost)
         invalidateReads(`group:${id}`, `ledger:${id}`, `balances:${id}`, 'home');
     },
-    // In both stores: the older one's copies, and the Group views' rows on the persister.
+    // Every view now keeps its saved copies in the persister (#223).
     retain: async (accountId, listed) => {
-      await dependencies.readCache?.retainGroups(accountId, listed);
+      await dependencies.savedQueries?.retainGroups?.(accountId, listed);
       await groupQueries.retain(accountId, listed);
       await expenseQueries.retain(accountId, listed);
       await activityQueries.retain(accountId, listed);
@@ -1103,7 +1119,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     expenseQueries.listen(focusManager, onlineManager),
     activityQueries.listen(focusManager, onlineManager),
   ];
-  const disconnect = () => listening.forEach((stop) => stop());
+  const disconnect = () => {
+    listening.forEach((stop) => stop());
+    stopSavedUsage();
+  };
 
   /**
    * Records the cookie, on disk, for the account `get-session` just confirmed. Only a recorded
@@ -1189,7 +1208,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     try {
       await revalidateSession(owner);
     } catch (error) {
-      if (!(error instanceof RequestError) || !error.networkFailure || !dependencies.readCache)
+      if (!(error instanceof RequestError) || !error.networkFailure || !dependencies.savedQueries)
         throw error;
       offlineSession = true;
     }
@@ -1256,7 +1275,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (!lease) return;
     try {
       await lease.write(async () => {
-        await dependencies.readCache?.invalidateLedger(lease.accountId, groupId);
         await groupQueries.forget(lease.accountId, groupId, 'ledger');
         await expenseQueries.forget(lease.accountId, groupId);
         await activityQueries.forget(lease.accountId, groupId);
@@ -1391,6 +1409,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const openHome = (user: NonNullable<MobileSnapshot['auth']['user']>, start = {}) => {
     const signedIn = cleanSnapshot({ status: 'authenticated', user, message: null });
     navigate(home, { ...signedIn, ...savedHome(user.id), ...start });
+    savedCopies.adopted();
   };
   /** Home, with the Groups list read again now (Check Groups, joining): it shows it loading. */
   const listOnHome = (owner: number) => {
@@ -1842,10 +1861,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       time = now();
     if (!lease) return;
     try {
-      // In both stores: the older one's copies of the Group, and the persister's rows of its view,
-      // its list and Home.
+      // The persister's rows of this Group, its lists and Home.
       await lease.write(async () => {
-        await dependencies.readCache?.invalidateGroup(lease.accountId, groupId);
         await groupQueries.forget(lease.accountId, groupId, 'group');
         await expenseQueries.forget(lease.accountId, groupId);
         await activityQueries.forget(lease.accountId, groupId);
@@ -5114,7 +5131,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               refreshedAt: readAt(key),
             },
           });
-        } else if (dependencies.readCache && groupId) {
+        } else if (dependencies.savedQueries && groupId) {
           const context = parseExpenseContext(
             await groupQueries.readGroup(groupId, owner, {
               wanted: () => view === viewRequest,

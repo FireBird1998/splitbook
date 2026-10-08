@@ -1,18 +1,4 @@
 import { z } from 'zod';
-import type { AccountGroupRecordStore } from './account-record-storage';
-export interface FinancialReadStore extends Pick<
-  AccountGroupRecordStore,
-  'load' | 'save' | 'clear'
-> {
-  invalidateGroup(accountId: string, groupId: string): Promise<void>;
-  /**
-   * Removes the saved copies an Expense or Settlement change in this Group makes obsolete: its
-   * Expense pages for every Month, each Expense record and its history, Activity and Balances.
-   * The Group itself stays. Home's figures are the persister's (#217).
-   */
-  invalidateLedger(accountId: string, groupId: string): Promise<void>;
-  retainGroups(accountId: string, groupIds: string[]): Promise<void>;
-}
 export interface OfflineIdentityStore {
   load(): Promise<unknown>;
   save(value: unknown): Promise<void>;

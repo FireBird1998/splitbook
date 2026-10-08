@@ -118,16 +118,6 @@ function setup() {
         clear: async () => drafts.clear(),
       },
       savedQueries: savedQueriesIn(cache),
-      readCache: {
-        retainGroups: async () => undefined,
-        invalidateGroup: async () => undefined,
-        invalidateLedger: async () => undefined,
-        load: async (accountId, path) => structuredClone(cache.get(accountId + path) ?? null),
-        save: async (accountId, path, value) => {
-          cache.set(accountId + path, structuredClone(value));
-        },
-        clear: async () => cache.clear(),
-      },
       accountLocal: {
         owner: {
           load: async () => account,

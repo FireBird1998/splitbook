@@ -213,37 +213,6 @@ function fixture() {
           },
         },
         savedQueries: savedQueriesIn(cache),
-        readCache: {
-          load: async (account, path) => structuredClone(cache.get(account + path) ?? null),
-          save: async (account, path, value) => {
-            cache.set(account + path, structuredClone(value));
-          },
-          clear: async () => cache.clear(),
-          invalidateGroup: async (account, id) => {
-            for (const key of cache.keys())
-              if (
-                key.startsWith(`${account}/api/groups/${id}`) ||
-                key === `${account}/api/groups` ||
-                key === `${account}/api/user/balances`
-              )
-                cache.delete(key);
-          },
-          invalidateLedger: async (account, id) => {
-            for (const key of cache.keys())
-              if (
-                key.startsWith(`${account}/api/groups/${id}/`) ||
-                key.startsWith(`${account}/api/groups/${id}?`) ||
-                key === `${account}/api/user/balances`
-              )
-                cache.delete(key);
-          },
-          retainGroups: async (account, ids) => {
-            for (const key of cache.keys()) {
-              const id = /^\/api\/groups\/([a-f\d]{24})/.exec(key.slice(account.length))?.[1];
-              if (key.startsWith(account) && id && !ids.includes(id)) cache.delete(key);
-            }
-          },
-        },
         expenseDrafts: {
           load: async (account, id) => structuredClone(drafts.get(account + id) ?? null),
           save: async (account, id, value) => {

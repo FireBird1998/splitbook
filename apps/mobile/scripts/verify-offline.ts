@@ -25,8 +25,7 @@ async function run() {
     },
   });
   const identity = record('identity'),
-    cache = record('cache'),
-    // The persister's rows (#217): the Groups list and Home, in a file of their own.
+    // Per-query rows for every display read (#223), in a file of their own.
     rows = record('rows'),
     draft = record('draft');
   const credentials = record('credentials'),
@@ -40,7 +39,7 @@ async function run() {
     save: accountOwner.save,
     clear: accountOwner.clear,
   };
-  const entries = async (file = cache) =>
+  const entries = async (file = rows) =>
     z.record(z.string(), z.unknown()).parse((await file.load()) ?? {});
   // The persister's rows are each written whole, as SQLite writes a row (#220). This file holds
   // them all, so its reads and writes take turns: the views' saved-copy queues write side by
@@ -90,50 +89,6 @@ async function run() {
                 .map(([key, value]) => ({ groupId: key.slice(account.length), value })),
             ),
         },
-        readCache: {
-          load: async (account, path) => (await entries())[account + path] ?? null,
-          save: async (account, path, value) => {
-            const saved = await entries();
-            saved[account + path] = value;
-            await cache.save(saved);
-          },
-          clear: cache.clear,
-          invalidateGroup: async (account, group) => {
-            const saved = await entries();
-            for (const key of Object.keys(saved))
-              if (
-                key.startsWith(account + '/api/groups/' + group) ||
-                key === account + '/api/groups' ||
-                key === account + '/api/user/balances'
-              )
-                delete saved[key];
-            await cache.save(saved);
-          },
-          invalidateLedger: async (account, group) => {
-            const saved = await entries();
-            for (const key of Object.keys(saved))
-              if (
-                key.startsWith(account + '/api/groups/' + group + '/') ||
-                key.startsWith(account + '/api/groups/' + group + '?') ||
-                key === account + '/api/user/balances'
-              )
-                delete saved[key];
-            await cache.save(saved);
-          },
-          retainGroups: async (account, ids) => {
-            const saved = await entries();
-            for (const key of Object.keys(saved)) {
-              const group = /^\/api\/groups\/([a-f\d]{24})(?:\/|\?|$)/i.exec(
-                key.slice(account.length),
-              )?.[1];
-              if (key.startsWith(account) && group && !ids.includes(group)) {
-                delete saved[key];
-                delete saved[account + '/api/user/balances'];
-              }
-            }
-            await cache.save(saved);
-          },
-        },
         expenseDrafts: {
           load: draft.load,
           save: async (_account, _group, value) => draft.save(value),
@@ -151,7 +106,7 @@ async function run() {
               cleanup = false;
             },
           },
-          stores: [identity, cache, rows, draft],
+          stores: [identity, rows, draft],
         },
         fetch: async (url, init) => {
           assert.equal(new URL(url).origin, origin);
@@ -236,7 +191,7 @@ async function run() {
     controller = create();
     await controller.restore();
     assert.equal(controller.getSnapshot().auth.user, null);
-    assert.equal(await cache.load(), null);
+    assert.equal(await rows.load(), null);
 
     // #191: after a confirmed edit, offline the record and its Month show the edited Expense or
     // say they weren't saved on this device, never the version before, also after a restart.

@@ -245,29 +245,6 @@ function phone() {
           },
         },
         savedQueries: savedQueriesIn(stored.cache),
-        readCache: {
-          retainGroups: async () => undefined,
-          invalidateGroup: async (account, id) => {
-            for (const key of [...stored.cache.keys()])
-              if (key.startsWith(`${account}/api/groups/${id}`)) stored.cache.delete(key);
-          },
-          invalidateLedger: async (account, id) => {
-            for (const key of [...stored.cache.keys()])
-              if (
-                key.startsWith(`${account}/api/groups/${id}/`) ||
-                key.startsWith(`${account}/api/groups/${id}?`) ||
-                key === `${account}/api/user/balances`
-              )
-                stored.cache.delete(key);
-          },
-          load: async (account, key) => structuredClone(stored.cache.get(account + key) ?? null),
-          save: async (account, key, value) => {
-            stored.cache.set(account + key, structuredClone(value));
-          },
-          clear: async () => {
-            stored.cache.clear();
-          },
-        },
         expenseDrafts: {
           load: async (account, id) =>
             structuredClone(stored.drafts.get(`${account}:${id}`) ?? null),

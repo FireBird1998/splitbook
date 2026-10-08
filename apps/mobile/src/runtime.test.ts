@@ -27,7 +27,7 @@ describe('runtime storage wiring', () => {
     'expenseDrafts',
     'settlementAttempts',
     'groupCreations',
-    'readCache',
+    'savedQueries',
     'offlineIdentity',
   ])('purges %s on sign-out and account change', (name) => {
     const dependencies = wired.dependencies!;

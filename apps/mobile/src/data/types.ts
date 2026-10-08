@@ -1,6 +1,7 @@
-import type { FinancialReadStore, OfflineIdentityStore } from './offline-cache';
+import type { OfflineIdentityStore } from './offline-cache';
 import type { ActivityState } from './activity';
-import type { AccountGroupRecordStore, FindableRecordStore } from './account-record-storage';
+import type { AccountGroupRecordStore } from './account-record-storage';
+import type { SavedQueryRecords } from './saved-copy-budget';
 import type { PendingPayment, SettlementState } from './settlement';
 import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
 import type { GroupValidation } from './group-draft';
@@ -519,6 +520,8 @@ export interface GroupCreationStore {
 export interface AccountStorageLease {
   accountId: string;
   write<T>(operation: () => Promise<T>): Promise<T>;
+  /** Same generation checks, on the independent saved-copy lane. */
+  writeSavedCopy<T>(operation: () => Promise<T>): Promise<T>;
 }
 
 export interface CookieHeaders {
@@ -551,13 +554,12 @@ export interface NetworkState {
 export interface MobileDependencies {
   /** Native identity acquisition only. The controller owns the app session. */
   googleSignIn?: () => Promise<GoogleIdentityResult>;
-  readCache?: FinancialReadStore;
   /**
    * The persister's rows (ADR 0006, M3-1): one saved copy per query (a list's, per page), keyed by
    * its path, for the Groups list, Home's figures and each Group's view. Its `list` finds a
    * Group's rows to remove them together. Register it in `accountLocal.stores` too.
    */
-  savedQueries?: FindableRecordStore;
+  savedQueries?: SavedQueryRecords;
   /** Reconnecting reads the screen's queries again (M1-4); NetInfo, or a fake in tests. */
   netInfo?: NetworkState;
   offlineIdentity?: OfflineIdentityStore;

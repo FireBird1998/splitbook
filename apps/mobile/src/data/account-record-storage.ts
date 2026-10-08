@@ -1,4 +1,5 @@
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
+import type { SavedCopyUsage } from './saved-copy-budget';
 export interface AccountGroupRecordStore {
   load(accountId: string, groupId: string): Promise<unknown | null>;
   save(accountId: string, groupId: string, value: unknown): Promise<void>;
@@ -14,6 +15,9 @@ export interface AccountGroupRecordStore {
    * that can't be read never stops a removal that only needs its key (#219).
    */
   keys?(accountId: string): Promise<string[]>;
+  usage?(accountId: string): Promise<SavedCopyUsage[]>;
+  touch?(accountId: string, path: string, time: number): Promise<void>;
+  prepare?(): Promise<void>;
 }
 /**
  * A store that finds its records without knowing their keys, by `keys`, `list` or both, as the
@@ -26,13 +30,13 @@ export type FindableRecordStore = Omit<AccountGroupRecordStore, 'keys' | 'list'>
   );
 
 /**
- * Atomic account/Group JSON records. The two existing on-disk stores keep their identities.
+ * Atomic account/Group JSON records. Drafts, attempts and saved copies keep separate tables.
  * `saved` holds the persister's saved copies, one row per query, keyed by the query's path
- * (ADR 0006, M3-1), beside the older saved-copy document in the same database.
+ * (ADR 0006, M3-1). Opening it removes obsolete single-document rows in this environment.
  */
 export function createAccountGroupRecordStore(
   environment: string,
-  kind: 'expense' | 'settlement' | 'cache' | 'saved' | 'group-creation' | 'sign-out',
+  kind: 'expense' | 'settlement' | 'saved' | 'group-creation' | 'sign-out',
 ): AccountGroupRecordStore & Required<Pick<AccountGroupRecordStore, 'keys' | 'list'>> {
   const {
     file,
@@ -41,7 +45,6 @@ export function createAccountGroupRecordStore(
   } = {
     expense: { file: 'splitbook-drafts.db', table: 'expense_drafts' },
     settlement: { file: 'splitbook-settlements.db', table: 'settlement_attempts' },
-    cache: { file: 'splitbook-read-cache.db', table: 'financial_reads' },
     saved: { file: 'splitbook-read-cache.db', table: 'saved_queries', column: 'query_key' },
     'group-creation': { file: 'splitbook-group-creations.db', table: 'group_creations' },
     'sign-out': { file: 'splitbook-sign-outs.db', table: 'pending_sign_outs' },
@@ -55,6 +58,27 @@ export function createAccountGroupRecordStore(
           environment TEXT NOT NULL, account_id TEXT NOT NULL, ${column} TEXT NOT NULL,
           value TEXT NOT NULL, PRIMARY KEY (environment, account_id, ${column})
         );`);
+      if (kind === 'saved') {
+        const columns = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${table})`);
+        if (!columns.some(({ name }) => name === 'last_used'))
+          await db.execAsync(
+            `ALTER TABLE ${table} ADD COLUMN last_used INTEGER NOT NULL DEFAULT 0`,
+          );
+        // Copies from before the cap start from their original verification time; no age expiry.
+        await db.runAsync(
+          `UPDATE ${table} SET last_used = CASE WHEN json_valid(value)
+             THEN COALESCE(json_extract(value, '$.refreshedAt'), 0) ELSE 0 END
+           WHERE environment = ? AND last_used = 0`,
+          environment,
+        );
+        // Upgrade drops old copies for every account here, never carries them over (#212).
+        // Retain other environments, per-query rows, drafts and attempts.
+        await db.execAsync(`CREATE TABLE IF NOT EXISTS financial_reads (
+          environment TEXT NOT NULL, account_id TEXT NOT NULL, group_id TEXT NOT NULL,
+          value TEXT NOT NULL, PRIMARY KEY (environment, account_id, group_id)
+        );`);
+        await db.runAsync('DELETE FROM financial_reads WHERE environment = ?', environment);
+      }
       return db;
     })().catch((error: unknown) => {
       opening = undefined;
@@ -63,6 +87,35 @@ export function createAccountGroupRecordStore(
     return opening;
   };
   return {
+    ...(kind === 'saved'
+      ? {
+          prepare: async () => {
+            await database();
+          },
+          usage: async (accountId: string) =>
+            (await database()).getAllAsync<SavedCopyUsage>(
+              `SELECT ${column} AS path,
+                length(CAST(environment AS BLOB)) + length(CAST(account_id AS BLOB)) +
+                length(CAST(${column} AS BLOB)) + length(CAST(value AS BLOB)) + 8 AS bytes,
+                last_used AS lastUsed
+               FROM ${table} WHERE environment = ? AND account_id = ?`,
+              environment,
+              accountId,
+            ),
+          touch: async (accountId: string, path: string, time: number) => {
+            await (
+              await database()
+            ).runAsync(
+              `UPDATE ${table} SET last_used = ?
+               WHERE environment = ? AND account_id = ? AND ${column} = ?`,
+              time,
+              environment,
+              accountId,
+              path,
+            );
+          },
+        }
+      : {}),
     async load(accountId, groupId) {
       const row = await (
         await database()
@@ -75,14 +128,20 @@ export function createAccountGroupRecordStore(
       return row ? JSON.parse(row.value) : null;
     },
     async save(accountId, groupId, value) {
-      await (
-        await database()
-      ).runAsync(
-        `INSERT INTO ${table} (environment, account_id, ${column}, value) VALUES (?, ?, ?, ?) ON CONFLICT(environment, account_id, ${column}) DO UPDATE SET value = excluded.value`,
+      const db = await database();
+      await db.runAsync(
+        kind === 'saved'
+          ? `INSERT INTO ${table} (environment, account_id, ${column}, value, last_used)
+             VALUES (?, ?, ?, ?, ?) ON CONFLICT(environment, account_id, ${column})
+             DO UPDATE SET value = excluded.value, last_used = excluded.last_used`
+          : `INSERT INTO ${table} (environment, account_id, ${column}, value)
+             VALUES (?, ?, ?, ?) ON CONFLICT(environment, account_id, ${column})
+             DO UPDATE SET value = excluded.value`,
         environment,
         accountId,
         groupId,
         JSON.stringify(value),
+        ...(kind === 'saved' ? [Date.now()] : []),
       );
     },
     async remove(accountId, groupId) {

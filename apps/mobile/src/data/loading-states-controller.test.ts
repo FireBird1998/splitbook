@@ -85,8 +85,6 @@ function fixture() {
   };
   let clearing: Promise<void> | null = null;
   let retaining: { arrive: () => void; released: Promise<void> } | null = null;
-  /** The Groups this device last kept saved copies for. */
-  let retained: string[] = [];
   let saving: { path: string; arrive: () => void; released: Promise<void> } | null = null;
   // Reads from this device, which can be slow on a phone: while `slow`, each waits for a round.
   const storage = { slow: false, waiting: [] as (() => void)[] };
@@ -217,8 +215,14 @@ function fixture() {
             identity = null;
           },
         },
-        // The persister's rows sit beside the other saved copies, read and held the same way.
+        // All display reads use these per-query rows; device operations can still be held.
         savedQueries: savedQueriesIn(cache, {
+          retainGroups: async () => {
+            const held = retaining;
+            retaining = null;
+            held?.arrive();
+            await held?.released;
+          },
           load: (account, key) => read(() => structuredClone(cache.get(account + key) ?? null)),
           save: async (account, key, value) => {
             const held = saving?.path === key ? saving : null;
@@ -230,56 +234,6 @@ function fixture() {
             cache.set(account + key, structuredClone(value));
           },
         }),
-        readCache: {
-          retainGroups: async (account, groupIds) => {
-            const held = retaining;
-            retaining = null;
-            held?.arrive();
-            await held?.released;
-            // As on a phone: what was saved for a Group no longer listed goes, with Home's figures.
-            if (retained.some((id) => !groupIds.includes(id)))
-              cache.delete(`${account}/api/user/balances`);
-            retained = [...groupIds];
-            for (const key of [...cache.keys()]) {
-              const id = /^\/api\/groups\/([a-f\d]{24})/.exec(key.slice(account.length))?.[1];
-              if (key.startsWith(account) && id && !groupIds.includes(id)) cache.delete(key);
-            }
-          },
-          // As on a phone: the Group's saved copies go, with the saved list and Home's figures.
-          invalidateGroup: async (account, id) => {
-            for (const key of [...cache.keys()])
-              if (
-                key.startsWith(`${account}/api/groups/${id}`) ||
-                key === `${account}/api/groups` ||
-                key === `${account}/api/user/balances`
-              )
-                cache.delete(key);
-          },
-          // As on a phone: a change's Group keeps its own saved copy and the saved list.
-          invalidateLedger: async (account, id) => {
-            for (const key of [...cache.keys()])
-              if (
-                key.startsWith(`${account}/api/groups/${id}/`) ||
-                key.startsWith(`${account}/api/groups/${id}?`) ||
-                key === `${account}/api/user/balances`
-              )
-                cache.delete(key);
-          },
-          load: (account, key) => read(() => structuredClone(cache.get(account + key) ?? null)),
-          save: async (account, key, value) => {
-            const held = saving?.path === key ? saving : null;
-            if (held) {
-              saving = null;
-              held.arrive();
-              await held.released;
-            }
-            cache.set(account + key, structuredClone(value));
-          },
-          clear: async () => {
-            cache.clear();
-            retained = [];
-          },
-        },
         expenseDrafts: {
           load: (account, id) =>
             read(() => structuredClone(drafts.get(`${account}:${id}`) ?? null)),
@@ -343,7 +297,6 @@ function fixture() {
               clear: async () => {
                 await clearing;
                 cache.clear();
-                retained = [];
                 drafts.clear();
                 creations.clear();
                 identity = null;

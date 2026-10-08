@@ -356,24 +356,6 @@ function world({ google = false } = {}) {
         },
       },
       savedQueries: savedQueriesIn(device.cache),
-      readCache: {
-        retainGroups: async () => undefined,
-        invalidateGroup: async (account, id) => {
-          for (const key of device.cache.keys())
-            if (key.startsWith(`${account}/api/groups/${id}`)) device.cache.delete(key);
-        },
-        invalidateLedger: async (account, id) => {
-          for (const key of device.cache.keys())
-            if (key.startsWith(`${account}/api/groups/${id}/`)) device.cache.delete(key);
-        },
-        load: async (account, key) => structuredClone(device.cache.get(account + key) ?? null),
-        save: async (account, key, value) => {
-          device.cache.set(account + key, structuredClone(value));
-        },
-        clear: async () => {
-          device.cache.clear();
-        },
-      },
       expenseDrafts: records(device.drafts, () => !device.failDraftWrites),
       settlementAttempts: records(device.payments),
       groupCreations: {
