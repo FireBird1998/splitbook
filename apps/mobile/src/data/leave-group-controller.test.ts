@@ -193,8 +193,12 @@ function fixture() {
           });
         if (path === '/api/groups')
           return Response.json({ status: 200, data: member ? [group] : [] });
+        // Like SplitBook's, Home's figures name the Groups they were worked out over (#333).
         if (path === '/api/user/balances')
-          return Response.json({ status: 200, data: { buckets: [] } });
+          return Response.json({
+            status: 200,
+            data: { buckets: [], groups: member ? [{ groupId, balances: [] }] : [] },
+          });
         if (path === `/api/groups/${groupId}/leave`) {
           await held;
           return leave();

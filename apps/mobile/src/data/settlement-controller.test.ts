@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gatewayReply } from '../test-utils/transport-faults';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse } from './types';
@@ -76,6 +76,8 @@ function setup(
     },
   };
   const writes: RequestInit[] = [];
+  /** Every request sent, as `METHOD /path`, in the order sent. */
+  const sent: string[] = [];
   /** NetInfo's listeners: the device's connection, which `connect` reports. */
   const connection = new Set<(state: { isConnected: boolean | null }) => void>();
   const create = () =>
@@ -128,6 +130,7 @@ function setup(
         },
         fetch: async (url, init) => {
           const path = new URL(url).pathname;
+          sent.push(`${init.method ?? 'GET'} ${path}`);
           if (path.endsWith('/settlements') && init.method === 'POST') writes.push(init);
           const override = intercept(path, init);
           if (override) return override;
@@ -170,7 +173,7 @@ function setup(
   /** NetInfo reports the device's connection: false when it drops, true when it's back. */
   const connect = (isConnected: boolean) =>
     connection.forEach((listener) => listener({ isConnected }));
-  return { controller: create(), create, store, records, writes, connect };
+  return { controller: create(), create, store, records, writes, sent, connect };
 }
 describe('native payment recording', () => {
   it('unlocks a definitely rejected first submission even when a warm invitation interrupts its response', async () => {
@@ -210,8 +213,9 @@ describe('native payment recording', () => {
   it('keeps an interrupted Record usable, and unsent, after a warm invitation', async () => {
     let hold = false,
       release!: (value: FetchResponse) => void;
+    // Record's check before sending, the live Balances read (#333), is held.
     const { controller, writes } = setup((path) =>
-      hold && path === `/api/groups/${groupId}`
+      hold && path === `/api/groups/${groupId}/balances`
         ? new Promise((resolve) => {
             release = resolve;
           })
@@ -223,7 +227,7 @@ describe('native payment recording', () => {
     hold = true;
     const pending = controller.recordSettlement();
     await controller.openInvitation('http://localhost:4138/join/1234abcd');
-    release(json({ status: 200, data: group }));
+    release(json(balances()));
     await pending;
     expect(controller.getSnapshot().settlement.status).toBe('editing');
     expect(controller.getSnapshot().screen).toBe('invite');
@@ -234,7 +238,7 @@ describe('native payment recording', () => {
     async (failure) => {
       let offline = false;
       const { controller, store, writes, records } = setup((path) =>
-        offline && path === `/api/groups/${groupId}`
+        offline && path.startsWith(`/api/groups/${groupId}`)
           ? Promise.reject(new Error('Offline'))
           : undefined,
       );
@@ -314,9 +318,11 @@ describe('native payment recording', () => {
   });
 
   it('unlocks a definitively rejected new submission for correction without losing input', async () => {
+    // A refusal its entries can correct. One the Group's change made (a member left, the currency
+    // changed) ends the payment instead (#333).
     const { controller, records } = setup((path, init) =>
       path.endsWith('/settlements') && init.method === 'POST'
-        ? json({ status: 422, code: 'CURRENCY_MISMATCH', error: 'Currency changed' }, 422)
+        ? json({ status: 422, code: 'VALIDATION_ERROR', error: 'Invalid payment' }, 422)
         : undefined,
     );
     await controller.signIn('alex');
@@ -336,8 +342,9 @@ describe('native payment recording', () => {
   it('blocks a newly denied member without sending and preserves an unresolved attempt after replay denial', async () => {
     let denied = false,
       rejectReplay = false;
+    // As SplitBook does, a member it no longer lets in is refused every request under the Group.
     const { controller, writes, records } = setup((path, init) => {
-      if (path === `/api/groups/${groupId}` && denied)
+      if (path.startsWith(`/api/groups/${groupId}`) && denied)
         return json({ status: 403, error: 'Access removed' }, 403);
       if (path.endsWith('/settlements') && init.method === 'POST')
         return rejectReplay
@@ -1099,6 +1106,9 @@ describe('native payment recording', () => {
                   members: group.members.filter(({ user }) => user._id !== actor),
                 },
               });
+        // Everything else under the Group is refused, as SplitBook refuses a non-member.
+        if (refused && path.startsWith(`/api/groups/${groupId}/`))
+          return json({ status: 403, error: 'Forbidden' }, 403);
       });
       await controller.signIn('alex');
       await controller.openGroup(groupId, true, 'balances');
@@ -1159,7 +1169,7 @@ describe('native payment recording', () => {
       sent.push(`${init.method ?? 'GET'} ${path}`);
       if (down && path.startsWith('/api/groups/'))
         return Promise.reject(new TypeError('Network request failed'));
-      if (denied && path === `/api/groups/${groupId}`)
+      if (denied && path.startsWith(`/api/groups/${groupId}`))
         return json({ status: 403, error: 'Access removed' }, 403);
       if (hold && path.endsWith('/settlements') && init.method === 'POST')
         return new Promise((resolve) => {
@@ -1198,7 +1208,8 @@ describe('native payment recording', () => {
     });
     await ignored('error, away from the sheet');
 
-    // On the sheet, Try again runs the check again, with the same two reads.
+    // On the sheet, Try again runs the check again: the live Balances, over the Group its view
+    // verified within 30 s (#333).
     await controller.openGroup(groupId, true, 'balances');
     down = true;
     await controller.openRecordPayment(actor, recipient, 'INR');
@@ -1206,10 +1217,7 @@ describe('native payment recording', () => {
     down = false;
     const from = sent.length;
     await controller.retrySettlementCheck();
-    expect(sent.slice(from)).toEqual([
-      `GET /api/groups/${groupId}`,
-      `GET /api/groups/${groupId}/balances`,
-    ]);
+    expect(sent.slice(from)).toEqual([`GET /api/groups/${groupId}/balances`]);
     expect(controller.getSnapshot().settlement.status).toBe('editing');
 
     // Recording, then unconfirmed once its reply is lost.
@@ -1354,4 +1362,313 @@ describe('native payment recording', () => {
       settlement: { attempt: null },
     });
   });
+});
+
+describe('the Record payment sheet reads only what it checks (#333)', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  const groupPath = `/api/groups/${groupId}`,
+    balancesPath = `${groupPath}/balances`,
+    paymentPath = `${groupPath}/settlements`;
+  /** Requests sent since `from`, up to and with the payment, if one was sent. */
+  const upTo = (sent: string[], from: number) => {
+    const next = sent.slice(from),
+      post = next.indexOf(`POST ${paymentPath}`);
+    return post < 0 ? next : next.slice(0, post + 1);
+  };
+  const key = (init: RequestInit) => new Headers(init.headers).get('Idempotency-Key');
+  const unreachable = 'Could not reach SplitBook. Check your connection and try again.';
+
+  it('checks only the Balances over a Group its view verified within 30 s; past that, the Group, then the Balances once it has answered', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(Date.parse(iso));
+    let gate = false,
+      release: (() => void) | null = null;
+    const { controller, sent } = setup((path) => {
+      if (gate && path === groupPath)
+        return new Promise<FetchResponse>((resolve) => {
+          release = () => resolve(json({ status: 200, data: group }));
+        });
+    });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    let from = sent.length;
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    expect(sent.slice(from)).toEqual([`GET ${balancesPath}`]);
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      group: { id: groupId },
+      draft: { paidBy: actor, paidTo: recipient, amount: '30' },
+    });
+    // Closed, Balances show what the sheet read: nothing is read again.
+    from = sent.length;
+    await controller.back();
+    expect(sent.slice(from)).toEqual([]);
+
+    // Past the window, the sheet reads the Group, and the Balances only after it (AMEND-1).
+    vi.setSystemTime(Date.now() + 31_000);
+    gate = true;
+    from = sent.length;
+    const opening = controller.openRecordPayment(actor, recipient, 'INR');
+    await vi.waitFor(() => expect(release).not.toBeNull());
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(sent.slice(from)).toEqual([`GET ${groupPath}`]);
+    gate = false;
+    release!();
+    await opening;
+    expect(sent.slice(from)).toEqual([`GET ${groupPath}`, `GET ${balancesPath}`]);
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'editing',
+      draft: { amount: '30' },
+    });
+  });
+
+  it('records after one live Balances read, the suggestion it checks, against the Group the sheet checked', async () => {
+    const { controller, sent, writes } = setup();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    controller.updateSettlement({ amount: '10', note: 'Paid already' });
+    const from = sent.length;
+    await controller.recordSettlement();
+    expect(upTo(sent, from)).toEqual([`GET ${balancesPath}`, `POST ${paymentPath}`]);
+    expect(writes).toHaveLength(1);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      snackbar: { message: 'Payment recorded' },
+    });
+  });
+
+  it('sends nothing when Record’s Balances read is refused, the lost Group goes, and nothing is sent later', async () => {
+    let lost = false;
+    const { controller, sent, writes, records } = setup((path) => {
+      // Alex has lost the Group: SplitBook refuses every request under it.
+      if (lost && path.startsWith(groupPath)) return json({ status: 403, error: 'Forbidden' }, 403);
+    });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    controller.updateSettlement({ amount: '10', note: '' });
+    lost = true;
+    const from = sent.length;
+    await controller.recordSettlement();
+    expect(upTo(sent, from)).toEqual([`GET ${balancesPath}`]);
+    expect(writes).toHaveLength(0);
+    expect(records.size).toBe(0);
+    // The lost-access purge: the Group leaves Home, and the sheet names no one in it.
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'settlement',
+      groups: { data: [] },
+      settlement: { status: 'blocked', group: null, balances: [], known: {} },
+    });
+    await controller.refresh('foreground');
+    await controller.back();
+    await controller.refresh('pull');
+    expect(sent.slice(from).filter((request) => !request.startsWith('GET '))).toEqual([]);
+  });
+
+  it('checks only the Balances before a payment and before its Retry, and tells a payment never sent from one that may be recorded', async () => {
+    let down = false,
+      posted = 0;
+    const { controller, sent, writes, records } = setup((path, init) => {
+      if (down && path.startsWith('/api/groups/'))
+        return Promise.reject(new TypeError('Network request failed'));
+      // The first payment's reply never arrives: SplitBook may have recorded it.
+      if (path === paymentPath && init.method === 'POST' && ++posted === 1)
+        return Promise.reject(new TypeError('Network request failed'));
+    });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId, true, 'balances');
+    await controller.openRecordPayment(actor, recipient, 'INR');
+    controller.updateSettlement({ amount: '10', note: 'Paid already' });
+
+    // Its check can't reach SplitBook: never sent, and it says only that.
+    down = true;
+    let from = sent.length;
+    await controller.recordSettlement();
+    expect(sent.slice(from)).toEqual([`GET ${balancesPath}`]);
+    expect(writes).toHaveLength(0);
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'review',
+      attempt: null,
+      message: unreachable,
+    });
+
+    // Sent, its reply lost: it may be recorded.
+    down = false;
+    from = sent.length;
+    await controller.recordSettlement();
+    expect(upTo(sent, from)).toEqual([`GET ${balancesPath}`, `POST ${paymentPath}`]);
+    const attempt = controller.getSnapshot().settlement.attempt;
+    expect(attempt).not.toBeNull();
+
+    // A Retry whose check can't reach SplitBook sends nothing, and says the first may be recorded.
+    down = true;
+    from = sent.length;
+    await controller.recordSettlement();
+    expect(sent.slice(from)).toEqual([`GET ${balancesPath}`]);
+    expect(writes).toHaveLength(1);
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'uncertain',
+      attempt,
+      message: `${unreachable} This payment may already be recorded. Retry sends the same record, so it can’t be counted twice.`,
+    });
+
+    // Retry: the Balances, then the first payment's key and body again.
+    down = false;
+    from = sent.length;
+    await controller.recordSettlement();
+    expect(upTo(sent, from)).toEqual([`GET ${balancesPath}`, `POST ${paymentPath}`]);
+    expect(writes).toHaveLength(2);
+    expect(writes[1].body).toBe(writes[0].body);
+    expect(key(writes[1])).toBe(key(writes[0]));
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      snackbar: { message: 'Payment recorded' },
+    });
+  });
+
+  it.each([
+    [
+      'INVALID_MEMBERS',
+      'the payee has left the Group',
+      'The payer or recipient is no longer a Group member. Close this and choose another payment.',
+    ],
+    [
+      'CURRENCY_MISMATCH',
+      'the Group’s currency has changed',
+      'The Group currency changed. Close this and choose the payment again.',
+    ],
+  ] as const)(
+    'ends a payment SplitBook refuses with %s, as %s: no Record for it again, and the Group is read again',
+    async (code, _, correction) => {
+      let changed = false;
+      const { controller, sent, writes, records } = setup((path, init) => {
+        if (!changed) return;
+        if (path === paymentPath && init.method === 'POST')
+          return json({ status: 422, code, error: 'Refused' }, 422);
+        if (path === groupPath)
+          return json({
+            status: 200,
+            data:
+              code === 'INVALID_MEMBERS'
+                ? {
+                    ...group,
+                    members: group.members.filter(({ user }) => user._id !== recipient),
+                  }
+                : { ...group, defaultCurrency: 'EUR' },
+          });
+      });
+      await controller.signIn('alex');
+      await controller.openGroup(groupId, true, 'balances');
+      await controller.openRecordPayment(actor, recipient, 'INR');
+      expect(controller.getSnapshot().settlement).toMatchObject({ status: 'editing' });
+      // Elsewhere, and within the 30 s the sheet reuses the view's Group for, the Group changes.
+      changed = true;
+      let from = sent.length;
+      await controller.recordSettlement();
+      const refused = sent.indexOf(`POST ${paymentPath}`, from);
+      expect(upTo(sent, from)).toEqual([`GET ${balancesPath}`, `POST ${paymentPath}`]);
+      // The correction shows; the payment is no longer offered, and its key is dropped: it was
+      // sent and refused, so it can't be recorded.
+      expect(controller.getSnapshot().settlement).toMatchObject({
+        status: 'ready',
+        draft: null,
+        attempt: null,
+        suggested: null,
+        message: correction,
+      });
+      expect(records.size).toBe(0);
+      // A second tap sends nothing, nor does choosing the same payment again on this sheet: it
+      // offers nothing until it is closed.
+      from = sent.length;
+      await controller.recordSettlement();
+      controller.selectSettlement(actor, recipient, 'INR');
+      expect(controller.getSnapshot().settlement).toMatchObject({
+        status: 'ready',
+        draft: null,
+        group: null,
+        message: correction,
+      });
+      await controller.recordSettlement();
+      expect(writes).toHaveLength(1);
+      expect(sent.slice(from).filter((request) => !request.startsWith('GET '))).toEqual([]);
+      // The Group is read again, at the latest by Close, so it's current there.
+      await controller.back();
+      expect(sent.slice(refused)).toContain(`GET ${groupPath}`);
+      expect(controller.getSnapshot().detail.data).toMatchObject(
+        code === 'INVALID_MEMBERS'
+          ? { members: [{ user: { id: actor } }, { user: { id: other } }] }
+          : { defaultCurrency: 'EUR' },
+      );
+      // Opened again, the sheet doesn't offer the refused payment.
+      from = sent.length;
+      await controller.openRecordPayment(actor, recipient, 'INR');
+      expect(controller.getSnapshot().settlement).toMatchObject({ draft: null });
+      expect(sent.slice(from).filter((request) => !request.startsWith('GET '))).toEqual([]);
+      expect(writes).toHaveLength(1);
+    },
+  );
+
+  it.each(['INVALID_MEMBERS', 'CURRENCY_MISMATCH', 'a refused Retry'] as const)(
+    'on Close after a payment refused with %s, reads the Group before the Balances, and the Balances once',
+    async (refusal) => {
+      let changed = false,
+        lose = refusal === 'a refused Retry',
+        holdGroup = false,
+        release: (() => void) | null = null;
+      const code = refusal === 'CURRENCY_MISMATCH' ? 'CURRENCY_MISMATCH' : 'INVALID_MEMBERS';
+      const { controller, sent } = setup((path, init) => {
+        if (path === paymentPath && init.method === 'POST') {
+          // A Retry's first payment: its reply never arrives.
+          if (lose) {
+            lose = false;
+            return Promise.reject(new TypeError('Network request failed'));
+          }
+          if (changed) return json({ status: 422, code, error: 'Refused' }, 422);
+        }
+        if (path === groupPath && holdGroup)
+          return new Promise<FetchResponse>((resolve) => {
+            release = () => resolve(json({ status: 200, data: group }));
+          });
+      });
+      await controller.signIn('alex');
+      await controller.openGroup(groupId, true, 'balances');
+      await controller.openRecordPayment(actor, recipient, 'INR');
+      if (refusal === 'a refused Retry') {
+        await controller.recordSettlement();
+        expect(controller.getSnapshot().settlement).toMatchObject({ status: 'uncertain' });
+      }
+      changed = true;
+      await controller.recordSettlement();
+      expect(controller.getSnapshot().settlement.status).toBe(
+        refusal === 'a refused Retry' ? 'blocked' : 'ready',
+      );
+      // The Group's reply is held: no Balances read may start while it is on its way.
+      holdGroup = true;
+      const from = sent.length;
+      const closing = controller.back();
+      await vi.waitFor(() => expect(release).not.toBeNull());
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(sent.slice(from)).toContain(`GET ${groupPath}`);
+      expect(sent.slice(from)).not.toContain(`GET ${balancesPath}`);
+      holdGroup = false;
+      release!();
+      await closing;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const after = sent.slice(from);
+      expect(after.filter((request) => request === `GET ${balancesPath}`)).toHaveLength(1);
+      expect(after.indexOf(`GET ${balancesPath}`)).toBeGreaterThan(
+        after.indexOf(`GET ${groupPath}`),
+      );
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        destination: 'balances',
+        financial: { balances: { status: 'ready' } },
+      });
+    },
+  );
 });

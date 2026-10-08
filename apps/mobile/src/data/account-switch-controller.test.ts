@@ -99,7 +99,12 @@ function phone() {
   };
   const server = {
     offline: false,
-    /** The next answer refreshes the session's cookie, as a server may. */
+    /**
+     * The next answer refreshes the session's cookie, as a server may. The cookie it was sent
+     * with still works, as with Better Auth, which keeps a session's token when it refreshes it:
+     * the phone may have other reads on their way with it, such as Home's list and figures, read
+     * together (#333).
+     */
     rotate: false,
     deleted: false,
     sessions: new Map<string, Person>(),
@@ -134,7 +139,6 @@ function phone() {
     let refreshed: string | undefined;
     if (server.rotate) {
       server.rotate = false;
-      server.sessions.delete(cookie!);
       refreshed = issue(user);
     }
     const answer = (body: unknown, status = 200) => json(body, status, refreshed);
