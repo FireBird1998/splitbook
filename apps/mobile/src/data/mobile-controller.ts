@@ -4419,8 +4419,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       : snapshot.pendingPayment?.groupId === groupId
         ? snapshot.pendingPayment
         : null;
+    // A Group a refusal made out of date (#333) has no query left: the view opens again, reading
+    // it before its Balances (M1-5, AMEND-1). One still being read is followed as before.
+    const regroup = !queryClient.getQueryState(groupKey(account(), groupId));
     showSettlementGroup(to, null, pending);
-    if (!shown) await openGroup(groupId, true, 'balances');
+    if (!shown || regroup) await openGroup(groupId, true, 'balances');
     else await readFinancial('balances');
   };
 

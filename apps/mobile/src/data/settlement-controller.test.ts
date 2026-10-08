@@ -1612,4 +1612,63 @@ describe('the Record payment sheet reads only what it checks (#333)', () => {
       expect(writes).toHaveLength(1);
     },
   );
+
+  it.each(['INVALID_MEMBERS', 'CURRENCY_MISMATCH', 'a refused Retry'] as const)(
+    'on Close after a payment refused with %s, reads the Group before the Balances, and the Balances once',
+    async (refusal) => {
+      let changed = false,
+        lose = refusal === 'a refused Retry',
+        holdGroup = false,
+        release: (() => void) | null = null;
+      const code = refusal === 'CURRENCY_MISMATCH' ? 'CURRENCY_MISMATCH' : 'INVALID_MEMBERS';
+      const { controller, sent } = setup((path, init) => {
+        if (path === paymentPath && init.method === 'POST') {
+          // A Retry's first payment: its reply never arrives.
+          if (lose) {
+            lose = false;
+            return Promise.reject(new TypeError('Network request failed'));
+          }
+          if (changed) return json({ status: 422, code, error: 'Refused' }, 422);
+        }
+        if (path === groupPath && holdGroup)
+          return new Promise<FetchResponse>((resolve) => {
+            release = () => resolve(json({ status: 200, data: group }));
+          });
+      });
+      await controller.signIn('alex');
+      await controller.openGroup(groupId, true, 'balances');
+      await controller.openRecordPayment(actor, recipient, 'INR');
+      if (refusal === 'a refused Retry') {
+        await controller.recordSettlement();
+        expect(controller.getSnapshot().settlement).toMatchObject({ status: 'uncertain' });
+      }
+      changed = true;
+      await controller.recordSettlement();
+      expect(controller.getSnapshot().settlement.status).toBe(
+        refusal === 'a refused Retry' ? 'blocked' : 'ready',
+      );
+      // The Group's reply is held: no Balances read may start while it is on its way.
+      holdGroup = true;
+      const from = sent.length;
+      const closing = controller.back();
+      await vi.waitFor(() => expect(release).not.toBeNull());
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(sent.slice(from)).toContain(`GET ${groupPath}`);
+      expect(sent.slice(from)).not.toContain(`GET ${balancesPath}`);
+      holdGroup = false;
+      release!();
+      await closing;
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const after = sent.slice(from);
+      expect(after.filter((request) => request === `GET ${balancesPath}`)).toHaveLength(1);
+      expect(after.indexOf(`GET ${balancesPath}`)).toBeGreaterThan(
+        after.indexOf(`GET ${groupPath}`),
+      );
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'group',
+        destination: 'balances',
+        financial: { balances: { status: 'ready' } },
+      });
+    },
+  );
 });
