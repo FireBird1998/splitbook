@@ -3195,6 +3195,26 @@ it('opens the held invitation after an edited Expense is confirmed', async () =>
   });
 });
 
+it('keeps an Expense draft when the save preflight names a different Group', async () => {
+  let wrong = false;
+  let posts = 0;
+  const f = setup((path, init) => {
+    if (wrong && path === `/api/groups/${groupId}`)
+      return Promise.resolve(
+        json({ status: 200, data: { ...group, _id: 'b00000000000000000000009' } }),
+      );
+    if (path.endsWith('/expenses') && init.method === 'POST') posts++;
+  });
+  await f.controller.signIn('alex');
+  await f.controller.openExpense(groupId);
+  await f.controller.updateExpenseDraft({ description: 'Dinner', amount: '12', tagId });
+  wrong = true;
+  await f.controller.saveExpense();
+  await f.controller.back();
+  expect(f.records.size).toBe(1);
+  expect(posts).toBe(0);
+});
+
 it.each(['create', 'edit', 'delete'] as const)(
   'keeps an unconfirmed %s blocked until confirmed Discard after Group refusal',
   async (kind) => {

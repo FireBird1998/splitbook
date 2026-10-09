@@ -2407,3 +2407,33 @@ it('does not clear invitation storage when Back closes an invalid link with no s
   expect(pending.credentials.clear).not.toHaveBeenCalled();
   expect(controller.getSnapshot().screen).toBe('groups');
 });
+
+it('keeps a newer invalid-link screen when an older valid invitation finishes saving', async () => {
+  const pending = memoryCredentials();
+  const held = deferred<void>();
+  const save = pending.credentials.save;
+  pending.credentials.save = async (value) => {
+    await held.promise;
+    await save(value);
+  };
+  const controller = setup({ pending: pending.credentials }).controller;
+  await controller.restore();
+  const opening = controller.openInvitation('http://localhost:4127/join/deadbeef');
+  await controller.openInvitation('https://other.example.test/join/deadbeef');
+  held.resolve();
+  await opening;
+  expect(controller.getSnapshot().invitation).toMatchObject({ status: 'invalid', code: null });
+  expect(pending.read()).toBe('deadbeef');
+});
+
+it('does not let an invalid-link opening navigate after sign-out', async () => {
+  const controller = setup().controller;
+  await controller.signIn('alex');
+  const opening = controller.openInvitation('https://other.example.test/join/deadbeef');
+  await controller.signOut();
+  await opening;
+  expect(controller.getSnapshot()).toMatchObject({
+    screen: 'groups',
+    auth: { status: 'signed-out' },
+  });
+});

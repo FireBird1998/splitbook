@@ -81,6 +81,7 @@ function fixture(
     holdGroupRead: null as Promise<void> | null,
   };
   let archived = false;
+  let financialCleanup: unknown = null;
   /** Replies with a status, and a body that defaults to an empty JSON object. */
   const errors = new Map<string, { status: number; body?: string }>();
   const failedPaths = new Set<string>();
@@ -201,6 +202,15 @@ function fixture(
           },
         },
         accountLocal: {
+          financialCleanup: {
+            load: async () => structuredClone(financialCleanup),
+            save: async (value) => {
+              financialCleanup = structuredClone(value);
+            },
+            clear: async () => {
+              financialCleanup = null;
+            },
+          },
           owner: {
             load: async () => owner,
             save: async (value) => {
@@ -227,6 +237,7 @@ function fixture(
                 drafts.clear();
                 creations.clear();
                 attempts.clear();
+                financialCleanup = null;
               },
             },
           ],
@@ -1598,4 +1609,60 @@ it('starts a new ordinary draft after access returns without recovering or repla
   await controller.back();
   expect(f.drafts.size).toBe(1);
   expect(f.writes()).toBe(0);
+});
+
+it('retries failed financial cleanup before restoring an offline account’s draft', async () => {
+  const f = fixture();
+  const controller = f.create();
+  await controller.signIn('alex');
+  await controller.openExpense(groupId);
+  await controller.updateExpenseDraft({ description: 'Removed membership dinner', amount: '12' });
+  f.revoke();
+  await controller.refresh('retry');
+  f.device.failRemoval = true;
+  await controller.back();
+  expect(f.drafts.size).toBe(1);
+  controller.dispose();
+  f.device.failRemoval = false;
+  f.goOffline();
+  const restarted = f.create();
+  await restarted.restore();
+  expect(f.drafts.size).toBe(0);
+  expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+});
+
+it('never shows a pending lost Group’s financial record when restart cleanup still fails', async () => {
+  const f = fixture();
+  const controller = f.create();
+  await controller.signIn('alex');
+  await controller.openExpense(groupId);
+  await controller.updateExpenseDraft({ description: 'Removed membership dinner', amount: '12' });
+  f.revoke();
+  await controller.refresh('retry');
+  f.device.failRemoval = true;
+  await controller.back();
+  controller.dispose();
+  f.goOffline();
+  const restarted = f.create();
+  await restarted.restore();
+  await restarted.openExpense(groupId);
+  expect(f.drafts.size).toBe(1);
+  expect(restarted.getSnapshot().expense.draft).toBeNull();
+  expect(restarted.getSnapshot().expense.status).toBe('blocked');
+});
+
+it('retains a draft when the Group check returns another Group instead of a refusal', async () => {
+  const f = fixture();
+  const controller = f.create();
+  await controller.signIn('alex');
+  await controller.openExpense(groupId);
+  await controller.updateExpenseDraft({ description: 'Dinner', amount: '12' });
+  f.failResponse(
+    `/api/groups/${groupId}`,
+    200,
+    JSON.stringify({ status: 200, data: { ...group, _id: 'b00000000000000000000010' } }),
+  );
+  await controller.refresh('retry');
+  await controller.back();
+  expect(f.drafts.size).toBe(1);
 });

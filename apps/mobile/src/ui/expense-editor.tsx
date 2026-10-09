@@ -514,12 +514,14 @@ function ExpenseTask({
                     : 'We couldn’t confirm this change'
               }
               message={
-                state.message ??
-                (state.attempt
-                  ? state.attemptRejected
-                    ? `SplitBook refused a retry of this save. ${refusedRetryNotice}`
-                    : `This Expense may already be in ${context?.group.name ?? 'the Group'}. Checking reuses the same submission, so it can’t be recorded twice.`
-                  : `${state.mutation?.kind === 'delete' ? 'This Expense may already be deleted.' : 'This change may already be saved.'} Checking reads the saved Expense first, so nothing is sent twice.`)
+                state.accessLost
+                  ? 'This save or change may already be recorded. Its retry will be removed from this device when you leave. If access returns, check the Group’s Expenses before saving again.'
+                  : (state.message ??
+                    (state.attempt
+                      ? state.attemptRejected
+                        ? `SplitBook refused a retry of this save. ${refusedRetryNotice}`
+                        : `This Expense may already be in ${context?.group.name ?? 'the Group'}. Checking reuses the same submission, so it can’t be recorded twice.`
+                      : `${state.mutation?.kind === 'delete' ? 'This Expense may already be deleted.' : 'This change may already be saved.'} Checking reads the saved Expense first, so nothing is sent twice.`))
               }
             >
               {(state.attemptRejected || (state.accessLost && state.status === 'blocked')) &&
@@ -536,7 +538,7 @@ function ExpenseTask({
             <Banner
               tone="warning"
               title="Group access lost"
-              message="This draft will be removed from this device when you leave. Nothing has been sent."
+              message="This draft will be removed from this device when you leave. Nothing has been sent. If access returns, check the Group’s Expenses before saving again."
             >
               <CompactButton label="Discard draft" variant="text" dense onPress={onDiscard} />
             </Banner>

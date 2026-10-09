@@ -291,6 +291,7 @@ export interface HomeSession {
   listed(listed: Set<string>, lost: Set<string>): void;
   /** Verified omission prompts an access check only for financial records kept on this device. */
   checkUnlisted?(listed: Set<string>, owner: number): Promise<void>;
+  financialBlocked?(accountId: string, groupId: string): boolean;
   /** The persister keeps only these Groups' copies (inside a lease write). */
   retain(accountId: string, listed: string[]): Promise<void> | undefined;
   /** This account's saved copies in these scopes couldn't be removed: never shown again. */
@@ -756,7 +757,11 @@ export function createHomeQueries(session: HomeSession) {
       const records = await lease.write(() => list(lease.accountId));
       if (!session.current(owner)) return;
       session.publish({
-        drafts: draftSummaries(records, lease.accountId, session.snapshot().groups.data),
+        drafts: draftSummaries(
+          records.filter(({ groupId }) => !session.financialBlocked?.(lease.accountId, groupId)),
+          lease.accountId,
+          session.snapshot().groups.data,
+        ),
       });
     } catch {
       // Home keeps the drafts it lists; each one is still in its Group.

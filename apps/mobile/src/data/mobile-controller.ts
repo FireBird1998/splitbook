@@ -88,6 +88,7 @@ import { createGroupQueries, emptyExpenses } from './group-queries';
 import { createExpenseQueries } from './expense-queries';
 import { createActivityQueries } from './activity-queries';
 import { untrustedCopies } from './untrusted-copies';
+import { lostGroupRecords, financialCleanupMessage } from './lost-group-records';
 import {
   createTransport,
   expiredMessage,
@@ -420,6 +421,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * could not remove, with when: never shown again, and deleted at the next start (#212).
    */
   const untrusted = untrustedCopies(dependencies);
+  const financialCleanup = lostGroupRecords(dependencies);
   let storeQueue: Promise<unknown> = Promise.resolve();
   let cleanupRequired = false;
   let accountCleanupRequired = false;
@@ -441,6 +443,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   let pendingLoaded = false;
   let creationRecovery: { ownerId: string; creation: GroupCreation } | null = null;
   let pendingQueue: Promise<unknown> = Promise.resolve();
+  /** Only the newest incoming link may open a screen; invalid links retain the pending code. */
+  let invitationOpening = 0;
   /** Pulls and automatic refreshes still running, by the view each started on; newest last. */
   let running: Record<'pull' | 'automatic', string[]> = { pull: [], automatic: [] };
 
@@ -1003,6 +1007,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     environment: apiBase,
     drafts: dependencies.expenseDrafts,
     checkUnlisted: (listed, owner) => checkUnlistedRecords(listed, owner),
+    financialBlocked: financialCleanup.blocked,
     shows: () => route.screen === 'groups' && snapshot.auth.status === 'authenticated',
     listed: (listed, lost) => {
       [listedGroups, unlistedGroups] = [listed, lost];
@@ -1433,6 +1438,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
     }
     await recordCookieAccount(owner, session.user.id);
+    await queueAccount(() => financialCleanup.recover());
     await queueAccount(() => untrusted.recover(session.user.id, now()));
     // A Group submission stored on this device reopens before anything else can be created.
     openHome(session.user, await storedCreation(owner, session.user.id));
@@ -1475,6 +1481,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (cleanupRequired) await clearSaved(owner);
       // Any pending sign-out cleanup has finished, and saved copies this device couldn't remove
       // are gone, so its saved Home can be read, alongside the session cookie, before any request.
+      await queueAccount(() => financialCleanup.recover());
       await queueAccount(() => untrusted.drop());
       const device = readDeviceAccount();
       const accountId = (await device)?.accountId;
@@ -1836,8 +1843,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     try {
       const removed = await lease.write(async () => {
         if (!lostGroups.has(groupId)) return false;
-        await dependencies.expenseDrafts?.remove(lease.accountId, groupId);
-        await dependencies.settlementAttempts?.remove(lease.accountId, groupId);
+        await financialCleanup.erase(lease.accountId, groupId);
         return true;
       });
       if (!removed) return true;
@@ -1849,6 +1855,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           pendingPayment:
             snapshot.pendingPayment?.groupId === groupId ? null : snapshot.pendingPayment,
           drafts: snapshot.drafts.filter((draft) => draft.groupId !== groupId),
+          homeSnackbar: {
+            message:
+              'This Group’s draft and unconfirmed saves were removed from this device. If access returns, check the Group’s Expenses before saving again.',
+          },
         });
       return true;
     } catch (error) {
@@ -2002,6 +2012,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * suggestions say, so a payment whose response was lost can always be retried.
    */
   const loadPendingPayment = async (groupId: string) => {
+    if (snapshot.auth.user && financialCleanup.blocked(snapshot.auth.user.id, groupId)) return;
     const owner = generation,
       read = ++pendingRequest,
       lease = accountStorage(),
@@ -2028,6 +2039,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * never opens or changes it.
    */
   const loadKeptDraft = async (groupId: string) => {
+    if (snapshot.auth.user && financialCleanup.blocked(snapshot.auth.user.id, groupId)) return;
     const owner = generation,
       read = ++keptDraftRequest,
       lease = accountStorage(),
@@ -2341,6 +2353,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const accountId = snapshot.auth.user.id;
     const month = snapshot.financial.groupId === groupId ? snapshot.financial.month : null;
     const returnTo = expenseReturn(groupId, origin.scrollY, origin.anchor);
+    if (financialCleanup.blocked(accountId, groupId)) {
+      navigate(
+        { screen: 'expense', groupId, returnTo },
+        {
+          expense: {
+            ...emptyExpenseEditor(),
+            groupId,
+            status: 'blocked',
+            message: financialCleanupMessage,
+          },
+        },
+      );
+      return;
+    }
     // Keep the current screen while local recovery is checked for a warm new form. Once it
     // answers, opening and publishing the form need no network wait (#366). A route/account
     // change meanwhile cancels the open, and a second tap cannot replace the first open.
@@ -2429,10 +2455,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       known = !!reading && showing() && (await expenseQueries.known(owner, held));
       const context = parseExpenseContext(await checking);
       if (!showing()) return;
-      if (
-        context.group.id !== groupId ||
-        !context.group.members.some((member) => member.user.id === accountId)
-      )
+      if (context.group.id !== groupId)
+        throw new RequestError('The server returned a different Group. Please retry.', 500);
+      if (!context.group.members.some((member) => member.user.id === accountId))
         throw new RequestError('You no longer have access to this Group.', 403);
       const blank: ExpenseDraft = {
         amount: '',
@@ -3162,10 +3187,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (!context) {
         context = parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
         if (!current(owner) || view !== route || !owns()) return;
-        if (
-          context.group.id !== groupId ||
-          !context.group.members.some((member) => member.user.id === snapshot.auth.user?.id)
-        ) {
+        if (context.group.id !== groupId)
+          throw new RequestError('The server returned a different Group. Please retry.', 500);
+        if (!context.group.members.some((member) => member.user.id === snapshot.auth.user?.id)) {
           await forgetGroup(groupId, 403, owner);
           throw new RequestError('You no longer have access to this Group.', 403);
         }
@@ -3378,10 +3402,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
       const context = parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
       if (!current(owner) || view !== route || !owns()) return;
-      if (
-        context.group.id !== groupId ||
-        !context.group.members.some((member) => member.user.id === lease.accountId)
-      ) {
+      if (context.group.id !== groupId)
+        throw new RequestError('The server returned a different Group. Please retry.', 500);
+      if (!context.group.members.some((member) => member.user.id === lease.accountId)) {
         await forgetGroup(groupId, 403, owner);
         throw new RequestError('You no longer have access to this Group.', 403);
       }
@@ -3567,10 +3590,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // A successful authorized read is a connection/access check, never proof a write will succeed.
       const context = parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
       if (!current(owner) || view !== route || !owns()) return;
-      if (
-        context.group.id !== groupId ||
-        !context.group.members.some((member) => member.user.id === lease.accountId)
-      ) {
+      if (context.group.id !== groupId)
+        throw new RequestError('The server returned a different Group. Please retry.', 500);
+      if (!context.group.members.some((member) => member.user.id === lease.accountId)) {
         await forgetGroup(groupId, 403, owner);
         throw new RequestError('You no longer have access to this Group.', 403);
       }
@@ -3782,7 +3804,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const group = parseGroup(
       verifiedGroup(groupId) ?? (await request(`/api/groups/${groupId}`, owner)),
     );
-    if (group.id !== groupId || !group.members.some((m) => m.user.id === snapshot.auth.user?.id)) {
+    if (group.id !== groupId)
+      throw new RequestError('The server returned a different Group. Please retry.', 500);
+    if (!group.members.some((m) => m.user.id === snapshot.auth.user?.id)) {
       await forgetGroup(groupId, 403, owner);
       throw new RequestError('You no longer have access to this Group.', 403);
     }
@@ -3836,6 +3860,18 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const stale = () => !current(owner) || view !== route || request !== settlementRequest;
     try {
       if (!lease || !storage) throw new DeviceStorageError(recoveryStorageMissing);
+      if (financialCleanup.blocked(lease.accountId, groupId)) {
+        publish({
+          ...snapshot,
+          settlement: {
+            ...snapshot.settlement,
+            status: 'blocked',
+            message: financialCleanupMessage,
+            known: {},
+          },
+        });
+        return;
+      }
       let recovery: ReturnType<typeof parseSettlementAttempt> | null;
       try {
         const stored = await lease.write(() => storage.load(lease.accountId, groupId));
@@ -4874,12 +4910,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const openInvitation = async (url: string) => {
     const code = parseInvitationLink(url, inviteOrigin);
     const owner = generation;
+    const view = route;
+    const opening = ++invitationOpening;
     // A sign-in or restore since then shows the saved invitation itself. The quiet revoke retry
     // that the link's return to the foreground starts doesn't, so it never stops this (#286).
-    const shows = () => current(owner) || signOutPending();
+    const shows = () => opening === invitationOpening && (current(owner) || signOutPending());
     // A malformed link is a separate screen, never a cancellation of the saved invitation.
     if (!code) {
       if (await holdInvitationForDraft(url, owner)) return;
+      if (!shows() || view !== route) return;
       showInvitation({
         code: null,
         status: 'invalid',
@@ -4892,8 +4931,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     try {
       await savePending(code);
     } catch {
-      if (!shows()) return;
+      if (!shows() || view !== route) return;
       if (await holdInvitationForDraft(url, owner)) return;
+      if (!shows() || view !== route) return;
       showInvitation({
         code,
         status: 'error',
@@ -4902,9 +4942,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       });
       return;
     }
-    if (!shows() || pendingCode !== code) return;
+    if (!shows() || view !== route || pendingCode !== code) return;
     if (await holdInvitationForDraft(url, owner)) return;
-    if (!shows() || pendingCode !== code) return;
+    if (!shows() || view !== route || pendingCode !== code) return;
     if (signOutPending()) {
       // Until the sign-out is confirmed, the invitation waits on the sign-in screen, which says
       // it's saved, as after Continue and at a restart. It's read once the revoke is confirmed (a
@@ -5455,10 +5495,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             }),
           );
           if (!current(owner) || view !== route || snapshot.screen !== 'members') return;
-          if (
-            group.id !== groupId ||
-            !group.members.some((member) => member.user.id === snapshot.auth.user?.id)
-          ) {
+          if (group.id !== groupId)
+            throw new RequestError('The server returned a different Group. Please retry.', 500);
+          if (!group.members.some((member) => member.user.id === snapshot.auth.user?.id)) {
             // As for a refusal: its saved copies and its place in the Group list go too.
             await forgetGroup(groupId, 403, owner);
             throw new RequestError('You no longer have access to this group.', 403);
@@ -5481,10 +5520,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             }),
           );
           if (!current(owner) || view !== route) return;
-          if (
-            context.group.id !== groupId ||
-            !context.group.members.some((member) => member.user.id === snapshot.auth.user?.id)
-          ) {
+          if (context.group.id !== groupId)
+            throw new RequestError('The server returned a different Group. Please retry.', 500);
+          if (!context.group.members.some((member) => member.user.id === snapshot.auth.user?.id)) {
             await forgetGroup(groupId, 403, owner);
             throw new RequestError('You no longer have access to this Group.', 403);
           }
@@ -5563,6 +5601,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * as its own Try again does (#280 item 3).
    */
   const refreshExpense = async (reuse: boolean) => {
+    if (
+      snapshot.auth.user &&
+      snapshot.expense.groupId &&
+      financialCleanup.blocked(snapshot.auth.user.id, snapshot.expense.groupId)
+    )
+      return;
     const { groupId, draft, status, requestedExpenseId } = snapshot.expense;
     if (!reuse && groupId && !draft && status === 'blocked')
       return openExpense(groupId, requestedExpenseId ?? undefined);

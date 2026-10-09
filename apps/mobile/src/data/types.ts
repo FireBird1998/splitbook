@@ -511,6 +511,12 @@ export interface AccountLocalStorage {
     save(record: { accountId: string; scopes: Record<string, number> }): Promise<void>;
     clear(): Promise<void>;
   };
+  /** Lost Group records awaiting deletion, kept outside their financial databases (#212). */
+  financialCleanup?: {
+    load(): Promise<unknown>;
+    save(record: { accountId: string; groupIds: string[] }): Promise<void>;
+    clear(): Promise<void>;
+  };
   /** Register at startup. Each store clears all its account keys for this backend. */
   stores: readonly { clear(): Promise<void> }[];
 }

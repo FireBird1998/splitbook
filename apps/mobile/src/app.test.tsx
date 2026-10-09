@@ -1908,6 +1908,7 @@ it('asks before discarding a lost Group’s unconfirmed Expense and sends nothin
       : undefined,
   );
   await settle(app.controller.refresh('retry'));
+  expect(app.text()).toContain('check the Group’s Expenses before saving again');
   await app.press('Discard unconfirmed save');
   const [, message, choices] = vi.mocked(Alert.alert).mock.lastCall!;
   expect(message).toContain('may already be recorded');
