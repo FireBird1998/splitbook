@@ -22,7 +22,10 @@ export default {
   ios: { bundleIdentifier: appIdentifier },
   android: {
     package: appIdentifier,
-    predictiveBackGestureEnabled: true,
+    // Off until facebook/react-native#58407 is resolved in the React Native version in use.
+    // Opted in, React Native does not forward Back to the app on Android 13–15, so Back leaves
+    // the app from every screen, even mid-save.
+    predictiveBackGestureEnabled: false,
     intentFilters: androidInvitationFilters({
       mode: process.env.EXPO_PUBLIC_APP_ENV,
       inviteOrigin: process.env.EXPO_PUBLIC_INVITE_ORIGIN,

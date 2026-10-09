@@ -12,7 +12,7 @@ import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
-import { emitAppState, pressBack } from './test-utils/native';
+import { backListenerCount, emitAppState, pressBack } from './test-utils/native';
 import { GroupExpensesView } from './ui/group-expenses';
 import { GroupActivity } from './ui/group-activity';
 
@@ -1374,17 +1374,20 @@ describe('App Expense window (#219)', () => {
       await app.press('Fictional row 5-5');
       await app.androidBack();
       native.scrollTo.mockClear();
-      layReturnRow(app, 'Fictional row 5-1,', 4500);
-      await app.layout(700, 6500);
-      if (choice === 'drag')
-        act(() =>
+      let selection: Promise<unknown> | undefined;
+      // Deliver layout and the member's input before yielding to the queued return timer.
+      // Awaiting layout first can let that timer scroll before the cancellation under test.
+      act(() => {
+        layReturnRow(app, 'Fictional row 5-1,', 4500);
+        void app.layout(700, 6500);
+        if (choice === 'drag')
           app
             .root()
             .findAll((node) => (node.type as unknown) === 'ScrollView')[0]
-            .props.onScrollBeginDrag(),
-        );
-      else await settle(app.controller.selectMonth('2026-08'));
-      await settle(new Promise((resolve) => setTimeout(resolve, 0)));
+            .props.onScrollBeginDrag();
+        else selection = app.controller.selectMonth('2026-08');
+      });
+      await settle(selection);
       expect(native.scrollTo).not.toHaveBeenCalled();
       // Subsequent native layout callbacks cannot resurrect the cancelled return.
       await app.layout(700, 7000);
@@ -1866,6 +1869,18 @@ describe('App Home', () => {
     expect(await app.androidBack()).toBe(true);
     expect(app.text()).toContain('September groceries');
     expect(app.pressable('Back to Home')).toBeTruthy();
+  });
+
+  it('leaves Back on Home to Android, so the app closes', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    expect(await app.androidBack()).toBe(true);
+    expect(app.pressable('Open Maple House')).toBeTruthy();
+
+    // Not handled: Android's own Back runs and leaves the app.
+    expect(backListenerCount()).not.toBe(0);
+    expect(await app.androidBack()).toBe(false);
+    expect(app.pressable('Open Maple House')).toBeTruthy();
   });
 });
 
