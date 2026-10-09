@@ -802,7 +802,7 @@ describe('export recovery and whole-trip statement bounds', () => {
     expect(json(response)).toMatchObject({ code: 'EXPORT_TOO_LARGE', status: 413 });
     expect(response.headers.get('content-disposition')).toBeNull();
   });
-  it('uses stored Trip dates, retaining before/after Expenses but windowing dated Payments', async () => {
+  it('uses stored Trip dates, retaining before/after Expenses and every Payment', async () => {
     const id = await createGroup('Ferry Trip', alice, [bob]);
     await Group.updateOne(
       { _id: id },
@@ -842,7 +842,21 @@ describe('export recovery and whole-trip statement bounds', () => {
       ['Before the trip', 'before'],
       ['After the trip', 'after'],
     ]);
-    expect(result.currencies[0].payments).toEqual([]);
+    expect(result.currencies[0].payments).toMatchObject([
+      { amountMinor: 20, recordedById: bob, outsideTrip: 'after' },
+    ]);
+    expect(result.currencies[0].paymentTotalMinor).toBe(20);
     expect(result.currencies[0].people.map((row) => row.balanceMinor)).toEqual([80, -80]);
+    const period = await exportService.statement(alice, {
+      groupIds: [id],
+      format: 'csv',
+      include: [],
+      from: '2026-09-01',
+      to: '2026-09-02',
+      timeZone: 'UTC',
+    });
+    expect(period.currencies[0].payments).toEqual([]);
+    expect(period.currencies[0].paymentTotalMinor).toBe(0);
+    expect(period.currencies[0].people.map((row) => row.balanceMinor)).toEqual([80, -80]);
   });
 });

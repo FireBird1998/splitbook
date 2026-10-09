@@ -132,6 +132,19 @@ test('a Trip’s Share wrap-up opens its whole-trip statement, with every sectio
   for (const name of ['Alex Rivera', 'Sam Chen', 'Priya Shah'])
     await expect(statement).toContainText(name);
   await expect(statement).toContainText('Alleppey houseboat (overnight, all meals)');
+  const payments = statement.getByRole('region', { name: 'Payments by date' });
+  await expect(payments).toContainText(
+    'Every recorded payment, including those before and after the trip.',
+  );
+  const postTripPayment = payments.getByRole('row').filter({ hasText: 'After the trip' });
+  await expect(postTripPayment).toHaveCount(1);
+  await expect(postTripPayment.getByRole('cell').nth(1)).toHaveText('Alex Rivera');
+  await expect(postTripPayment.getByRole('cell').nth(2)).toHaveText('Sam Chen');
+  await expect(postTripPayment.getByRole('cell').nth(3)).toHaveText('₹4,000.00');
+  await expect(postTripPayment.getByRole('cell').nth(5)).toHaveText('Alex Rivera');
+  await payments.screenshot({
+    path: `playwright/artifacts/${testInfo.project.name}/trip-statement-payments.png`,
+  });
   // The same payments the wrap-up suggests, everyone by name.
   const suggestions = statement
     .getByRole('region', { name: 'Balances and suggested payments' })

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildStatement } from './statement';
 import { tripSummary, type TripExpense } from './trip-summary';
 import type { BackupExpenseInput, BackupGroupInput } from './export-backup';
+import { dayKeyInZone } from './zoned-calendar';
 const group: BackupGroupInput = {
   id: 'g',
   name: 'Ferry Trip',
@@ -43,6 +44,58 @@ const group: BackupGroupInput = {
   ],
 };
 describe('printable statement figures', () => {
+  const tripPayments: BackupGroupInput = {
+    ...group,
+    startDate: '2026-09-01T00:00:00Z',
+    endDate: '2026-09-02T00:00:00Z',
+    settlements: [
+      { ...group.settlements[0], id: 'after', at: '2026-09-03T12:00:00Z', amountMinor: 30 },
+      { ...group.settlements[0], id: 'before', at: '2026-08-30T12:00:00Z', amountMinor: 10 },
+      { ...group.settlements[0], id: 'during', at: '2026-09-01T12:00:00Z', amountMinor: 20 },
+      { ...group.settlements[0], id: 'edge', at: '2026-09-02T22:30:00Z', amountMinor: 40 },
+    ],
+  };
+
+  it.each(['UTC', 'Pacific/Pago_Pago', 'Pacific/Kiritimati', 'Pacific/Tongatapu', 'Asia/Kolkata'])(
+    'lists every whole-trip Payment with viewer-day labels in %s',
+    (timeZone) => {
+      const bucket = buildStatement(tripPayments, {
+        wholeTrip: true,
+        from: '2026-09-01',
+        to: '2026-09-02',
+        timeZone,
+      }).currencies[0];
+      expect(bucket.payments.map((row) => row.id)).toEqual(['before', 'during', 'edge', 'after']);
+      expect(bucket.paymentTotalMinor).toBe(100);
+      const start = dayKeyInZone(tripPayments.startDate!, timeZone);
+      const end = dayKeyInZone(tripPayments.endDate!, timeZone);
+      for (const row of bucket.payments) {
+        const day = dayKeyInZone(row.at, timeZone);
+        expect(row.outsideTrip).toBe(day < start ? 'before' : day > end ? 'after' : null);
+        expect(row.recordedById).toBe('b');
+      }
+      expect(bucket.payments[0].outsideTrip).toBe('before');
+      expect(bucket.payments[1].outsideTrip).toBeNull();
+      expect(bucket.payments[3].outsideTrip).toBe('after');
+      expect(bucket.people.map((row) => row.balanceMinor)).toEqual([-50, 50]);
+      expect(bucket.spentMinor).toBe(101);
+    },
+  );
+
+  it('keeps period Payments filtered and unlabelled, with all-time balances', () => {
+    const bucket = buildStatement(tripPayments, {
+      from: '2026-09-01',
+      to: '2026-09-02',
+      timeZone: 'UTC',
+    }).currencies[0];
+    expect(bucket.payments.map((row) => [row.id, row.outsideTrip])).toEqual([
+      ['during', null],
+      ['edge', null],
+    ]);
+    expect(bucket.paymentTotalMinor).toBe(60);
+    expect(bucket.people.map((row) => row.balanceMinor)).toEqual([-50, 50]);
+  });
+
   it('keeps Paid and Share equal to Spent, Nets zero, and suggestions identical to the ledger', () => {
     const bucket = buildStatement(group).currencies[0];
     expect(bucket.spentMinor).toBe(101);

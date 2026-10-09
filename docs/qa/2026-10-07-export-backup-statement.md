@@ -84,8 +84,13 @@ and Net, and are named "Before the trip" and "After the trip", a line each in th
 under the date in the Expenses table. Days are read as the Trip summary reads them, by instant
 in the viewer's zone. A shared test checks that the statement and `tripSummary` agree on Spent,
 the Expense count, the outside totals and the member's Paid and Share, in six zones and with
-both dates, one date, or the dates stored the wrong way round. Payments stay windowed to the
-Trip's dates; current balances include every Payment.
+both dates, one date, or the dates stored the wrong way round. Following the owner's decision
+on 9 October 2026, whole-trip statements list every recorded Payment, including those before
+and after the Trip's dates, oldest first with recorder names. Payment counts and totals cover
+that complete list. Outside Payments are marked "Before the trip" or "After the trip" using
+the same viewer-day helper as Expenses, and the Payments caption explains the scope. Period
+statements still filter Payments to their window, never by Month. Current balances and
+suggested payments remain all-time.
 
 **Share wrap-up** sits on the Trip wrap-up card under the suggested payments, as on the design
 canvas's Trip Group page, once the Trip has Expenses (also when everyone is settled up). It
@@ -165,7 +170,3 @@ labels and the refusal page were added after those reviews.
 - Run the demo suite on a fresh database, as CI does. A second run on the same database keeps
   the Groups the first run created, so Alex ends up in more than 50 Groups and #317's
   several-Groups zip journey meets the 50-Group cap.
-- A whole-trip statement lists only the Payments recorded on the Trip's dates. Payments that
-  settle the trip afterwards count in its balances but aren't listed; on the seeded Trip that
-  reads "No payments in this period". Whether a whole trip should list every Payment is open
-  for the owner.
