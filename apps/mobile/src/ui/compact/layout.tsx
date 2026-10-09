@@ -635,8 +635,7 @@ export function SummaryStats({
     ? (width - 28 - space.gap * Math.max(0, stats.length - 1)) / Math.max(1, stats.length)
     : Infinity;
   const stacked =
-    isLargeText(fontScale) ||
-    (measured.signature === signature && measured.widths.some((needed) => needed > columnWidth));
+    measured.signature === signature && measured.widths.some((needed) => needed > columnWidth);
   const measure =
     (index: number) =>
     ({ nativeEvent: { lines } }: TextLayoutEvent) => {

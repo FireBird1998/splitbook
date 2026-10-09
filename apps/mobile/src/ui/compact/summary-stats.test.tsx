@@ -142,6 +142,33 @@ describe('Summary figures fit their card', () => {
     expect(direction(root)).toBe('row');
   });
 
+  it.each([1.3, 2])(
+    'keeps fitting figures horizontal on a wide card at %sx text and stacks after narrowing',
+    (fontScale) => {
+      setWindow({ fontScale });
+      const root = render();
+      resize(root, 800);
+      for (const amount of amounts(root)) textLayout(amount, [190]);
+      const labels = root.findAll(
+        (node) =>
+          host(node, 'Text') &&
+          node.children.some((value) =>
+            ['Spent', 'Your share', 'You paid'].includes(String(value)),
+          ),
+      );
+      for (const label of labels) textLayout(label, [130]);
+      expect(direction(root)).toBe('row');
+
+      resize(root, 320);
+      expect(direction(root)).toBe('column');
+      for (const amount of amounts(root)) textLayout(amount, [190]);
+      expect(direction(root)).toBe('column');
+      resize(root, 800);
+      for (const amount of amounts(root)) textLayout(amount, [190]);
+      expect(direction(root)).toBe('row');
+    },
+  );
+
   it.each(['light', 'dark'] as const)(
     'at enlarged text keeps labels, complete values and their semantic colors in %s',
     (mode) => {
@@ -152,6 +179,7 @@ describe('Summary figures fit their card', () => {
       }));
       const root = render(stats, mode);
       resize(root, 320);
+      for (const amount of amounts(root)) textLayout(amount, [130]);
       expect(direction(root)).toBe('column');
       const beforeScale = amounts(root)[0]!.props.onTextLayout;
       setWindow({ fontScale: 2 });
