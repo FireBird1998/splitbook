@@ -1121,6 +1121,13 @@ joined, has left, or that doesn't exist answers a real `403` with the app's
 "Group not found" page, and a signed-out visitor is redirected to `/login`.
 See [JSON backup and printable statements](export-backup.md).
 
+A whole-trip statement lists every recorded Payment of the Group, including those before
+and after the Trip's stored dates, oldest first with recorder names. Outside Payments are
+marked "Before the trip" or "After the trip" using days in the viewer's time zone, as for
+Expenses. The Payment count and total cover that complete list. Period statements still
+filter Payments by their date window; Settlements are never attributed to a Month.
+Current balances and suggested payments remain all-time.
+
 ---
 
 ## Not implemented

@@ -83,8 +83,11 @@ Trip summary's rule (#316) for Expenses dated outside the Trip's dates:
   the statement names the same Expenses, with the same totals, as the Insights tab. A shared
   test checks this against `tripSummary` in several zones.
 
-Payments are still windowed to the Trip's dates, and current balances still include every
-payment. The page explains this scope.
+A whole-trip statement lists every recorded Payment of the Group, including those before
+and after the Trip's dates, oldest first with recorder names. Its Payment count and total
+cover that list. Outside Payments use the same viewer-day labels as Expenses. The Payments
+caption makes this scope explicit. Period statements still window Payments; Settlements are
+never attributed to a Month. Current balances still include every payment.
 
 **Share wrap-up.** A Trip's Insights tab has Share wrap-up on its Trip wrap-up card, under the
 suggested payments, once the Trip has Expenses. It links, in the same tab, to

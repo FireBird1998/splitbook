@@ -13,7 +13,7 @@ export interface StatementWindow {
   wholeTrip?: boolean;
 }
 
-/** Where a whole-trip statement's Expense falls: before the Trip's first day, or after its last. */
+/** Where a whole-trip statement's Expense or Payment falls relative to the Trip's days. */
 export type OutsideTrip = 'before' | 'after';
 
 /** A Trip's first and last days in a zone, read as the Trip summary (#316) reads them. */
@@ -51,7 +51,9 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
     if (trip.end && day > trip.end) return 'after';
     return null;
   };
-  const settlements = group.settlements.filter((row) => within(zonedDay(row.at, timeZone)));
+  const settlements = group.settlements.filter(
+    (row) => window.wholeTrip || within(zonedDay(row.at, timeZone)),
+  );
   const currencies = [
     ...new Set([
       group.currency,
@@ -159,7 +161,11 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
           date: expenseDay(row.date),
           outsideTrip: outsideTrip(row.date),
         })),
-        payments: payments.map((row) => ({ ...row, at: new Date(row.at).toISOString() })),
+        payments: payments.map((row) => ({
+          ...row,
+          at: new Date(row.at).toISOString(),
+          outsideTrip: outsideTrip(row.at),
+        })),
       };
     }),
   };

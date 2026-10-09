@@ -17,7 +17,7 @@ import { zonedTimestamp } from '@splitbook/shared/export-csv';
 import type { OutsideTrip, Statement } from '@splitbook/shared/statement';
 
 const light = getSemanticTokens('light');
-/** #316's names for a whole trip's Expenses outside the Trip's dates. */
+/** A whole trip's Expenses and Payments outside the Trip's dates. */
 const OUTSIDE_TRIP: Record<OutsideTrip, string> = {
   before: 'Before the trip',
   after: 'After the trip',
@@ -230,6 +230,11 @@ export default function StatementView({ statement }: { statement: Statement }) {
         )}
       </Section>
       <Section title="Payments by date">
+        {statement.wholeTrip ? (
+          <Typography color="text.secondary">
+            Every recorded payment, including those before and after the trip.
+          </Typography>
+        ) : null}
         {bucket.payments.length ? (
           <StatementTable
             title="Dated payments"
@@ -237,7 +242,14 @@ export default function StatementView({ statement }: { statement: Statement }) {
           >
             {bucket.payments.map((row) => (
               <TableRow key={row.id}>
-                <TableCell>{zonedTimestamp(row.at, statement.timeZone)}</TableCell>
+                <TableCell>
+                  {zonedTimestamp(row.at, statement.timeZone)}
+                  {row.outsideTrip ? (
+                    <Typography variant="caption" component="div">
+                      {OUTSIDE_TRIP[row.outsideTrip]}
+                    </Typography>
+                  ) : null}
+                </TableCell>
                 <TableCell>{name(row.fromId)}</TableCell>
                 <TableCell>{name(row.toId)}</TableCell>
                 <TableCell>{amount(row.amountMinor)}</TableCell>
@@ -247,7 +259,9 @@ export default function StatementView({ statement }: { statement: Statement }) {
             ))}
           </StatementTable>
         ) : (
-          <Typography>No payments in this period.</Typography>
+          <Typography>
+            {statement.wholeTrip ? 'No payments recorded.' : 'No payments in this period.'}
+          </Typography>
         )}
       </Section>
     </Box>

@@ -7,6 +7,7 @@ import type { BackupExpenseInput, BackupGroupInput } from '@splitbook/shared/exp
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { text } from '@/lib/test-utils/markup';
 import StatementView from './StatementView';
+import { zonedTimestamp } from '@splitbook/shared/export-csv';
 
 /*
  * A whole-trip statement (#319, opened from Share wrap-up), rendered as the server renders it:
@@ -53,7 +54,18 @@ const TRIP: BackupGroupInput = {
     expense('e2', '2026-09-18', 'Island guesthouse', 120000),
     expense('e3', '2026-09-22', 'Late taxi refund share', 4000),
   ],
-  settlements: [],
+  settlements: [
+    {
+      id: 'p1',
+      at: '2026-09-22T12:00:00.000Z',
+      fromId: ALEX,
+      toId: SAM,
+      amountMinor: 40000,
+      currency: 'INR',
+      recordedById: ALEX,
+      note: 'Settled after returning home',
+    },
+  ],
 };
 
 function render(wholeTrip: boolean) {
@@ -93,5 +105,16 @@ describe('a whole-trip statement', () => {
     expect(page).toContain('All time');
     expect(page).not.toMatch(/Before the trip|After the trip|Whole trip/);
     expect(page).toContain('Spent: ₹1,840.00');
+  });
+
+  it('lists and marks a post-trip Payment with its recorder and whole-trip scope', () => {
+    const payments = render(true).split('Payments by date')[1];
+    expect(payments).toContain(
+      'Every recorded payment, including those before and after the trip.',
+    );
+    expect(payments).toContain(
+      `${zonedTimestamp(TRIP.settlements[0].at, 'Asia/Kolkata')} After the trip Alex Rivera Sam Chen ₹400.00 Settled after returning home Alex Rivera`,
+    );
+    expect(render(true)).toContain('Payments: 1 · ₹400.00');
   });
 });
