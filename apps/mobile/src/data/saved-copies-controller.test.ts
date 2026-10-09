@@ -1170,3 +1170,30 @@ it('an interrupted attempt in another Group preserves an unreadable existing cle
     await saving;
   }
 });
+
+it('records failed confirmed-write cleanup even when its previous journal cannot be read', async () => {
+  const f = fixture();
+  const controller = await visitEverything(f);
+  f.server.failInvalidation = true;
+  f.server.failJournalReads = 1;
+  await controller.openExpense(mapleId, dinnerId);
+  await controller.editExpense();
+  await controller.updateExpenseDraft({ description: 'Lake dinner' });
+  await controller.saveExpense();
+  await settle();
+  expect(await f.drafts.list(alex.id)).toEqual([]);
+  controller.dispose();
+  f.server.offline = true;
+  f.server.failInvalidation = false;
+  const restarted = f.create();
+  try {
+    const homes: unknown[] = [];
+    restarted.subscribe(() => homes.push(restarted.getSnapshot().home.data));
+    await restarted.restore();
+    expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+    expect(Object.keys(f.savedOf(mapleId))).not.toContain('Dinner');
+    expect(homes.every((home) => home === null)).toBe(true);
+  } finally {
+    restarted.dispose();
+  }
+});

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { homePath, listPath } from './home-queries';
-import { removeGroupRows } from './group-queries';
+import { removeGroupRows, rowPaths } from './group-queries';
 import { removeRecordRows } from './expense-queries';
 import { removeActivityRows } from './activity-queries';
 import { parseStoredExpenseDraft } from './expense-draft';
@@ -8,6 +8,7 @@ import { parseSettlementAttempt } from './settlement';
 import type { MobileDependencies } from './types';
 
 const recorded = z.object({ accountId: z.string(), scopes: z.record(z.string(), z.number()) });
+const allScopes = ['groups', 'group', 'ledger', 'balances', 'home'];
 
 /**
  * Saved copies this device couldn't remove (ADR 0006, #212), by scope, each with when: a copy
@@ -38,10 +39,21 @@ export function untrustedCopies({
    * keep every saved row on the persister (#223).
    */
   const remove = async (accountId: string, scope: string) => {
+    if (!rows) return;
     const [name, groupId = ''] = scope.split(':');
     if (name === 'groups' || name === 'home')
       await rows?.remove(accountId, name === 'groups' ? listPath : homePath);
-    else if (name === 'group') {
+    else if (!groupId) {
+      // A journal that couldn't be read was replaced conservatively: its affected Groups are
+      // unknown, so remove every saved Group view in this account before showing any of them.
+      const groups = new Set(
+        [...(await rowPaths(rows, accountId))].flatMap((path) => {
+          const id = /^\/api\/groups\/([a-f\d]{24})(?:\/|$)/i.exec(path)?.[1];
+          return id ? [id] : [];
+        }),
+      );
+      for (const id of groups) await remove(accountId, `${name}:${id}`);
+    } else if (name === 'group') {
       await removeGroupRows(rows, accountId, groupId, 'group');
     } else {
       await removeGroupRows(rows, accountId, groupId, 'ledger');
@@ -56,7 +68,13 @@ export function untrustedCopies({
     // Added to what is recorded for this account; another account's record is stale.
     recording = recording
       .then(async () => {
-        const before = await held();
+        const before = await held().catch(() => {
+          // We cannot safely union an unreadable journal. A durable superset protects both
+          // its unknown entries and this new invalidation, even when no attempt remains.
+          const scopes = Object.fromEntries(allScopes.map((scope) => [scope, time]));
+          for (const scope of allScopes) untrusted.set(scope, time);
+          return { accountId, scopes };
+        });
         const known = before?.accountId === accountId ? before.scopes : {};
         for (const scope of scopes) known[scope] = time;
         await record.save({ accountId, scopes: known });
@@ -74,8 +92,7 @@ export function untrustedCopies({
       readable = false;
       // The cleanup record may name any saved view. While it cannot be read, no older copy
       // can be considered safe; live answers remain available and the session stays signed in.
-      for (const scope of ['groups', 'group', 'ledger', 'balances', 'home'])
-        untrusted.set(scope, now());
+      for (const scope of allScopes) untrusted.set(scope, now());
       return null;
     });
     // A stored attempt is itself durable evidence. Removing its copies must not depend on
