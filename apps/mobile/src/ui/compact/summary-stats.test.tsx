@@ -169,6 +169,25 @@ describe('Summary figures fit their card', () => {
     },
   );
 
+  it('reserves the large-text loading shape until every displayed label and value has a native width', () => {
+    setWindow({ fontScale: 1.3 });
+    const root = render();
+    resize(root, 800);
+    expect(direction(root)).toBe('column');
+    for (const amount of amounts(root)) textLayout(amount, [190]);
+    expect(direction(root)).toBe('column');
+    const labels = root.findAll(
+      (node) =>
+        host(node, 'Text') &&
+        node.children.some((value) => ['Spent', 'Your share', 'You paid'].includes(String(value))),
+    );
+    textLayout(labels[0]!, [130]);
+    textLayout(labels[1]!, [130]);
+    expect(direction(root)).toBe('column');
+    textLayout(labels[2]!, [130]);
+    expect(direction(root)).toBe('row');
+  });
+
   it.each(['light', 'dark'] as const)(
     'at enlarged text keeps labels, complete values and their semantic colors in %s',
     (mode) => {

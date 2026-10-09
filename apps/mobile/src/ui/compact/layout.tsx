@@ -610,6 +610,8 @@ export interface SummaryStat {
 /**
  * Stats side by side while their full text fits; otherwise each becomes a label-and-value row.
  * Native text layout measures the displayed labels and amounts, including their font scale.
+ * Until those widths arrive, large text keeps the stacked loading shape; once measured, even
+ * large text uses columns when it fits. Nothing briefly wraps into a different loading height.
  * Rows can wrap, so even an amount longer than the card keeps every character. While
  * `loading`, three skeleton stats of the same shape stand in (hidden from screen readers, as
  * the screen's own placeholder announces the load); when it clears, the stats fade in. Keep the
@@ -634,10 +636,20 @@ export function SummaryStats({
   const columnWidth = width
     ? (width - 28 - space.gap * Math.max(0, stats.length - 1)) / Math.max(1, stats.length)
     : Infinity;
+  const sameFigures = measured.signature === signature;
+  const fullyMeasured =
+    width > 0 &&
+    sameFigures &&
+    stats.length > 0 &&
+    stats.every(
+      (_item, index) =>
+        measured.widths[index * 2] !== undefined && measured.widths[index * 2 + 1] !== undefined,
+    );
   const stacked =
-    measured.signature === signature && measured.widths.some((needed) => needed > columnWidth);
+    (!fullyMeasured && isLargeText(fontScale)) ||
+    (sameFigures && measured.widths.some((needed) => needed > columnWidth));
   const measure =
-    (index: number) =>
+    (slot: number) =>
     ({ nativeEvent: { lines } }: TextLayoutEvent) => {
       if (currentSignature.current !== signature || !lines.length) return;
       // A wrapped line only gives the width of its pieces. Keep their combined width, and
@@ -648,9 +660,9 @@ export function SummaryStats({
       );
       setMeasured((previous) => {
         const widths = previous.signature === signature ? previous.widths : [];
-        if ((widths[index] ?? 0) >= needed) return previous;
+        if (widths[slot] !== undefined && widths[slot]! >= needed) return previous;
         const next = [...widths];
-        next[index] = needed;
+        next[slot] = needed;
         return { signature, widths: next };
       });
     };
@@ -692,7 +704,7 @@ export function SummaryStats({
               <CompactText
                 variant="caption"
                 tone="secondary"
-                onTextLayout={measure(index)}
+                onTextLayout={measure(index * 2)}
                 style={{ maxWidth: '100%' }}
               >
                 {item.label}
@@ -700,7 +712,7 @@ export function SummaryStats({
               <Money
                 tone={item.tone}
                 numberOfLines={0}
-                onTextLayout={measure(index)}
+                onTextLayout={measure(index * 2 + 1)}
                 style={{ maxWidth: '100%' }}
               >
                 {item.value}
