@@ -132,6 +132,7 @@ export function RecordPaymentSheet({
   onRecord,
   onRetry,
   onClose,
+  onDiscard,
 }: {
   visible: boolean;
   state: SettlementState;
@@ -145,6 +146,8 @@ export function RecordPaymentSheet({
   /** Try again, after the sheet couldn't check the latest balances: it checks them again. */
   onRetry: () => void;
   onClose: () => void;
+  /** Confirm before removing a lost Group’s payment that may already be recorded. */
+  onDiscard?: () => void;
 }) {
   const theme = useTheme();
   const { draft, status, chosen } = state;
@@ -200,14 +203,20 @@ export function RecordPaymentSheet({
       : undefined;
   // A single correction already shows on its field.
   const message =
-    state.message && !Object.values(errors).includes(state.message) ? state.message : null;
+    state.message && !Object.values(errors).includes(state.message)
+      ? state.accessLost
+        ? `${state.message} If access returns, check the Group’s Expenses and payments before recording again.`
+        : state.message
+      : null;
   // An unconfirmed payment found on this phone waits for the check as Retry.
   const retrying = checking && state.attempt !== null;
 
   const footer =
     figures || status === 'error' ? (
       <>
-        {status === 'uncertain' ? (
+        {status === 'blocked' && state.accessLost && state.attempt && onDiscard ? (
+          <CompactButton label="Discard unconfirmed payment" block onPress={onDiscard} />
+        ) : status === 'uncertain' ? (
           <CompactButton label="Retry payment" block onPress={onRecord} />
         ) : status === 'error' ? (
           <CompactButton label="Try again" block onPress={onRetry} />

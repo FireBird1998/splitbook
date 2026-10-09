@@ -3,7 +3,13 @@ import { toDateParam } from '@splitbook/shared/date';
 import { gatewayReply, hangUntilAborted, manualTimer } from '../test-utils/transport-faults';
 import { resolveDraftReview, type ExpenseDraft, type ExpenseField } from './expense-draft';
 import { createMobileController, type MobileController } from './mobile-controller';
-import type { FetchResponse, MobileFetch, MobileSnapshot, MobileTimer } from './types';
+import type {
+  FetchResponse,
+  MobileFetch,
+  MobileSnapshot,
+  MobileTimer,
+  CredentialStore,
+} from './types';
 
 const memberIds = [
   'a00000000000000000000001',
@@ -44,13 +50,21 @@ const json = (data: unknown, status = 200, cookie?: string) =>
   });
 function setup(
   intercept?: (path: string, init: RequestInit) => Promise<FetchResponse> | undefined,
-  options: { newSubmissionKey?: () => string; timer?: MobileTimer } = {},
+  options: {
+    newSubmissionKey?: () => string;
+    timer?: MobileTimer;
+    pendingInvitation?: CredentialStore;
+  } = {},
 ) {
   let cookie: string | null = null;
   let account: string | null = null;
   let cleanup = false;
   const records = new Map<string, unknown>();
   const drafts = {
+    keys: async (accountId: string) =>
+      [...records.keys()]
+        .filter((key) => key.startsWith(accountId + ':'))
+        .map((key) => key.slice(accountId.length + 1)),
     load: async (accountId: string, id: string) =>
       structuredClone(records.get(`${accountId}:${id}`) ?? null),
     save: async (accountId: string, id: string, value: unknown) => {
@@ -118,6 +132,7 @@ function setup(
           },
         },
         expenseDrafts: drafts,
+        pendingInvitation: options.pendingInvitation,
         accountLocal: {
           owner: {
             load: async () => account,
@@ -3003,3 +3018,364 @@ describe('native Expense field corrections', () => {
     expect(restarted.getSnapshot().expense.validation.errors).toEqual({});
   });
 });
+
+describe('invitations while the phone cannot keep an Expense draft', () => {
+  it.each(['http://localhost:4138/join/abcdef12', 'http://localhost:4138/join/invalid'])(
+    'keeps the form on an incoming link until the draft stores and Back is pressed: %s',
+    async (url) => {
+      const requests: string[] = [];
+      const { controller, drafts } = setup((path, init) => {
+        requests.push(`${init.method ?? 'GET'} ${path}`);
+        if (path === '/api/join/abcdef12')
+          return Promise.resolve(
+            json({
+              status: 200,
+              data: {
+                _id: 'b00000000000000000000002',
+                name: 'Pine Cabin',
+                category: 'trip',
+                memberCount: 1,
+              },
+            }),
+          );
+      });
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      const save = drafts.save;
+      drafts.save = async () => {
+        throw new Error('Storage full');
+      };
+      await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+      const error = controller.getSnapshot().expense.message;
+      const before = requests.length;
+      await controller.openInvitation(url);
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'expense',
+        expense: {
+          persistence: 'error',
+          draft: { description: 'Dinner', amount: '10' },
+          message: error,
+          waitingInvitation: url,
+        },
+      });
+      await controller.back();
+      expect(controller.getSnapshot().screen).toBe('expense');
+      expect(requests.slice(before)).toEqual([]);
+      drafts.save = save;
+      await controller.updateExpenseDraft({ notes: 'Keep this too' });
+      await controller.back();
+      expect(controller.getSnapshot()).toMatchObject({
+        screen: 'invite',
+        invitation: { status: url.endsWith('invalid') ? 'invalid' : 'ready' },
+      });
+      expect(requests.slice(before).filter((request) => request.startsWith('POST '))).toEqual([]);
+    },
+  );
+});
+
+it.each(['save', 'discard'] as const)(
+  'opens the waiting invitation after a deliberate %s',
+  async (finish) => {
+    const { controller, drafts } = setup((path, init) => {
+      if (path === '/api/join/abcdef12')
+        return Promise.resolve(
+          json({
+            status: 200,
+            data: {
+              _id: 'b00000000000000000000002',
+              name: 'Pine Cabin',
+              category: 'trip',
+              memberCount: 1,
+            },
+          }),
+        );
+      if (path.endsWith('/expenses') && init.method === 'POST')
+        return Promise.resolve(
+          json({ status: 201, data: { _id: expenseId, group: groupId } }, 201),
+        );
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    const save = drafts.save;
+    drafts.save = async () => {
+      throw new Error('Storage full');
+    };
+    await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+    await controller.openInvitation('http://localhost:4138/join/abcdef12');
+    drafts.save = save;
+    if (finish === 'save') {
+      await controller.updateExpenseDraft({ notes: 'Ready' });
+      await controller.saveExpense();
+    } else await controller.discardExpenseDraft();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      invitation: { status: 'ready', preview: { name: 'Pine Cabin' } },
+    });
+  },
+);
+
+it.each([true, false])(
+  'waits for a pending draft write before opening an invitation (failure %s)',
+  async (fails) => {
+    const { controller, drafts } = setup((path) =>
+      path === '/api/join/abcdef12'
+        ? Promise.resolve(
+            json({
+              status: 200,
+              data: {
+                _id: 'b00000000000000000000002',
+                name: 'Pine Cabin',
+                category: 'trip',
+                memberCount: 1,
+              },
+            }),
+          )
+        : undefined,
+    );
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    const save = drafts.save;
+    let release!: () => void;
+    const waiting = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    drafts.save = async (...args) => {
+      await waiting;
+      if (fails) throw new Error('Storage full');
+      await save(...args);
+    };
+    const typing = controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+    const opening = controller.openInvitation('http://localhost:4138/join/abcdef12');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(controller.getSnapshot().screen).toBe('expense');
+    release();
+    await Promise.all([typing, opening]);
+    expect(controller.getSnapshot().screen).toBe(fails ? 'expense' : 'invite');
+    if (fails)
+      expect(controller.getSnapshot().expense).toMatchObject({
+        persistence: 'error',
+        draft: { description: 'Dinner' },
+        waitingInvitation: 'http://localhost:4138/join/abcdef12',
+      });
+  },
+);
+
+it('opens the held invitation after an edited Expense is confirmed', async () => {
+  const { controller, drafts } = setup((path) => {
+    if (path.endsWith(`/${expenseId}`))
+      return Promise.resolve(json({ status: 200, data: savedExpense }));
+    if (path === '/api/join/abcdef12')
+      return Promise.resolve(
+        json({
+          status: 200,
+          data: {
+            _id: 'b00000000000000000000002',
+            name: 'Pine Cabin',
+            category: 'trip',
+            memberCount: 1,
+          },
+        }),
+      );
+  });
+  await controller.signIn('alex');
+  await controller.openExpense(groupId, expenseId);
+  await controller.editExpense();
+  const save = drafts.save;
+  drafts.save = async () => {
+    throw new Error('Storage full');
+  };
+  await controller.updateExpenseDraft({ notes: 'Keep these edits' });
+  await controller.openInvitation('http://localhost:4138/join/abcdef12');
+  drafts.save = save;
+  await controller.updateExpenseDraft({ notes: 'Keep these edited notes' });
+  await controller.saveExpense();
+  expect(controller.getSnapshot()).toMatchObject({
+    screen: 'invite',
+    invitation: { status: 'ready' },
+  });
+});
+
+it('keeps an Expense draft when the save preflight names a different Group', async () => {
+  let wrong = false;
+  let posts = 0;
+  const f = setup((path, init) => {
+    if (wrong && path === `/api/groups/${groupId}`)
+      return Promise.resolve(
+        json({ status: 200, data: { ...group, _id: 'b00000000000000000000009' } }),
+      );
+    if (path.endsWith('/expenses') && init.method === 'POST') posts++;
+  });
+  await f.controller.signIn('alex');
+  await f.controller.openExpense(groupId);
+  await f.controller.updateExpenseDraft({ description: 'Dinner', amount: '12', tagId });
+  wrong = true;
+  await f.controller.saveExpense();
+  await f.controller.back();
+  expect(f.records.size).toBe(1);
+  expect(posts).toBe(0);
+});
+
+it.each(['create', 'edit', 'delete'] as const)(
+  'keeps an unconfirmed %s blocked until confirmed Discard after Group refusal',
+  async (kind) => {
+    let denied = false;
+    const requests: string[] = [];
+    const { controller, records } = setup((path, init) => {
+      requests.push(`${init.method ?? 'GET'} ${path}`);
+      if (denied && path === `/api/groups/${groupId}`)
+        return Promise.resolve(json({ status: 403, error: 'Access removed' }, 403));
+      if (
+        ['POST', 'PATCH', 'DELETE'].includes(init.method ?? '') &&
+        path.startsWith(`/api/groups/${groupId}/expenses`)
+      )
+        return Promise.reject(new TypeError('Reply lost'));
+      if (path.endsWith(`/${expenseId}`))
+        return Promise.resolve(json({ status: 200, data: savedExpense }));
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, kind === 'create' ? undefined : expenseId);
+    if (kind === 'delete') {
+      controller.reviewExpenseDeletion();
+      await controller.deleteExpense();
+    } else {
+      if (kind === 'edit') await controller.editExpense();
+      await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+      await controller.saveExpense();
+    }
+    expect(records.size).toBe(1);
+    denied = true;
+    await controller.refresh('retry');
+    expect(controller.getSnapshot().expense).toMatchObject({ status: 'blocked', accessLost: true });
+    expect(records.size).toBe(1);
+    const before = requests.length;
+    await controller.discardUnconfirmedExpense();
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot().screen).toBe('groups');
+    expect(requests.slice(before).filter((request) => !request.startsWith('GET '))).toEqual([]);
+  },
+);
+
+it('keeps a new draft when an older Group refusal arrives after joining it', async () => {
+  let hold = true,
+    release!: (response: FetchResponse) => void,
+    reached!: () => void;
+  const arrived = new Promise<void>((resolve) => {
+    reached = resolve;
+  });
+  const { controller, records } = setup((path, init) => {
+    if (path === `/api/groups/${groupId}` && hold) {
+      hold = false;
+      return new Promise((resolve) => {
+        release = resolve;
+        reached();
+      });
+    }
+    if (path === '/api/join/abcdef12')
+      return Promise.resolve(
+        init.method === 'POST'
+          ? json({ status: 201, data: { groupId } }, 201)
+          : json({
+              status: 200,
+              data: { _id: groupId, name: 'Shared home', category: 'home', memberCount: 3 },
+            }),
+      );
+  });
+  await controller.signIn('alex');
+  const opening = controller.openExpense(groupId);
+  await arrived;
+  await controller.openInvitation('http://localhost:4138/join/abcdef12');
+  const joining = controller.joinInvitation();
+  try {
+    await vi.waitFor(
+      () =>
+        expect(controller.getSnapshot()).toMatchObject({
+          screen: 'group',
+          detail: { status: 'ready' },
+        }),
+      { timeout: 300 },
+    );
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({
+      description: 'New membership dinner',
+      amount: '10',
+      tagId,
+    });
+  } finally {
+    release(json({ status: 403, error: 'Earlier access refused' }, 403));
+    await Promise.all([joining, opening]);
+  }
+  expect(controller.getSnapshot()).toMatchObject({
+    screen: 'expense',
+    expense: { status: 'editing', draft: { description: 'New membership dinner' } },
+  });
+  expect(records.size).toBe(1);
+});
+
+it('keeps unstored Expense entries even when the incoming invitation cannot be stored', async () => {
+  const { controller, drafts } = setup(undefined, {
+    pendingInvitation: {
+      load: async () => null,
+      clear: async () => {},
+      save: async () => {
+        throw new Error('Disk full');
+      },
+    },
+  });
+  await controller.signIn('alex');
+  await controller.openExpense(groupId);
+  drafts.save = async () => {
+    throw new Error('Disk full');
+  };
+  await controller.updateExpenseDraft({ description: 'Keep my dinner', amount: '10' });
+  await controller.openInvitation('http://localhost:4138/join/abcdef12');
+  expect(controller.getSnapshot()).toMatchObject({
+    screen: 'expense',
+    expense: {
+      persistence: 'error',
+      draft: { description: 'Keep my dinner' },
+      waitingInvitation: 'http://localhost:4138/join/abcdef12',
+    },
+  });
+});
+
+it.each(['create', 'edit', 'delete'] as const)(
+  'cleans an unconfirmed %s on Home only after the unlisted Group refuses access',
+  async (kind) => {
+    let denied = false;
+    const requests: string[] = [];
+    const { controller, records } = setup((path, init) => {
+      requests.push(`${init.method ?? 'GET'} ${path}`);
+      if (denied && path === '/api/groups') return Promise.resolve(json({ status: 200, data: [] }));
+      if (denied && path === `/api/groups/${groupId}`)
+        return Promise.resolve(json({ status: 403, error: 'Access removed' }, 403));
+      if (
+        ['POST', 'PATCH', 'DELETE'].includes(init.method ?? '') &&
+        path.startsWith(`/api/groups/${groupId}/expenses`)
+      )
+        return Promise.reject(new TypeError('Reply lost'));
+      if (path.endsWith(`/${expenseId}`))
+        return Promise.resolve(json({ status: 200, data: savedExpense }));
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId, kind === 'create' ? undefined : expenseId);
+    if (kind === 'delete') {
+      controller.reviewExpenseDeletion();
+      await controller.deleteExpense();
+    } else {
+      if (kind === 'edit') await controller.editExpense();
+      await controller.updateExpenseDraft({ description: 'Dinner', amount: '10', tagId });
+      await controller.saveExpense();
+    }
+    await controller.back();
+    await controller.back();
+    expect(records.size).toBe(1);
+    denied = true;
+    const before = requests.length;
+    await controller.refresh('pull');
+    expect(records.size).toBe(0);
+    expect(
+      requests.slice(before).filter((request) => request === `GET /api/groups/${groupId}`),
+    ).toHaveLength(1);
+    expect(requests.slice(before).filter((request) => !request.startsWith('GET '))).toEqual([]);
+  },
+);

@@ -297,7 +297,10 @@ function ExpenseTask({
   const form = showsForm(state);
   // A save that may already be recorded stays locked until it is checked.
   const unconfirmed =
-    form && ['resume', 'uncertain'].includes(state.status) && !!(state.attempt || state.mutation);
+    form &&
+    (['resume', 'uncertain'].includes(state.status) ||
+      (state.status === 'blocked' && state.accessLost)) &&
+    !!(state.attempt || state.mutation);
   const conflict = form && state.status === 'conflict' ? state.latest : null;
   // A newer revision means the Expense changed; who changed it isn't known, since the member's
   // own unconfirmed change may be the one that landed.
@@ -364,6 +367,12 @@ function ExpenseTask({
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
       >
         {shownNotice}
+        {state.waitingInvitation ? (
+          <Notice
+            title="Invitation waiting"
+            message="Your invitation will open after you keep or discard this draft, or finish saving it."
+          />
+        ) : null}
         {body}
       </ScrollView>
       {footer}
@@ -505,22 +514,33 @@ function ExpenseTask({
                     : 'We couldn’t confirm this change'
               }
               message={
-                state.message ??
-                (state.attempt
-                  ? state.attemptRejected
-                    ? `SplitBook refused a retry of this save. ${refusedRetryNotice}`
-                    : `This Expense may already be in ${context?.group.name ?? 'the Group'}. Checking reuses the same submission, so it can’t be recorded twice.`
-                  : `${state.mutation?.kind === 'delete' ? 'This Expense may already be deleted.' : 'This change may already be saved.'} Checking reads the saved Expense first, so nothing is sent twice.`)
+                state.accessLost
+                  ? `${state.message ? `${state.message} ` : ''}This save or change may already be recorded. Its retry will be removed from this device when you leave. If access returns, check the Group’s Expenses before saving again.`
+                  : (state.message ??
+                    (state.attempt
+                      ? state.attemptRejected
+                        ? `SplitBook refused a retry of this save. ${refusedRetryNotice}`
+                        : `This Expense may already be in ${context?.group.name ?? 'the Group'}. Checking reuses the same submission, so it can’t be recorded twice.`
+                      : `${state.mutation?.kind === 'delete' ? 'This Expense may already be deleted.' : 'This change may already be saved.'} Checking reads the saved Expense first, so nothing is sent twice.`))
               }
             >
-              {state.attemptRejected && onDiscardUnconfirmed && (
-                <CompactButton
-                  label="Discard unconfirmed save"
-                  variant="text"
-                  dense
-                  onPress={onDiscardUnconfirmed}
-                />
-              )}
+              {(state.attemptRejected || (state.accessLost && state.status === 'blocked')) &&
+                onDiscardUnconfirmed && (
+                  <CompactButton
+                    label="Discard unconfirmed save"
+                    variant="text"
+                    dense
+                    onPress={onDiscardUnconfirmed}
+                  />
+                )}
+            </Banner>
+          ) : state.status === 'blocked' && state.accessLost ? (
+            <Banner
+              tone="warning"
+              title="Group access lost"
+              message="This draft will be removed from this device when you leave. Nothing has been sent. If access returns, check the Group’s Expenses before saving again."
+            >
+              <CompactButton label="Discard draft" variant="text" dense onPress={onDiscard} />
             </Banner>
           ) : state.status === 'resume' ? (
             <Banner

@@ -59,6 +59,15 @@ const untrustedCopies = {
   save: (record: unknown) => SecureStore.setItemAsync(untrustedKey, JSON.stringify(record)),
   clear: () => SecureStore.deleteItemAsync(untrustedKey),
 };
+const financialCleanupKey = storageKey.replace(
+  'splitbook.session.',
+  'splitbook.financial-cleanup.',
+);
+const financialCleanup = {
+  load: async () => JSON.parse((await SecureStore.getItemAsync(financialCleanupKey)) ?? 'null'),
+  save: (record: unknown) => SecureStore.setItemAsync(financialCleanupKey, JSON.stringify(record)),
+  clear: () => SecureStore.deleteItemAsync(financialCleanupKey),
+};
 const offlineIdentityKey = storageKey.replace('splitbook.session.', 'splitbook.offline-identity.');
 const offlineIdentity = {
   load: async () => {
@@ -102,6 +111,7 @@ export const controller = createMobileController(controllerConfig, {
     },
     signOutRecord: createSignOutRecord(controllerConfig.apiBaseUrl),
     untrustedCopies,
+    financialCleanup,
     owner: {
       load: () => SecureStore.getItemAsync(ownerKey),
       save: (accountId) => SecureStore.setItemAsync(ownerKey, accountId),
@@ -113,6 +123,7 @@ export const controller = createMobileController(controllerConfig, {
       groupCreations,
       savedQueries,
       untrustedCopies,
+      financialCleanup,
       offlineIdentity,
       ...(googleSignInEnabled
         ? [

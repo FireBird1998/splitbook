@@ -576,7 +576,9 @@ export function createGroupQueries(session: GroupSession) {
         throw new RequestError('This group is no longer available.', 404);
       return fetchOne(key, queryKeyPath(key), run, async (value) => {
         const group = groupOf(value);
-        if (group.id === groupId && lists(group)) return;
+        if (group.id !== groupId)
+          throw new RequestError('The server returned a different Group. Please retry.', 500);
+        if (lists(group)) return;
         // As for a refusal from the server: what was read and saved for it goes too.
         await session.lose(groupId, session.generation());
         throw new RequestError('You no longer have access to this group.', 403);

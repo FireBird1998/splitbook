@@ -86,6 +86,8 @@ export interface SettlementChoice {
   shown: number | null;
 }
 export interface SettlementState {
+  /** Group refusal keeps a stored payment blocked until leaving or Discard. */
+  accessLost?: boolean;
   groupId: string | null;
   group: MobileGroup | null;
   balances: GroupCurrencyBalance[];

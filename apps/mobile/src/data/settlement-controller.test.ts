@@ -65,13 +65,32 @@ function setup(
     cleanup = false,
     key = 0;
   const records = new Map<string, unknown>();
+  let cleanupRecord: unknown = null;
+  const device = { failRemoval: false };
+  const financialCleanup = {
+    load: async () => structuredClone(cleanupRecord),
+    save: async (value: unknown) => {
+      cleanupRecord = structuredClone(value);
+    },
+    clear: async () => {
+      cleanupRecord = null;
+    },
+  };
   const savedRows = new Map<string, unknown>();
   const store = {
+    list: async (account: string) =>
+      [...records]
+        .filter(([key]) => key.startsWith(account))
+        .map(([key, value]) => ({
+          groupId: key.slice(account.length),
+          value: structuredClone(value),
+        })),
     load: async (a: string, g: string) => structuredClone(records.get(a + g) ?? null),
     save: async (a: string, g: string, v: unknown) => {
       records.set(a + g, structuredClone(v));
     },
     remove: async (a: string, g: string) => {
+      if (device.failRemoval) throw new Error('Device storage failed');
       records.delete(a + g);
     },
     clear: async () => {
@@ -112,6 +131,7 @@ function setup(
         },
         newSubmissionKey: () => `settlement-key-${++key}`,
         accountLocal: {
+          financialCleanup,
           owner: {
             load: async () => account,
             save: async (v) => {
@@ -130,7 +150,7 @@ function setup(
               cleanup = false;
             },
           },
-          stores: [store],
+          stores: [store, financialCleanup],
         },
         fetch: async (url, init) => {
           const path = new URL(url).pathname;
@@ -177,7 +197,7 @@ function setup(
   /** NetInfo reports the device's connection: false when it drops, true when it's back. */
   const connect = (isConnected: boolean) =>
     connection.forEach((listener) => listener({ isConnected }));
-  return { controller: create(), create, store, records, writes, sent, connect };
+  return { controller: create(), create, store, records, writes, sent, connect, device };
 }
 describe('native payment recording', () => {
   it('finishes confirmed receipt cleanup without reopening a Group denied while device removal is pending', async () => {
@@ -1821,4 +1841,140 @@ describe('the Record payment sheet reads only what it checks (#333)', () => {
       });
     },
   );
+});
+
+afterEach(() => vi.useRealTimers());
+it('forgets saved Group content when the payment check returns 200 without this member', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  let left = false,
+    offline = false;
+  const { controller, sent } = setup((path) => {
+    if (offline) return Promise.reject(new TypeError('Network request failed'));
+    if (left && path === `/api/groups/${groupId}`)
+      return json({ status: 200, data: { ...group, members: group.members.slice(1) } });
+  }, true);
+  await controller.signIn('alex');
+  await controller.openGroup(groupId);
+  await controller.back();
+  left = true;
+  vi.setSystemTime(Date.now() + 31_000);
+  await controller.openSettlements(groupId);
+  expect(controller.getSnapshot()).toMatchObject({
+    groups: { data: [] },
+    settlement: { status: 'blocked', group: null },
+  });
+  await controller.back();
+  offline = true;
+  const before = sent.length;
+  await controller.openGroup(groupId);
+  expect(controller.getSnapshot().detail.data).toBeNull();
+  expect(controller.getSnapshot().financial.expenses.data).toEqual([]);
+  expect(sent.slice(before).filter((request) => !request.startsWith('GET '))).toEqual([]);
+});
+
+it.each(['back', 'discard'] as const)(
+  'removes a lost Group’s payment attempt only on deliberate %s',
+  async (leave) => {
+    let refused = false;
+    const { controller, records, sent } = setup((path, init) => {
+      if (refused && path === `/api/groups/${groupId}`)
+        return json({ status: 403, error: 'Access removed' }, 403);
+      if (path.endsWith('/settlements') && init.method === 'POST')
+        return Promise.reject(new TypeError('Reply lost'));
+    }, true);
+    await controller.signIn('alex');
+    await controller.openSettlements(groupId);
+    controller.selectSettlement(actor, recipient, 'INR');
+    await controller.recordSettlement();
+    expect(records.size).toBe(1);
+    refused = true;
+    await controller.refresh('retry');
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'blocked',
+      attempt: { key: 'settlement-key-1' },
+    });
+    expect(records.size).toBe(1);
+    const before = sent.length;
+    if (leave === 'back') await controller.back();
+    else await controller.discardUnconfirmedSettlement();
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot().screen).toBe('groups');
+    expect(sent.slice(before).filter((request) => !request.startsWith('GET '))).toEqual([]);
+  },
+);
+
+it('cleans the unlisted Group’s payment attempt after its own refusal on Home', async () => {
+  let denied = false;
+  const { controller, records, sent } = setup((path, init) => {
+    if (denied && path === '/api/groups') return json({ status: 200, data: [] });
+    if (denied && path === `/api/groups/${groupId}`)
+      return json({ status: 404, error: 'Group gone' }, 404);
+    if (path.endsWith('/settlements') && init.method === 'POST')
+      return Promise.reject(new TypeError('Reply lost'));
+  }, true);
+  await controller.signIn('alex');
+  await controller.openSettlements(groupId);
+  controller.selectSettlement(actor, recipient, 'INR');
+  await controller.recordSettlement();
+  await controller.back();
+  await controller.back();
+  expect(records.size).toBe(1);
+  denied = true;
+  const before = sent.length;
+  await controller.refresh('pull');
+  expect(records.size).toBe(0);
+  expect(
+    sent.slice(before).filter((request) => request === `GET /api/groups/${groupId}`),
+  ).toHaveLength(1);
+  expect(sent.slice(before).filter((request) => !request.startsWith('GET '))).toEqual([]);
+});
+
+it.each([false, true])(
+  'recovers failed payment cleanup before the sheet opens (still failing %s)',
+  async (fails) => {
+    let denied = false;
+    const f = setup((path, init) => {
+      if (denied && path === `/api/groups/${groupId}`)
+        return json({ status: 403, error: 'Removed' }, 403);
+      if (path.endsWith('/settlements') && init.method === 'POST')
+        return Promise.reject(new TypeError('Reply lost'));
+    });
+    await f.controller.signIn('alex');
+    await f.controller.openSettlements(groupId);
+    f.controller.selectSettlement(actor, recipient, 'INR');
+    await f.controller.recordSettlement();
+    denied = true;
+    await f.controller.refresh('retry');
+    f.device.failRemoval = true;
+    await f.controller.back();
+    expect(f.records.size).toBe(1);
+    f.controller.dispose();
+    f.device.failRemoval = fails;
+    const restarted = f.create();
+    await restarted.restore();
+    expect(f.records.size).toBe(fails ? 1 : 0);
+    await restarted.openSettlements(groupId);
+    expect(restarted.getSnapshot().settlement.attempt).toBeNull();
+    expect(restarted.getSnapshot().settlement.status).toBe('blocked');
+    expect(f.writes).toHaveLength(1);
+  },
+);
+
+it('keeps a payment attempt when its direct Group check names a different Group', async () => {
+  let wrong = false;
+  const f = setup((path, init) => {
+    if (wrong && path === `/api/groups/${groupId}`)
+      return json({ status: 200, data: { ...group, _id: 'b00000000000000000000009' } });
+    if (path.endsWith('/settlements') && init.method === 'POST')
+      return Promise.reject(new TypeError('Reply lost'));
+  });
+  await f.controller.signIn('alex');
+  await f.controller.openSettlements(groupId);
+  f.controller.selectSettlement(actor, recipient, 'INR');
+  await f.controller.recordSettlement();
+  wrong = true;
+  await f.controller.openSettlements(groupId);
+  await f.controller.back();
+  expect(f.records.size).toBe(1);
+  expect(f.writes).toHaveLength(1);
 });

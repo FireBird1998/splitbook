@@ -289,6 +289,9 @@ export interface HomeSession {
   answered(path: string, saved?: number | null): void;
   /** A Groups list from the server holds `listed`, and leaves out `lost`: they go from memory. */
   listed(listed: Set<string>, lost: Set<string>): void;
+  /** Verified omission prompts an access check only for financial records kept on this device. */
+  checkUnlisted?(listed: Set<string>, owner: number): Promise<void>;
+  financialBlocked?(accountId: string, groupId: string): boolean;
   /** The persister keeps only these Groups' copies (inside a lease write). */
   retain(accountId: string, listed: string[]): Promise<void> | undefined;
   /** This account's saved copies in these scopes couldn't be removed: never shown again. */
@@ -655,6 +658,7 @@ export function createHomeQueries(session: HomeSession) {
         'home',
       ]);
     }
+    if (session.current(owner)) await session.checkUnlisted?.(listed, owner);
   };
   const options = (): QueryObserverOptions<Envelope, Error, Envelope, Envelope, QueryKey>[] => [
     {
@@ -753,7 +757,11 @@ export function createHomeQueries(session: HomeSession) {
       const records = await lease.write(() => list(lease.accountId));
       if (!session.current(owner)) return;
       session.publish({
-        drafts: draftSummaries(records, lease.accountId, session.snapshot().groups.data),
+        drafts: draftSummaries(
+          records.filter(({ groupId }) => !session.financialBlocked?.(lease.accountId, groupId)),
+          lease.accountId,
+          session.snapshot().groups.data,
+        ),
       });
     } catch {
       // Home keeps the drafts it lists; each one is still in its Group.
@@ -902,7 +910,11 @@ export function createHomeQueries(session: HomeSession) {
               restored: true,
             }
           : emptyHome(),
-        drafts: draftSummaries(records, accountId, list.value),
+        drafts: draftSummaries(
+          records.filter(({ groupId }) => !session.financialBlocked?.(accountId, groupId)),
+          accountId,
+          list.value,
+        ),
       };
     },
     /**
