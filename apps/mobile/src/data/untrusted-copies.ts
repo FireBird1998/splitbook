@@ -56,7 +56,7 @@ export function untrustedCopies({
     // Added to what is recorded for this account; another account's record is stale.
     recording = recording
       .then(async () => {
-        const before = await held().catch(() => null);
+        const before = await held();
         const known = before?.accountId === accountId ? before.scopes : {};
         for (const scope of scopes) known[scope] = time;
         await record.save({ accountId, scopes: known });

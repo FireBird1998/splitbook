@@ -286,6 +286,8 @@ function fixture() {
       return server.missingExpense
         ? json({ error: 'Expense not found' }, 404)
         : json({ status: 200, data: dinner() });
+    if (path === `/api/groups/${cabinId}/expenses` && method === 'POST')
+      return json({ status: 201, data: { ...dinner(), group: cabinId } }, 201);
     if (path === `${maplePath}/expenses` && method === 'POST') {
       server.ledger += 1;
       return json({ status: 201, data: dinner() }, 201);
@@ -1121,3 +1123,50 @@ it.each([1, 8])(
     }
   },
 );
+
+it('an interrupted attempt in another Group preserves an unreadable existing cleanup journal', async () => {
+  const f = fixture();
+  let controller = await visitEverything(f);
+  f.server.failInvalidation = true;
+  await controller.openExpense(mapleId, dinnerId);
+  await controller.editExpense();
+  await controller.updateExpenseDraft({ description: 'Lake dinner' });
+  await controller.saveExpense();
+  await settle();
+  expect(await f.drafts.list(alex.id)).toEqual([]);
+  expect(Object.keys(f.savedOf(mapleId))).toContain('Dinner');
+
+  await controller.openExpense(cabinId);
+  await controller.updateExpenseDraft({ amount: '12', description: 'Cabin lunch', tagId });
+  const response = f.hold(
+    (path, method) => path === `/api/groups/${cabinId}/expenses` && method === 'POST',
+  );
+  const saving = controller.saveExpense();
+  await response.arrived;
+  const recovery = await f.drafts.list(alex.id);
+  expect(recovery).toHaveLength(1);
+  expect(recovery[0]).toMatchObject({
+    groupId: cabinId,
+    value: { attempt: { key: 'attempt-0001' } },
+  });
+  controller.dispose();
+  f.server.offline = true;
+  f.server.failInvalidation = false;
+  f.server.failJournalReads = 2;
+  controller = f.create();
+  try {
+    await controller.restore();
+    expect(controller.getSnapshot().auth.status).toBe('authenticated');
+    expect((await readOffline(controller)).record).toBe(recordNotSaved);
+    controller.dispose();
+    controller = f.create();
+    await controller.restore();
+    expect(controller.getSnapshot().auth.status).toBe('authenticated');
+    expect((await readOffline(controller)).record).toBe(recordNotSaved);
+    expect(await f.drafts.list(alex.id)).toEqual(recovery);
+  } finally {
+    controller.dispose();
+    response.release();
+    await saving;
+  }
+});
