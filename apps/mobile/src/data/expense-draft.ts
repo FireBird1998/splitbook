@@ -84,6 +84,14 @@ export interface ExpenseEditor {
   context: ExpenseContext | null;
   draft: ExpenseDraft | null;
   preview: { user: unknown; amountMinor: number }[] | null;
+  /** Ordinary entries can be edited while current financial choices wait for this check. */
+  contextCheck?: {
+    status: 'checking' | 'failed' | 'saved';
+    refreshedAt: number | null;
+    saved: boolean;
+    /** Only a new, untouched form's financial defaults follow the accepted Group. */
+    initialize: boolean;
+  };
   status:
     | 'conflict'
     | 'delete-review'

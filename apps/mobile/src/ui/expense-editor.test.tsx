@@ -67,6 +67,7 @@ function backend({
   losePatch = false,
   refuseRetries = false,
   holdCreate,
+  readGroup,
 }: {
   record?: Record<string, unknown>;
   /** Loses every create response, or only this many. */
@@ -79,6 +80,7 @@ function backend({
   refuseRetries?: boolean;
   /** Creates wait for this before they're answered, so a save stays in flight. */
   holdCreate?: Promise<void>;
+  readGroup?: () => Promise<FetchResponse>;
 } = {}) {
   const writes: string[] = [];
   const submissions: { key: string | null; body: string }[] = [];
@@ -104,7 +106,8 @@ function backend({
       return json({ user: alex }, 200, 'better-auth.session_token=alex.signature; Max-Age=2592000');
     if (path.endsWith('/get-session'))
       return json({ user: alex, session: { userId: memberId, expiresAt: '2030-01-01T00:00:00Z' } });
-    if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
+    if (path === `/api/groups/${groupId}`)
+      return readGroup ? readGroup() : json({ data: group, status: 200 });
     if (path === `/api/groups/${groupId}/expenses/${expenseId}`) {
       if (init.method === 'PATCH') {
         if (losePatch) throw new Error('The connection dropped before the edit arrived');
@@ -932,6 +935,50 @@ describe('rendered edit history', () => {
 });
 
 describe('compact Expense form', () => {
+  it('keeps the same inputs while the Group is checked, and locks only financial choices', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    let hold = false;
+    let release: () => void = () => undefined;
+    let opening: Promise<void> | undefined;
+    try {
+      const form = await render((controller) => controller.openGroup(groupId), {
+        readGroup: () =>
+          hold
+            ? new Promise((resolve) => {
+                release = () => resolve(json({ status: 200, data: group }));
+              })
+            : Promise.resolve(json({ status: 200, data: group })),
+      });
+      hold = true;
+      vi.setSystemTime(Date.now() + 31_000);
+      await act(async () => {
+        opening = form.controller.openExpense(groupId);
+      });
+      await settle();
+      const amount = form.input('Amount, required');
+      const description = form.input('Description, required');
+      expect(amount.props.editable).toBe(true);
+      expect(form.tile('Date').props.accessibilityState.disabled).toBe(false);
+      for (const label of ['Paid by', 'Split', 'Tag'])
+        expect(form.tile(label).props.accessibilityState.disabled).toBe(true);
+      expect(form.pressable('Save expense').props.accessibilityState.disabled).toBe(true);
+      await form.type('Amount, required', '12.34');
+      await form.type('Description, required', 'Dinner while checking');
+      await act(async () => {
+        release();
+        await opening;
+      });
+      expect(form.input('Amount, required')).toBe(amount);
+      expect(form.input('Description, required')).toBe(description);
+      expect(description.props.value).toBe('Dinner while checking');
+      expect(form.tile('Tag').props.accessibilityState.disabled).toBe(false);
+      expect(form.focusCount('Amount, required')).toBe(0);
+    } finally {
+      release();
+      await opening;
+      vi.useRealTimers();
+    }
+  });
   const openSheet = (root: ReactTestInstance, title: string) =>
     root
       .findAll((node) => isHost(node, 'Modal') && node.props.visible === true)

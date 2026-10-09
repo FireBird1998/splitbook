@@ -133,6 +133,9 @@ export interface ExpenseSession {
   distrust(accountId: string, scopes: string[]): void;
   /** The session check that comes before the Group is read again on the foreground. */
   checkSession(owner: number): Promise<void>;
+  /** Current Group context reaches the existing editor without replacing ordinary entries. */
+  contextChecked(context: ReturnType<typeof parseExpenseContext>): Promise<void> | void;
+  contextFailed(error: unknown): void;
   /** The Group refused the member on a read this screen made: what it shows goes. */
   refused(groupId: string, error: RequestError): void;
   /** The Expense shown is gone, as its own read said: nothing saved of it, at these paths, shows. */
@@ -742,12 +745,12 @@ export function createExpenseQueries(session: ExpenseSession) {
   };
 
   /** The Group's details for the form and the record: taken from each read of it. */
-  const adoptContext = (value: unknown, opened: View) => {
+  const adoptContext = async (value: unknown, opened: View) => {
     const { expense } = session.snapshot();
     if (view !== opened || expense.groupId !== opened.groupId || expense.status === 'saving')
       return;
     const context = contextOf(value, '');
-    if (expense.context !== context) session.publish({ expense: { ...expense, context } });
+    if (expense.context !== context || expense.contextCheck) await session.contextChecked(context);
   };
   /**
    * The screen reads again: on the foreground by itself, the Group past its stale time, after the
@@ -779,7 +782,10 @@ export function createExpenseQueries(session: ExpenseSession) {
       if (!here()) return;
       step = 'group';
       const wanted = () => here();
-      adoptContext(await session.group.read(opened.groupId, owner, { fresh, wanted }), opened);
+      await adoptContext(
+        await session.group.read(opened.groupId, owner, { fresh, wanted }),
+        opened,
+      );
       const { expense } = onScreen() ?? {},
         expenseId = expense?.draft?.original?._id;
       if (kind === 'foreground' || !here(false) || !expenseId) return;
@@ -791,6 +797,7 @@ export function createExpenseQueries(session: ExpenseSession) {
       // Its changes being read again say so on their own, from the publish that starts them.
       await api.history(owner, { fresh, wanted, starting: () => unmark(true) });
     } catch (error) {
+      if (here(true)) session.contextFailed(error);
       // The refusal has already withdrawn the record's queries: what shows goes too.
       if (step === 'session' || !here(true) || !(error instanceof RequestError)) return;
       if (error.status === 403 || (step === 'group' && error.status === 404))
