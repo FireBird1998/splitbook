@@ -198,7 +198,7 @@ function SplitBook() {
   if (configurationReady && (authenticated || checking) && state.screen === 'groups')
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-        <HomeScreen state={state} />
+        <HomeScreen />
       </SafeAreaView>
     );
   return (
@@ -595,11 +595,41 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
  * Home: balances by currency, drafts to resume, and the member's balance in each Group. At cold
  * start it is the saved Home, read-only until the session is confirmed.
  */
-function HomeScreen({ state }: { state: MobileSnapshot }) {
+const HomeScreen = memo(function HomeScreen() {
+  const selected = useMobileSnapshot(
+    controller,
+    (snapshot) => {
+      const feedback = refreshFeedback(snapshot);
+      return {
+        auth: snapshot.auth,
+        groups: snapshot.groups,
+        home: snapshot.home,
+        creation: snapshot.creation,
+        invitation: snapshot.invitation,
+        drafts: snapshot.drafts,
+        offline: snapshot.offline,
+        homeSnackbar: snapshot.homeSnackbar,
+        pull: feedback.pull,
+        quiet: feedback.quiet,
+        checking: feedback.checking,
+        progress: feedback.progress,
+        // Silence matters while figures are read; an unchanged fresh Home has no cue to hide.
+        silent: snapshot.home.status === 'loading' && feedback.silent,
+      };
+    },
+    sameSelection,
+  );
+  const state = selected;
   const theme = useTheme();
-  const feedback = refreshFeedback(state);
+  const feedback = selected;
   const { checking } = feedback;
-  const refresh = () => void controller.refresh();
+  const refresh = useCallback(() => void controller.refresh(), []);
+  const refreshFigures = useCallback(() => void controller.refreshHome(), []);
+  const openDraft = useCallback(
+    (draft: MobileSnapshot['drafts'][number]) =>
+      void controller.openExpense(draft.groupId, draft.expenseId ?? undefined),
+    [],
+  );
   const openGroup = useCallback((groupId: string) => void controller.openGroup(groupId), []);
   return (
     <>
@@ -641,7 +671,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
           state={state.home}
           offline={state.offline.active}
           silent={feedback.silent}
-          onRefresh={() => void controller.refreshHome()}
+          onRefresh={refreshFigures}
         />
         {state.creation.status === 'uncertain' && (
           <GroupCreationCheck
@@ -666,13 +696,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
           />
         )}
         {/* Direct entry: the form returns to that Group's Expenses. */}
-        <ContinueDrafts
-          drafts={state.drafts}
-          disabled={checking}
-          onOpen={(draft) =>
-            void controller.openExpense(draft.groupId, draft.expenseId ?? undefined)
-          }
-        />
+        <ContinueDrafts drafts={state.drafts} disabled={checking} onOpen={openDraft} />
         <HomeGroups
           groups={state.groups}
           byGroup={state.home.byGroup}
@@ -693,7 +717,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
       ) : null}
     </>
   );
-}
+});
 
 /** Shares the open Group's invitation link through Android's share sheet. */
 function shareInvite() {

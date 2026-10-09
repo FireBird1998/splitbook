@@ -5,13 +5,13 @@
       "requests": 7,
       "publishes": 8,
       "commits": 4,
-      "renders": 319
+      "renders": 318
     },
     "Foreground on Home within 30 s": {
       "requests": 0,
       "publishes": 2,
       "commits": 1,
-      "renders": 45
+      "renders": 0
     },
     "Open a Group on Expenses": {
       "requests": 3,
@@ -65,7 +65,7 @@
       "requests": 1,
       "publishes": 5,
       "commits": 2,
-      "renders": 291
+      "renders": 290
     },
     "Reopen the Group within 30 s": {
       "requests": 0,

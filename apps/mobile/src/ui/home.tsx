@@ -223,7 +223,7 @@ function BalancesTime({
  * One row per currency, each kept separate, with when the figures were read (`BalancesTime`).
  * `silent` keeps an automatic refresh unannounced.
  */
-export function HomeBalances({
+export const HomeBalances = memo(function HomeBalances({
   state,
   offline = false,
   silent = false,
@@ -347,7 +347,7 @@ export function HomeBalances({
       </Card>
     </View>
   );
-}
+});
 
 /** A formatted amount, or null while the draft's amount isn't valid yet. */
 function draftAmount({ amount, currency }: ExpenseDraftSummary) {
@@ -362,7 +362,7 @@ function draftAmount({ amount, currency }: ExpenseDraftSummary) {
  * Every Expense draft on this device; saves that weren't confirmed come first, in warning.
  * `disabled` rows can't be opened yet, as while the session is checked.
  */
-export function ContinueDrafts({
+export const ContinueDrafts = memo(function ContinueDrafts({
   drafts,
   disabled = false,
   onOpen,
@@ -406,7 +406,7 @@ export function ContinueDrafts({
       </Card>
     </View>
   );
-}
+});
 
 /** "17–20 Sep", "28 Sep – 2 Oct" or "17 Sep"; Group dates are calendar days at UTC midnight. */
 function tripDates({ startDate, endDate }: MobileGroup) {
@@ -530,7 +530,7 @@ function NoGroups({ onRefresh }: { onRefresh: () => void }) {
  * (`balancesPending`), a Group whose balance isn't known yet holds its place, so its row
  * doesn't lay out again when the balance lands after the list (#332).
  */
-export function HomeGroups({
+export const HomeGroups = memo(function HomeGroups({
   groups,
   byGroup,
   balancesPending = false,
@@ -610,7 +610,7 @@ export function HomeGroups({
       ) : null}
     </View>
   );
-}
+});
 
 /** A Group save that wasn't confirmed: check the Groups list before sending it again. */
 export function GroupCreationCheck({
