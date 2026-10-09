@@ -108,6 +108,7 @@ vi.mock('./ui/compact/text', async (load) => counting.wrap(await load<Module>())
 vi.mock('./ui/controller-expense-editor', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/draft-status-selection', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/expense-input-selection', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-save-selection', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/draft-status', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/expense-inputs', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/expense-optional-details', async (load) => counting.wrap(await load<Module>()));
@@ -1044,7 +1045,11 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
         for (let length = 1; length <= amount.length; length++)
           await app.type('Amount, required', amount.slice(0, length));
       },
-      () => expect(app.value('Amount, required')).toBe(amount),
+      () => {
+        expect(app.value('Amount, required')).toBe(amount);
+        expect(app.rows('share ₹12.34')).toBe(1);
+        expect(app.count('Save expense ₹12.34')).toBe(1);
+      },
     );
     await app.press('Category and notes, optional');
     const notes = 'Fictional groceries!';
@@ -1055,6 +1060,35 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
           await app.type('Notes', notes.slice(0, length));
       },
       () => expect(app.value('Notes')).toBe(notes),
+    );
+  });
+
+  it('keeps ordinary money-changing Amount entry within its render budget', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Add expense');
+    const amount = '123456.78';
+    const strokes: number[] = [];
+    await journey(
+      `Type ${amount.length} money-changing characters into Amount`,
+      async () => {
+        for (let length = 1; length <= amount.length; length++) {
+          const before = [...counting.renders.values()].reduce((sum, count) => sum + count, 0);
+          await app.type('Amount, required', amount.slice(0, length));
+          strokes.push(
+            [...counting.renders.values()].reduce((sum, count) => sum + count, 0) - before,
+          );
+        }
+      },
+      () => {
+        expect(app.value('Amount, required')).toBe(amount);
+        expect(app.rows('share ₹123,456.78')).toBe(1);
+        expect(app.count('Save expense ₹123,456.78')).toBe(1);
+        if (process.env.RENDER_PROFILE)
+          console.log('Money-changing Amount renders by keystroke:', strokes);
+        // The first valid amount mounts the preview; later financial digits update its money.
+        expect(Math.max(...strokes.slice(1))).toBeLessThanOrEqual(15);
+      },
     );
   });
 

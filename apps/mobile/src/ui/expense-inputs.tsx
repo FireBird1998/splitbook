@@ -1,4 +1,4 @@
-import { useState, type Ref } from 'react';
+import { memo, useState, type Ref } from 'react';
 import { TextInput, View } from 'react-native';
 import type { ExpenseDraft, ExpenseField } from '../data/expense-draft';
 import { acceptsNumericText } from '../data/field-feedback';
@@ -38,6 +38,47 @@ export function NotesField({
     />
   );
 }
+const RequiredFieldLabel = memo(function RequiredFieldLabel({
+  text,
+  invalid,
+}: {
+  text: string;
+  invalid: boolean;
+}) {
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <CompactText variant="small" tone={invalid ? 'negative' : 'secondary'}>
+        {text}
+      </CompactText>
+      <FieldMarker kind="required" />
+    </View>
+  );
+});
+const CurrencyBadge = memo(function CurrencyBadge({
+  currency,
+  recorded,
+}: {
+  currency: string;
+  recorded: boolean;
+}) {
+  const theme = useTheme();
+  return (
+    <View
+      accessible
+      accessibilityLabel={`Currency ${currency}, ${recorded ? 'the Expense’s currency' : 'the Group’s currency'}`}
+      style={{
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        borderRadius: 10,
+        backgroundColor: theme.surfaceMuted,
+      }}
+    >
+      <CompactText tone="secondary" style={{ fontFamily: fonts.mono, fontSize: 15 }}>
+        {currency}
+      </CompactText>
+    </View>
+  );
+});
 export function AmountField({
   draft,
   locked,
@@ -57,17 +98,10 @@ export function AmountField({
     paddingHorizontal: 0,
     opacity: locked ? 0.65 : 1,
   };
-  const label = (text: string, error?: string) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <CompactText variant="small" tone={error ? 'negative' : 'secondary'}>
-        {text}
-      </CompactText>
-      <FieldMarker kind="required" />
-    </View>
-  );
+
   return (
     <View ref={section('amount')} style={{ gap: 6 }}>
-      {label('Amount', errors.amount)}
+      <RequiredFieldLabel text="Amount" invalid={!!errors.amount} />
       <View style={{ gap: 4 }}>
         {/* The focus ring sits outside the content and stays as a transparent border on blur. */}
         <View
@@ -83,20 +117,7 @@ export function AmountField({
             borderColor: amountFocused && !locked ? theme.focus : 'transparent',
           }}
         >
-          <View
-            accessible
-            accessibilityLabel={`Currency ${draft.currency}, ${draft.original ? 'the Expense’s currency' : 'the Group’s currency'}`}
-            style={{
-              paddingVertical: 6,
-              paddingHorizontal: 10,
-              borderRadius: 10,
-              backgroundColor: theme.surfaceMuted,
-            }}
-          >
-            <CompactText tone="secondary" style={{ fontFamily: fonts.mono, fontSize: 15 }}>
-              {draft.currency}
-            </CompactText>
-          </View>
+          <CurrencyBadge currency={draft.currency} recorded={!!draft.original} />
           <TextInput
             ref={amountRef}
             value={draft.amount}

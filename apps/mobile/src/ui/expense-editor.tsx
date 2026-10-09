@@ -3,6 +3,7 @@ import { DraftStatus } from './draft-status';
 import { SelectedDraftStatus } from './draft-status-selection';
 import { SelectedExpenseTiles } from './expense-tile-selection';
 import { SelectedWhoOwesWhat } from './expense-allocation-selection';
+import { SelectedSaveBar } from './expense-save-selection';
 import { SelectedSplitSheet, SelectedPayerSheet } from './expense-sheet-selection';
 import { SelectedOptionalDetails } from './expense-optional-details';
 import { canEditExpense } from '../data/expense-record';
@@ -400,6 +401,7 @@ function ExpenseTask({
   );
   const amountDone = useCallback(() => inputs.current.description?.focus(), []);
   const SplitEditor = controller ? SelectedSplitSheet : SplitSheet;
+  const SaveAction = controller ? SelectedSaveBar : SaveBar;
   const PayerEditor = controller ? SelectedPayerSheet : PayerSheet;
   const { draft, context } = state;
   const members = useMemo(() => context?.group.members.map(({ user }) => user) ?? [], [context]);
@@ -948,7 +950,8 @@ function ExpenseTask({
             secondary={{ label: 'Use the saved version', onPress: onAcceptCurrent }}
           />
         ) : canSave ? (
-          <SaveBar
+          <SaveAction
+            controller={controller!}
             label={draft.original ? 'Save changes' : 'Save expense'}
             busy={state.status === 'saving' ? 'Saving expense…' : undefined}
             amount={

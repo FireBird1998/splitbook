@@ -115,7 +115,11 @@ export default function App() {
 
 function SplitBook() {
   const theme = useTheme();
-  const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const state = useMobileSnapshot(
+    controller,
+    ({ auth, screen }) => ({ auth, screen }),
+    sameSelection,
+  );
   useEffect(() => {
     if (!configurationReady) return;
     const startup = controller.restore();
@@ -146,18 +150,7 @@ function SplitBook() {
   }, []);
 
   const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
-  const feedback = refreshFeedback(state);
-  // Cold start: the saved Home of the account that last signed in, while its session is checked.
   const checking = state.auth.status === 'restoring' && state.auth.user !== null;
-  const joining = state.invitation.status === 'joining';
-  // The session check, or a sign-in, with nothing of the account on screen yet (#335).
-  const waiting = !configurationReady
-    ? null
-    : state.auth.status === 'restoring'
-      ? 'Checking your session'
-      : state.auth.status === 'signing-in'
-        ? 'Signing in'
-        : null;
   if (configurationReady && authenticated && state.screen === 'expense')
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -174,13 +167,13 @@ function SplitBook() {
   if (configurationReady && authenticated && ['group', 'settlement'].includes(state.screen))
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-        <GroupScreen state={state} />
+        <GroupScreen />
       </SafeAreaView>
     );
   if (configurationReady && authenticated && state.screen === 'members')
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-        <MembersScreen state={state} />
+        <MembersScreen />
       </SafeAreaView>
     );
   // Settings, Create Group and an invitation, which also opens before sign-in once the session
@@ -192,7 +185,7 @@ function SplitBook() {
   )
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-        <TaskScreen state={state} authenticated={authenticated} />
+        <TaskScreen />
       </SafeAreaView>
     );
   if (configurationReady && (authenticated || checking) && state.screen === 'groups')
@@ -201,6 +194,35 @@ function SplitBook() {
         <HomeScreen />
       </SafeAreaView>
     );
+  return <AuthenticationScreen />;
+}
+
+function AuthenticationScreen() {
+  const theme = useTheme();
+  const state = useMobileSnapshot(
+    controller,
+    (snapshot) => ({
+      auth: snapshot.auth,
+      screen: snapshot.screen,
+      creation: snapshot.creation,
+      invitation: snapshot.invitation,
+      expense: snapshot.expense,
+      offline: snapshot.offline,
+      quiet: refreshFeedback(snapshot).quiet,
+      pull: refreshFeedback(snapshot).pull,
+    }),
+    sameSelection,
+  );
+  const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
+  const feedback = state;
+  const joining = state.invitation.status === 'joining';
+  const waiting = !configurationReady
+    ? null
+    : state.auth.status === 'restoring'
+      ? 'Checking your session'
+      : state.auth.status === 'signing-in'
+        ? 'Signing in'
+        : null;
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
@@ -388,10 +410,26 @@ function SplitBook() {
 }
 
 /** Settings, Create Group or an invitation: a compact top bar over the screen's content. */
-function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authenticated: boolean }) {
+function TaskScreen() {
+  const state = useMobileSnapshot(
+    controller,
+    (snapshot) => ({
+      auth: snapshot.auth,
+      screen: snapshot.screen,
+      creation: snapshot.creation,
+      invitation: snapshot.invitation,
+      groups: snapshot.groups,
+      offline: snapshot.offline,
+      feedback: refreshFeedback(snapshot),
+    }),
+    (a, b) =>
+      sameSelection({ ...a, feedback: null }, { ...b, feedback: null }) &&
+      sameSelection(a.feedback, b.feedback),
+  );
+  const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
   const theme = useTheme();
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
-  const feedback = refreshFeedback(state);
+  const feedback = state.feedback;
   const scroll = useRef<ScrollView>(null);
   const scrollContent = useRef<View>(null);
   // Place a form section near the top, so it stays visible when the keyboard opens.
@@ -623,6 +661,10 @@ const HomeScreen = memo(function HomeScreen() {
   const theme = useTheme();
   const feedback = selected;
   const { checking } = feedback;
+  const status = useMemo(
+    () => <RefreshStatus visible={feedback.quiet || checking} checking={checking} />,
+    [feedback.quiet, checking],
+  );
   const refresh = useCallback(() => void controller.refresh(), []);
   const refreshFigures = useCallback(() => void controller.refreshHome(), []);
   const openDraft = useCallback(
@@ -635,7 +677,7 @@ const HomeScreen = memo(function HomeScreen() {
     <>
       <HomeTopBar
         userName={state.auth.user!.name}
-        status={<RefreshStatus visible={feedback.quiet || checking} checking={checking} />}
+        status={status}
         accountDisabled={
           checking || state.creation.status === 'saving' || state.invitation.status === 'joining'
         }
@@ -758,8 +800,32 @@ const unlistedGroup = (id: string): MobileGroup => ({
 });
 
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
-function GroupScreen({ state }: { state: MobileSnapshot }) {
-  const feedback = refreshFeedback(state);
+function GroupScreen() {
+  const state = useMobileSnapshot(
+    controller,
+    (snapshot) => ({
+      auth: snapshot.auth,
+      screen: snapshot.screen,
+      destination: snapshot.destination,
+      detail: snapshot.detail,
+      groups: snapshot.groups,
+      financial: snapshot.financial,
+      activity: snapshot.activity,
+      settlement: snapshot.settlement,
+      offline: snapshot.offline,
+      share: snapshot.share,
+      restoreScroll: snapshot.restoreScroll,
+      keptDraft: snapshot.keptDraft,
+      snackbar: snapshot.snackbar,
+      pendingPayment: snapshot.pendingPayment,
+      home: snapshot.home,
+      feedback: refreshFeedback(snapshot),
+    }),
+    (a, b) =>
+      sameSelection({ ...a, feedback: null }, { ...b, feedback: null }) &&
+      sameSelection(a.feedback, b.feedback),
+  );
+  const feedback = state.feedback;
   // The top bar keeps the Group's name and actions while it is first read.
   const known = shownGroup(state);
   // Its details couldn't be read, but its Expenses answered, which proves the member belongs
@@ -1216,7 +1282,19 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
 }
 
 /** Members and Group details: a full screen over the Group, which Back returns to. */
-function MembersScreen({ state }: { state: MobileSnapshot }) {
+function MembersScreen() {
+  const state = useMobileSnapshot(
+    controller,
+    ({ auth, detail, groups, share, offline, leave }) => ({
+      auth,
+      detail,
+      groups,
+      share,
+      offline,
+      leave,
+    }),
+    sameSelection,
+  );
   const group = shownGroup(state);
   return (
     <GroupMembers

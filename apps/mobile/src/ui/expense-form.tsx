@@ -233,6 +233,74 @@ export const ExpenseTiles = memo(function ExpenseTiles({
 /** Under an equal split whose shares differ by the smallest unit. */
 export const sharesDifferNote = 'Shares differ by the smallest unit so the whole amount is shared.';
 
+const AllocationHeading = memo(function AllocationHeading({ savedLabel }: { savedLabel?: string }) {
+  return (
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 8,
+        paddingHorizontal: 14,
+        paddingTop: 12,
+      }}
+    >
+      <CompactText variant="overline" accessibilityRole="header">
+        Who owes what
+      </CompactText>
+      {savedLabel ? (
+        <CompactText variant="caption" tone="secondary">
+          {savedLabel}
+        </CompactText>
+      ) : (
+        <Badge label="Adds up" tone="positive" icon="checkmark" />
+      )}
+    </View>
+  );
+});
+const AllocationColumns = memo(function AllocationColumns() {
+  return (
+    <View
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={{
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        paddingHorizontal: 14,
+        paddingTop: 6,
+      }}
+    >
+      {['Paid', 'Share'].map((heading) => (
+        <CompactText
+          key={heading}
+          variant="caption"
+          tone="secondary"
+          style={{ minWidth: 84, textAlign: 'right' }}
+        >
+          {heading}
+        </CompactText>
+      ))}
+    </View>
+  );
+});
+const AllocationPersonLabel = memo(function AllocationPersonLabel({
+  name,
+  person,
+  stacked,
+}: {
+  name: string;
+  person: string;
+  stacked: boolean;
+}) {
+  return (
+    <>
+      <CompactAvatar name={name} small />
+      <CompactText numberOfLines={stacked ? undefined : 2} style={{ flex: 1, minWidth: 0 }}>
+        {person}
+      </CompactText>
+    </>
+  );
+});
 export const WhoOwesWhat = memo(function WhoOwesWhat({
   draft,
   allocation,
@@ -293,52 +361,8 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
     );
   return (
     <Card>
-      <View
-        style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-          paddingHorizontal: 14,
-          paddingTop: 12,
-        }}
-      >
-        <CompactText variant="overline" accessibilityRole="header">
-          Who owes what
-        </CompactText>
-        {saved ? (
-          <CompactText variant="caption" tone="secondary">
-            {splitSummary(draft)}
-          </CompactText>
-        ) : (
-          <Badge label="Adds up" tone="positive" icon="checkmark" />
-        )}
-      </View>
-      {stacked ? (
-        <View style={{ height: 6 }} />
-      ) : (
-        <View
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-          style={{
-            flexDirection: 'row',
-            justifyContent: 'flex-end',
-            paddingHorizontal: 14,
-            paddingTop: 6,
-          }}
-        >
-          {['Paid', 'Share'].map((heading) => (
-            <CompactText
-              key={heading}
-              variant="caption"
-              tone="secondary"
-              style={{ minWidth: column.minWidth, textAlign: 'right' }}
-            >
-              {heading}
-            </CompactText>
-          ))}
-        </View>
-      )}
+      <AllocationHeading savedLabel={saved ? splitSummary(draft) : undefined} />
+      {stacked ? <View style={{ height: 6 }} /> : <AllocationColumns />}
       {shown.map((id) => {
         const paidMinor = paid.get(id);
         const shareMinor = shares.get(id) ?? 0;
@@ -356,10 +380,7 @@ export const WhoOwesWhat = memo(function WhoOwesWhat({
             }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <CompactAvatar name={name(id)} small />
-              <CompactText numberOfLines={stacked ? undefined : 2} style={{ flex: 1, minWidth: 0 }}>
-                {person(id)}
-              </CompactText>
+              <AllocationPersonLabel name={name(id)} person={person(id)} stacked={stacked} />
               {stacked ? null : (
                 <>
                   <View style={column}>{amount(paidMinor)}</View>

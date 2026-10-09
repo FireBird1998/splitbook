@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type Ref } from 'react';
+import { memo, useEffect, useRef, useState, type Ref } from 'react';
 import { Modal, Pressable, ScrollView, TextInput, View, type TextInputProps } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CURRENCIES, getCurrency } from '@splitbook/shared/currency';
@@ -49,7 +49,13 @@ export interface GroupCreateFormProps {
 }
 
 /** A correction shown directly below the control it belongs to. */
-export function FieldError({ message, ref }: { message?: string | null; ref?: Ref<View> }) {
+export const FieldError = memo(function FieldError({
+  message,
+  ref,
+}: {
+  message?: string | null;
+  ref?: Ref<View>;
+}) {
   const theme = useTheme();
   if (!message) return null;
   return (
@@ -66,7 +72,7 @@ export function FieldError({ message, ref }: { message?: string | null; ref?: Re
       </Copy>
     </View>
   );
-}
+});
 
 export function Field({
   label,

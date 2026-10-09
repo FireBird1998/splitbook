@@ -27,8 +27,10 @@ function sameFrame(before: Editor, after: Editor) {
   };
   return (
     sameExcept(before, after, ['draft', 'persistence', 'preview', 'validation']) &&
-    sameExcept(a, b, ['description', 'notes', 'category']) &&
-    sameSelection(before.validation.errors, after.validation.errors) &&
+    sameExcept(a, b, ['amount', 'description', 'notes', 'category']) &&
+    (before.validation.submitted
+      ? sameSelection(before.validation.errors, after.validation.errors)
+      : sameExcept(before.validation.errors, after.validation.errors, ['amount'])) &&
     sameExcept(before.validation, after.validation, ['errors'])
   );
 }

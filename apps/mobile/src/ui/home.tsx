@@ -50,7 +50,7 @@ const themeIcons: Record<GroupCategory, IconName> = {
 const rowInset = 66;
 
 /** The wordmark, a quiet refresh status, Refresh, and the avatar that opens Account. */
-export function HomeTopBar({
+export const HomeTopBar = memo(function HomeTopBar({
   userName,
   status,
   accountDisabled = false,
@@ -119,7 +119,7 @@ export function HomeTopBar({
       </Pressable>
     </View>
   );
-}
+});
 
 function CurrencyRow({ bucket }: { bucket: HomeCurrencyBalance }) {
   const theme = useTheme();

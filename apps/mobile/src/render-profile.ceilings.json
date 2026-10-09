@@ -5,12 +5,12 @@
       "requests": 7,
       "publishes": 8,
       "commits": 4,
-      "renders": 318
+      "renders": 312
     },
     "Foreground on Home within 30 s": {
       "requests": 0,
       "publishes": 2,
-      "commits": 1,
+      "commits": 0,
       "renders": 0
     },
     "Open a Group on Expenses": {
@@ -47,7 +47,7 @@
       "requests": 0,
       "publishes": 2,
       "commits": 1,
-      "renders": 38
+      "renders": 0
     },
     "Load the 5th Activity page (80 \u2192 100 events)": {
       "requests": 1,
@@ -59,13 +59,13 @@
       "requests": 0,
       "publishes": 2,
       "commits": 1,
-      "renders": 39
+      "renders": 0
     },
     "Back to Home from a Group": {
       "requests": 1,
       "publishes": 5,
       "commits": 2,
-      "renders": 290
+      "renders": 284
     },
     "Reopen the Group within 30 s": {
       "requests": 0,
@@ -125,49 +125,49 @@
       "requests": 3,
       "publishes": 5,
       "commits": 3,
-      "renders": 217
+      "renders": 210
     },
     "Refresh an Expense with 2 pages of changes": {
       "requests": 5,
       "publishes": 5,
       "commits": 5,
-      "renders": 230
+      "renders": 195
     },
     "Load the 6th page of an Expense\u2019s changes (pages 2 to 6)": {
       "requests": 1,
       "publishes": 2,
       "commits": 2,
-      "renders": 192
+      "renders": 178
     },
     "Load newer changes (pages 1 to 5)": {
       "requests": 1,
       "publishes": 2,
       "commits": 2,
-      "renders": 194
+      "renders": 180
     },
     "Open the payment sheet within 30 s": {
       "requests": 1,
       "publishes": 3,
       "commits": 2,
-      "renders": 196
+      "renders": 195
     },
     "Record a payment": {
       "requests": 6,
       "publishes": 13,
       "commits": 6,
-      "renders": 448
+      "renders": 446
     },
     "Type 20 characters into Description": {
       "requests": 0,
       "publishes": 40,
       "commits": 20,
-      "renders": 123
+      "renders": 103
     },
     "Type with a delayed device write": {
       "requests": 0,
       "publishes": 1,
       "commits": 1,
-      "renders": 7
+      "renders": 6
     },
     "Store the latest Expense entries": {
       "requests": 0,
@@ -191,13 +191,19 @@
       "requests": 0,
       "publishes": 40,
       "commits": 20,
-      "renders": 775
+      "renders": 121
     },
     "Type 20 characters into Notes": {
       "requests": 0,
       "publishes": 40,
       "commits": 20,
       "renders": 100
+    },
+    "Type 9 money-changing characters into Amount": {
+      "requests": 0,
+      "publishes": 18,
+      "commits": 9,
+      "renders": 127
     }
   }
 }
