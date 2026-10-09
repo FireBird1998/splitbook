@@ -79,6 +79,7 @@ function backend({
   refuseRetries = false,
   holdCreate,
   readGroup,
+  now = () => localNoon,
 }: {
   record?: Record<string, unknown>;
   /** Loses every create response, or only this many. */
@@ -92,6 +93,7 @@ function backend({
   /** Creates wait for this before they're answered, so a save stays in flight. */
   holdCreate?: Promise<void>;
   readGroup?: () => Promise<FetchResponse>;
+  now?: () => number;
 } = {}) {
   const writes: string[] = [];
   const submissions: { key: string | null; body: string }[] = [];
@@ -192,7 +194,7 @@ function backend({
         cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
         stores: [drafts],
       },
-      now: () => localNoon,
+      now,
       newSubmissionKey: () => 'native-expense-test-0001',
     },
   );
@@ -475,9 +477,20 @@ describe('rendered Expense corrections', () => {
 
   it('waits until a field is left before showing its correction', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
+    const border = () => {
+      let node: ReactTestInstance | null = ui.input('Amount, required');
+      while (node) {
+        const style = flatten(node.props.style);
+        if (isHost(node, 'View') && style.padding === 14 && style.borderWidth !== undefined)
+          return style.borderWidth;
+        node = node.parent;
+      }
+      throw new Error('Amount and Description card not found');
+    };
     await ui.type('Amount, required', '10.005');
     expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([]);
     await ui.leave('Amount, required');
+    expect(border()).toBe(2);
     expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([
       'INR amounts can have at most 2 decimal places. Nothing is rounded for you.',
     ]);
@@ -485,6 +498,46 @@ describe('rendered Expense corrections', () => {
     expect(ui.focusCount('Amount, required')).toBe(0);
     await ui.type('Amount, required', '10.05');
     expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([]);
+    expect(ui.input('Amount, required').props.accessibilityHint).toBeUndefined();
+    expect(border()).toBe(1);
+    // Leaving it made corrections visible: a later invalid entry marks the card immediately.
+    await ui.type('Amount, required', '10.005');
+    expect(ui.input('Amount, required').props.accessibilityHint).toBeTruthy();
+    expect(border()).toBe(2);
+  });
+
+  it('keeps the exact Save amount on a recovered ordinary draft while offline', async () => {
+    let time = localNoon;
+    let disconnected = false;
+    const ui = await render(
+      async (controller) => {
+        await controller.openExpense(groupId);
+        await controller.updateExpenseDraft({
+          amount: '12.34',
+          description: 'Saved dinner',
+          tagId,
+        });
+        await controller.closeExpense();
+        disconnected = true;
+        time += 31_000;
+        await controller.openExpense(groupId);
+        controller.resumeExpenseDraft();
+      },
+      {
+        now: () => time,
+        readGroup: async () => {
+          if (disconnected) throw new Error('Offline');
+          return json({ status: 200, data: group });
+        },
+      },
+    );
+    const state = ui.controller.getSnapshot();
+    expect(state.offline.active).toBe(true);
+    expect(state.expense).toMatchObject({ status: 'editing', contextCheck: { initialize: false } });
+    expect(state.expense.contextCheck?.status).not.toBe('checking');
+    expect(labelled(ui.root(), 'You: paid ₹12.34, share ₹12.34')).toHaveLength(1);
+    expect(ui.pressable('Save expense ₹12.34').props.disabled).toBe(true);
+    expect(ui.writes).toEqual([]);
   });
 
   it('moves screen-reader focus to a missing Tag instead of opening the keyboard', async () => {

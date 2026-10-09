@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
-import { expenseMoney } from '../data/expense-draft';
+import { expenseContextPending, expenseMoney } from '../data/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
 import { SaveBar } from './expense-form';
 import { useMobileSnapshot } from './use-mobile-snapshot';
@@ -11,8 +11,13 @@ export const SelectedSaveBar = memo(function SelectedSaveBar({
   controller,
   ...props
 }: Parameters<typeof SaveBar>[0] & { controller: MobileController }) {
-  const amount = useMobileSnapshot(controller, ({ expense }) => {
-    if (!expense.draft || expense.status === 'saving' || expense.contextCheck) return undefined;
+  const amount = useMobileSnapshot(controller, ({ expense, offline }) => {
+    if (
+      !expense.draft ||
+      expense.status === 'saving' ||
+      expenseContextPending(expense, offline.active)
+    )
+      return undefined;
     try {
       const money = expenseMoney(expense.draft);
       return formatCurrency(
