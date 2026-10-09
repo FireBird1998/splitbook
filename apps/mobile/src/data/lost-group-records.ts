@@ -28,20 +28,30 @@ export function lostGroupRecords({
   const remove = async (accountId: string, groupId: string) => {
     await expenseDrafts?.remove(accountId, groupId);
     await settlementAttempts?.remove(accountId, groupId);
+    const before = pending;
     if (pending?.accountId === accountId)
       pending = { ...pending, groupIds: pending.groupIds.filter((id) => id !== groupId) };
+    try {
+      await save();
+    } catch (error) {
+      pending = before;
+      throw error;
+    }
+  };
+  const mark = async (accountId: string, groupId: string) => {
+    await load();
+    const groupIds = new Set(pending?.accountId === accountId ? pending.groupIds : []);
+    groupIds.add(groupId);
+    pending = { accountId, groupIds: [...groupIds] };
     await save();
   };
   return {
+    mark,
     blocked: (accountId: string, groupId: string) =>
       unreadable || !!(pending?.accountId === accountId && pending.groupIds.includes(groupId)),
     async erase(accountId: string, groupId: string) {
-      await load();
-      const groupIds = new Set(pending?.accountId === accountId ? pending.groupIds : []);
-      groupIds.add(groupId);
-      pending = { accountId, groupIds: [...groupIds] };
       // Record the intent before deletion: a kill or partial delete is retried at startup.
-      await save();
+      await mark(accountId, groupId);
       await remove(accountId, groupId);
     },
     async recover() {

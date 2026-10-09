@@ -515,7 +515,7 @@ function ExpenseTask({
               }
               message={
                 state.accessLost
-                  ? 'This save or change may already be recorded. Its retry will be removed from this device when you leave. If access returns, check the Group’s Expenses before saving again.'
+                  ? `${state.message ? `${state.message} ` : ''}This save or change may already be recorded. Its retry will be removed from this device when you leave. If access returns, check the Group’s Expenses before saving again.`
                   : (state.message ??
                     (state.attempt
                       ? state.attemptRejected

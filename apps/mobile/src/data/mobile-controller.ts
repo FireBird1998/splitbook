@@ -1855,10 +1855,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           pendingPayment:
             snapshot.pendingPayment?.groupId === groupId ? null : snapshot.pendingPayment,
           drafts: snapshot.drafts.filter((draft) => draft.groupId !== groupId),
-          homeSnackbar: {
-            message:
-              'This Group’s draft and unconfirmed saves were removed from this device. If access returns, check the Group’s Expenses before saving again.',
-          },
         });
       return true;
     } catch (error) {
@@ -1922,6 +1918,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     (snapshot.screen === 'expense' && snapshot.expense.groupId === groupId) ||
     (snapshot.screen === 'settlement' && snapshot.settlement.groupId === groupId);
   const forgetGroup = (groupId: string, status: number, owner: number, financialRefusal = true) => {
+    if (!current(owner)) return Promise.resolve();
     if (financialRefusal) {
       lostGroups.add(groupId);
       if (snapshot.screen === 'expense' && snapshot.expense.groupId === groupId)
@@ -1930,10 +1927,29 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         publish({ ...snapshot, settlement: { ...snapshot.settlement, accessLost: true } });
     }
     const running = forgetting.get(groupId);
-    if (running?.owner === owner) return running.removal;
-    const removal = removeGroup(groupId, status, owner).finally(() => {
-      if (forgetting.get(groupId)?.removal === removal) forgetting.delete(groupId);
-    });
+    const lease = financialRefusal ? accountStorage() : null;
+    const recorded = lease
+      ? lease
+          .write(async () => {
+            if (lostGroups.has(groupId)) await financialCleanup.mark(lease.accountId, groupId);
+          })
+          .catch((error) => {
+            if (current(owner) && !(error instanceof Superseded))
+              publish({
+                ...snapshot,
+                expense: { ...snapshot.expense, message: financialCleanupMessage },
+                settlement: { ...snapshot.settlement, message: financialCleanupMessage },
+              });
+          })
+      : Promise.resolve();
+    if (running?.owner === owner)
+      return Promise.all([recorded, running.removal]).then(() => undefined);
+    // Eviction locks the active form at once; its queued intent survives a process restart.
+    const removal = Promise.all([recorded, removeGroup(groupId, status, owner)])
+      .then(() => undefined)
+      .finally(() => {
+        if (forgetting.get(groupId)?.removal === removal) forgetting.delete(groupId);
+      });
     forgetting.set(groupId, { owner, removal });
     return removal;
   };

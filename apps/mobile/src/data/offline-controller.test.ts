@@ -77,6 +77,7 @@ function fixture(
   let activeUser = user;
   const device = {
     failRemoval: false,
+    failJournalClear: false,
     holdDraftWrite: null as Promise<void> | null,
     holdGroupRead: null as Promise<void> | null,
   };
@@ -208,6 +209,7 @@ function fixture(
               financialCleanup = structuredClone(value);
             },
             clear: async () => {
+              if (device.failJournalClear) throw new Error('Cleanup journal unavailable');
               financialCleanup = null;
             },
           },
@@ -1665,4 +1667,73 @@ it('retains a draft when the Group check returns another Group instead of a refu
   await controller.refresh('retry');
   await controller.back();
   expect(f.drafts.size).toBe(1);
+});
+
+it('never publishes a pending lost draft through saved Home after a cold restart', async () => {
+  const f = fixture();
+  const first = f.create();
+  await first.signIn('alex');
+  await first.openExpense(groupId);
+  await first.updateExpenseDraft({ description: 'Must remain hidden', amount: '12' });
+  f.revoke();
+  await first.refresh('retry');
+  f.device.failRemoval = true;
+  await first.back();
+  f.restoreAccess();
+  await first.openGroup(groupId);
+  await first.back();
+  expect(first.getSnapshot().drafts).toEqual([]);
+  first.dispose();
+  f.goOffline();
+  const restarted = f.create();
+  const shown: unknown[] = [];
+  const unsubscribe = restarted.subscribe(() => {
+    if (restarted.getSnapshot().drafts.length) shown.push(restarted.getSnapshot().drafts);
+  });
+  await restarted.restore();
+  unsubscribe();
+  expect(shown).toEqual([]);
+});
+
+it('holds new drafts until a failed cleanup journal retirement succeeds', async () => {
+  const f = fixture();
+  const first = f.create();
+  await first.signIn('alex');
+  await first.openExpense(groupId);
+  await first.updateExpenseDraft({ description: 'Old draft', amount: '12' });
+  f.revoke();
+  await first.refresh('retry');
+  f.device.failJournalClear = true;
+  await first.back();
+  expect(f.drafts.size).toBe(0);
+  f.restoreAccess();
+  await first.openGroup(groupId);
+  await first.openExpense(groupId);
+  expect(first.getSnapshot().expense.status).toBe('blocked');
+  await first.updateExpenseDraft({ description: 'New draft', amount: '15' });
+  expect(f.drafts.size).toBe(0);
+  first.dispose();
+  f.device.failJournalClear = false;
+  const restarted = f.create();
+  await restarted.restore();
+  await restarted.openExpense(groupId);
+  await restarted.updateExpenseDraft({ description: 'New draft', amount: '15' });
+  expect(f.drafts.size).toBe(1);
+});
+
+it('finishes access-loss cleanup after the blocked form’s process is killed without Back', async () => {
+  const f = fixture();
+  const first = f.create();
+  await first.signIn('alex');
+  await first.openExpense(groupId);
+  await first.updateExpenseDraft({ description: 'Lost Group draft', amount: '12' });
+  f.revoke();
+  await first.refresh('retry');
+  expect(f.drafts.size).toBe(1);
+  first.dispose();
+  f.goOffline();
+  const restarted = f.create();
+  await restarted.restore();
+  expect(f.drafts.size).toBe(0);
+  expect(restarted.getSnapshot().auth.status).toBe('authenticated');
 });

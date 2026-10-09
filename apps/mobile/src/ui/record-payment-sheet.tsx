@@ -203,7 +203,11 @@ export function RecordPaymentSheet({
       : undefined;
   // A single correction already shows on its field.
   const message =
-    state.message && !Object.values(errors).includes(state.message) ? state.message : null;
+    state.message && !Object.values(errors).includes(state.message)
+      ? state.accessLost
+        ? `${state.message} If access returns, check the Group’s Expenses and payments before recording again.`
+        : state.message
+      : null;
   // An unconfirmed payment found on this phone waits for the check as Retry.
   const retrying = checking && state.attempt !== null;
 

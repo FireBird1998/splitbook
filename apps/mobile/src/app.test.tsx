@@ -132,7 +132,7 @@ function backend() {
   let cookie: string | null = null;
   let account: string | null = null;
   const drafts = new Map<string, unknown>();
-  const device = { failDraftWrites: false };
+  const device = { failDraftWrites: false, failDraftRemoval: false };
   const payments = new Map<string, unknown>();
   const settlementAttempts = {
     load: async (accountId: string, id: string) =>
@@ -177,6 +177,7 @@ function backend() {
           drafts.set(`${accountId}:${id}`, structuredClone(value));
         },
         remove: async (accountId, id) => {
+          if (device.failDraftRemoval) throw new Error('Device storage failed');
           drafts.delete(`${accountId}:${id}`);
         },
         clear: async () => drafts.clear(),
@@ -1914,7 +1915,16 @@ it('asks before discarding a lost Group’s unconfirmed Expense and sends nothin
   expect(message).toContain('may already be recorded');
   expect(app.drafts.size).toBe(1);
   expect(choices!.find((choice) => choice.text === 'Cancel')).toBeDefined();
+  app.device.failDraftRemoval = true;
   await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
+  expect(app.drafts.size).toBe(1);
+  expect(app.text()).toContain('Could not remove this Group');
+  app.device.failDraftRemoval = false;
+  await app.press('Discard unconfirmed save');
+  const retryChoices = vi.mocked(Alert.alert).mock.lastCall![2]!;
+  await settle(
+    Promise.resolve(retryChoices.find((choice) => choice.text === 'Discard')!.onPress!()),
+  );
   expect(app.drafts.size).toBe(0);
   expect(app.controller.getSnapshot().screen).toBe('groups');
 });

@@ -910,7 +910,11 @@ export function createHomeQueries(session: HomeSession) {
               restored: true,
             }
           : emptyHome(),
-        drafts: draftSummaries(records, accountId, list.value),
+        drafts: draftSummaries(
+          records.filter(({ groupId }) => !session.financialBlocked?.(accountId, groupId)),
+          accountId,
+          list.value,
+        ),
       };
     },
     /**
