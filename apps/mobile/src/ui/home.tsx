@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { memo, type ReactNode } from 'react';
 import { Pressable, Text, View, useWindowDimensions } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
@@ -447,12 +447,13 @@ export function balanceWidth(fontScale: number) {
   return 9 * (0.6 * scaledSp(fontSize as number, fontScale) + (letterSpacing as number));
 }
 
-function GroupRow({
+const GroupRow = memo(function GroupRow({
   group,
   balances,
   pending,
   width,
-  onPress,
+  onOpen,
+  disabled,
 }: {
   group: MobileGroup;
   /** Undefined while the member's balance in this Group is unknown. */
@@ -461,7 +462,8 @@ function GroupRow({
   pending: boolean;
   /** The balance's width (`balanceWidth`). */
   width: number;
-  onPress?: () => void;
+  onOpen: (groupId: string) => void;
+  disabled: boolean;
 }) {
   const descriptor = getGroupTheme(group.category);
   const count = group.members.length;
@@ -496,10 +498,10 @@ function GroupRow({
       ]
         .filter(Boolean)
         .join(', ')}
-      onPress={onPress}
+      onPress={disabled ? undefined : () => onOpen(group.id)}
     />
   );
-}
+});
 
 function NoGroups({ onRefresh }: { onRefresh: () => void }) {
   return (
@@ -599,7 +601,8 @@ export function HomeGroups({
                 balances={byGroup[group.id]}
                 pending={balancesPending}
                 width={width}
-                onPress={disabled ? undefined : () => onOpen(group.id)}
+                onOpen={onOpen}
+                disabled={disabled}
               />
             </View>
           ))}

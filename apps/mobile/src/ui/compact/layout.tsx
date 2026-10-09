@@ -1,4 +1,4 @@
-import { Children, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Children, memo, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
   Pressable,
@@ -287,7 +287,7 @@ function TrailingSkeleton() {
  * title is laid out as it will be; when it clears, the value fades in where the skeleton was.
  * `trailingWidth` keeps that place one width, skeleton or value, unless a value is wider.
  */
-export function ListRow({
+export const ListRow = memo(function ListRow({
   leading,
   title,
   meta,
@@ -350,7 +350,7 @@ export function ListRow({
       {content}
     </Pressable>
   );
-}
+});
 
 /** A trailing amount with a caption beneath, for list rows. */
 export function RowAmount({

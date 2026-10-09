@@ -11,115 +11,115 @@
       "requests": 0,
       "publishes": 2,
       "commits": 1,
-      "renders": 146
+      "renders": 45
     },
     "Open a Group on Expenses": {
       "requests": 3,
       "publishes": 9,
       "commits": 3,
-      "renders": 310
+      "renders": 290
     },
     "Change Month": {
       "requests": 2,
       "publishes": 5,
       "commits": 3,
-      "renders": 310
+      "renders": 290
     },
     "Switch to Balances": {
       "requests": 0,
       "publishes": 1,
       "commits": 1,
-      "renders": 57
+      "renders": 52
     },
     "Switch to Activity": {
       "requests": 1,
       "publishes": 3,
-      "commits": 3,
-      "renders": 173
+      "commits": 2,
+      "renders": 163
     },
     "Load the 5th Expense page (80 \u2192 100 rows)": {
       "requests": 2,
       "publishes": 5,
       "commits": 3,
-      "renders": 282
+      "renders": 261
     },
     "Foreground within 30 s after 5 Expense pages": {
       "requests": 0,
       "publishes": 2,
       "commits": 1,
-      "renders": 47
+      "renders": 38
     },
     "Load the 5th Activity page (80 \u2192 100 events)": {
       "requests": 1,
       "publishes": 2,
       "commits": 2,
-      "renders": 171
+      "renders": 159
     },
     "Foreground within 30 s after 5 Activity pages": {
       "requests": 0,
       "publishes": 2,
       "commits": 1,
-      "renders": 45
+      "renders": 39
     },
     "Back to Home from a Group": {
       "requests": 1,
       "publishes": 5,
       "commits": 2,
-      "renders": 294
+      "renders": 291
     },
     "Reopen the Group within 30 s": {
       "requests": 0,
       "publishes": 4,
       "commits": 1,
-      "renders": 204
+      "renders": 200
     },
     "Pull to refresh with 5 Expense pages": {
       "requests": 7,
       "publishes": 10,
       "commits": 4,
-      "renders": 188
+      "renders": 158
     },
     "Foreground after 30 s with 5 Expense pages": {
       "requests": 7,
       "publishes": 8,
       "commits": 4,
-      "renders": 203
+      "renders": 173
     },
     "Pull to refresh with 5 Activity pages": {
       "requests": 5,
       "publishes": 4,
       "commits": 2,
-      "renders": 90
+      "renders": 78
     },
     "Foreground after 30 s with 5 Activity pages": {
       "requests": 5,
       "publishes": 4,
       "commits": 2,
-      "renders": 90
+      "renders": 78
     },
     "Load the 6th Expense page (pages 2 to 6)": {
       "requests": 2,
       "publishes": 5,
       "commits": 3,
-      "renders": 301
+      "renders": 278
     },
     "Load newer Expenses (pages 1 to 5)": {
       "requests": 2,
       "publishes": 5,
       "commits": 3,
-      "renders": 301
+      "renders": 278
     },
     "Load the 6th Activity page (pages 2 to 6)": {
       "requests": 1,
       "publishes": 2,
       "commits": 2,
-      "renders": 173
+      "renders": 161
     },
     "Load newer Activity (pages 1 to 5)": {
       "requests": 1,
       "publishes": 2,
       "commits": 2,
-      "renders": 175
+      "renders": 163
     },
     "Open an Expense from Expenses": {
       "requests": 3,
@@ -137,13 +137,13 @@
       "requests": 1,
       "publishes": 2,
       "commits": 2,
-      "renders": 238
+      "renders": 192
     },
     "Load newer changes (pages 1 to 5)": {
       "requests": 1,
       "publishes": 2,
       "commits": 2,
-      "renders": 240
+      "renders": 194
     },
     "Open the payment sheet within 30 s": {
       "requests": 1,
@@ -154,8 +154,8 @@
     "Record a payment": {
       "requests": 6,
       "publishes": 13,
-      "commits": 7,
-      "renders": 469
+      "commits": 6,
+      "renders": 448
     },
     "Type 20 characters into Description": {
       "requests": 0,
@@ -174,6 +174,30 @@
       "publishes": 1,
       "commits": 1,
       "renders": 4
+    },
+    "Store entries with Split open": {
+      "requests": 0,
+      "publishes": 1,
+      "commits": 1,
+      "renders": 4
+    },
+    "Store entries with Paid by open": {
+      "requests": 0,
+      "publishes": 1,
+      "commits": 1,
+      "renders": 4
+    },
+    "Type 20 characters into Amount": {
+      "requests": 0,
+      "publishes": 40,
+      "commits": 20,
+      "renders": 775
+    },
+    "Type 20 characters into Notes": {
+      "requests": 0,
+      "publishes": 40,
+      "commits": 20,
+      "renders": 100
     }
   }
 }

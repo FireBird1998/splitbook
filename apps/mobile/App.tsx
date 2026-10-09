@@ -61,6 +61,7 @@ import { scrollToShow } from './src/ui/scroll';
 import { returnScrollTarget, visibleRowAnchor, type RowPlaces } from './src/ui/return-scroll';
 import { recordOutline } from './src/ui/expense-record-view';
 import { DetailsNotice, RefreshStatus, RetainedNotice } from './src/ui/financial-views';
+import { currentDayKey } from './src/ui/list-day-header';
 import { GroupExpensesView } from './src/ui/group-expenses';
 import { TripStrip } from './src/ui/trip-strip';
 import {
@@ -599,6 +600,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
   const feedback = refreshFeedback(state);
   const { checking } = feedback;
   const refresh = () => void controller.refresh();
+  const openGroup = useCallback((groupId: string) => void controller.openGroup(groupId), []);
   return (
     <>
       <HomeTopBar
@@ -679,7 +681,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
           offline={state.offline.active}
           disabled={checking}
           onNewGroup={controller.startCreate}
-          onOpen={(groupId) => void controller.openGroup(groupId)}
+          onOpen={openGroup}
           onRetry={refresh}
         />
         <CompactText variant="caption" tone="muted" style={{ textAlign: 'center' }}>
@@ -758,6 +760,10 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
   const shown = group ?? opening;
   // Not saved on this phone, and offline: the navigation stays, without a banner.
   const unavailable = !group && state.detail.status === 'error' && state.offline.active;
+  const activityMembers = useMemo(
+    () => shown?.members.map(({ user }) => ({ id: user.id, name: user.name })),
+    [shown?.members],
+  );
   const userId = state.auth.user!.id;
   const eventOpen = state.destination === 'activity' && state.activity.selected !== null;
   const scroll = useRef<ScrollView>(null);
@@ -805,7 +811,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     pendingScroll.current = state.restoreScroll;
   }
   /** Applied once the returning view's content and row are laid out; a drag cancels it. */
-  const restorePendingScroll = (height: number) => {
+  const restorePendingScroll = useCallback((height: number) => {
     contentHeight.current = height;
     const restore = pendingScroll.current;
     if (!restore || viewportHeight.current <= 0) return;
@@ -841,66 +847,92 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     scrollY.current = y;
     if (restore.anchor || Math.max(0, height - viewportHeight.current) >= restore.y || settled)
       pendingScroll.current = null;
-  };
+  }, []);
   /** Native layout events arrive together; apply a row return after their last update. */
-  const scheduleRestore = () => {
+  const scheduleRestore = useCallback(() => {
     if (restoreTimer.current !== null) clearTimeout(restoreTimer.current);
     restoreTimer.current = setTimeout(() => {
       restoreTimer.current = null;
       restorePendingScroll(contentHeight.current);
     }, 0);
-  };
+  }, [restorePendingScroll]);
   useEffect(() => {
     if (pendingScroll.current?.anchor) scheduleRestore();
     return () => {
       if (restoreTimer.current !== null) clearTimeout(restoreTimer.current);
     };
   }, [state.restoreScroll, state.financial.expenses.status, state.activity.status]);
-  const onRowsLayout = (rows: RowPlaces) => {
-    if (shownScrollKey.current !== scrollKey) return;
-    rowPlaces.current = rows;
-    if (pendingScroll.current?.anchor) scheduleRestore();
-  };
-  const origin = () => {
+  const onRowsLayout = useCallback(
+    (rows: RowPlaces) => {
+      if (shownScrollKey.current !== scrollKey) return;
+      rowPlaces.current = rows;
+      if (pendingScroll.current?.anchor) scheduleRestore();
+    },
+    [scrollKey, scheduleRestore],
+  );
+  const origin = useCallback(() => {
     const anchor = visibleRowAnchor(rowPlaces.current, scrollY.current, viewportHeight.current);
     return { scrollY: scrollY.current, ...(anchor ? { anchor } : {}) };
-  };
+  }, []);
   /** The window moved: the view scrolls by `dy` from where it was then, so the row stays put. */
-  const shift = (dy: number) => {
+  const shift = useCallback((dy: number) => {
     const from = slideFrom.current ?? scrollY.current;
     slideFrom.current = null;
     scrollY.current = Math.max(0, from + dy);
     scroll.current?.scrollTo({ y: scrollY.current, animated: false });
-  };
-  const openExpense = (groupId: string, expenseId?: string) =>
-    void controller.openExpense(groupId, expenseId, origin());
+  }, []);
+  const openExpense = useCallback(
+    (groupId: string, expenseId?: string) =>
+      void controller.openExpense(groupId, expenseId, origin()),
+    [origin],
+  );
   const kept = state.keptDraft?.groupId === known?.id ? state.keptDraft : null;
   // Both open the kept record; a save that may already be recorded is checked, not resumed.
   const keptAction = kept?.unconfirmed
     ? { label: 'Check save', icon: 'alert-circle-outline' as const }
     : { label: 'Resume draft', icon: 'pencil-outline' as const };
-  const resumeDraft = () => void controller.resumeKeptDraft(origin());
+  const resumeDraft = useCallback(() => void controller.resumeKeptDraft(origin()), [origin]);
   // On Expenses, also while the Group is first read; not when it can't be.
   const floating =
     known && (group || state.detail.status === 'loading') && state.destination === 'expenses'
       ? known
       : null;
-  const discardDraft = () =>
-    Alert.alert(
-      'Discard this expense draft?',
-      'Your saved entries will be removed from this device.',
-      [
-        { text: 'Keep draft', style: 'cancel' },
-        {
-          text: 'Discard',
-          style: 'destructive',
-          onPress: () =>
-            void controller.discardKeptDraft().then((discarded) => {
-              if (!discarded) Alert.alert('Couldn’t discard this draft', 'Please try again.');
-            }),
-        },
-      ],
-    );
+  const discardDraft = useCallback(
+    () =>
+      Alert.alert(
+        'Discard this expense draft?',
+        'Your saved entries will be removed from this device.',
+        [
+          { text: 'Keep draft', style: 'cancel' },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () =>
+              void controller.discardKeptDraft().then((discarded) => {
+                if (!discarded) Alert.alert('Couldn’t discard this draft', 'Please try again.');
+              }),
+          },
+        ],
+      ),
+    [],
+  );
+  const selectMonth = useCallback((month: string | null) => void controller.selectMonth(month), []);
+  const refreshExpenses = useCallback(() => void controller.refreshExpenses(), []);
+  const loadMoreExpenses = useCallback(() => void controller.loadMoreExpenses(), []);
+  const loadNewerExpenses = useCallback(() => void controller.loadNewerExpenses(), []);
+  const openListedExpense = useCallback(
+    (id: string) => {
+      if (shown) openExpense(shown.id, id);
+    },
+    [shown?.id, openExpense],
+  );
+  const refreshActivity = useCallback(() => void controller.refreshActivity(), []);
+  const loadMoreActivity = useCallback(() => void controller.loadMoreActivity(), []);
+  const loadNewerActivity = useCallback(() => void controller.loadNewerActivity(), []);
+  const selectActivity = useCallback(
+    (id: string) => void controller.openActivityEvent(id, origin()),
+    [origin],
+  );
   // Offline, the banner says so; that what's shown was saved on this device, only while some of
   // it is: the Group's details, or the destination's own content (#219, #222, as Home since #332).
   const notice = unavailable ? null : (
@@ -945,16 +977,16 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
       state={activityState}
       currentUserId={userId}
       currency={shown.defaultCurrency}
-      members={shown.members.map(({ user }) => ({ id: user.id, name: user.name }))}
+      members={activityMembers}
       offline={state.offline.active}
-      now={Date.now()}
-      onRetry={() => void controller.refreshActivity()}
-      onMore={() => void controller.loadMoreActivity()}
-      onLoadNewer={() => void controller.loadNewerActivity()}
+      dayKey={currentDayKey()}
+      onRetry={refreshActivity}
+      onMore={loadMoreActivity}
+      onLoadNewer={loadNewerActivity}
       // The newest page dropped, or came back: the event on screen keeps its place.
       onShift={shift}
       onRowsLayout={activityState.selected ? undefined : onRowsLayout}
-      onSelect={(id) => void controller.openActivityEvent(id, origin())}
+      onSelect={selectActivity}
       onClose={controller.closeActivityDetail}
     />
   );
@@ -1111,15 +1143,15 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                 }
                 offline={state.offline.active}
                 firstRead={opening !== null}
-                now={Date.now()}
-                onSelectMonth={(month) => void controller.selectMonth(month)}
-                onRefreshExpenses={() => void controller.refreshExpenses()}
-                onLoadMore={() => void controller.loadMoreExpenses()}
-                onLoadNewer={() => void controller.loadNewerExpenses()}
+                dayKey={currentDayKey()}
+                onSelectMonth={selectMonth}
+                onRefreshExpenses={refreshExpenses}
+                onLoadMore={loadMoreExpenses}
+                onLoadNewer={loadNewerExpenses}
                 // The newest page dropped: the row on screen keeps its place (#219).
                 onShift={shift}
                 onRowsLayout={onRowsLayout}
-                onOpenExpense={(expenseId) => openExpense(shown.id, expenseId)}
+                onOpenExpense={openListedExpense}
                 onResumeDraft={resumeDraft}
                 onDiscardDraft={discardDraft}
               />
@@ -1127,32 +1159,34 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
           )}
         </>
       )}
-      <RecordPaymentSheet
-        visible={state.screen === 'settlement'}
-        state={state.settlement}
-        currentUserId={userId}
-        today={`Today, ${new Date().toLocaleDateString('en', { month: 'short', day: 'numeric' })}`}
-        onChange={controller.updateSettlement}
-        onLeaveField={controller.touchSettlementField}
-        onAcknowledge={controller.acknowledgeSettlement}
-        onRecord={() => void controller.recordSettlement()}
-        onRetry={() => void controller.retrySettlementCheck()}
-        onDiscard={() =>
-          Alert.alert(
-            'Discard this unconfirmed payment?',
-            'This payment may already be recorded. Discarding removes its retry from this device and sends nothing. If access returns, check the Group’s payments before recording it again.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Discard',
-                style: 'destructive',
-                onPress: () => void controller.discardUnconfirmedSettlement(),
-              },
-            ],
-          )
-        }
-        onClose={() => void controller.back()}
-      />
+      {state.screen === 'settlement' ? (
+        <RecordPaymentSheet
+          visible
+          state={state.settlement}
+          currentUserId={userId}
+          today={`Today, ${new Date().toLocaleDateString('en', { month: 'short', day: 'numeric' })}`}
+          onChange={controller.updateSettlement}
+          onLeaveField={controller.touchSettlementField}
+          onAcknowledge={controller.acknowledgeSettlement}
+          onRecord={() => void controller.recordSettlement()}
+          onRetry={() => void controller.retrySettlementCheck()}
+          onDiscard={() =>
+            Alert.alert(
+              'Discard this unconfirmed payment?',
+              'This payment may already be recorded. Discarding removes its retry from this device and sends nothing. If access returns, check the Group’s payments before recording it again.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Discard',
+                  style: 'destructive',
+                  onPress: () => void controller.discardUnconfirmedSettlement(),
+                },
+              ],
+            )
+          }
+          onClose={() => void controller.back()}
+        />
+      ) : null}
     </GroupShell>
   );
 }

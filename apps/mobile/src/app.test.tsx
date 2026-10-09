@@ -1083,6 +1083,7 @@ describe('App return from an Expense', () => {
     await app.press('Date: ');
     for (const step of date) await app.press(step);
     await app.press('Close Date, keeping your entries');
+    await app.press('Tag, required: Choose a Tag');
     await app.press('Tag: Shared');
   };
   const created = (path: string, init: RequestInit) =>

@@ -7,6 +7,7 @@ import { WhoOwesWhat } from './expense-form';
 import { useMobileSnapshot } from './use-mobile-snapshot';
 
 const moneyFields: (keyof ExpenseDraft)[] = [
+  'original',
   'amount',
   'currency',
   'multiPayer',

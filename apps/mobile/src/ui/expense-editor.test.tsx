@@ -95,6 +95,7 @@ function backend({
 } = {}) {
   const writes: string[] = [];
   const submissions: { key: string | null; body: string }[] = [];
+  const edits: string[] = [];
   let saved = record;
   const records = new Map<string, unknown>();
   const drafts = {
@@ -121,6 +122,7 @@ function backend({
       return readGroup ? readGroup() : json({ data: group, status: 200 });
     if (path === `/api/groups/${groupId}/expenses/${expenseId}`) {
       if (init.method === 'PATCH') {
+        edits.push(String(init.body));
         if (losePatch) throw new Error('The connection dropped before the edit arrived');
         if (conflict && saved !== conflict) {
           saved = conflict;
@@ -194,7 +196,7 @@ function backend({
       newSubmissionKey: () => 'native-expense-test-0001',
     },
   );
-  return { controller, drafts, writes, submissions };
+  return { controller, drafts, writes, submissions, edits };
 }
 
 interface NodeMock {
@@ -807,6 +809,65 @@ describe('rendered save not confirmed', () => {
 });
 
 describe('rendered edit conflict', () => {
+  it('shows the latest recorded remainder after rebasing unchanged money entries', async () => {
+    const samId = 'a00000000000000000000002';
+    const original = {
+      ...savedExpense,
+      amount: 0.03,
+      amountMinor: 3,
+      paidBy: [{ user: { _id: memberId, name: 'Alex' }, amount: 0.03, amountMinor: 3 }],
+      splitBetween: [
+        { user: { _id: memberId, name: 'Alex' }, amount: 0.02, amountMinor: 2 },
+        { user: { _id: samId, name: 'Sam' }, amount: 0.01, amountMinor: 1 },
+      ],
+    };
+    const latest = {
+      ...original,
+      revision: 4,
+      splitBetween: [
+        { user: { _id: memberId, name: 'Alex' }, amount: 0.01, amountMinor: 1 },
+        { user: { _id: samId, name: 'Sam' }, amount: 0.02, amountMinor: 2 },
+      ],
+    };
+    const ui = await render(
+      async (controller) => {
+        await controller.openExpense(groupId, expenseId);
+        await controller.editExpense();
+        await controller.updateExpenseDraft({ description: 'Groceries and milk' });
+      },
+      {
+        record: original,
+        conflict: latest,
+        readGroup: async () =>
+          json({
+            data: {
+              ...group,
+              members: [
+                ...group.members,
+                {
+                  user: { _id: samId, name: 'Sam', email: 'sam@example.test', image: null },
+                  role: 'member',
+                  joinedAt: iso,
+                },
+              ],
+            },
+            status: 200,
+          }),
+      },
+    );
+    expect(labelled(ui.root(), 'You: paid ₹0.03, share ₹0.02')).toHaveLength(1);
+    const before = ui.controller.getSnapshot().expense.draft!;
+    await ui.press('Save changes');
+    await ui.press('Keep my version for review');
+    const after = ui.controller.getSnapshot().expense.draft!;
+    expect(after.amount).toBe(before.amount);
+    expect(after.participantIds).toBe(before.participantIds);
+    expect(after.splitValues).toBe(before.splitValues);
+    expect(labelled(ui.root(), 'You: paid ₹0.03, share ₹0.01')).toHaveLength(1);
+    expect(labelled(ui.root(), 'Sam: paid nothing, share ₹0.02')).toHaveLength(1);
+    await ui.press('Save changes');
+    expect(JSON.parse(ui.edits.at(-1)!)).toEqual({ description: 'Groceries and milk' });
+  });
   // Someone else saved a new amount and notes before the member's edit arrived.
   const theirs = {
     ...savedExpense,

@@ -127,6 +127,7 @@ vi.mock('./ui/group-members', async (load) => counting.wrap(await load<Module>()
 vi.mock('./ui/group-shell', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/group-snackbar', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/group-workflows', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/list-day-header', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/home', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/offline-notice', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/payer-sheet', async (load) => counting.wrap(await load<Module>()));
@@ -998,6 +999,63 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
       release();
       unsubscribe();
     }
+  });
+
+  it.each(['Split', 'Paid by'])(
+    'does not redraw the open %s sheet when device storage completes',
+    async (tile) => {
+      const app = await renderApp();
+      await app.press('Open Maple House');
+      await app.press('Add expense');
+      await app.type('Amount, required', '12.34');
+      await app.press(tile);
+      const release = app.holdDraftWrites();
+      try {
+        await app.type('Amount, required', '23.45');
+        expect(app.controller.getSnapshot().expense.persistence).toBe('saving');
+        await journey(
+          `Store entries with ${tile} open`,
+          () => settle(Promise.resolve(release())),
+          () => {
+            expect(app.controller.getSnapshot().expense.persistence).toBe('saved');
+            expect(app.count('Done')).toBe(1);
+            expect([...counting.renders.keys()].sort()).toEqual([
+              'CompactText',
+              'DraftStatus',
+              'Icon',
+              'SelectedDraftStatus',
+            ]);
+          },
+        );
+      } finally {
+        release();
+      }
+    },
+  );
+
+  it('characterizes Amount and Notes typing separately', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Add expense');
+    const amount = '00000000000000012.34';
+    await journey(
+      `Type ${amount.length} characters into Amount`,
+      async () => {
+        for (let length = 1; length <= amount.length; length++)
+          await app.type('Amount, required', amount.slice(0, length));
+      },
+      () => expect(app.value('Amount, required')).toBe(amount),
+    );
+    await app.press('Category and notes, optional');
+    const notes = 'Fictional groceries!';
+    await journey(
+      `Type ${notes.length} characters into Notes`,
+      async () => {
+        for (let length = 1; length <= notes.length; length++)
+          await app.type('Notes', notes.slice(0, length));
+      },
+      () => expect(app.value('Notes')).toBe(notes),
+    );
   });
 
   // vi.mock takes static paths, so the list at the top is kept by hand and checked here.

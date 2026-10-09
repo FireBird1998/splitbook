@@ -2,7 +2,7 @@ import { useState, type Ref } from 'react';
 import { TextInput, View } from 'react-native';
 import type { ExpenseDraft, ExpenseField } from '../data/expense-draft';
 import { acceptsNumericText } from '../data/field-feedback';
-import { FieldError } from './group-workflows';
+import { Field, FieldError } from './group-workflows';
 import { CompactText, FieldMarker, radius } from './compact';
 import { Icon } from './primitives';
 import { fonts, useTheme } from './theme';
@@ -18,6 +18,26 @@ export type ExpenseInputProps = {
   onLeave: (field: ExpenseField) => void;
   onAmountDone?: () => void;
 };
+export function NotesField({
+  notes,
+  locked,
+  onChange,
+}: {
+  notes: string;
+  locked: boolean;
+  onChange: (patch: Partial<ExpenseDraft>) => void;
+}) {
+  return (
+    <Field
+      label="Notes"
+      value={notes}
+      maxLength={500}
+      multiline
+      editable={!locked}
+      onChangeText={(notes) => onChange({ notes })}
+    />
+  );
+}
 export function AmountField({
   draft,
   locked,

@@ -9,10 +9,10 @@ export const SelectedOptionalDetails = memo(function SelectedOptionalDetails({
   const draft = useMobileSnapshot(
     controller,
     ({ expense }) => ({
-      notes: expense.draft!.notes,
+      notes: '',
       category: expense.draft!.category,
     }),
     sameSelection,
   );
-  return <OptionalDetails {...props} draft={draft} />;
+  return <OptionalDetails {...props} controller={controller} draft={draft} />;
 });

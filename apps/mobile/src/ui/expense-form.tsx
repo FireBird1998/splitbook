@@ -15,10 +15,14 @@ import {
   type expenseMoney,
 } from '../data/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
-import { AmountField, DescriptionField } from './expense-inputs';
-import { SelectedAmountField, SelectedDescriptionField } from './expense-input-selection';
+import { AmountField, DescriptionField, NotesField } from './expense-inputs';
+import {
+  SelectedAmountField,
+  SelectedDescriptionField,
+  SelectedNotesField,
+} from './expense-input-selection';
 import { gregorianDateFormat } from './date-sheet';
-import { Field, FieldError } from './group-workflows';
+import { FieldError } from './group-workflows';
 import { Icon } from './primitives';
 import {
   Badge,
@@ -641,11 +645,13 @@ export function WhatsDifferent({
 
 /** Category and Notes behind one optional row. */
 export const OptionalDetails = memo(function OptionalDetails({
+  controller,
   draft,
   locked,
   categoryLocked = locked,
   onChange,
 }: {
+  controller?: MobileController;
   draft: Pick<ExpenseDraft, 'notes' | 'category'>;
   locked: boolean;
   categoryLocked?: boolean;
@@ -694,14 +700,11 @@ export const OptionalDetails = memo(function OptionalDetails({
               />
             ))}
           </View>
-          <Field
-            label="Notes"
-            value={draft.notes}
-            maxLength={500}
-            multiline
-            editable={!locked}
-            onChangeText={(notes) => onChange({ notes })}
-          />
+          {controller ? (
+            <SelectedNotesField controller={controller} locked={locked} onChange={onChange} />
+          ) : (
+            <NotesField notes={draft.notes} locked={locked} onChange={onChange} />
+          )}
         </View>
       ) : null}
     </Card>

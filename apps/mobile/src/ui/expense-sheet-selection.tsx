@@ -7,13 +7,13 @@ export function SelectedSplitSheet({
   controller,
   ...props
 }: Parameters<typeof SplitSheet>[0] & { controller: MobileController }) {
-  const persistence = useMobileSnapshot(controller, ({ expense }) => expense.persistence);
-  return <SplitSheet {...props} persistence={persistence} />;
+  const failed = useMobileSnapshot(controller, ({ expense }) => expense.persistence === 'error');
+  return <SplitSheet {...props} persistence={failed ? 'error' : 'saved'} />;
 }
 export function SelectedPayerSheet({
   controller,
   ...props
 }: Parameters<typeof PayerSheet>[0] & { controller: MobileController }) {
-  const persistence = useMobileSnapshot(controller, ({ expense }) => expense.persistence);
-  return <PayerSheet {...props} persistence={persistence} />;
+  const failed = useMobileSnapshot(controller, ({ expense }) => expense.persistence === 'error');
+  return <PayerSheet {...props} persistence={failed ? 'error' : 'saved'} />;
 }

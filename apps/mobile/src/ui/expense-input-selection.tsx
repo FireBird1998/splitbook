@@ -1,6 +1,18 @@
 import type { MobileController } from '../data/mobile-controller';
-import { AmountField, DescriptionField, type ExpenseInputProps } from './expense-inputs';
+import {
+  AmountField,
+  DescriptionField,
+  NotesField,
+  type ExpenseInputProps,
+} from './expense-inputs';
 import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
+export function SelectedNotesField({
+  controller,
+  ...props
+}: Omit<Parameters<typeof NotesField>[0], 'notes'> & { controller: MobileController }) {
+  const notes = useMobileSnapshot(controller, ({ expense }) => expense.draft?.notes ?? '');
+  return <NotesField {...props} notes={notes} />;
+}
 export function SelectedAmountField({
   controller,
   ...props
