@@ -99,6 +99,7 @@ function fixture() {
     /** This device can't remove saved copies. */
     failInvalidation: false,
     failJournal: false,
+    missingExpense: false,
     /** The server refuses every change as invalid (422) and changes nothing. */
     refuse: false,
     ledger: 0,
@@ -274,7 +275,10 @@ function fixture() {
     }
     if (path.startsWith(`/api/groups/${cabinId}/expenses?`))
       return page([row('d00000000000000000000009', cabinId, 'Cabin firewood')], 1, 1);
-    if (path === dinnerPath && method === 'GET') return json({ status: 200, data: dinner() });
+    if (path === dinnerPath && method === 'GET')
+      return server.missingExpense
+        ? json({ error: 'Expense not found' }, 404)
+        : json({ status: 200, data: dinner() });
     if (path === `${maplePath}/expenses` && method === 'POST') {
       server.ledger += 1;
       return json({ status: 201, data: dinner() }, 201);
@@ -307,7 +311,13 @@ function fixture() {
               expenseId,
             },
           ])
-        : events([{ id: 'e00000000000000000000001', description: `ledger ${server.ledger}` }]);
+        : events([
+            {
+              id: 'e00000000000000000000001',
+              description: `ledger ${server.ledger}`,
+              expenseId: dinnerId,
+            },
+          ]);
     }
     if (path === `${maplePath}/balances`) return balances(alex, sam, 30 + server.ledger);
     if (path === `/api/groups/${cabinId}/balances`) return balances(sam, alex, 12);
@@ -1015,4 +1025,54 @@ describe('stored unconfirmed changes remove older copies before a restart (#282)
     expect(Object.keys(f.savedOf(mapleId))).not.toContain('Expenses 2026-08 page 1');
     controller.dispose();
   });
+});
+
+describe('an Expense 404 discards its Group ledger copies (#281)', () => {
+  it.each([
+    ['open', false],
+    ['retry', false],
+    ['activity', false],
+    ['open', true],
+    ['retry', true],
+    ['activity', true],
+  ] as const)(
+    'never reuses an obsolete saved view after %s finds a missing Expense (failed cleanup: %s)',
+    async (entry, failInvalidation) => {
+      const f = fixture();
+      const controller = await visitEverything(f);
+      const cabinCopies = f.savedOf(cabinId);
+      if (entry === 'retry') await controller.openExpense(mapleId, dinnerId);
+      if (entry === 'activity') await controller.openActivity(mapleId);
+      f.server.missingExpense = true;
+      f.server.failInvalidation = failInvalidation;
+      if (entry === 'open') await controller.openExpense(mapleId, dinnerId);
+      if (entry === 'retry') await controller.refresh();
+      if (entry === 'activity') await controller.selectActivity('e00000000000000000000001');
+      expect(f.calls.at(-1)).toMatchObject({
+        method: 'GET',
+        path: `/api/groups/${mapleId}/expenses/${dinnerId}`,
+      });
+      if (failInvalidation) expect(Object.keys(f.savedOf(mapleId))).toContain('Dinner');
+      else {
+        expect(Object.keys(f.savedOf(mapleId))).toEqual(['Group']);
+        expect(f.saved()['/api/user/balances']).toBeUndefined();
+      }
+      expect(f.saved()['/api/groups']).toBeDefined();
+      expect(f.savedOf(cabinId)).toEqual(cabinCopies);
+      f.server.offline = true;
+      expect(await readOffline(controller)).toEqual({
+        groups: ['Maple House', 'Cabin Weekend'],
+        home: 'Your balances aren’t saved on this phone. Connect to load them.',
+        group: mapleId,
+        september: [],
+        secondPage: [],
+        august: notSaved,
+        balances: notSaved,
+        activity: notSaved,
+        record: recordNotSaved,
+      });
+      expect(controller.getSnapshot().auth.status).toBe('authenticated');
+      controller.dispose();
+    },
+  );
 });

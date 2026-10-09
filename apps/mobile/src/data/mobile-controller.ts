@@ -1066,6 +1066,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     },
     checkSession: (owner) => checkSession(owner),
     refused: (groupId, error) => refuseExpenseGroup(groupId, error),
+    missingLedger: (groupId, owner) => missingLedger(groupId, owner),
     gone: () => {
       // The Group was just read: what's missing is this Expense, and nothing saved of it shows.
       // An edit stays with its Group's details, and a save in flight is its own: saving either is
@@ -1087,6 +1088,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     readRecord: (groupId, expenseId, owner, wanted) =>
       expenseQueries.recordOf(groupId, expenseId, owner, wanted),
     refused: (groupId, error) => void dropDeniedGroup(groupId, error),
+    missingLedger: (groupId, owner) => missingLedger(groupId, owner),
   });
   const listening = [
     homeQueries.listen(focusManager, onlineManager, dependencies.netInfo),
@@ -1241,6 +1243,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (current(owner) && !(error instanceof Superseded))
         untrusted.mark(lease.accountId, [`ledger:${groupId}`, `balances:${groupId}`, 'home'], time);
     }
+  };
+
+  /** An Expense read answered 404: the Group stays, but every older ledger copy goes. */
+  const missingLedger = async (groupId: string, owner: number) => {
+    if (!current(owner)) return;
+    publish({
+      ...snapshot,
+      home: emptyHome(),
+      financial:
+        snapshot.financial.groupId === groupId
+          ? { ...emptyFinancial(), groupId }
+          : snapshot.financial,
+    });
+    ledgerChanged(groupId);
+    await removeLedgerCopies(groupId, owner);
   };
 
   /** The saved Home shown while checking, kept for the same account so it never blanks. */

@@ -143,6 +143,8 @@ export interface ActivitySession {
   ): Promise<unknown>;
   /** The Group refused the member on a read this view made: what it shows goes. */
   refused(groupId: string, error: RequestError): void;
+  /** A missing Expense makes its Group's saved ledger views obsolete, while access remains. */
+  missingLedger(groupId: string, owner: number): Promise<void>;
 }
 
 /** A read of a query: whether its request answered, and when it ends (as for a Group's view). */
@@ -540,7 +542,13 @@ export function createActivityQueries(session: ActivitySession) {
    */
   const bind = () => {
     pending = false;
-    if (!view || !onScreen() || !session.checked(view.groupId)) return unbind();
+    if (
+      !view ||
+      !onScreen() ||
+      !session.checked(view.groupId) ||
+      view.detail?.failure === unavailable
+    )
+      return unbind();
     const next = listOptions(activityKey(view.groupId));
     if (observer) observer.setOptions(next);
     else {
@@ -741,6 +749,8 @@ export function createActivityQueries(session: ActivitySession) {
       // No events stays the same list, so it publishes nothing new.
       events: shown.events.length ? [] : shown.events,
     };
+    // A missing Expense's historical event stays open; its obsolete list is read on return.
+    if (opened.detail?.failure === unavailable) return same(shown, { ...base, status: 'ready' });
     // Nothing read, or what was read went with a change, a denial or a Groups list: no event
     // shows, never one from before this device's own change (#280 item 1).
     // While the Group is read, Activity's own read follows it: loading, never a blank.
@@ -1044,6 +1054,7 @@ export function createActivityQueries(session: ActivitySession) {
           return void refuse(opened, error);
         detail.failure =
           error instanceof RequestError && error.status === 404 ? unavailable : failed;
+        if (detail.failure === unavailable) await session.missingLedger(groupId, owner);
       } finally {
         detail.reading = false;
         if (view === opened && opened.detail === detail) reproject();
