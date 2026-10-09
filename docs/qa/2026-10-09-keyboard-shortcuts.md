@@ -3,13 +3,13 @@
 ## Delivery
 
 - Branch: `codex/322-shortcuts`, with no upstream.
-- Fixed base: `d49de57357d8ac3acb6e1dc785be1d86a8ffa475` (`origin/main` fetched at task start).
+- Initial verification base: `d49de57357d8ac3acb6e1dc785be1d86a8ffa475` (`origin/main` fetched at task start).
 - Starting branch remains untouched in its other worktree: `feat/322-shortcuts`, tip `4ce3f010bdd25515578e5890d835027d3d7d0854`, original base `cb57603`.
 - `af0d8c8` — Web: keyboard shortcuts, with a Settings switch (#322). Rebased implementation of original `a3abea3`.
 - `fbc9e59` — Test Trip table shortcuts across day headings (#322).
 - `d650ac5` — Refresh desktop shortcut hint baselines after rebase (#322).
 - Code and baseline tip: `d650ac5`; the verification-report commit follows. Use `git log d49de573..HEAD --oneline` for the final local commit list.
-- No GitHub writes, push, PR creation, merge or deployment. No changes under `apps/mobile`. The prior `codex/319-trip-payments` branch and existing untracked `output/` contents are preserved.
+- At initial local delivery: no GitHub writes, push, PR creation, merge or deployment. No changes under `apps/mobile`. The prior `codex/319-trip-payments` branch and existing untracked `output/` contents are preserved.
 
 The authoritative source is the owner's attached #322 handoff, supplemented by GitHub issue #322 and parent #300, including their comments (none on #322). Native dependencies #311 and #321 are closed. The handoff explicitly overrides the original issue's X-selection requirement: selection and bulk actions remain deferred.
 
@@ -93,6 +93,28 @@ Spec total: 0 findings; no unresolved issue. Review did not itself claim verific
 Dropped only `splitbook_c322` through MongoClient at `mongodb://127.0.0.1:27018/?directConnection=true`; result `true`. Stopped only `c322-visual-browser` (`--rm` removes it); retained the existing `splitbook-mongo` container. Runner-owned port-3322 servers exited with the tests. Removed seven `/tmp/c322-*` scratch paths after retaining the runner configs and logs, plus the root `.next/trace` and `.next/trace-build` created by the first misplaced build. The real app's `apps/web/.next` output was preserved.
 
 Final cleanup checks confirmed no listener on 3322/9332, no c322 database and no task scratch paths. Only pre-existing/untracked `output/` remains outside tracked work, now also holding this task's evidence and PR draft. No branches were deleted. Never used host 27017, port 3100, backend 4138 or the Android emulator.
+
+## Publishing follow-up: 9 October 2026
+
+The owner subsequently authorized another interactive browser check, pushing the branch and preparing a PR for merge. Rebased onto `e0d9d0c712f749699b58e1ac542ed744ac61598f` (the merged #319 whole-Trip Payments fix) without conflicts. `git range-diff d49de573..3716b47 e0d9d0c..fba5c16` shows all four original commits unchanged apart from their rebased hashes: `5a9eb6b`, `2fd6585`, `d533ee7`, `fba5c16`.
+
+Used a managed worktree at `/Users/ankitdas/.codex/worktrees/shortcuts-322-publish/SplidBook`; primary local `main` stays unchanged. Installed all 913 locked packages offline with the existing pnpm 10.23.0 executable after correcting the worktree's executable PATH. No lockfile changes.
+
+`pnpm swarm up --origin http://127.0.0.1:3322 --server production --mongo-port 27018 --ready-timeout 600` passed, including the full production build/typecheck, in 32.4 seconds. It created only its own fictional database `splitbook_mobile_swarm_6250b7446a_b7b9240a`.
+
+The Codex in-app browser, signed in as fictional Alex, confirmed:
+
+- N opens the Group chooser on Home.
+- / opens global search outside a Group, focuses Group search within one, and moves from Balances to Expenses with search focused.
+- / types literal text while in a search field.
+- J skips Day 4's heading from houseboat to Dinner; K moves back to houseboat.
+- Enter opens the focused row and closes that same row again.
+- E opens the correct Expense form; Cancel preserves the ledger.
+- Settings turns single keys off and keeps that choice after reload; N and / open no dialog, J retains row focus and E opens no form.
+- Tab reaches the next Expense and Enter opens it with single keys off; ⌘K still opens global search.
+- The setting was restored; light and dark Settings, Trip day headings, row controls and footer were visually inspected.
+
+Browser screenshots are retained in the primary checkout's `output/playwright/c322-publish/`: `settings.jpg`, `settings-dark.jpg`, `trip-dark.jpg`. No real account or production data was used and no Expense or Payment was saved. Prior two-axis review findings remain zero; this rebase changed no reviewed feature code. The pre-push `pnpm swarm gate` and GitHub `full-ci` results belong to the publication follow-up and are reported in the final PR status.
 
 ## Final PR draft
 
