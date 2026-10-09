@@ -1374,17 +1374,20 @@ describe('App Expense window (#219)', () => {
       await app.press('Fictional row 5-5');
       await app.androidBack();
       native.scrollTo.mockClear();
-      layReturnRow(app, 'Fictional row 5-1,', 4500);
-      await app.layout(700, 6500);
-      if (choice === 'drag')
-        act(() =>
+      let selection: Promise<unknown> | undefined;
+      // Deliver layout and the member's input before yielding to the queued return timer.
+      // Awaiting layout first can let that timer scroll before the cancellation under test.
+      act(() => {
+        layReturnRow(app, 'Fictional row 5-1,', 4500);
+        void app.layout(700, 6500);
+        if (choice === 'drag')
           app
             .root()
             .findAll((node) => (node.type as unknown) === 'ScrollView')[0]
-            .props.onScrollBeginDrag(),
-        );
-      else await settle(app.controller.selectMonth('2026-08'));
-      await settle(new Promise((resolve) => setTimeout(resolve, 0)));
+            .props.onScrollBeginDrag();
+        else selection = app.controller.selectMonth('2026-08');
+      });
+      await settle(selection);
       expect(native.scrollTo).not.toHaveBeenCalled();
       // Subsequent native layout callbacks cannot resurrect the cancelled return.
       await app.layout(700, 7000);
