@@ -84,6 +84,14 @@ export interface ExpenseEditor {
   context: ExpenseContext | null;
   draft: ExpenseDraft | null;
   preview: { user: unknown; amountMinor: number }[] | null;
+  /** Ordinary entries can be edited while current financial choices wait for this check. */
+  contextCheck?: {
+    status: 'checking' | 'failed' | 'saved';
+    refreshedAt: number | null;
+    saved: boolean;
+    /** Only a new, untouched form's financial defaults follow the accepted Group. */
+    initialize: boolean;
+  };
   status:
     | 'conflict'
     | 'delete-review'
@@ -142,6 +150,12 @@ export interface ExpenseEditor {
   refreshing?: boolean;
 }
 /** Correctable Expense inputs, in the order they appear on screen. */
+export function expenseContextPending(editor: ExpenseEditor, offline: boolean) {
+  const check = editor.contextCheck;
+  // A recovered ordinary draft keeps the editing rules it already had offline. Reconnecting
+  // still waits for the live check, and a new provisional form never invents financial choices.
+  return !!check && !(offline && !check.initialize && check.status !== 'checking');
+}
 export const expenseFields = ['amount', 'description', 'date', 'payers', 'split', 'tag'] as const;
 export type ExpenseField = (typeof expenseFields)[number];
 export type ExpenseFieldErrors = Partial<Record<ExpenseField, string>>;

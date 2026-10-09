@@ -242,6 +242,7 @@ export function AmountDescriptionCard({
 /** Date, Paid by, Split and Tag; each opens its editor. Their corrections follow the grid. */
 export function ExpenseTiles({
   locked,
+  financialLocked = locked,
   errors,
   values,
   correction,
@@ -249,6 +250,7 @@ export function ExpenseTiles({
   onOpen,
 }: {
   locked: boolean;
+  financialLocked?: boolean;
   errors: Partial<Record<'date' | 'payers' | 'split' | 'tag', string>>;
   values: {
     date: ReturnType<typeof expenseDateLabel>;
@@ -279,7 +281,7 @@ export function ExpenseTiles({
           label="Paid by"
           value={values.payers}
           error={errors.payers}
-          locked={locked}
+          locked={financialLocked}
           onPress={() => onOpen('payers')}
         />
         <SelectorTile
@@ -287,7 +289,7 @@ export function ExpenseTiles({
           label="Split"
           value={values.split}
           error={errors.split}
-          locked={locked}
+          locked={financialLocked}
           onPress={() => onOpen('split')}
         />
         <SelectorTile
@@ -296,7 +298,7 @@ export function ExpenseTiles({
           value={values.tag}
           required
           error={errors.tag}
-          locked={locked}
+          locked={financialLocked}
           onPress={() => onOpen('tag')}
         />
       </TileGrid>
@@ -728,10 +730,12 @@ export function WhatsDifferent({
 export function OptionalDetails({
   draft,
   locked,
+  categoryLocked = locked,
   onChange,
 }: {
   draft: ExpenseDraft;
   locked: boolean;
+  categoryLocked?: boolean;
   onChange: (patch: Partial<ExpenseDraft>) => void;
 }) {
   const theme = useTheme();
@@ -772,7 +776,8 @@ export function OptionalDetails({
                 role="radio"
                 label={category.label}
                 selected={draft.category === category.id}
-                onPress={() => !locked && onChange({ category: category.id })}
+                disabled={categoryLocked}
+                onPress={() => !categoryLocked && onChange({ category: category.id })}
               />
             ))}
           </View>

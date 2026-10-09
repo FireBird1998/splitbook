@@ -37,6 +37,7 @@ import {
   buildExpenseBody,
   buildExpensePatch,
   expenseCorrectionSummary,
+  expenseContextPending,
   expenseDraftChanged,
   expenseFields,
   parseCreatedExpenseId,
@@ -1081,6 +1082,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       read: (groupId, owner, options) => groupQueries.readGroup(groupId, owner, options),
     },
     checkSession: (owner) => checkSession(owner),
+    contextChecked: (context) => acceptExpenseOpening(context),
+    contextFailed: (error) => failExpenseOpening(error),
     refused: (groupId, error) => refuseExpenseGroup(groupId, error),
     missingLedger: (groupId, owner) => missingLedger(groupId, owner),
     gone: () => {
@@ -2366,6 +2369,139 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     };
   };
 
+  const requireExpenseAccess = (context: ExpenseContext, groupId: string, accountId: string) => {
+    if (context.group.id !== groupId)
+      throw new RequestError('The server returned a different Group. Please retry.', 500);
+    if (!context.group.members.some((member) => member.user.id === accountId))
+      throw new RequestError('You no longer have access to this Group.', 403);
+  };
+  const blankExpense = (
+    context: ExpenseContext,
+    accountId: string,
+    month: string | null,
+  ): ExpenseDraft => ({
+    amount: '',
+    currency: context.group.defaultCurrency,
+    description: '',
+    date: toDateParam(
+      month && month < currentMonthKey(new Date(now()))
+        ? new Date(getLocalMonthIsoRange(month).dateTo)
+        : new Date(now()),
+    ),
+    payerId: accountId,
+    multiPayer: false,
+    payers: [],
+    splitMethod: 'equal',
+    splitValues: {},
+    participantIds: context.group.members.map((member) => member.user.id),
+    category: 'other',
+    tagId: '',
+    notes: '',
+  });
+  const failExpenseOpening = (error: unknown) => {
+    const editor = snapshot.expense;
+    if (
+      !editor.contextCheck ||
+      snapshot.screen !== 'expense' ||
+      editor.accessLost ||
+      error instanceof Superseded
+    )
+      return;
+    publish({
+      ...snapshot,
+      expense: {
+        ...editor,
+        preview: null,
+        status: editor.draft ? editor.status : 'blocked',
+        contextCheck: { ...editor.contextCheck, status: 'failed' },
+        message: expenseFailureMessage(
+          error,
+          'Could not check this Group. Your entries are kept. Please retry.',
+        ),
+      },
+    });
+  };
+  const acceptExpenseOpening = async (context: ExpenseContext) => {
+    const editor = snapshot.expense;
+    if (snapshot.screen !== 'expense' || editor.status === 'saving' || editor.accessLost) return;
+    const check = editor.contextCheck;
+    if (!check) return publish({ ...snapshot, expense: { ...editor, context } });
+    const envelope = queryClient.getQueryData<Envelope>(groupKey(account(), editor.groupId!));
+    const saved = envelope?.source === 'saved';
+    const defaults =
+      check.initialize && snapshot.auth.user
+        ? blankExpense(context, snapshot.auth.user.id, snapshot.financial.month)
+        : null;
+    const blank =
+      defaults && editor.blank
+        ? {
+            ...editor.blank,
+            currency: defaults.currency,
+            payerId: defaults.payerId,
+            participantIds: defaults.participantIds,
+          }
+        : (defaults ?? editor.blank);
+    const draft =
+      editor.draft && check.initialize && blank
+        ? {
+            ...editor.draft,
+            payerId: blank.payerId,
+            participantIds: blank.participantIds,
+            // A typed amount keeps its currency until the member explicitly reviews it.
+            currency: editor.draft.amount ? editor.draft.currency : blank.currency,
+          }
+        : editor.draft;
+    publish({
+      ...snapshot,
+      expense: {
+        ...editor,
+        context,
+        blank,
+        contextCheck: saved
+          ? {
+              ...check,
+              status: 'saved',
+              saved: true,
+              refreshedAt: envelope?.refreshedAt ?? check.refreshedAt,
+            }
+          : undefined,
+        message: check.status === 'failed' ? null : editor.message,
+        preview: saved ? null : draft ? previewExpense(draft) : null,
+      },
+    });
+    // The existing strict draft queue stores reconciled defaults with the latest ordinary entries.
+    if (draft && draft !== editor.draft) await updateExpenseDraft(draft);
+  };
+  const checkExpenseOpening = async (owner: number, wanted: () => boolean) => {
+    const groupId = snapshot.expense.groupId!;
+    const view = route;
+    try {
+      const context = parseExpenseContext(await expenseQueries.group(owner, { wanted }));
+      if (!current(owner) || !wanted()) return;
+      requireExpenseAccess(context, groupId, snapshot.auth.user!.id);
+      // A cold open has no currency or members to invent: only now can its blank exist.
+      if (!snapshot.expense.draft && snapshot.auth.user) {
+        const blank = blankExpense(context, snapshot.auth.user.id, snapshot.financial.month);
+        publish({
+          ...snapshot,
+          expense: { ...snapshot.expense, draft: blank, blank, status: 'editing' },
+        });
+      }
+      expenseQueries.check();
+      await acceptExpenseOpening(context);
+    } catch (error) {
+      const denied = error instanceof RequestError && [403, 404].includes(error.status);
+      if (
+        !current(owner) ||
+        view !== route ||
+        (!denied && !wanted()) ||
+        error instanceof Superseded
+      )
+        return;
+      if (denied) refuseExpenseGroup(groupId, error);
+      else failExpenseOpening(error);
+    }
+  };
   const openExpense = async (
     groupId: string,
     expenseId?: string,
@@ -2436,6 +2572,50 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         : await lease.write(() => dependencies.expenseDrafts!.load(accountId, groupId));
       let record = stored === null ? null : parseStoredExpenseDraft(stored, accountId, groupId);
       if (!showing()) return;
+      if (!expenseId && !record?.draft.original) {
+        if (
+          record &&
+          !record.attempt &&
+          !record.mutation &&
+          !expenseDraftChanged(record.draft, record.blank)
+        ) {
+          await lease.write(() => dependencies.expenseDrafts!.remove(accountId, groupId));
+          if (!showing()) return;
+          record = null;
+        }
+        const envelope = queryClient.getQueryData<Envelope>(groupKey(account(), groupId));
+        const context = envelope ? parseExpenseContext(envelope.value) : null;
+        const blank = context ? blankExpense(context, accountId, month) : null;
+        const draft = record?.draft ?? blank;
+        const verified = verifiedGroup(groupId);
+        publish({
+          ...snapshot,
+          expense: {
+            ...snapshot.expense,
+            context,
+            draft,
+            blank: record ? record.blank : blank,
+            status: record ? 'resume' : draft ? 'editing' : 'loading',
+            attempt: record?.attempt ?? null,
+            attemptRejected: !!record?.attempt && record.attemptRejected,
+            mutation: record?.mutation ?? null,
+            preview: verified && draft ? previewExpense(draft) : null,
+            contextCheck: verified
+              ? undefined
+              : {
+                  status: 'checking',
+                  refreshedAt: envelope?.refreshedAt ?? null,
+                  saved: envelope?.source === 'saved',
+                  initialize: !record,
+                },
+          },
+        });
+        if (verified) {
+          expenseQueries.check();
+          return;
+        }
+        return await checkExpenseOpening(owner, wanted);
+      }
       // Another saved Expense opens read-only beside an ordinary draft. An unconfirmed save,
       // and a draft editing this same Expense, still come first.
       let held =
@@ -2478,29 +2658,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       known = !!reading && showing() && (await expenseQueries.known(owner, held));
       const context = parseExpenseContext(await checking);
       if (!showing()) return;
-      if (context.group.id !== groupId)
-        throw new RequestError('The server returned a different Group. Please retry.', 500);
-      if (!context.group.members.some((member) => member.user.id === accountId))
-        throw new RequestError('You no longer have access to this Group.', 403);
-      const blank: ExpenseDraft = {
-        amount: '',
-        currency: context.group.defaultCurrency,
-        description: '',
-        date: toDateParam(
-          month && month < currentMonthKey(new Date(now()))
-            ? new Date(getLocalMonthIsoRange(month).dateTo)
-            : new Date(now()),
-        ),
-        payerId: accountId,
-        multiPayer: false,
-        payers: [],
-        splitMethod: 'equal',
-        splitValues: {},
-        participantIds: context.group.members.map((member) => member.user.id),
-        category: 'other',
-        tagId: '',
-        notes: '',
-      };
+      requireExpenseAccess(context, groupId, accountId);
+      const blank = blankExpense(context, accountId, month);
       // Earlier versions stored drafts that changed nothing; one would still hold the Group.
       // A new draft is compared with the start stored with it, not today's blank form, and
       // is kept when that start is unknown.
@@ -2677,6 +2836,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !snapshot.expense.draft
     )
       return;
+    if (expenseContextPending(snapshot.expense, snapshot.offline.active)) {
+      const { amount, description, date, notes } = patch;
+      patch = {
+        ...(amount !== undefined ? { amount } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(date !== undefined ? { date } : {}),
+        ...(notes !== undefined ? { notes } : {}),
+      };
+    }
     const lease = accountStorage();
     const storage = dependencies.expenseDrafts;
     if (!lease || !storage) return;
@@ -2703,7 +2871,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       expense: {
         ...snapshot.expense,
         draft,
-        preview: previewExpense(draft),
+        preview: expenseContextPending(snapshot.expense, snapshot.offline.active)
+          ? null
+          : previewExpense(draft),
         persistence: 'saving',
         message: null,
         validation: revalidateExpense(snapshot.expense.validation, draft, snapshot.expense.context),
@@ -3396,6 +3566,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       editor.status !== (kind === 'delete' ? 'delete-review' : 'editing') ||
       // Saving and deleting need a connection; the form and the confirmation say so.
       snapshot.offline.active ||
+      !!editor.contextCheck ||
       editor.persistence === 'error' ||
       !original ||
       !draft ||
@@ -3579,6 +3750,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.screen !== 'expense' ||
       // Saving needs a connection; the form says so.
       snapshot.offline.active ||
+      !!editor.contextCheck ||
       // An unconfirmed save is finished from where it reopens, without resuming it first.
       !(
         editor.status === 'editing' ||
@@ -5634,6 +5806,27 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     )
       return;
     const { groupId, draft, status, requestedExpenseId } = snapshot.expense;
+    if (!reuse && groupId && snapshot.expense.contextCheck) {
+      if (snapshot.expense.contextCheck.status === 'checking') return;
+      const owner = generation,
+        view = route;
+      const owns = queryOwner(queryClient, groupKey(account(), groupId));
+      publish({
+        ...snapshot,
+        expense: {
+          ...snapshot.expense,
+          contextCheck: { ...snapshot.expense.contextCheck, status: 'checking' },
+        },
+      });
+      try {
+        await checkSession(owner);
+        if (!current(owner) || view !== route || !owns()) return;
+        return await checkExpenseOpening(owner, () => view === route && owns());
+      } catch (error) {
+        if (current(owner) && view === route && owns()) failExpenseOpening(error);
+      }
+      return;
+    }
     if (!reuse && groupId && !draft && status === 'blocked')
       return openExpense(groupId, requestedExpenseId ?? undefined);
     await (reuse ? expenseQueries.settle() : expenseQueries.retry());

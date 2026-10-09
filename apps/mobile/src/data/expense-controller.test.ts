@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { toDateParam } from '@splitbook/shared/date';
 import { gatewayReply, hangUntilAborted, manualTimer } from '../test-utils/transport-faults';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 import { resolveDraftReview, type ExpenseDraft, type ExpenseField } from './expense-draft';
 import { createMobileController, type MobileController } from './mobile-controller';
 import type {
@@ -9,6 +10,7 @@ import type {
   MobileSnapshot,
   MobileTimer,
   CredentialStore,
+  MobileDependencies,
 } from './types';
 
 const memberIds = [
@@ -54,6 +56,7 @@ function setup(
     newSubmissionKey?: () => string;
     timer?: MobileTimer;
     pendingInvitation?: CredentialStore;
+    savedQueries?: MobileDependencies['savedQueries'];
   } = {},
 ) {
   let cookie: string | null = null;
@@ -157,6 +160,7 @@ function setup(
         now: () => now,
         newSubmissionKey: options.newSubmissionKey ?? (() => 'native-expense-test-0001'),
         timer: options.timer,
+        savedQueries: options.savedQueries,
       },
     );
   return { create, controller: create(), drafts, records };
@@ -197,6 +201,376 @@ const savedExpense = {
 };
 
 describe('native Expense creation and editing', () => {
+  it.each([403, 404, 'missing member'] as const)(
+    'blocks retained entries when the held Group check refuses access (%s)',
+    async (refusal) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      let hold = false,
+        checking = false,
+        posts = 0;
+      let release: () => void = () => undefined;
+      let opening: Promise<void> | undefined;
+      try {
+        const { controller, records } = setup((path, init) => {
+          if (path.endsWith('/expenses') && init.method === 'POST') posts += 1;
+          if (hold && path === `/api/groups/${groupId}`)
+            return new Promise((resolve) => {
+              checking = true;
+              release = () =>
+                resolve(
+                  refusal === 'missing member'
+                    ? json({ status: 200, data: { ...group, members: group.members.slice(1) } })
+                    : json({ error: 'Group access lost', status: refusal }, refusal),
+                );
+            });
+        });
+        await controller.signIn('alex');
+        await controller.openGroup(groupId);
+        vi.setSystemTime(Date.now() + 31_000);
+        hold = true;
+        opening = controller.openExpense(groupId);
+        await vi.waitFor(() => expect(checking).toBe(true));
+        await controller.updateExpenseDraft({
+          description: 'Retained on refusal',
+          amount: '10.01',
+        });
+        release();
+        await opening;
+        expect(controller.getSnapshot().expense).toMatchObject({
+          status: 'blocked',
+          context: null,
+          accessLost: true,
+          draft: { description: 'Retained on refusal', amount: '10.01' },
+        });
+        await controller.updateExpenseDraft({ description: 'Do not edit blocked entries' });
+        await controller.saveExpense();
+        expect(posts).toBe(0);
+        expect([...records.values()][0]).toMatchObject({
+          draft: { description: 'Retained on refusal' },
+        });
+        await controller.closeExpense();
+        expect(records.size).toBe(0);
+      } finally {
+        release();
+        await opening;
+        vi.useRealTimers();
+      }
+    },
+  );
+  it('keeps a restored Group’s original check time and draft while reconnecting without sending', async () => {
+    const copies = new Map<string, unknown>();
+    let offline = false,
+      held = false,
+      reads = 0,
+      posts = 0;
+    let release: () => void = () => undefined;
+    const { controller, create } = setup(
+      (path, init) => {
+        if (path.endsWith('/expenses') && init.method === 'POST') posts += 1;
+        if (path === `/api/groups/${groupId}`) {
+          if (offline) return Promise.reject(new Error('Offline'));
+          if (held)
+            return new Promise((resolve) => {
+              reads += 1;
+              release = () => resolve(json({ status: 200, data: group }));
+            });
+        }
+      },
+      { savedQueries: savedQueriesIn(copies) },
+    );
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ amount: '24.01', description: 'A saved draft', tagId });
+    await vi.waitFor(() => expect(copies.has(memberIds[0] + `/api/groups/${groupId}`)).toBe(true));
+    const row = copies.get(memberIds[0] + `/api/groups/${groupId}`);
+    offline = true;
+    const restarted = create();
+    await restarted.restore();
+    await restarted.openExpense(groupId);
+    expect(restarted.getSnapshot().expense.contextCheck).toMatchObject({
+      status: 'saved',
+      saved: true,
+    });
+    expect(row).toMatchObject({
+      refreshedAt: restarted.getSnapshot().expense.contextCheck?.refreshedAt,
+    });
+    restarted.resumeExpenseDraft();
+    await restarted.updateExpenseDraft({ notes: 'Offline notes' });
+    await restarted.updateExpenseDraft({
+      payerId: memberIds[1],
+      participantIds: memberIds.slice(0, 2),
+      splitMethod: 'shares',
+      splitValues: { [memberIds[0]]: '1', [memberIds[1]]: '2' },
+      category: 'food',
+    });
+    expect(restarted.getSnapshot().expense.draft).toMatchObject({
+      payerId: memberIds[1],
+      participantIds: memberIds.slice(0, 2),
+      splitMethod: 'shares',
+      category: 'food',
+    });
+    await restarted.saveExpense();
+    expect(posts).toBe(0);
+    offline = false;
+    held = true;
+    const retrying = restarted.refresh();
+    await vi.waitFor(() => expect(reads).toBe(1));
+    expect(restarted.getSnapshot().expense.contextCheck?.status).toBe('checking');
+    await restarted.updateExpenseDraft({ description: 'Typing while reconnecting' });
+    release();
+    await retrying;
+    expect(restarted.getSnapshot().expense.contextCheck).toBeUndefined();
+    expect(restarted.getSnapshot().expense.draft).toMatchObject({
+      amount: '24.01',
+      notes: 'Offline notes',
+      description: 'Typing while reconnecting',
+      tagId,
+    });
+    expect(posts).toBe(0);
+  });
+  it('resolves recovery before exposing entries, then keeps a resumed draft through verification', async () => {
+    let hold = false;
+    let release: () => void = () => undefined;
+    const { controller, records, drafts } = setup((path) => {
+      if (hold && path === `/api/groups/${groupId}`)
+        return new Promise((resolve) => {
+          release = () =>
+            resolve(json({ status: 200, data: { ...group, members: group.members.slice(0, 2) } }));
+        });
+    });
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({
+      description: 'My recovered entries',
+      amount: '14.01',
+      tagId,
+    });
+    await controller.closeExpense();
+    let restore: () => void = () => undefined;
+    const load = drafts.load;
+    drafts.load = async (accountId, id) => {
+      await new Promise<void>((resolve) => {
+        restore = resolve;
+      });
+      return load(accountId, id);
+    };
+    // Expire only the network read, not the recovery data.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    let opening: Promise<void> | undefined;
+    try {
+      vi.setSystemTime(Date.now() + 31_000);
+      hold = true;
+      opening = controller.openExpense(groupId);
+      await vi.waitFor(() => expect(controller.getSnapshot().screen).toBe('expense'));
+      expect(controller.getSnapshot().expense.draft).toBeNull();
+      await controller.updateExpenseDraft({ description: 'Do not replace recovery' });
+      restore();
+      await vi.waitFor(() => expect(controller.getSnapshot().expense.status).toBe('resume'));
+      expect(controller.getSnapshot().expense.draft?.description).toBe('My recovered entries');
+      controller.resumeExpenseDraft();
+      await controller.updateExpenseDraft({
+        description: 'Resumed while checking',
+        notes: 'Still mine',
+      });
+      release();
+      await opening;
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'editing',
+        draft: {
+          amount: '14.01',
+          description: 'Resumed while checking',
+          notes: 'Still mine',
+          participantIds: memberIds,
+          tagId,
+        },
+      });
+      // Existing choices are retained for review, unlike an untouched new form's defaults.
+      expect(controller.getSnapshot().expense.context?.group.members).toHaveLength(2);
+      expect([...records.values()][0]).toMatchObject({
+        draft: { description: 'Resumed while checking' },
+      });
+    } finally {
+      restore();
+      release();
+      await opening;
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not reopen or replace a newer task when a held check answers after Back', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    let hold = false;
+    let release: () => void = () => undefined;
+    let checking = false;
+    let opening: Promise<void> | undefined;
+    try {
+      const { controller, records } = setup((path) => {
+        if (hold && path === `/api/groups/${groupId}`)
+          return new Promise((resolve) => {
+            checking = true;
+            release = () => resolve(json({ status: 200, data: group }));
+          });
+      });
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      vi.setSystemTime(Date.now() + 31_000);
+      hold = true;
+      opening = controller.openExpense(groupId);
+      await vi.waitFor(() => expect(checking).toBe(true));
+      await controller.updateExpenseDraft({ description: 'Kept before Back' });
+      const closing = controller.closeExpense();
+      await vi.waitFor(() => expect(controller.getSnapshot().screen).toBe('group'));
+      expect(controller.getSnapshot().screen).toBe('group');
+      release();
+      await Promise.all([opening, closing]);
+      expect(controller.getSnapshot().screen).toBe('group');
+      expect([...records.values()][0]).toMatchObject({
+        draft: { description: 'Kept before Back' },
+      });
+    } finally {
+      release();
+      await opening;
+      vi.useRealTimers();
+    }
+  });
+  it('preserves a typed amount and its currency across a failed check and Retry', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    let hold = false;
+    let reads = 0;
+    let release: () => void = () => undefined;
+    let opening: Promise<void> | undefined;
+    let retrying: Promise<void> | undefined;
+    try {
+      const { controller, records } = setup((path) => {
+        if (path !== `/api/groups/${groupId}` || !hold) return;
+        reads += 1;
+        return new Promise((resolve) => {
+          release = () =>
+            resolve(
+              json({
+                status: 200,
+                data:
+                  reads === 1
+                    ? { ...group, _id: 'a00000000000000000000099' }
+                    : { ...group, defaultCurrency: 'USD', members: group.members.slice(0, 2) },
+              }),
+            );
+        });
+      });
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      vi.setSystemTime(Date.now() + 31_000);
+      hold = true;
+      opening = controller.openExpense(groupId);
+      await vi.waitFor(() => expect(reads).toBe(1));
+      await controller.updateExpenseDraft({
+        amount: '12.34',
+        description: 'Keep my amount',
+        notes: 'Keep my notes',
+      });
+      await controller.updateExpenseDraft({
+        currency: 'USD',
+        participantIds: [memberIds[2]],
+        tagId,
+      });
+      expect(controller.getSnapshot().expense.draft).toMatchObject({
+        currency: 'INR',
+        participantIds: memberIds,
+        tagId: '',
+      });
+      expect(controller.getSnapshot().expense.preview).toBeNull();
+      release();
+      await opening;
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'editing',
+        contextCheck: { status: 'failed' },
+      });
+      await controller.updateExpenseDraft({ description: 'Keep these newer entries' });
+      retrying = controller.refresh();
+      await vi.waitFor(() => expect(reads).toBe(2));
+      expect(controller.getSnapshot().expense.draft?.description).toBe('Keep these newer entries');
+      release();
+      await retrying;
+      expect(controller.getSnapshot().expense.contextCheck).toBeUndefined();
+      expect(controller.getSnapshot().expense.draft).toMatchObject({
+        amount: '12.34',
+        currency: 'INR',
+        notes: 'Keep my notes',
+        description: 'Keep these newer entries',
+        participantIds: memberIds.slice(0, 2),
+      });
+      expect([...records.values()][0]).toMatchObject({
+        draft: controller.getSnapshot().expense.draft,
+      });
+      await controller.saveExpense();
+      expect(controller.getSnapshot().expense.validation.errors.amount).toMatch(/currency|USD/i);
+      await controller.updateExpenseDraft({ currency: 'USD' });
+      expect(controller.getSnapshot().expense.draft?.amount).toBe('12.34');
+      expect(controller.getSnapshot().expense.draft?.currency).toBe('USD');
+    } finally {
+      release();
+      await opening;
+      await retrying;
+      vi.useRealTimers();
+    }
+  });
+  it('keeps ordinary entries usable while an expired Group is checked, without sending a save', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    let release = () => {};
+    let opening: Promise<void> | undefined;
+    try {
+      let hold = false;
+      let checking = false;
+      let posts = 0;
+      const { controller } = setup((path, init) => {
+        if (path.endsWith('/expenses') && init.method === 'POST') posts += 1;
+        if (hold && path === `/api/groups/${groupId}`)
+          return new Promise((resolve) => {
+            checking = true;
+            release = () =>
+              resolve(
+                json({ status: 200, data: { ...group, members: group.members.slice(0, 2) } }),
+              );
+          });
+      });
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      vi.setSystemTime(Date.now() + 31_000);
+      hold = true;
+      opening = controller.openExpense(groupId);
+      await vi.waitFor(() => expect(checking).toBe(true));
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'editing',
+        draft: { description: '', amount: '' },
+      });
+      await controller.updateExpenseDraft({
+        description: 'Dinner entered during the check',
+        amount: '12.34',
+        date: '2026-09-27',
+        notes: 'Keep these entries',
+      });
+      await controller.saveExpense();
+      expect(posts).toBe(0);
+      release();
+      await opening;
+      expect(controller.getSnapshot().expense).toMatchObject({
+        status: 'editing',
+        draft: {
+          description: 'Dinner entered during the check',
+          amount: '12.34',
+          date: '2026-09-27',
+          notes: 'Keep these entries',
+          participantIds: memberIds.slice(0, 2),
+        },
+      });
+    } finally {
+      release();
+      await opening;
+      vi.useRealTimers();
+    }
+  });
+
   it('reads an expired Group before opening a new Expense', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     try {
@@ -311,11 +685,17 @@ describe('native Expense creation and editing', () => {
     await vi.waitFor(() => expect(release).toBeTypeOf('function'));
     const opening = controller.openExpense(groupId);
     await vi.waitFor(() => expect(controller.getSnapshot().screen).toBe('expense'));
-    expect(controller.getSnapshot().expense.status).toBe('loading');
+    await vi.waitFor(() => expect(controller.getSnapshot().expense.status).toBe('editing'));
+    expect(controller.getSnapshot().expense.contextCheck?.status).toBe('checking');
+    await controller.updateExpenseDraft({
+      description: 'Joining the existing check',
+      amount: '12.34',
+    });
     expect(reads).toBe(before + 1);
     release();
     await Promise.all([refreshing, opening]);
     expect(controller.getSnapshot().expense.draft?.participantIds).toEqual(memberIds.slice(0, 2));
+    expect(controller.getSnapshot().expense.draft?.description).toBe('Joining the existing check');
   });
 
   it('still checks Group access again when opening a saved Expense over a recent Group', async () => {

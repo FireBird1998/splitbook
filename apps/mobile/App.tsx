@@ -1228,11 +1228,13 @@ function ExpenseScreen({ state }: { state: MobileSnapshot }) {
       onSave={() => void controller.saveExpense()}
       onResume={controller.resumeExpenseDraft}
       onRetry={() =>
-        state.expense.groupId &&
-        void controller.openExpense(
-          state.expense.groupId,
-          state.expense.requestedExpenseId ?? undefined,
-        )
+        state.expense.contextCheck
+          ? void controller.refresh()
+          : state.expense.groupId &&
+            void controller.openExpense(
+              state.expense.groupId,
+              state.expense.requestedExpenseId ?? undefined,
+            )
       }
       onDiscardUnconfirmed={() =>
         Alert.alert(

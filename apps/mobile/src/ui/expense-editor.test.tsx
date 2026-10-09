@@ -1,5 +1,14 @@
 import { useSyncExternalStore, type ReactElement } from 'react';
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
+import { flatten, layoutHeight } from '../test-utils/layout';
+import { setWindow } from '../test-utils/native';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
@@ -8,6 +17,7 @@ import { expenseRecordSchema } from '../data/expense-record';
 import { ExpenseEditor } from './expense-editor';
 import { expenseDateLabel } from './expense-form';
 import { ExpenseRecordView } from './expense-record-view';
+import { OfflineNotice } from './offline-notice';
 
 const { AccessibilityInfo } = await import('react-native');
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -67,6 +77,7 @@ function backend({
   losePatch = false,
   refuseRetries = false,
   holdCreate,
+  readGroup,
 }: {
   record?: Record<string, unknown>;
   /** Loses every create response, or only this many. */
@@ -79,6 +90,7 @@ function backend({
   refuseRetries?: boolean;
   /** Creates wait for this before they're answered, so a save stays in flight. */
   holdCreate?: Promise<void>;
+  readGroup?: () => Promise<FetchResponse>;
 } = {}) {
   const writes: string[] = [];
   const submissions: { key: string | null; body: string }[] = [];
@@ -104,7 +116,8 @@ function backend({
       return json({ user: alex }, 200, 'better-auth.session_token=alex.signature; Max-Age=2592000');
     if (path.endsWith('/get-session'))
       return json({ user: alex, session: { userId: memberId, expiresAt: '2030-01-01T00:00:00Z' } });
-    if (path === `/api/groups/${groupId}`) return json({ data: group, status: 200 });
+    if (path === `/api/groups/${groupId}`)
+      return readGroup ? readGroup() : json({ data: group, status: 200 });
     if (path === `/api/groups/${groupId}/expenses/${expenseId}`) {
       if (init.method === 'PATCH') {
         if (losePatch) throw new Error('The connection dropped before the edit arrived');
@@ -162,6 +175,7 @@ function backend({
         },
       },
       expenseDrafts: drafts,
+      savedQueries: savedQueriesIn(new Map()),
       accountLocal: {
         owner: {
           load: async () => account,
@@ -200,6 +214,9 @@ function EditorScreen({
   return (
     <ExpenseEditor
       state={state.expense}
+      offline={state.offline.active}
+      notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
+      emptyNotice={<OfflineNotice state={state.offline} savedShown={false} />}
       currentUserId={memberId}
       onClose={calls.close}
       onChange={(patch) => void controller.updateExpenseDraft(patch)}
@@ -303,6 +320,58 @@ async function render(
 }
 
 const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
+/** Estimated vertical input position in the rendered layout; native QA checks real bounds too. */
+const inputTop = (
+  node: ReactTestRendererJSON | string | null,
+  label: string,
+  scale: number,
+): number | null => {
+  if (!node || typeof node === 'string') return null;
+  if (node.type === 'TextInput' && node.props.accessibilityLabel === label) return 0;
+  const style = flatten(node.props.style);
+  let before = Number(style.paddingTop ?? style.paddingVertical ?? style.padding ?? 0);
+  for (const child of node.children ?? []) {
+    const within = inputTop(child, label, scale);
+    if (within !== null) return before + within;
+    if (style.flexDirection !== 'row')
+      before += layoutHeight(child, scale, 360) + Number(style.gap ?? 0);
+  }
+  return null;
+};
+
+/** Native layout events measure content independently of the ScrollView's clamped offset. */
+async function measureForm(scale: number) {
+  const visit = (node: ReactTestRendererJSON | string | null) => {
+    if (!node || typeof node === 'string') return;
+    node.children?.forEach(visit);
+    if (typeof node.props.onLayout === 'function')
+      node.props.onLayout({
+        nativeEvent: { layout: { x: 0, y: 0, width: 360, height: layoutHeight(node, scale, 360) } },
+      });
+  };
+  await act(async () => {
+    const tree = screen!.toJSON();
+    if (Array.isArray(tree)) tree.forEach(visit);
+    else visit(tree);
+  });
+}
+
+/** Android's maximum scroll offset is content height minus the available viewport height. */
+function scrollExtent(scale: number) {
+  const tree = screen!.toJSON();
+  const frame = Array.isArray(tree) ? tree[0]! : tree!;
+  const children = frame.children!.filter(
+    (child): child is ReactTestRendererJSON => typeof child !== 'string',
+  );
+  const scroll = children.find((child) => child.type === 'ScrollView')!;
+  const content = layoutHeight(
+    { ...scroll, type: 'View', props: { style: scroll.props.contentContainerStyle } },
+    scale,
+    360,
+  );
+  const footer = layoutHeight(children[children.length - 1], scale, 360);
+  return { content, footer, maximum: content - (640 - footer) };
+}
 /** The section that owns this input: the largest ancestor holding no other input. */
 const fieldOf = (input: ReactTestInstance) => {
   const inputs = (node: ReactTestInstance) =>
@@ -932,6 +1001,139 @@ describe('rendered edit history', () => {
 });
 
 describe('compact Expense form', () => {
+  it.each([1, 1.3])(
+    'keeps editable input positions when the saved-copy offline notice clears at %sx text',
+    async (scale) => {
+      setWindow({ fontScale: scale });
+      let disconnected = false;
+      let held = false;
+      let release: () => void = () => undefined;
+      let refreshing: Promise<void> | undefined;
+      try {
+        const form = await render((controller) => controller.openExpense(groupId), {
+          readGroup: () => {
+            if (disconnected) return Promise.reject(new Error('Offline'));
+            return held
+              ? new Promise((resolve) => {
+                  release = () => resolve(json({ status: 200, data: group }));
+                })
+              : Promise.resolve(json({ status: 200, data: group }));
+          },
+        });
+        await form.type('Amount, required', '12.34');
+        await form.type('Description, required', 'Saved dinner');
+        await form.press('Category and notes, optional');
+        await form.type('Notes', 'Keep this note');
+        disconnected = true;
+        await act(async () => form.controller.refresh());
+        expect(form.controller.getSnapshot().offline.active).toBe(true);
+        expect(text(form.root())).toContain('You’re offline');
+        await measureForm(scale);
+        const offlineExtent = scrollExtent(scale);
+        const labels = ['Amount, required', 'Description, required', 'Notes'];
+        const inputs = labels.map(form.input);
+        const positions = () => {
+          const layout = screen!.toJSON();
+          return labels.map((label) =>
+            inputTop(Array.isArray(layout) ? (layout[0] ?? null) : layout, label, scale),
+          );
+        };
+        const before = positions();
+        expect(before.every((top) => top !== null)).toBe(true);
+        disconnected = false;
+        held = true;
+        await act(async () => {
+          refreshing = form.controller.refresh();
+        });
+        await settle();
+        await form.type('Description, required', 'Typing while reconnecting');
+        await act(async () => {
+          release();
+          await refreshing;
+        });
+        expect(form.controller.getSnapshot().offline.active).toBe(false);
+        expect(text(form.root())).not.toContain('You’re offline');
+        await measureForm(scale);
+        const onlineExtent = scrollExtent(scale);
+        // Keeping content coordinates alone is insufficient: Android must not clamp a
+        // still-focused Notes field down when notices or Save's explanation disappear.
+        expect(onlineExtent.content).toBeGreaterThanOrEqual(offlineExtent.content);
+        expect(onlineExtent.footer).toBeGreaterThanOrEqual(offlineExtent.footer);
+        expect(onlineExtent.maximum).toBeGreaterThanOrEqual(offlineExtent.maximum);
+        expect(labels.map(form.input)).toEqual(inputs);
+        expect(positions()).toEqual(before);
+        expect(form.input('Description, required').props.value).toBe('Typing while reconnecting');
+        expect(form.input('Notes').props.value).toBe('Keep this note');
+        expect(form.writes).toEqual([]);
+      } finally {
+        release();
+        await refreshing;
+        setWindow({ fontScale: 1 });
+      }
+    },
+  );
+  it.each([1, 1.3])(
+    'keeps input identity and position while the Group is checked at %sx text',
+    async (scale) => {
+      setWindow({ fontScale: scale });
+      vi.useFakeTimers({ toFake: ['Date'] });
+      let hold = false;
+      let release: () => void = () => undefined;
+      let opening: Promise<void> | undefined;
+      try {
+        const form = await render((controller) => controller.openGroup(groupId), {
+          readGroup: () =>
+            hold
+              ? new Promise((resolve) => {
+                  release = () => resolve(json({ status: 200, data: group }));
+                })
+              : Promise.resolve(json({ status: 200, data: group })),
+        });
+        hold = true;
+        vi.setSystemTime(Date.now() + 31_000);
+        await act(async () => {
+          opening = form.controller.openExpense(groupId);
+        });
+        await settle();
+        const amount = form.input('Amount, required');
+        const description = form.input('Description, required');
+        await form.press('Category and notes, optional');
+        const layout = screen!.toJSON();
+        const labels = ['Amount, required', 'Description, required', 'Notes'];
+        const before = labels.map((label) =>
+          inputTop(Array.isArray(layout) ? (layout[0] ?? null) : layout, label, scale),
+        );
+        expect(before.every((top) => top !== null)).toBe(true);
+        expect(amount.props.editable).toBe(true);
+        expect(form.tile('Date').props.accessibilityState.disabled).toBe(false);
+        for (const label of ['Paid by', 'Split', 'Tag'])
+          expect(form.tile(label).props.accessibilityState.disabled).toBe(true);
+        expect(form.pressable('Save expense').props.accessibilityState.disabled).toBe(true);
+        await form.type('Amount, required', '12.34');
+        await form.type('Description, required', 'Dinner while checking');
+        await act(async () => {
+          release();
+          await opening;
+        });
+        expect(form.input('Amount, required')).toBe(amount);
+        expect(form.input('Description, required')).toBe(description);
+        expect(description.props.value).toBe('Dinner while checking');
+        expect(form.tile('Tag').props.accessibilityState.disabled).toBe(false);
+        expect(form.focusCount('Amount, required')).toBe(0);
+        const ready = screen!.toJSON();
+        expect(
+          labels.map((label) =>
+            inputTop(Array.isArray(ready) ? (ready[0] ?? null) : ready, label, scale),
+          ),
+        ).toEqual(before);
+      } finally {
+        release();
+        await opening;
+        vi.useRealTimers();
+        setWindow({ fontScale: 1 });
+      }
+    },
+  );
   const openSheet = (root: ReactTestInstance, title: string) =>
     root
       .findAll((node) => isHost(node, 'Modal') && node.props.visible === true)

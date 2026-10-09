@@ -392,6 +392,85 @@ async function renderApp() {
 }
 
 describe('App refresh rendering', () => {
+  it('keeps Add expense entries mounted through a failed inline check and Retry', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const checking = hold(),
+      retrying = hold();
+    try {
+      const app = await renderApp();
+      await app.press('Open Maple House');
+      vi.setSystemTime(Date.now() + 31_000);
+      let reads = 0,
+        posts = 0;
+      app.use((path, init) => {
+        if (path.endsWith('/expenses') && init.method === 'POST') posts += 1;
+        if (path === `/api/groups/${groupId}`)
+          return ++reads === 1 ? checking.respond() : retrying.respond();
+      });
+      await app.press('Add expense');
+      await checking.reached;
+      expect(app.text()).toContain('Checking Group');
+      expect(app.progressbars()).toBe(0);
+      const amount = app
+        .root()
+        .find(
+          (node) =>
+            node.props.accessibilityLabel === 'Amount, required' && typeof node.type === 'string',
+        );
+      await app.type('Amount, required', '19.99');
+      await app.type('Description, required', 'Phone beta dinner');
+      expect(app.pressable('Save expense').props.accessibilityState.disabled).toBe(true);
+      checking.release(json({ status: 200, data: { ...group, _id: 'a00000000000000000000099' } }));
+      await settle();
+      expect(app.text()).toContain('Group not checked');
+      await app.press('Retry Group check');
+      await retrying.reached;
+      await app.type('Description, required', 'Dinner corrected during Retry');
+      retrying.release(json({ status: 200, data: group }));
+      await settle();
+      expect(
+        app
+          .root()
+          .find(
+            (node) =>
+              node.props.accessibilityLabel === 'Amount, required' && typeof node.type === 'string',
+          ),
+      ).toBe(amount);
+      expect(amount.props.value).toBe('19.99');
+      expect(app.controller.getSnapshot().expense.draft?.description).toBe(
+        'Dinner corrected during Retry',
+      );
+      expect(app.pressable('Save expense').props.accessibilityState.disabled).toBe(false);
+      expect(reads).toBe(2);
+      expect(posts).toBe(0);
+    } finally {
+      checking.release(json({ status: 200, data: group }));
+      retrying.release(json({ status: 200, data: group }));
+      vi.useRealTimers();
+    }
+  });
+
+  it('uses the Add expense frame and placeholders until a cold Group has a real currency', async () => {
+    const app = await renderApp();
+    const checking = hold();
+    app.use((path) => (path === `/api/groups/${groupId}` ? checking.respond() : undefined));
+    const opening = app.controller.openExpense(groupId);
+    await checking.reached;
+    await settle();
+    expect(app.text()).toContain('Add expense');
+    expect(app.text()).toContain('Amount');
+    expect(app.progressbars()).toBe(0);
+    expect(app.controller.getSnapshot().expense.draft).toBeNull();
+    expect(
+      app
+        .root()
+        .findAll((node) => typeof node.type === 'string' && String(node.type) === 'TextInput'),
+    ).toHaveLength(0);
+    checking.release(json({ status: 200, data: group }));
+    await settle(opening);
+    expect(app.text()).toContain('Add expense');
+    expect(app.controller.getSnapshot().expense.draft?.currency).toBe('INR');
+  });
   it('keeps the newest Month and never lists its Expenses under an older Month label', async () => {
     const app = await renderApp();
     await app.press('Open Maple House');

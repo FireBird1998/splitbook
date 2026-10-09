@@ -14,6 +14,7 @@ import { enteredPayers } from '@splitbook/shared/payer-remainder';
 import {
   draftFromExpense,
   expenseDraftChanged,
+  expenseContextPending,
   expenseFieldLabels,
   expenseFields,
   expenseMoney,
@@ -35,6 +36,8 @@ import {
   IconButton,
   IconTile,
   ListRow,
+  Skeleton,
+  TileGrid,
   TopBar,
   useReveal,
 } from './compact';
@@ -60,6 +63,71 @@ const showsForm = ({ draft, status }: Editor) =>
   !!draft &&
   status !== 'loading' &&
   !(draft.original && ['detail', 'delete-review'].includes(status));
+
+const contextNotices = {
+  checking: {
+    tone: 'info',
+    title: 'Checking Group',
+    message:
+      'You can enter the amount, description, date and notes while current members, Tags and currency are checked. Financial choices and Save wait for this check.',
+  },
+  failed: {
+    tone: 'warning',
+    title: 'Group not checked',
+    message:
+      'Could not verify this Group. Your entries are kept. Retry to unlock financial choices and Save.',
+  },
+  saved: {
+    tone: 'offline',
+    title: 'Saved Group',
+    message: 'Using the saved Group. Connect to verify current financial choices before saving.',
+  },
+} satisfies Record<
+  NonNullable<Editor['contextCheck']>['status'],
+  {
+    tone: 'info' | 'warning' | 'offline';
+    title: string;
+    message: string;
+  }
+>;
+
+/**
+ * Android clamps the scroll offset when notices disappear or the footer gets shorter. Keep
+ * their largest natural height for this task so an already-focused input stays in place.
+ * The inner view measures only its children, never the outer minimum: no layout feedback.
+ */
+function RetainHeight({
+  children,
+  enabled = true,
+  footer = false,
+}: {
+  children: ReactNode;
+  enabled?: boolean;
+  footer?: boolean;
+}) {
+  const [height, setHeight] = useState(0);
+  const theme = useTheme();
+  if (!enabled) return <>{children}</>;
+  return (
+    <View
+      style={{
+        minHeight: height,
+        justifyContent: footer ? 'flex-end' : undefined,
+        backgroundColor: footer ? theme.bgElevated : undefined,
+      }}
+    >
+      <View
+        style={footer ? undefined : { gap: 12 }}
+        onLayout={(event) => {
+          const natural = event.nativeEvent.layout.height;
+          setHeight((before) => Math.max(before, natural));
+        }}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
 
 /**
  * The Expense task, full screen without the Group's bottom navigation: the compact form for
@@ -316,22 +384,25 @@ function ExpenseTask({
   // could be, it only says the phone is offline, and the screen's own Try again stands alone
   // (the loading-state audit, #220).
   const shownNotice = draft && state.status !== 'loading' ? notice : emptyNotice;
+  const newTask = !state.requestedExpenseId && !draft?.original;
   const frame = (body: ReactNode, footer?: ReactNode) => (
     <View style={{ flex: 1, backgroundColor: theme.bg }}>
       <TopBar
         title={
-          !draft || state.status === 'loading' || record
-            ? 'Expense'
-            : draft.original
-              ? 'Edit expense'
-              : 'Add expense'
+          newTask
+            ? 'Add expense'
+            : !draft || state.status === 'loading' || record
+              ? 'Expense'
+              : draft.original
+                ? 'Edit expense'
+                : 'Add expense'
         }
         subtitle={
           context
             ? `${context.group.name} · ${draft?.currency ?? context.group.defaultCurrency}`
             : undefined
         }
-        prominent={!form}
+        prominent={!form && !newTask}
         leading={
           onClose
             ? form
@@ -366,7 +437,7 @@ function ExpenseTask({
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
       >
-        {shownNotice}
+        {newTask && form ? null : shownNotice}
         {state.waitingInvitation ? (
           <Notice
             title="Invitation waiting"
@@ -375,7 +446,7 @@ function ExpenseTask({
         ) : null}
         {body}
       </ScrollView>
-      {footer}
+      {newTask && form && footer ? <RetainHeight footer>{footer}</RetainHeight> : footer}
     </View>
   );
 
@@ -384,17 +455,39 @@ function ExpenseTask({
     return frame(
       opening ? (
         <ExpenseRecordSkeleton label="Opening this Expense…" outline={outline} />
+      ) : !newTask ? (
+        <Loading label={requested ? 'Opening this Expense…' : 'Opening your draft…'} />
       ) : (
-        // Only a draft this phone kept says "draft": a new Expense has none (#334).
-        <Loading
-          label={
-            requested
-              ? 'Opening this Expense…'
-              : draft || kept
-                ? 'Opening your draft…'
-                : 'Opening a new Expense…'
-          }
-        />
+        <View
+          accessibilityLabel={draft || kept ? 'Opening your draft…' : 'Opening a new Expense…'}
+          accessibilityState={{ busy: true }}
+          accessibilityLiveRegion="polite"
+          style={{ gap: 12 }}
+        >
+          <CompactText variant="small" tone="secondary">
+            {draft || kept ? 'Opening your draft…' : 'Opening a new Expense…'}
+          </CompactText>
+          <Card padded>
+            <CompactText variant="small" tone="secondary">
+              Amount
+            </CompactText>
+            <Skeleton width="60%" height={48} />
+            <CompactText variant="small" tone="secondary">
+              Description
+            </CompactText>
+            <Skeleton width="80%" height={48} />
+          </Card>
+          <TileGrid>
+            {['Date', 'Paid by', 'Split', 'Tag'].map((label) => (
+              <Card key={label} padded>
+                <CompactText variant="small" tone="secondary">
+                  {label}
+                </CompactText>
+                <Skeleton width="75%" line="body" />
+              </Card>
+            ))}
+          </TileGrid>
+        </View>
       ),
     );
   if (!draft)
@@ -433,6 +526,11 @@ function ExpenseTask({
       />
     );
   const locked = state.status !== 'editing';
+  const checking = state.contextCheck;
+  const pendingContext = expenseContextPending(state, offline);
+  const financialLocked = locked || pendingContext;
+  const checkNotice = checking ? contextNotices[checking.status] : null;
+  const checkingMessage = checkNotice?.message ?? '';
   const members = context?.group.members.map(({ user }) => user) ?? [];
   const name = (id: string) =>
     members.find((member) => member.id === id)?.name ??
@@ -441,6 +539,7 @@ function ExpenseTask({
       .find((row) => row.user === id)?.name ??
     'Unavailable member';
   const invalidMembers =
+    !checking &&
     context &&
     [
       ...(draft.multiPayer
@@ -451,7 +550,7 @@ function ExpenseTask({
   let allocation: ReturnType<typeof expenseMoney> | null = null;
   let allocationError = '';
   try {
-    allocation = expenseMoney(draft);
+    if (!pendingContext) allocation = expenseMoney(draft);
   } catch (error) {
     allocationError = error instanceof Error ? error.message : 'Review the allocation.';
   }
@@ -466,11 +565,13 @@ function ExpenseTask({
       ? 'Sending this Expense. Keep this screen open until SplitBook confirms it.'
       : offline
         ? savingNeedsConnection
-        : state.persistence === 'error'
-          ? 'Save is unavailable until this draft is stored on this device. Retry saving the draft first.'
-          : draft.review?.length
-            ? 'Choose which version to keep for each change in What’s different first.'
-            : null;
+        : checking
+          ? 'Save waits for current Group verification.'
+          : state.persistence === 'error'
+            ? 'Save is unavailable until this draft is stored on this device. Retry saving the draft first.'
+            : draft.review?.length
+              ? 'Choose which version to keep for each change in What’s different first.'
+              : null;
 
   const invalid = expenseFields.filter((field) => errors[field]);
   const summary = state.validation.submitted && invalid.length > 0;
@@ -606,24 +707,6 @@ function ExpenseTask({
               ))}
             </Banner>
           ) : null}
-          {/* The Group's details are unknown: offline, refused, or not read. Each says which. */}
-          {!context &&
-            (offline ? (
-              <Banner
-                tone="offline"
-                message="Connect to check the current members and Tags. You can still edit your saved text."
-              />
-            ) : (
-              <Banner
-                tone="warning"
-                standing
-                message={
-                  state.status === 'blocked'
-                    ? 'You no longer have access to this Group’s members and Tags. Your draft is kept.'
-                    : 'Couldn’t check the current members and Tags. You can still edit your saved text.'
-                }
-              />
-            ))}
           <AmountDescriptionCard
             draft={draft}
             locked={locked}
@@ -635,28 +718,10 @@ function ExpenseTask({
             onChange={onChange}
             onLeave={onLeaveField}
             onAmountDone={() => inputs.current.description?.focus()}
-          >
-            {!draft.original && context && draft.currency !== context.group.defaultCurrency ? (
-              <View style={{ gap: 6 }}>
-                {!errors.amount && (
-                  <CompactText variant="small" tone="warning" accessibilityRole="alert">
-                    This draft uses {draft.currency}; the Group now uses{' '}
-                    {context.group.defaultCurrency}. Review the amount before choosing the new
-                    currency.
-                  </CompactText>
-                )}
-                <CompactButton
-                  label={`Use ${context.group.defaultCurrency}`}
-                  variant="tonal"
-                  dense
-                  disabled={locked}
-                  onPress={() => onChange({ currency: context.group.defaultCurrency })}
-                />
-              </View>
-            ) : null}
-          </AmountDescriptionCard>
+          ></AmountDescriptionCard>
           <ExpenseTiles
             locked={locked}
+            financialLocked={financialLocked}
             errors={{ ...errors, tag: errors.tag ?? tagReport.error }}
             values={{
               date: expenseDateLabel(draft.date),
@@ -670,55 +735,125 @@ function ExpenseTask({
             section={section}
             onOpen={(tile) => (tile === 'payers' ? setEditor(tile) : setSheet(tile))}
           />
-          {tagNotice ? (
-            <CompactText variant="small" tone="warning" accessibilityRole="alert">
-              {tagNotice}
-            </CompactText>
-          ) : null}
-          {invalidMembers && !errors.payers && !errors.split && (
-            <CompactText variant="small" tone="warning" accessibilityRole="alert">
-              A saved payer or participant is no longer in this Group. Open Paid by or Split to
-              remove unavailable members.
-            </CompactText>
-          )}
-          <WhoOwesWhat
+          <OptionalDetails
             draft={draft}
-            allocation={allocation}
-            problem={
-              errors.amount
-                ? 'Correct the amount to see who owes what.'
-                : draft.amount
-                  ? allocationError
-                  : 'Enter a valid amount to see who owes what.'
-            }
-            name={name}
-            currentUserId={currentUserId}
-            money={money}
+            locked={locked}
+            categoryLocked={financialLocked}
+            onChange={onChange}
           />
-          <OptionalDetails draft={draft} locked={locked} onChange={onChange} />
-          {/* The banners above already say why a save is unconfirmed or in conflict. */}
-          {state.message && !summary && !unconfirmed && !conflict && state.status !== 'resume' && (
-            <CompactText variant="small" accessibilityRole="alert" accessibilityLiveRegion="polite">
-              {state.message}
-            </CompactText>
-          )}
-          {state.persistence === 'error' && !state.attempt && (
-            <Button label="Retry saving draft" secondary onPress={() => onChange({})} />
-          )}
-          {draft.original && !unconfirmed && ['uncertain', 'blocked'].includes(state.status) && (
-            <Button label="Check current Expense" onPress={onReconcile} />
-          )}
-          {unconfirmed && (
-            <CompactText variant="small" tone="secondary">
-              Details are locked until the save is confirmed. Signing out removes recovery
-              information; check Group history before recreating this expense.
-            </CompactText>
-          )}
+          <RetainHeight enabled={newTask}>
+            {newTask ? shownNotice : null}
+            {/* The Group's details are unknown: offline, refused, or not read. Each says which. */}
+            {checking && checkNotice ? (
+              <Banner tone={checkNotice.tone} title={checkNotice.title} message={checkingMessage}>
+                {checking.saved && checking.refreshedAt && (
+                  <CompactText variant="small" tone="secondary">
+                    Saved Group checked {new Date(checking.refreshedAt).toLocaleString()}
+                  </CompactText>
+                )}
+                {checking.status !== 'checking' && (
+                  <CompactButton label="Retry Group check" variant="text" dense onPress={onRetry} />
+                )}
+              </Banner>
+            ) : null}
+            {!context &&
+              !checking &&
+              (offline ? (
+                <Banner
+                  tone="offline"
+                  message="Connect to check the current members and Tags. You can still edit your saved text."
+                />
+              ) : (
+                <Banner
+                  tone="warning"
+                  standing
+                  message={
+                    state.status === 'blocked'
+                      ? 'You no longer have access to this Group’s members and Tags. Your draft is kept.'
+                      : 'Couldn’t check the current members and Tags. You can still edit your saved text.'
+                  }
+                />
+              ))}
+            {!checking &&
+            !draft.original &&
+            context &&
+            draft.currency !== context.group.defaultCurrency ? (
+              <View style={{ gap: 6 }}>
+                {!errors.amount && (
+                  <CompactText variant="small" tone="warning" accessibilityRole="alert">
+                    This draft uses {draft.currency}; the Group now uses{' '}
+                    {context.group.defaultCurrency}. Review the amount before choosing the new
+                    currency.
+                  </CompactText>
+                )}
+                <CompactButton
+                  label={`Use ${context.group.defaultCurrency}`}
+                  variant="tonal"
+                  dense
+                  disabled={financialLocked}
+                  onPress={() => onChange({ currency: context.group.defaultCurrency })}
+                />
+              </View>
+            ) : null}
+            {tagNotice ? (
+              <CompactText variant="small" tone="warning" accessibilityRole="alert">
+                {tagNotice}
+              </CompactText>
+            ) : null}
+            {invalidMembers && !errors.payers && !errors.split && (
+              <CompactText variant="small" tone="warning" accessibilityRole="alert">
+                A saved payer or participant is no longer in this Group. Open Paid by or Split to
+                remove unavailable members.
+              </CompactText>
+            )}
+            {!pendingContext && (
+              <WhoOwesWhat
+                draft={draft}
+                allocation={allocation}
+                problem={
+                  errors.amount
+                    ? 'Correct the amount to see who owes what.'
+                    : draft.amount
+                      ? allocationError
+                      : 'Enter a valid amount to see who owes what.'
+                }
+                name={name}
+                currentUserId={currentUserId}
+                money={money}
+              />
+            )}
+            {/* The banners above already say why a save is unconfirmed or in conflict. */}
+            {state.message &&
+              !summary &&
+              !unconfirmed &&
+              !conflict &&
+              state.status !== 'resume' && (
+                <CompactText
+                  variant="small"
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="polite"
+                >
+                  {state.message}
+                </CompactText>
+              )}
+            {state.persistence === 'error' && !state.attempt && (
+              <Button label="Retry saving draft" secondary onPress={() => onChange({})} />
+            )}
+            {draft.original && !unconfirmed && ['uncertain', 'blocked'].includes(state.status) && (
+              <Button label="Check current Expense" onPress={onReconcile} />
+            )}
+            {unconfirmed && (
+              <CompactText variant="small" tone="secondary">
+                Details are locked until the save is confirmed. Signing out removes recovery
+                information; check Group history before recreating this expense.
+              </CompactText>
+            )}
+          </RetainHeight>
         </>,
         unconfirmed ? (
           <SaveBar
             label={state.attempt ? 'Check and finish saving' : 'Check the saved Expense'}
-            blocked={offline ? 'Checking needs a connection.' : null}
+            blocked={checking ? checkingMessage : offline ? 'Checking needs a connection.' : null}
             onSave={state.attempt ? onSave : onReconcile}
             secondary={onClose && { label: 'Keep for later', onPress: onClose }}
           />
@@ -764,7 +899,7 @@ function ExpenseTask({
         draft={draft}
         members={context ? members : null}
         currentUserId={currentUserId}
-        locked={locked}
+        locked={financialLocked}
         persistence={state.persistence}
         name={name}
         money={money}
@@ -780,7 +915,7 @@ function ExpenseTask({
         tagId={draft.tagId}
         error={tagReport.error}
         notice={tagNotice}
-        locked={locked}
+        locked={financialLocked}
         onChoose={(tagId) => {
           onChange({ tagId });
           setSheet(null);
@@ -812,7 +947,7 @@ function ExpenseTask({
         draft={draft}
         members={context ? members : null}
         currentUserId={currentUserId}
-        locked={locked}
+        locked={financialLocked}
         persistence={state.persistence}
         name={name}
         onChange={onChange}
