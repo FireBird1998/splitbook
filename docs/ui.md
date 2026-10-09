@@ -230,6 +230,41 @@ The shortcut is never taken while the member is typing in another field. A Group
 result opens `/groups/[id]`, and a person opens the first Group shared with them. An
 Expense opens `/groups/[id]/expenses?search=…`, which fills the Expense list's search.
 
+### Keyboard shortcuts (`src/lib/shortcuts/`, `src/components/shortcuts/`)
+
+One table, `SHORTCUTS` in `lib/shortcuts/shortcuts.ts`, drives both what each key does
+and the hints that show it (#322). `ShortcutsProvider` (in the signed-in layout) holds the
+member's setting and one listener for the page's keys; components register a handler with
+`useShortcut(id, handler)`.
+
+| Keys       | Where             | Does                                                     |
+| ---------- | ----------------- | -------------------------------------------------------- |
+| N          | Any page          | Add expense, exactly as the top bar's button             |
+| /          | Any page          | Focuses the Group's Expense search (see below)           |
+| ⌘K, Ctrl+K | Any page          | Opens search across Groups (#321)                        |
+| J, K       | The focused table | Move focus to the next or previous Expense's button      |
+| Enter      | The focused table | The button's own: opens its Expense in the side panel    |
+| E          | The focused table | Edits the Expense whose row has focus, else the open one |
+
+- **/ outside the Expenses tab.** On another tab of a Group (or its settings) it opens the
+  Group's Expenses tab and focuses the search there; outside a Group, where there is no Group
+  to search, it opens search across Groups, as ⌘K does.
+- **Single keys** (N, /, J, K, E) never fire while focus is in a field (an input, text
+  area, select, editable text, or a widget that takes letters, such as MUI's Select), while a
+  dialog or menu is open, or with Ctrl, Alt or ⌘ held.
+- **The Settings switch** turns single keys off (WCAG 2.1.4). It is kept per member on the
+  device (`localStorage`, one key per member id) and defaults to on; until the device's
+  setting is read, single keys are off and no hint shows, so the server never guesses.
+  ⌘K keeps working either way.
+- **Hints** (`ShortcutHint`, a `<kbd>` hidden from screen readers, which hear the key from
+  the control's `aria-keyshortcuts`) sit beside Add expense and the Group's search, and the
+  Expenses tab ends with `ShortcutsFooter`. They show from 900 px up on devices that can
+  hover, and go while single keys are off; the top bar's ⌘K stays.
+- **No row selection, so no X.** The design canvas's X selects rows for bulk actions, which
+  are deferred (#300).
+- Every action keeps its control: each Expense row's button stays in the Tab order, so J
+  and K are a quicker way, never the only one.
+
 ### Groups (`src/components/groups/`)
 
 | Component                  | Description                                           |

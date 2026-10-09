@@ -29,6 +29,12 @@ Allow users to update their profile preferences.
 │         │  │             [Save Changes]          │   │
 │         │  └─────────────────────────────────────┘   │
 │         │                                             │
+│         │  ── Keyboard shortcuts ──                   │
+│         │  ┌─────────────────────────────────────┐   │
+│         │  │ (●) Single-key shortcuts            │   │
+│         │  │ N, /, J, K and E; ⌘K keeps working  │   │
+│         │  └─────────────────────────────────────┘   │
+│         │                                             │
 │         │  ── Account ──                              │
 │         │  ┌─────────────────────────────────────┐   │
 │         │  │ Connected with Google                │   │
@@ -44,12 +50,13 @@ Allow users to update their profile preferences.
 
 ## Fields
 
-| Field              | Editable | Type   | Notes                          |
-| ------------------ | -------- | ------ | ------------------------------ |
-| Avatar             | No       | Image  | Pulled from Google profile     |
-| Name               | Yes      | Text   | 1-100 chars                    |
-| Email              | No       | Text   | From Google, can't be changed  |
-| Preferred Currency | Yes      | Select | Used as default for new groups |
+| Field                | Editable | Type   | Notes                          |
+| -------------------- | -------- | ------ | ------------------------------ |
+| Avatar               | No       | Image  | Pulled from Google profile     |
+| Name                 | Yes      | Text   | 1-100 chars                    |
+| Email                | No       | Text   | From Google, can't be changed  |
+| Preferred Currency   | Yes      | Select | Used as default for new groups |
+| Single-key shortcuts | Yes      | Switch | Per member, on this device     |
 
 ---
 
@@ -60,6 +67,10 @@ Allow users to update their profile preferences.
 - Show success toast: "Settings saved!"
 - Show error toast if update fails
 - "Sign Out" button triggers `signOut()` from Auth.js → redirects to landing page
+- **Single-key shortcuts** (#322) turns N, /, J, K and E off (WCAG 2.1.4), so they never
+  clash with a screen reader or voice control. It is kept in `localStorage` for the
+  signed-in member on this device, on by default, and applies at once on every open page
+  and tab. ⌘K (Ctrl+K) search keeps working. See `docs/ui.md`, "Keyboard shortcuts".
 
 ---
 

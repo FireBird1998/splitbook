@@ -5,6 +5,7 @@ import ExpectedAccountProvider from '@/components/layout/ExpectedAccountProvider
 import SessionGuard from '@/components/layout/SessionGuard';
 import SettlementAttemptsOwner from '@/components/settlements/SettlementAttemptsOwner';
 import { isDemoMode } from '@/lib/auth-mode';
+import { ShortcutsProvider } from '@/lib/shortcuts/ShortcutsProvider';
 
 export default async function MainLayout({ children }: { children: React.ReactNode }) {
   const user = await getAuthUser();
@@ -17,12 +18,15 @@ export default async function MainLayout({ children }: { children: React.ReactNo
     <ExpectedAccountProvider accountId={user.id}>
       <SessionGuard accountId={user.id} />
       <SettlementAttemptsOwner accountId={user.id} />
-      <AppShell
-        user={{ id: user.id, name: user.name, email: user.email, image: user.image }}
-        demoMode={isDemoMode()}
-      >
-        {children}
-      </AppShell>
+      {/* Keyboard shortcuts (#322), with the member's own setting on this device. */}
+      <ShortcutsProvider memberId={user.id}>
+        <AppShell
+          user={{ id: user.id, name: user.name, email: user.email, image: user.image }}
+          demoMode={isDemoMode()}
+        >
+          {children}
+        </AppShell>
+      </ShortcutsProvider>
     </ExpectedAccountProvider>
   );
 }

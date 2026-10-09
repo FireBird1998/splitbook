@@ -1,20 +1,18 @@
 'use client';
 
-import { useEffect, useState, useSyncExternalStore, type KeyboardEvent } from 'react';
+import { useState, useSyncExternalStore, type KeyboardEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
 import IconButton from '@mui/material/IconButton';
 import SearchIcon from '@mui/icons-material/Search';
+import { groupTabFromPath, groupTabHref } from '@/components/groups/group-tabs';
+import { groupIdInPath } from '@/components/layout/shell-nav';
+import { useHandOnShortcut, useShortcut } from '@/lib/shortcuts/ShortcutsProvider';
 import SearchDialog from './SearchDialog';
 import { kbdSx } from './SearchPanel';
 import { SEARCH_LABEL } from './search-label';
-import {
-  isApplePlatform,
-  isSearchShortcut,
-  isTypingTarget,
-  searchShortcutKeys,
-  searchShortcutLabel,
-} from './search-shortcut';
+import { isApplePlatform, searchShortcutKeys, searchShortcutLabel } from './search-shortcut';
 
 const noSubscription = () => () => {};
 
@@ -32,31 +30,43 @@ const isPrintable = (event: KeyboardEvent) =>
  * below it, where the bar also holds the menu button, the logo and Add expense; each opens the
  * search dialog, which ⌘K (Ctrl+K off Apple devices) also opens from anywhere, except while the
  * member is typing in another field. Fills the space at the start of the bar.
+ *
+ * It also answers / (#322) on pages without a Group search to focus: inside a Group it opens
+ * the Group's Expenses tab and focuses its search there; anywhere else it opens this search.
  */
 export default function SearchLauncher() {
   const apple = useApplePlatform();
   const [open, setOpen] = useState(false);
   const [initialQuery, setInitialQuery] = useState('');
 
-  useEffect(() => {
-    function onKeyDown(event: globalThis.KeyboardEvent) {
-      if (event.defaultPrevented || !isSearchShortcut(event)) return;
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      // In the search field itself the shortcut closes the search; in any other field it types.
-      const inSearch = target?.matches('[data-search-input]') ?? false;
-      if (!inSearch && isTypingTarget(target)) return;
-      event.preventDefault();
-      setInitialQuery('');
-      setOpen((wasOpen) => !wasOpen);
-    }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  const router = useRouter();
+  const handOn = useHandOnShortcut();
 
   const openSearch = (query = '') => {
     setInitialQuery(query);
     setOpen(true);
   };
+
+  // ⌘K opens the search, and closes it again from its own field (the shortcuts' rules).
+  useShortcut('search', () => {
+    setInitialQuery('');
+    setOpen((wasOpen) => !wasOpen);
+  });
+
+  // / where no Group search is showing: the Group's Expenses tab, or search across Groups.
+  useShortcut(
+    'search-group',
+    () => {
+      const { pathname } = window.location;
+      const groupId = groupIdInPath(pathname);
+      if (!groupId) return openSearch();
+      // On the Expenses tab its search answers; if it isn't there (the list failed), stay put.
+      if (groupTabFromPath(pathname) === 'expenses') return;
+      handOn('search-group');
+      router.push(groupTabHref(groupId, 'expenses'));
+    },
+    { fallback: true },
+  );
 
   const shortcut = apple === null ? undefined : searchShortcutKeys(apple);
 

@@ -378,6 +378,12 @@ export default function ExpenseListView({
     shown ? () => start(shown as unknown as Record<string, unknown>) : undefined;
   const historyState = loaded ? 'ready' : record.error ? 'failed' : 'loading';
 
+  /** E in the table (#322): edit a row's Expense, from its own read when it is the open one. */
+  const editRow = (expenseId: string) => {
+    const row = loaded?._id === expenseId ? loaded : expenses.find(({ _id }) => _id === expenseId);
+    if (row) setEditing(row as unknown as Record<string, unknown>);
+  };
+
   const recurringId = recurringExpensesEnabled ? (shown?.recurringExpense ?? null) : null;
   const schedules = useSWR(
     recurringId && onComputer ? recurringExpensesPath(groupId) : null,
@@ -506,6 +512,7 @@ export default function ExpenseListView({
       panelId={EXPENSE_PANEL_ID}
       stale={changing}
       dayHeadings={dayHeadings}
+      onEdit={editRow}
     />
   ) : (
     <ExpenseCards

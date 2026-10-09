@@ -17,6 +17,8 @@ import SearchIcon from '@mui/icons-material/Search';
 import SortIcon from '@mui/icons-material/Sort';
 import { formatCurrency, getCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
+import { ShortcutHint, useShortcutAria } from '@/components/shortcuts/ShortcutHint';
+import { useShortcut } from '@/lib/shortcuts/ShortcutsProvider';
 import {
   CLEARED_FILTERS,
   EXPENSE_DATE_WINDOWS,
@@ -418,7 +420,10 @@ function AmountField({
   );
 }
 
-/** The search box (design canvas `.search.gx-search`), which waits for a pause in typing. */
+/**
+ * The search box (design canvas `.search.gx-search`), which waits for a pause in typing. / puts
+ * the cursor in it (#322), and the box shows the key until it has focus.
+ */
 function SearchField({
   value,
   onSearch,
@@ -435,6 +440,12 @@ function SearchField({
   const [seen, setSeen] = useState(value);
   const [sent, setSent] = useState(value);
   const timer = useRef<number | undefined>(undefined);
+  const input = useRef<HTMLInputElement>(null);
+  useShortcut('search-group', () => {
+    input.current?.focus();
+    input.current?.select();
+  });
+  const keyShortcuts = useShortcutAria('search-group');
   if (value !== seen) {
     // A change from elsewhere (a search link, Back) replaces what's typed; our own doesn't.
     setSeen(value);
@@ -474,6 +485,8 @@ function SearchField({
           borderColor: 'focus.main',
           boxShadow: (theme) => `0 0 0 3px ${theme.palette.focus.ring}`,
         },
+        // In the box, / types a slash.
+        '&:focus-within [data-shortcut-hint]': { display: 'none' },
       }}
     >
       <SearchIcon sx={{ fontSize: 18 }} aria-hidden />
@@ -482,7 +495,8 @@ function SearchField({
         value={text}
         onChange={(event) => change(event.target.value)}
         placeholder={placeholder}
-        inputProps={{ 'aria-label': label, maxLength: 200 }}
+        inputRef={input}
+        inputProps={{ 'aria-label': label, 'aria-keyshortcuts': keyShortcuts, maxLength: 200 }}
         sx={{
           flex: 1,
           minWidth: 0,
@@ -492,6 +506,7 @@ function SearchField({
           '& input:focus-visible': { outline: 'none', boxShadow: 'none' },
         }}
       />
+      <ShortcutHint id="search-group" />
     </Box>
   );
 }

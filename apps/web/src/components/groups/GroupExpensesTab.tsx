@@ -14,6 +14,7 @@ import MonthCycleBar, {
 import MonthMemberTable from '@/components/groups/MonthMemberTable';
 import ExpenseListView from '@/components/expenses/ExpenseListView';
 import QuickAddExpense from '@/components/expenses/QuickAddExpense';
+import { ShortcutsFooter } from '@/components/shortcuts/ShortcutHint';
 import { expensePagePath } from '@splitbook/shared/api-paths';
 import { parseExpensePageResponse } from '@splitbook/shared/expense-page-read';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -33,8 +34,9 @@ interface GroupExpensesTabProps {
 
 /**
  * The Expenses tab (`/groups/[id]/expenses`, #310): a Household's Month bar, then the
- * toolbar and the Expenses, as a table on computers and cards on phones. A Month is a lens over
- * Expenses, and Balances always include every Month.
+ * toolbar and the Expenses, as a table on computers and cards on phones, and on computers a
+ * footer listing the keyboard shortcuts (#322). A Month is a lens over Expenses, and Balances
+ * always include every Month.
  */
 export default function GroupExpensesTab({
   recurringExpensesEnabled = false,
@@ -158,6 +160,8 @@ export default function GroupExpensesTab({
         monthCycle={hasMonthCycle}
         recurringExpensesEnabled={recurringExpensesEnabled}
       />
+
+      <ShortcutsFooter />
     </Stack>
   );
 }
