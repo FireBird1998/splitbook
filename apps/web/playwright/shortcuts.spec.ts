@@ -143,6 +143,53 @@ test('the keyboard path through the Expense table: J and K move, Enter opens, E 
   ).toHaveCount(0);
 });
 
+test('J and K skip Trip day headings while every Expense keeps its Tab stop', async ({
+  page,
+}, testInfo) => {
+  test.skip(isPhone(testInfo), 'Trip table navigation is for computers; phones list cards.');
+  await enterAsPersona(page, 'alex');
+  await page.goto('/groups/a00000000000000000000202/expenses');
+  await shortcutsReady(page);
+  const table = main(page)
+    .getByRole('region', { name: /^Expenses/ })
+    .getByRole('table');
+  const buttons = rowButtons(page);
+  await expect(table.locator('tr[data-trip-day]').nth(1)).toBeVisible();
+  await expect(buttons.nth(2)).toBeVisible();
+  // At least one heading sits between two Expense rows: crossing it is observable here.
+  expect(
+    await table
+      .locator('tr[data-trip-day]')
+      .evaluateAll((headings) =>
+        headings.some(
+          (heading) =>
+            heading.previousElementSibling?.hasAttribute('data-expense-id') &&
+            heading.nextElementSibling?.hasAttribute('data-expense-id'),
+        ),
+      ),
+  ).toBe(true);
+  const count = await buttons.count();
+  await buttons.first().focus();
+  for (let index = 1; index < count; index++) {
+    await page.keyboard.press('j');
+    await expect(buttons.nth(index)).toBeFocused();
+  }
+  await page.keyboard.press('j');
+  await expect(buttons.last()).toBeFocused();
+  for (let index = count - 2; index >= 0; index--) {
+    await page.keyboard.press('k');
+    await expect(buttons.nth(index)).toBeFocused();
+  }
+  await page.keyboard.press('Tab');
+  await expect(buttons.nth(1)).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(buttons.nth(1)).toHaveAttribute('aria-expanded', 'true');
+  await page.keyboard.press('Enter');
+  await expect(buttons.nth(1)).toHaveAttribute('aria-expanded', 'false');
+  await expect(buttons.nth(1)).toBeFocused();
+  await expect(table.locator('tr[data-trip-day]').nth(1)).toBeVisible();
+});
+
 test('N adds an Expense and / searches the Group, from any page, never while typing', async ({
   page,
 }, testInfo) => {
