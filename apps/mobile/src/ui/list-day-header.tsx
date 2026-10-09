@@ -2,7 +2,7 @@ import { memo } from 'react';
 import { CompactText } from './compact';
 
 /** One local day, rather than a changing millisecond timestamp, for relative list labels. */
-export const currentDayKey = (date = new Date()) =>
+export const currentDayKey = (date = new Date(Date.now())) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
 export const ListDayHeader = memo(function ListDayHeader({ label }: { label: string }) {

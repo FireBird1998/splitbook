@@ -819,6 +819,7 @@ function GroupScreen() {
       snackbar: snapshot.snackbar,
       pendingPayment: snapshot.pendingPayment,
       home: snapshot.home,
+      dayKey: currentDayKey(),
       feedback: refreshFeedback(snapshot),
     }),
     (a, b) =>
@@ -1069,7 +1070,7 @@ function GroupScreen() {
       currency={shown.defaultCurrency}
       members={activityMembers}
       offline={state.offline.active}
-      dayKey={currentDayKey()}
+      dayKey={state.dayKey}
       onRetry={refreshActivity}
       onMore={loadMoreActivity}
       onLoadNewer={loadNewerActivity}
@@ -1233,7 +1234,7 @@ function GroupScreen() {
                 }
                 offline={state.offline.active}
                 firstRead={opening !== null}
-                dayKey={currentDayKey()}
+                dayKey={state.dayKey}
                 onSelectMonth={selectMonth}
                 onRefreshExpenses={refreshExpenses}
                 onLoadMore={loadMoreExpenses}
