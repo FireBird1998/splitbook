@@ -1,7 +1,7 @@
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, expect, it } from 'vitest';
 import { createMobileController } from '../data/mobile-controller';
-import { useMobileSnapshot } from './use-mobile-snapshot';
+import { sameSelection, useMobileSnapshot } from './use-mobile-snapshot';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 let screen: ReactTestRenderer | undefined;
@@ -86,4 +86,22 @@ it('uses the equality check for a fresh projection and renders the next selected
   act(() => controller.updateCreation({ name: 'Our home' }));
   expect(renders).toBe(2);
   expect(screen!.toJSON()).toMatchObject({ children: ['Our home'] });
+});
+
+it('renders changed projection keys even when their values are undefined', async () => {
+  const controller = await signedIn();
+  function Name() {
+    const value = useMobileSnapshot(
+      controller,
+      (state): Record<string, undefined> =>
+        state.creation.draft.name ? { named: undefined } : { empty: undefined },
+      sameSelection,
+    );
+    return <span>{Object.keys(value)[0]}</span>;
+  }
+  await act(async () => {
+    screen = create(<Name />);
+  });
+  act(() => controller.updateCreation({ name: 'Our home' }));
+  expect(screen!.toJSON()).toMatchObject({ children: ['named'] });
 });

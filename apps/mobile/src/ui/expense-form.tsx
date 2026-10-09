@@ -1,5 +1,5 @@
-import { useState, type ReactNode, type Ref } from 'react';
-import { Pressable, TextInput, View, useWindowDimensions } from 'react-native';
+import { memo, useState, type ReactNode, type Ref } from 'react';
+import { Pressable, type TextInput, View, useWindowDimensions } from 'react-native';
 import { EXPENSE_CATEGORIES, getCategory } from '@splitbook/shared/categories';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
@@ -14,7 +14,9 @@ import {
   type ExpenseField,
   type expenseMoney,
 } from '../data/expense-draft';
-import { acceptsNumericText } from '../data/field-feedback';
+import type { MobileController } from '../data/mobile-controller';
+import { AmountField, DescriptionField } from './expense-inputs';
+import { SelectedAmountField, SelectedDescriptionField } from './expense-input-selection';
 import { gregorianDateFormat } from './date-sheet';
 import { Field, FieldError } from './group-workflows';
 import { Icon } from './primitives';
@@ -30,10 +32,9 @@ import {
   Money,
   SelectorTile,
   TileGrid,
-  radius,
   useLargeText,
 } from './compact';
-import { fonts, useTheme } from './theme';
+import { useTheme } from './theme';
 
 type Allocation = ReturnType<typeof expenseMoney>;
 type SectionRef = (field: ExpenseField) => (node: View | null) => void;
@@ -86,7 +87,7 @@ export const splitSummary = (draft: ExpenseDraft) =>
   `${splitSummaries[draft.splitMethod]} · ${draft.participantIds.length}`;
 
 /** Amount with its read-only currency, then Description: the two typed values. */
-export function AmountDescriptionCard({
+export const AmountDescriptionCard = memo(function AmountDescriptionCard({
   draft,
   locked,
   showLock = false,
@@ -98,7 +99,9 @@ export function AmountDescriptionCard({
   onLeave,
   onAmountDone,
   children,
+  controller,
 }: {
+  controller?: MobileController;
   draft: ExpenseDraft;
   locked: boolean;
   /** Shows the values as locked, as for a save that may already be recorded. */
@@ -114,133 +117,43 @@ export function AmountDescriptionCard({
   /** Notes about the amount, such as a changed Group currency. */
   children?: ReactNode;
 }) {
-  const theme = useTheme();
-  const [amountFocused, setAmountFocused] = useState(false);
-  const input = {
-    color: theme.text,
-    paddingVertical: 4,
-    paddingHorizontal: 0,
-    opacity: locked ? 0.65 : 1,
+  const props = {
+    draft,
+    locked,
+    showLock,
+    errors,
+    amountRef,
+    descriptionRef,
+    section,
+    onChange,
+    onLeave,
+    onAmountDone,
   };
-  const label = (text: string, error?: string) => (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-      <CompactText variant="small" tone={error ? 'negative' : 'secondary'}>
-        {text}
-      </CompactText>
-      <FieldMarker kind="required" />
-    </View>
-  );
   return (
     <Card
       state={errors.amount || errors.description ? 'error' : showLock ? 'locked' : 'default'}
       padded
     >
-      <View ref={section('amount')} style={{ gap: 6 }}>
-        {label('Amount', errors.amount)}
-        <View style={{ gap: 4 }}>
-          {/* The focus ring sits outside the content and stays as a transparent border on blur. */}
-          <View
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 10,
-              marginHorizontal: -10,
-              paddingHorizontal: 8,
-              paddingVertical: 2,
-              borderWidth: 2,
-              borderRadius: radius.tile,
-              borderColor: amountFocused && !locked ? theme.focus : 'transparent',
-            }}
-          >
-            <View
-              accessible
-              accessibilityLabel={`Currency ${draft.currency}, ${draft.original ? 'the Expense’s currency' : 'the Group’s currency'}`}
-              style={{
-                paddingVertical: 6,
-                paddingHorizontal: 10,
-                borderRadius: 10,
-                backgroundColor: theme.surfaceMuted,
-              }}
-            >
-              <CompactText tone="secondary" style={{ fontFamily: fonts.mono, fontSize: 15 }}>
-                {draft.currency}
-              </CompactText>
-            </View>
-            <TextInput
-              ref={amountRef}
-              value={draft.amount}
-              maxLength={40}
-              keyboardType="decimal-pad"
-              returnKeyType="next"
-              submitBehavior="submit"
-              editable={!locked}
-              placeholder="0.00"
-              placeholderTextColor={theme.textMuted}
-              selectionColor={theme.brand.main}
-              accessibilityLabel="Amount, required"
-              accessibilityHint={errors.amount}
-              onChangeText={(amount) => {
-                // A refused edit leaves the field showing the draft's amount.
-                if (amount !== draft.amount && acceptsNumericText(amount, draft.amount))
-                  onChange({ amount });
-              }}
-              onFocus={() => setAmountFocused(true)}
-              onBlur={() => {
-                setAmountFocused(false);
-                onLeave('amount');
-              }}
-              onSubmitEditing={onAmountDone}
-              style={[
-                input,
-                {
-                  flex: 1,
-                  minHeight: 48,
-                  fontFamily: fonts.mono,
-                  fontSize: 32,
-                  lineHeight: 38,
-                },
-              ]}
-            />
-            {showLock ? (
-              <Icon name="lock-closed-outline" size={20} color={theme.textSecondary} />
-            ) : null}
-          </View>
-        </View>
-        <FieldError message={errors.amount} />
-        {children}
-      </View>
+      {controller ? (
+        <SelectedAmountField controller={controller} {...props} />
+      ) : (
+        <AmountField {...props} />
+      )}
+      {children}
       <View style={{ marginVertical: 12, marginHorizontal: -14 }}>
         <Divider inset={14} />
       </View>
-      <View ref={section('description')} style={{ gap: 6 }}>
-        {label('Description', errors.description)}
-        <View>
-          <TextInput
-            ref={descriptionRef}
-            value={draft.description}
-            maxLength={200}
-            returnKeyType="done"
-            editable={!locked}
-            placeholder="What was it for? e.g. Groceries"
-            placeholderTextColor={theme.textMuted}
-            selectionColor={theme.brand.main}
-            accessibilityLabel="Description, required"
-            accessibilityHint={
-              errors.description ? `${errors.description} What was this for?` : 'What was this for?'
-            }
-            onChangeText={(description) => onChange({ description })}
-            onBlur={() => onLeave('description')}
-            style={[input, { minHeight: 48, fontFamily: fonts.regular, fontSize: 17 }]}
-          />
-        </View>
-        <FieldError message={errors.description} />
-      </View>
+      {controller ? (
+        <SelectedDescriptionField controller={controller} {...props} />
+      ) : (
+        <DescriptionField {...props} />
+      )}
     </Card>
   );
-}
+});
 
 /** Date, Paid by, Split and Tag; each opens its editor. Their corrections follow the grid. */
-export function ExpenseTiles({
+export const ExpenseTiles = memo(function ExpenseTiles({
   locked,
   financialLocked = locked,
   errors,
@@ -307,7 +220,7 @@ export function ExpenseTiles({
       ))}
     </View>
   );
-}
+});
 
 /**
  * "Who owes what": each person's paid amount and share, an "Adds up" badge and the totals.
@@ -316,7 +229,7 @@ export function ExpenseTiles({
 /** Under an equal split whose shares differ by the smallest unit. */
 export const sharesDifferNote = 'Shares differ by the smallest unit so the whole amount is shared.';
 
-export function WhoOwesWhat({
+export const WhoOwesWhat = memo(function WhoOwesWhat({
   draft,
   allocation,
   problem,
@@ -517,7 +430,7 @@ export function WhoOwesWhat({
       )}
     </Card>
   );
-}
+});
 
 const versionLabels: Record<ExpenseVersionField, string> = {
   ...expenseFieldLabels,
@@ -727,13 +640,13 @@ export function WhatsDifferent({
 }
 
 /** Category and Notes behind one optional row. */
-export function OptionalDetails({
+export const OptionalDetails = memo(function OptionalDetails({
   draft,
   locked,
   categoryLocked = locked,
   onChange,
 }: {
-  draft: ExpenseDraft;
+  draft: Pick<ExpenseDraft, 'notes' | 'category'>;
   locked: boolean;
   categoryLocked?: boolean;
   onChange: (patch: Partial<ExpenseDraft>) => void;
@@ -793,7 +706,7 @@ export function OptionalDetails({
       ) : null}
     </Card>
   );
-}
+});
 
 /** Pinned under the form, above the keyboard; it names the amount once that is valid. */
 export function SaveBar({

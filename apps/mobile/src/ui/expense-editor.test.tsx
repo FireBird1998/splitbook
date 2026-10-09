@@ -15,6 +15,7 @@ import type { FetchResponse, MobileFetch } from '../data/types';
 import { draftFromExpense } from '../data/expense-draft';
 import { expenseRecordSchema } from '../data/expense-record';
 import { ExpenseEditor } from './expense-editor';
+import { ControllerExpenseEditor } from './controller-expense-editor';
 import { expenseDateLabel } from './expense-form';
 import { ExpenseRecordView } from './expense-record-view';
 import { OfflineNotice } from './offline-notice';
@@ -212,8 +213,8 @@ function EditorScreen({
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   return (
-    <ExpenseEditor
-      state={state.expense}
+    <ControllerExpenseEditor
+      controller={controller}
       offline={state.offline.active}
       notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
       emptyNotice={<OfflineNotice state={state.offline} savedShown={false} />}
@@ -413,6 +414,7 @@ describe('rendered Expense corrections', () => {
   it('moves a blank Description submission to its field and saves once after correction', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     await ui.type('Amount, required', '250.50');
+    await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     await ui.press('Save expense');
 
@@ -427,7 +429,7 @@ describe('rendered Expense corrections', () => {
     expect(text(ui.root())).toContain('One thing to fix before saving');
     expect(ui.pressable('Go to Description')).toBeTruthy();
     expect(ui.input('Amount, required').props.value).toBe('250.50');
-    expect(ui.pressable('Tag: Groceries').props.accessibilityState.checked).toBe(true);
+    expect(ui.tile('Tag').props.accessibilityLabel).toBe('Tag, required: Groceries');
 
     await ui.type('Description, required', 'Groceries');
     expect(corrections(fieldOf(ui.input('Description, required')))).toEqual([]);
@@ -496,6 +498,7 @@ describe('rendered Expense corrections', () => {
     );
     expect(ui.focusCount('Amount, required')).toBe(0);
     expect(ui.focusCount('Description, required')).toBe(0);
+    await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     expect(corrections(ui.root())).not.toContain('Choose a Tag for this Expense.');
     expect(ui.tile('Tag').props.accessibilityLabel).toBe('Tag, required: Groceries');
@@ -536,6 +539,7 @@ describe('rendered Expense corrections', () => {
   it('keeps Save enabled and the bar steady while a draft write is pending', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     await ui.type('Amount, required', '120');
+    await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
@@ -551,8 +555,8 @@ describe('rendered Expense corrections', () => {
     expect(button.props.disabled).toBe(false);
     expect(button.props.accessibilityHint).toBeUndefined();
     expect(text(ui.root())).not.toContain('Available once');
-    // A quick write changes nothing on screen and announces nothing.
-    expect(draftStatus(ui.root())).toEqual([{ label: 'Draft saved', live: 'none' }]);
+    // The latest entries are not stored yet, so no saved claim is shown or announced.
+    expect(draftStatus(ui.root())).toEqual([]);
     await act(() => new Promise((resolve) => setTimeout(resolve, 450)));
     expect(draftStatus(ui.root())).toEqual([{ label: 'Saving draft…', live: 'none' }]);
 
@@ -574,6 +578,7 @@ describe('rendered Expense corrections', () => {
     const held = new Promise<void>((resolve) => (release = resolve));
     const ui = await render((controller) => controller.openExpense(groupId), { holdCreate: held });
     await ui.type('Amount, required', '120');
+    await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     await ui.type('Description, required', 'Milk');
     await ui.press('Save expense');
@@ -1207,6 +1212,7 @@ describe('compact Expense form', () => {
     await ui.type('Amount, required', '-5');
     expect(ui.input('Amount, required').props.value).toBe('-5');
     await ui.type('Description, required', 'Milk');
+    await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     await ui.press('Save expense');
     expect(ui.writes).toEqual([]);

@@ -166,7 +166,7 @@ async function render(draft: Partial<ExpenseDraft> = {}) {
     screen = create(<EditorScreen controller={harness.controller} />);
   });
   const root = () => screen!.root;
-  /** The Who paid sheet's Modal, open or not. */
+  /** The mounted Who paid sheet's Modal. */
   const sheet = () =>
     root().find((node) => isHost(node, 'Modal') && text(node).startsWith('Who paid?'));
   const find = (host: 'Pressable' | 'TextInput', label: string) =>
@@ -197,6 +197,9 @@ async function render(draft: Partial<ExpenseDraft> = {}) {
   return {
     ...harness,
     sheet,
+    hasSheet: () =>
+      root().findAll((node) => isHost(node, 'Modal') && text(node).startsWith('Who paid?')).length >
+      0,
     pressable,
     input,
     exists,
@@ -221,7 +224,7 @@ async function render(draft: Partial<ExpenseDraft> = {}) {
 describe('Who paid sheet', () => {
   it('opens from Paid by on "One person", a radio list of the Group’s members', async () => {
     const ui = await render({ amount: '1249.50' });
-    expect(ui.sheet().props.visible).toBe(false);
+    expect(ui.hasSheet()).toBe(false);
     await ui.open();
     expect(ui.sheet().props.visible).toBe(true);
 
@@ -309,7 +312,7 @@ describe('Who paid sheet', () => {
     expect(ui.writes).toEqual([]);
 
     await ui.done();
-    expect(ui.sheet().props.visible).toBe(false);
+    expect(ui.hasSheet()).toBe(false);
     expect(ui.tile().props.accessibilityLabel).toBe('Paid by: 3 people');
     expect(ui.writes).toEqual([]);
   });
@@ -401,7 +404,7 @@ describe('Who paid sheet', () => {
     await ui.press('Several people');
     await ui.type('What you paid', '6');
     await ui.back();
-    expect(ui.sheet().props.visible).toBe(false);
+    expect(ui.hasSheet()).toBe(false);
     expect(ui.stored()).toMatchObject({
       multiPayer: true,
       payers: [{ user: alexId, amount: '6' }],
@@ -418,7 +421,7 @@ describe('Who paid sheet', () => {
     expect(ui.input('What you paid').props.value).toBe('6');
     await ui.type('What Sam Chen paid', '4');
     await ui.tapOutside();
-    expect(ui.sheet().props.visible).toBe(false);
+    expect(ui.hasSheet()).toBe(false);
     expect(ui.stored()?.payers).toEqual([
       { user: alexId, amount: '6' },
       { user: samId, amount: '4' },

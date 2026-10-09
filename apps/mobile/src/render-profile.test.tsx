@@ -105,6 +105,15 @@ vi.mock('./ui/compact/layout', async (load) => counting.wrap(await load<Module>(
 vi.mock('./ui/compact/navigation', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/compact/sheet', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/compact/text', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/controller-expense-editor', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/draft-status-selection', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-input-selection', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/draft-status', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-inputs', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-optional-details', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-tile-selection', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-allocation-selection', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-sheet-selection', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/date-sheet', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/error-boundary', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/expense-editor', async (load) => counting.wrap(await load<Module>()));
@@ -298,6 +307,7 @@ function backend({ expensePages = pages, activityPages = pages, payment = false 
   let cookie: string | null = null;
   let account: string | null = null;
   let paid = false;
+  let draftGate: Promise<void> | undefined;
   const drafts = new Map<string, unknown>(),
     attempts = new Map<string, unknown>();
   const shown = payment
@@ -321,6 +331,7 @@ function backend({ expensePages = pages, activityPages = pages, payment = false 
       expenseDrafts: {
         load: async (accountId, id) => structuredClone(drafts.get(`${accountId}:${id}`) ?? null),
         save: async (accountId, id, value) => {
+          await draftGate;
           drafts.set(`${accountId}:${id}`, structuredClone(value));
         },
         remove: async (accountId, id) => {
@@ -440,7 +451,20 @@ function backend({ expensePages = pages, activityPages = pages, payment = false 
       },
     },
   );
-  return { controller, clock };
+  return {
+    controller,
+    clock,
+    holdDraftWrites: () => {
+      let release!: () => void;
+      draftGate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return () => {
+        release();
+        draftGate = undefined;
+      };
+    },
+  };
 }
 
 interface Sample {
@@ -937,6 +961,43 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
         expect(app.shows('Draft saved'), 'Draft saved on screen').toBe(true);
       },
     );
+  });
+
+  it('stores every latest entry before claiming it saved, with only status rendered on completion', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Add expense');
+    await app.type('Description, required', 'Milk');
+    const persistence: string[] = [];
+    const unsubscribe = app.controller.subscribe(() =>
+      persistence.push(app.controller.getSnapshot().expense.persistence),
+    );
+    const release = app.holdDraftWrites();
+    try {
+      await journey(
+        'Type with a delayed device write',
+        () => app.type('Description, required', 'Milk and bread'),
+        () => {
+          expect(app.value('Description, required')).toBe('Milk and bread');
+          expect(app.controller.getSnapshot().expense.persistence).toBe('saving');
+          expect(app.shows('Draft saved')).toBe(false);
+        },
+      );
+      await journey(
+        'Store the latest Expense entries',
+        () => settle(Promise.resolve(release())),
+        () => {
+          expect(app.controller.getSnapshot().expense.persistence).toBe('saved');
+          expect(app.shows('Draft saved')).toBe(true);
+          expect(persistence).toEqual(['saving', 'saved']);
+          const changed = [...counting.renders.keys()].sort();
+          expect(changed).toEqual(['CompactText', 'DraftStatus', 'Icon', 'SelectedDraftStatus']);
+        },
+      );
+    } finally {
+      release();
+      unsubscribe();
+    }
   });
 
   // vi.mock takes static paths, so the list at the top is kept by hand and checked here.

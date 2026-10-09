@@ -22,6 +22,6 @@ export function sameSelection<Selection extends object>(before: Selection, after
   const keys = Object.keys(before) as (keyof Selection)[];
   return (
     keys.length === Object.keys(after).length &&
-    keys.every((key) => Object.is(before[key], after[key]))
+    keys.every((key) => Object.hasOwn(after, key) && Object.is(before[key], after[key]))
   );
 }

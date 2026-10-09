@@ -1,5 +1,6 @@
 import { NotAvailableOffline, OfflineNotice } from './src/ui/offline-notice';
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -54,7 +55,8 @@ import {
 import { SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
-import { ExpenseEditor } from './src/ui/expense-editor';
+import { ControllerExpenseEditor } from './src/ui/controller-expense-editor';
+import { useMobileSnapshot, sameSelection } from './src/ui/use-mobile-snapshot';
 import { scrollToShow } from './src/ui/scroll';
 import { returnScrollTarget, visibleRowAnchor, type RowPlaces } from './src/ui/return-scroll';
 import { recordOutline } from './src/ui/expense-record-view';
@@ -163,7 +165,7 @@ function SplitBook() {
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <ExpenseScreen state={state} />
+          <ExpenseScreen />
         </KeyboardAvoidingView>
       </SafeAreaView>
     );
@@ -1183,19 +1185,43 @@ function MembersScreen({ state }: { state: MobileSnapshot }) {
 }
 
 /** Adding, editing or reviewing an Expense: a full-screen task without the Group's navigation. */
-function ExpenseScreen({ state }: { state: MobileSnapshot }) {
+const ExpenseScreen = memo(function ExpenseScreen() {
+  const state = useMobileSnapshot(
+    controller,
+    ({ expense, financial, keptDraft, auth, offline }) => ({
+      expense: {
+        requestedExpenseId: expense.requestedExpenseId,
+        groupId: expense.groupId,
+        contextCheck: expense.contextCheck,
+        accessLost: expense.accessLost,
+      },
+      row:
+        expense.requestedExpenseId && financial.groupId === expense.groupId
+          ? financial.expenses.data.find((row) => row.id === expense.requestedExpenseId)
+          : undefined,
+      keptDraft,
+      auth,
+      offline,
+    }),
+    (a, b) =>
+      sameSelection(a.expense, b.expense) &&
+      a.row === b.row &&
+      a.keptDraft === b.keptDraft &&
+      a.auth === b.auth &&
+      a.offline === b.offline,
+  );
   // The list row an Expense opens from already says much of what its record shows.
-  const { requestedExpenseId, groupId } = state.expense;
-  const row =
-    requestedExpenseId && state.financial.groupId === groupId
-      ? state.financial.expenses.data.find((expense) => expense.id === requestedExpenseId)
-      : undefined;
+  const { groupId } = state.expense;
+  const outline = useMemo(
+    () => (state.row ? recordOutline(state.row, state.auth.user?.id) : null),
+    [state.row, state.auth.user?.id],
+  );
   return (
-    <ExpenseEditor
-      state={state.expense}
+    <ControllerExpenseEditor
+      controller={controller}
       kept={!!groupId && state.keptDraft?.groupId === groupId}
       currentUserId={state.auth.user?.id}
-      outline={row ? recordOutline(row, state.auth.user?.id) : null}
+      outline={outline}
       notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
       emptyNotice={
         state.offline.active || state.offline.message ? (
@@ -1268,4 +1294,4 @@ function ExpenseScreen({ state }: { state: MobileSnapshot }) {
       }
     />
   );
-}
+});
