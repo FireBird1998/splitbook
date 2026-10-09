@@ -33,7 +33,7 @@ import { createSavedCopyQueue, notSaved, type Envelope } from './home-queries';
 import { cachedRead } from './offline-cache';
 import { keepInvalidated, queryOwner } from './query-owner';
 import { RequestError, Superseded } from './transport';
-import type { AccountStorageLease, MobileSnapshot, Route } from './types';
+import type { AccountStorageLease, MobileSnapshot, Route, ScrollAnchor } from './types';
 
 type Pages = InfiniteData<PageEnvelope, number>;
 type Target = ActivityState['target'];
@@ -745,6 +745,7 @@ export function createActivityQueries(session: ActivitySession) {
       ...emptyActivity(),
       groupId,
       selected,
+      origin: selected && selected._id === shown.selected?._id ? shown.origin : null,
       target,
       // No events stays the same list, so it publishes nothing new.
       events: shown.events.length ? [] : shown.events,
@@ -1014,7 +1015,11 @@ export function createActivityQueries(session: ActivitySession) {
      * Opens an event: what was recorded, and, when it names an Expense, that Expense as it is
      * now. The Group's query is read first, checking the member (#219); then the record's (#220).
      */
-    async select(eventId: string, owner: number) {
+    async select(
+      eventId: string,
+      owner: number,
+      origin: { scrollY?: number; anchor?: ScrollAnchor } = {},
+    ) {
       const opened = view,
         shown = session.snapshot().activity;
       // Opened once read, as the list offers them: not while read again, or after that failed.
@@ -1028,7 +1033,22 @@ export function createActivityQueries(session: ActivitySession) {
         failure: null,
       };
       opened.detail = detail;
-      reproject();
+      session.publish({
+        activity: {
+          ...shown,
+          selected: event,
+          origin:
+            origin.scrollY !== undefined && Number.isFinite(origin.scrollY)
+              ? {
+                  groupId: opened.groupId,
+                  scrollY: Math.max(0, origin.scrollY),
+                  ...(origin.anchor?.key && Number.isFinite(origin.anchor.offset)
+                    ? { anchor: origin.anchor }
+                    : {}),
+                }
+              : null,
+        },
+      });
       const { groupId } = opened;
       const wanted = () => view === opened && opened.detail === detail && session.current(owner);
       let recordRead = false;

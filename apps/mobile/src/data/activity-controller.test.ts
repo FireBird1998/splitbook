@@ -309,3 +309,37 @@ describe('native Group Activity', () => {
     },
   );
 });
+
+it.each(['back', 'close'] as const)(
+  'returns to the payment row on Activity page two on %s',
+  async (close) => {
+    let reads = 0;
+    const events = Array.from({ length: 25 }, (_, index) => ({
+      ...event,
+      _id: `d${String(index + 1).padStart(23, '0')}`,
+      type: 'settlement_recorded',
+      metadata: { amount: 10, currency: 'INR', paidByName: 'Alex', paidToName: 'Sam' },
+    }));
+    const controller = setup((url) => {
+      if (!url.pathname.endsWith('/activity')) return;
+      reads++;
+      const number = Number(url.searchParams.get('page') ?? 1);
+      return json(page(events.slice((number - 1) * 20, number * 20), number, 25));
+    });
+    await controller.signIn('alex');
+    await controller.openActivity(groupId);
+    await controller.loadMoreActivity();
+    const before = reads;
+    const anchor = { key: events[22]._id, offset: 12 };
+    await controller.openActivityEvent(events[22]._id, { scrollY: 1800, anchor });
+    if (close === 'back') await controller.back();
+    else controller.closeActivityDetail();
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'group',
+      destination: 'activity',
+      activity: { selected: null, pagination: { page: 2 } },
+      restoreScroll: { groupId, y: 1800, anchor },
+    });
+    expect(reads).toBe(before);
+  },
+);

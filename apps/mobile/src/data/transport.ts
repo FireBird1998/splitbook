@@ -171,6 +171,8 @@ export interface TransportDependencies {
     current(owner: number): boolean;
     /** The cookie ordinary requests send. */
     cookie(): string | null;
+    /** Ownership of a Group read; joining or creating retires earlier access answers. */
+    ownsGroup?(groupId: string): () => boolean;
     /**
      * Saves a cookie a reply set for `owner`'s session, and sends it from then on. Rejects with
      * `Superseded` once `owner` is no longer current.
@@ -192,7 +194,7 @@ export interface TransportDependencies {
    * The member lost access to a Group: a 403 under `/api/groups/:id`, or a 404 on exactly
    * `/api/groups/:id`. It finishes before the caller gets the error.
    */
-  onGroupDenied(groupId: string, status: number, owner: number): Promise<void>;
+  onGroupDenied(groupId: string, status: number, owner: number, path: string): Promise<void>;
   /**
    * A read of a Group or of its Expense list ended: answered, failed or cancelled once sent. The
    * server may have created due recurring Expenses for it, so that Group's Balances and Home are
@@ -284,6 +286,9 @@ export function createTransport({
       if (!live()) throw new Superseded();
     };
     assertLive();
+    const ownGroup =
+      (options.method ?? 'GET') === 'GET' && /^\/api\/groups\/([a-f\d]{24})$/i.exec(path)?.[1];
+    const ownsGroup = ownGroup && session.ownsGroup?.(ownGroup);
     // Invitations can open even after restoration fails. Every ordinary request
     // must verify staging before it can send or adopt a session cookie.
     if (path !== '/.well-known/splitbook-mobile.json')
@@ -382,7 +387,8 @@ export function createTransport({
               }),
             ]).finally(() => endWait())
           : await reading;
-        if (denied) await onGroupDenied(denied, response.status, owner);
+        if (ownsGroup && !ownsGroup()) throw new Superseded();
+        if (denied) await onGroupDenied(denied, response.status, owner, path);
         const message =
           response.status === 403 || response.status === 404
             ? groupRefused(response.status)
@@ -417,6 +423,7 @@ export function createTransport({
       reading = true;
       const body = await response.json();
       assertLive();
+      if (ownsGroup && !ownsGroup()) throw new Superseded();
       return body;
     } catch (error) {
       if (!live() || aborted === 'session') throw new Superseded();

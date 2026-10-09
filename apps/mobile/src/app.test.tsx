@@ -132,6 +132,22 @@ function backend() {
   let cookie: string | null = null;
   let account: string | null = null;
   const drafts = new Map<string, unknown>();
+  const device = { failDraftWrites: false };
+  const payments = new Map<string, unknown>();
+  const settlementAttempts = {
+    load: async (accountId: string, id: string) =>
+      structuredClone(payments.get(accountId + id) ?? null),
+    save: async (accountId: string, id: string, value: unknown) => {
+      payments.set(accountId + id, structuredClone(value));
+    },
+    remove: async (accountId: string, id: string) => {
+      payments.delete(accountId + id);
+    },
+    clear: async () => {
+      payments.clear();
+    },
+  };
+
   const creations = new Map<string, unknown>();
   const groupCreations = {
     load: async (accountId: string) => structuredClone(creations.get(accountId) ?? null),
@@ -153,9 +169,11 @@ function backend() {
     },
     {
       now: () => clock.now,
+      settlementAttempts,
       expenseDrafts: {
         load: async (accountId, id) => structuredClone(drafts.get(`${accountId}:${id}`) ?? null),
         save: async (accountId, id, value) => {
+          if (device.failDraftWrites) throw new Error('Device storage full');
           drafts.set(`${accountId}:${id}`, structuredClone(value));
         },
         remove: async (accountId, id) => {
@@ -178,7 +196,7 @@ function backend() {
           },
         },
         cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
-        stores: [groupCreations],
+        stores: [groupCreations, settlementAttempts],
       },
       groupCreations,
       newSubmissionKey: () => 'native-app-test-0001',
@@ -239,6 +257,9 @@ function backend() {
     controller,
     clock,
     creations,
+    device,
+    drafts,
+    payments,
     use(next: Handler) {
       handler = next;
     },
@@ -738,6 +759,35 @@ describe('App Group being created', () => {
 });
 
 describe('App Group Activity refresh', () => {
+  it('Android Back restores the payment event’s scroll position', async () => {
+    const app = await renderApp();
+    app.use((path) =>
+      path.includes('/activity?')
+        ? json({
+            ...activityPage,
+            data: {
+              ...activityPage.data,
+              activities: [
+                {
+                  ...activityPage.data.activities[0],
+                  type: 'settlement_recorded',
+                  metadata: { amount: 10, currency: 'INR', paidByName: 'Sam', paidToName: 'Alex' },
+                },
+              ],
+            },
+          })
+        : undefined,
+    );
+    await app.press('Open Maple House');
+    await app.press('Activity');
+    await app.scrollTo(900);
+    await settle(app.controller.openActivityEvent('d00000000000000000000001', { scrollY: 900 }));
+    native.scrollTo.mockClear();
+    expect(await app.androidBack()).toBe(true);
+    await app.layout(700, 2100);
+    expect(native.scrollTo).toHaveBeenLastCalledWith({ y: 900, animated: false });
+  });
+
   async function onActivity() {
     const app = await renderApp();
     await app.press('Open Maple House');
@@ -1816,4 +1866,90 @@ describe('App Home', () => {
     expect(app.text()).toContain('September groceries');
     expect(app.pressable('Back to Home')).toBeTruthy();
   });
+});
+
+it('shows the waiting invitation while Android Back protects an unstored draft', async () => {
+  const app = await renderApp();
+  await app.press('Open Maple House');
+  await settle(app.controller.openExpense(groupId));
+  app.device.failDraftWrites = true;
+  await settle(app.controller.updateExpenseDraft({ description: 'Dinner', amount: '10' }));
+  await settle(app.controller.openInvitation('http://localhost:4138/join/deadbeef'));
+  expect(app.text()).toContain('Invitation waiting');
+  expect(app.text()).toContain('Could not save your draft on this device');
+  expect(await app.androidBack()).toBe(true);
+  expect(app.controller.getSnapshot()).toMatchObject({
+    screen: 'expense',
+    expense: { draft: { description: 'Dinner' }, persistence: 'error' },
+  });
+  expect(app.text()).toContain('Invitation waiting');
+});
+
+it('asks before discarding a lost Group’s unconfirmed Expense and sends nothing', async () => {
+  const app = await renderApp();
+  await settle(app.controller.openExpense(groupId));
+  await settle(
+    app.controller.updateExpenseDraft({
+      description: 'Dinner',
+      amount: '10',
+      tagId: 'c00000000000000000000001',
+    }),
+  );
+  app.use((path, init) =>
+    path === `/api/groups/${groupId}/expenses` && init.method === 'POST'
+      ? Promise.reject(new TypeError('Reply lost'))
+      : undefined,
+  );
+  await settle(app.controller.saveExpense());
+  expect(app.drafts.size).toBe(1);
+  app.use((path) =>
+    path === `/api/groups/${groupId}`
+      ? json({ status: 403, error: 'Access removed' }, 403)
+      : undefined,
+  );
+  await settle(app.controller.refresh('retry'));
+  await app.press('Discard unconfirmed save');
+  const [, message, choices] = vi.mocked(Alert.alert).mock.lastCall!;
+  expect(message).toContain('may already be recorded');
+  expect(app.drafts.size).toBe(1);
+  expect(choices!.find((choice) => choice.text === 'Cancel')).toBeDefined();
+  await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
+  expect(app.drafts.size).toBe(0);
+  expect(app.controller.getSnapshot().screen).toBe('groups');
+});
+
+it('asks before discarding a lost Group’s unconfirmed payment', async () => {
+  const app = await renderApp();
+  let denied = false;
+  app.use((path, init) => {
+    if (path === `/api/groups/${groupId}`)
+      return denied
+        ? json({ status: 403, error: 'Access removed' }, 403)
+        : json({
+            status: 200,
+            data: {
+              ...group,
+              members: [
+                ...group.members,
+                { user: { ...alex, email: 'alex@example.test' }, role: 'member', joinedAt: iso },
+              ],
+            },
+          });
+    if (path.endsWith('/settlements') && init.method === 'POST')
+      return Promise.reject(new TypeError('Reply lost'));
+  });
+  await settle(app.controller.openSettlements(groupId));
+  app.controller.selectSettlement(user.id, alex._id, 'INR');
+  await settle(app.controller.recordSettlement());
+  expect(app.payments.size).toBe(1);
+  denied = true;
+  await settle(app.controller.refresh('retry'));
+  await app.press('Discard unconfirmed payment');
+  const [, message, choices] = vi.mocked(Alert.alert).mock.lastCall!;
+  expect(message).toContain('may already be recorded');
+  expect(app.payments.size).toBe(1);
+  expect(choices!.find((choice) => choice.text === 'Cancel')).toBeDefined();
+  await settle(Promise.resolve(choices!.find((choice) => choice.text === 'Discard')!.onPress!()));
+  expect(app.payments.size).toBe(0);
+  expect(app.controller.getSnapshot().screen).toBe('groups');
 });

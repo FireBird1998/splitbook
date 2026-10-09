@@ -773,6 +773,48 @@ describe('native session and Group boundary', () => {
     });
   });
 
+  it.each([
+    'http://localhost:4127/join/abcdefg',
+    'http://localhost:4127/join/deadbeef?extra=1',
+    'https://other.example.test/join/deadbeef',
+  ])('keeps the saved invitation when an incoming link is invalid: %s', async (invalidUrl) => {
+    const pending = memoryCredentials();
+    const intercept = (path: string) =>
+      path === '/api/join/deadbeef'
+        ? json({
+            data: { _id: otherGroupId, name: 'Maple Flat', category: 'home', memberCount: 1 },
+            status: 200,
+          })
+        : undefined;
+    const controller = setup({ pending: pending.credentials, intercept }).controller;
+    await controller.restore();
+    await controller.openInvitation('http://localhost:4127/join/deadbeef');
+    await controller.openInvitation(invalidUrl);
+    expect(controller.getSnapshot()).toMatchObject({
+      screen: 'invite',
+      invitation: { status: 'invalid', code: null },
+    });
+    expect(pending.read()).toBe('deadbeef');
+    await controller.back();
+    await vi.waitFor(() => expect(controller.getSnapshot().invitation.status).toBe('ready'));
+    expect(controller.getSnapshot().invitation).toMatchObject({
+      status: 'ready',
+      code: 'deadbeef',
+      preview: { name: 'Maple Flat' },
+    });
+    await controller.openInvitation(invalidUrl);
+    await controller.refresh('foreground');
+    expect(controller.getSnapshot().invitation).toMatchObject({
+      status: 'ready',
+      code: 'deadbeef',
+      preview: { name: 'Maple Flat' },
+    });
+    controller.dispose();
+    const restarted = setup({ pending: pending.credentials, intercept }).controller;
+    await restarted.restore();
+    expect(restarted.getSnapshot().invitation).toMatchObject({ status: 'ready', code: 'deadbeef' });
+  });
+
   it('restores a pending invitation after process restart before signing in', async () => {
     const pending = memoryCredentials();
     const intercept = (path: string) =>
@@ -2354,4 +2396,14 @@ describe('sign-out revokes the session on the server (#202)', () => {
     expect(device.store.read()).toBeNull();
     expect(restarted.getSnapshot().auth).toMatchObject({ status: 'signed-out', user: null });
   });
+});
+
+it('does not clear invitation storage when Back closes an invalid link with no saved destination', async () => {
+  const pending = memoryCredentials();
+  const controller = setup({ pending: pending.credentials }).controller;
+  await controller.restore();
+  await controller.openInvitation('https://other.example.test/join/deadbeef');
+  await controller.cancelInvitation();
+  expect(pending.credentials.clear).not.toHaveBeenCalled();
+  expect(controller.getSnapshot().screen).toBe('groups');
 });

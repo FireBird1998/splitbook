@@ -108,6 +108,10 @@ export interface ExpenseEditor {
   requestedExpenseId: string | null;
   receiptId: string | null;
   persistence: 'saved' | 'saving' | 'error';
+  /** Incoming link held until entries can be kept or explicitly discarded; never a write. */
+  waitingInvitation?: string | null;
+  /** Its Group refused this member; entries stay blocked until leaving or Discard. */
+  accessLost?: boolean;
   message: string | null;
   validation: ExpenseValidation;
   returnTo: GroupReturnContext | null;

@@ -67,6 +67,13 @@ function setup(
   const records = new Map<string, unknown>();
   const savedRows = new Map<string, unknown>();
   const store = {
+    list: async (account: string) =>
+      [...records]
+        .filter(([key]) => key.startsWith(account))
+        .map(([key, value]) => ({
+          groupId: key.slice(account.length),
+          value: structuredClone(value),
+        })),
     load: async (a: string, g: string) => structuredClone(records.get(a + g) ?? null),
     save: async (a: string, g: string, v: unknown) => {
       records.set(a + g, structuredClone(v));
@@ -1821,4 +1828,90 @@ describe('the Record payment sheet reads only what it checks (#333)', () => {
       });
     },
   );
+});
+
+afterEach(() => vi.useRealTimers());
+it('forgets saved Group content when the payment check returns 200 without this member', async () => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  let left = false,
+    offline = false;
+  const { controller, sent } = setup((path) => {
+    if (offline) return Promise.reject(new TypeError('Network request failed'));
+    if (left && path === `/api/groups/${groupId}`)
+      return json({ status: 200, data: { ...group, members: group.members.slice(1) } });
+  }, true);
+  await controller.signIn('alex');
+  await controller.openGroup(groupId);
+  await controller.back();
+  left = true;
+  vi.setSystemTime(Date.now() + 31_000);
+  await controller.openSettlements(groupId);
+  expect(controller.getSnapshot()).toMatchObject({
+    groups: { data: [] },
+    settlement: { status: 'blocked', group: null },
+  });
+  await controller.back();
+  offline = true;
+  const before = sent.length;
+  await controller.openGroup(groupId);
+  expect(controller.getSnapshot().detail.data).toBeNull();
+  expect(controller.getSnapshot().financial.expenses.data).toEqual([]);
+  expect(sent.slice(before).filter((request) => !request.startsWith('GET '))).toEqual([]);
+});
+
+it.each(['back', 'discard'] as const)(
+  'removes a lost Group’s payment attempt only on deliberate %s',
+  async (leave) => {
+    let refused = false;
+    const { controller, records, sent } = setup((path, init) => {
+      if (refused && path === `/api/groups/${groupId}`)
+        return json({ status: 403, error: 'Access removed' }, 403);
+      if (path.endsWith('/settlements') && init.method === 'POST')
+        return Promise.reject(new TypeError('Reply lost'));
+    }, true);
+    await controller.signIn('alex');
+    await controller.openSettlements(groupId);
+    controller.selectSettlement(actor, recipient, 'INR');
+    await controller.recordSettlement();
+    expect(records.size).toBe(1);
+    refused = true;
+    await controller.refresh('retry');
+    expect(controller.getSnapshot().settlement).toMatchObject({
+      status: 'blocked',
+      attempt: { key: 'settlement-key-1' },
+    });
+    expect(records.size).toBe(1);
+    const before = sent.length;
+    if (leave === 'back') await controller.back();
+    else await controller.discardUnconfirmedSettlement();
+    expect(records.size).toBe(0);
+    expect(controller.getSnapshot().screen).toBe('groups');
+    expect(sent.slice(before).filter((request) => !request.startsWith('GET '))).toEqual([]);
+  },
+);
+
+it('cleans the unlisted Group’s payment attempt after its own refusal on Home', async () => {
+  let denied = false;
+  const { controller, records, sent } = setup((path, init) => {
+    if (denied && path === '/api/groups') return json({ status: 200, data: [] });
+    if (denied && path === `/api/groups/${groupId}`)
+      return json({ status: 404, error: 'Group gone' }, 404);
+    if (path.endsWith('/settlements') && init.method === 'POST')
+      return Promise.reject(new TypeError('Reply lost'));
+  }, true);
+  await controller.signIn('alex');
+  await controller.openSettlements(groupId);
+  controller.selectSettlement(actor, recipient, 'INR');
+  await controller.recordSettlement();
+  await controller.back();
+  await controller.back();
+  expect(records.size).toBe(1);
+  denied = true;
+  const before = sent.length;
+  await controller.refresh('pull');
+  expect(records.size).toBe(0);
+  expect(
+    sent.slice(before).filter((request) => request === `GET /api/groups/${groupId}`),
+  ).toHaveLength(1);
+  expect(sent.slice(before).filter((request) => !request.startsWith('GET '))).toEqual([]);
 });

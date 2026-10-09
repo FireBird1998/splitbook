@@ -1135,6 +1135,20 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
         onAcknowledge={controller.acknowledgeSettlement}
         onRecord={() => void controller.recordSettlement()}
         onRetry={() => void controller.retrySettlementCheck()}
+        onDiscard={() =>
+          Alert.alert(
+            'Discard this unconfirmed payment?',
+            'This payment may already be recorded. Discarding removes its retry from this device and sends nothing. If access returns, check the Group’s payments before recording it again.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              {
+                text: 'Discard',
+                style: 'destructive',
+                onPress: () => void controller.discardUnconfirmedSettlement(),
+              },
+            ],
+          )
+        }
         onClose={() => void controller.back()}
       />
     </GroupShell>
@@ -1223,7 +1237,9 @@ function ExpenseScreen({ state }: { state: MobileSnapshot }) {
       onDiscardUnconfirmed={() =>
         Alert.alert(
           'Discard this unconfirmed save?',
-          'Check this Group’s Expenses first. If this Expense is already there, discard this save and don’t save the draft again. If it isn’t, discard this save, then correct the draft and save it. Discarding sends nothing.',
+          state.expense.accessLost
+            ? 'This Expense save or change may already be recorded. Discarding removes it from this device and sends nothing. If access returns, check the Group’s Expenses before saving again.'
+            : 'Check this Group’s Expenses first. If this Expense is already there, discard this save and don’t save the draft again. If it isn’t, discard this save, then correct the draft and save it. Discarding sends nothing.',
           [
             { text: 'Cancel', style: 'cancel' },
             {

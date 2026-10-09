@@ -289,6 +289,8 @@ export interface HomeSession {
   answered(path: string, saved?: number | null): void;
   /** A Groups list from the server holds `listed`, and leaves out `lost`: they go from memory. */
   listed(listed: Set<string>, lost: Set<string>): void;
+  /** Verified omission prompts an access check only for financial records kept on this device. */
+  checkUnlisted?(listed: Set<string>, owner: number): Promise<void>;
   /** The persister keeps only these Groups' copies (inside a lease write). */
   retain(accountId: string, listed: string[]): Promise<void> | undefined;
   /** This account's saved copies in these scopes couldn't be removed: never shown again. */
@@ -655,6 +657,7 @@ export function createHomeQueries(session: HomeSession) {
         'home',
       ]);
     }
+    if (session.current(owner)) await session.checkUnlisted?.(listed, owner);
   };
   const options = (): QueryObserverOptions<Envelope, Error, Envelope, Envelope, QueryKey>[] => [
     {

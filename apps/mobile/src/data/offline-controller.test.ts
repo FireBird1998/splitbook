@@ -75,6 +75,12 @@ function fixture(
     cleanup = false,
     sessionStatus = 200;
   let activeUser = user;
+  const device = {
+    failRemoval: false,
+    holdDraftWrite: null as Promise<void> | null,
+    holdGroupRead: null as Promise<void> | null,
+  };
+  let archived = false;
   /** Replies with a status, and a body that defaults to an empty JSON object. */
   const errors = new Map<string, { status: number; body?: string }>();
   const failedPaths = new Set<string>();
@@ -142,6 +148,13 @@ function fixture(
           },
         },
         settlementAttempts: {
+          list: async (account) =>
+            [...attempts]
+              .filter(([key]) => key.startsWith(account))
+              .map(([key, value]) => ({
+                groupId: key.slice(account.length),
+                value: structuredClone(value),
+              })),
           load: async (account, group) => structuredClone(attempts.get(account + group) ?? null),
           save: async (account, group, value) => {
             attempts.set(account + group, structuredClone(value));
@@ -154,11 +167,20 @@ function fixture(
           },
         },
         expenseDrafts: {
+          list: async (account) =>
+            [...drafts]
+              .filter(([key]) => key.startsWith(account))
+              .map(([key, value]) => ({
+                groupId: key.slice(account.length),
+                value: structuredClone(value),
+              })),
           load: async (account, group) => structuredClone(drafts.get(account + group) ?? null),
           save: async (account, group, value) => {
+            await device.holdDraftWrite;
             drafts.set(account + group, structuredClone(value));
           },
           remove: async (account, group) => {
+            if (device.failRemoval) throw new Error('Device storage failed');
             drafts.delete(account + group);
           },
           clear: async () => {
@@ -214,6 +236,7 @@ function fixture(
           if (offline) throw new Error('Offline');
           if (gateway) return gatewayReply(gateway.status, gateway.body);
           const path = new URL(url).pathname;
+          if (path === `/api/groups/${groupId}`) await device.holdGroupRead;
           if (hung.has(path)) return hangUntilAborted(init, hung.get(path)!);
           if (errors.has(path)) {
             const { status, body } = errors.get(path)!;
@@ -262,7 +285,7 @@ function fixture(
                 activeUser.id !== accountId
                   ? []
                   : [
-                      ...(revoked ? [] : [group]),
+                      ...(revoked || archived ? [] : [group]),
                       ...(options.extraGroups ?? []),
                       ...(created ? [created] : []),
                     ],
@@ -328,6 +351,13 @@ function fixture(
     );
   return {
     create,
+    device,
+    archive: () => {
+      archived = true;
+    },
+    restoreAccess: () => {
+      revoked = false;
+    },
     expireIdentity: () => {
       identity = { user, session: { userId: accountId, expiresAt: '2020-01-01T00:00:00.000Z' } };
     },
@@ -373,6 +403,79 @@ function fixture(
   };
 }
 describe('account-scoped offline financial views', () => {
+  it('discards a blocked ordinary draft without any server write', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Dinner', amount: '12' });
+    f.revoke();
+    await controller.refresh('retry');
+    const before = f.requests().length;
+    await controller.discardExpenseDraft();
+    expect(f.drafts.size).toBe(0);
+    expect(controller.getSnapshot().screen).toBe('groups');
+    expect(
+      f
+        .requests()
+        .slice(before)
+        .filter((request) => !request.startsWith('GET ')),
+    ).toEqual([]);
+  });
+
+  it('checks an unlisted draft’s Group before deleting it on a verified Home refresh', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Dinner', amount: '12' });
+    await controller.back();
+    await controller.back();
+    expect(f.drafts.size).toBe(1);
+    f.revoke();
+    const before = f.requests().length;
+    await controller.refresh('pull');
+    expect(
+      f
+        .requests()
+        .slice(before)
+        .filter((request) => request === `GET /api/groups/${groupId}`),
+    ).toHaveLength(1);
+    expect(f.drafts.size).toBe(0);
+    expect(
+      f
+        .requests()
+        .slice(before)
+        .filter((request) => !request.startsWith('GET ')),
+    ).toEqual([]);
+  });
+
+  it('keeps a refused draft blocked on its form, then removes it when leaving for Home', async () => {
+    const f = fixture();
+    const controller = f.create();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Keep my dinner', amount: '12' });
+    f.revoke();
+    const before = f.requests().length;
+    await controller.refresh('retry');
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'blocked',
+      draft: { description: 'Keep my dinner' },
+    });
+    expect(f.drafts.size).toBe(1);
+    await controller.back();
+    expect(controller.getSnapshot().screen).toBe('groups');
+    expect(f.drafts.size).toBe(0);
+    expect(
+      f
+        .requests()
+        .slice(before)
+        .filter((request) => !request.startsWith('GET ')),
+    ).toEqual([]);
+  });
+
   it('reopens previously loaded Home and Groups after an offline restart with last refresh information', async () => {
     const f = fixture(),
       first = f.create();
@@ -1394,4 +1497,105 @@ describe('saved-copy storage budget (#223)', () => {
       controller.dispose();
     },
   );
+});
+
+it('retains an archived Group’s financial records after a verified list omits it', async () => {
+  const f = fixture();
+  const controller = f.create();
+  await controller.signIn('alex');
+  await controller.openExpense(groupId);
+  await controller.updateExpenseDraft({ description: 'Dinner', amount: '12' });
+  await controller.back();
+  await controller.back();
+  f.archive();
+  const before = f.requests().length;
+  await controller.refresh('pull');
+  expect(
+    f
+      .requests()
+      .slice(before)
+      .filter((request) => request === `GET /api/groups/${groupId}`),
+  ).toHaveLength(1);
+  expect(f.drafts.size).toBe(1);
+});
+it('retains a refused draft and reports a failed Discard without signing out', async () => {
+  const f = fixture();
+  const controller = f.create();
+  await controller.signIn('alex');
+  await controller.openExpense(groupId);
+  await controller.updateExpenseDraft({ description: 'Dinner', amount: '12' });
+  f.revoke();
+  await controller.refresh('retry');
+  f.device.failRemoval = true;
+  await controller.discardExpenseDraft();
+  expect(f.drafts.size).toBe(1);
+  expect(controller.getSnapshot()).toMatchObject({
+    auth: { status: 'authenticated' },
+    screen: 'expense',
+    expense: { status: 'blocked', draft: { description: 'Dinner' } },
+  });
+  expect(controller.getSnapshot().expense.message).toContain('Could not remove');
+  f.device.failRemoval = false;
+  await controller.discardExpenseDraft();
+  expect(f.drafts.size).toBe(0);
+});
+
+it('finishes a draft write before lost-access cleanup, so it cannot restore the removed record', async () => {
+  const f = fixture();
+  const controller = f.create();
+  await controller.signIn('alex');
+  await controller.openExpense(groupId);
+  let release!: () => void, releaseGroup!: () => void;
+  f.device.holdGroupRead = new Promise<void>((resolve) => {
+    releaseGroup = resolve;
+  });
+  const before = f.requests().length;
+  const reading = controller.refresh('retry');
+  await vi.waitFor(() =>
+    expect(f.requests().slice(before)).toContain(`GET /api/groups/${groupId}`),
+  );
+  f.device.holdDraftWrite = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const typing = controller.updateExpenseDraft({ description: 'Dinner', amount: '12' });
+  f.revoke();
+  releaseGroup();
+  let leaving: ReturnType<typeof controller.back>;
+  try {
+    await vi.waitFor(() => expect(controller.getSnapshot().expense.status).toBe('blocked'));
+    leaving = controller.back();
+  } finally {
+    release();
+  }
+  await Promise.all([typing, reading, leaving!]);
+  expect(f.drafts.size).toBe(0);
+  expect(controller.getSnapshot()).toMatchObject({
+    screen: 'groups',
+    auth: { status: 'authenticated' },
+  });
+});
+
+it('starts a new ordinary draft after access returns without recovering or replaying the removed one', async () => {
+  const f = fixture();
+  const controller = f.create();
+  await controller.signIn('alex');
+  await controller.openExpense(groupId);
+  await controller.updateExpenseDraft({ description: 'Old dinner', amount: '12' });
+  f.revoke();
+  await controller.refresh('retry');
+  await controller.back();
+  expect(f.drafts.size).toBe(0);
+  f.restoreAccess();
+  await controller.openGroup(groupId);
+  await controller.openExpense(groupId);
+  expect(controller.getSnapshot().expense).toMatchObject({
+    status: 'editing',
+    attempt: null,
+    mutation: null,
+    draft: { description: '' },
+  });
+  await controller.updateExpenseDraft({ description: 'New dinner', amount: '15' });
+  await controller.back();
+  expect(f.drafts.size).toBe(1);
+  expect(f.writes()).toBe(0);
 });

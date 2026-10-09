@@ -180,6 +180,11 @@ async function run() {
     await alex.request(`${path}/members/${samId}`, 'DELETE');
     await controller.refresh();
     assert.equal(controller.getSnapshot().expense.status, 'blocked');
+    assert.notEqual(await draft.load(), null);
+    await controller.back();
+    await controller.refresh('pull');
+    assert.equal(controller.getSnapshot().screen, 'groups');
+    assert.equal(await draft.load(), null);
     controller.dispose();
     offline = true;
     controller = create();

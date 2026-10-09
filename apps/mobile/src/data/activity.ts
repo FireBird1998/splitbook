@@ -3,7 +3,7 @@ import { parseActivityPageResponse } from '@splitbook/shared/activity-page-read'
 import { getCurrency } from '@splitbook/shared/currency';
 import { parseAmountMinor } from '@splitbook/shared/exact-money';
 import { objectId } from './dto';
-import type { LoadStatus } from './types';
+import type { LoadStatus, ScrollAnchor } from './types';
 
 const metadata = z.object({
   userId: objectId.optional(),
@@ -39,6 +39,8 @@ const eventSchema = z.object({
 export type ActivityEvent = z.infer<typeof eventSchema>;
 export interface ActivityState {
   selected: ActivityEvent | null;
+  /** Position of a selected event in the loaded list; no origin for direct selection. */
+  origin?: { groupId: string; scrollY: number; anchor?: ScrollAnchor } | null;
   target: {
     status: 'none' | 'loading' | 'available' | 'deleted' | 'unavailable' | 'error';
     description?: string;
