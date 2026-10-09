@@ -297,6 +297,19 @@ describe('native Expense creation and editing', () => {
     });
     restarted.resumeExpenseDraft();
     await restarted.updateExpenseDraft({ notes: 'Offline notes' });
+    await restarted.updateExpenseDraft({
+      payerId: memberIds[1],
+      participantIds: memberIds.slice(0, 2),
+      splitMethod: 'shares',
+      splitValues: { [memberIds[0]]: '1', [memberIds[1]]: '2' },
+      category: 'food',
+    });
+    expect(restarted.getSnapshot().expense.draft).toMatchObject({
+      payerId: memberIds[1],
+      participantIds: memberIds.slice(0, 2),
+      splitMethod: 'shares',
+      category: 'food',
+    });
     await restarted.saveExpense();
     expect(posts).toBe(0);
     offline = false;

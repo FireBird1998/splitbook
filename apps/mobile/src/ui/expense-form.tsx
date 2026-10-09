@@ -770,19 +770,16 @@ export function OptionalDetails({
             accessibilityLabel="Category"
             style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}
           >
-            {categoryLocked ? (
-              <CompactText>{getCategory(draft.category)?.label ?? draft.category}</CompactText>
-            ) : (
-              EXPENSE_CATEGORIES.map((category) => (
-                <Chip
-                  key={category.id}
-                  role="radio"
-                  label={category.label}
-                  selected={draft.category === category.id}
-                  onPress={() => !locked && onChange({ category: category.id })}
-                />
-              ))
-            )}
+            {EXPENSE_CATEGORIES.map((category) => (
+              <Chip
+                key={category.id}
+                role="radio"
+                label={category.label}
+                selected={draft.category === category.id}
+                disabled={categoryLocked}
+                onPress={() => !categoryLocked && onChange({ category: category.id })}
+              />
+            ))}
           </View>
           <Field
             label="Notes"

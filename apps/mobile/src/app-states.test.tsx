@@ -2415,18 +2415,28 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     const app = await start(phone);
     await settle();
     await app.press(openMaple);
-    // Outside the freshness window, the form waits only for the Group's read (#366).
+    // Outside the freshness window, ordinary input is available during the shared Group check.
     const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 31_000);
     let group = phone.hold(`/api/groups/${maple}`);
     void controller().openExpense(maple);
     await group.reached;
     await settle();
-    expect(controller().getSnapshot().expense).toMatchObject({ status: 'loading', draft: null });
-    expect(app.text()).toContain('Opening a new Expense…');
-    expect(app.text()).not.toMatch(/draft/i);
+    expect(controller().getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      draft: { description: '', amount: '' },
+      contextCheck: { status: 'checking' },
+      preview: null,
+    });
+    expect(app.text()).toContain('Checking Group');
+    expect(app.text()).not.toContain('Opening your draft…');
+    expect(app.disabled('Save expense')).toBe(true);
+    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12' }));
     group.release();
     await settle();
-    await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12' }));
+    expect(controller().getSnapshot().expense.draft).toMatchObject({
+      description: 'Gas bill',
+      amount: '12',
+    });
     await app.press('Back to Group, keeping your draft');
     expect(controller().getSnapshot().keptDraft).toMatchObject({ groupId: maple });
     // The draft kept for Maple House opens, and says so when its Group needs a read.
@@ -2436,10 +2446,12 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     await group.reached;
     await settle();
     expect(controller().getSnapshot().expense).toMatchObject({
-      status: 'loading',
+      status: 'resume',
       draft: { description: 'Gas bill' },
+      contextCheck: { status: 'checking' },
     });
-    expect(app.text()).toContain('Opening your draft…');
+    expect(app.text()).toContain('Unfinished draft');
+    expect(app.text()).toContain('Checking Group');
     expect(app.text()).not.toContain('new Expense');
     group.release();
     await settle();
@@ -2475,9 +2487,14 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     void controller().discardExpenseDraft();
     await group.reached;
     await settle();
-    expect(controller().getSnapshot().expense).toMatchObject({ status: 'loading', draft: null });
-    expect(app.text()).toContain('Opening a new Expense…');
-    expect(app.text()).not.toMatch(/draft/i);
+    expect(controller().getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      draft: { description: '', amount: '' },
+      contextCheck: { status: 'checking' },
+    });
+    expect(app.text()).toContain('Checking Group');
+    expect(app.text()).not.toContain('Opening your draft…');
+    expect(app.text()).not.toContain('Unfinished draft');
     group.release();
     await settle();
   });
@@ -2496,13 +2513,27 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
         phone.network.failing.push(`/api/groups/${maple}`);
       } else phone.storage.failDraftRead = true;
       await settle(controller().openExpense(maple));
+      if (failure === 'Group') {
+        expect(controller().getSnapshot().expense).toMatchObject({
+          status: 'editing',
+          draft: { description: '', amount: '' },
+          contextCheck: { status: 'failed' },
+          message: 'The server could not complete this request. Please try again.',
+        });
+        expect(app.text()).toContain('Group not checked');
+        expect(app.disabled('Save expense')).toBe(true);
+        await settle(
+          controller().updateExpenseDraft({ description: 'Kept through the failed check' }),
+        );
+        expect(controller().getSnapshot().expense.draft?.description).toBe(
+          'Kept through the failed check',
+        );
+        return;
+      }
       expect(controller().getSnapshot().expense).toMatchObject({
         status: 'blocked',
         draft: null,
-        message:
-          failure === 'Group'
-            ? 'The server could not complete this request. Please try again.'
-            : 'Could not open a new Expense. Please try again.',
+        message: 'Could not open a new Expense. Please try again.',
       });
       expect(app.text()).toContain('Couldn’t open a new Expense');
       expect(app.text()).not.toMatch(/draft/i);

@@ -37,6 +37,7 @@ import {
   buildExpenseBody,
   buildExpensePatch,
   expenseCorrectionSummary,
+  expenseContextPending,
   expenseDraftChanged,
   expenseFields,
   parseCreatedExpenseId,
@@ -2368,6 +2369,12 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     };
   };
 
+  const requireExpenseAccess = (context: ExpenseContext, groupId: string, accountId: string) => {
+    if (context.group.id !== groupId)
+      throw new RequestError('The server returned a different Group. Please retry.', 500);
+    if (!context.group.members.some((member) => member.user.id === accountId))
+      throw new RequestError('You no longer have access to this Group.', 403);
+  };
   const blankExpense = (
     context: ExpenseContext,
     accountId: string,
@@ -2471,10 +2478,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     try {
       const context = parseExpenseContext(await expenseQueries.group(owner, { wanted }));
       if (!current(owner) || !wanted()) return;
-      if (context.group.id !== groupId)
-        throw new RequestError('The server returned a different Group. Please retry.', 500);
-      if (!context.group.members.some((member) => member.user.id === snapshot.auth.user?.id))
-        throw new RequestError('You no longer have access to this Group.', 403);
+      requireExpenseAccess(context, groupId, snapshot.auth.user!.id);
       // A cold open has no currency or members to invent: only now can its blank exist.
       if (!snapshot.expense.draft && snapshot.auth.user) {
         const blank = blankExpense(context, snapshot.auth.user.id, snapshot.financial.month);
@@ -2654,10 +2658,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       known = !!reading && showing() && (await expenseQueries.known(owner, held));
       const context = parseExpenseContext(await checking);
       if (!showing()) return;
-      if (context.group.id !== groupId)
-        throw new RequestError('The server returned a different Group. Please retry.', 500);
-      if (!context.group.members.some((member) => member.user.id === accountId))
-        throw new RequestError('You no longer have access to this Group.', 403);
+      requireExpenseAccess(context, groupId, accountId);
       const blank = blankExpense(context, accountId, month);
       // Earlier versions stored drafts that changed nothing; one would still hold the Group.
       // A new draft is compared with the start stored with it, not today's blank form, and
@@ -2835,7 +2836,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       !snapshot.expense.draft
     )
       return;
-    if (snapshot.expense.contextCheck) {
+    if (expenseContextPending(snapshot.expense, snapshot.offline.active)) {
       const { amount, description, date, notes } = patch;
       patch = {
         ...(amount !== undefined ? { amount } : {}),
@@ -2870,7 +2871,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       expense: {
         ...snapshot.expense,
         draft,
-        preview: snapshot.expense.contextCheck ? null : previewExpense(draft),
+        preview: expenseContextPending(snapshot.expense, snapshot.offline.active)
+          ? null
+          : previewExpense(draft),
         persistence: 'saving',
         message: null,
         validation: revalidateExpense(snapshot.expense.validation, draft, snapshot.expense.context),

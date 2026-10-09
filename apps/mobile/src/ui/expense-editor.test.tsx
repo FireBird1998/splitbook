@@ -1,5 +1,13 @@
 import { useSyncExternalStore, type ReactElement } from 'react';
-import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
+import {
+  act,
+  create,
+  type ReactTestInstance,
+  type ReactTestRenderer,
+  type ReactTestRendererJSON,
+} from 'react-test-renderer';
+import { flatten, layoutHeight } from '../test-utils/layout';
+import { setWindow } from '../test-utils/native';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
@@ -306,6 +314,24 @@ async function render(
 }
 
 const isHost = (node: ReactTestInstance, name: string) => (node.type as unknown) === name;
+/** Estimated vertical input position in the rendered layout; native QA checks real bounds too. */
+const inputTop = (
+  node: ReactTestRendererJSON | string | null,
+  label: string,
+  scale: number,
+): number | null => {
+  if (!node || typeof node === 'string') return null;
+  if (node.type === 'TextInput' && node.props.accessibilityLabel === label) return 0;
+  const style = flatten(node.props.style);
+  let before = Number(style.paddingTop ?? style.paddingVertical ?? style.padding ?? 0);
+  for (const child of node.children ?? []) {
+    const within = inputTop(child, label, scale);
+    if (within !== null) return before + within;
+    if (style.flexDirection !== 'row')
+      before += layoutHeight(child, scale, 360) + Number(style.gap ?? 0);
+  }
+  return null;
+};
 /** The section that owns this input: the largest ancestor holding no other input. */
 const fieldOf = (input: ReactTestInstance) => {
   const inputs = (node: ReactTestInstance) =>
@@ -935,50 +961,68 @@ describe('rendered edit history', () => {
 });
 
 describe('compact Expense form', () => {
-  it('keeps the same inputs while the Group is checked, and locks only financial choices', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    let hold = false;
-    let release: () => void = () => undefined;
-    let opening: Promise<void> | undefined;
-    try {
-      const form = await render((controller) => controller.openGroup(groupId), {
-        readGroup: () =>
-          hold
-            ? new Promise((resolve) => {
-                release = () => resolve(json({ status: 200, data: group }));
-              })
-            : Promise.resolve(json({ status: 200, data: group })),
-      });
-      hold = true;
-      vi.setSystemTime(Date.now() + 31_000);
-      await act(async () => {
-        opening = form.controller.openExpense(groupId);
-      });
-      await settle();
-      const amount = form.input('Amount, required');
-      const description = form.input('Description, required');
-      expect(amount.props.editable).toBe(true);
-      expect(form.tile('Date').props.accessibilityState.disabled).toBe(false);
-      for (const label of ['Paid by', 'Split', 'Tag'])
-        expect(form.tile(label).props.accessibilityState.disabled).toBe(true);
-      expect(form.pressable('Save expense').props.accessibilityState.disabled).toBe(true);
-      await form.type('Amount, required', '12.34');
-      await form.type('Description, required', 'Dinner while checking');
-      await act(async () => {
+  it.each([1, 1.3])(
+    'keeps input identity and position while the Group is checked at %sx text',
+    async (scale) => {
+      setWindow({ fontScale: scale });
+      vi.useFakeTimers({ toFake: ['Date'] });
+      let hold = false;
+      let release: () => void = () => undefined;
+      let opening: Promise<void> | undefined;
+      try {
+        const form = await render((controller) => controller.openGroup(groupId), {
+          readGroup: () =>
+            hold
+              ? new Promise((resolve) => {
+                  release = () => resolve(json({ status: 200, data: group }));
+                })
+              : Promise.resolve(json({ status: 200, data: group })),
+        });
+        hold = true;
+        vi.setSystemTime(Date.now() + 31_000);
+        await act(async () => {
+          opening = form.controller.openExpense(groupId);
+        });
+        await settle();
+        const amount = form.input('Amount, required');
+        const description = form.input('Description, required');
+        await form.press('Category and notes, optional');
+        const layout = screen!.toJSON();
+        const labels = ['Amount, required', 'Description, required', 'Notes'];
+        const before = labels.map((label) =>
+          inputTop(Array.isArray(layout) ? (layout[0] ?? null) : layout, label, scale),
+        );
+        expect(before.every((top) => top !== null)).toBe(true);
+        expect(amount.props.editable).toBe(true);
+        expect(form.tile('Date').props.accessibilityState.disabled).toBe(false);
+        for (const label of ['Paid by', 'Split', 'Tag'])
+          expect(form.tile(label).props.accessibilityState.disabled).toBe(true);
+        expect(form.pressable('Save expense').props.accessibilityState.disabled).toBe(true);
+        await form.type('Amount, required', '12.34');
+        await form.type('Description, required', 'Dinner while checking');
+        await act(async () => {
+          release();
+          await opening;
+        });
+        expect(form.input('Amount, required')).toBe(amount);
+        expect(form.input('Description, required')).toBe(description);
+        expect(description.props.value).toBe('Dinner while checking');
+        expect(form.tile('Tag').props.accessibilityState.disabled).toBe(false);
+        expect(form.focusCount('Amount, required')).toBe(0);
+        const ready = screen!.toJSON();
+        expect(
+          labels.map((label) =>
+            inputTop(Array.isArray(ready) ? (ready[0] ?? null) : ready, label, scale),
+          ),
+        ).toEqual(before);
+      } finally {
         release();
         await opening;
-      });
-      expect(form.input('Amount, required')).toBe(amount);
-      expect(form.input('Description, required')).toBe(description);
-      expect(description.props.value).toBe('Dinner while checking');
-      expect(form.tile('Tag').props.accessibilityState.disabled).toBe(false);
-      expect(form.focusCount('Amount, required')).toBe(0);
-    } finally {
-      release();
-      await opening;
-      vi.useRealTimers();
-    }
-  });
+        vi.useRealTimers();
+        setWindow({ fontScale: 1 });
+      }
+    },
+  );
   const openSheet = (root: ReactTestInstance, title: string) =>
     root
       .findAll((node) => isHost(node, 'Modal') && node.props.visible === true)

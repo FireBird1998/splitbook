@@ -317,6 +317,7 @@ export function Chip({
   selected = false,
   onPress,
   role = 'button',
+  disabled = false,
 }: {
   label: string;
   /** When the spoken name needs more context than the visible label, e.g. "Tag: Groceries". */
@@ -324,13 +325,18 @@ export function Chip({
   selected?: boolean;
   onPress: () => void;
   role?: 'radio' | 'button';
+  disabled?: boolean;
 }) {
   const theme = useTheme();
   return (
     <Pressable
       accessibilityRole={role}
       accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityState={role === 'radio' ? { checked: selected } : { selected }}
+      accessibilityState={{
+        ...(role === 'radio' ? { checked: selected } : { selected }),
+        ...(disabled ? { disabled: true } : {}),
+      }}
+      disabled={disabled}
       onPress={onPress}
       hitSlop={denseHitSlop}
       style={{
