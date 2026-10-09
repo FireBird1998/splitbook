@@ -1046,7 +1046,13 @@ describe('account-scoped offline financial views', () => {
     await controller.signIn('alex');
     await controller.openGroup(groupId);
     f.revoke();
-    await controller.openExpense(groupId);
+    // A recently verified form can open locally; an expired Group must check access (#366).
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 31_000);
+    try {
+      await controller.openExpense(groupId);
+    } finally {
+      clock.mockRestore();
+    }
     f.goOffline();
     await controller.back();
     expect(controller.getSnapshot().groups.data).toEqual([]);
