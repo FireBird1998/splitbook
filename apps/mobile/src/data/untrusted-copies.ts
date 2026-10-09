@@ -3,6 +3,8 @@ import { homePath, listPath } from './home-queries';
 import { removeGroupRows } from './group-queries';
 import { removeRecordRows } from './expense-queries';
 import { removeActivityRows } from './activity-queries';
+import { parseStoredExpenseDraft } from './expense-draft';
+import { parseSettlementAttempt } from './settlement';
 import type { MobileDependencies } from './types';
 
 const recorded = z.object({ accountId: z.string(), scopes: z.record(z.string(), z.number()) });
@@ -16,7 +18,12 @@ const recorded = z.object({ accountId: z.string(), scopes: z.record(z.string(), 
 export function untrustedCopies({
   accountLocal,
   savedQueries: rows,
-}: Pick<MobileDependencies, 'accountLocal' | 'savedQueries'>) {
+  expenseDrafts,
+  settlementAttempts,
+}: Pick<
+  MobileDependencies,
+  'accountLocal' | 'savedQueries' | 'expenseDrafts' | 'settlementAttempts'
+>) {
   const record = accountLocal?.untrustedCopies,
     untrusted = new Map<string, number>();
   let recording = Promise.resolve();
@@ -41,35 +48,71 @@ export function untrustedCopies({
       await removeActivityRows(rows, accountId, groupId);
     }
   };
+  /** These scopes' saved copies from `time` or before cannot be shown. */
+  const mark = (accountId: string, scopes: string[], time: number) => {
+    for (const scope of scopes) untrusted.set(scope, time);
+    if (!record) return;
+    // Added to what is recorded for this account; another account's record is stale.
+    recording = recording
+      .then(async () => {
+        const before = await held().catch(() => null);
+        const known = before?.accountId === accountId ? before.scopes : {};
+        for (const scope of scopes) known[scope] = time;
+        await record.save({ accountId, scopes: known });
+      })
+      .catch(() => undefined);
+  };
+  /**
+   * At a start, before anything reads a saved copy: deletes the recorded copies, then the
+   * record. While one can't be deleted, the record stays and they are never shown.
+   */
+  const drop = async (pending?: z.infer<typeof recorded>) => {
+    await recording;
+    const saved = await held().catch(() => null);
+    // A stored attempt is itself durable evidence. Removing its copies must not depend on
+    // successfully writing a second record (or on that optional record being available).
+    const copies = [saved, pending].filter((copy) => copy !== null && copy !== undefined);
+    try {
+      for (const copy of copies)
+        for (const scope of Object.keys(copy.scopes)) await remove(copy.accountId, scope);
+      await record?.clear();
+    } catch {
+      for (const copy of copies)
+        for (const [scope, time] of Object.entries(copy.scopes)) untrusted.set(scope, time);
+    }
+  };
   return Object.assign(untrusted, {
-    /** These scopes' saved copies from `time` or before couldn't be removed. */
-    mark(accountId: string, scopes: string[], time: number) {
-      for (const scope of scopes) untrusted.set(scope, time);
-      if (!record) return;
-      // Added to what is recorded for this account; another account's record is stale.
-      recording = recording
-        .then(async () => {
-          const before = await held().catch(() => null);
-          const known = before?.accountId === accountId ? before.scopes : {};
-          for (const scope of scopes) known[scope] = time;
-          await record.save({ accountId, scopes: known });
-        })
-        .catch(() => undefined);
-    },
-    /**
-     * At a start, before anything reads a saved copy: deletes the recorded copies, then the
-     * record. While one can't be deleted, the record stays and they are never shown.
-     */
-    async drop() {
-      await recording;
-      const copies = await held().catch(() => null);
-      if (!copies) return;
-      try {
-        for (const scope of Object.keys(copies.scopes)) await remove(copies.accountId, scope);
-        await record?.clear();
-      } catch {
-        for (const [scope, time] of Object.entries(copies.scopes)) untrusted.set(scope, time);
+    mark,
+    drop,
+    /** A stored attempt may have reached the server before the app was killed (#282). */
+    async recover(accountId: string, time: number) {
+      const scopes = new Set<string>();
+      for (const { groupId, value } of (await expenseDrafts?.list?.(accountId)) ?? []) {
+        try {
+          const draft = parseStoredExpenseDraft(value, accountId, groupId);
+          if (!draft.attempt && !draft.mutation) continue;
+          scopes.add(`ledger:${groupId}`);
+          scopes.add(`balances:${groupId}`);
+          scopes.add('home');
+        } catch {
+          // A malformed draft is kept for its existing recovery UI, never treated as a save.
+        }
       }
+      for (const { groupId, value } of (await settlementAttempts?.list?.(accountId)) ?? []) {
+        try {
+          parseSettlementAttempt(value, accountId, groupId);
+          scopes.add(`ledger:${groupId}`);
+          scopes.add(`balances:${groupId}`);
+          scopes.add('home');
+        } catch {
+          // An unreadable payment stays available to its existing recovery UI.
+        }
+      }
+      if (scopes.size) mark(accountId, [...scopes], time);
+      await drop({
+        accountId,
+        scopes: Object.fromEntries([...scopes].map((scope) => [scope, time])),
+      });
     },
   });
 }

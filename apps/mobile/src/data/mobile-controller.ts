@@ -1405,7 +1405,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
     }
     await recordCookieAccount(owner, session.user.id);
-    await queueAccount(() => untrusted.drop());
+    await queueAccount(() => untrusted.recover(session.user.id, now()));
     // A Group submission stored on this device reopens before anything else can be created.
     openHome(session.user, await storedCreation(owner, session.user.id));
     await saveVerifiedIdentity(session, owner);
@@ -1449,6 +1449,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // are gone, so its saved Home can be read, alongside the session cookie, before any request.
       await queueAccount(() => untrusted.drop());
       const device = readDeviceAccount();
+      const accountId = (await device)?.accountId;
+      if (accountId) await queueAccount(() => untrusted.recover(accountId, now()));
       const deviceHome = readSavedHome(device);
       await loadPending();
       assertCurrent(owner);
