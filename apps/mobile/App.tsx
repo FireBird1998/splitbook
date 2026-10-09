@@ -1,5 +1,6 @@
 import { NotAvailableOffline, OfflineNotice } from './src/ui/offline-notice';
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -54,11 +55,13 @@ import {
 import { SignIn, styles } from './src/ui/screens';
 import { GroupCreateForm, InvitationPreview } from './src/ui/group-workflows';
 import { SettingsScreen, signOutClears, signOutInterruptedSave } from './src/ui/settings-screen';
-import { ExpenseEditor } from './src/ui/expense-editor';
+import { ControllerExpenseEditor } from './src/ui/controller-expense-editor';
+import { useMobileSnapshot, sameSelection } from './src/ui/use-mobile-snapshot';
 import { scrollToShow } from './src/ui/scroll';
 import { returnScrollTarget, visibleRowAnchor, type RowPlaces } from './src/ui/return-scroll';
 import { recordOutline } from './src/ui/expense-record-view';
 import { DetailsNotice, RefreshStatus, RetainedNotice } from './src/ui/financial-views';
+import { currentDayKey } from './src/ui/list-day-header';
 import { GroupExpensesView } from './src/ui/group-expenses';
 import { TripStrip } from './src/ui/trip-strip';
 import {
@@ -112,7 +115,11 @@ export default function App() {
 
 function SplitBook() {
   const theme = useTheme();
-  const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
+  const state = useMobileSnapshot(
+    controller,
+    ({ auth, screen }) => ({ auth, screen }),
+    sameSelection,
+  );
   useEffect(() => {
     if (!configurationReady) return;
     const startup = controller.restore();
@@ -143,18 +150,7 @@ function SplitBook() {
   }, []);
 
   const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
-  const feedback = refreshFeedback(state);
-  // Cold start: the saved Home of the account that last signed in, while its session is checked.
   const checking = state.auth.status === 'restoring' && state.auth.user !== null;
-  const joining = state.invitation.status === 'joining';
-  // The session check, or a sign-in, with nothing of the account on screen yet (#335).
-  const waiting = !configurationReady
-    ? null
-    : state.auth.status === 'restoring'
-      ? 'Checking your session'
-      : state.auth.status === 'signing-in'
-        ? 'Signing in'
-        : null;
   if (configurationReady && authenticated && state.screen === 'expense')
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
@@ -163,7 +159,7 @@ function SplitBook() {
           style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <ExpenseScreen state={state} />
+          <ExpenseScreen />
         </KeyboardAvoidingView>
       </SafeAreaView>
     );
@@ -171,13 +167,13 @@ function SplitBook() {
   if (configurationReady && authenticated && ['group', 'settlement'].includes(state.screen))
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-        <GroupScreen state={state} />
+        <GroupScreen />
       </SafeAreaView>
     );
   if (configurationReady && authenticated && state.screen === 'members')
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-        <MembersScreen state={state} />
+        <MembersScreen />
       </SafeAreaView>
     );
   // Settings, Create Group and an invitation, which also opens before sign-in once the session
@@ -189,15 +185,44 @@ function SplitBook() {
   )
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-        <TaskScreen state={state} authenticated={authenticated} />
+        <TaskScreen />
       </SafeAreaView>
     );
   if (configurationReady && (authenticated || checking) && state.screen === 'groups')
     return (
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
-        <HomeScreen state={state} />
+        <HomeScreen />
       </SafeAreaView>
     );
+  return <AuthenticationScreen />;
+}
+
+function AuthenticationScreen() {
+  const theme = useTheme();
+  const state = useMobileSnapshot(
+    controller,
+    (snapshot) => ({
+      auth: snapshot.auth,
+      screen: snapshot.screen,
+      creation: snapshot.creation,
+      invitation: snapshot.invitation,
+      expense: snapshot.expense,
+      offline: snapshot.offline,
+      quiet: refreshFeedback(snapshot).quiet,
+      pull: refreshFeedback(snapshot).pull,
+    }),
+    sameSelection,
+  );
+  const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
+  const feedback = state;
+  const joining = state.invitation.status === 'joining';
+  const waiting = !configurationReady
+    ? null
+    : state.auth.status === 'restoring'
+      ? 'Checking your session'
+      : state.auth.status === 'signing-in'
+        ? 'Signing in'
+        : null;
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <View style={[styles.between, { paddingHorizontal: 24, paddingTop: 10, paddingBottom: 16 }]}>
@@ -385,10 +410,26 @@ function SplitBook() {
 }
 
 /** Settings, Create Group or an invitation: a compact top bar over the screen's content. */
-function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authenticated: boolean }) {
+function TaskScreen() {
+  const state = useMobileSnapshot(
+    controller,
+    (snapshot) => ({
+      auth: snapshot.auth,
+      screen: snapshot.screen,
+      creation: snapshot.creation,
+      invitation: snapshot.invitation,
+      groups: snapshot.groups,
+      offline: snapshot.offline,
+      feedback: refreshFeedback(snapshot),
+    }),
+    (a, b) =>
+      sameSelection({ ...a, feedback: null }, { ...b, feedback: null }) &&
+      sameSelection(a.feedback, b.feedback),
+  );
+  const authenticated = state.auth.status === 'authenticated' && state.auth.user !== null;
   const theme = useTheme();
   const preference = useSyncExternalStore(appearance.subscribe, appearance.getSnapshot);
-  const feedback = refreshFeedback(state);
+  const feedback = state.feedback;
   const scroll = useRef<ScrollView>(null);
   const scrollContent = useRef<View>(null);
   // Place a form section near the top, so it stays visible when the keyboard opens.
@@ -592,16 +633,51 @@ function TaskScreen({ state, authenticated }: { state: MobileSnapshot; authentic
  * Home: balances by currency, drafts to resume, and the member's balance in each Group. At cold
  * start it is the saved Home, read-only until the session is confirmed.
  */
-function HomeScreen({ state }: { state: MobileSnapshot }) {
+const HomeScreen = memo(function HomeScreen() {
+  const selected = useMobileSnapshot(
+    controller,
+    (snapshot) => {
+      const feedback = refreshFeedback(snapshot);
+      return {
+        auth: snapshot.auth,
+        groups: snapshot.groups,
+        home: snapshot.home,
+        creation: snapshot.creation,
+        invitation: snapshot.invitation,
+        drafts: snapshot.drafts,
+        offline: snapshot.offline,
+        homeSnackbar: snapshot.homeSnackbar,
+        pull: feedback.pull,
+        quiet: feedback.quiet,
+        checking: feedback.checking,
+        progress: feedback.progress,
+        // Silence matters while figures are read; an unchanged fresh Home has no cue to hide.
+        silent: snapshot.home.status === 'loading' && feedback.silent,
+      };
+    },
+    sameSelection,
+  );
+  const state = selected;
   const theme = useTheme();
-  const feedback = refreshFeedback(state);
+  const feedback = selected;
   const { checking } = feedback;
-  const refresh = () => void controller.refresh();
+  const status = useMemo(
+    () => <RefreshStatus visible={feedback.quiet || checking} checking={checking} />,
+    [feedback.quiet, checking],
+  );
+  const refresh = useCallback(() => void controller.refresh(), []);
+  const refreshFigures = useCallback(() => void controller.refreshHome(), []);
+  const openDraft = useCallback(
+    (draft: MobileSnapshot['drafts'][number]) =>
+      void controller.openExpense(draft.groupId, draft.expenseId ?? undefined),
+    [],
+  );
+  const openGroup = useCallback((groupId: string) => void controller.openGroup(groupId), []);
   return (
     <>
       <HomeTopBar
         userName={state.auth.user!.name}
-        status={<RefreshStatus visible={feedback.quiet || checking} checking={checking} />}
+        status={status}
         accountDisabled={
           checking || state.creation.status === 'saving' || state.invitation.status === 'joining'
         }
@@ -637,7 +713,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
           state={state.home}
           offline={state.offline.active}
           silent={feedback.silent}
-          onRefresh={() => void controller.refreshHome()}
+          onRefresh={refreshFigures}
         />
         {state.creation.status === 'uncertain' && (
           <GroupCreationCheck
@@ -662,13 +738,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
           />
         )}
         {/* Direct entry: the form returns to that Group's Expenses. */}
-        <ContinueDrafts
-          drafts={state.drafts}
-          disabled={checking}
-          onOpen={(draft) =>
-            void controller.openExpense(draft.groupId, draft.expenseId ?? undefined)
-          }
-        />
+        <ContinueDrafts drafts={state.drafts} disabled={checking} onOpen={openDraft} />
         <HomeGroups
           groups={state.groups}
           byGroup={state.home.byGroup}
@@ -677,7 +747,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
           offline={state.offline.active}
           disabled={checking}
           onNewGroup={controller.startCreate}
-          onOpen={(groupId) => void controller.openGroup(groupId)}
+          onOpen={openGroup}
           onRetry={refresh}
         />
         <CompactText variant="caption" tone="muted" style={{ textAlign: 'center' }}>
@@ -689,7 +759,7 @@ function HomeScreen({ state }: { state: MobileSnapshot }) {
       ) : null}
     </>
   );
-}
+});
 
 /** Shares the open Group's invitation link through Android's share sheet. */
 function shareInvite() {
@@ -730,8 +800,33 @@ const unlistedGroup = (id: string): MobileGroup => ({
 });
 
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
-function GroupScreen({ state }: { state: MobileSnapshot }) {
-  const feedback = refreshFeedback(state);
+function GroupScreen() {
+  const state = useMobileSnapshot(
+    controller,
+    (snapshot) => ({
+      auth: snapshot.auth,
+      screen: snapshot.screen,
+      destination: snapshot.destination,
+      detail: snapshot.detail,
+      groups: snapshot.groups,
+      financial: snapshot.financial,
+      activity: snapshot.activity,
+      settlement: snapshot.settlement,
+      offline: snapshot.offline,
+      share: snapshot.share,
+      restoreScroll: snapshot.restoreScroll,
+      keptDraft: snapshot.keptDraft,
+      snackbar: snapshot.snackbar,
+      pendingPayment: snapshot.pendingPayment,
+      home: snapshot.home,
+      dayKey: currentDayKey(),
+      feedback: refreshFeedback(snapshot),
+    }),
+    (a, b) =>
+      sameSelection({ ...a, feedback: null }, { ...b, feedback: null }) &&
+      sameSelection(a.feedback, b.feedback),
+  );
+  const feedback = state.feedback;
   // The top bar keeps the Group's name and actions while it is first read.
   const known = shownGroup(state);
   // Its details couldn't be read, but its Expenses answered, which proves the member belongs
@@ -756,6 +851,10 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
   const shown = group ?? opening;
   // Not saved on this phone, and offline: the navigation stays, without a banner.
   const unavailable = !group && state.detail.status === 'error' && state.offline.active;
+  const activityMembers = useMemo(
+    () => shown?.members.map(({ user }) => ({ id: user.id, name: user.name })),
+    [shown?.members],
+  );
   const userId = state.auth.user!.id;
   const eventOpen = state.destination === 'activity' && state.activity.selected !== null;
   const scroll = useRef<ScrollView>(null);
@@ -803,7 +902,7 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     pendingScroll.current = state.restoreScroll;
   }
   /** Applied once the returning view's content and row are laid out; a drag cancels it. */
-  const restorePendingScroll = (height: number) => {
+  const restorePendingScroll = useCallback((height: number) => {
     contentHeight.current = height;
     const restore = pendingScroll.current;
     if (!restore || viewportHeight.current <= 0) return;
@@ -839,66 +938,92 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
     scrollY.current = y;
     if (restore.anchor || Math.max(0, height - viewportHeight.current) >= restore.y || settled)
       pendingScroll.current = null;
-  };
+  }, []);
   /** Native layout events arrive together; apply a row return after their last update. */
-  const scheduleRestore = () => {
+  const scheduleRestore = useCallback(() => {
     if (restoreTimer.current !== null) clearTimeout(restoreTimer.current);
     restoreTimer.current = setTimeout(() => {
       restoreTimer.current = null;
       restorePendingScroll(contentHeight.current);
     }, 0);
-  };
+  }, [restorePendingScroll]);
   useEffect(() => {
     if (pendingScroll.current?.anchor) scheduleRestore();
     return () => {
       if (restoreTimer.current !== null) clearTimeout(restoreTimer.current);
     };
   }, [state.restoreScroll, state.financial.expenses.status, state.activity.status]);
-  const onRowsLayout = (rows: RowPlaces) => {
-    if (shownScrollKey.current !== scrollKey) return;
-    rowPlaces.current = rows;
-    if (pendingScroll.current?.anchor) scheduleRestore();
-  };
-  const origin = () => {
+  const onRowsLayout = useCallback(
+    (rows: RowPlaces) => {
+      if (shownScrollKey.current !== scrollKey) return;
+      rowPlaces.current = rows;
+      if (pendingScroll.current?.anchor) scheduleRestore();
+    },
+    [scrollKey, scheduleRestore],
+  );
+  const origin = useCallback(() => {
     const anchor = visibleRowAnchor(rowPlaces.current, scrollY.current, viewportHeight.current);
     return { scrollY: scrollY.current, ...(anchor ? { anchor } : {}) };
-  };
+  }, []);
   /** The window moved: the view scrolls by `dy` from where it was then, so the row stays put. */
-  const shift = (dy: number) => {
+  const shift = useCallback((dy: number) => {
     const from = slideFrom.current ?? scrollY.current;
     slideFrom.current = null;
     scrollY.current = Math.max(0, from + dy);
     scroll.current?.scrollTo({ y: scrollY.current, animated: false });
-  };
-  const openExpense = (groupId: string, expenseId?: string) =>
-    void controller.openExpense(groupId, expenseId, origin());
+  }, []);
+  const openExpense = useCallback(
+    (groupId: string, expenseId?: string) =>
+      void controller.openExpense(groupId, expenseId, origin()),
+    [origin],
+  );
   const kept = state.keptDraft?.groupId === known?.id ? state.keptDraft : null;
   // Both open the kept record; a save that may already be recorded is checked, not resumed.
   const keptAction = kept?.unconfirmed
     ? { label: 'Check save', icon: 'alert-circle-outline' as const }
     : { label: 'Resume draft', icon: 'pencil-outline' as const };
-  const resumeDraft = () => void controller.resumeKeptDraft(origin());
+  const resumeDraft = useCallback(() => void controller.resumeKeptDraft(origin()), [origin]);
   // On Expenses, also while the Group is first read; not when it can't be.
   const floating =
     known && (group || state.detail.status === 'loading') && state.destination === 'expenses'
       ? known
       : null;
-  const discardDraft = () =>
-    Alert.alert(
-      'Discard this expense draft?',
-      'Your saved entries will be removed from this device.',
-      [
-        { text: 'Keep draft', style: 'cancel' },
-        {
-          text: 'Discard',
-          style: 'destructive',
-          onPress: () =>
-            void controller.discardKeptDraft().then((discarded) => {
-              if (!discarded) Alert.alert('Couldn’t discard this draft', 'Please try again.');
-            }),
-        },
-      ],
-    );
+  const discardDraft = useCallback(
+    () =>
+      Alert.alert(
+        'Discard this expense draft?',
+        'Your saved entries will be removed from this device.',
+        [
+          { text: 'Keep draft', style: 'cancel' },
+          {
+            text: 'Discard',
+            style: 'destructive',
+            onPress: () =>
+              void controller.discardKeptDraft().then((discarded) => {
+                if (!discarded) Alert.alert('Couldn’t discard this draft', 'Please try again.');
+              }),
+          },
+        ],
+      ),
+    [],
+  );
+  const selectMonth = useCallback((month: string | null) => void controller.selectMonth(month), []);
+  const refreshExpenses = useCallback(() => void controller.refreshExpenses(), []);
+  const loadMoreExpenses = useCallback(() => void controller.loadMoreExpenses(), []);
+  const loadNewerExpenses = useCallback(() => void controller.loadNewerExpenses(), []);
+  const openListedExpense = useCallback(
+    (id: string) => {
+      if (shown) openExpense(shown.id, id);
+    },
+    [shown?.id, openExpense],
+  );
+  const refreshActivity = useCallback(() => void controller.refreshActivity(), []);
+  const loadMoreActivity = useCallback(() => void controller.loadMoreActivity(), []);
+  const loadNewerActivity = useCallback(() => void controller.loadNewerActivity(), []);
+  const selectActivity = useCallback(
+    (id: string) => void controller.openActivityEvent(id, origin()),
+    [origin],
+  );
   // Offline, the banner says so; that what's shown was saved on this device, only while some of
   // it is: the Group's details, or the destination's own content (#219, #222, as Home since #332).
   const notice = unavailable ? null : (
@@ -943,16 +1068,16 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
       state={activityState}
       currentUserId={userId}
       currency={shown.defaultCurrency}
-      members={shown.members.map(({ user }) => ({ id: user.id, name: user.name }))}
+      members={activityMembers}
       offline={state.offline.active}
-      now={Date.now()}
-      onRetry={() => void controller.refreshActivity()}
-      onMore={() => void controller.loadMoreActivity()}
-      onLoadNewer={() => void controller.loadNewerActivity()}
+      dayKey={state.dayKey}
+      onRetry={refreshActivity}
+      onMore={loadMoreActivity}
+      onLoadNewer={loadNewerActivity}
       // The newest page dropped, or came back: the event on screen keeps its place.
       onShift={shift}
       onRowsLayout={activityState.selected ? undefined : onRowsLayout}
-      onSelect={(id) => void controller.openActivityEvent(id, origin())}
+      onSelect={selectActivity}
       onClose={controller.closeActivityDetail}
     />
   );
@@ -1109,15 +1234,15 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
                 }
                 offline={state.offline.active}
                 firstRead={opening !== null}
-                now={Date.now()}
-                onSelectMonth={(month) => void controller.selectMonth(month)}
-                onRefreshExpenses={() => void controller.refreshExpenses()}
-                onLoadMore={() => void controller.loadMoreExpenses()}
-                onLoadNewer={() => void controller.loadNewerExpenses()}
+                dayKey={state.dayKey}
+                onSelectMonth={selectMonth}
+                onRefreshExpenses={refreshExpenses}
+                onLoadMore={loadMoreExpenses}
+                onLoadNewer={loadNewerExpenses}
                 // The newest page dropped: the row on screen keeps its place (#219).
                 onShift={shift}
                 onRowsLayout={onRowsLayout}
-                onOpenExpense={(expenseId) => openExpense(shown.id, expenseId)}
+                onOpenExpense={openListedExpense}
                 onResumeDraft={resumeDraft}
                 onDiscardDraft={discardDraft}
               />
@@ -1125,38 +1250,52 @@ function GroupScreen({ state }: { state: MobileSnapshot }) {
           )}
         </>
       )}
-      <RecordPaymentSheet
-        visible={state.screen === 'settlement'}
-        state={state.settlement}
-        currentUserId={userId}
-        today={`Today, ${new Date().toLocaleDateString('en', { month: 'short', day: 'numeric' })}`}
-        onChange={controller.updateSettlement}
-        onLeaveField={controller.touchSettlementField}
-        onAcknowledge={controller.acknowledgeSettlement}
-        onRecord={() => void controller.recordSettlement()}
-        onRetry={() => void controller.retrySettlementCheck()}
-        onDiscard={() =>
-          Alert.alert(
-            'Discard this unconfirmed payment?',
-            'This payment may already be recorded. Discarding removes its retry from this device and sends nothing. If access returns, check the Group’s payments before recording it again.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Discard',
-                style: 'destructive',
-                onPress: () => void controller.discardUnconfirmedSettlement(),
-              },
-            ],
-          )
-        }
-        onClose={() => void controller.back()}
-      />
+      {state.screen === 'settlement' ? (
+        <RecordPaymentSheet
+          visible
+          state={state.settlement}
+          currentUserId={userId}
+          today={`Today, ${new Date().toLocaleDateString('en', { month: 'short', day: 'numeric' })}`}
+          onChange={controller.updateSettlement}
+          onLeaveField={controller.touchSettlementField}
+          onAcknowledge={controller.acknowledgeSettlement}
+          onRecord={() => void controller.recordSettlement()}
+          onRetry={() => void controller.retrySettlementCheck()}
+          onDiscard={() =>
+            Alert.alert(
+              'Discard this unconfirmed payment?',
+              'This payment may already be recorded. Discarding removes its retry from this device and sends nothing. If access returns, check the Group’s payments before recording it again.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Discard',
+                  style: 'destructive',
+                  onPress: () => void controller.discardUnconfirmedSettlement(),
+                },
+              ],
+            )
+          }
+          onClose={() => void controller.back()}
+        />
+      ) : null}
     </GroupShell>
   );
 }
 
 /** Members and Group details: a full screen over the Group, which Back returns to. */
-function MembersScreen({ state }: { state: MobileSnapshot }) {
+function MembersScreen() {
+  const state = useMobileSnapshot(
+    controller,
+    ({ auth, detail, groups, share, offline, leave }) => ({
+      auth,
+      detail,
+      groups,
+      share,
+      offline,
+      leave,
+    }),
+    sameSelection,
+  );
   const group = shownGroup(state);
   return (
     <GroupMembers
@@ -1183,19 +1322,43 @@ function MembersScreen({ state }: { state: MobileSnapshot }) {
 }
 
 /** Adding, editing or reviewing an Expense: a full-screen task without the Group's navigation. */
-function ExpenseScreen({ state }: { state: MobileSnapshot }) {
+const ExpenseScreen = memo(function ExpenseScreen() {
+  const state = useMobileSnapshot(
+    controller,
+    ({ expense, financial, keptDraft, auth, offline }) => ({
+      expense: {
+        requestedExpenseId: expense.requestedExpenseId,
+        groupId: expense.groupId,
+        contextCheck: expense.contextCheck,
+        accessLost: expense.accessLost,
+      },
+      row:
+        expense.requestedExpenseId && financial.groupId === expense.groupId
+          ? financial.expenses.data.find((row) => row.id === expense.requestedExpenseId)
+          : undefined,
+      keptDraft,
+      auth,
+      offline,
+    }),
+    (a, b) =>
+      sameSelection(a.expense, b.expense) &&
+      a.row === b.row &&
+      a.keptDraft === b.keptDraft &&
+      a.auth === b.auth &&
+      a.offline === b.offline,
+  );
   // The list row an Expense opens from already says much of what its record shows.
-  const { requestedExpenseId, groupId } = state.expense;
-  const row =
-    requestedExpenseId && state.financial.groupId === groupId
-      ? state.financial.expenses.data.find((expense) => expense.id === requestedExpenseId)
-      : undefined;
+  const { groupId } = state.expense;
+  const outline = useMemo(
+    () => (state.row ? recordOutline(state.row, state.auth.user?.id) : null),
+    [state.row, state.auth.user?.id],
+  );
   return (
-    <ExpenseEditor
-      state={state.expense}
+    <ControllerExpenseEditor
+      controller={controller}
       kept={!!groupId && state.keptDraft?.groupId === groupId}
       currentUserId={state.auth.user?.id}
-      outline={row ? recordOutline(row, state.auth.user?.id) : null}
+      outline={outline}
       notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
       emptyNotice={
         state.offline.active || state.offline.message ? (
@@ -1268,4 +1431,4 @@ function ExpenseScreen({ state }: { state: MobileSnapshot }) {
       }
     />
   );
-}
+});

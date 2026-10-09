@@ -80,6 +80,9 @@ importers:
       react-native-safe-area-context:
         specifier: ~5.7.0
         version: 5.7.0(react-native@0.86.3(@babel/core@7.29.0)(@types/react@19.2.13)(react@19.2.3))(react@19.2.3)
+      use-sync-external-store:
+        specifier: ^1.6.0
+        version: 1.6.0(react@19.2.3)
       zod:
         specifier: ^4.5.4
         version: 4.5.4
@@ -96,6 +99,9 @@ importers:
       '@types/react-test-renderer':
         specifier: ^19.3.0
         version: 19.3.0
+      '@types/use-sync-external-store':
+        specifier: ^1.7.0
+        version: 1.7.0
       eslint:
         specifier: ^9
         version: 9.39.2(jiti@2.6.1)
@@ -1881,6 +1887,9 @@ packages:
 
   '@types/react@19.2.13':
     resolution: {integrity: sha512-KkiJeU6VbYbUOp5ITMIc7kBfqlYkKA5KhEHVrGMmUUMt7NeaZg65ojdPk+FtNrBAOXNVM5QM72jnADjM+XVRAQ==}
+
+  '@types/use-sync-external-store@1.7.0':
+    resolution: {integrity: sha512-v8435kzWm3FuxyUa4r8o4sG6b0D+r+uOrzF5MXHxZKW4Haoo6txu/lq56Vio45e2i1nkmFPA+R7myWcmV7Z7Bg==}
 
   '@types/webidl-conversions@7.0.3':
     resolution: {integrity: sha512-CiJJvcRtIgzadHCYXw7dqEnMNRjhGZlYK05Mj9OyktqV8uVT8fD2BFOB7S1uwBE3Kj2Z+4UyPmFw/Ixgw/LAlA==}
@@ -6837,6 +6846,8 @@ snapshots:
   '@types/react@19.2.13':
     dependencies:
       csstype: 3.2.3
+
+  '@types/use-sync-external-store@1.7.0': {}
 
   '@types/webidl-conversions@7.0.3': {}
 

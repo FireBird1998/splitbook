@@ -586,8 +586,19 @@ describe('the Groups list and Home on the persister (#217, M3-1)', () => {
     await controller.openGroup(mapleId);
     await controller.back();
     let sent = f.calls.length;
+    const before = controller.getSnapshot();
+    const cues: (string | null)[] = [];
+    const stop = controller.subscribe(() => {
+      const next = controller.getSnapshot();
+      expect(next.groups).toBe(before.groups);
+      expect(next.home).toBe(before.home);
+      expect(next.drafts).toBe(before.drafts);
+      cues.push(next.automatic);
+    });
     await controller.refresh('foreground');
+    stop();
     expect(f.calls.slice(sent)).toEqual([]);
+    expect(cues).toEqual(['groups', null]);
 
     later(31_000);
     sent = f.calls.length;

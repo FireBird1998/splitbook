@@ -456,78 +456,82 @@ export function ExpenseRecordScreen({
           />
         </FadeIn>
       </ScrollView>
-      <BottomSheet
-        visible={options}
-        title="Expense options"
-        dismissLabel="Close Expense options"
-        onDone={() => setOptions(false)}
-      >
-        <Card>
-          <ListRow
-            leading={<IconTile icon="refresh-outline" />}
-            title="Refresh"
-            meta="Read the latest saved version"
-            onPress={() => {
-              setOptions(false);
-              onRefresh();
-            }}
-          />
-          {!record.isDeleted ? (
-            <>
-              <Divider />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Delete expense"
-                accessibilityHint={held ?? 'Removes it from balances; its history is kept'}
-                accessibilityState={{ disabled: !!held }}
-                disabled={!!held}
-                onPress={() => {
-                  setOptions(false);
-                  onReviewDelete();
-                }}
-                style={({ pressed }) => ({
-                  opacity: held ? 0.45 : 1,
-                  backgroundColor: pressed ? theme.surfaceMuted : undefined,
-                })}
-              >
-                <ListRow
-                  leading={<IconTile icon="trash-outline" tone="warning" />}
-                  title="Delete expense"
-                  meta={held ?? 'Removes it from balances; its history is kept'}
-                />
-              </Pressable>
-            </>
+      {options ? (
+        <BottomSheet
+          visible={options}
+          title="Expense options"
+          dismissLabel="Close Expense options"
+          onDone={() => setOptions(false)}
+        >
+          <Card>
+            <ListRow
+              leading={<IconTile icon="refresh-outline" />}
+              title="Refresh"
+              meta="Read the latest saved version"
+              onPress={() => {
+                setOptions(false);
+                onRefresh();
+              }}
+            />
+            {!record.isDeleted ? (
+              <>
+                <Divider />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Delete expense"
+                  accessibilityHint={held ?? 'Removes it from balances; its history is kept'}
+                  accessibilityState={{ disabled: !!held }}
+                  disabled={!!held}
+                  onPress={() => {
+                    setOptions(false);
+                    onReviewDelete();
+                  }}
+                  style={({ pressed }) => ({
+                    opacity: held ? 0.45 : 1,
+                    backgroundColor: pressed ? theme.surfaceMuted : undefined,
+                  })}
+                >
+                  <ListRow
+                    leading={<IconTile icon="trash-outline" tone="warning" />}
+                    title="Delete expense"
+                    meta={held ?? 'Removes it from balances; its history is kept'}
+                  />
+                </Pressable>
+              </>
+            ) : null}
+          </Card>
+        </BottomSheet>
+      ) : null}
+      {state.status === 'delete-review' ? (
+        <BottomSheet
+          visible={state.status === 'delete-review'}
+          title="Delete this Expense?"
+          doneLabel="Cancel"
+          dismissLabel="Cancel, keeping this Expense"
+          onDone={onCancelDelete}
+        >
+          <CompactText>
+            {record.description} will no longer count in balances. Its history is kept.
+          </CompactText>
+          {state.message ? (
+            <CompactText variant="small" tone="negative" accessibilityRole="alert">
+              {state.message}
+            </CompactText>
           ) : null}
-        </Card>
-      </BottomSheet>
-      <BottomSheet
-        visible={state.status === 'delete-review'}
-        title="Delete this Expense?"
-        doneLabel="Cancel"
-        dismissLabel="Cancel, keeping this Expense"
-        onDone={onCancelDelete}
-      >
-        <CompactText>
-          {record.description} will no longer count in balances. Its history is kept.
-        </CompactText>
-        {state.message ? (
-          <CompactText variant="small" tone="negative" accessibilityRole="alert">
-            {state.message}
-          </CompactText>
-        ) : null}
-        <CompactButton
-          label="Delete expense"
-          block
-          disabled={offline}
-          hint={offline ? savingNeedsConnection : undefined}
-          onPress={onDelete}
-        />
-        {offline ? (
-          <CompactText variant="small" tone="secondary">
-            {savingNeedsConnection}
-          </CompactText>
-        ) : null}
-      </BottomSheet>
+          <CompactButton
+            label="Delete expense"
+            block
+            disabled={offline}
+            hint={offline ? savingNeedsConnection : undefined}
+            onPress={onDelete}
+          />
+          {offline ? (
+            <CompactText variant="small" tone="secondary">
+              {savingNeedsConnection}
+            </CompactText>
+          ) : null}
+        </BottomSheet>
+      ) : null}
     </View>
   );
 }

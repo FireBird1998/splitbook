@@ -482,6 +482,21 @@ async function withPages(f: ReturnType<typeof fixture>, pages: number) {
 }
 
 describe('one query of up to 5 pages per Month (#219, M1-3, M7-2)', () => {
+  it('retains the Group and Expense Date projections across a fresh foreground read', async () => {
+    const f = fixture();
+    const controller = await withPages(f, 1);
+    const before = controller.getSnapshot();
+    const group = before.detail.data!;
+    const row = before.financial.expenses.data[0]!;
+    expect(group.createdAt).toBeInstanceOf(Date);
+    expect(row.date).toBeInstanceOf(Date);
+    await controller.refresh('foreground');
+    const after = controller.getSnapshot();
+    expect(after.detail.data).toBe(group);
+    expect(after.detail.data!.createdAt).toBe(group.createdAt);
+    expect(after.financial.expenses.data[0]).toBe(row);
+    expect(after.financial.expenses.data[0].date).toBe(row.date);
+  });
   it.each([3, 5])(
     'reads the %i loaded pages again on a refresh, keeping the rows on screen as refreshing until it lands',
     async (pages) => {

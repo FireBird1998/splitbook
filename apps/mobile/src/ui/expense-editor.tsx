@@ -1,3 +1,11 @@
+import type { MobileController } from '../data/mobile-controller';
+import { DraftStatus } from './draft-status';
+import { SelectedDraftStatus } from './draft-status-selection';
+import { SelectedExpenseTiles } from './expense-tile-selection';
+import { SelectedWhoOwesWhat } from './expense-allocation-selection';
+import { SelectedSaveBar } from './expense-save-selection';
+import { SelectedSplitSheet, SelectedPayerSheet } from './expense-sheet-selection';
+import { SelectedOptionalDetails } from './expense-optional-details';
 import { canEditExpense } from '../data/expense-record';
 import {
   ExpenseRecordScreen,
@@ -5,7 +13,15 @@ import {
   ExpenseRecordView,
   type RecordOutline,
 } from './expense-record-view';
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
@@ -25,7 +41,7 @@ import {
   type ExpenseField,
 } from '../data/expense-draft';
 import { DateSheet } from './date-sheet';
-import { Button, Icon, Loading, Notice } from './primitives';
+import { Button, Loading, Notice } from './primitives';
 import {
   Badge,
   Banner,
@@ -143,7 +159,9 @@ export function ExpenseEditor(props: Parameters<typeof ExpenseTask>[0]) {
   const unconfirmed = state.attempt ? 'save' : (state.mutation?.kind ?? null);
   return (
     <ErrorBoundary
-      resetKey={state.draft}
+      resetKey={
+        props.controller ? (state.blank ?? state.draft?.original ?? state.groupId) : state.draft
+      }
       fallback={
         <ExpenseProblem
           draft={form}
@@ -218,6 +236,7 @@ function ExpenseProblem({
 }
 
 function ExpenseTask({
+  controller,
   state,
   currentUserId,
   kept = false,
@@ -246,6 +265,7 @@ function ExpenseTask({
   onRetryHistory,
   outline,
 }: {
+  controller?: MobileController;
   state: Editor;
   /** Shown as "You" in the form. */
   currentUserId?: string;
@@ -351,16 +371,49 @@ function ExpenseTask({
   const outlined = useRef(false);
   if (opening) outlined.current = !!outline;
   const errors = state.validation.errors;
-  const section = (field: ExpenseField) => (node: View | null) => {
-    sections.current[field] = node;
-  };
-  const input = (field: ExpenseField) => (node: TextInput | null) => {
-    inputs.current[field] = node;
-  };
-  const correction = (field: ExpenseField) => (node: View | null) => {
-    corrections.current[field] = node;
-  };
+  const refs = useMemo(
+    () =>
+      Object.fromEntries(
+        expenseFields.map((field) => [
+          field,
+          {
+            section: (node: View | null) => {
+              sections.current[field] = node;
+            },
+            input: (node: TextInput | null) => {
+              inputs.current[field] = node;
+            },
+            correction: (node: View | null) => {
+              corrections.current[field] = node;
+            },
+          },
+        ]),
+      ),
+    [],
+  );
+  const section = useCallback((field: ExpenseField) => refs[field].section, [refs]);
+  const input = useCallback((field: ExpenseField) => refs[field].input, [refs]);
+  const correction = useCallback((field: ExpenseField) => refs[field].correction, [refs]);
+  const openTile = useCallback(
+    (tile: 'date' | 'payers' | 'split' | 'tag') =>
+      tile === 'payers' ? setEditor(tile) : setSheet(tile),
+    [],
+  );
+  const amountDone = useCallback(() => inputs.current.description?.focus(), []);
+  const SplitEditor = controller ? SelectedSplitSheet : SplitSheet;
+  const SaveAction = controller ? SelectedSaveBar : SaveBar;
+  const PayerEditor = controller ? SelectedPayerSheet : PayerSheet;
   const { draft, context } = state;
+  const members = useMemo(() => context?.group.members.map(({ user }) => user) ?? [], [context]);
+  const name = useCallback(
+    (id: string) =>
+      members.find((member) => member.id === id)?.name ??
+      [draft?.original, state.latest]
+        .flatMap((saved) => [...(saved?.paidBy ?? []), ...(saved?.splitBetween ?? [])])
+        .find((row) => row.user === id)?.name ??
+      'Unavailable member',
+    [members, draft?.original, state.latest],
+  );
   const record = !!draft?.original && ['detail', 'delete-review'].includes(state.status);
   const form = showsForm(state);
   // A save that may already be recorded stays locked until it is checked.
@@ -414,10 +467,16 @@ function ExpenseTask({
           badge ? (
             <Badge label={badge} tone="warning" />
           ) : form ? (
-            <DraftStatus
-              persistence={state.persistence}
-              kept={!!(state.attempt || state.mutation) || expenseDraftChanged(draft!, state.blank)}
-            />
+            controller ? (
+              <SelectedDraftStatus controller={controller} />
+            ) : (
+              <DraftStatus
+                persistence={state.persistence}
+                kept={
+                  !!(state.attempt || state.mutation) || expenseDraftChanged(draft!, state.blank)
+                }
+              />
+            )
           ) : null
         }
         actions={
@@ -531,13 +590,6 @@ function ExpenseTask({
   const financialLocked = locked || pendingContext;
   const checkNotice = checking ? contextNotices[checking.status] : null;
   const checkingMessage = checkNotice?.message ?? '';
-  const members = context?.group.members.map(({ user }) => user) ?? [];
-  const name = (id: string) =>
-    members.find((member) => member.id === id)?.name ??
-    [draft.original, state.latest]
-      .flatMap((saved) => [...(saved?.paidBy ?? []), ...(saved?.splitBetween ?? [])])
-      .find((row) => row.user === id)?.name ??
-    'Unavailable member';
   const invalidMembers =
     !checking &&
     context &&
@@ -708,6 +760,7 @@ function ExpenseTask({
             </Banner>
           ) : null}
           <AmountDescriptionCard
+            controller={controller}
             draft={draft}
             locked={locked}
             showLock={unconfirmed}
@@ -717,30 +770,51 @@ function ExpenseTask({
             section={section}
             onChange={onChange}
             onLeave={onLeaveField}
-            onAmountDone={() => inputs.current.description?.focus()}
+            onAmountDone={amountDone}
           ></AmountDescriptionCard>
-          <ExpenseTiles
-            locked={locked}
-            financialLocked={financialLocked}
-            errors={{ ...errors, tag: errors.tag ?? tagReport.error }}
-            values={{
-              date: expenseDateLabel(draft.date),
-              payers: paidBySummary(draft, (id) => (id === currentUserId ? 'You' : name(id))),
-              split: splitSummary(draft),
-              tag:
-                tag?.name ??
-                (draft.tagId ? (draft.original?.tag ?? 'Unavailable Tag') : 'Choose a Tag'),
-            }}
-            correction={correction}
-            section={section}
-            onOpen={(tile) => (tile === 'payers' ? setEditor(tile) : setSheet(tile))}
-          />
-          <OptionalDetails
-            draft={draft}
-            locked={locked}
-            categoryLocked={financialLocked}
-            onChange={onChange}
-          />
+          {controller ? (
+            <SelectedExpenseTiles
+              controller={controller}
+              currentUserId={currentUserId}
+              locked={locked}
+              financialLocked={financialLocked}
+              correction={correction}
+              section={section}
+              onOpen={openTile}
+            />
+          ) : (
+            <ExpenseTiles
+              locked={locked}
+              financialLocked={financialLocked}
+              errors={{ ...errors, tag: errors.tag ?? tagReport.error }}
+              values={{
+                date: expenseDateLabel(draft.date),
+                payers: paidBySummary(draft, (id) => (id === currentUserId ? 'You' : name(id))),
+                split: splitSummary(draft),
+                tag:
+                  tag?.name ??
+                  (draft.tagId ? (draft.original?.tag ?? 'Unavailable Tag') : 'Choose a Tag'),
+              }}
+              correction={correction}
+              section={section}
+              onOpen={openTile}
+            />
+          )}
+          {controller ? (
+            <SelectedOptionalDetails
+              controller={controller}
+              locked={locked}
+              categoryLocked={financialLocked}
+              onChange={onChange}
+            />
+          ) : (
+            <OptionalDetails
+              draft={draft}
+              locked={locked}
+              categoryLocked={financialLocked}
+              onChange={onChange}
+            />
+          )}
           <RetainHeight enabled={newTask}>
             {newTask ? shownNotice : null}
             {/* The Group's details are unknown: offline, refused, or not read. Each says which. */}
@@ -806,22 +880,29 @@ function ExpenseTask({
                 remove unavailable members.
               </CompactText>
             )}
-            {!pendingContext && (
-              <WhoOwesWhat
-                draft={draft}
-                allocation={allocation}
-                problem={
-                  errors.amount
-                    ? 'Correct the amount to see who owes what.'
-                    : draft.amount
-                      ? allocationError
-                      : 'Enter a valid amount to see who owes what.'
-                }
-                name={name}
-                currentUserId={currentUserId}
-                money={money}
-              />
-            )}
+            {!pendingContext &&
+              (controller ? (
+                <SelectedWhoOwesWhat
+                  controller={controller}
+                  name={name}
+                  currentUserId={currentUserId}
+                />
+              ) : (
+                <WhoOwesWhat
+                  draft={draft}
+                  allocation={allocation}
+                  problem={
+                    errors.amount
+                      ? 'Correct the amount to see who owes what.'
+                      : draft.amount
+                        ? allocationError
+                        : 'Enter a valid amount to see who owes what.'
+                  }
+                  name={name}
+                  currentUserId={currentUserId}
+                  money={money}
+                />
+              ))}
             {/* The banners above already say why a save is unconfirmed or in conflict. */}
             {state.message &&
               !summary &&
@@ -869,7 +950,8 @@ function ExpenseTask({
             secondary={{ label: 'Use the saved version', onPress: onAcceptCurrent }}
           />
         ) : canSave ? (
-          <SaveBar
+          <SaveAction
+            controller={controller!}
             label={draft.original ? 'Save changes' : 'Save expense'}
             busy={state.status === 'saving' ? 'Saving expense…' : undefined}
             amount={
@@ -884,115 +966,90 @@ function ExpenseTask({
           />
         ) : null,
       )}
-      <DateSheet
-        visible={sheet === 'date'}
-        value={draft.date}
-        locked={locked}
-        onChange={(date) => onChange({ date })}
-        onDone={() => {
-          setSheet(null);
-          onLeaveField('date');
-        }}
-      />
-      <SplitSheet
-        visible={sheet === 'split'}
-        draft={draft}
-        members={context ? members : null}
-        currentUserId={currentUserId}
-        locked={financialLocked}
-        persistence={state.persistence}
-        name={name}
-        money={money}
-        onChange={onChange}
-        onDone={() => {
-          setSheet(null);
-          onLeaveField('split');
-        }}
-      />
-      <TagSheet
-        visible={sheet === 'tag'}
-        tags={context ? activeTags : null}
-        tagId={draft.tagId}
-        error={tagReport.error}
-        notice={tagNotice}
-        locked={financialLocked}
-        onChoose={(tagId) => {
-          onChange({ tagId });
-          setSheet(null);
-        }}
-        onDone={() => {
-          setSheet(null);
-          onLeaveField('tag');
-        }}
-      />
-      <BottomSheet
-        visible={sheet === 'options'}
-        title="Expense options"
-        onDone={() => setSheet(null)}
-      >
-        <Card>
-          <ListRow
-            leading={<IconTile icon="trash-outline" tone="warning" />}
-            title="Discard draft"
-            meta="Removes these entries from this device"
-            onPress={() => {
-              setSheet(null);
-              onDiscard();
-            }}
-          />
-        </Card>
-      </BottomSheet>
-      <PayerSheet
-        visible={editor === 'payers'}
-        draft={draft}
-        members={context ? members : null}
-        currentUserId={currentUserId}
-        locked={financialLocked}
-        persistence={state.persistence}
-        name={name}
-        onChange={onChange}
-        onDone={() => {
-          setEditor(null);
-          onLeaveField('payers');
-        }}
-      />
+      {sheet === 'date' ? (
+        <DateSheet
+          visible={sheet === 'date'}
+          value={draft.date}
+          locked={locked}
+          onChange={(date) => onChange({ date })}
+          onDone={() => {
+            setSheet(null);
+            onLeaveField('date');
+          }}
+        />
+      ) : null}
+      {sheet === 'split' ? (
+        <SplitEditor
+          controller={controller!}
+          visible={sheet === 'split'}
+          draft={draft}
+          members={context ? members : null}
+          currentUserId={currentUserId}
+          locked={financialLocked}
+          persistence={state.persistence}
+          name={name}
+          money={money}
+          onChange={onChange}
+          onDone={() => {
+            setSheet(null);
+            onLeaveField('split');
+          }}
+        />
+      ) : null}
+      {sheet === 'tag' ? (
+        <TagSheet
+          visible={sheet === 'tag'}
+          tags={context ? activeTags : null}
+          tagId={draft.tagId}
+          error={tagReport.error}
+          notice={tagNotice}
+          locked={financialLocked}
+          onChoose={(tagId) => {
+            onChange({ tagId });
+            setSheet(null);
+          }}
+          onDone={() => {
+            setSheet(null);
+            onLeaveField('tag');
+          }}
+        />
+      ) : null}
+      {sheet === 'options' ? (
+        <BottomSheet
+          visible={sheet === 'options'}
+          title="Expense options"
+          onDone={() => setSheet(null)}
+        >
+          <Card>
+            <ListRow
+              leading={<IconTile icon="trash-outline" tone="warning" />}
+              title="Discard draft"
+              meta="Removes these entries from this device"
+              onPress={() => {
+                setSheet(null);
+                onDiscard();
+              }}
+            />
+          </Card>
+        </BottomSheet>
+      ) : null}
+      {editor === 'payers' ? (
+        <PayerEditor
+          controller={controller!}
+          visible={editor === 'payers'}
+          draft={draft}
+          members={context ? members : null}
+          currentUserId={currentUserId}
+          locked={financialLocked}
+          persistence={state.persistence}
+          name={name}
+          onChange={onChange}
+          onDone={() => {
+            setEditor(null);
+            onLeaveField('payers');
+          }}
+        />
+      ) : null}
     </>
-  );
-}
-
-/** "Draft saved" while this device keeps entries that differ from where the form started. */
-function DraftStatus({ persistence, kept }: { persistence: Editor['persistence']; kept: boolean }) {
-  const theme = useTheme();
-  // Writes run on every keystroke; only one that takes a while says so.
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    if (persistence !== 'saving') return;
-    const timer = setTimeout(() => setSlow(true), 400);
-    return () => {
-      clearTimeout(timer);
-      setSlow(false);
-    };
-  }, [persistence]);
-  const saving = persistence === 'saving' && slow;
-  if (persistence !== 'error' && !saving && !kept) return null;
-  const [icon, text, color] =
-    persistence === 'error'
-      ? (['alert-circle-outline', 'Draft not saved', theme.status.negative] as const)
-      : saving
-        ? (['sync-outline', 'Saving draft…', theme.textSecondary] as const)
-        : (['checkmark', 'Draft saved', theme.textSecondary] as const);
-  return (
-    <View
-      accessible
-      accessibilityLabel={text}
-      // Only a failure is announced.
-      accessibilityLiveRegion={persistence === 'error' ? 'polite' : 'none'}
-      style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 4 }}
-    >
-      <Icon name={icon} size={16} color={color} />
-      <CompactText variant="caption" style={{ color }}>
-        {text}
-      </CompactText>
-    </View>
   );
 }

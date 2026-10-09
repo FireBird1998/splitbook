@@ -1,3 +1,5 @@
+import { sameSelection } from './use-mobile-snapshot';
+import { ListDayHeader } from './list-day-header';
 import type { RowPlaces } from './return-scroll';
 import { memo, useCallback, useEffect, useLayoutEffect, useRef } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -414,297 +416,300 @@ function KeptDraftNotice({
  * The Expenses destination: the window summary (with a Household's Month bar), the Group's
  * kept draft, and its Expenses under day headings, each with what the member lent or owes.
  */
-export function GroupExpensesView({
-  group,
-  currentUserId,
-  state,
-  kept,
-  savedExpenseId,
-  offline = false,
-  firstRead = false,
-  now,
-  onSelectMonth,
-  onRefreshExpenses,
-  onLoadMore,
-  onLoadNewer,
-  onShift,
-  onRowsLayout,
-  onOpenExpense,
-  onResumeDraft,
-  onDiscardDraft,
-}: {
-  group: MobileGroup;
-  currentUserId: string;
-  state: GroupFinancialState;
-  /** This Group's kept draft, if any. */
-  kept: KeptDraft | null;
-  /** Highlighted after a save while its confirmation shows. */
-  savedExpenseId: string | null;
-  /** The app can't reach SplitBook: this device's saved copy shows its badge. */
-  offline?: boolean;
-  /**
-   * The Group is first read, shown as Home lists it: these are its placeholders, in the shape
-   * they keep once it answers (#219).
-   */
-  firstRead?: boolean;
-  now: number;
-  onSelectMonth: (month: string | null) => void;
-  onRefreshExpenses: () => void;
-  onLoadMore: () => void;
-  /** Reads the page before the list's window, once it has slid past its newest page (#219). */
-  onLoadNewer: () => void;
-  /** Scroll the view by `dy`: the rows above the one on screen changed by as much. */
-  onShift?: (dy: number) => void;
-  /** Current row layouts in scroll-content coordinates, for memory-only return anchors. */
-  onRowsLayout?: (rows: RowPlaces) => void;
-  onOpenExpense: (expenseId: string) => void;
-  onResumeDraft: () => void;
-  onDiscardDraft: () => void;
-}) {
-  const theme = useTheme();
-  const { expenses } = state;
-  // The latest handler, behind one that never changes, so no row renders again for it.
-  const opening = useRef(onOpenExpense);
-  useEffect(() => {
-    opening.current = onOpenExpense;
-  });
-  const open = useCallback((expenseId: string) => opening.current(expenseId), []);
-  // The same for the Month bar, so the summary renders again only when what it says changes.
-  const choosing = useRef(onSelectMonth);
-  useEffect(() => {
-    choosing.current = onSelectMonth;
-  });
-  const choose = useCallback((month: string | null) => choosing.current(month), []);
-  // When the window moves (#219), rows above the one on screen go or come: Load more past 5
-  // pages drops the newest page, and Load newer brings it back above. The view moves by as much
-  // as a row shown on both sides of the change moved, so the row on screen keeps its place.
-  // Where the list, each day and each row lie, as their layouts last said.
-  const places = useRef({
-    origin: 0,
-    list: 0,
-    body: null as number | null,
-    days: new Map<string, number>(),
-    rows: new Map<string, { day: string; y: number; height: number }>(),
-  });
-  const anchor = useRef<{ id: string; at: number; timer?: ReturnType<typeof setTimeout> } | null>(
-    null,
-  );
-  const firstPage = expenses.firstPage ?? 1;
-  const shownFirst = useRef(firstPage);
-  /** The rows as last shown: the window's change keeps the first of them still listed. */
-  const shownRows = useRef(expenses.data);
-  const top = (id: string) => {
-    const row = places.current.rows.get(id),
-      day = row && places.current.days.get(row.day);
-    return row && day !== undefined && places.current.body !== null
-      ? places.current.list + places.current.body + day + row.y
-      : null;
-  };
-  useLayoutEffect(() => {
-    const moved = firstPage !== shownFirst.current;
-    shownFirst.current = firstPage;
-    if (anchor.current?.timer) clearTimeout(anchor.current.timer);
-    if (!moved) return;
-    // The first row shown before the change that is still listed: the newest one left after a
-    // slide, or the one that was first before Load newer.
-    const listedNow = new Set(expenses.data.map(({ id }) => id));
-    const id = shownRows.current.find((row) => listedNow.has(row.id))?.id;
-    // Laid out before the change: where it was.
-    const at = id ? top(id) : null;
-    anchor.current = id && at !== null ? { id, at } : null;
-    // Only this commit's change: the layout it leads to moves the view, once.
-  }, [firstPage]);
-  useLayoutEffect(() => {
-    shownRows.current = expenses.data;
-  });
-  /** A layout changed: once the slide's layouts have all arrived, the view follows its row. */
-  const place = (
-    change:
-      | { origin: number }
-      | { list: number }
-      | { body: number }
-      | { day: string; y: number }
-      | { row: string; day: string; y: number; height: number },
-  ) => {
-    if ('origin' in change) places.current.origin = change.origin;
-    else if ('list' in change) places.current.list = change.list;
-    else if ('body' in change) places.current.body = change.body;
-    else if ('row' in change) places.current.rows.set(change.row, change);
-    else places.current.days.set(change.day, change.y);
-    const rows = new Map<string, { top: number; height: number }>();
-    for (const { id: key } of expenses.data) {
-      const at = top(key),
-        row = places.current.rows.get(key);
-      if (at !== null && row)
-        rows.set(key, { top: places.current.origin + at, height: row.height });
-    }
-    onRowsLayout?.(rows);
-    const held = anchor.current;
-    if (!held || held.timer) return;
-    // A layout's events arrive together: the shift waits for all of them.
-    held.timer = setTimeout(() => {
-      if (anchor.current === held) anchor.current = null;
-      const at = top(held.id);
-      if (at !== null && at !== held.at) onShift?.(at - held.at);
-    }, 0);
-  };
-  const household = group.category === 'home';
-  // Never show one Month's Expenses under another Month's label.
-  const current = expenses.month === state.month;
-  const summary = current ? expenses.summary : null;
-  const listed =
-    current && (expenses.status === 'ready' || summary !== null || expenses.data.length > 0);
-  // Load more stays in place, disabled, while the rows shown are read again (a pull, the
-  // foreground, or the window after an edit or delete), so the list never gets shorter under the
-  // member: at its end, Android would clamp the view a control's height up (#219).
-  const more =
-    listed &&
-    (expenses.status === 'ready' || expenses.status === 'loading') &&
-    expenses.pagination !== null &&
-    expenses.pagination.page < expenses.pagination.totalPages;
-  // The list has slid past its newest page: the pages before it are read with Load newer. It stays
-  // in place, disabled, while the window is read again, so the rows below it never move (#219).
-  const newer = listed && (expenses.firstPage ?? 1) > 1;
+export const GroupExpensesView = memo(
+  function GroupExpensesView({
+    group,
+    currentUserId,
+    state,
+    kept,
+    savedExpenseId,
+    offline = false,
+    firstRead = false,
+    now: legacyNow,
+    dayKey,
+    onSelectMonth,
+    onRefreshExpenses,
+    onLoadMore,
+    onLoadNewer,
+    onShift,
+    onRowsLayout,
+    onOpenExpense,
+    onResumeDraft,
+    onDiscardDraft,
+  }: {
+    group: MobileGroup;
+    currentUserId: string;
+    state: GroupFinancialState;
+    /** This Group's kept draft, if any. */
+    kept: KeptDraft | null;
+    /** Highlighted after a save while its confirmation shows. */
+    savedExpenseId: string | null;
+    /** The app can't reach SplitBook: this device's saved copy shows its badge. */
+    offline?: boolean;
+    /**
+     * The Group is first read, shown as Home lists it: these are its placeholders, in the shape
+     * they keep once it answers (#219).
+     */
+    firstRead?: boolean;
+    now?: number;
+    dayKey?: string;
+    onSelectMonth: (month: string | null) => void;
+    onRefreshExpenses: () => void;
+    onLoadMore: () => void;
+    /** Reads the page before the list's window, once it has slid past its newest page (#219). */
+    onLoadNewer: () => void;
+    /** Scroll the view by `dy`: the rows above the one on screen changed by as much. */
+    onShift?: (dy: number) => void;
+    /** Current row layouts in scroll-content coordinates, for memory-only return anchors. */
+    onRowsLayout?: (rows: RowPlaces) => void;
+    onOpenExpense: (expenseId: string) => void;
+    onResumeDraft: () => void;
+    onDiscardDraft: () => void;
+  }) {
+    const now = dayKey ? new Date(`${dayKey}T12:00:00`).getTime() : (legacyNow ?? Date.now());
+    const theme = useTheme();
+    const { expenses } = state;
+    // The latest handler, behind one that never changes, so no row renders again for it.
+    const opening = useRef(onOpenExpense);
+    useEffect(() => {
+      opening.current = onOpenExpense;
+    });
+    const open = useCallback((expenseId: string) => opening.current(expenseId), []);
+    // The same for the Month bar, so the summary renders again only when what it says changes.
+    const choosing = useRef(onSelectMonth);
+    useEffect(() => {
+      choosing.current = onSelectMonth;
+    });
+    const choose = useCallback((month: string | null) => choosing.current(month), []);
+    // When the window moves (#219), rows above the one on screen go or come: Load more past 5
+    // pages drops the newest page, and Load newer brings it back above. The view moves by as much
+    // as a row shown on both sides of the change moved, so the row on screen keeps its place.
+    // Where the list, each day and each row lie, as their layouts last said.
+    const places = useRef({
+      origin: 0,
+      list: 0,
+      body: null as number | null,
+      days: new Map<string, number>(),
+      rows: new Map<string, { day: string; y: number; height: number }>(),
+    });
+    const anchor = useRef<{ id: string; at: number; timer?: ReturnType<typeof setTimeout> } | null>(
+      null,
+    );
+    const firstPage = expenses.firstPage ?? 1;
+    const shownFirst = useRef(firstPage);
+    /** The rows as last shown: the window's change keeps the first of them still listed. */
+    const shownRows = useRef(expenses.data);
+    const top = (id: string) => {
+      const row = places.current.rows.get(id),
+        day = row && places.current.days.get(row.day);
+      return row && day !== undefined && places.current.body !== null
+        ? places.current.list + places.current.body + day + row.y
+        : null;
+    };
+    useLayoutEffect(() => {
+      const moved = firstPage !== shownFirst.current;
+      shownFirst.current = firstPage;
+      if (anchor.current?.timer) clearTimeout(anchor.current.timer);
+      if (!moved) return;
+      // The first row shown before the change that is still listed: the newest one left after a
+      // slide, or the one that was first before Load newer.
+      const listedNow = new Set(expenses.data.map(({ id }) => id));
+      const id = shownRows.current.find((row) => listedNow.has(row.id))?.id;
+      // Laid out before the change: where it was.
+      const at = id ? top(id) : null;
+      anchor.current = id && at !== null ? { id, at } : null;
+      // Only this commit's change: the layout it leads to moves the view, once.
+    }, [firstPage]);
+    useLayoutEffect(() => {
+      shownRows.current = expenses.data;
+    });
+    /** A layout changed: once the slide's layouts have all arrived, the view follows its row. */
+    const place = (
+      change:
+        | { origin: number }
+        | { list: number }
+        | { body: number }
+        | { day: string; y: number }
+        | { row: string; day: string; y: number; height: number },
+    ) => {
+      if ('origin' in change) places.current.origin = change.origin;
+      else if ('list' in change) places.current.list = change.list;
+      else if ('body' in change) places.current.body = change.body;
+      else if ('row' in change) places.current.rows.set(change.row, change);
+      else places.current.days.set(change.day, change.y);
+      const rows = new Map<string, { top: number; height: number }>();
+      for (const { id: key } of expenses.data) {
+        const at = top(key),
+          row = places.current.rows.get(key);
+        if (at !== null && row)
+          rows.set(key, { top: places.current.origin + at, height: row.height });
+      }
+      onRowsLayout?.(rows);
+      const held = anchor.current;
+      if (!held || held.timer) return;
+      // A layout's events arrive together: the shift waits for all of them.
+      held.timer = setTimeout(() => {
+        if (anchor.current === held) anchor.current = null;
+        const at = top(held.id);
+        if (at !== null && at !== held.at) onShift?.(at - held.at);
+      }, 0);
+    };
+    const household = group.category === 'home';
+    // Never show one Month's Expenses under another Month's label.
+    const current = expenses.month === state.month;
+    const summary = current ? expenses.summary : null;
+    const listed =
+      current && (expenses.status === 'ready' || summary !== null || expenses.data.length > 0);
+    // Load more stays in place, disabled, while the rows shown are read again (a pull, the
+    // foreground, or the window after an edit or delete), so the list never gets shorter under the
+    // member: at its end, Android would clamp the view a control's height up (#219).
+    const more =
+      listed &&
+      (expenses.status === 'ready' || expenses.status === 'loading') &&
+      expenses.pagination !== null &&
+      expenses.pagination.page < expenses.pagination.totalPages;
+    // The list has slid past its newest page: the pages before it are read with Load newer. It stays
+    // in place, disabled, while the window is read again, so the rows below it never move (#219).
+    const newer = listed && (expenses.firstPage ?? 1) > 1;
 
-  const scope = state.month ? monthLabel(state.month) : 'all-time';
-  return (
-    <View
-      style={{ gap: 12 }}
-      onLayout={({ nativeEvent }) => place({ origin: nativeEvent.layout.y })}
-    >
-      <ExpenseSummary
-        household={household}
-        month={state.month}
-        summary={summary}
-        currentUserId={currentUserId}
-        refreshedAt={listed ? expenses.refreshedAt : null}
-        restored={expenses.restored === true}
-        // The rows shown are from before a change written here, and being read again.
-        updating={expenses.changed === true && expenses.status === 'loading'}
-        offline={offline}
-        loading={!listed && expenses.status !== 'error'}
-        opening={firstRead}
-        current={currentMonthKey(new Date(now))}
-        onSelectMonth={choose}
-      />
-      {listed ? (
-        <RetainedNotice
-          status={expenses.status}
-          refreshedAt={expenses.refreshedAt}
-          message={expenses.message}
-          subject={`${scope} expenses`}
-          retryLabel="Retry expenses"
+    const scope = state.month ? monthLabel(state.month) : 'all-time';
+    return (
+      <View
+        style={{ gap: 12 }}
+        onLayout={({ nativeEvent }) => place({ origin: nativeEvent.layout.y })}
+      >
+        <ExpenseSummary
+          household={household}
+          month={state.month}
+          summary={summary}
+          currentUserId={currentUserId}
+          refreshedAt={listed ? expenses.refreshedAt : null}
+          restored={expenses.restored === true}
+          // The rows shown are from before a change written here, and being read again.
+          updating={expenses.changed === true && expenses.status === 'loading'}
           offline={offline}
-          onRetry={onRefreshExpenses}
+          loading={!listed && expenses.status !== 'error'}
+          opening={firstRead}
+          current={currentMonthKey(new Date(now))}
+          onSelectMonth={choose}
         />
-      ) : null}
-      {kept?.groupId === group.id ? (
-        <KeptDraftNotice kept={kept} onResume={onResumeDraft} onDiscard={onDiscardDraft} />
-      ) : null}
-      {newer
-        ? pageControl({
-            which: 'newer',
-            status: expenses.newerStatus ?? 'idle',
-            disabled: expenses.status !== 'ready',
-            message: expenses.newerMessage ?? null,
-            color: theme.brand.main,
-            onPress: onLoadNewer,
-          })
-        : null}
-      {/* Where the list lies, for the row kept on screen when the newest page drops (#219). It
+        {listed ? (
+          <RetainedNotice
+            status={expenses.status}
+            refreshedAt={expenses.refreshedAt}
+            message={expenses.message}
+            subject={`${scope} expenses`}
+            retryLabel="Retry expenses"
+            offline={offline}
+            onRetry={onRefreshExpenses}
+          />
+        ) : null}
+        {kept?.groupId === group.id ? (
+          <KeptDraftNotice kept={kept} onResume={onResumeDraft} onDiscard={onDiscardDraft} />
+        ) : null}
+        {newer
+          ? pageControl({
+              which: 'newer',
+              status: expenses.newerStatus ?? 'idle',
+              disabled: expenses.status !== 'ready',
+              message: expenses.newerMessage ?? null,
+              color: theme.brand.main,
+              onPress: onLoadNewer,
+            })
+          : null}
+        {/* Where the list lies, for the row kept on screen when the newest page drops (#219). It
           wraps every state of the list, so the Card that showed its skeleton stays the Card that
           fades its rows in. */}
-      <View onLayout={({ nativeEvent }) => place({ list: nativeEvent.layout.y })}>
-        {!listed ? (
-          expenses.status === 'error' && offline ? (
-            <NotAvailableOffline
-              compact
-              // True whether they were never saved here, removed by a change or a sign-out, or
-              // withheld (#323): never "hasn't been opened" (#219, #280 item 2).
-              message={
-                state.month
-                  ? `Expenses in ${monthLabel(state.month)} aren’t saved on this phone. Connect to load them.`
-                  : 'These expenses aren’t saved on this phone. Connect to load them.'
-              }
-              onRetry={onRefreshExpenses}
-            />
-          ) : expenses.status === 'error' ? (
-            <View style={{ gap: 10 }}>
-              <Banner
-                tone="error"
-                message={expenses.message ?? 'These expenses couldn’t be loaded. Try again.'}
+        <View onLayout={({ nativeEvent }) => place({ list: nativeEvent.layout.y })}>
+          {!listed ? (
+            expenses.status === 'error' && offline ? (
+              <NotAvailableOffline
+                compact
+                // True whether they were never saved here, removed by a change or a sign-out, or
+                // withheld (#323): never "hasn't been opened" (#219, #280 item 2).
+                message={
+                  state.month
+                    ? `Expenses in ${monthLabel(state.month)} aren’t saved on this phone. Connect to load them.`
+                    : 'These expenses aren’t saved on this phone. Connect to load them.'
+                }
+                onRetry={onRefreshExpenses}
               />
-              <CompactButton label="Retry expenses" variant="tonal" onPress={onRefreshExpenses} />
-            </View>
-          ) : (
-            <Card
-              loading={`Loading ${scope} expenses`}
-              skeleton={{ heading: true }}
-              onBodyOffset={(body) => place({ body })}
-            />
-          )
-        ) : expenses.data.length ? (
-          <Card onBodyOffset={(body) => place({ body })}>
-            {expenseDays(expenses.data, now).map((day) => (
-              <View
-                key={day.key}
-                onLayout={({ nativeEvent }) => place({ day: day.key, y: nativeEvent.layout.y })}
-              >
-                <CompactText
-                  variant="small"
-                  tone="secondary"
-                  accessibilityRole="header"
-                  style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 2 }}
-                >
-                  {day.label}
-                </CompactText>
-                {day.expenses.map((expense) => (
-                  <View
-                    key={expense.id}
-                    onLayout={({ nativeEvent }) =>
-                      place({
-                        row: expense.id,
-                        day: day.key,
-                        y: nativeEvent.layout.y,
-                        height: nativeEvent.layout.height,
-                      })
-                    }
-                  >
-                    <ExpenseRow
-                      expense={expense}
-                      currentUserId={currentUserId}
-                      saved={expense.id === savedExpenseId}
-                      onOpen={open}
-                    />
-                  </View>
-                ))}
+            ) : expenses.status === 'error' ? (
+              <View style={{ gap: 10 }}>
+                <Banner
+                  tone="error"
+                  message={expenses.message ?? 'These expenses couldn’t be loaded. Try again.'}
+                />
+                <CompactButton label="Retry expenses" variant="tonal" onPress={onRefreshExpenses} />
               </View>
-            ))}
-          </Card>
-        ) : (
-          <Card padded>
-            <CompactText weight="semibold">
-              {state.month ? `No expenses in ${monthLabel(state.month)}` : 'No expenses yet'}
-            </CompactText>
-            <CompactText variant="small" tone="secondary">
-              {state.month ? 'Try another Month or All time.' : 'Expenses you add appear here.'}
-            </CompactText>
-          </Card>
-        )}
+            ) : (
+              <Card
+                loading={`Loading ${scope} expenses`}
+                skeleton={{ heading: true }}
+                onBodyOffset={(body) => place({ body })}
+              />
+            )
+          ) : expenses.data.length ? (
+            <Card onBodyOffset={(body) => place({ body })}>
+              {expenseDays(expenses.data, now).map((day) => (
+                <View
+                  key={day.key}
+                  onLayout={({ nativeEvent }) => place({ day: day.key, y: nativeEvent.layout.y })}
+                >
+                  <ListDayHeader label={day.label} />
+                  {day.expenses.map((expense) => (
+                    <View
+                      key={expense.id}
+                      onLayout={({ nativeEvent }) =>
+                        place({
+                          row: expense.id,
+                          day: day.key,
+                          y: nativeEvent.layout.y,
+                          height: nativeEvent.layout.height,
+                        })
+                      }
+                    >
+                      <ExpenseRow
+                        expense={expense}
+                        currentUserId={currentUserId}
+                        saved={expense.id === savedExpenseId}
+                        onOpen={open}
+                      />
+                    </View>
+                  ))}
+                </View>
+              ))}
+            </Card>
+          ) : (
+            <Card padded>
+              <CompactText weight="semibold">
+                {state.month ? `No expenses in ${monthLabel(state.month)}` : 'No expenses yet'}
+              </CompactText>
+              <CompactText variant="small" tone="secondary">
+                {state.month ? 'Try another Month or All time.' : 'Expenses you add appear here.'}
+              </CompactText>
+            </Card>
+          )}
+        </View>
+        {more
+          ? pageControl({
+              which: 'more',
+              status: expenses.moreStatus,
+              disabled: expenses.status !== 'ready',
+              message: expenses.moreMessage,
+              color: theme.brand.main,
+              onPress: onLoadMore,
+            })
+          : null}
       </View>
-      {more
-        ? pageControl({
-            which: 'more',
-            status: expenses.moreStatus,
-            disabled: expenses.status !== 'ready',
-            message: expenses.moreMessage,
-            color: theme.brand.main,
-            onPress: onLoadMore,
-          })
-        : null}
-    </View>
-  );
-}
+    );
+  },
+  (a, b) =>
+    sameSelection(
+      { ...a, state: a.state.expenses, month: a.state.month },
+      { ...b, state: b.state.expenses, month: b.state.month },
+    ),
+);
 
 /**
  * Load more, below the list, or Load newer, above it once the list has slid past its newest

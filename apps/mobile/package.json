@@ -25,6 +25,7 @@
     "react-native-nitro-google-signin": "2.3.0",
     "react-native-nitro-modules": "0.37.1",
     "react-native-safe-area-context": "~5.7.0",
+    "use-sync-external-store": "^1.6.0",
     "zod": "^4.5.4"
   },
   "devDependencies": {
@@ -32,6 +33,7 @@
     "@types/node": "^22",
     "@types/react": "~19.2.2",
     "@types/react-test-renderer": "^19.3.0",
+    "@types/use-sync-external-store": "^1.7.0",
     "eslint": "^9",
     "react-test-renderer": "19.2.3",
     "tsx": "^4.23.1",

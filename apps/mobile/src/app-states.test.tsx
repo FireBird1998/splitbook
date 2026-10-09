@@ -2202,6 +2202,23 @@ describe('A Group says what is true, without jumps (#219)', () => {
     expect(seen()).toContain(`All-time balance · INRUpdated ${refreshedLabel(phone.clock.now)}`);
   });
 
+  it('keeps local Month labels on the controller clock across midnight', async () => {
+    const phone = device();
+    phone.clock.now = new Date(2026, 8, 30, 23, 59, 59).getTime();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(open[maple]);
+    expect(controller().getSnapshot().financial.month).toBe('2026-09');
+    expect(seen()).toContain('0 expenses this monthUpdated');
+    // The selected September list stays in place; only the relative label changes.
+    phone.clock.now = new Date(2026, 9, 1, 0, 0, 1).getTime();
+    await settle(controller().refresh('foreground'));
+    expect(controller().getSnapshot().financial.month).toBe('2026-09');
+    expect(seen()).toContain('0 expenses in SeptemberUpdated');
+    expect(seen()).not.toContain('0 expenses this month');
+  });
+
   // N2 (MB): once the Expenses are read after a change, they're current, whatever Balances wait on.
   it('says the Expenses are refreshing plainly once read after a change, while Balances still wait', async () => {
     const phone = device();

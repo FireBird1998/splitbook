@@ -395,6 +395,14 @@ describe('Split sheet', () => {
     expect(ui.sheet()).toBeUndefined();
     expect(ui.splitTile().props.accessibilityLabel).toBe('Split: By amounts · 3');
     await ui.type('Description, required', 'Weekly groceries');
+    const tag = ui
+      .root()
+      .find(
+        (node) =>
+          isHost(node, 'Pressable') &&
+          String(node.props.accessibilityLabel).startsWith('Tag, required:'),
+      );
+    await ui.press(tag.props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     await ui.press('Save expense ₹1,249.50');
     expect(ui.writes).toHaveLength(1);

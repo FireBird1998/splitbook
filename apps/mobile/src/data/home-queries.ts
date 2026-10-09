@@ -756,13 +756,22 @@ export function createHomeQueries(session: HomeSession) {
     try {
       const records = await lease.write(() => list(lease.accountId));
       if (!session.current(owner)) return;
-      session.publish({
-        drafts: draftSummaries(
-          records.filter(({ groupId }) => !session.financialBlocked?.(lease.accountId, groupId)),
-          lease.accountId,
-          session.snapshot().groups.data,
-        ),
-      });
+      const next = draftSummaries(
+        records.filter(({ groupId }) => !session.financialBlocked?.(lease.accountId, groupId)),
+        lease.accountId,
+        session.snapshot().groups.data,
+      );
+      const shown = session.snapshot().drafts;
+      if (
+        shown.length === next.length &&
+        next.every((draft, index) =>
+          (Object.keys(draft) as (keyof ExpenseDraftSummary)[]).every(
+            (key) => draft[key] === shown[index][key],
+          ),
+        )
+      )
+        return;
+      session.publish({ drafts: next });
     } catch {
       // Home keeps the drafts it lists; each one is still in its Group.
     }

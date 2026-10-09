@@ -15,6 +15,7 @@ import type { FetchResponse, MobileFetch } from '../data/types';
 import { draftFromExpense } from '../data/expense-draft';
 import { expenseRecordSchema } from '../data/expense-record';
 import { ExpenseEditor } from './expense-editor';
+import { ControllerExpenseEditor } from './controller-expense-editor';
 import { expenseDateLabel } from './expense-form';
 import { ExpenseRecordView } from './expense-record-view';
 import { OfflineNotice } from './offline-notice';
@@ -78,6 +79,7 @@ function backend({
   refuseRetries = false,
   holdCreate,
   readGroup,
+  now = () => localNoon,
 }: {
   record?: Record<string, unknown>;
   /** Loses every create response, or only this many. */
@@ -91,9 +93,11 @@ function backend({
   /** Creates wait for this before they're answered, so a save stays in flight. */
   holdCreate?: Promise<void>;
   readGroup?: () => Promise<FetchResponse>;
+  now?: () => number;
 } = {}) {
   const writes: string[] = [];
   const submissions: { key: string | null; body: string }[] = [];
+  const edits: string[] = [];
   let saved = record;
   const records = new Map<string, unknown>();
   const drafts = {
@@ -120,6 +124,7 @@ function backend({
       return readGroup ? readGroup() : json({ data: group, status: 200 });
     if (path === `/api/groups/${groupId}/expenses/${expenseId}`) {
       if (init.method === 'PATCH') {
+        edits.push(String(init.body));
         if (losePatch) throw new Error('The connection dropped before the edit arrived');
         if (conflict && saved !== conflict) {
           saved = conflict;
@@ -189,11 +194,11 @@ function backend({
         cleanupMarker: { load: async () => false, mark: async () => {}, clear: async () => {} },
         stores: [drafts],
       },
-      now: () => localNoon,
+      now,
       newSubmissionKey: () => 'native-expense-test-0001',
     },
   );
-  return { controller, drafts, writes, submissions };
+  return { controller, drafts, writes, submissions, edits };
 }
 
 interface NodeMock {
@@ -212,8 +217,8 @@ function EditorScreen({
 }) {
   const state = useSyncExternalStore(controller.subscribe, controller.getSnapshot);
   return (
-    <ExpenseEditor
-      state={state.expense}
+    <ControllerExpenseEditor
+      controller={controller}
       offline={state.offline.active}
       notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
       emptyNotice={<OfflineNotice state={state.offline} savedShown={false} />}
@@ -413,6 +418,7 @@ describe('rendered Expense corrections', () => {
   it('moves a blank Description submission to its field and saves once after correction', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     await ui.type('Amount, required', '250.50');
+    await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     await ui.press('Save expense');
 
@@ -427,7 +433,7 @@ describe('rendered Expense corrections', () => {
     expect(text(ui.root())).toContain('One thing to fix before saving');
     expect(ui.pressable('Go to Description')).toBeTruthy();
     expect(ui.input('Amount, required').props.value).toBe('250.50');
-    expect(ui.pressable('Tag: Groceries').props.accessibilityState.checked).toBe(true);
+    expect(ui.tile('Tag').props.accessibilityLabel).toBe('Tag, required: Groceries');
 
     await ui.type('Description, required', 'Groceries');
     expect(corrections(fieldOf(ui.input('Description, required')))).toEqual([]);
@@ -471,9 +477,20 @@ describe('rendered Expense corrections', () => {
 
   it('waits until a field is left before showing its correction', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
+    const border = () => {
+      let node: ReactTestInstance | null = ui.input('Amount, required');
+      while (node) {
+        const style = flatten(node.props.style);
+        if (isHost(node, 'View') && style.padding === 14 && style.borderWidth !== undefined)
+          return style.borderWidth;
+        node = node.parent;
+      }
+      throw new Error('Amount and Description card not found');
+    };
     await ui.type('Amount, required', '10.005');
     expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([]);
     await ui.leave('Amount, required');
+    expect(border()).toBe(2);
     expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([
       'INR amounts can have at most 2 decimal places. Nothing is rounded for you.',
     ]);
@@ -481,6 +498,46 @@ describe('rendered Expense corrections', () => {
     expect(ui.focusCount('Amount, required')).toBe(0);
     await ui.type('Amount, required', '10.05');
     expect(corrections(fieldOf(ui.input('Amount, required')))).toEqual([]);
+    expect(ui.input('Amount, required').props.accessibilityHint).toBeUndefined();
+    expect(border()).toBe(1);
+    // Leaving it made corrections visible: a later invalid entry marks the card immediately.
+    await ui.type('Amount, required', '10.005');
+    expect(ui.input('Amount, required').props.accessibilityHint).toBeTruthy();
+    expect(border()).toBe(2);
+  });
+
+  it('keeps the exact Save amount on a recovered ordinary draft while offline', async () => {
+    let time = localNoon;
+    let disconnected = false;
+    const ui = await render(
+      async (controller) => {
+        await controller.openExpense(groupId);
+        await controller.updateExpenseDraft({
+          amount: '12.34',
+          description: 'Saved dinner',
+          tagId,
+        });
+        await controller.closeExpense();
+        disconnected = true;
+        time += 31_000;
+        await controller.openExpense(groupId);
+        controller.resumeExpenseDraft();
+      },
+      {
+        now: () => time,
+        readGroup: async () => {
+          if (disconnected) throw new Error('Offline');
+          return json({ status: 200, data: group });
+        },
+      },
+    );
+    const state = ui.controller.getSnapshot();
+    expect(state.offline.active).toBe(true);
+    expect(state.expense).toMatchObject({ status: 'editing', contextCheck: { initialize: false } });
+    expect(state.expense.contextCheck?.status).not.toBe('checking');
+    expect(labelled(ui.root(), 'You: paid ₹12.34, share ₹12.34')).toHaveLength(1);
+    expect(ui.pressable('Save expense ₹12.34').props.disabled).toBe(true);
+    expect(ui.writes).toEqual([]);
   });
 
   it('moves screen-reader focus to a missing Tag instead of opening the keyboard', async () => {
@@ -496,6 +553,7 @@ describe('rendered Expense corrections', () => {
     );
     expect(ui.focusCount('Amount, required')).toBe(0);
     expect(ui.focusCount('Description, required')).toBe(0);
+    await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     expect(corrections(ui.root())).not.toContain('Choose a Tag for this Expense.');
     expect(ui.tile('Tag').props.accessibilityLabel).toBe('Tag, required: Groceries');
@@ -536,6 +594,7 @@ describe('rendered Expense corrections', () => {
   it('keeps Save enabled and the bar steady while a draft write is pending', async () => {
     const ui = await render((controller) => controller.openExpense(groupId));
     await ui.type('Amount, required', '120');
+    await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
@@ -551,8 +610,8 @@ describe('rendered Expense corrections', () => {
     expect(button.props.disabled).toBe(false);
     expect(button.props.accessibilityHint).toBeUndefined();
     expect(text(ui.root())).not.toContain('Available once');
-    // A quick write changes nothing on screen and announces nothing.
-    expect(draftStatus(ui.root())).toEqual([{ label: 'Draft saved', live: 'none' }]);
+    // The latest entries are not stored yet, so no saved claim is shown or announced.
+    expect(draftStatus(ui.root())).toEqual([]);
     await act(() => new Promise((resolve) => setTimeout(resolve, 450)));
     expect(draftStatus(ui.root())).toEqual([{ label: 'Saving draft…', live: 'none' }]);
 
@@ -574,6 +633,7 @@ describe('rendered Expense corrections', () => {
     const held = new Promise<void>((resolve) => (release = resolve));
     const ui = await render((controller) => controller.openExpense(groupId), { holdCreate: held });
     await ui.type('Amount, required', '120');
+    await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     await ui.type('Description, required', 'Milk');
     await ui.press('Save expense');
@@ -802,6 +862,65 @@ describe('rendered save not confirmed', () => {
 });
 
 describe('rendered edit conflict', () => {
+  it('shows the latest recorded remainder after rebasing unchanged money entries', async () => {
+    const samId = 'a00000000000000000000002';
+    const original = {
+      ...savedExpense,
+      amount: 0.03,
+      amountMinor: 3,
+      paidBy: [{ user: { _id: memberId, name: 'Alex' }, amount: 0.03, amountMinor: 3 }],
+      splitBetween: [
+        { user: { _id: memberId, name: 'Alex' }, amount: 0.02, amountMinor: 2 },
+        { user: { _id: samId, name: 'Sam' }, amount: 0.01, amountMinor: 1 },
+      ],
+    };
+    const latest = {
+      ...original,
+      revision: 4,
+      splitBetween: [
+        { user: { _id: memberId, name: 'Alex' }, amount: 0.01, amountMinor: 1 },
+        { user: { _id: samId, name: 'Sam' }, amount: 0.02, amountMinor: 2 },
+      ],
+    };
+    const ui = await render(
+      async (controller) => {
+        await controller.openExpense(groupId, expenseId);
+        await controller.editExpense();
+        await controller.updateExpenseDraft({ description: 'Groceries and milk' });
+      },
+      {
+        record: original,
+        conflict: latest,
+        readGroup: async () =>
+          json({
+            data: {
+              ...group,
+              members: [
+                ...group.members,
+                {
+                  user: { _id: samId, name: 'Sam', email: 'sam@example.test', image: null },
+                  role: 'member',
+                  joinedAt: iso,
+                },
+              ],
+            },
+            status: 200,
+          }),
+      },
+    );
+    expect(labelled(ui.root(), 'You: paid ₹0.03, share ₹0.02')).toHaveLength(1);
+    const before = ui.controller.getSnapshot().expense.draft!;
+    await ui.press('Save changes');
+    await ui.press('Keep my version for review');
+    const after = ui.controller.getSnapshot().expense.draft!;
+    expect(after.amount).toBe(before.amount);
+    expect(after.participantIds).toBe(before.participantIds);
+    expect(after.splitValues).toBe(before.splitValues);
+    expect(labelled(ui.root(), 'You: paid ₹0.03, share ₹0.01')).toHaveLength(1);
+    expect(labelled(ui.root(), 'Sam: paid nothing, share ₹0.02')).toHaveLength(1);
+    await ui.press('Save changes');
+    expect(JSON.parse(ui.edits.at(-1)!)).toEqual({ description: 'Groceries and milk' });
+  });
   // Someone else saved a new amount and notes before the member's edit arrived.
   const theirs = {
     ...savedExpense,
@@ -1207,6 +1326,7 @@ describe('compact Expense form', () => {
     await ui.type('Amount, required', '-5');
     expect(ui.input('Amount, required').props.value).toBe('-5');
     await ui.type('Description, required', 'Milk');
+    await ui.press(ui.tile('Tag').props.accessibilityLabel);
     await ui.press('Tag: Groceries');
     await ui.press('Save expense');
     expect(ui.writes).toEqual([]);

@@ -1,3 +1,4 @@
+import { ListDayHeader } from './list-day-header';
 import type { RowPlaces } from './return-scroll';
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
@@ -35,7 +36,8 @@ interface GroupActivityProps {
   members?: Member[];
   /** The app can't reach SplitBook: this device's saved copy shows its badge. */
   offline: boolean;
-  now: number;
+  now?: number;
+  dayKey?: string;
   onRetry: () => void;
   onMore: () => void;
   /** Reads the page before the window, once Activity has slid past its newest page (#222). */
@@ -202,7 +204,8 @@ function ActivityList({
   currency,
   members,
   offline,
-  now,
+  now: legacyNow,
+  dayKey,
   onRetry,
   onMore,
   onLoadNewer,
@@ -210,6 +213,7 @@ function ActivityList({
   onRowsLayout,
   onSelect,
 }: GroupActivityProps) {
+  const now = dayKey ? new Date(`${dayKey}T12:00:00`).getTime() : (legacyNow ?? Date.now());
   const theme = useTheme();
   const loading = state.status === 'loading';
   // Events listed with their pages: they stay shown while they're read again (M1-3), and after
@@ -427,18 +431,7 @@ function ActivityList({
                 onLayout={({ nativeEvent }) => place({ day: day.key, y: nativeEvent.layout.y })}
               >
                 {index > 0 ? <Divider /> : null}
-                <CompactText
-                  variant="small"
-                  tone="secondary"
-                  accessibilityRole="header"
-                  style={{
-                    paddingHorizontal: 14,
-                    paddingTop: 12,
-                    paddingBottom: 2,
-                  }}
-                >
-                  {day.label}
-                </CompactText>
+                <ListDayHeader label={day.label} />
                 {day.events.map((event) => (
                   <View
                     key={event._id}

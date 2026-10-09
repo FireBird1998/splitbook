@@ -105,6 +105,16 @@ vi.mock('./ui/compact/layout', async (load) => counting.wrap(await load<Module>(
 vi.mock('./ui/compact/navigation', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/compact/sheet', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/compact/text', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/controller-expense-editor', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/draft-status-selection', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-input-selection', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-save-selection', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/draft-status', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-inputs', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-optional-details', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-tile-selection', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-allocation-selection', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/expense-sheet-selection', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/date-sheet', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/error-boundary', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/expense-editor', async (load) => counting.wrap(await load<Module>()));
@@ -118,6 +128,7 @@ vi.mock('./ui/group-members', async (load) => counting.wrap(await load<Module>()
 vi.mock('./ui/group-shell', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/group-snackbar', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/group-workflows', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/list-day-header', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/home', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/offline-notice', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/payer-sheet', async (load) => counting.wrap(await load<Module>()));
@@ -298,6 +309,7 @@ function backend({ expensePages = pages, activityPages = pages, payment = false 
   let cookie: string | null = null;
   let account: string | null = null;
   let paid = false;
+  let draftGate: Promise<void> | undefined;
   const drafts = new Map<string, unknown>(),
     attempts = new Map<string, unknown>();
   const shown = payment
@@ -321,6 +333,7 @@ function backend({ expensePages = pages, activityPages = pages, payment = false 
       expenseDrafts: {
         load: async (accountId, id) => structuredClone(drafts.get(`${accountId}:${id}`) ?? null),
         save: async (accountId, id, value) => {
+          await draftGate;
           drafts.set(`${accountId}:${id}`, structuredClone(value));
         },
         remove: async (accountId, id) => {
@@ -440,7 +453,20 @@ function backend({ expensePages = pages, activityPages = pages, payment = false 
       },
     },
   );
-  return { controller, clock };
+  return {
+    controller,
+    clock,
+    holdDraftWrites: () => {
+      let release!: () => void;
+      draftGate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return () => {
+        release();
+        draftGate = undefined;
+      };
+    },
+  };
 }
 
 interface Sample {
@@ -935,6 +961,133 @@ describe('render and request profile (#177, #206)', { timeout: 30_000 }, () => {
       () => {
         expect(app.value('Description, required'), 'Description').toBe(text);
         expect(app.shows('Draft saved'), 'Draft saved on screen').toBe(true);
+      },
+    );
+  });
+
+  it('stores every latest entry before claiming it saved, with only status rendered on completion', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Add expense');
+    await app.type('Description, required', 'Milk');
+    const persistence: string[] = [];
+    const unsubscribe = app.controller.subscribe(() =>
+      persistence.push(app.controller.getSnapshot().expense.persistence),
+    );
+    const release = app.holdDraftWrites();
+    try {
+      await journey(
+        'Type with a delayed device write',
+        () => app.type('Description, required', 'Milk and bread'),
+        () => {
+          expect(app.value('Description, required')).toBe('Milk and bread');
+          expect(app.controller.getSnapshot().expense.persistence).toBe('saving');
+          expect(app.shows('Draft saved')).toBe(false);
+        },
+      );
+      await journey(
+        'Store the latest Expense entries',
+        () => settle(Promise.resolve(release())),
+        () => {
+          expect(app.controller.getSnapshot().expense.persistence).toBe('saved');
+          expect(app.shows('Draft saved')).toBe(true);
+          expect(persistence).toEqual(['saving', 'saved']);
+          const changed = [...counting.renders.keys()].sort();
+          expect(changed).toEqual(['CompactText', 'DraftStatus', 'Icon', 'SelectedDraftStatus']);
+        },
+      );
+    } finally {
+      release();
+      unsubscribe();
+    }
+  });
+
+  it.each(['Split', 'Paid by'])(
+    'does not redraw the open %s sheet when device storage completes',
+    async (tile) => {
+      const app = await renderApp();
+      await app.press('Open Maple House');
+      await app.press('Add expense');
+      await app.type('Amount, required', '12.34');
+      await app.press(tile);
+      const release = app.holdDraftWrites();
+      try {
+        await app.type('Amount, required', '23.45');
+        expect(app.controller.getSnapshot().expense.persistence).toBe('saving');
+        await journey(
+          `Store entries with ${tile} open`,
+          () => settle(Promise.resolve(release())),
+          () => {
+            expect(app.controller.getSnapshot().expense.persistence).toBe('saved');
+            expect(app.count('Done')).toBe(1);
+            expect([...counting.renders.keys()].sort()).toEqual([
+              'CompactText',
+              'DraftStatus',
+              'Icon',
+              'SelectedDraftStatus',
+            ]);
+          },
+        );
+      } finally {
+        release();
+      }
+    },
+  );
+
+  it('characterizes Amount and Notes typing separately', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Add expense');
+    const amount = '00000000000000012.34';
+    await journey(
+      `Type ${amount.length} characters into Amount`,
+      async () => {
+        for (let length = 1; length <= amount.length; length++)
+          await app.type('Amount, required', amount.slice(0, length));
+      },
+      () => {
+        expect(app.value('Amount, required')).toBe(amount);
+        expect(app.rows('share ₹12.34')).toBe(1);
+        expect(app.count('Save expense ₹12.34')).toBe(1);
+      },
+    );
+    await app.press('Category and notes, optional');
+    const notes = 'Fictional groceries!';
+    await journey(
+      `Type ${notes.length} characters into Notes`,
+      async () => {
+        for (let length = 1; length <= notes.length; length++)
+          await app.type('Notes', notes.slice(0, length));
+      },
+      () => expect(app.value('Notes')).toBe(notes),
+    );
+  });
+
+  it('keeps ordinary money-changing Amount entry within its render budget', async () => {
+    const app = await renderApp();
+    await app.press('Open Maple House');
+    await app.press('Add expense');
+    const amount = '123456.78';
+    const strokes: number[] = [];
+    await journey(
+      `Type ${amount.length} money-changing characters into Amount`,
+      async () => {
+        for (let length = 1; length <= amount.length; length++) {
+          const before = [...counting.renders.values()].reduce((sum, count) => sum + count, 0);
+          await app.type('Amount, required', amount.slice(0, length));
+          strokes.push(
+            [...counting.renders.values()].reduce((sum, count) => sum + count, 0) - before,
+          );
+        }
+      },
+      () => {
+        expect(app.value('Amount, required')).toBe(amount);
+        expect(app.rows('share ₹123,456.78')).toBe(1);
+        expect(app.count('Save expense ₹123,456.78')).toBe(1);
+        if (process.env.RENDER_PROFILE)
+          console.log('Money-changing Amount renders by keystroke:', strokes);
+        // The first valid amount mounts the preview; later financial digits update its money.
+        expect(Math.max(...strokes.slice(1))).toBeLessThanOrEqual(15);
       },
     );
   });
