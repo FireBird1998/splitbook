@@ -1937,8 +1937,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             if (current(owner) && !(error instanceof Superseded))
               publish({
                 ...snapshot,
-                expense: { ...snapshot.expense, message: financialCleanupMessage },
-                settlement: { ...snapshot.settlement, message: financialCleanupMessage },
+                expense:
+                  snapshot.expense.groupId === groupId
+                    ? { ...snapshot.expense, message: financialCleanupMessage }
+                    : snapshot.expense,
+                settlement:
+                  snapshot.settlement.groupId === groupId
+                    ? { ...snapshot.settlement, message: financialCleanupMessage }
+                    : snapshot.settlement,
+                groups: { ...snapshot.groups, message: financialCleanupMessage },
               });
           })
       : Promise.resolve();
@@ -5066,7 +5073,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (snapshot.invitation.status === 'joining') return;
     if (snapshot.invitation.status === 'invalid' && !snapshot.invitation.code) {
       if (pendingCode) return previewInvitation(pendingCode);
-      navigate(home, { invitation: { code: null, status: 'idle', preview: null, message: null } });
+      navigate(home, {
+        financial: emptyFinancial(),
+        invitation: { code: null, status: 'idle', preview: null, message: null },
+      });
       return backHome();
     }
     const owner = generation;

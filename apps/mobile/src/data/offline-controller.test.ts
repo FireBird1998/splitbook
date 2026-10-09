@@ -78,6 +78,7 @@ function fixture(
   const device = {
     failRemoval: false,
     failJournalClear: false,
+    failJournalSave: false,
     holdDraftWrite: null as Promise<void> | null,
     holdGroupRead: null as Promise<void> | null,
   };
@@ -206,6 +207,7 @@ function fixture(
           financialCleanup: {
             load: async () => structuredClone(financialCleanup),
             save: async (value) => {
+              if (device.failJournalSave) throw new Error('Cleanup journal unavailable');
               financialCleanup = structuredClone(value);
             },
             clear: async () => {
@@ -1736,4 +1738,35 @@ it('finishes access-loss cleanup after the blocked form’s process is killed wi
   await restarted.restore();
   expect(f.drafts.size).toBe(0);
   expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+});
+
+it('keeps another Group’s form unchanged if background loss recording fails', async () => {
+  const otherId = 'b00000000000000000000009';
+  const f = fixture({ extraGroups: [{ ...group, _id: otherId }] });
+  const controller = f.create();
+  await controller.signIn('alex');
+  let release!: () => void;
+  f.device.holdGroupRead = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const before = f.requests().length;
+  const opening = controller.openGroup(groupId);
+  await vi.waitFor(() =>
+    expect(f.requests().slice(before)).toContain(`GET /api/groups/${groupId}`),
+  );
+  await controller.openExpense(otherId);
+  await controller.updateExpenseDraft({ description: 'Other Group dinner', amount: '12' });
+  f.device.failJournalSave = true;
+  f.revoke();
+  release();
+  await opening;
+  expect(controller.getSnapshot()).toMatchObject({
+    screen: 'expense',
+    expense: {
+      groupId: otherId,
+      status: 'editing',
+      message: null,
+      draft: { description: 'Other Group dinner' },
+    },
+  });
 });
