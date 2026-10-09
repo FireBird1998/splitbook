@@ -123,28 +123,28 @@ All sizes are in dp and scale with the Android font size. Layout boxes do not sc
 
 ### Layout and components
 
-| Component         | Specification                                                                                                                                                          |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Screen            | 16 side gutters; 10–12 between sections                                                                                                                                |
-| Tap targets       | At least 48 (44 inside sheets for chips, steppers and calendar days)                                                                                                   |
-| Top bar           | Min height 64; icon buttons 48; title plus a one-line subtitle                                                                                                         |
-| Bottom navigation | Min height 80; three equal destinations; active pill 60 × 32, radius 16, `brand.bg`                                                                                    |
-| Card              | Radius 14, 1 border `border`, `surface` fill                                                                                                                           |
-| List row          | Min height 60; padding 8 × 14; leading icon tile 40 (radius 12) or avatar 32 (radius 11); trailing amount in mono with a caption below                                 |
-| Selector tile     | Min height 60; radius 12; 20 icon in `brand.main`; caption label above a semibold value; error state uses a 2 `negative.main` border; locked state uses `surfaceMuted` |
-| Tile grid         | Two columns with 8 gaps; one column at 130% text                                                                                                                       |
-| Summary stats     | Three columns; one column with label and value side by side at 130% text                                                                                               |
-| Buttons           | Min height 48, radius 12; small 44; primary, tonal (`brand.bg`) and text                                                                                               |
-| Add button        | Extended floating button, min height 56, radius 16, 16 from the right and 96 from the bottom (above the navigation)                                                    |
-| Save bar          | Pinned to the bottom with a top border; sits directly above the keyboard when it is open                                                                               |
-| Chips, segmented  | Min height 44, radius 12; the segmented control is 44 high inside a 3 padded `surfaceMuted` track                                                                      |
-| Stepper           | 44 × 44 − and + with the value between                                                                                                                                 |
-| Banner            | Radius 12, padding 10 × 12, 20 icon, title plus one sentence                                                                                                           |
-| Snackbar          | Min height 48, radius 12, inverse colours, 92 from the bottom; the add button moves above it                                                                           |
-| Badge             | Pill; icon 16 plus a short label                                                                                                                                       |
-| Linear progress   | 3 high under the top bar; one per screen                                                                                                                               |
-| Trip strip        | Min height 72, radius 16; route codes in mono 22; perforation divider; dates and member count on the right                                                             |
-| Icons             | Ionicons outline equivalents of the canvas icons                                                                                                                       |
+| Component         | Specification                                                                                                                                                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Screen            | 16 side gutters; 10–12 between sections                                                                                                                                                                              |
+| Tap targets       | At least 48 (44 inside sheets for chips, steppers and calendar days)                                                                                                                                                 |
+| Top bar           | Min height 64; icon buttons 48; title plus a one-line subtitle                                                                                                                                                       |
+| Bottom navigation | Min height 80; three equal destinations; active pill 60 × 32, radius 16, `brand.bg`                                                                                                                                  |
+| Card              | Radius 14, 1 border `border`, `surface` fill                                                                                                                                                                         |
+| List row          | Min height 60; padding 8 × 14; leading icon tile 40 (radius 12) or avatar 32 (radius 11); trailing amount in mono with a caption below                                                                               |
+| Selector tile     | Min height 60; radius 12; 20 icon in `brand.main`; caption label above a semibold value; error state uses a 2 `negative.main` border; locked state uses `surfaceMuted`                                               |
+| Tile grid         | Two columns with 8 gaps; one column at 130% text                                                                                                                                                                     |
+| Summary stats     | Columns when every full label and amount fits, including at enlarged text; otherwise label-and-value rows. Large text uses the stacked loading shape until native widths arrive; values may wrap without truncation. |
+| Buttons           | Min height 48, radius 12; small 44; primary, tonal (`brand.bg`) and text                                                                                                                                             |
+| Add button        | Extended floating button, min height 56, radius 16, 16 from the right and 96 from the bottom (above the navigation)                                                                                                  |
+| Save bar          | Pinned to the bottom with a top border; sits directly above the keyboard when it is open                                                                                                                             |
+| Chips, segmented  | Min height 44, radius 12; the segmented control is 44 high inside a 3 padded `surfaceMuted` track                                                                                                                    |
+| Stepper           | 44 × 44 − and + with the value between                                                                                                                                                                               |
+| Banner            | Radius 12, padding 10 × 12, 20 icon, title plus one sentence                                                                                                                                                         |
+| Snackbar          | Min height 48, radius 12, inverse colours, 92 from the bottom; the add button moves above it                                                                                                                         |
+| Badge             | Pill; icon 16 plus a short label                                                                                                                                                                                     |
+| Linear progress   | 3 high under the top bar; one per screen                                                                                                                                                                             |
+| Trip strip        | Min height 72, radius 16; route codes in mono 22; perforation divider; dates and member count on the right                                                                                                           |
+| Icons             | Ionicons outline equivalents of the canvas icons                                                                                                                                                                     |
 
 ### Bottom sheets
 

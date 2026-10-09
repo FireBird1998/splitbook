@@ -125,8 +125,8 @@ export { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
 export const DISPLAY_FRESHNESS_MS = 30_000;
 
 /** What a map of scopes holds for this read's scope. */
-const scoped = <T>(map: Map<string, T>, key: QueryKey) =>
-  [...map].find(([scope]) => inScope(scope)(key))?.[1];
+const scoped = (map: Map<string, number>, key: QueryKey) =>
+  Math.max(-Infinity, ...[...map].filter(([scope]) => inScope(scope)(key)).map(([, time]) => time));
 
 /**
  * A confirmed change's message (#219): `snackbar` as the change confirmed it, with the saved row
@@ -1066,6 +1066,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     },
     checkSession: (owner) => checkSession(owner),
     refused: (groupId, error) => refuseExpenseGroup(groupId, error),
+    missingLedger: (groupId, owner) => missingLedger(groupId, owner),
     gone: () => {
       // The Group was just read: what's missing is this Expense, and nothing saved of it shows.
       // An edit stays with its Group's details, and a save in flight is its own: saving either is
@@ -1087,6 +1088,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     readRecord: (groupId, expenseId, owner, wanted) =>
       expenseQueries.recordOf(groupId, expenseId, owner, wanted),
     refused: (groupId, error) => void dropDeniedGroup(groupId, error),
+    missingLedger: (groupId, owner) => missingLedger(groupId, owner),
   });
   const listening = [
     homeQueries.listen(focusManager, onlineManager, dependencies.netInfo),
@@ -1241,6 +1243,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (current(owner) && !(error instanceof Superseded))
         untrusted.mark(lease.accountId, [`ledger:${groupId}`, `balances:${groupId}`, 'home'], time);
     }
+  };
+
+  /** An Expense read answered 404: the Group stays, but every older ledger copy goes. */
+  const missingLedger = async (groupId: string, owner: number) => {
+    if (!current(owner)) return;
+    publish({
+      ...snapshot,
+      home: emptyHome(),
+      financial:
+        snapshot.financial.groupId === groupId
+          ? { ...emptyFinancial(), groupId }
+          : snapshot.financial,
+    });
+    ledgerChanged(groupId);
+    await removeLedgerCopies(groupId, owner);
   };
 
   /** The saved Home shown while checking, kept for the same account so it never blanks. */
@@ -1405,7 +1422,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       }
     }
     await recordCookieAccount(owner, session.user.id);
-    await queueAccount(() => untrusted.drop());
+    await queueAccount(() => untrusted.recover(session.user.id, now()));
     // A Group submission stored on this device reopens before anything else can be created.
     openHome(session.user, await storedCreation(owner, session.user.id));
     await saveVerifiedIdentity(session, owner);
@@ -1449,6 +1466,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       // are gone, so its saved Home can be read, alongside the session cookie, before any request.
       await queueAccount(() => untrusted.drop());
       const device = readDeviceAccount();
+      const accountId = (await device)?.accountId;
+      if (accountId) await queueAccount(() => untrusted.recover(accountId, now()));
       const deviceHome = readSavedHome(device);
       await loadPending();
       assertCurrent(owner);

@@ -100,7 +100,7 @@ export function lineBox(kind: LineKind, fontScale: number) {
   };
 }
 
-/** At or above this Android font scale, tile grids and summary stats use one column. */
+/** At or above this Android font scale, tile grids use one column. */
 export const LARGE_TEXT_SCALE = 1.3;
 // Android reports the scale as a 32-bit float (130% arrives as 1.2999999523…), so compare
 // whole percentages rather than the raw value.

@@ -98,6 +98,9 @@ function fixture() {
     loseWrites: false,
     /** This device can't remove saved copies. */
     failInvalidation: false,
+    failJournal: false,
+    failJournalReads: 0,
+    missingExpense: false,
     /** The server refuses every change as invalid (422) and changes nothing. */
     refuse: false,
     ledger: 0,
@@ -109,6 +112,7 @@ function fixture() {
     cleanup = false,
     keys = 0;
   const calls: { method: string; path: string }[] = [];
+  const requests: { method: string; path: string }[] = [];
   const memory = (map = new Map<string, unknown>()) => ({
     load: async (account: string, key: string) => structuredClone(map.get(account + key) ?? null),
     save: async (account: string, key: string, value: unknown) => {
@@ -120,6 +124,13 @@ function fixture() {
     clear: async () => {
       map.clear();
     },
+    list: async (account: string) =>
+      [...map]
+        .filter(([key]) => key.startsWith(account))
+        .map(([key, value]) => ({
+          groupId: key.slice(account.length),
+          value: structuredClone(value),
+        })),
   });
   const drafts = memory(),
     attempts = memory();
@@ -131,6 +142,23 @@ function fixture() {
       server.failInvalidation
         ? Promise.reject(new Error('The device storage is full'))
         : store.remove(accountId, path),
+  };
+  let distrust: unknown = null;
+  const untrustedCopies = {
+    load: async () => {
+      if (server.failJournalReads > 0) {
+        server.failJournalReads -= 1;
+        throw new Error('Transient cleanup journal read failure');
+      }
+      return structuredClone(distrust);
+    },
+    save: async (value: unknown) => {
+      if (server.failJournal) throw new Error('Device journal unavailable');
+      distrust = structuredClone(value);
+    },
+    clear: async () => {
+      distrust = null;
+    },
   };
   const offlineIdentity = {
     load: async () => structuredClone(identity),
@@ -254,7 +282,16 @@ function fixture() {
     }
     if (path.startsWith(`/api/groups/${cabinId}/expenses?`))
       return page([row('d00000000000000000000009', cabinId, 'Cabin firewood')], 1, 1);
-    if (path === dinnerPath && method === 'GET') return json({ status: 200, data: dinner() });
+    if (path === dinnerPath && method === 'GET')
+      return server.missingExpense
+        ? json({ error: 'Expense not found' }, 404)
+        : json({ status: 200, data: dinner() });
+    if (path === `/api/groups/${cabinId}/expenses` && method === 'POST')
+      return json({ status: 201, data: { ...dinner(), group: cabinId } }, 201);
+    if (path === `${maplePath}/expenses` && method === 'POST') {
+      server.ledger += 1;
+      return json({ status: 201, data: dinner() }, 201);
+    }
     if (
       server.refuse &&
       method !== 'GET' &&
@@ -283,7 +320,13 @@ function fixture() {
               expenseId,
             },
           ])
-        : events([{ id: 'e00000000000000000000001', description: `ledger ${server.ledger}` }]);
+        : events([
+            {
+              id: 'e00000000000000000000001',
+              description: `ledger ${server.ledger}`,
+              expenseId: dinnerId,
+            },
+          ]);
     }
     if (path === `${maplePath}/balances`) return balances(alex, sam, 30 + server.ledger);
     if (path === `/api/groups/${cabinId}/balances`) return balances(sam, alex, 12);
@@ -359,9 +402,14 @@ function fixture() {
               cleanup = false;
             },
           },
-          stores: [savedQueries, offlineIdentity, drafts, attempts],
+          untrustedCopies,
+          stores: [savedQueries, offlineIdentity, drafts, attempts, untrustedCopies],
         },
         fetch: async (url, init) => {
+          requests.push({
+            method: init.method ?? 'GET',
+            path: new URL(url).pathname + new URL(url).search,
+          });
           if (server.offline) throw new Error('Offline');
           const path = new URL(url).pathname + new URL(url).search;
           const method = init.method ?? 'GET';
@@ -439,7 +487,19 @@ function fixture() {
           return [view, copy];
         }),
     );
-  return { create, clock, server, calls, saved, savedOf, hold, stallSave };
+  return {
+    create,
+    clock,
+    server,
+    calls,
+    saved,
+    savedOf,
+    hold,
+    stallSave,
+    drafts,
+    attempts,
+    requests,
+  };
 }
 type Fixture = ReturnType<typeof fixture>;
 type Controller = ReturnType<Fixture['create']>;
@@ -824,4 +884,316 @@ describe('saved copies are never older than a confirmed change (#191)', () => {
     f.server.offline = true;
     expect((await readOffline(controller)).activity).toBe(notSaved);
   });
+});
+
+describe('stored unconfirmed changes remove older copies before a restart (#282)', () => {
+  it('keeps an interrupted edit and its revision, but shows no older Home or ledger offline', async () => {
+    const f = fixture();
+    const controller = await visitEverything(f);
+    await controller.openExpense(mapleId, dinnerId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Lake dinner' });
+    const response = f.hold(
+      (path, method) => path.endsWith(`/expenses/${dinnerId}`) && method === 'PATCH',
+    );
+    const saving = controller.saveExpense();
+    await response.arrived;
+    const recovery = await f.drafts.list(alex.id);
+    expect(recovery[0].value).toMatchObject({ mutation: { kind: 'edit', revision: 3 } });
+    controller.dispose();
+    f.server.offline = true;
+    const beforeRestore = f.calls.length;
+    const beforeRequests = f.requests.length;
+    const restarted = f.create();
+    try {
+      const homes: unknown[] = [];
+      const stop = restarted.subscribe(() => homes.push(restarted.getSnapshot().home.data));
+      await restarted.restore();
+      stop();
+      expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+      expect(homes.every((home) => home === null)).toBe(true);
+      expect(restarted.getSnapshot().home.data).toBeNull();
+      expect(Object.keys(f.savedOf(mapleId))).toEqual(['Group']);
+      expect(await f.drafts.list(alex.id)).toEqual(recovery);
+      expect(f.calls.slice(beforeRestore)).toEqual([]);
+      expect(f.requests.slice(beforeRequests).every(({ method }) => method === 'GET')).toBe(true);
+    } finally {
+      restarted.dispose();
+      response.release();
+      await saving;
+    }
+  });
+
+  it('keeps an interrupted payment identity, but shows no older Home or ledger offline', async () => {
+    const f = fixture();
+    const controller = await visitEverything(f);
+    await controller.openGroup(mapleId, true, 'balances');
+    await controller.openRecordPayment(alex.id, sam.id, 'INR');
+    const response = f.hold((path, method) => path.endsWith('/settlements') && method === 'POST');
+    const saving = controller.recordSettlement();
+    await response.arrived;
+    const recovery = await f.attempts.list(alex.id);
+    expect(recovery).toHaveLength(1);
+    controller.dispose();
+    f.server.offline = true;
+    const beforeRestore = f.calls.length;
+    const beforeRequests = f.requests.length;
+    const restarted = f.create();
+    try {
+      const homes: unknown[] = [];
+      const stop = restarted.subscribe(() => homes.push(restarted.getSnapshot().home.data));
+      await restarted.restore();
+      stop();
+      expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+      expect(homes.every((home) => home === null)).toBe(true);
+      expect(Object.keys(f.savedOf(mapleId))).toEqual(['Group']);
+      expect(await f.attempts.list(alex.id)).toEqual(recovery);
+      expect(f.calls.slice(beforeRestore)).toEqual([]);
+      expect(f.requests.slice(beforeRequests).every(({ method }) => method === 'GET')).toBe(true);
+    } finally {
+      restarted.dispose();
+      response.release();
+      await saving;
+    }
+  });
+
+  it.each([false, true])(
+    'keeps an interrupted new Expense identity and removes older copies even when the cleanup journal fails (%s)',
+    async (failJournal) => {
+      const f = fixture();
+      const controller = await visitEverything(f);
+      await controller.openExpense(mapleId);
+      await controller.updateExpenseDraft({ amount: '12', description: 'Lunch', tagId });
+      const response = f.hold((path, method) => path.endsWith('/expenses') && method === 'POST');
+      const saving = controller.saveExpense();
+      await response.arrived;
+      const recovery = await f.drafts.list(alex.id);
+      expect(recovery[0].value).toMatchObject({ attempt: { key: 'attempt-0001' } });
+      f.server.failJournal = failJournal;
+      controller.dispose();
+      f.server.offline = true;
+      const beforeRequests = f.requests.length;
+      const restarted = f.create();
+      try {
+        await restarted.restore();
+        expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+        expect(restarted.getSnapshot().home.data).toBeNull();
+        expect(Object.keys(f.savedOf(mapleId))).toEqual(['Group']);
+        expect(await f.drafts.list(alex.id)).toEqual(recovery);
+        expect(f.requests.slice(beforeRequests).every(({ method }) => method === 'GET')).toBe(true);
+      } finally {
+        restarted.dispose();
+        response.release();
+        await saving;
+      }
+    },
+  );
+
+  it('keeps a draft that was never sent and the Group copies when starting offline', async () => {
+    const f = fixture();
+    const controller = await visitEverything(f);
+    await controller.openExpense(mapleId);
+    await controller.updateExpenseDraft({ amount: '12', description: 'Lunch', tagId });
+    const copies = f.savedOf(mapleId);
+    const drafts = await f.drafts.list(alex.id);
+    controller.dispose();
+    f.server.offline = true;
+    const restarted = f.create();
+    await restarted.restore();
+    expect(restarted.getSnapshot().home.data).toMatchObject([{ youOwe: 30 }]);
+    expect(f.savedOf(mapleId)).toEqual(copies);
+    expect(await f.drafts.list(alex.id)).toEqual(drafts);
+    restarted.dispose();
+  });
+
+  it('keeps failed removals untrusted across restarts and removes them before reading when storage recovers', async () => {
+    const f = fixture();
+    let controller = await visitEverything(f);
+    f.server.failInvalidation = true;
+    await controller.openExpense(mapleId, dinnerId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Lake dinner' });
+    await controller.saveExpense();
+    await settle();
+    for (let restart = 0; restart < 2; restart += 1) {
+      controller.dispose();
+      f.server.offline = true;
+      controller = f.create();
+      await controller.restore();
+      expect(controller.getSnapshot().auth.status).toBe('authenticated');
+      const shown = await readOffline(controller);
+      expect(shown.record).toBe(recordNotSaved);
+      expect(shown.august).toBe(notSaved);
+      expect(shown.activity).toBe(notSaved);
+    }
+    controller.dispose();
+    f.server.failInvalidation = false;
+    controller = f.create();
+    await controller.restore();
+    expect(Object.keys(f.savedOf(mapleId))).not.toContain('Dinner');
+    expect(Object.keys(f.savedOf(mapleId))).not.toContain('Expenses 2026-08 page 1');
+    controller.dispose();
+  });
+});
+
+describe('an Expense 404 discards its Group ledger copies (#281)', () => {
+  it.each([
+    ['open', false],
+    ['retry', false],
+    ['activity', false],
+    ['open', true],
+    ['retry', true],
+    ['activity', true],
+  ] as const)(
+    'never reuses an obsolete saved view after %s finds a missing Expense (failed cleanup: %s)',
+    async (entry, failInvalidation) => {
+      const f = fixture();
+      const controller = await visitEverything(f);
+      const cabinCopies = f.savedOf(cabinId);
+      if (entry === 'retry') await controller.openExpense(mapleId, dinnerId);
+      if (entry === 'activity') await controller.openActivity(mapleId);
+      f.server.missingExpense = true;
+      f.server.failInvalidation = failInvalidation;
+      if (entry === 'open') await controller.openExpense(mapleId, dinnerId);
+      if (entry === 'retry') await controller.refresh();
+      if (entry === 'activity') await controller.selectActivity('e00000000000000000000001');
+      expect(f.calls.at(-1)).toMatchObject({
+        method: 'GET',
+        path: `/api/groups/${mapleId}/expenses/${dinnerId}`,
+      });
+      if (failInvalidation) expect(Object.keys(f.savedOf(mapleId))).toContain('Dinner');
+      else {
+        expect(Object.keys(f.savedOf(mapleId))).toEqual(['Group']);
+        expect(f.saved()['/api/user/balances']).toBeUndefined();
+      }
+      expect(f.saved()['/api/groups']).toBeDefined();
+      expect(f.savedOf(cabinId)).toEqual(cabinCopies);
+      f.server.offline = true;
+      expect(await readOffline(controller)).toEqual({
+        groups: ['Maple House', 'Cabin Weekend'],
+        home: 'Your balances aren’t saved on this phone. Connect to load them.',
+        group: mapleId,
+        september: [],
+        secondPage: [],
+        august: notSaved,
+        balances: notSaved,
+        activity: notSaved,
+        record: recordNotSaved,
+      });
+      expect(controller.getSnapshot().auth.status).toBe('authenticated');
+      controller.dispose();
+    },
+  );
+});
+
+it.each([1, 8])(
+  'failed cleanup journal reads (%s) cannot revive an old copy after a confirmed edit',
+  async (failures) => {
+    const f = fixture();
+    const controller = await visitEverything(f);
+    f.server.failInvalidation = true;
+    await controller.openExpense(mapleId, dinnerId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Lake dinner' });
+    await controller.saveExpense();
+    await settle();
+    expect(await f.drafts.list(alex.id)).toEqual([]);
+    expect(Object.keys(f.savedOf(mapleId))).toContain('Dinner');
+    controller.dispose();
+    f.server.offline = true;
+    f.server.failInvalidation = false;
+    f.server.failJournalReads = failures;
+    const restarted = f.create();
+    try {
+      await restarted.restore();
+      expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+      const shown = await readOffline(restarted);
+      expect(shown.record).not.toBe('Dinner');
+      expect(shown.home).not.toEqual([30]);
+      expect(shown.august).not.toEqual(['Dinner']);
+      restarted.dispose();
+      f.server.failJournalReads = 0;
+      const recovered = f.create();
+      await recovered.restore();
+      expect(Object.keys(f.savedOf(mapleId))).not.toContain('Dinner');
+      expect(recovered.getSnapshot().auth.status).toBe('authenticated');
+      recovered.dispose();
+    } finally {
+      restarted.dispose();
+    }
+  },
+);
+
+it('an interrupted attempt in another Group preserves an unreadable existing cleanup journal', async () => {
+  const f = fixture();
+  let controller = await visitEverything(f);
+  f.server.failInvalidation = true;
+  await controller.openExpense(mapleId, dinnerId);
+  await controller.editExpense();
+  await controller.updateExpenseDraft({ description: 'Lake dinner' });
+  await controller.saveExpense();
+  await settle();
+  expect(await f.drafts.list(alex.id)).toEqual([]);
+  expect(Object.keys(f.savedOf(mapleId))).toContain('Dinner');
+
+  await controller.openExpense(cabinId);
+  await controller.updateExpenseDraft({ amount: '12', description: 'Cabin lunch', tagId });
+  const response = f.hold(
+    (path, method) => path === `/api/groups/${cabinId}/expenses` && method === 'POST',
+  );
+  const saving = controller.saveExpense();
+  await response.arrived;
+  const recovery = await f.drafts.list(alex.id);
+  expect(recovery).toHaveLength(1);
+  expect(recovery[0]).toMatchObject({
+    groupId: cabinId,
+    value: { attempt: { key: 'attempt-0001' } },
+  });
+  controller.dispose();
+  f.server.offline = true;
+  f.server.failInvalidation = false;
+  f.server.failJournalReads = 2;
+  controller = f.create();
+  try {
+    await controller.restore();
+    expect(controller.getSnapshot().auth.status).toBe('authenticated');
+    expect((await readOffline(controller)).record).toBe(recordNotSaved);
+    controller.dispose();
+    controller = f.create();
+    await controller.restore();
+    expect(controller.getSnapshot().auth.status).toBe('authenticated');
+    expect((await readOffline(controller)).record).toBe(recordNotSaved);
+    expect(await f.drafts.list(alex.id)).toEqual(recovery);
+  } finally {
+    controller.dispose();
+    response.release();
+    await saving;
+  }
+});
+
+it('records failed confirmed-write cleanup even when its previous journal cannot be read', async () => {
+  const f = fixture();
+  const controller = await visitEverything(f);
+  f.server.failInvalidation = true;
+  f.server.failJournalReads = 1;
+  await controller.openExpense(mapleId, dinnerId);
+  await controller.editExpense();
+  await controller.updateExpenseDraft({ description: 'Lake dinner' });
+  await controller.saveExpense();
+  await settle();
+  expect(await f.drafts.list(alex.id)).toEqual([]);
+  controller.dispose();
+  f.server.offline = true;
+  f.server.failInvalidation = false;
+  const restarted = f.create();
+  try {
+    const homes: unknown[] = [];
+    restarted.subscribe(() => homes.push(restarted.getSnapshot().home.data));
+    await restarted.restore();
+    expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+    expect(Object.keys(f.savedOf(mapleId))).not.toContain('Dinner');
+    expect(homes.every((home) => home === null)).toBe(true);
+  } finally {
+    restarted.dispose();
+  }
 });

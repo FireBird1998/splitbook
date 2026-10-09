@@ -1,4 +1,4 @@
-import { Children, useLayoutEffect, type ReactNode } from 'react';
+import { Children, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Animated,
   Pressable,
@@ -6,6 +6,7 @@ import {
   useWindowDimensions,
   type DimensionValue,
   type StyleProp,
+  type TextLayoutEvent,
   type ViewStyle,
 } from 'react-native';
 import { useTheme } from '../theme';
@@ -607,7 +608,11 @@ export interface SummaryStat {
 }
 
 /**
- * Three stats side by side; at large text each stat becomes a label-and-value row. While
+ * Stats side by side while their full text fits; otherwise each becomes a label-and-value row.
+ * Native text layout measures the displayed labels and amounts, including their font scale.
+ * Until those widths arrive, large text keeps the stacked loading shape; once measured, even
+ * large text uses columns when it fits. Nothing briefly wraps into a different loading height.
+ * Rows can wrap, so even an amount longer than the card keeps every character. While
  * `loading`, three skeleton stats of the same shape stand in (hidden from screen readers, as
  * the screen's own placeholder announces the load); when it clears, the stats fade in. Keep the
  * same SummaryStats in place across the change so they can.
@@ -619,11 +624,53 @@ export function SummaryStats({
   stats: SummaryStat[];
   loading?: boolean;
 }) {
-  const large = useLargeText();
+  const { fontScale } = useWindowDimensions();
+  const [width, setWidth] = useState(0);
+  const signature = JSON.stringify([fontScale, stats.map(({ label, value }) => [label, value])]);
+  const currentSignature = useRef(signature);
+  currentSignature.current = signature;
+  const [measured, setMeasured] = useState<{ signature: string; widths: number[] }>({
+    signature,
+    widths: [],
+  });
+  const columnWidth = width
+    ? (width - 28 - space.gap * Math.max(0, stats.length - 1)) / Math.max(1, stats.length)
+    : Infinity;
+  const sameFigures = measured.signature === signature;
+  const fullyMeasured =
+    width > 0 &&
+    sameFigures &&
+    stats.length > 0 &&
+    stats.every(
+      (_item, index) =>
+        measured.widths[index * 2] !== undefined && measured.widths[index * 2 + 1] !== undefined,
+    );
+  const stacked =
+    (!fullyMeasured && isLargeText(fontScale)) ||
+    (sameFigures && measured.widths.some((needed) => needed > columnWidth));
+  const measure =
+    (slot: number) =>
+    ({ nativeEvent: { lines } }: TextLayoutEvent) => {
+      if (currentSignature.current !== signature || !lines.length) return;
+      // A wrapped line only gives the width of its pieces. Keep their combined width, and
+      // remember that this column did not fit until the wider stacked row measures it again.
+      const needed = Math.max(
+        lines.reduce((sum, line) => sum + line.width, 0),
+        !stacked && width > 0 && lines.length > 1 ? columnWidth + 1 : 0,
+      );
+      setMeasured((previous) => {
+        const widths = previous.signature === signature ? previous.widths : [];
+        if (widths[slot] !== undefined && widths[slot]! >= needed) return previous;
+        const next = [...widths];
+        next[slot] = needed;
+        return { signature, widths: next };
+      });
+    };
   const reveal = useReveal(loading);
-  const stat = large
+  const stat = stacked
     ? {
         flexDirection: 'row' as const,
+        flexWrap: 'wrap' as const,
         justifyContent: 'space-between' as const,
         alignItems: 'baseline' as const,
         gap: space.gap,
@@ -632,9 +679,10 @@ export function SummaryStats({
   const content = (
     <View
       {...(loading ? hiddenFromReaders : {})}
+      onLayout={({ nativeEvent }) => setWidth(nativeEvent.layout.width)}
       style={{
-        flexDirection: large ? 'column' : 'row',
-        gap: large ? 6 : space.gap,
+        flexDirection: stacked ? 'column' : 'row',
+        gap: stacked ? 6 : space.gap,
         paddingHorizontal: 14,
         paddingVertical: 12,
       }}
@@ -642,21 +690,33 @@ export function SummaryStats({
       {loading
         ? [0, 1, 2].map((index) => (
             <View key={index} style={stat}>
-              <Skeleton width={large ? '32%' : '60%'} line="caption" />
-              <Skeleton width={large ? '28%' : '85%'} line="list" />
+              <Skeleton width={stacked ? '32%' : '60%'} line="caption" />
+              <Skeleton width={stacked ? '28%' : '85%'} line="list" />
             </View>
           ))
-        : stats.map((item) => (
+        : stats.map((item, index) => (
             <View
               key={item.label}
               accessible
               accessibilityLabel={`${item.label}: ${item.value}`}
               style={stat}
             >
-              <CompactText variant="caption" tone="secondary">
+              <CompactText
+                variant="caption"
+                tone="secondary"
+                onTextLayout={measure(index * 2)}
+                style={{ maxWidth: '100%' }}
+              >
                 {item.label}
               </CompactText>
-              <Money tone={item.tone}>{item.value}</Money>
+              <Money
+                tone={item.tone}
+                numberOfLines={0}
+                onTextLayout={measure(index * 2 + 1)}
+                style={{ maxWidth: '100%' }}
+              >
+                {item.value}
+              </Money>
             </View>
           ))}
     </View>

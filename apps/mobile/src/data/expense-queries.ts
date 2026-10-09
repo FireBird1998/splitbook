@@ -137,6 +137,8 @@ export interface ExpenseSession {
   refused(groupId: string, error: RequestError): void;
   /** The Expense shown is gone, as its own read said: nothing saved of it, at these paths, shows. */
   gone(paths: string[]): void;
+  /** A missing Expense also makes its Group's saved ledger figures and pages obsolete. */
+  missingLedger(groupId: string, owner: number): Promise<void>;
 }
 
 /** A read of a query: whether its request answered, and when it ends (as for a Group's view). */
@@ -1047,27 +1049,11 @@ export function createExpenseQueries(session: ExpenseSession) {
      * a restart. A row that can't be removed is no longer trusted (#323).
      */
     async drop(groupId: string, expenseId: string, owner: number) {
-      const record = recordKey(groupId, expenseId),
-        history = historyKey(groupId, expenseId),
-        paths = recordPaths(groupId, expenseId);
+      const paths = recordPaths(groupId, expenseId);
       queue.drop(paths[0]);
-      for (const page of held<Pages>(history)?.state.data?.pageParams ?? [])
-        queue.drop(pagePath(history, page));
-      client.removeQueries({ queryKey: record, exact: true });
-      client.removeQueries({ queryKey: history, exact: true });
-      const lease = session.lease();
-      if (!lease || !rows) return;
-      forgotten.set(groupId, (forgotten.get(groupId) ?? 0) + 1);
-      try {
-        await lease.write(async () => {
-          for (const path of await rowPaths(rows, lease.accountId, known))
-            if (path === paths[0] || path.startsWith(paths[1]))
-              await rows.remove(lease.accountId, path);
-        });
-      } catch (error) {
-        if (!(error instanceof Superseded) && session.current(owner))
-          session.distrust(lease.accountId, [`ledger:${groupId}`]);
-      }
+      for (const page of held<Pages>(historyKey(groupId, expenseId))?.state.data?.pageParams ?? [])
+        queue.drop(pagePath(historyKey(groupId, expenseId), page));
+      await session.missingLedger(groupId, owner);
     },
     /** Removes a Group's record and history rows, inside a lease write: a change or a loss. */
     async forget(accountId: string, groupId: string) {

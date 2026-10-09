@@ -415,7 +415,7 @@ function record(controller: ReturnType<ReturnType<typeof fixture>['create']>) {
 }
 
 describe('cold start (#127 decision): the saved Home while the session is checked', () => {
-  it('shows the saved Home after three rounds of reads from a slow device, then checks the session', async () => {
+  it('checks stored attempts before showing the saved Home from a slow device, then checks the session', async () => {
     const f = fixture();
     await previousSession(f);
     f.requests.length = 0;
@@ -428,8 +428,9 @@ describe('cold start (#127 decision): the saved Home while the session is checke
       await f.answerReads();
       rounds += 1;
     }
-    // The sign-out cleanup marker first, then the session cookie and the saved Home together.
-    expect(rounds).toBe(3);
+    // Cleanup and device ownership come first. Stored attempts must be checked before any
+    // saved Home read (#282), adding two device-read rounds to the previous three.
+    expect(rounds).toBe(5);
     expect(restarted.getSnapshot()).toMatchObject({
       auth: { status: 'restoring', user: { id: accountId } },
       groups: { data: [{ id: maple }, { id: lisbon }] },
