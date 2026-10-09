@@ -125,8 +125,8 @@ export { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
 export const DISPLAY_FRESHNESS_MS = 30_000;
 
 /** What a map of scopes holds for this read's scope. */
-const scoped = <T>(map: Map<string, T>, key: QueryKey) =>
-  [...map].find(([scope]) => inScope(scope)(key))?.[1];
+const scoped = (map: Map<string, number>, key: QueryKey) =>
+  Math.max(-Infinity, ...[...map].filter(([scope]) => inScope(scope)(key)).map(([, time]) => time));
 
 /**
  * A confirmed change's message (#219): `snackbar` as the change confirmed it, with the saved row

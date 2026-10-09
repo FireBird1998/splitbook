@@ -1586,8 +1586,8 @@ describe('an Expense its own read finds gone (404)', () => {
     });
     expect(f.savedRows(recordPath(billId))).toEqual([]);
     expect(f.savedRows(`${maplePath}/activity?expenseId=${billId}`)).toEqual([]);
-    // Only the bill's rows go.
-    expect(f.savedRows(recordPath(dinnerId))).toHaveLength(1);
+    // A missing Expense makes every saved record in its Group's ledger obsolete (#281).
+    expect(f.savedRows(recordPath(dinnerId))).toHaveLength(0);
     const { restarted, atOnce } = await restartAndOpen(f, controller);
     expect(atOnce).toMatchObject({ status: 'loading', draft: null });
     expect(restarted.getSnapshot().expense).toMatchObject({ status: 'blocked', draft: null });

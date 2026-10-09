@@ -99,6 +99,7 @@ function fixture() {
     /** This device can't remove saved copies. */
     failInvalidation: false,
     failJournal: false,
+    failJournalReads: 0,
     missingExpense: false,
     /** The server refuses every change as invalid (422) and changes nothing. */
     refuse: false,
@@ -144,7 +145,13 @@ function fixture() {
   };
   let distrust: unknown = null;
   const untrustedCopies = {
-    load: async () => structuredClone(distrust),
+    load: async () => {
+      if (server.failJournalReads > 0) {
+        server.failJournalReads -= 1;
+        throw new Error('Transient cleanup journal read failure');
+      }
+      return structuredClone(distrust);
+    },
     save: async (value: unknown) => {
       if (server.failJournal) throw new Error('Device journal unavailable');
       distrust = structuredClone(value);
@@ -1076,3 +1083,41 @@ describe('an Expense 404 discards its Group ledger copies (#281)', () => {
     },
   );
 });
+
+it.each([1, 8])(
+  'failed cleanup journal reads (%s) cannot revive an old copy after a confirmed edit',
+  async (failures) => {
+    const f = fixture();
+    const controller = await visitEverything(f);
+    f.server.failInvalidation = true;
+    await controller.openExpense(mapleId, dinnerId);
+    await controller.editExpense();
+    await controller.updateExpenseDraft({ description: 'Lake dinner' });
+    await controller.saveExpense();
+    await settle();
+    expect(await f.drafts.list(alex.id)).toEqual([]);
+    expect(Object.keys(f.savedOf(mapleId))).toContain('Dinner');
+    controller.dispose();
+    f.server.offline = true;
+    f.server.failInvalidation = false;
+    f.server.failJournalReads = failures;
+    const restarted = f.create();
+    try {
+      await restarted.restore();
+      expect(restarted.getSnapshot().auth.status).toBe('authenticated');
+      const shown = await readOffline(restarted);
+      expect(shown.record).not.toBe('Dinner');
+      expect(shown.home).not.toEqual([30]);
+      expect(shown.august).not.toEqual(['Dinner']);
+      restarted.dispose();
+      f.server.failJournalReads = 0;
+      const recovered = f.create();
+      await recovered.restore();
+      expect(Object.keys(f.savedOf(mapleId))).not.toContain('Dinner');
+      expect(recovered.getSnapshot().auth.status).toBe('authenticated');
+      recovered.dispose();
+    } finally {
+      restarted.dispose();
+    }
+  },
+);

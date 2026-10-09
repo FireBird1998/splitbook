@@ -20,9 +20,10 @@ export function untrustedCopies({
   savedQueries: rows,
   expenseDrafts,
   settlementAttempts,
+  now = Date.now,
 }: Pick<
   MobileDependencies,
-  'accountLocal' | 'savedQueries' | 'expenseDrafts' | 'settlementAttempts'
+  'accountLocal' | 'savedQueries' | 'expenseDrafts' | 'settlementAttempts' | 'now'
 >) {
   const record = accountLocal?.untrustedCopies,
     untrusted = new Map<string, number>();
@@ -68,14 +69,23 @@ export function untrustedCopies({
    */
   const drop = async (pending?: z.infer<typeof recorded>) => {
     await recording;
-    const saved = await held().catch(() => null);
+    let readable = true;
+    const saved = await held().catch(() => {
+      readable = false;
+      // The cleanup record may name any saved view. While it cannot be read, no older copy
+      // can be considered safe; live answers remain available and the session stays signed in.
+      for (const scope of ['groups', 'group', 'ledger', 'balances', 'home'])
+        untrusted.set(scope, now());
+      return null;
+    });
     // A stored attempt is itself durable evidence. Removing its copies must not depend on
     // successfully writing a second record (or on that optional record being available).
     const copies = [saved, pending].filter((copy) => copy !== null && copy !== undefined);
+    if (!copies.length) return;
     try {
       for (const copy of copies)
         for (const scope of Object.keys(copy.scopes)) await remove(copy.accountId, scope);
-      await record?.clear();
+      if (readable) await record?.clear();
     } catch {
       for (const copy of copies)
         for (const [scope, time] of Object.entries(copy.scopes)) untrusted.set(scope, time);
@@ -87,32 +97,41 @@ export function untrustedCopies({
     /** A stored attempt may have reached the server before the app was killed (#282). */
     async recover(accountId: string, time: number) {
       const scopes = new Set<string>();
-      for (const { groupId, value } of (await expenseDrafts?.list?.(accountId)) ?? []) {
+      const [expenses, payments] = await Promise.all([
+        expenseDrafts?.list?.(accountId) ?? [],
+        settlementAttempts?.list?.(accountId) ?? [],
+      ]);
+      const addGroup = (groupId: string) => {
+        scopes.add(`ledger:${groupId}`);
+        scopes.add(`balances:${groupId}`);
+        scopes.add('home');
+      };
+      for (const { groupId, value } of expenses) {
         try {
           const draft = parseStoredExpenseDraft(value, accountId, groupId);
           if (!draft.attempt && !draft.mutation) continue;
-          scopes.add(`ledger:${groupId}`);
-          scopes.add(`balances:${groupId}`);
-          scopes.add('home');
+          addGroup(groupId);
         } catch {
           // A malformed draft is kept for its existing recovery UI, never treated as a save.
         }
       }
-      for (const { groupId, value } of (await settlementAttempts?.list?.(accountId)) ?? []) {
+      for (const { groupId, value } of payments) {
         try {
           parseSettlementAttempt(value, accountId, groupId);
-          scopes.add(`ledger:${groupId}`);
-          scopes.add(`balances:${groupId}`);
-          scopes.add('home');
+          addGroup(groupId);
         } catch {
           // An unreadable payment stays available to its existing recovery UI.
         }
       }
       if (scopes.size) mark(accountId, [...scopes], time);
-      await drop({
-        accountId,
-        scopes: Object.fromEntries([...scopes].map((scope) => [scope, time])),
-      });
+      await drop(
+        scopes.size
+          ? {
+              accountId,
+              scopes: Object.fromEntries([...scopes].map((scope) => [scope, time])),
+            }
+          : undefined,
+      );
     },
   });
 }
