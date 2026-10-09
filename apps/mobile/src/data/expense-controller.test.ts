@@ -182,6 +182,159 @@ const savedExpense = {
 };
 
 describe('native Expense creation and editing', () => {
+  it('reads an expired Group before opening a new Expense', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      let reads = 0;
+      const { controller } = setup((path) => {
+        if (path === `/api/groups/${groupId}`) reads += 1;
+        return undefined;
+      });
+      await controller.signIn('alex');
+      await controller.openGroup(groupId);
+      const before = reads;
+      vi.setSystemTime(Date.now() + 31_000);
+      await controller.openExpense(groupId);
+      expect(reads).toBe(before + 1);
+      expect(controller.getSnapshot().expense.status).toBe('editing');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('preserves a recovered draft when opening over a recently verified Group', async () => {
+    const { controller } = setup();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Keep my dinner', amount: '12' });
+    await controller.closeExpense();
+    await controller.openExpense(groupId);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'resume',
+      draft: { description: 'Keep my dinner', amount: '12' },
+    });
+  });
+
+  it('checks Group access live on Save even when the new form reused a recent Group', async () => {
+    let deny = false;
+    let posts = 0;
+    const { controller } = setup((path, init) => {
+      if (deny && path === `/api/groups/${groupId}`)
+        return Promise.resolve(json({ status: 403, error: 'No access' }, 403));
+      if (path.endsWith('/expenses') && init.method === 'POST') posts += 1;
+    });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({ description: 'Dinner', amount: '12', tagId });
+    deny = true;
+    await controller.saveExpense();
+    expect(posts).toBe(0);
+    expect(controller.getSnapshot().expense.context).toBeNull();
+    expect(controller.getSnapshot().detail.data).toBeNull();
+  });
+
+  it('keeps the Group visible while checking local recovery for a warm new form', async () => {
+    const { controller, drafts } = setup();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    let release!: () => void;
+    vi.spyOn(drafts, 'load').mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve(null);
+        }),
+    );
+    const opening = controller.openExpense(groupId);
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    expect(controller.getSnapshot().screen).toBe('group');
+    release();
+    await opening;
+    expect(controller.getSnapshot().expense.status).toBe('editing');
+  });
+
+  it('does not navigate to the form if Back is pressed during warm draft recovery', async () => {
+    const { controller, drafts } = setup();
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    let release!: () => void;
+    vi.spyOn(drafts, 'load').mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve(null);
+        }),
+    );
+    const opening = controller.openExpense(groupId);
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    await controller.back();
+    const destination = controller.getSnapshot().screen;
+    release();
+    await opening;
+    expect(controller.getSnapshot().screen).toBe(destination);
+    expect(destination).not.toBe('expense');
+  });
+
+  it('joins an in-flight Group refresh instead of opening with its previous members', async () => {
+    let hold = false;
+    let release!: () => void;
+    let reads = 0;
+    const { controller } = setup((path) => {
+      if (path !== `/api/groups/${groupId}`) return;
+      reads += 1;
+      if (hold)
+        return new Promise((resolve) => {
+          release = () =>
+            resolve(json({ status: 200, data: { ...group, members: group.members.slice(0, 2) } }));
+        });
+    });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    const before = reads;
+    hold = true;
+    const refreshing = controller.refresh();
+    await vi.waitFor(() => expect(release).toBeTypeOf('function'));
+    const opening = controller.openExpense(groupId);
+    await vi.waitFor(() => expect(controller.getSnapshot().screen).toBe('expense'));
+    expect(controller.getSnapshot().expense.status).toBe('loading');
+    expect(reads).toBe(before + 1);
+    release();
+    await Promise.all([refreshing, opening]);
+    expect(controller.getSnapshot().expense.draft?.participantIds).toEqual(memberIds.slice(0, 2));
+  });
+
+  it('still checks Group access again when opening a saved Expense over a recent Group', async () => {
+    let reads = 0;
+    const { controller } = setup((path) => {
+      if (path === `/api/groups/${groupId}`) reads += 1;
+      if (path.endsWith(`/expenses/${expenseId}`))
+        return Promise.resolve(json({ status: 200, data: savedExpense }));
+    });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    const before = reads;
+    await controller.openExpense(groupId, expenseId);
+    expect(reads).toBe(before + 1);
+    expect(controller.getSnapshot().expense.status).toBe('detail');
+  });
+
+  it('opens a new Expense over a recently verified Group without another network read', async () => {
+    let reads = 0;
+    const { controller } = setup((path) => {
+      if (path === `/api/groups/${groupId}`) reads += 1;
+      return undefined;
+    });
+    await controller.signIn('alex');
+    await controller.openGroup(groupId);
+    const before = reads;
+    await controller.openExpense(groupId);
+    expect(reads).toBe(before);
+    expect(controller.getSnapshot().expense).toMatchObject({
+      status: 'editing',
+      draft: { currency: 'INR', payerId: memberIds[0], participantIds: memberIds },
+    });
+  });
+
   it('confirms a lost delete of a historical Expense with missing member identities after restart', async () => {
     let deleted = false,
       offline = false,

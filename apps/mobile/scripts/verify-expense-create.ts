@@ -304,6 +304,9 @@ async function verify(manifest: Manifest) {
     await alex.request(`/api/groups/${manifest.groupId}/tags/${manifest.tagId}`, 'PATCH', {
       isArchived: false,
     });
+    // This separate actor changed the Group on the server. Refresh what this phone knows
+    // before starting the split cases: a new form reuses recently verified context (#366).
+    await controller.refresh();
     const memberIds = controller
       .getSnapshot()
       .expense.context!.group.members.map((member) => member.user.id)

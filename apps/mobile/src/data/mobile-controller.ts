@@ -2189,6 +2189,23 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const accountId = snapshot.auth.user.id;
     const month = snapshot.financial.groupId === groupId ? snapshot.financial.month : null;
     const returnTo = expenseReturn(groupId, origin.scrollY, origin.anchor);
+    // Keep the current screen while local recovery is checked for a warm new form. Once it
+    // answers, opening and publishing the form need no network wait (#366). A route/account
+    // change meanwhile cancels the open, and a second tap cannot replace the first open.
+    const from = route;
+    const recovered =
+      !expenseId && snapshot.keptDraft?.groupId !== groupId && verifiedGroup(groupId)
+        ? await (async () => {
+            const lease = accountStorage();
+            if (!lease || !dependencies.expenseDrafts)
+              throw new Error('Draft storage is unavailable.');
+            return {
+              ok: true as const,
+              stored: await lease.write(() => dependencies.expenseDrafts!.load(accountId, groupId)),
+            };
+          })().catch((error: unknown) => ({ ok: false as const, error }))
+        : null;
+    if (!current(owner) || from !== route) return;
     publishReadFreshness();
     expenseQueries.open(groupId);
     navigate(
@@ -2212,7 +2229,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     try {
       const lease = accountStorage();
       if (!lease || !dependencies.expenseDrafts) throw new Error('Draft storage is unavailable.');
-      const stored = await lease.write(() => dependencies.expenseDrafts!.load(accountId, groupId));
+      if (recovered && !recovered.ok) throw recovered.error;
+      const stored = recovered
+        ? recovered.stored
+        : await lease.write(() => dependencies.expenseDrafts!.load(accountId, groupId));
       let record = stored === null ? null : parseStoredExpenseDraft(stored, accountId, groupId);
       if (!showing()) return;
       // Another saved Expense opens read-only beside an ordinary draft. An unconfirmed save,
@@ -2238,10 +2258,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             blank: record.blank,
           },
         });
-      // The Group is read again on every open: for a new Expense it is the only check (#180).
-      // The record is read beside it (owner decision, 2026-10-06): what the server answers shows
-      // once the Group's check passes, and a refusal drops it.
-      const checking = expenseQueries.group(owner, { wanted });
+      // A new form reuses only a Group recently verified online (#366); Save still checks it
+      // live before sending. Records keep their fresh access check (#180), read beside them
+      // (owner decision, 2026-10-06): what the server answers shows after that check passes.
+      const verified = expenseId ? null : verifiedGroup(groupId);
+      const checking = verified
+        ? Promise.resolve(verified)
+        : expenseQueries.group(owner, { wanted });
       checking.catch(() => undefined);
       const readRecord = (id: string) => {
         expenseQueries.want(id);

@@ -2392,6 +2392,22 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
   const posts = (phone: ReturnType<typeof device>) =>
     phone.sent.filter((request) => request === `POST /api/groups/${maple}/settlements`);
 
+  it('opens a warm new Expense without a network loading screen', async () => {
+    const phone = device();
+    await usedBefore(phone);
+    const app = await start(phone);
+    await settle();
+    await app.press(openMaple);
+    const before = phone.sent.filter((request) => request === `GET /api/groups/${maple}`).length;
+    await app.press('Add expense');
+    expect(controller().getSnapshot().expense.status).toBe('editing');
+    expect(app.text()).not.toContain('Opening a new Expense…');
+    expect(app.text()).not.toContain('Opening your draft…');
+    expect(phone.sent.filter((request) => request === `GET /api/groups/${maple}`)).toHaveLength(
+      before,
+    );
+  });
+
   // Item 1: "Opening your draft…" showed for a brand-new Expense.
   it('opens a new Expense without saying “draft”, and says it only for a kept draft', async () => {
     const phone = device();
@@ -2399,7 +2415,8 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     const app = await start(phone);
     await settle();
     await app.press(openMaple);
-    // Nothing is kept for Maple House: the form waits only for the Group's read.
+    // Outside the freshness window, the form waits only for the Group's read (#366).
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 31_000);
     let group = phone.hold(`/api/groups/${maple}`);
     void controller().openExpense(maple);
     await group.reached;
@@ -2412,7 +2429,8 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     await settle(controller().updateExpenseDraft({ description: 'Gas bill', amount: '12' }));
     await app.press('Back to Group, keeping your draft');
     expect(controller().getSnapshot().keptDraft).toMatchObject({ groupId: maple });
-    // The draft kept for Maple House opens, and says so.
+    // The draft kept for Maple House opens, and says so when its Group needs a read.
+    clock.mockReturnValue(Date.now() + 31_000);
     group = phone.hold(`/api/groups/${maple}`);
     void controller().openExpense(maple);
     await group.reached;
@@ -2451,7 +2469,8 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
     expect(controller().getSnapshot().expense).toMatchObject({
       draft: { description: 'Gas bill' },
     });
-    // Discarded, nothing is kept: the form opening again is a new Expense.
+    // Discarded, nothing is kept: an expired Group makes this new form wait for a read.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 31_000);
     const group = phone.hold(`/api/groups/${maple}`);
     void controller().discardExpenseDraft();
     await group.reached;
@@ -2472,8 +2491,10 @@ describe('The Expense form and Record payment say what they are doing (#334)', (
       await settle();
       await app.press(openMaple);
       expect(controller().getSnapshot().keptDraft).toBeNull();
-      if (failure === 'Group') phone.network.failing.push(`/api/groups/${maple}`);
-      else phone.storage.failDraftRead = true;
+      if (failure === 'Group') {
+        vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 31_000);
+        phone.network.failing.push(`/api/groups/${maple}`);
+      } else phone.storage.failDraftRead = true;
       await settle(controller().openExpense(maple));
       expect(controller().getSnapshot().expense).toMatchObject({
         status: 'blocked',
