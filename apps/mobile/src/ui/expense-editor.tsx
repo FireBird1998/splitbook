@@ -399,7 +399,7 @@ function ExpenseTask({
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 4, paddingBottom: 24, gap: 12 }}
       >
-        {shownNotice}
+        {newTask && form ? null : shownNotice}
         {state.waitingInvitation ? (
           <Notice
             title="Invitation waiting"
@@ -703,6 +703,7 @@ function ExpenseTask({
             categoryLocked={financialLocked}
             onChange={onChange}
           />
+          {newTask ? shownNotice : null}
           {/* The Group's details are unknown: offline, refused, or not read. Each says which. */}
           {checking && checkNotice ? (
             <Banner tone={checkNotice.tone} title={checkNotice.title} message={checkingMessage}>

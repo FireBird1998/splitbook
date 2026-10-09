@@ -8,6 +8,7 @@ import {
 } from 'react-test-renderer';
 import { flatten, layoutHeight } from '../test-utils/layout';
 import { setWindow } from '../test-utils/native';
+import { savedQueriesIn } from '../test-utils/saved-queries';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
@@ -16,6 +17,7 @@ import { expenseRecordSchema } from '../data/expense-record';
 import { ExpenseEditor } from './expense-editor';
 import { expenseDateLabel } from './expense-form';
 import { ExpenseRecordView } from './expense-record-view';
+import { OfflineNotice } from './offline-notice';
 
 const { AccessibilityInfo } = await import('react-native');
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -173,6 +175,7 @@ function backend({
         },
       },
       expenseDrafts: drafts,
+      savedQueries: savedQueriesIn(new Map()),
       accountLocal: {
         owner: {
           load: async () => account,
@@ -211,6 +214,9 @@ function EditorScreen({
   return (
     <ExpenseEditor
       state={state.expense}
+      offline={state.offline.active}
+      notice={<OfflineNotice state={state.offline} onRetry={() => void controller.refresh()} />}
+      emptyNotice={<OfflineNotice state={state.offline} savedShown={false} />}
       currentUserId={memberId}
       onClose={calls.close}
       onChange={(patch) => void controller.updateExpenseDraft(patch)}
@@ -961,6 +967,68 @@ describe('rendered edit history', () => {
 });
 
 describe('compact Expense form', () => {
+  it.each([1, 1.3])(
+    'keeps editable input positions when the saved-copy offline notice clears at %sx text',
+    async (scale) => {
+      setWindow({ fontScale: scale });
+      let disconnected = false;
+      let held = false;
+      let release: () => void = () => undefined;
+      let refreshing: Promise<void> | undefined;
+      try {
+        const form = await render((controller) => controller.openExpense(groupId), {
+          readGroup: () => {
+            if (disconnected) return Promise.reject(new Error('Offline'));
+            return held
+              ? new Promise((resolve) => {
+                  release = () => resolve(json({ status: 200, data: group }));
+                })
+              : Promise.resolve(json({ status: 200, data: group }));
+          },
+        });
+        await form.type('Amount, required', '12.34');
+        await form.type('Description, required', 'Saved dinner');
+        await form.press('Category and notes, optional');
+        await form.type('Notes', 'Keep this note');
+        disconnected = true;
+        await act(async () => form.controller.refresh());
+        expect(form.controller.getSnapshot().offline.active).toBe(true);
+        expect(text(form.root())).toContain('You’re offline');
+        const labels = ['Amount, required', 'Description, required', 'Notes'];
+        const inputs = labels.map(form.input);
+        const positions = () => {
+          const layout = screen!.toJSON();
+          return labels.map((label) =>
+            inputTop(Array.isArray(layout) ? (layout[0] ?? null) : layout, label, scale),
+          );
+        };
+        const before = positions();
+        expect(before.every((top) => top !== null)).toBe(true);
+        disconnected = false;
+        held = true;
+        await act(async () => {
+          refreshing = form.controller.refresh();
+        });
+        await settle();
+        await form.type('Description, required', 'Typing while reconnecting');
+        await act(async () => {
+          release();
+          await refreshing;
+        });
+        expect(form.controller.getSnapshot().offline.active).toBe(false);
+        expect(text(form.root())).not.toContain('You’re offline');
+        expect(labels.map(form.input)).toEqual(inputs);
+        expect(positions()).toEqual(before);
+        expect(form.input('Description, required').props.value).toBe('Typing while reconnecting');
+        expect(form.input('Notes').props.value).toBe('Keep this note');
+        expect(form.writes).toEqual([]);
+      } finally {
+        release();
+        await refreshing;
+        setWindow({ fontScale: 1 });
+      }
+    },
+  );
   it.each([1, 1.3])(
     'keeps input identity and position while the Group is checked at %sx text',
     async (scale) => {
