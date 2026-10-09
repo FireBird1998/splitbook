@@ -338,6 +338,40 @@ const inputTop = (
   }
   return null;
 };
+
+/** Native layout events measure content independently of the ScrollView's clamped offset. */
+async function measureForm(scale: number) {
+  const visit = (node: ReactTestRendererJSON | string | null) => {
+    if (!node || typeof node === 'string') return;
+    node.children?.forEach(visit);
+    if (typeof node.props.onLayout === 'function')
+      node.props.onLayout({
+        nativeEvent: { layout: { x: 0, y: 0, width: 360, height: layoutHeight(node, scale, 360) } },
+      });
+  };
+  await act(async () => {
+    const tree = screen!.toJSON();
+    if (Array.isArray(tree)) tree.forEach(visit);
+    else visit(tree);
+  });
+}
+
+/** Android's maximum scroll offset is content height minus the available viewport height. */
+function scrollExtent(scale: number) {
+  const tree = screen!.toJSON();
+  const frame = Array.isArray(tree) ? tree[0]! : tree!;
+  const children = frame.children!.filter(
+    (child): child is ReactTestRendererJSON => typeof child !== 'string',
+  );
+  const scroll = children.find((child) => child.type === 'ScrollView')!;
+  const content = layoutHeight(
+    { ...scroll, type: 'View', props: { style: scroll.props.contentContainerStyle } },
+    scale,
+    360,
+  );
+  const footer = layoutHeight(children[children.length - 1], scale, 360);
+  return { content, footer, maximum: content - (640 - footer) };
+}
 /** The section that owns this input: the largest ancestor holding no other input. */
 const fieldOf = (input: ReactTestInstance) => {
   const inputs = (node: ReactTestInstance) =>
@@ -994,6 +1028,8 @@ describe('compact Expense form', () => {
         await act(async () => form.controller.refresh());
         expect(form.controller.getSnapshot().offline.active).toBe(true);
         expect(text(form.root())).toContain('You’re offline');
+        await measureForm(scale);
+        const offlineExtent = scrollExtent(scale);
         const labels = ['Amount, required', 'Description, required', 'Notes'];
         const inputs = labels.map(form.input);
         const positions = () => {
@@ -1017,6 +1053,13 @@ describe('compact Expense form', () => {
         });
         expect(form.controller.getSnapshot().offline.active).toBe(false);
         expect(text(form.root())).not.toContain('You’re offline');
+        await measureForm(scale);
+        const onlineExtent = scrollExtent(scale);
+        // Keeping content coordinates alone is insufficient: Android must not clamp a
+        // still-focused Notes field down when notices or Save's explanation disappear.
+        expect(onlineExtent.content).toBeGreaterThanOrEqual(offlineExtent.content);
+        expect(onlineExtent.footer).toBeGreaterThanOrEqual(offlineExtent.footer);
+        expect(onlineExtent.maximum).toBeGreaterThanOrEqual(offlineExtent.maximum);
         expect(labels.map(form.input)).toEqual(inputs);
         expect(positions()).toEqual(before);
         expect(form.input('Description, required').props.value).toBe('Typing while reconnecting');

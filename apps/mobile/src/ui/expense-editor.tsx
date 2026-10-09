@@ -92,6 +92,44 @@ const contextNotices = {
 >;
 
 /**
+ * Android clamps the scroll offset when notices disappear or the footer gets shorter. Keep
+ * their largest natural height for this task so an already-focused input stays in place.
+ * The inner view measures only its children, never the outer minimum: no layout feedback.
+ */
+function RetainHeight({
+  children,
+  enabled = true,
+  footer = false,
+}: {
+  children: ReactNode;
+  enabled?: boolean;
+  footer?: boolean;
+}) {
+  const [height, setHeight] = useState(0);
+  const theme = useTheme();
+  if (!enabled) return <>{children}</>;
+  return (
+    <View
+      style={{
+        minHeight: height,
+        justifyContent: footer ? 'flex-end' : undefined,
+        backgroundColor: footer ? theme.bgElevated : undefined,
+      }}
+    >
+      <View
+        style={footer ? undefined : { gap: 12 }}
+        onLayout={(event) => {
+          const natural = event.nativeEvent.layout.height;
+          setHeight((before) => Math.max(before, natural));
+        }}
+      >
+        {children}
+      </View>
+    </View>
+  );
+}
+
+/**
  * The Expense task, full screen without the Group's bottom navigation: the compact form for
  * adding and editing, and the saved record. Close and Android Back keep the draft.
  *
@@ -408,7 +446,7 @@ function ExpenseTask({
         ) : null}
         {body}
       </ScrollView>
-      {footer}
+      {newTask && form && footer ? <RetainHeight footer>{footer}</RetainHeight> : footer}
     </View>
   );
 
@@ -703,104 +741,114 @@ function ExpenseTask({
             categoryLocked={financialLocked}
             onChange={onChange}
           />
-          {newTask ? shownNotice : null}
-          {/* The Group's details are unknown: offline, refused, or not read. Each says which. */}
-          {checking && checkNotice ? (
-            <Banner tone={checkNotice.tone} title={checkNotice.title} message={checkingMessage}>
-              {checking.saved && checking.refreshedAt && (
-                <CompactText variant="small" tone="secondary">
-                  Saved Group checked {new Date(checking.refreshedAt).toLocaleString()}
-                </CompactText>
-              )}
-              {checking.status !== 'checking' && (
-                <CompactButton label="Retry Group check" variant="text" dense onPress={onRetry} />
-              )}
-            </Banner>
-          ) : null}
-          {!context &&
-            !checking &&
-            (offline ? (
-              <Banner
-                tone="offline"
-                message="Connect to check the current members and Tags. You can still edit your saved text."
-              />
-            ) : (
-              <Banner
-                tone="warning"
-                standing
-                message={
-                  state.status === 'blocked'
-                    ? 'You no longer have access to this Group’s members and Tags. Your draft is kept.'
-                    : 'Couldn’t check the current members and Tags. You can still edit your saved text.'
+          <RetainHeight enabled={newTask}>
+            {newTask ? shownNotice : null}
+            {/* The Group's details are unknown: offline, refused, or not read. Each says which. */}
+            {checking && checkNotice ? (
+              <Banner tone={checkNotice.tone} title={checkNotice.title} message={checkingMessage}>
+                {checking.saved && checking.refreshedAt && (
+                  <CompactText variant="small" tone="secondary">
+                    Saved Group checked {new Date(checking.refreshedAt).toLocaleString()}
+                  </CompactText>
+                )}
+                {checking.status !== 'checking' && (
+                  <CompactButton label="Retry Group check" variant="text" dense onPress={onRetry} />
+                )}
+              </Banner>
+            ) : null}
+            {!context &&
+              !checking &&
+              (offline ? (
+                <Banner
+                  tone="offline"
+                  message="Connect to check the current members and Tags. You can still edit your saved text."
+                />
+              ) : (
+                <Banner
+                  tone="warning"
+                  standing
+                  message={
+                    state.status === 'blocked'
+                      ? 'You no longer have access to this Group’s members and Tags. Your draft is kept.'
+                      : 'Couldn’t check the current members and Tags. You can still edit your saved text.'
+                  }
+                />
+              ))}
+            {!checking &&
+            !draft.original &&
+            context &&
+            draft.currency !== context.group.defaultCurrency ? (
+              <View style={{ gap: 6 }}>
+                {!errors.amount && (
+                  <CompactText variant="small" tone="warning" accessibilityRole="alert">
+                    This draft uses {draft.currency}; the Group now uses{' '}
+                    {context.group.defaultCurrency}. Review the amount before choosing the new
+                    currency.
+                  </CompactText>
+                )}
+                <CompactButton
+                  label={`Use ${context.group.defaultCurrency}`}
+                  variant="tonal"
+                  dense
+                  disabled={financialLocked}
+                  onPress={() => onChange({ currency: context.group.defaultCurrency })}
+                />
+              </View>
+            ) : null}
+            {tagNotice ? (
+              <CompactText variant="small" tone="warning" accessibilityRole="alert">
+                {tagNotice}
+              </CompactText>
+            ) : null}
+            {invalidMembers && !errors.payers && !errors.split && (
+              <CompactText variant="small" tone="warning" accessibilityRole="alert">
+                A saved payer or participant is no longer in this Group. Open Paid by or Split to
+                remove unavailable members.
+              </CompactText>
+            )}
+            {!pendingContext && (
+              <WhoOwesWhat
+                draft={draft}
+                allocation={allocation}
+                problem={
+                  errors.amount
+                    ? 'Correct the amount to see who owes what.'
+                    : draft.amount
+                      ? allocationError
+                      : 'Enter a valid amount to see who owes what.'
                 }
+                name={name}
+                currentUserId={currentUserId}
+                money={money}
               />
-            ))}
-          {!checking &&
-          !draft.original &&
-          context &&
-          draft.currency !== context.group.defaultCurrency ? (
-            <View style={{ gap: 6 }}>
-              {!errors.amount && (
-                <CompactText variant="small" tone="warning" accessibilityRole="alert">
-                  This draft uses {draft.currency}; the Group now uses{' '}
-                  {context.group.defaultCurrency}. Review the amount before choosing the new
-                  currency.
+            )}
+            {/* The banners above already say why a save is unconfirmed or in conflict. */}
+            {state.message &&
+              !summary &&
+              !unconfirmed &&
+              !conflict &&
+              state.status !== 'resume' && (
+                <CompactText
+                  variant="small"
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="polite"
+                >
+                  {state.message}
                 </CompactText>
               )}
-              <CompactButton
-                label={`Use ${context.group.defaultCurrency}`}
-                variant="tonal"
-                dense
-                disabled={financialLocked}
-                onPress={() => onChange({ currency: context.group.defaultCurrency })}
-              />
-            </View>
-          ) : null}
-          {tagNotice ? (
-            <CompactText variant="small" tone="warning" accessibilityRole="alert">
-              {tagNotice}
-            </CompactText>
-          ) : null}
-          {invalidMembers && !errors.payers && !errors.split && (
-            <CompactText variant="small" tone="warning" accessibilityRole="alert">
-              A saved payer or participant is no longer in this Group. Open Paid by or Split to
-              remove unavailable members.
-            </CompactText>
-          )}
-          {!pendingContext && (
-            <WhoOwesWhat
-              draft={draft}
-              allocation={allocation}
-              problem={
-                errors.amount
-                  ? 'Correct the amount to see who owes what.'
-                  : draft.amount
-                    ? allocationError
-                    : 'Enter a valid amount to see who owes what.'
-              }
-              name={name}
-              currentUserId={currentUserId}
-              money={money}
-            />
-          )}
-          {/* The banners above already say why a save is unconfirmed or in conflict. */}
-          {state.message && !summary && !unconfirmed && !conflict && state.status !== 'resume' && (
-            <CompactText variant="small" accessibilityRole="alert" accessibilityLiveRegion="polite">
-              {state.message}
-            </CompactText>
-          )}
-          {state.persistence === 'error' && !state.attempt && (
-            <Button label="Retry saving draft" secondary onPress={() => onChange({})} />
-          )}
-          {draft.original && !unconfirmed && ['uncertain', 'blocked'].includes(state.status) && (
-            <Button label="Check current Expense" onPress={onReconcile} />
-          )}
-          {unconfirmed && (
-            <CompactText variant="small" tone="secondary">
-              Details are locked until the save is confirmed. Signing out removes recovery
-              information; check Group history before recreating this expense.
-            </CompactText>
-          )}
+            {state.persistence === 'error' && !state.attempt && (
+              <Button label="Retry saving draft" secondary onPress={() => onChange({})} />
+            )}
+            {draft.original && !unconfirmed && ['uncertain', 'blocked'].includes(state.status) && (
+              <Button label="Check current Expense" onPress={onReconcile} />
+            )}
+            {unconfirmed && (
+              <CompactText variant="small" tone="secondary">
+                Details are locked until the save is confirmed. Signing out removes recovery
+                information; check Group history before recreating this expense.
+              </CompactText>
+            )}
+          </RetainHeight>
         </>,
         unconfirmed ? (
           <SaveBar
