@@ -1,3 +1,4 @@
+import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
 import Group from '@/lib/models/Group';
@@ -81,20 +82,22 @@ export class SettlementService {
 
     let settlement;
     try {
-      settlement = await Settlement.create({
-        _id: settlementId,
-        group: groupId,
-        paidBy,
-        paidTo: data.paidTo,
-        amount: command.amount,
-        amountMinor,
-        moneyVersion: 1,
-        currency: data.currency,
-        note: data.note,
-        createdBy: userId,
-        ...(requestKey ? { creationRequest: createRequestMetadata(requestKey, command) } : {}),
-        pendingActivity: [event],
-      });
+      settlement = await withGroupMutation(groupId, async () =>
+        Settlement.create({
+          _id: settlementId,
+          group: groupId,
+          paidBy,
+          paidTo: data.paidTo,
+          amount: command.amount,
+          amountMinor,
+          moneyVersion: 1,
+          currency: data.currency,
+          note: data.note,
+          createdBy: userId,
+          ...(requestKey ? { creationRequest: createRequestMetadata(requestKey, command) } : {}),
+          pendingActivity: [event],
+        }),
+      );
     } catch (err) {
       if (requestKey && (err as { code?: number }).code === 11000) {
         const existing = await Settlement.findOne({

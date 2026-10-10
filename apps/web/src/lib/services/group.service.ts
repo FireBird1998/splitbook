@@ -1,3 +1,10 @@
+import { withGroupMutation } from '@/lib/group-mutation';
+import {
+  findGroupDeletion,
+  requestGroupDeletion,
+  resumeGroupDeletion,
+  type GroupDeletionResult,
+} from './group-cleanup.service';
 import connectDB from '@/lib/db';
 import { assertCreateReplay, createRequestMetadata } from '@/lib/financial-write';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
@@ -149,22 +156,24 @@ export class GroupService {
         ).some(Boolean);
       if (hasRecords) throw new Error('CURRENCY_LOCKED');
       // First financial writes set the monotonic lock using the old currency predicate.
-      const changed = await Group.findOneAndUpdate(
-        {
-          _id: groupId,
-          defaultCurrency: group.defaultCurrency,
-          currencyLocked: { $ne: true },
-          members: { $elemMatch: { user: userId, role: 'admin' } },
-        },
-        { $set: data },
-        { returnDocument: 'after', runValidators: true },
+      const changed = await withGroupMutation(groupId, async () =>
+        Group.findOneAndUpdate(
+          {
+            _id: groupId,
+            defaultCurrency: group.defaultCurrency,
+            currencyLocked: { $ne: true },
+            members: { $elemMatch: { user: userId, role: 'admin' } },
+          },
+          { $set: data },
+          { returnDocument: 'after', runValidators: true },
+        ),
       );
       if (!changed) throw new Error('CURRENCY_LOCKED');
       await activityService.log(groupId, 'group_updated', userId, { changes });
       return changed.populate('members.user', 'name email image');
     }
     Object.assign(group, data);
-    await group.save();
+    await withGroupMutation(groupId, async () => group.save());
 
     if (Object.keys(changes).length > 0) {
       await activityService.log(groupId, 'group_updated', userId, { changes });
@@ -188,7 +197,7 @@ export class GroupService {
     }
 
     group.isArchived = true;
-    await group.save();
+    await withGroupMutation(groupId, async () => group.save());
 
     await activityService.log(groupId, 'group_updated', userId, {
       changes: { isArchived: { old: false, new: true } },
@@ -233,7 +242,7 @@ export class GroupService {
       role,
       joinedAt: new Date(),
     });
-    await group.save();
+    await withGroupMutation(groupId, async () => group.save());
 
     await activityService.log(groupId, 'member_joined', userId, {
       userId,
@@ -277,7 +286,7 @@ export class GroupService {
 
     const previousRole = target.role;
     target.role = newRole;
-    await group.save();
+    await withGroupMutation(groupId, async () => group.save());
 
     await activityService.log(groupId, 'group_updated', actorId, {
       changes: {
@@ -326,7 +335,7 @@ export class GroupService {
     group.members = group.members.filter(
       (m) => m.user.toString() !== targetUserId,
     ) as typeof group.members;
-    await group.save();
+    await withGroupMutation(groupId, async () => group.save());
 
     await activityService.log(groupId, 'member_left', actorId, {
       userId: targetUserId,
@@ -339,13 +348,22 @@ export class GroupService {
   /**
    * The member leaves the Group. They must be settled up in every currency,
    * counting the recurring Expenses already due, which are added first. The
-   * last admin must hand over first. The last member's leaving also
-   * archives the Group, since nobody would be left to reach it.
+   * last admin must hand over first. The last member must explicitly consent
+   * to permanently deleting the Group and its history.
    * Returns null when the Group doesn't exist.
    */
-  async leave(groupId: string, actorId: string): Promise<{ archived: boolean } | null> {
+  async leave(
+    groupId: string,
+    actorId: string,
+    deleteIfLastMember = false,
+  ): Promise<{ archived: boolean } | GroupDeletionResult | null> {
     await connectDB();
 
+    const previous = await findGroupDeletion(groupId, actorId);
+    if (previous) {
+      if (!deleteIfLastMember) throw new Error('GROUP_DELETION_CONFIRMATION_REQUIRED');
+      return resumeGroupDeletion(groupId);
+    }
     // A concurrent join or leave can change who remains between the read and
     // the conditional update; the update then matches nothing and we decide again.
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -357,27 +375,8 @@ export class GroupService {
       const others = group.members.filter((m) => m.user.toString() !== actorId);
 
       if (others.length === 0) {
-        // Nobody is left to settle with or to hand over to, so the Group is archived.
-        const left = await Group.findOneAndUpdate(
-          { _id: groupId, 'members.user': actorId, members: { $size: 1 } },
-          {
-            $pull: { members: { user: actorId } },
-            $set: { isArchived: true },
-            // Member changes that load and save() the Group check this version.
-            $inc: { __v: 1 },
-          },
-        );
-        if (!left) continue;
-        await activityService.log(groupId, 'member_left', actorId, {
-          userId: actorId,
-          method: 'left',
-        });
-        if (!group.isArchived) {
-          await activityService.log(groupId, 'group_updated', actorId, {
-            changes: { isArchived: { old: false, new: true } },
-          });
-        }
-        return { archived: true };
+        if (!deleteIfLastMember) throw new Error('GROUP_DELETION_CONFIRMATION_REQUIRED');
+        return requestGroupDeletion(groupId, actorId);
       }
 
       if (self.role === 'admin' && !others.some((m) => m.role === 'admin')) {
@@ -397,11 +396,13 @@ export class GroupService {
         self.role === 'admin'
           ? { members: { $elemMatch: { role: 'admin', user: { $ne: actorId } } } }
           : { 'members.1': { $exists: true } };
-      const left = await Group.findOneAndUpdate(
-        { $and: [{ _id: groupId }, { 'members.user': actorId }, stillHandedOver] },
-        // The version bump makes a role change or removal loaded before this leave fail
-        // instead of writing to a shifted member index.
-        { $pull: { members: { user: actorId } }, $inc: { __v: 1 } },
+      const left = await withGroupMutation(groupId, async () =>
+        Group.findOneAndUpdate(
+          { $and: [{ _id: groupId }, { 'members.user': actorId }, stillHandedOver] },
+          // The version bump makes a role change or removal loaded before this leave fail
+          // instead of writing to a shifted member index.
+          { $pull: { members: { user: actorId } }, $inc: { __v: 1 } },
+        ),
       );
       if (!left) continue;
 
@@ -444,30 +445,32 @@ export class GroupService {
     }
 
     // Atomic $push directly to MongoDB
-    const updated = await Group.findOneAndUpdate(
-      {
-        _id: groupId,
-        members: { $elemMatch: { user: userId, role: 'admin' } },
-        tags: {
-          $not: {
-            $elemMatch: {
-              name: new RegExp(`^${escapeRegex(name.trim())}$`, 'i'),
-              isDeleted: { $ne: true },
+    const updated = await withGroupMutation(groupId, async () =>
+      Group.findOneAndUpdate(
+        {
+          _id: groupId,
+          members: { $elemMatch: { user: userId, role: 'admin' } },
+          tags: {
+            $not: {
+              $elemMatch: {
+                name: new RegExp(`^${escapeRegex(name.trim())}$`, 'i'),
+                isDeleted: { $ne: true },
+              },
             },
           },
         },
-      },
-      {
-        $push: {
-          tags: {
-            name: name.trim(),
-            isArchived: false,
-            createdAt: new Date(),
+        {
+          $push: {
+            tags: {
+              name: name.trim(),
+              isArchived: false,
+              createdAt: new Date(),
+            },
           },
         },
-      },
-      { returnDocument: 'after' },
-    ).populate('members.user', 'name email image');
+        { returnDocument: 'after' },
+      ).populate('members.user', 'name email image'),
+    );
 
     if (!updated) throw new Error('TAG_EXISTS');
     return updated;
@@ -518,10 +521,14 @@ export class GroupService {
           ]);
           if (legacyExpense || legacyTemplate) throw new Error('AMBIGUOUS_TAG');
         } else {
-          await Promise.all([
-            Expense.collection.updateMany(legacy, { $set: { tagId: tag._id } }),
-            RecurringExpense.collection.updateMany(legacy, { $set: { tagId: tag._id } }),
-          ]);
+          await withGroupMutation(groupId, async (session) => {
+            await Expense.collection.updateMany(legacy, { $set: { tagId: tag._id } }, { session });
+            await RecurringExpense.collection.updateMany(
+              legacy,
+              { $set: { tagId: tag._id } },
+              { session },
+            );
+          });
         }
       }
     }
@@ -546,18 +553,20 @@ export class GroupService {
             },
           };
 
-    const updated = await Group.findOneAndUpdate(
-      {
-        _id: groupId,
-        members: { $elemMatch: { user: userId, role: 'admin' } },
-        $and: [
-          { tags: { $elemMatch: { _id: tag._id, name: tag.name, isDeleted: { $ne: true } } } },
-          noDuplicate,
-        ],
-      },
-      { $set: setFields },
-      { returnDocument: 'after', arrayFilters: [{ 'tag._id': tag._id }] },
-    ).populate('members.user', 'name email image');
+    const updated = await withGroupMutation(groupId, async () =>
+      Group.findOneAndUpdate(
+        {
+          _id: groupId,
+          members: { $elemMatch: { user: userId, role: 'admin' } },
+          $and: [
+            { tags: { $elemMatch: { _id: tag._id, name: tag.name, isDeleted: { $ne: true } } } },
+            noDuplicate,
+          ],
+        },
+        { $set: setFields },
+        { returnDocument: 'after', arrayFilters: [{ 'tag._id': tag._id }] },
+      ).populate('members.user', 'name email image'),
+    );
 
     if (!updated) throw new Error('TAG_CHANGED');
     return updated;
@@ -600,11 +609,17 @@ export class GroupService {
 
     // Retain identity even if a write admitted before deletion finishes later.
     // Such a write keeps a readable historical Tag; subsequent selection fails.
-    const updated = await Group.findOneAndUpdate(
-      { _id: groupId, members: { $elemMatch: { user: userId, role: 'admin' } }, 'tags._id': tagId },
-      { $set: { 'tags.$.isDeleted': true, 'tags.$.isArchived': true } },
-      { returnDocument: 'after' },
-    ).populate('members.user', 'name email image');
+    const updated = await withGroupMutation(groupId, async () =>
+      Group.findOneAndUpdate(
+        {
+          _id: groupId,
+          members: { $elemMatch: { user: userId, role: 'admin' } },
+          'tags._id': tagId,
+        },
+        { $set: { 'tags.$.isDeleted': true, 'tags.$.isArchived': true } },
+        { returnDocument: 'after' },
+      ).populate('members.user', 'name email image'),
+    );
 
     return updated;
   }
@@ -627,7 +642,7 @@ export class GroupService {
 
     group.inviteCode = inviteCode;
     group.inviteCodeExpiresAt = expiresAt;
-    await group.save();
+    await withGroupMutation(groupId, async () => group.save());
 
     return {
       inviteCode,

@@ -56,7 +56,8 @@ const refusals = {
   },
 } as const;
 
-function fixture() {
+function fixture(memberCount = 2) {
+  const currentGroup = { ...group, members: group.members.slice(0, memberCount) };
   let offline = false,
     cookie: string | null = null,
     owner: string | null = accountId,
@@ -69,6 +70,7 @@ function fixture() {
     return left();
   };
   const calls: string[] = [];
+  const leaveBodies: unknown[] = [];
   const cache = new Map<string, unknown>(),
     drafts = new Map<string, unknown>(),
     payments = new Map<string, unknown>();
@@ -89,104 +91,118 @@ function fixture() {
         .filter(([key]) => key.startsWith(`${account}:`))
         .map(([key, value]) => ({ groupId: key.split(':')[1], value: structuredClone(value) })),
   });
-  const controller = createMobileController(
-    {
-      apiBaseUrl: 'http://localhost:4147',
-      authOrigin: 'http://localhost:4147',
-      developmentPersonaEnabled: true,
-    },
-    {
-      now: () => now,
-      credentials: {
-        load: async () => cookie,
-        save: async (value) => {
-          cookie = value;
-        },
-        clear: async () => {
-          cookie = null;
-        },
+  const build = () =>
+    createMobileController(
+      {
+        apiBaseUrl: 'http://localhost:4147',
+        authOrigin: 'http://localhost:4147',
+        developmentPersonaEnabled: true,
       },
-      offlineIdentity: {
-        load: async () => structuredClone(identity),
-        save: async (value) => {
-          identity = structuredClone(value);
-        },
-        clear: async () => {
-          identity = null;
-        },
-      },
-      savedQueries: savedQueriesIn(cache),
-      expenseDrafts: records(drafts),
-      settlementAttempts: records(payments),
-      accountLocal: {
-        owner: {
-          load: async () => owner,
+      {
+        now: () => now,
+        credentials: {
+          load: async () => cookie,
           save: async (value) => {
-            owner = value;
+            cookie = value;
           },
           clear: async () => {
-            owner = null;
+            cookie = null;
           },
         },
-        cleanupMarker: {
-          load: async () => cleanup,
-          mark: async () => {
-            cleanup = true;
+        offlineIdentity: {
+          load: async () => structuredClone(identity),
+          save: async (value) => {
+            identity = structuredClone(value);
           },
           clear: async () => {
-            cleanup = false;
+            identity = null;
           },
         },
-        stores: [
-          {
+        savedQueries: savedQueriesIn(cache),
+        expenseDrafts: records(drafts),
+        settlementAttempts: records(payments),
+        accountLocal: {
+          owner: {
+            load: async () => owner,
+            save: async (value) => {
+              owner = value;
+            },
             clear: async () => {
-              cache.clear();
-              identity = null;
-              drafts.clear();
-              payments.clear();
+              owner = null;
             },
           },
-        ],
-      },
-      fetch: async (url, init) => {
-        if (offline) throw new Error('Offline');
-        const path = new URL(url).pathname;
-        calls.push(`${init.method ?? 'GET'} ${path}`);
-        if (path.endsWith('/sign-in'))
-          return new Response(JSON.stringify({ user: alex }), {
-            headers: {
-              'Set-Cookie': 'better-auth.session_token=alex.signature; Max-Age=2592000',
+          cleanupMarker: {
+            load: async () => cleanup,
+            mark: async () => {
+              cleanup = true;
             },
-          });
-        if (path.endsWith('/get-session'))
-          return Response.json({
-            user: alex,
-            session: { userId: accountId, expiresAt: '2030-01-01T00:00:00.000Z' },
-          });
-        if (path === '/api/groups')
-          return Response.json({ status: 200, data: member ? [group] : [] });
-        // Like SplitBook's, Home's figures name the Groups they were worked out over (#333).
-        if (path === '/api/user/balances')
-          return Response.json({
-            status: 200,
-            data: { buckets: [], groups: member ? [{ groupId, balances: [] }] : [] },
-          });
-        if (path === `/api/groups/${groupId}/leave`) {
-          await held;
-          return leave();
-        }
-        if (!member && path.startsWith(`/api/groups/${groupId}`))
-          return Response.json({ error: 'Forbidden', status: 403 }, { status: 403 });
-        if (path === `/api/groups/${groupId}`) return Response.json({ status: 200, data: group });
-        if (path.endsWith('/expenses')) return Response.json(emptyPage);
-        if (path.endsWith('/balances'))
-          return Response.json({ status: 200, data: { byCurrency: [] } });
-        throw new Error(`Unexpected fixture request ${init.method} ${path}`);
+            clear: async () => {
+              cleanup = false;
+            },
+          },
+          stores: [
+            {
+              clear: async () => {
+                cache.clear();
+                identity = null;
+                drafts.clear();
+                payments.clear();
+              },
+            },
+          ],
+        },
+        fetch: async (url, init) => {
+          if (offline) throw new Error('Offline');
+          const path = new URL(url).pathname;
+          calls.push(`${init.method ?? 'GET'} ${path}`);
+          if (path.endsWith('/sign-in'))
+            return new Response(JSON.stringify({ user: alex }), {
+              headers: {
+                'Set-Cookie': 'better-auth.session_token=alex.signature; Max-Age=2592000',
+              },
+            });
+          if (path.endsWith('/get-session'))
+            return Response.json({
+              user: alex,
+              session: { userId: accountId, expiresAt: '2030-01-01T00:00:00.000Z' },
+            });
+          if (path === '/api/groups')
+            return Response.json({ status: 200, data: member ? [currentGroup] : [] });
+          // Like SplitBook's, Home's figures name the Groups they were worked out over (#333).
+          if (path === '/api/user/balances')
+            return Response.json({
+              status: 200,
+              data: { buckets: [], groups: member ? [{ groupId, balances: [] }] : [] },
+            });
+          if (path === `/api/groups/${groupId}/leave`) {
+            leaveBodies.push(init.body ? JSON.parse(String(init.body)) : null);
+            await held;
+            return leave();
+          }
+          if (!member && path.startsWith(`/api/groups/${groupId}`))
+            return Response.json({ error: 'Forbidden', status: 403 }, { status: 403 });
+          if (path === `/api/groups/${groupId}`)
+            return Response.json({ status: 200, data: currentGroup });
+          if (path.endsWith('/expenses')) return Response.json(emptyPage);
+          if (path.endsWith('/balances'))
+            return Response.json({ status: 200, data: { byCurrency: [] } });
+          throw new Error(`Unexpected fixture request ${init.method} ${path}`);
+        },
       },
-    },
-  );
+    );
+  let controller = build();
   return {
-    controller,
+    get controller() {
+      return controller;
+    },
+    restart: () => {
+      controller.dispose();
+      controller = build();
+    },
+    removeAccess: () => {
+      member = false;
+    },
+    leaveBodies,
     cache,
     drafts,
     payments,
@@ -217,8 +233,8 @@ function fixture() {
 }
 
 /** Signed in, on Maple House's Members and Group details. */
-async function onMembers() {
-  const f = fixture();
+async function onMembers(memberCount = 2) {
+  const f = fixture(memberCount);
   await f.controller.signIn('alex');
   await f.controller.openGroup(groupId);
   f.controller.openMembers();
@@ -554,5 +570,115 @@ describe('Leave Group and what this device keeps', () => {
     await f.controller.reviewLeaveGroup();
     await f.controller.leaveGroup();
     expect(f.drafts.size).toBe(1);
+  });
+});
+
+describe('explicit last-member deletion and recovery', () => {
+  it('Cancel and Back discard the destructive acknowledgement without sending a request', async () => {
+    const f = await onMembers(1);
+    await f.controller.reviewLeaveGroup();
+    expect(f.controller.getSnapshot().leave).toMatchObject({
+      status: 'confirm',
+      deleteIfLastMember: true,
+    });
+    f.controller.cancelLeaveGroup();
+    expect(f.controller.getSnapshot().leave).not.toHaveProperty('deleteIfLastMember');
+    await f.controller.reviewLeaveGroup();
+    await f.controller.back();
+    expect(leaveRequests(f.sent())).toEqual([]);
+  });
+
+  it('shows fresh destructive consent for a stale ordinary leave and waits for another explicit tap', async () => {
+    const f = await onMembers();
+    f.keep({ draft: draft('Unsent snacks') });
+    f.answer(() =>
+      Response.json(
+        {
+          status: 409,
+          code: 'GROUP_DELETION_CONFIRMATION_REQUIRED',
+          error: 'Review permanent deletion before leaving.',
+        },
+        { status: 409 },
+      ),
+    );
+    await f.controller.reviewLeaveGroup();
+    await f.controller.leaveGroup();
+    expect(f.leaveBodies).toEqual([null]);
+    expect(f.controller.getSnapshot().leave).toMatchObject({
+      status: 'refused',
+      deleteIfLastMember: true,
+    });
+    expect(f.drafts.size).toBe(1);
+    f.answer(() => {
+      f.removeAccess();
+      return Response.json({
+        status: 200,
+        data: { archived: true, deleted: true, deletionPending: false },
+      });
+    });
+    await f.controller.leaveGroup();
+    expect(f.leaveBodies).toEqual([null, { deleteIfLastMember: true }]);
+    expect(f.drafts.size).toBe(0);
+    expect(f.controller.getSnapshot().homeSnackbar?.message).toContain('permanently deleted');
+  });
+
+  it('allows a consented lost-response replay when access remains on screen, without automatic resubmission', async () => {
+    const f = await onMembers(1);
+    f.answer(() => {
+      throw new Error('Lost the completed response');
+    });
+    await f.controller.reviewLeaveGroup();
+    await f.controller.leaveGroup();
+    expect(f.leaveBodies).toEqual([{ deleteIfLastMember: true }]);
+    f.answer(() => {
+      f.removeAccess();
+      return Response.json({
+        status: 200,
+        data: { archived: true, deleted: true, deletionPending: false },
+      });
+    });
+    await f.controller.leaveGroup();
+    expect(f.leaveBodies).toEqual([{ deleteIfLastMember: true }, { deleteIfLastMember: true }]);
+    expect(f.controller.getSnapshot().screen).toBe('groups');
+  });
+
+  it('forgets saved content and drafts after lost response plus access invalidation, including restart', async () => {
+    const f = await onMembers(1);
+    f.keep({ draft: draft('Unsent snacks') });
+    f.answer(() => {
+      f.removeAccess();
+      throw new Error('Lost the completed response');
+    });
+    await f.controller.reviewLeaveGroup();
+    await f.controller.leaveGroup();
+    await f.controller.refresh();
+    expect(f.leaveBodies).toEqual([{ deleteIfLastMember: true }]);
+    expect([...f.cache.keys()].some((key) => key.includes(groupId))).toBe(false);
+    expect(f.drafts.size).toBe(0);
+    f.restart();
+    await f.controller.restore();
+    expect(f.controller.getSnapshot().groups.data).toEqual([]);
+    expect(f.controller.getSnapshot().drafts).toEqual([]);
+    expect(f.leaveBodies).toHaveLength(1);
+  });
+
+  it('distinguishes pending cleanup from completed deletion and removes the departed Group locally', async () => {
+    const f = await onMembers(1);
+    f.keep({ draft: draft('Unsent snacks') });
+    f.answer(() => {
+      f.removeAccess();
+      return Response.json({
+        status: 200,
+        data: { archived: true, deleted: false, deletionPending: true },
+      });
+    });
+    await f.controller.reviewLeaveGroup();
+    await f.controller.leaveGroup();
+    expect(f.controller.getSnapshot().homeSnackbar?.message).toContain('still finishing');
+    expect(f.controller.getSnapshot().homeSnackbar?.message).not.toContain(
+      'were permanently deleted',
+    );
+    expect(f.controller.getSnapshot().groups.data).toEqual([]);
+    expect(f.drafts.size).toBe(0);
   });
 });

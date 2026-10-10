@@ -1,3 +1,4 @@
+import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
 import Activity from '@/lib/models/Activity';
 import mongoose, { Types } from 'mongoose';
@@ -51,7 +52,7 @@ function activityPayload(event: IPendingActivity) {
 export class ActivityService {
   /**
    * Persist an immutable event once, then acknowledge its embedded intent. The two
-   * writes deliberately remain separately retryable on standalone MongoDB.
+   * writes deliberately remain separately committed and retryable on every topology.
    */
   private async publishOne(
     source: ActivitySource,
@@ -59,45 +60,67 @@ export class ActivityService {
     event: IPendingActivity,
     deadline: number,
   ) {
-    const maxTimeMS = () => Math.max(1, Math.min(500, deadline - Date.now()));
-    const payload = activityPayload(event);
-    try {
-      await Activity.updateOne(
-        { _id: event._id },
-        { $setOnInsert: payload },
-        { upsert: true, runValidators: true, timestamps: false, maxTimeMS: maxTimeMS() },
-      );
-    } catch (err) {
-      // Concurrent upserts may race on _id. Only acknowledge the same immutable event.
-      if (typeof err !== 'object' || err === null || (err as { code?: unknown }).code !== 11000) {
-        throw err;
-      }
-      const existing = await Activity.findById(event._id).maxTimeMS(maxTimeMS()).lean();
-      if (
-        !existing ||
-        fingerprintCreateCommand({
-          group: existing.group,
-          type: existing.type,
-          actor: existing.actor,
-          metadata: existing.metadata,
-          createdAt: existing.createdAt,
-        }) !== fingerprintCreateCommand(payload)
-      ) {
-        throw err;
-      }
-    }
+    const maxTimeMS = () => {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new Error('Activity publication budget expired');
+      return Math.min(500, remaining);
+    };
+    await withGroupMutation(
+      String(event.group),
+      async () => {
+        const payload = activityPayload(event);
+        try {
+          await Activity.updateOne(
+            { _id: event._id },
+            { $setOnInsert: payload },
+            { upsert: true, runValidators: true, timestamps: false, maxTimeMS: maxTimeMS() },
+          );
+        } catch (err) {
+          // Concurrent upserts may race on _id. Only acknowledge the same immutable event.
+          if (
+            typeof err !== 'object' ||
+            err === null ||
+            (err as { code?: unknown }).code !== 11000
+          ) {
+            throw err;
+          }
+          const existing = await Activity.findById(event._id).maxTimeMS(maxTimeMS()).lean();
+          if (
+            !existing ||
+            fingerprintCreateCommand({
+              group: existing.group,
+              type: existing.type,
+              actor: existing.actor,
+              metadata: existing.metadata,
+              createdAt: existing.createdAt,
+            }) !== fingerprintCreateCommand(payload)
+          ) {
+            throw err;
+          }
+        }
+      },
+      { deadline },
+    );
 
-    const db = mongoose.connection.db;
-    if (!db) throw new Error('Activity database is not connected');
-    // Raw maintenance update avoids Mongoose timestamps and business-revision changes.
-    // Pulling exactly one event is safe alongside an editor appending a different one.
-    await db
-      .collection<PendingActivitySource>(source)
-      .updateOne(
-        { _id: new Types.ObjectId(recordId), group: event.group },
-        { $pull: { pendingActivity: { _id: event._id } } },
-        { maxTimeMS: maxTimeMS() },
-      );
+    // Acknowledgement trouble must retain the already committed Activity. Both
+    // commits still conflict with deletion and share the caller's whole deadline.
+    return withGroupMutation(
+      String(event.group),
+      async (session) => {
+        const db = mongoose.connection.db;
+        if (!db) throw new Error('Activity database is not connected');
+        // Raw maintenance update avoids Mongoose timestamps and business-revision changes.
+        // Pulling exactly one event is safe alongside an editor appending a different one.
+        await db
+          .collection<PendingActivitySource>(source)
+          .updateOne(
+            { _id: new Types.ObjectId(recordId), group: event.group },
+            { $pull: { pendingActivity: { _id: event._id } } },
+            { maxTimeMS: maxTimeMS(), session },
+          );
+      },
+      { deadline },
+    );
   }
 
   /**
@@ -216,12 +239,9 @@ export class ActivityService {
     metadata: Record<string, unknown> = {},
   ) {
     await connectDB();
-    return Activity.create({
-      group: groupId,
-      type,
-      actor: actorId,
-      metadata,
-    });
+    return withGroupMutation(groupId, async () =>
+      Activity.create({ group: groupId, type, actor: actorId, metadata }),
+    );
   }
 
   /**

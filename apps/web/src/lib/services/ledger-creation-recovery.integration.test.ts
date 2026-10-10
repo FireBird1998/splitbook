@@ -104,45 +104,71 @@ for (const writer of ['expenses', 'settlements'] as const) {
       await assertOneEffect(writer, stored!._id);
     });
 
-    it('publishes during real same-key collision recovery even when both response preparations fail', async () => {
+    it('publishes during concurrent same-key recovery even when both response preparations fail', async () => {
       const key = randomUUID();
       const model = writer === 'expenses' ? Expense : Settlement;
       let arrivals = 0;
       let release!: () => void;
-      const gate = new Promise<void>((resolve) => {
+      let schedulingFailed!: (error: Error) => void;
+      const gate = new Promise<void>((resolve, reject) => {
         release = resolve;
+        schedulingFailed = reject;
       });
-      const insert = model.collection.insertOne;
-      // Hold real Mongo insertions until both requests have passed their initial lookup.
-      const barrier = vi.spyOn(model.collection, 'insertOne').mockImplementation(async function (
-        ...args
-      ) {
+      const hello = await mongoose.connection.db!.admin().command({ hello: 1 });
+      const replica = !!hello.setName || hello.msg === 'isdbgrid';
+      const waitForBoth = async () => {
         arrivals += 1;
         if (arrivals === 2) release();
         await gate;
-        return insert.apply(model.collection, args);
-      });
+      };
+      // Transactions serialize the parent fence: synchronize requests before acquiring it.
+      // Standalone still exercises a real unique collision by holding both Mongo insertions.
+      const transaction = mongoose.connection.transaction.bind(mongoose.connection);
+      const insert = model.collection.insertOne;
+      const barrier = replica
+        ? vi
+            .spyOn(mongoose.connection, 'transaction')
+            .mockImplementation(async (callback, options) => {
+              await waitForBoth();
+              return transaction(callback, options);
+            })
+        : vi.spyOn(model.collection, 'insertOne').mockImplementation(async (...args) => {
+            await waitForBoth();
+            return insert.apply(model.collection, args);
+          });
+      // A broken scheduling assertion must not leave a held callback blocking DB teardown.
+      const timeout = setTimeout(
+        () => schedulingFailed(new Error('Both concurrent requests must arrive before writing')),
+        1_000,
+      );
       const fault = vi
         .spyOn(model.prototype, 'populate')
         .mockRejectedValue(new Error('response preparation unavailable'));
-      const results = await Promise.allSettled([create(writer, key), create(writer, key)]);
-      expect(results).toEqual([
-        expect.objectContaining({
-          status: 'rejected',
-          reason: expect.objectContaining({ message: 'response preparation unavailable' }),
-        }),
-        expect.objectContaining({
-          status: 'rejected',
-          reason: expect.objectContaining({ message: 'response preparation unavailable' }),
-        }),
-      ]);
-      expect(await Activity.countDocuments({ group: groupId, type: eventType(writer) })).toBe(1);
-      const stored = await collection(writer).findOne({ 'creationRequest.key': key });
-      expect(stored!.pendingActivity).toEqual([]);
-      fault.mockRestore();
-      barrier.mockRestore();
-      expect(String((await create(writer, key))._id)).toBe(String(stored!._id));
-      await assertOneEffect(writer, stored!._id);
+      try {
+        const results = await Promise.allSettled([create(writer, key), create(writer, key)]);
+        expect(arrivals).toBeGreaterThanOrEqual(2);
+        expect(results).toEqual([
+          expect.objectContaining({
+            status: 'rejected',
+            reason: expect.objectContaining({ message: 'response preparation unavailable' }),
+          }),
+          expect.objectContaining({
+            status: 'rejected',
+            reason: expect.objectContaining({ message: 'response preparation unavailable' }),
+          }),
+        ]);
+        expect(await Activity.countDocuments({ group: groupId, type: eventType(writer) })).toBe(1);
+        const stored = await collection(writer).findOne({ 'creationRequest.key': key });
+        expect(stored!.pendingActivity).toEqual([]);
+        fault.mockRestore();
+        barrier.mockRestore();
+        expect(String((await create(writer, key))._id)).toBe(String(stored!._id));
+        await assertOneEffect(writer, stored!._id);
+      } finally {
+        clearTimeout(timeout);
+        release();
+        barrier.mockRestore();
+      }
     });
 
     it('retains atomic pending intent during an Activity outage and retries one financial effect', async () => {

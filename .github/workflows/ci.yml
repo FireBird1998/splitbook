@@ -154,13 +154,60 @@ jobs:
       - name: Adopted design-system style policy
         run: pnpm check:design-system
 
+      # The standalone service still proves ordinary-operation compatibility.
+      # Destructive cleanup/race suites require real transactions and failpoints;
+      # service options are Docker flags, so launch mongod explicitly here.
+      - name: Start isolated transaction-test Mongo replica set
+        working-directory: .
+        shell: bash
+        run: |
+          docker run --detach --name splitbook-orphan-ci --publish 127.0.0.1:27038:27017 \
+            mongo:7.0.39 mongod --replSet orphanTest --bind_ip_all --setParameter enableTestCommands=1
+          for attempt in $(seq 1 30); do
+            if docker exec splitbook-orphan-ci mongosh --quiet --eval 'db.adminCommand({ping:1})' > /dev/null; then break; fi
+            sleep 1
+          done
+          docker exec splitbook-orphan-ci mongosh --quiet --eval 'rs.initiate({_id:"orphanTest",members:[{_id:0,host:"127.0.0.1:27017"}]})'
+          for attempt in $(seq 1 30); do
+            if docker exec splitbook-orphan-ci mongosh --quiet --eval 'if (!db.hello().isWritablePrimary) quit(1)' > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          docker logs splitbook-orphan-ci
+          exit 1
+
       - name: Test (workspace, unit + integration)
         working-directory: .
         run: pnpm test
         env:
-          # Integration suites derive per-file splitbook-test-* databases from
-          # this base URI; the demo database is never touched.
+          # Every integration file owns a fictional splitbook-test-* database.
+          # Feature tests fail, rather than skip, if transactions are unavailable.
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27038/?directConnection=true
+          STANDALONE_TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
+
+      - name: Standalone financial collision and Activity acknowledgement recovery
+        run: pnpm exec vitest run src/lib/services/ledger-creation-recovery.integration.test.ts src/lib/services/activity-outbox.integration.test.ts --maxWorkers=1
+        env:
           TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
+
+      - name: Authenticated Group cleanup and background recovery HTTP
+        working-directory: .
+        shell: bash
+        timeout-minutes: 5
+        env:
+          SPLITBOOK_NATIVE_ORIGIN_PORT: 4184
+          SPLITBOOK_NATIVE_MONGO_PORT: 27038
+          SPLITBOOK_NATIVE_DATABASE: splitbook_mobile_orphan_cleanup_ci
+          MOBILE_VERIFY_URL: http://127.0.0.1:4184
+          MONGODB_URI: mongodb://127.0.0.1:27038/splitbook_mobile_orphan_cleanup_ci?directConnection=true
+        run: |
+          pnpm mobile backend:seed
+          node apps/mobile/scripts/dev-backend/start.mjs > "$RUNNER_TEMP/orphan-http-backend.log" 2>&1 &
+          echo "$!" > "$RUNNER_TEMP/orphan-http-backend.pid"
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:4184/api/auth/get-session > /dev/null; then break; fi
+            sleep 1
+          done
+          pnpm web test:group-cleanup-http
 
       - name: Typecheck (workspace)
         working-directory: .
@@ -184,6 +231,16 @@ jobs:
           AUTH_GOOGLE_ID: test
           AUTH_GOOGLE_SECRET: test
 
+      - name: Stop owned cleanup HTTP backend and test replica set
+        if: always()
+        working-directory: .
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/orphan-http-backend.pid" ]; then
+            kill "$(cat "$RUNNER_TEMP/orphan-http-backend.pid")" 2>/dev/null || true
+          fi
+          docker rm --force splitbook-orphan-ci 2>/dev/null || true
+
       - name: Upload authenticated test failure diagnostics
         if: failure()
         uses: actions/upload-artifact@v4
@@ -192,6 +249,7 @@ jobs:
           path: |
             apps/web/output/playwright/expense-access/
             apps/web/output/playwright/auth-recovery/
+            ${{ runner.temp }}/orphan-http-backend.log
           retention-days: 7
 
   # Unit tests give the same result in every time zone (#227). PR checks and verify run

@@ -323,3 +323,19 @@ describe('Leave Group', () => {
     expect(props.leave.onCheck).toHaveBeenCalledOnce();
   });
 });
+
+it('warns the final member explicitly and labels the irreversible confirmation', () => {
+  const finalGroup = { ...household, members: [household.members[0]] };
+  const { root, props } = page({
+    group: finalGroup,
+    leave: leaveActions({ status: 'confirm', deleteIfLastMember: true }),
+  });
+  const modal = sheet(root);
+  expect(text(modal)).toContain('Leaving will permanently delete this Group and its history.');
+  expect(text(modal)).toContain('Expenses, Settlements and Activity');
+  const confirm = one(byRole(modal, 'button', 'Leave and delete Group'));
+  act(() => confirm.props.onPress());
+  expect(props.leave.onConfirm).toHaveBeenCalledOnce();
+  act(() => one(byRole(modal, 'button', 'Cancel')).props.onPress());
+  expect(props.leave.onCancel).toHaveBeenCalledOnce();
+});

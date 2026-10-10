@@ -207,23 +207,13 @@ describe('leaving a Group', () => {
     ]);
   });
 
-  it('archives the Group when its last member leaves', async () => {
+  it('requires explicit permanent-deletion confirmation from the last member', async () => {
     const groupId = await createTrip([]);
-
-    await expect(groupService.leave(groupId, alice)).resolves.toEqual({ archived: true });
-
-    const stored = await Group.findById(groupId).lean();
-    expect(stored!.members).toHaveLength(0);
-    expect(stored!.isArchived).toBe(true);
-    const types = await Activity.find({ group: groupId, actor: alice })
-      .sort({ createdAt: 1, _id: 1 })
-      .lean();
-    expect(types.map((activity) => activity.type)).toEqual([
-      'group_created',
-      'member_left',
-      'group_updated',
-    ]);
-    expect(types[2].metadata).toEqual({ changes: { isArchived: { old: false, new: true } } });
+    await expect(groupService.leave(groupId, alice)).rejects.toThrow(
+      'GROUP_DELETION_CONFIRMATION_REQUIRED',
+    );
+    expect(await memberIds(groupId)).toEqual([alice]);
+    expect(await Activity.countDocuments({ group: groupId, type: 'member_left' })).toBe(0);
   });
 
   it('refuses strangers and answers null for a missing Group', async () => {

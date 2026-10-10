@@ -1,3 +1,5 @@
+import { after } from 'next/server';
+import { resumeRequestedGroupDeletions } from '@/lib/services/group-cleanup.service';
 import {
   getAuthUser,
   unauthorized,
@@ -38,6 +40,12 @@ export async function GET() {
     if (!user) return unauthorized();
 
     const groups = await groupService.getUserGroups(user.id!);
+    // Recovery runs after the response; only explicit recorded requests are eligible.
+    after(() =>
+      resumeRequestedGroupDeletions()
+        .then(() => undefined)
+        .catch(() => undefined),
+    );
     return success(groups);
   } catch (err) {
     return serverError(err);

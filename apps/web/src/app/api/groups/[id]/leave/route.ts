@@ -1,3 +1,5 @@
+import { after } from 'next/server';
+import { resumeRequestedGroupDeletions } from '@/lib/services/group-cleanup.service';
 import { NextResponse } from 'next/server';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
@@ -26,16 +28,34 @@ function describeOpenBalances(balances: LeaveBlockedError['balances']) {
 }
 
 // POST /api/groups/[id]/leave — The signed-in member leaves the Group
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser();
     if (!user) return unauthorized();
 
     const { id } = await params;
-    const result = await groupService.leave(id, user.id);
+    const body: unknown = await req.json().catch(() => null);
+    const acknowledgement =
+      typeof body === 'object' &&
+      body !== null &&
+      'deleteIfLastMember' in body &&
+      body.deleteIfLastMember === true;
+    const result = await groupService.leave(id, user.id, acknowledgement);
     if (!result) return notFound('Group');
+    if ('deletionPending' in result && result.deletionPending)
+      after(() =>
+        resumeRequestedGroupDeletions()
+          .then(() => undefined)
+          .catch(() => undefined),
+      );
 
-    return success({ message: 'Left group', archived: result.archived });
+    return success({
+      message: 'Left group',
+      archived: result.archived,
+      ...('deleted' in result
+        ? { deleted: result.deleted, deletionPending: result.deletionPending }
+        : {}),
+    });
   } catch (err) {
     if (err instanceof LeaveBlockedError && err.code === 'LAST_ADMIN') {
       return error('Make someone else an admin before you leave.', 409, 'LAST_ADMIN');
@@ -52,6 +72,20 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
           })),
         },
         { status: 409 },
+      );
+    }
+    if (err instanceof Error && err.message === 'GROUP_DELETION_CONFIRMATION_REQUIRED') {
+      return error(
+        'You are the last member. Leaving will permanently delete this Group and its history. Confirm deletion to continue.',
+        409,
+        'GROUP_DELETION_CONFIRMATION_REQUIRED',
+      );
+    }
+    if (err instanceof Error && err.message === 'GROUP_DELETION_UNAVAILABLE') {
+      return error(
+        'Permanent Group deletion is unavailable here. You are still a member; no history was deleted.',
+        409,
+        'GROUP_DELETION_UNAVAILABLE',
       );
     }
     if (err instanceof Error && err.message === 'FORBIDDEN') return forbidden();
