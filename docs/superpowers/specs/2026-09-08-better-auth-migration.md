@@ -1,15 +1,16 @@
 # Splitbook authentication migration to Better Auth — specification
 
 **Date:** 2026-09-08  
-**Status:** Implemented in PR A (web parity). Three amendments found during implementation are recorded inline and marked **Amendment**.  
+**Status:** Complete for the authentication migration. Web parity landed in PR #38; mobile authentication follows PR #97 and ADR 0006. Production verification and cleanup were completed on 2026-10-10 (see section 11). Signed Android release and physical-phone verification remain outside this migration, under #193.
+
 **Tracking:** Spec issue [#26](https://github.com/FireBird1998/splitbook/issues/26) with tickets #27–#36.  
 **Decision record:** [ADR 0003](../../adr/0003-better-auth.md).  
-**Baseline:** Canonical `main` at commit `bd42d15` (pnpm workspace; app in `apps/web`, shared code in `packages/shared`). Recheck the checkout before implementation.
+**Baseline:** Canonical `main` at commit `bd42d15` (pnpm workspace; app in `apps/web`, shared code in `packages/shared`). This is the historical implementation baseline.
 
 ## 1. Problem and intended outcome
 
-Splitbook authenticates with Auth.js v5, which has stayed in beta for years, and
-keeps a stateless JWT in a browser cookie. The Android and iOS client planned in
+At the start of this migration, Splitbook authenticated with Auth.js v5, which
+had stayed in beta for years, and kept a stateless JWT in a browser cookie. The Android and iOS client planned in
 ADR 0001 cannot complete a browser redirect login and cannot follow a redirect to
 an HTML page; it needs an API that verifies a Google ID token obtained from the
 device's native sign-in and returns a session it can send with every request.
@@ -54,11 +55,11 @@ native Google prompt and stays signed in for 30 days of use.
 | Q3     | Demo personas            | One-click picker via a custom plugin endpoint, same guard semantics                                                                                                                                                                                                                                                                                                                                                    |
 | Q4     | Allowlist                | Re-checked on every Google sign-in; stays an environment variable                                                                                                                                                                                                                                                                                                                                                      |
 | Q5     | Session lifetime         | 30 days, refreshed on activity after one day, 5-minute cookie cache                                                                                                                                                                                                                                                                                                                                                    |
-| Q6     | Mobile platforms         | iOS and Android from day one; the owner creates the OAuth clients                                                                                                                                                                                                                                                                                                                                                      |
+| Q6     | Mobile platforms         | Original plan: iOS and Android from day one. **Amendment (2026-10-10):** Android staging uses a registered Android client to request the web audience; production-package and iOS clients belong to their release work (#35 closure).                                                                                                                                                                                  |
 | Q7/Q18 | Google test coverage     | Redirect parameters asserted without contacting Google; approved and denied outcomes through the ID-token path with a locally signed token behind an environment-gated `verifyIdToken` override; mock issuer removed. **Amendment:** under `NODE_ENV=production` the override needs `ALLOW_TEST_ID_TOKEN=true` as well (CI runs the suite against a production build), the same two-variable rule as `ALLOW_DEMO_AUTH` |
-| Q8     | Rollout                  | PR A web parity, PR B mobile readiness                                                                                                                                                                                                                                                                                                                                                                                 |
+| Q8     | Rollout                  | PR A web parity (#38). **Amendment (2026-10-10):** PR #97 delivers the mobile exchange; the originally planned PR B is superseded (#36 closure, ADR 0006).                                                                                                                                                                                                                                                             |
 | Q9     | Tickets                  | Spec issue plus child tickets, `ready-for-agent` / `ready-for-human`                                                                                                                                                                                                                                                                                                                                                   |
-| Q10    | Cutover settings         | Parity needs none; non-secret mobile ids may be set via the Vercel CLI                                                                                                                                                                                                                                                                                                                                                 |
+| Q10    | Cutover settings         | Parity needs none. **Amendment (2026-10-10):** the server retains its web Google audience; mobile client ids are not added to its environment.                                                                                                                                                                                                                                                                         |
 | Q11    | Old Auth.js data         | Backed up at migration, dropped in a cleanup ticket                                                                                                                                                                                                                                                                                                                                                                    |
 | Q12    | Sign-in methods          | Google only                                                                                                                                                                                                                                                                                                                                                                                                            |
 | Q13    | Middleware file          | Renamed to `proxy.ts`                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -66,7 +67,7 @@ native Google prompt and stays signed in for 30 days of use.
 | Q15    | Auth.js account rows     | Renamed to a backup collection; Google logins re-link on next sign-in                                                                                                                                                                                                                                                                                                                                                  |
 | Q16    | Rate limiting            | Better Auth defaults with database storage. **Amendment:** `AUTH_RATE_LIMIT_ENABLED` overrides the default; the browser suites set it to `false` because behind `next start` on loopback no client IP is resolvable and every request would share one bucket                                                                                                                                                           |
 | Q17    | Middleware depth         | Optimistic session-cookie check; routes and pages validate                                                                                                                                                                                                                                                                                                                                                             |
-| Q19    | Mobile session transport | Cookies through the Expo client; no bearer plugin                                                                                                                                                                                                                                                                                                                                                                      |
+| Q19    | Mobile session transport | Signed Better Auth session cookie through the mobile controller and SecureStore; no bearer plugin. **Amendment (2026-10-10):** the Expo client is superseded by PR #97 and ADR 0006.                                                                                                                                                                                                                                   |
 | Q20    | Environment variables    | Names kept; base URL derived from `NEXT_PUBLIC_APP_URL`                                                                                                                                                                                                                                                                                                                                                                |
 | Q21    | Cookie cache trade-off   | Up to five minutes of stale validity after revocation accepted                                                                                                                                                                                                                                                                                                                                                         |
 
@@ -92,11 +93,12 @@ native Google prompt and stays signed in for 30 days of use.
 - **Base URL and secret:** `baseURL` from `NEXT_PUBLIC_APP_URL`; the secret is
   read from `AUTH_SECRET` (Better Auth's documented fallback), so the existing
   Vercel secret stays.
-- **Trusted origins:** the app URL. PR B adds `splitbook://` and the Expo
-  development origins.
+- **Trusted origins:** the configured app URL. The native exchange sends the
+  configured trusted web origin; it does not require Expo or `splitbook://`
+  origins for sign-in (PR #97, ADR 0006).
 - **Google provider:** `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET`,
-  `prompt: 'select_account'`. PR B turns `clientId` into the array of web, iOS
-  and Android ids so native ID tokens verify against their audiences.
+  `prompt: 'select_account'`. Native identity acquisition requests this web
+  audience too; no server array of Android/iOS audiences is needed.
 - **Allowlist:** `user.validateUserInfo` returns an `email_not_allowed` error
   unless the provider email, trimmed and lower-cased, is in
   `AUTH_ALLOWED_EMAILS`; an empty or missing list rejects everyone. The gate
@@ -217,18 +219,23 @@ placeholder Google variables stay valid.
 
 ## 8. Delivery sequence and review gate
 
-1. **PR A, web parity** (#27 migration script, #28 server, #29 persona plugin,
-   #30 web client, #31 tests, #32 docs). One branch, reviewable per commit.
-   Gate: every suite green in CI, plus a local run of the migration script
-   against a copy of the production users.
-2. **Cutover** (#33, human): merge PR A, run the migration against production,
-   sign in as a tester, check the denial path, confirm 401 JSON and that demo
-   sign-in is unreachable, ask testers to sign in once.
-3. **Cleanup** (#34, human, a week later): drop the backup collection and any
-   obsolete Vercel variables.
-4. **Mobile readiness** (#36, blocked by #33 and #35): Expo plugin, trusted
-   origins, the three-audience Google client id, documented Expo client wiring.
-   The `apps/mobile` scaffold follows as its own spec.
+1. **Web parity:** PR #38 delivered #27–#32, including the migration tool,
+   server, persona plugin, web client, regression suites and docs.
+2. **Production verification:** #33 is complete. The owner verified approved
+   and denied Google sign-in. The read-only audit found Better Auth-compatible
+   data and no pending conversion. Other testers use staging, so production
+   re-login notifications are unnecessary.
+3. **Cleanup:** #34 is complete with no work required. No legacy auth backups
+   or verification-token collection remain; `AUTH_TRUST_HOST` is absent. Current
+   Better Auth `accounts`, `sessions` and `verifications` must not be dropped.
+4. **Mobile readiness:** #35 and #36 closed as superseded by PR #97 and
+   [ADR 0006](../../adr/0006-android-client-architecture.md). Android obtains a
+   Google ID token for the configured web audience and supplies it with a nonce
+   to Better Auth. The controller owns the exchange and saves only the signed
+   session cookie through SecureStore, scoped to the backend/account. Neither
+   the Expo auth plugin nor multiple server-side client audiences are used.
+   Production-package and iOS OAuth registration belong to their release work;
+   #193 retains the signed staging APK and real-phone release checks.
 
 ### Rollback and scope control
 
@@ -237,17 +244,22 @@ changes, so the ledger is untouched by either direction. Scope stays at parity
 plus mobile readiness; session management UI, invite management in the
 database, and email sign-in are out of scope.
 
-## 9. Acceptance checklist
+## 9. Original acceptance checklist
 
-- [ ] Invited tester signs in with Google and keeps groups, expenses and settlements.
-- [ ] Address outside the allowlist sees the invite-only message; empty allowlist denies everyone.
-- [ ] Demo personas work with one click in demo mode; endpoint absent otherwise and in production without `ALLOW_DEMO_AUTH`.
-- [ ] Anonymous `/api/*` returns 401 JSON without a redirect; anonymous pages redirect with `callbackUrl`.
-- [ ] Sessions last 30 days of use; sign-out clears the device; other devices stale for at most five minutes.
-- [ ] Persona ids and every `users._id` unchanged after migration; `--revert` restores the previous shape.
-- [ ] All Vitest and Playwright suites green in CI without the mock issuer.
-- [ ] Docs, README, `.env.example`, AGENTS.md and the Cursor rule describe Better Auth.
-- [ ] `next-auth` and `@auth/mongodb-adapter` removed from the workspace.
+The criteria below were delivered by the merged web-parity implementation and
+its regression suites. Section 11 distinguishes the production checks performed
+for closeout from those automated guarantees; it does not claim a fresh real-device
+or 30-day session endurance test.
+
+- [x] Invited tester signs in with Google and keeps groups, expenses and settlements.
+- [x] Address outside the allowlist sees the invite-only message; empty allowlist denies everyone.
+- [x] Demo personas work with one click in demo mode; endpoint absent otherwise and in production without `ALLOW_DEMO_AUTH`.
+- [x] Anonymous `/api/*` returns 401 JSON without a redirect; anonymous pages redirect with `callbackUrl`.
+- [x] Sessions last 30 days of use; sign-out clears the device; other devices stale for at most five minutes.
+- [x] Persona ids and every `users._id` unchanged after migration; `--revert` restores the previous shape.
+- [x] All Vitest and Playwright suites green in CI without the mock issuer.
+- [x] Docs, README, `.env.example`, AGENTS.md and the Cursor rule describe Better Auth.
+- [x] `next-auth` and `@auth/mongodb-adapter` removed from the workspace.
 
 ## 10. Deferred and out of scope
 
@@ -256,3 +268,32 @@ database, and email sign-in are out of scope.
 - Instant cross-device revocation (would require disabling the cookie cache).
 - The `apps/mobile` scaffold itself; this spec ends at mobile readiness.
 - Migrating Auth.js account rows field by field; re-linking on sign-in replaces it.
+
+## 11. Production closeout — 2026-10-10
+
+Evidence: [#33 verification](https://github.com/FireBird1998/splitbook/issues/33#issuecomment-6099584287)
+and [#34 cleanup](https://github.com/FireBird1998/splitbook/issues/34#issuecomment-6099584763).
+
+The owner reports successful production use and supplied the invite-only rejection
+screen after trying a nonallowlisted Google account. All other testers use staging.
+Live anonymous checks on `https://splitbook.in` returned 401 JSON for `/api/groups`,
+307 to `/login?callbackUrl=%2Fdashboard` for `/dashboard`, null for `get-session`,
+and 404 for demo-persona sign-in. The Google authorization response used the
+`splitbook.in/api/auth/callback/google` callback, code flow, PKCE S256 and account
+selection. Owner sign-in confirms the callback is accepted.
+
+Read-only Atlas inspection of the production `splitbook` database found:
+
+- One user with an ObjectId, `emailVerified: true`, and Date timestamps.
+- One Better Auth account and two Better Auth sessions, all referencing the user;
+  no orphaned references or legacy Auth.js account/session field shapes.
+- `users_email_uidx` on email; no legacy `email_1`. The connector exposed index
+  names and keys, not uniqueness options.
+- No Auth.js backup collections or legacy `verification_tokens` collection.
+- No `AUTH_TRUST_HOST` in the production Vercel environment-variable list.
+
+No migration, export, deletion, or environment change was needed or performed.
+No database credential was downloaded. This audit confirms the current shape;
+it does not reconstruct historical migration counts or establish pre-cutover id
+continuity from a backup. The migration's forward/idempotence/revert regression
+suite supplies that guarantee. Mobile release validation stays tracked in #193.
