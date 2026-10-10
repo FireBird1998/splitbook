@@ -1,5 +1,7 @@
 'use client';
 
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
+import { recurringExpensesKey } from '@splitbook/shared/query-keys';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import Box from '@mui/material/Box';
@@ -34,7 +36,7 @@ import AutorenewIcon from '@mui/icons-material/Autorenew';
 import MoneyText from '@/components/common/MoneyText';
 import { EXPENSE_CATEGORIES } from '@splitbook/shared/categories';
 import { formatDate, toDateParam } from '@splitbook/shared/date';
-import { fetcher } from '@/lib/utils/fetcher';
+import { fetchWebRead } from '@/lib/web-read';
 import { displayTagReference, findReferencedTag } from '@splitbook/shared/tag-identity';
 import {
   getStoredExpenseMoneyFields,
@@ -164,7 +166,7 @@ export default function RecurringExpensesSection({
   defaultCurrency,
   onNotify,
 }: RecurringExpensesSectionProps) {
-  const { data, mutate } = useSWR(`/api/groups/${groupId}/recurring`, fetcher);
+  const { data, mutate } = useSWR(recurringExpensesKey(WEB_QUERY_ACCOUNT, groupId), fetchWebRead);
   const templates = (data?.data ?? []) as IRecurringExpense[];
 
   // Linked to as `#recurring-expenses` (the Insights tab's Manage, #315). The section mounts

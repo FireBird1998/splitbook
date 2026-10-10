@@ -1,6 +1,7 @@
+import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
 import { describe, expect, it, vi } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
-import { DISPLAY_FRESHNESS_MS, createMobileController } from './mobile-controller';
+import { DISPLAY_FRESHNESS_MS } from './mobile-controller';
 import type { FetchResponse, PendingInvitationStore } from './types';
 import { refreshFeedback } from '../ui/refresh-feedback';
 import { savedQueriesIn } from '../test-utils/saved-queries';

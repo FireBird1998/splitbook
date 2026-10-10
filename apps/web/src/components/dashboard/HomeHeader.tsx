@@ -1,5 +1,6 @@
 'use client';
 
+import { queryKeyPath } from '@splitbook/shared/query-keys';
 import { useState, useSyncExternalStore } from 'react';
 import { useSWRConfig } from 'swr';
 import { format } from 'date-fns';
@@ -90,7 +91,7 @@ export default function HomeHeader({ userId }: { userId: string }) {
   const { data: groups } = useGroups(userId);
   const updatedAt = useSyncExternalStore(
     subscribeToAnswers,
-    () => lastAnswered(HOME_BALANCES_KEY),
+    () => lastAnswered(queryKeyPath(HOME_BALANCES_KEY)),
     () => null,
   );
   const { mutate } = useSWRConfig();

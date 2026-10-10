@@ -1,5 +1,7 @@
 'use client';
 
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
+import { homeBalancesKey } from '@splitbook/shared/query-keys';
 import Link from 'next/link';
 import { useMemo } from 'react';
 import useSWR from 'swr';
@@ -15,7 +17,7 @@ import {
 } from '@splitbook/shared/home-balances-read';
 import { visuallyHidden } from '@/components/common/visually-hidden';
 import { useGroups } from '@/lib/hooks/use-groups';
-import { fetcher } from '@/lib/utils/fetcher';
+import { fetchWebHomeBalances } from '@/lib/web-read';
 import { GROUPS_HREF, NEW_GROUP_HREF, groupCurrent, groupsListCurrent } from './shell-nav';
 import { groupThemeIcon } from './group-theme-icons';
 import {
@@ -29,7 +31,7 @@ const ROW_RADIUS = '10px';
 const TILE_RADIUS = '9px';
 
 /** The read Home's balances use: the same key and fetcher, so both share one request. */
-export const USER_BALANCES_KEY = '/api/user/balances';
+export const USER_BALANCES_KEY = homeBalancesKey(WEB_QUERY_ACCOUNT);
 
 function readBalances(raw: unknown): HomeBalancesRead | null {
   try {
@@ -63,7 +65,7 @@ export default function SidebarGroups({
   onNavigate,
 }: SidebarGroupsProps) {
   const groups = useGroups(userId);
-  const balances = useSWR(USER_BALANCES_KEY, fetcher, { refreshInterval: 30_000 });
+  const balances = useSWR(USER_BALANCES_KEY, fetchWebHomeBalances, { refreshInterval: 30_000 });
 
   const balanceRead = useMemo(
     () => (balances.data === undefined ? undefined : readBalances(balances.data)),

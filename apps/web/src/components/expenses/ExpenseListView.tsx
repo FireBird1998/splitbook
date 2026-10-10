@@ -1,5 +1,6 @@
 'use client';
 
+import { fetchWebExpensePage, fetchWebExpenseRecord, fetchWebRead } from '@/lib/web-read';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -18,25 +19,20 @@ import ErrorState from '@/components/common/ErrorState';
 import MoneyText from '@/components/common/MoneyText';
 import { formatDate, toDateParam } from '@splitbook/shared/date';
 import { ExpenseDraft, type SavedDraftExpense } from '@splitbook/shared/expense-draft';
+import { expenseRecordPath } from '@splitbook/shared/api-paths';
 import {
-  expensePagePath,
-  expenseRecordPath,
-  recurringExpensesPath,
-} from '@splitbook/shared/api-paths';
+  expensePageKey,
+  expenseRecordKey,
+  recurringExpensesKey,
+} from '@splitbook/shared/query-keys';
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { repeatsLabel, type RecurringSchedule } from '@splitbook/shared/expense-detail';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupRead } from '@splitbook/shared/group-read';
-import {
-  parseExpensePageResponse,
-  type ExpensePageRead,
-  type ExpenseRead,
-} from '@splitbook/shared/expense-page-read';
-import {
-  parseExpenseRecordResponse,
-  type ExpenseRecordRead,
-} from '@splitbook/shared/expense-record-read';
+import { type ExpensePageRead, type ExpenseRead } from '@splitbook/shared/expense-page-read';
+import { type ExpenseRecordRead } from '@splitbook/shared/expense-record-read';
 import { hasTripSummary } from '@splitbook/shared/trip-summary';
-import { fetcher, HttpResponseError } from '@/lib/utils/fetcher';
+import { HttpResponseError } from '@/lib/utils/fetcher';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { useViewerTimeZone } from '@/lib/hooks/use-viewer-time-zone';
 import { RADIUS, TOPBAR_HEIGHT } from '@/lib/theme/tokens';
@@ -70,22 +66,12 @@ export const EXPENSE_LIST_PAGE_SIZE = 50;
 /** The side panel's element, which the open row's button controls (#311). */
 export const EXPENSE_PANEL_ID = 'expense-panel';
 
-/** A response the shared decoder refuses is a failed read; SWR keeps the last good one. */
-async function fetchExpensePage(path: string): Promise<ExpensePageRead> {
-  return parseExpensePageResponse(await fetcher(path));
-}
-
-/** The open Expense's own read (#210), with its revision and history. */
-async function fetchExpenseRecord(path: string): Promise<ExpenseRecordRead> {
-  return parseExpenseRecordResponse(await fetcher(path));
-}
-
 /**
  * The Group's recurring Expenses, for the Repeats row: only each one's id and schedule, and
  * nothing the read sends that the row doesn't use.
  */
-async function fetchRecurringSchedules(path: string): Promise<Map<string, RecurringSchedule>> {
-  const read = (await fetcher(path)) as { data?: unknown };
+function readRecurringSchedules(payload: unknown): Map<string, RecurringSchedule> {
+  const read = payload as { data?: unknown };
   const schedules = new Map<string, RecurringSchedule>();
   for (const item of Array.isArray(read?.data) ? read.data : []) {
     const template = item as Record<string, unknown>;
@@ -193,14 +179,21 @@ export default function ExpenseListView({
   const rangeProblem = customRangeError(query);
   const path = rangeProblem
     ? null
-    : expensePagePath(
+    : expensePageKey(
+        WEB_QUERY_ACCOUNT,
         groupId,
         expenseListFilters(query, { userId, pageSize: EXPENSE_LIST_PAGE_SIZE, month }),
       );
-  const { data, error, isLoading, mutate } = useSWR(path, fetchExpensePage, {
+  const {
+    data: pageRead,
+    error,
+    isLoading,
+    mutate,
+  } = useSWR(path, fetchWebExpensePage, {
     refreshInterval: 10_000,
     keepPreviousData: true,
   });
+  const data = pageRead?.data;
   // The previous view's Expenses, kept while a changed view loads (not the 10 s refresh).
   const changing = isLoading && Boolean(data);
 
@@ -245,9 +238,9 @@ export default function ExpenseListView({
     [pathname, searchParams],
   );
 
-  const recordPath = openId ? expenseRecordPath(groupId, openId) : null;
-  const record = useSWR(recordPath, fetchExpenseRecord, { refreshInterval: 10_000 });
-  const loaded = record.data && record.data._id === openId ? record.data : null;
+  const recordPath = openId ? expenseRecordKey(WEB_QUERY_ACCOUNT, groupId, openId) : null;
+  const record = useSWR(recordPath, fetchWebExpenseRecord, { refreshInterval: 10_000 });
+  const loaded = record.data?.data && record.data?.data._id === openId ? record.data?.data : null;
   const listed = openId ? expenses.find((expense) => expense._id === openId) : undefined;
   const gone = Boolean(openId) && isGone(loaded ?? undefined, record.error);
 
@@ -385,13 +378,18 @@ export default function ExpenseListView({
   };
 
   const recurringId = recurringExpensesEnabled ? (shown?.recurringExpense ?? null) : null;
-  const schedules = useSWR(
-    recurringId && onComputer ? recurringExpensesPath(groupId) : null,
-    fetchRecurringSchedules,
+  const schedulesRead = useSWR(
+    recurringId && onComputer ? recurringExpensesKey(WEB_QUERY_ACCOUNT, groupId) : null,
+    fetchWebRead,
+  );
+  const schedules = useMemo(
+    () =>
+      schedulesRead.data === undefined ? undefined : readRecurringSchedules(schedulesRead.data),
+    [schedulesRead.data],
   );
   const repeats = recurringId
-    ? repeatsLabel(schedules.data?.get(recurringId), {
-        deleted: Boolean(schedules.data && !schedules.data.has(recurringId)),
+    ? repeatsLabel(schedules?.get(recurringId), {
+        deleted: Boolean(schedules && !schedules.has(recurringId)),
       })
     : null;
 

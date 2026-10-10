@@ -1,11 +1,12 @@
 'use client';
 
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { useCallback } from 'react';
 import useSWR from 'swr';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Skeleton from '@mui/material/Skeleton';
-import { groupInsightsPath } from '@splitbook/shared/api-paths';
+import { groupInsightsKey, queryKeyPath, type GroupQueryKey } from '@splitbook/shared/query-keys';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import {
   parseGroupInsightsResponse,
@@ -17,8 +18,8 @@ import { fetcher } from '@/lib/utils/fetcher';
 import GroupInsightsView from './GroupInsightsView';
 import { insightsHref, readInsightsAddress, type CompareChoice } from './group-insights';
 
-async function fetchInsights(path: string): Promise<GroupInsightsRead> {
-  return parseGroupInsightsResponse(await fetcher(path));
+async function fetchInsights(key: GroupQueryKey): Promise<GroupInsightsRead> {
+  return parseGroupInsightsResponse(await fetcher(queryKeyPath(key)));
 }
 
 /**
@@ -41,7 +42,7 @@ export default function GroupInsightsTab({
   const address = currentMonth ? readInsightsAddress(searchParams, currentMonth) : null;
   const { data, error, mutate } = useSWR(
     timeZone && address
-      ? groupInsightsPath(groupId, {
+      ? groupInsightsKey(WEB_QUERY_ACCOUNT, groupId, {
           month: address.month,
           compare: address.compare,
           timeZone,

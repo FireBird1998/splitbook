@@ -1,3 +1,5 @@
+import { queryKeyPath } from '@splitbook/shared/query-keys';
+import { unstable_serialize } from 'swr';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ThemeProvider } from '@mui/material/styles';
@@ -188,12 +190,12 @@ describe('Home’s latest changes', () => {
 
 describe('the card on Home', () => {
   it('reads the latest 10 changes across the member’s Groups', () => {
-    expect(LATEST_CHANGES_KEY).toBe('/api/user/activity?limit=10');
+    expect(queryKeyPath(LATEST_CHANGES_KEY)).toBe('/api/user/activity?limit=10');
   });
 
   it('shows the read’s changes once it has them, and loading until then', () => {
     const card = createElement(LatestChangesCard, { userId: ALEX });
-    const loaded = render(card, 'light', { [LATEST_CHANGES_KEY]: READ });
+    const loaded = render(card, 'light', { [unstable_serialize(LATEST_CHANGES_KEY)]: READ });
     expect(rows(loaded)).toHaveLength(4);
     expect(text(loaded)).toContain('You added Weekly groceries');
     expect(render(card)).toContain('aria-label="Loading latest changes"');

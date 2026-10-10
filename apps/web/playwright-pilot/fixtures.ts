@@ -110,13 +110,17 @@ const spending = {
   },
   lastChanges: [{ groupId: DEMO_GROUP_ID, at: '2026-09-06T08:40:00.000Z' }],
 };
-export const groupBalances = {
+const inrBalances = {
   balances: [
     { user: alex, balance: -1480 },
     { user: sam, balance: 1480 },
   ],
   debts: [{ from: alex, to: sam, amount: 1480 }],
   currency: 'INR',
+};
+export const groupBalances = {
+  ...inrBalances,
+  byCurrency: [inrBalances],
   hasMixedCurrencies: false,
 };
 
@@ -180,7 +184,15 @@ export async function installPilotFixtures(page: Page, overrides: Record<string,
     [`/api/groups/${DEMO_GROUP_ID}/expenses`]: {
       expenses: [],
       pagination: { total: 1, page: 1, limit: 20, totalPages: 1 },
-      summary: { totalAmount: 2500, count: 1, byCategory: [], byMember: [] },
+      summary: {
+        totalAmount: 2500,
+        count: 1,
+        totalsByCurrency: [{ currency: 'INR', totalAmount: 2500 }],
+        userOwes: 0,
+        userGetsBack: 0,
+        byCategory: [],
+        byMember: [],
+      },
     },
     ...overrides,
   };

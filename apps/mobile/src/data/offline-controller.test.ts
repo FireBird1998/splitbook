@@ -1,3 +1,4 @@
+import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
 import { describe, expect, it, vi } from 'vitest';
 import {
   bodyFails,
@@ -9,7 +10,6 @@ import {
   within,
   type GatewayBody,
 } from '../test-utils/transport-faults';
-import { createMobileController } from './mobile-controller';
 import type { MobileTimer } from './types';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 const accountId = 'a00000000000000000000001',

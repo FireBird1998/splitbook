@@ -24,12 +24,12 @@ import CheckIcon from '@mui/icons-material/Check';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import LaptopOutlinedIcon from '@mui/icons-material/LaptopOutlined';
-import { expensePagePath } from '@splitbook/shared/api-paths';
+import { expensePageKey } from '@splitbook/shared/query-keys';
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toDateParam } from '@splitbook/shared/date';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { ExpenseDraft } from '@splitbook/shared/expense-draft';
-import { parseExpensePageResponse } from '@splitbook/shared/expense-page-read';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import {
   quickAddDraftValues,
@@ -40,7 +40,7 @@ import {
 import { findReferencedTag } from '@splitbook/shared/tag-identity';
 import { visuallyHidden } from '@/components/common/visually-hidden';
 import { FONT_MONO } from '@/lib/theme/tokens';
-import { fetcher } from '@/lib/utils/fetcher';
+import { fetchWebExpensePage } from '@/lib/web-read';
 import ExpenseFormDialog from './ExpenseFormDialog';
 import { quickAddModel, type QuickAddChip, type QuickAddModel } from './quick-add-view';
 import { useExpenseDraftSave } from './use-expense-draft-save';
@@ -55,11 +55,6 @@ export const QUICK_ADD_UNCONFIRMED =
 const HISTORY_SIZE = 50;
 /** How long typing pauses before a screen reader hears what was read. */
 const SUMMARY_PAUSE_MS = 900;
-
-async function fetchHistory(path: string) {
-  const page = parseExpensePageResponse(await fetcher(path));
-  return page.expenses.map(({ description, tagId, tag }) => ({ description, tagId, tag }));
-}
 
 interface QuickAddExpenseProps {
   groupId: string;
@@ -121,13 +116,15 @@ export default function QuickAddExpense({ groupId, userId, group }: QuickAddExpe
   const typing = text.trim() !== '';
   const [wantsHistory, setWantsHistory] = useState(false);
   const historyRead = useSWR(
-    wantsHistory ? expensePagePath(groupId, { page: 1, limit: HISTORY_SIZE }) : null,
-    fetchHistory,
+    wantsHistory
+      ? expensePageKey(WEB_QUERY_ACCOUNT, groupId, { page: 1, limit: HISTORY_SIZE })
+      : null,
+    fetchWebExpensePage,
     { revalidateOnFocus: false },
   );
   const historyItems = useMemo<QuickAddHistoryItem[]>(
     () =>
-      (historyRead.data ?? []).map((item) => {
+      (historyRead.data?.data.expenses ?? []).map((item) => {
         // Older Expenses name their Tag; the name counts when it is one Tag's.
         const tag = findReferencedTag(group.tags, item);
         return { description: item.description, tagId: tag ? String(tag._id) : null };

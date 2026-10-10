@@ -1,3 +1,6 @@
+import { groupsKey, groupKey } from '@splitbook/shared/query-keys';
+import { WEB_QUERY_ACCOUNT } from './web-query-keys';
+import { fixtureQueryKey } from './test-utils/fixture-query-key';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { changesAccountGroups, lostGroupId } from './group-access';
 
@@ -130,7 +133,7 @@ async function freshDocument() {
     localStorage: storage,
   });
   const swr = await import('swr');
-  const { fetchGroupRead, groupReadKey, readWebGroupResponse } = await import('./group-read');
+  const { fetchGroupRead, readWebGroupResponse } = await import('./group-read');
   const { apiFetch, pinExpectedAccount } = await import('./utils/api-fetch');
   const { fetcher, HttpResponseError } = await import('./utils/fetcher');
   const { listSettlementAttempts, recordSettlement } = await import('./settlement-attempts');
@@ -142,7 +145,6 @@ async function freshDocument() {
     cache,
     storage,
     fetchGroupRead,
-    groupReadKey,
     readWebGroupResponse,
     apiFetch,
     fetcher,
@@ -198,9 +200,9 @@ describe('losing a Group deletes what this tab holds for it', () => {
     '/api/invitations',
   ];
   const keys = () => ({
-    groupList: doc.groupReadKey(ACTOR, '/api/groups'),
-    lostGroup: doc.groupReadKey(ACTOR, `/api/groups/${LOST}`),
-    keptGroup: doc.groupReadKey(ACTOR, `/api/groups/${KEPT}`),
+    groupList: groupsKey(WEB_QUERY_ACCOUNT),
+    lostGroup: groupKey(WEB_QUERY_ACCOUNT, LOST),
+    keptGroup: groupKey(WEB_QUERY_ACCOUNT, KEPT),
   });
   /** Account-wide reads that list every Group, the lost one included. */
   const accountReads = () => [keys().groupList, '/api/user/balances', LATEST_CHANGES, SPENDING];
@@ -211,13 +213,15 @@ describe('losing a Group deletes what this tab holds for it', () => {
    * that carry one. `group-access.hooks.test.ts` mounts real hooks.
    */
   function remember(key: string | readonly unknown[], state: { data?: unknown; error?: unknown }) {
-    doc.cache.set(doc.unstable_serialize(key), { ...state, _k: key } as never);
+    doc.cache.set(doc.unstable_serialize(typeof key === 'string' ? fixtureQueryKey(key) : key), {
+      ...state,
+      _k: typeof key === 'string' ? fixtureQueryKey(key) : key,
+    } as never);
   }
   const stateOf = (key: string | readonly unknown[]) => {
-    const { _k, ...state } = (doc.cache.get(doc.unstable_serialize(key)) ?? {}) as Record<
-      string,
-      unknown
-    >;
+    const { _k, ...state } = (doc.cache.get(
+      doc.unstable_serialize(typeof key === 'string' ? fixtureQueryKey(key) : key),
+    ) ?? {}) as Record<string, unknown>;
     void _k;
     return state;
   };
@@ -225,7 +229,7 @@ describe('losing a Group deletes what this tab holds for it', () => {
     const { lostGroup, keptGroup } = keys();
     return Object.fromEntries(
       [...accountReads(), lostGroup, keptGroup, ...lostContent, ...keptContent].map((key) => [
-        doc.unstable_serialize(key),
+        doc.unstable_serialize(typeof key === 'string' ? fixtureQueryKey(key) : key),
         stateOf(key),
       ]),
     );
@@ -276,7 +280,9 @@ describe('losing a Group deletes what this tab holds for it', () => {
 
   function expectKept(before: ReturnType<typeof allEntries>) {
     const after = allEntries();
-    for (const key of [keys().keptGroup, ...keptContent].map((key) => doc.unstable_serialize(key)))
+    for (const key of [keys().keptGroup, ...keptContent].map((key) =>
+      doc.unstable_serialize(typeof key === 'string' ? fixtureQueryKey(key) : key),
+    ))
       expect(after[key]).toEqual(before[key]);
   }
 

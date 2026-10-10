@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import type { GroupCategory } from '@splitbook/shared/types';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
-import { groupReadKey } from '@/lib/group-read-key';
+import { groupsKey, groupKey } from '@splitbook/shared/query-keys';
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { isGroupReadDenied, useGroup } from '@/lib/hooks/use-groups';
 import { anchors, text } from '@/lib/test-utils/markup';
 import {
@@ -68,7 +69,7 @@ const GROUPS = [
 function render(element: ReactElement, groupsRead?: unknown) {
   const fallback: Record<string, unknown> = {};
   if (groupsRead !== undefined)
-    fallback[unstable_serialize(groupReadKey(USER.id, '/api/groups'))] = groupsRead;
+    fallback[unstable_serialize(groupsKey(WEB_QUERY_ACCOUNT))] = groupsRead;
   return renderToStaticMarkup(
     createElement(
       SWRConfig,
@@ -232,7 +233,7 @@ describe('the form for a Group', () => {
         isGroupReadDenied(error) ? 'refused' : error ? 'failed' : 'read',
       );
     }
-    const key = unstable_serialize(groupReadKey(USER.id, `/api/groups/${id(1)}`));
+    const key = unstable_serialize(groupKey(WEB_QUERY_ACCOUNT, id(1)));
     return text(
       renderToStaticMarkup(
         createElement(SWRConfig, { value: { fallback: { [key]: answer } } }, createElement(Probe)),

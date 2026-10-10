@@ -141,7 +141,12 @@ test('empty dashboard and settled balances remain distinct from errors', async (
   await installPilotFixtures(page, {
     '/api/groups': [],
     '/api/user/balances': settledSummary,
-    [`/api/groups/${DEMO_GROUP_ID}/balances`]: { balances: [], debts: [], currency: 'INR' },
+    [`/api/groups/${DEMO_GROUP_ID}/balances`]: {
+      balances: [],
+      debts: [],
+      currency: 'INR',
+      byCurrency: [],
+    },
     [`/api/groups/${DEMO_GROUP_ID}/settlements`]: [],
   });
   await enterAsPersona(page, 'alex');

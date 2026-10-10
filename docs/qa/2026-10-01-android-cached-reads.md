@@ -62,6 +62,8 @@ TZ=Asia/Kolkata node --import tsx apps/mobile/scripts/measure-read-cache.ts
 
 "First content" is when the view first showed its content, and "settled" is when the action finished. Both are in milliseconds; the dev server's routes were warmed first.
 
+These recorded counts used the original read-cache window: journey start until the action resolved. Background requests sent later could be lost or assigned to the next journey. #256 standardizes future counts through 3× the injected delay after resolution and reports requests outside all windows; the numbers below are unchanged.
+
 | Journey                                         | `main` requests | `main` first content / settled | Branch requests | Branch first content / settled |
 | ----------------------------------------------- | --------------: | -----------------------------: | --------------: | -----------------------------: |
 | Sign in: Groups and Home, no saved views        |               4 |                    1291 / 1291 |               4 |                    1294 / 1294 |

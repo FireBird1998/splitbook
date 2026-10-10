@@ -4,6 +4,10 @@ import type { ExpenseSplitMethod } from './split-calculation';
 export const MONEY_VERSION = 1 as const;
 export const MAX_EXPENSE_AMOUNT = 10_000_000;
 
+export function maxExpenseAmountMinor(currency: string): number {
+  return parseAmountMinor(MAX_EXPENSE_AMOUNT, currency);
+}
+
 export class MoneyValidationError extends Error {
   constructor(
     public readonly code: string,
@@ -278,7 +282,7 @@ export function calculateSplitAmountsMinor<T extends MinorSplitInput>(
 /** The Expense total alone: exact currency precision, positive, and within the ledger limit. */
 export function parseExpenseAmountMinor(amount: string | number, currency: string): number {
   const amountMinor = parseAmountMinor(amount, currency);
-  if (amountMinor <= 0 || amountMinor > parseAmountMinor(MAX_EXPENSE_AMOUNT, currency)) {
+  if (amountMinor <= 0 || amountMinor > maxExpenseAmountMinor(currency)) {
     throw new MoneyValidationError(
       'INVALID_MONEY_RANGE',
       'Amount must be positive and at most 10,000,000',

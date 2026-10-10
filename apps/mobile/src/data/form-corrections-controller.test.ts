@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { createMobileController } from './mobile-controller';
+import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
+import { describe, expect, it, vi } from 'vitest';
+import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { visibleFieldErrors } from './field-feedback';
 import { groupFields } from './group-draft';
 import type { FetchResponse } from './types';
@@ -235,6 +236,74 @@ function device(
 }
 
 describe('Group creation corrections (#105)', () => {
+  it('maps shared-schema drift to all affected fields without sending a Group', async () => {
+    const backend = server();
+    const controller = device(backend).create();
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({
+      name: 'Goa weekend',
+      startDate: '2026-11-20',
+      endDate: '2026-11-22',
+    });
+    // Current local rules agree with the shared schema. Simulate the boundary rejecting
+    // otherwise valid entries after a future schema change, then drive the public command.
+    const rejection = createGroupSchema
+      .superRefine((_, context) => {
+        context.addIssue({ code: 'custom', path: ['name'], message: 'Schema name correction' });
+        context.addIssue({
+          code: 'custom',
+          path: ['startDate'],
+          message: 'Schema start correction',
+        });
+        context.addIssue({ code: 'custom', path: ['endDate'], message: 'Schema end correction' });
+      })
+      .safeParse({ name: 'Goa weekend', defaultCurrency: 'INR' });
+    if (rejection.success) throw new Error('The drift fixture must reject the Group');
+    const parse = vi.spyOn(createGroupSchema, 'safeParse').mockReturnValueOnce(rejection);
+    try {
+      await controller.createGroup();
+    } finally {
+      parse.mockRestore();
+    }
+    expect(backend.created).toEqual([]);
+    expect(controller.getSnapshot().creation).toMatchObject({
+      status: 'editing',
+      draft: { name: 'Goa weekend', startDate: '2026-11-20', endDate: '2026-11-22' },
+      message: 'Correct 3 fields before creating the Group: Name, Start date and End date.',
+      validation: {
+        submitted: true,
+        focus: { field: 'name', request: 1 },
+        errors: {
+          name: 'Schema name correction',
+          startDate: 'Schema start correction',
+          endDate: 'Schema end correction',
+        },
+      },
+    });
+  });
+
+  it('keeps schema failures without a form field in the form message', async () => {
+    const backend = server();
+    const controller = device(backend).create();
+    await controller.signIn('alex');
+    controller.startCreate();
+    controller.updateCreation({ name: 'House', description: 'x'.repeat(501) });
+    await controller.createGroup();
+    expect(backend.created).toEqual([]);
+    expect(controller.getSnapshot().creation).toMatchObject({
+      status: 'error',
+      validation: { errors: {} },
+    });
+    expect(controller.getSnapshot().creation.message).toBe(
+      createGroupSchema.safeParse({
+        name: 'House',
+        description: 'x'.repeat(501),
+        defaultCurrency: 'INR',
+      }).error?.issues[0].message,
+    );
+  });
+
   it('explains a missing name at the Name field, sends nothing, then creates once corrected', async () => {
     const backend = server();
     const controller = device(backend).create();

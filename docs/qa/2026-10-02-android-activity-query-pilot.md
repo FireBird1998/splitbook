@@ -77,6 +77,8 @@ What would change this decision: moving _every_ display read onto TanStack, so t
 
 ## Measurements
 
+These recorded Activity counts used journey start through 3× the injected delay after the action resolved. Settled was calculated after that wait by subtracting its nominal duration, including timer overshoot. #256 retains that request window, records Settled at resolution, and reports requests outside all windows; the numbers below are unchanged.
+
 **Method:** the public controller, over real HTTP, against an isolated fictional ledger.
 
 - **Script:** `apps/mobile/scripts/measure-activity-reads.ts`.

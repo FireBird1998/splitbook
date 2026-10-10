@@ -1,5 +1,7 @@
 'use client';
 
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
+import { expensePageKey } from '@splitbook/shared/query-keys';
 import Link from 'next/link';
 import useSWR from 'swr';
 import Box from '@mui/material/Box';
@@ -19,7 +21,7 @@ import { endOfMonth, format, startOfMonth } from 'date-fns';
 import TripStrip from '@/components/trip/TripStrip';
 import GroupHeader from '@/components/groups/GroupHeader';
 import MoneyText from '@/components/common/MoneyText';
-import { fetcher } from '@/lib/utils/fetcher';
+import { fetchWebExpensePage } from '@/lib/web-read';
 import { formatDate, formatRelativeTime } from '@splitbook/shared/date';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { DashboardBalanceAmount } from '@splitbook/shared/types';
@@ -41,13 +43,13 @@ interface GroupCardProps {
  */
 function HouseholdMonthSpend({ groupId, currency }: { groupId: string; currency: string }) {
   const now = new Date();
-  const params = new URLSearchParams({
+  const key = expensePageKey(WEB_QUERY_ACCOUNT, groupId, {
     dateFrom: startOfMonth(now).toISOString(),
     dateTo: endOfMonth(now).toISOString(),
-    page: '1',
-    limit: '1',
+    page: 1,
+    limit: 1,
   });
-  const { data } = useSWR(`/api/groups/${groupId}/expenses?${params.toString()}`, fetcher);
+  const { data } = useSWR(key, fetchWebExpensePage);
   const summary = data?.data?.summary as { totalAmount?: number; count?: number } | undefined;
   if (!summary) return null;
 

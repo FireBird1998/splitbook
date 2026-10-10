@@ -1,5 +1,7 @@
 'use client';
 
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
+import { activityPageKey } from '@splitbook/shared/query-keys';
 import useSWR from 'swr';
 import Box from '@mui/material/Box';
 import Stack from '@mui/material/Stack';
@@ -12,7 +14,7 @@ import {
   groupActivitiesByDay,
   type ActivityLike,
 } from '@splitbook/shared/activity-timeline';
-import { fetcher } from '@/lib/utils/fetcher';
+import { fetchWebActivity } from '@/lib/web-read';
 
 const ACTIVITY_ICONS: Record<string, string> = {
   expense_added: '🧾',
@@ -31,8 +33,8 @@ interface ActivityViewProps {
 
 export default function ActivityView({ groupId }: ActivityViewProps) {
   const { data, isLoading, error } = useSWR(
-    `/api/groups/${groupId}/activity?page=1&limit=50`,
-    fetcher,
+    activityPageKey(WEB_QUERY_ACCOUNT, groupId, { page: 1, limit: 50 }),
+    fetchWebActivity,
     {
       refreshInterval: 10_000,
     },

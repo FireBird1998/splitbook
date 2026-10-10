@@ -1,8 +1,15 @@
 'use client';
 
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { useSyncExternalStore } from 'react';
 import useSWR from 'swr';
-import { homeBalancesPath, invitationsPath, userSpendingPath } from '@splitbook/shared/api-paths';
+import {
+  homeBalancesKey,
+  invitationsKey,
+  userSpendingKey,
+  queryKeyPath,
+  type AccountQueryKey,
+} from '@splitbook/shared/query-keys';
 import { homeCurrencyBalances, type HomeCurrencyBalance } from '@splitbook/shared/dashboard';
 import {
   parseHomeBalancesResponse,
@@ -17,6 +24,7 @@ import {
 } from '@splitbook/shared/user-spending-read';
 import { isTimeZone } from '@splitbook/shared/zoned-calendar';
 import { fetcher } from '@/lib/utils/fetcher';
+import { fetchWebHomeBalances, fetchWebRead } from '@/lib/web-read';
 
 /**
  * Home's reads (#306). Each card calls the hook for what it shows; SWR shares one request per
@@ -32,8 +40,8 @@ export type CardRead<T> =
 /** Polled like the sidebar, so Home follows changes made elsewhere. */
 const readOptions = { refreshInterval: 30_000 };
 
-export const HOME_BALANCES_KEY = homeBalancesPath();
-export const HOME_INVITATIONS_KEY = invitationsPath();
+export const HOME_BALANCES_KEY = homeBalancesKey(WEB_QUERY_ACCOUNT);
+export const HOME_INVITATIONS_KEY = invitationsKey(WEB_QUERY_ACCOUNT);
 
 interface SWRState {
   data: unknown;
@@ -66,7 +74,7 @@ export type GroupBalanceAmounts = readonly { currency: string; balance: number }
  * balance in each Group.
  */
 export function useHomeBalances() {
-  const result = useSWR(HOME_BALANCES_KEY, fetcher, readOptions);
+  const result = useSWR(HOME_BALANCES_KEY, fetchWebHomeBalances, readOptions);
   const retry = () => void result.mutate();
   return {
     balances: cardRead<HomeBalances>(result, (data) => {
@@ -126,7 +134,7 @@ export function readInvitations(data: unknown): HomeInvitation[] {
 
 /** The member's pending invitations, for Needs you. */
 export function useHomeInvitations() {
-  const result = useSWR(HOME_INVITATIONS_KEY, fetcher, readOptions);
+  const result = useSWR(HOME_INVITATIONS_KEY, fetchWebRead, readOptions);
   return {
     invitations: cardRead(result, readInvitations),
     retry: () => void result.mutate(),
@@ -143,8 +151,8 @@ function useViewerTimeZone(): string | null {
   return useSyncExternalStore(noSubscription, browserTimeZone, () => null);
 }
 
-async function fetchSpending(path: string): Promise<UserSpendingRead> {
-  return parseUserSpendingResponse(await fetcher(path));
+async function fetchSpending(key: AccountQueryKey): Promise<UserSpendingRead> {
+  return parseUserSpendingResponse(await fetcher(queryKeyPath(key)));
 }
 
 /**
@@ -155,7 +163,9 @@ async function fetchSpending(path: string): Promise<UserSpendingRead> {
 export function useHomeSpending() {
   const timeZone = useViewerTimeZone();
   const { data, error, mutate } = useSWR(
-    timeZone ? userSpendingPath({ months: SPENDING_MONTHS.default, timeZone }) : null,
+    timeZone
+      ? userSpendingKey(WEB_QUERY_ACCOUNT, { months: SPENDING_MONTHS.default, timeZone })
+      : null,
     fetchSpending,
     readOptions,
   );

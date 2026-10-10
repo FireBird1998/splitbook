@@ -44,7 +44,7 @@ import LeaveGroupSection from '@/components/groups/LeaveGroupSection';
 import GroupUnavailable from '@/components/groups/GroupUnavailable';
 import { formatDate } from '@splitbook/shared/date';
 import { useGroup } from '@/lib/hooks/use-groups';
-import { isGroupReadKey } from '@/lib/group-read';
+import { matchWebGroupRead, isWebGroupsRead } from '@/lib/web-query-keys';
 import ErrorState from '@/components/common/ErrorState';
 import { validateTripDates } from '@splitbook/shared/trip-setup';
 import { GROUP_THEME_LIST, getGroupTheme } from '@splitbook/shared/group-themes';
@@ -205,10 +205,7 @@ function GroupSettingsContent({
         return;
       }
       mutate();
-      globalMutate(
-        (key: unknown) =>
-          (typeof key === 'string' && key.includes('/api/groups')) || isGroupReadKey(key),
-      );
+      globalMutate(isWebGroupsRead);
       setSnackbar({ open: true, message: 'Group info updated' });
     } catch {
       setSnackbar({ open: true, message: 'Failed to update' });
@@ -370,11 +367,7 @@ function GroupSettingsContent({
         setRenameTagError(data.error || 'Failed to rename tag');
         return;
       }
-      await globalMutate(
-        (key) =>
-          (typeof key === 'string' && key.startsWith(`/api/groups/${groupId}`)) ||
-          isGroupReadKey(key, `/api/groups/${groupId}`),
-      );
+      await globalMutate(matchWebGroupRead(groupId));
       setRenameTagOpen(false);
       setSelectedTag(null);
       setSnackbar({ open: true, message: 'Tag renamed' });
