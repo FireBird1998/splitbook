@@ -3,7 +3,6 @@ import {
   maxExpenseAmountMinor,
   MoneyValidationError,
   moneyParticipantId,
-  parseAmountMinor,
   parseDecimalUnits,
   parseExpenseAmountMinor,
 } from './exact-money';
