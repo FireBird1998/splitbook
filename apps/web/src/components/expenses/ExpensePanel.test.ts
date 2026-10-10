@@ -1,3 +1,4 @@
+import { fixtureSWRRead } from '@/lib/test-utils/fixture-swr-read';
 import { queryKeyPath, type QueryKey } from '@splitbook/shared/query-keys';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -51,16 +52,7 @@ vi.mock('swr', async (original) => {
       const read = match?.[1];
       return {
         ...read,
-        data:
-          read?.data === undefined
-            ? undefined
-            : {
-                status: 200,
-                data:
-                  read.data instanceof Map
-                    ? [...read.data].map(([_id, value]) => ({ _id, ...value }))
-                    : read.data,
-              },
+        data: fixtureSWRRead(read?.data),
         isValidating: false,
         isLoading: !read,
         mutate: vi.fn(),
