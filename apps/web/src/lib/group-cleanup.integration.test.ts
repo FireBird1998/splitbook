@@ -563,6 +563,119 @@ it('coordinates a generated recurring Expense and its later marker with final de
   }
 });
 
+it('keeps committed Activity visible if deletion wins before its separately fenced acknowledgement', async () => {
+  const id = await lastMemberGroup();
+  const db = mongoose.connection.db!;
+  const record = new mongoose.Types.ObjectId();
+  const event = makePendingActivity(id, 'expense_added', actor);
+  await db.collection('expenses').insertOne({
+    _id: record,
+    group: new mongoose.Types.ObjectId(id),
+    isDeleted: true,
+    pendingActivity: [event],
+  });
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let entered!: () => void;
+  const acknowledgement = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  const transaction = mongoose.connection.transaction.bind(mongoose.connection);
+  let transactions = 0;
+  const barrier = vi
+    .spyOn(mongoose.connection, 'transaction')
+    .mockImplementation(async (callback, options) => {
+      if (++transactions === 2) {
+        entered();
+        await gate;
+      }
+      return transaction(callback, options);
+    });
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+  const publishing = activityService.publishPending('expenses', record, [event]);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      acknowledgement,
+      new Promise<never>((_, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error('Acknowledgement did not use its own fence')),
+          1_000,
+        );
+      }),
+    ]);
+    expect(await db.collection('activities').countDocuments({ _id: event._id })).toBe(1);
+    expect(
+      (await db.collection('expenses').findOne({ _id: record }))?.pendingActivity,
+    ).toHaveLength(1);
+    expect((await leave(id, true)).body.data.deleted).toBe(true);
+    release();
+    expect(await publishing).toMatchObject({ published: 0, failed: 1, remaining: 1 });
+    expect((await inventoryOrphanGroups(db, 'test')).missingParents).toEqual([]);
+    expect(await db.collection('activities').countDocuments({ group: event.group })).toBe(0);
+  } finally {
+    clearTimeout(timeout);
+    release();
+    await publishing;
+    barrier.mockRestore();
+    errors.mockRestore();
+  }
+});
+
+it('shares the whole Activity deadline with a blocked acknowledgement fence after publication commits', async () => {
+  const id = await lastMemberGroup();
+  const db = mongoose.connection.db!;
+  const record = new mongoose.Types.ObjectId();
+  const event = makePendingActivity(id, 'expense_added', actor);
+  await db.collection('expenses').insertOne({
+    _id: record,
+    group: new mongoose.Types.ObjectId(id),
+    pendingActivity: [event],
+  });
+  const transaction = mongoose.connection.transaction.bind(mongoose.connection);
+  let transactions = 0;
+  const barrier = vi
+    .spyOn(mongoose.connection, 'transaction')
+    .mockImplementation(async (callback, options) => {
+      if (++transactions === 2) {
+        await db.admin().command({
+          configureFailPoint: 'failCommand',
+          mode: { times: 1 },
+          data: {
+            appName: testDb.dbName,
+            failCommands: ['update'],
+            blockConnection: true,
+            blockTimeMS: 800,
+          },
+        });
+      }
+      return transaction(callback, options);
+    });
+  const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    const started = Date.now();
+    expect(
+      await activityService.publishPending('expenses', record, [event], { maxDurationMs: 100 }),
+    ).toMatchObject({ published: 0, failed: 1, remaining: 1 });
+    expect(Date.now() - started).toBeLessThan(450);
+    expect(await db.collection('activities').countDocuments({ _id: event._id })).toBe(1);
+    expect(
+      (await db.collection('expenses').findOne({ _id: record }))?.pendingActivity,
+    ).toHaveLength(1);
+  } finally {
+    await db.admin().command({ configureFailPoint: 'failCommand', mode: 'off' });
+    barrier.mockRestore();
+    errors.mockRestore();
+  }
+  expect(await activityService.publishPending('expenses', record, [event])).toMatchObject({
+    published: 1,
+    remaining: 0,
+  });
+  expect(await db.collection('activities').countDocuments({ _id: event._id })).toBe(1);
+});
+
 it('coordinates recovered pending Activity with deletion instead of publishing missing-parent history', async () => {
   const id = await lastMemberGroup();
   const db = mongoose.connection.db!;
