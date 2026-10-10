@@ -1,3 +1,4 @@
+import { queryKeyPath, type QueryKey } from '@splitbook/shared/query-keys';
 import { createElement, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ThemeProvider, getContrastRatio } from '@mui/material/styles';
@@ -40,14 +41,30 @@ vi.mock('swr', async (original) => {
   const actual = await original<typeof import('swr')>();
   return {
     ...actual,
-    default: (key: string | null) => {
+    default: (queryKey: QueryKey | null) => {
+      const key = queryKey ? queryKeyPath(queryKey) : null;
       const match = key
         ? [...reads]
             .filter(([prefix]) => key.startsWith(prefix))
             .sort(([a], [b]) => b.length - a.length)[0]
         : undefined;
       const read = match?.[1];
-      return { ...read, isValidating: false, isLoading: !read, mutate: vi.fn() };
+      return {
+        ...read,
+        data:
+          read?.data === undefined
+            ? undefined
+            : {
+                status: 200,
+                data:
+                  read.data instanceof Map
+                    ? [...read.data].map(([_id, value]) => ({ _id, ...value }))
+                    : read.data,
+              },
+        isValidating: false,
+        isLoading: !read,
+        mutate: vi.fn(),
+      };
     },
   };
 });

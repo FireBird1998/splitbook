@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import type { GroupCategory } from '@splitbook/shared/types';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
-import { groupReadKey } from '@/lib/group-read-key';
+import { groupsKey, homeBalancesKey } from '@splitbook/shared/query-keys';
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { anchors, text } from '@/lib/test-utils/markup';
 import { sidebarBalanceLine } from './sidebar-balance';
 import { GROUP_THEME_ICONS, groupThemeIcon } from './group-theme-icons';
@@ -78,8 +79,9 @@ interface Reads {
 function render(element: ReactElement, reads: Reads = {}, mode: 'light' | 'dark' = 'light') {
   const fallback: Record<string, unknown> = {};
   if (reads.groups)
-    fallback[unstable_serialize(groupReadKey(USER.id, '/api/groups'))] = { data: reads.groups };
-  if (reads.balances) fallback['/api/user/balances'] = reads.balances;
+    fallback[unstable_serialize(groupsKey(WEB_QUERY_ACCOUNT))] = { data: reads.groups };
+  if (reads.balances)
+    fallback[unstable_serialize(homeBalancesKey(WEB_QUERY_ACCOUNT))] = reads.balances;
   return renderToStaticMarkup(
     createElement(
       SWRConfig,

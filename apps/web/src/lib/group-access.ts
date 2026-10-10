@@ -1,7 +1,11 @@
 import { mutate } from 'swr';
-import { isGroupReadKey } from '@/lib/group-read-key';
+import { matchScope } from '@splitbook/shared/query-keys';
+import {
+  matchWebGroupRead,
+  matchWebGroupContent,
+  isWebAccountGroupsRead,
+} from '@/lib/web-query-keys';
 import { forgetBrowserGroupSettlementAttempts } from '@/lib/settlement-attempts';
-import { userActivityPath, userSpendingPath } from '@splitbook/shared/api-paths';
 
 /**
  * Losing access to a Group (removed, or the Group deleted) removes what the
@@ -43,25 +47,6 @@ export function groupRequestTicket(): number {
   return ++sequence;
 }
 
-/** The Group's own entries under it: bare paths, and any Group read below the Group itself. */
-function isGroupContentKey(key: unknown, groupPath: string) {
-  const path = typeof key === 'string' ? key : isGroupReadKey(key) ? key[2] : null;
-  return path !== null && (path.startsWith(`${groupPath}/`) || path.startsWith(`${groupPath}?`));
-}
-
-/** The spending read's path without its query, from the shared builder. */
-const USER_SPENDING_PATH = userSpendingPath({ months: 1, timeZone: 'UTC' }).split('?')[0];
-
-/**
- * Account-wide reads that list every Group the account is in, or Home's latest changes and
- * spending chart across them (the chart whatever Months and time zone it asked for).
- */
-const isAccountGroupsKey = (key: unknown) =>
-  key === '/api/user/balances' ||
-  (typeof key === 'string' && key.split('?')[0] === userActivityPath()) ||
-  (typeof key === 'string' && key.split('?')[0] === USER_SPENDING_PATH) ||
-  (isGroupReadKey(key) && key[2] === '/api/groups');
-
 /**
  * Delete everything this tab holds for a Group the account has lost.
  *
@@ -78,15 +63,14 @@ const isAccountGroupsKey = (key: unknown) =>
  *   they can no longer be resent there.
  */
 function forgetGroup(groupId: string, accountId: string | null) {
-  const groupPath = `/api/groups/${groupId}`;
   lostGroups.set(groupId, ++sequence);
-  void mutate((key) => isGroupReadKey(key, groupPath) && key[2] === groupPath, denied, {
+  void mutate((key) => matchWebGroupRead(groupId)(key) && matchScope('group')(key), denied, {
     revalidate: false,
   });
-  void mutate((key) => isGroupContentKey(key, groupPath), undefined, {
+  void mutate(matchWebGroupContent(groupId), undefined, {
     revalidate: false,
   });
-  void mutate(isAccountGroupsKey, undefined);
+  void mutate(isWebAccountGroupsRead, undefined);
   if (accountId) void forgetBrowserGroupSettlementAttempts(accountId, groupId);
 }
 
@@ -100,9 +84,8 @@ function forgetGroup(groupId: string, accountId: string | null) {
  * SWR, so the page renders on clean keys and its mounted reads start over.
  */
 function reopenGroup(groupId: string) {
-  const groupPath = `/api/groups/${groupId}`;
   lostGroups.delete(groupId);
-  void mutate((key) => isGroupContentKey(key, groupPath), undefined);
+  void mutate(matchWebGroupContent(groupId), undefined);
 }
 
 /** Writes that can change the account's Groups, or its balance in one of them. */
@@ -139,7 +122,7 @@ export function noteGroupAccess({ method, path, status, accountId, ticket }: Gro
   if (lost) return forgetGroup(lost, accountId);
   // The shell's sidebar keeps the Group list and balances on screen across pages (#303):
   // refetch them after a write rather than waiting for their next poll.
-  if (changesAccountGroups(method, path, status)) void mutate(isAccountGroupsKey);
+  if (changesAccountGroups(method, path, status)) void mutate(isWebAccountGroupsRead);
   const groupId = GROUP_PATH.exec(path)?.[1];
   const lostAt = groupId ? lostGroups.get(groupId) : undefined;
   if (

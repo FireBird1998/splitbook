@@ -6,7 +6,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import { planExportFiles } from '@splitbook/shared/export-request';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
-import { groupReadKey } from '@/lib/group-read-key';
+import { groupsKey } from '@splitbook/shared/query-keys';
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { text } from '@/lib/test-utils/markup';
 import {
   DEFAULT_INCLUDE,
@@ -59,7 +60,7 @@ const NOW = new Date(2026, 8, 30, 10, 42);
 
 function render(element: ReactElement, groups?: GroupRead[], mode: 'light' | 'dark' = 'light') {
   const fallback: Record<string, unknown> = {};
-  if (groups) fallback[unstable_serialize(groupReadKey(ALEX, '/api/groups'))] = { data: groups };
+  if (groups) fallback[unstable_serialize(groupsKey(WEB_QUERY_ACCOUNT))] = { data: groups };
   return renderToStaticMarkup(
     createElement(
       SWRConfig,

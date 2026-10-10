@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react';
 import { useSWRConfig } from 'swr';
 import type { ExpenseDraft } from '@splitbook/shared/expense-draft';
-import { isGroupReadKey } from '@/lib/group-read';
+import { matchWebGroupRead } from '@/lib/web-query-keys';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { buildDuplicateCheckUrl } from './expense-duplicate-check';
 
@@ -100,11 +100,7 @@ export function useExpenseDraftSave(setDraft: Dispatch<SetStateAction<ExpenseDra
           return { status: 'refused', message, httpStatus: response.status };
         }
         setDraft((current) => current.complete(submission));
-        void mutate(
-          (key: unknown) =>
-            (typeof key === 'string' && key.startsWith(`/api/groups/${submission.groupId}`)) ||
-            isGroupReadKey(key, `/api/groups/${submission.groupId}`),
-        );
+        void mutate(matchWebGroupRead(submission.groupId));
         return { status: 'saved' };
       } catch (error) {
         const message =

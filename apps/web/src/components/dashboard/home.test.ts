@@ -7,7 +7,8 @@ import type { HomeCurrencyBalance } from '@splitbook/shared/dashboard';
 import type { HomeSuggestedPaymentRead } from '@splitbook/shared/home-balances-read';
 import type { GroupRead } from '@splitbook/shared/group-read';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
-import { groupReadKey } from '@/lib/group-read-key';
+import { groupsKey, homeBalancesKey, invitationsKey } from '@splitbook/shared/query-keys';
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { anchors, text } from '@/lib/test-utils/markup';
 import { BalancesCardView, groupCountLabel } from './BalancesCard';
 import { HomeHeaderView, homeStatusLine } from './HomeHeader';
@@ -354,9 +355,9 @@ describe('Home', () => {
   };
   const home = (balances: unknown, invitations: unknown = { status: 200, data: [] }) =>
     render(createElement(DashboardView, { userId: USER.id, userName: USER.name }), 'light', {
-      [unstable_serialize(groupReadKey(USER.id, '/api/groups'))]: { data: GROUPS },
-      '/api/user/balances': balances,
-      '/api/invitations': invitations,
+      [unstable_serialize(groupsKey(WEB_QUERY_ACCOUNT))]: { data: GROUPS },
+      [unstable_serialize(homeBalancesKey(WEB_QUERY_ACCOUNT))]: balances,
+      [unstable_serialize(invitationsKey(WEB_QUERY_ACCOUNT))]: invitations,
     });
 
   it('lays out the canvas’s order: the heading, Your balances beside Needs you, Your share of spending beside Where it went, then the Groups beside Latest changes', () => {

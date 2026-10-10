@@ -1,5 +1,7 @@
 'use client';
 
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
+import { expensePageKey, groupBalancesKey } from '@splitbook/shared/query-keys';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import useSWR from 'swr';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -16,7 +18,7 @@ import ExpenseFormDialog from '@/components/expenses/ExpenseFormDialog';
 import InviteDialog from '@/components/groups/InviteDialog';
 import { useGroup } from '@/lib/hooks/use-groups';
 import ErrorState from '@/components/common/ErrorState';
-import { fetcher } from '@/lib/utils/fetcher';
+import { fetchWebExpensePage, fetchWebBalances } from '@/lib/web-read';
 import { formatDate } from '@splitbook/shared/date';
 import { buildTripChecklist, shouldShowTripChecklist } from '@splitbook/shared/trip-setup';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
@@ -54,26 +56,28 @@ export default function GroupDetailView(props: GroupDetailViewProps) {
 /** The header's reads, made beside the Group read rather than after it. */
 interface HeaderReads {
   /** `expenses?page=1&limit=1`: the Expense count and the trip total. */
-  expensesData?: {
-    data?: {
-      pagination?: { total?: number };
-      expenses?: unknown[];
-      summary?: { totalAmount?: number };
-    };
-  };
+  expensesData?: Awaited<ReturnType<typeof fetchWebExpensePage>>;
   balancesData?: GroupBalancesRead;
 }
 
 function GroupDetailPage({ groupId, userId, children }: GroupDetailViewProps) {
   const { data: group, isLoading, error, mutate } = useGroup(userId, groupId);
 
-  const { data: expensesData } = useSWR(`/api/groups/${groupId}/expenses?page=1&limit=1`, fetcher, {
-    refreshInterval: 30_000,
-  });
+  const { data: expensesData } = useSWR(
+    expensePageKey(WEB_QUERY_ACCOUNT, groupId, { page: 1, limit: 1 }),
+    fetchWebExpensePage,
+    {
+      refreshInterval: 30_000,
+    },
+  );
 
-  const { data: balancesData } = useSWR(`/api/groups/${groupId}/balances`, fetcher, {
-    refreshInterval: 30_000,
-  });
+  const { data: balancesData } = useSWR(
+    groupBalancesKey(WEB_QUERY_ACCOUNT, groupId),
+    fetchWebBalances,
+    {
+      refreshInterval: 30_000,
+    },
+  );
 
   // The query (with or without `?action=add-expense`) last applied on this page, so content
   // mounted again after the Group was unavailable does not reopen the form by itself.

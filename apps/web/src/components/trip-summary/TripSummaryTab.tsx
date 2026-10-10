@@ -1,10 +1,11 @@
 'use client';
 
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { useCallback, useSyncExternalStore } from 'react';
 import useSWR from 'swr';
 import Box from '@mui/material/Box';
 import Skeleton from '@mui/material/Skeleton';
-import { tripSummaryPath } from '@splitbook/shared/api-paths';
+import { tripSummaryKey, queryKeyPath, type GroupQueryKey } from '@splitbook/shared/query-keys';
 import {
   parseTripSummaryResponse,
   type TripSummaryRead,
@@ -15,8 +16,8 @@ import { useViewerTimeZone } from '@/lib/hooks/use-viewer-time-zone';
 import { fetcher } from '@/lib/utils/fetcher';
 import TripSummaryView from './TripSummaryView';
 
-async function fetchTripSummary(path: string): Promise<TripSummaryRead> {
-  return parseTripSummaryResponse(await fetcher(path));
+async function fetchTripSummary(key: GroupQueryKey): Promise<TripSummaryRead> {
+  return parseTripSummaryResponse(await fetcher(queryKeyPath(key)));
 }
 
 /** Checked once a minute, so a page left open moves to the next day when it starts. */
@@ -45,7 +46,7 @@ export default function TripSummaryTab() {
   const timeZone = useViewerTimeZone();
   const today = useViewerToday(timeZone);
   const { data, error, mutate } = useSWR(
-    timeZone ? tripSummaryPath(groupId, { timeZone }) : null,
+    timeZone ? tripSummaryKey(WEB_QUERY_ACCOUNT, groupId, { timeZone }) : null,
     fetchTripSummary,
     // Sooner than the Group's own 30 s poll, so a refused read here is the first (#201).
     { refreshInterval: 20_000 },

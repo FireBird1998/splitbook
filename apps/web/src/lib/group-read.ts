@@ -5,8 +5,6 @@ import {
   type GroupRead,
 } from '@splitbook/shared/group-read';
 
-export { groupReadKey, isGroupReadKey, type GroupReadKey } from '@/lib/group-read-key';
-
 function belongsToActor(group: GroupRead, actorId: string) {
   return Boolean(actorId) && group.members.some((member) => member.user._id === actorId);
 }

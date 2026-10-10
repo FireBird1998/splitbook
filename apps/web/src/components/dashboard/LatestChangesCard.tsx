@@ -1,5 +1,6 @@
 'use client';
 
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import Link from 'next/link';
 import useSWR from 'swr';
 import Avatar from '@mui/material/Avatar';
@@ -7,7 +8,7 @@ import Box from '@mui/material/Box';
 import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import ErrorState from '@/components/common/ErrorState';
-import { userActivityPath } from '@splitbook/shared/api-paths';
+import { userActivityKey, queryKeyPath, type AccountQueryKey } from '@splitbook/shared/query-keys';
 import {
   activityLineParts,
   formatActivityAmount,
@@ -23,11 +24,13 @@ import { fetcher } from '@/lib/utils/fetcher';
 import { RADIUS } from '@/lib/theme/tokens';
 
 /** The read behind the card: the member's latest changes across their Groups (#309). */
-export const LATEST_CHANGES_KEY = userActivityPath({ limit: USER_ACTIVITY_DEFAULT_LIMIT });
+export const LATEST_CHANGES_KEY = userActivityKey(WEB_QUERY_ACCOUNT, {
+  limit: USER_ACTIVITY_DEFAULT_LIMIT,
+});
 
-async function fetchLatestChanges(path: string) {
+async function fetchLatestChanges(key: AccountQueryKey) {
   // A response the shared decoder refuses is a failed read; SWR keeps the last good one.
-  return parseUserActivityResponse(await fetcher(path));
+  return parseUserActivityResponse(await fetcher(queryKeyPath(key)));
 }
 
 /**

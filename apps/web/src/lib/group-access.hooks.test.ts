@@ -1,3 +1,5 @@
+import { fixtureQueryKey } from './test-utils/fixture-query-key';
+import { queryKeyPath, isQueryKey } from '@splitbook/shared/query-keys';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactTestRenderer } from 'react-test-renderer';
 import type { SWRResponse } from 'swr';
@@ -21,7 +23,11 @@ let balancesPath = '';
 function nextGroup() {
   LOST = `b${String((groups += 1)).padStart(23, '0')}`;
   groupPath = `/api/groups/${LOST}`;
-  listPath = `${groupPath}/expenses?sortBy=date&sortOrder=desc&page=1&limit=20`;
+  const listKey = fixtureQueryKey(
+    `${groupPath}/expenses?sortBy=date&sortOrder=desc&page=1&limit=20`,
+  );
+  if (!isQueryKey(listKey)) throw new Error('Expense fixture needs a shared key');
+  listPath = queryKeyPath(listKey);
   balancesPath = `${groupPath}/balances`;
 }
 
@@ -103,7 +109,7 @@ async function mountGroupPage() {
   const { act, create } = await import('react-test-renderer');
   const swr = await import('swr');
   const { useGroup } = await import('./hooks/use-groups');
-  const { fetcher } = await import('./utils/fetcher');
+  const { fetchWebRead } = await import('./web-read');
   const seen = {} as Seen;
   const report = (next: Seen) => Object.assign(seen, next);
   /** Reads what it reports while rendering, so SWR re-renders it when any of it changes. */
@@ -114,8 +120,8 @@ async function mountGroupPage() {
   });
   function GroupPageReads({ onRender }: { onRender: (seen: Seen) => void }) {
     const group = useGroup(ACTOR, LOST);
-    const list = read(swr.default(listPath, fetcher));
-    const balances = read(swr.default(balancesPath, fetcher));
+    const list = read(swr.default(fixtureQueryKey(listPath), fetchWebRead));
+    const balances = read(swr.default(fixtureQueryKey(balancesPath), fetchWebRead));
     useLayoutEffect(() => {
       onRender({ group, list, balances });
     });
@@ -136,7 +142,7 @@ async function mountGroupPage() {
   /** What a poll does: revalidate one mounted read. */
   const poll = (key: string) =>
     act(async () => {
-      void swr.mutate(key);
+      void swr.mutate(fixtureQueryKey(key));
     });
   const loaded = () =>
     Boolean(seen.group.data && seen.list.data && seen.balances.data) &&
@@ -255,13 +261,13 @@ describe('a write, with the shell sidebar’s reads mounted (#303)', () => {
     const { act, create } = await import('react-test-renderer');
     const swr = await import('swr');
     const { useGroups } = await import('./hooks/use-groups');
-    const { fetcher } = await import('./utils/fetcher');
+    const { fetchWebRead } = await import('./web-read');
     const { apiFetch } = await import('./utils/api-fetch');
     const seen: { groups?: unknown; balances?: unknown } = {};
     /** The two reads the sidebar mounts on every page. */
     function SidebarReads({ onRender }: { onRender: (next: typeof seen) => void }) {
       const groups = useGroups(ACTOR).data;
-      const balances = swr.default('/api/user/balances', fetcher).data;
+      const balances = swr.default(fixtureQueryKey('/api/user/balances'), fetchWebRead).data;
       useLayoutEffect(() => {
         onRender({ groups, balances });
       });

@@ -1,11 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  fetchGroupRead,
-  groupReadKey,
-  isGroupReadKey,
-  readWebGroupListResponse,
-  readWebGroupResponse,
-} from './group-read';
+import { fetchGroupRead, readWebGroupListResponse, readWebGroupResponse } from './group-read';
 
 const actor = 'aaaaaaaaaaaaaaaaaaaaaaaa';
 const group = {
@@ -53,12 +47,6 @@ describe('web Group read boundary', () => {
     expect(() =>
       readWebGroupResponse({ data: group, status: 200 }, actor, 'cccccccccccccccccccccccc'),
     ).toThrow('Group could not be loaded. Please retry.');
-  });
-  it('keeps account caches distinct and identifies scoped Group invalidation keys', () => {
-    expect(groupReadKey(actor, '/api/groups')).not.toEqual(groupReadKey('other', '/api/groups'));
-    expect(isGroupReadKey(groupReadKey(actor, '/api/groups/id'), '/api/groups/id')).toBe(true);
-    expect(isGroupReadKey(['/api/groups', actor])).toBe(false);
-    expect(isGroupReadKey('/api/groups')).toBe(false);
   });
 });
 

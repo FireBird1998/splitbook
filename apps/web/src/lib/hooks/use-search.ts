@@ -1,11 +1,7 @@
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
-import {
-  queryKeyPath,
-  searchKey,
-  type AccountQueryKey,
-  type QueryAccount,
-} from '@splitbook/shared/query-keys';
+import { queryKeyPath, searchKey, type AccountQueryKey } from '@splitbook/shared/query-keys';
 import { parseSearchResponse } from '@splitbook/shared/search-read';
 import { fetcher } from '@/lib/utils/fetcher';
 
@@ -14,7 +10,7 @@ import { fetcher } from '@/lib/utils/fetcher';
  * reads only its own origin, and only for the account it was rendered for, since a tab whose
  * session moves to another account reloads (#199).
  */
-export const WEB_QUERY_ACCOUNT: QueryAccount = { environment: 'web', accountId: 'web' };
+export { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 
 /** How long typing pauses before the search read is made. */
 export const SEARCH_DEBOUNCE_MS = 200;

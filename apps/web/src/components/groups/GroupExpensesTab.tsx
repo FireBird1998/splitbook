@@ -15,17 +15,13 @@ import MonthMemberTable from '@/components/groups/MonthMemberTable';
 import ExpenseListView from '@/components/expenses/ExpenseListView';
 import QuickAddExpense from '@/components/expenses/QuickAddExpense';
 import { ShortcutsFooter } from '@/components/shortcuts/ShortcutHint';
-import { expensePagePath } from '@splitbook/shared/api-paths';
-import { parseExpensePageResponse } from '@splitbook/shared/expense-page-read';
+import { expensePageKey } from '@splitbook/shared/query-keys';
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { ExpenseMemberBreakdownRow } from '@splitbook/shared/types';
-import { fetcher } from '@/lib/utils/fetcher';
+import { fetchWebExpensePage } from '@/lib/web-read';
 import { useGroupPage } from './group-page-context';
 import { groupTabHref } from './group-tabs';
-
-async function fetchMonth(path: string) {
-  return parseExpensePageResponse(await fetcher(path)).summary;
-}
 
 interface GroupExpensesTabProps {
   /** The product switch for recurring Expenses (#289), read by the server for the page. */
@@ -51,27 +47,27 @@ export default function GroupExpensesTab({
 
   // The Month bar's figures: the whole Month (or all time), whatever the list's filters.
   const monthPath = hasMonthCycle
-    ? expensePagePath(groupId, {
+    ? expensePageKey(WEB_QUERY_ACCOUNT, groupId, {
         page: 1,
         limit: 1,
         includeMemberBreakdown: true,
         ...(activeMonth ? { dateFrom: activeMonth.dateFrom, dateTo: activeMonth.dateTo } : {}),
       })
     : null;
-  const monthRead = useSWR(monthPath, fetchMonth, {
+  const monthRead = useSWR(monthPath, fetchWebExpensePage, {
     refreshInterval: 10_000,
     keepPreviousData: true,
   });
-  const byMember = (monthRead.data?.byMember ?? []) as ExpenseMemberBreakdownRow[];
+  const monthData = monthRead.data?.data.summary;
+  const byMember = (monthData?.byMember ?? []) as ExpenseMemberBreakdownRow[];
   const own = byMember.find((row) => row.user._id === userId);
-  const monthSummary: MonthSummary | null = monthRead.data
+  const monthSummary: MonthSummary | null = monthData
     ? {
         spent:
-          monthRead.data.totalsByCurrency.find((total) => total.currency === currency)
-            ?.totalAmount ?? 0,
+          monthData.totalsByCurrency.find((total) => total.currency === currency)?.totalAmount ?? 0,
         share: own?.share ?? 0,
         paid: own?.paid ?? 0,
-        count: monthRead.data.count,
+        count: monthData.count,
       }
     : null;
 
@@ -88,7 +84,7 @@ export default function GroupExpensesTab({
           <MonthCycleBar
             currency={currency}
             summary={monthSummary}
-            failed={Boolean(monthRead.error && !monthRead.data)}
+            failed={Boolean(monthRead.error && !monthData)}
             onRetry={() => void monthRead.mutate()}
           />
         </Box>

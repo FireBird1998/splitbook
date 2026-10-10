@@ -1,5 +1,7 @@
 'use client';
 
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
+import { groupBalancesKey, settlementsKey } from '@splitbook/shared/query-keys';
 import useSWR from 'swr';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
@@ -38,7 +40,7 @@ import {
 } from '@splitbook/shared/settlement-preview';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupRead } from '@splitbook/shared/group-read';
-import { fetcher } from '@/lib/utils/fetcher';
+import { fetchWebBalances, fetchWebRead } from '@/lib/web-read';
 import { useSettlementAttempts } from '@/lib/hooks/use-settlement-attempts';
 import type { SettlementAttempt } from '@/lib/settlement-attempts';
 import { TabCard, PersonAvatar } from './TabCard';
@@ -184,14 +186,18 @@ export default function BalancesView({ groupId, userId, group }: BalancesViewPro
   // Payments whose reply was lost, offered whatever the suggestions say (#198).
   const attempts = useSettlementAttempts(userId, groupId);
 
-  const { data, error, mutate } = useSWR<BalancesRead>(`/api/groups/${groupId}/balances`, fetcher, {
-    refreshInterval: 15_000,
-  });
+  const { data, error, mutate } = useSWR<BalancesRead>(
+    groupBalancesKey(WEB_QUERY_ACCOUNT, groupId),
+    fetchWebBalances,
+    {
+      refreshInterval: 15_000,
+    },
+  );
   const {
     data: settlementsData,
     error: settlementsError,
     mutate: mutateSettlements,
-  } = useSWR<{ data?: PaymentRead[] }>(`/api/groups/${groupId}/settlements`, fetcher);
+  } = useSWR<{ data?: PaymentRead[] }>(settlementsKey(WEB_QUERY_ACCOUNT, groupId), fetchWebRead);
 
   const refresh = useCallback(() => {
     void mutate();
