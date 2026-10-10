@@ -12,6 +12,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
 import LogoutIcon from '@mui/icons-material/Logout';
+import { darken, lighten } from '@mui/material/styles';
 import { apiFetch } from '@/lib/utils/api-fetch';
 import { groupTabHref } from './group-tabs';
 
@@ -131,7 +132,22 @@ export default function LeaveGroupSection({
           <Button onClick={close} color="inherit" disabled={leaving}>
             Cancel
           </Button>
-          <Button onClick={leave} variant="contained" color="error" disabled={leaving}>
+          <Button
+            onClick={leave}
+            variant="contained"
+            color="error"
+            disabled={leaving}
+            sx={(theme) => ({
+              backgroundColor: theme.palette.status.negative,
+              color: theme.palette.primary.contrastText,
+              '&:hover': {
+                backgroundColor:
+                  theme.palette.mode === 'light'
+                    ? darken(theme.palette.status.negative, 0.15)
+                    : lighten(theme.palette.status.negative, 0.1),
+              },
+            })}
+          >
             {leaving ? (
               <CircularProgress size={20} />
             ) : deleteIfLastMember ? (
