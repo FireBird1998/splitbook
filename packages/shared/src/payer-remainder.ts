@@ -1,6 +1,6 @@
 import { getCurrencyPrecision } from './currency';
 import {
-  MAX_EXPENSE_AMOUNT,
+  maxExpenseAmountMinor,
   parseAmountMinor,
   parseDecimalUnits,
   parseExpenseAmountMinor,
@@ -57,7 +57,7 @@ export function payerEntryProblem(amount: string, currency: string): PayerEntryP
     return 'invalid';
   }
   if (minor < 0) return 'negative';
-  if (minor > parseAmountMinor(MAX_EXPENSE_AMOUNT, currency)) return 'too-large';
+  if (minor > maxExpenseAmountMinor(currency)) return 'too-large';
   return undefined;
 }
 

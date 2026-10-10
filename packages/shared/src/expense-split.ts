@@ -1,6 +1,6 @@
 import { getCurrencyPrecision } from './currency';
 import {
-  MAX_EXPENSE_AMOUNT,
+  maxExpenseAmountMinor,
   MoneyValidationError,
   moneyParticipantId,
   parseAmountMinor,
@@ -124,8 +124,7 @@ export function splitEntryProblem(
   if (choice === 'percentage' && units > 10000) return 'too-large';
   // No one owes more than an Expense can be, so no sum of entries outgrows what exact money
   // can show (#187).
-  if (choice === 'amounts' && units > parseAmountMinor(MAX_EXPENSE_AMOUNT, currency))
-    return 'too-large';
+  if (choice === 'amounts' && units > maxExpenseAmountMinor(currency)) return 'too-large';
   return undefined;
 }
 

@@ -117,3 +117,37 @@ export function decideExpenseMoneyEdit(
       };
   return { financialEdit, money };
 }
+
+/**
+ * An entered zero is not a payer, but a historical Expense may retain zero payer rows.
+ * Keep those rows only when the nonzero entries and every money field are unchanged.
+ * Null means use the entered payers, with normal validation of deliberate money edits.
+ */
+export function keepSavedPayers(
+  stored: StoredExpenseMoney,
+  input: ExpenseMoneyInput,
+): ExpenseMoneyInput | null {
+  if (input.currency !== stored.currency) return null;
+  try {
+    const saved = readExpenseMoney(stored).paidBy;
+    const paid = new Map(
+      saved.filter((row) => row.amountMinor).map((row) => [row.user, row.amountMinor]),
+    );
+    const entries = new Map(
+      input.paidBy.map((row) => [
+        moneyParticipantId(row.user),
+        parseAmountMinor(row.amount, input.currency),
+      ]),
+    );
+    const samePayers =
+      entries.size === input.paidBy.length &&
+      entries.size === paid.size &&
+      [...entries].every(([user, minor]) => paid.get(user) === minor);
+    if (!samePayers) return null;
+    const kept = { ...input, paidBy: saved.map(({ user, amount }) => ({ user, amount })) };
+    return decideExpenseMoneyEdit(stored, kept).financialEdit ? null : kept;
+  } catch {
+    // Unreadable entries stay with the caller so normal validation can explain them.
+    return null;
+  }
+}
