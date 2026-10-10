@@ -4845,8 +4845,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           method: 'POST',
           ...(state.deleteIfLastMember === true
             ? {
-                body: JSON.stringify({ deleteIfLastMember: true }),
-                headers: { 'Content-Type': 'application/json' },
+                body: { deleteIfLastMember: true },
               }
             : {}),
         }).finally(() => {
