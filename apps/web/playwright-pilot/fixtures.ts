@@ -184,7 +184,15 @@ export async function installPilotFixtures(page: Page, overrides: Record<string,
     [`/api/groups/${DEMO_GROUP_ID}/expenses`]: {
       expenses: [],
       pagination: { total: 1, page: 1, limit: 20, totalPages: 1 },
-      summary: { totalAmount: 2500, count: 1, byCategory: [], byMember: [] },
+      summary: {
+        totalAmount: 2500,
+        count: 1,
+        totalsByCurrency: [{ currency: 'INR', totalAmount: 2500 }],
+        userOwes: 0,
+        userGetsBack: 0,
+        byCategory: [],
+        byMember: [],
+      },
     },
     ...overrides,
   };
