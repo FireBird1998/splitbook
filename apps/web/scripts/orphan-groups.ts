@@ -1,6 +1,6 @@
 /** Defaults to read-only. Never prints connection strings or financial records. */
 import { config } from 'dotenv';
-import { readFile, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { MongoClient } from 'mongodb';
 import { inventoryOrphanGroups } from '../src/lib/group-cleanup';

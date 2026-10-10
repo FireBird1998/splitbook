@@ -309,6 +309,8 @@ export interface KeptDraft {
  * settled-up member, and nothing on this device for that Group that may already be recorded.
  */
 export interface LeaveGroupState {
+  /** Explicitly reviewed permanent deletion if this member is the last one. */
+  deleteIfLastMember?: boolean;
   groupId: string | null;
   /**
    * 'checking' reads what this device keeps for the Group; 'blocked' is a save or payment that

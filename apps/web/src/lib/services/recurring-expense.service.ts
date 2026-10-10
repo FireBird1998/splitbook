@@ -1,3 +1,4 @@
+import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
 import mongoose from 'mongoose';
 import Expense from '@/lib/models/Expense';
@@ -148,20 +149,22 @@ export class RecurringExpenseService {
       console.error('Could not read when recurring Expenses were turned on:', err),
     );
 
-    const template = await RecurringExpense.create({
-      group: groupId,
-      description: data.description,
-      ...money,
-      category: data.category,
-      ...resolveTagReference(group.tags, data),
-      splitMethod: data.splitMethod,
-      dayOfMonth: data.dayOfMonth,
-      startsOn: data.startsOn,
-      endsOn: data.endsOn ?? null,
-      isPaused: false,
-      lastGeneratedFor: null,
-      createdBy: userId,
-    });
+    const template = await withGroupMutation(groupId, async () =>
+      RecurringExpense.create({
+        group: groupId,
+        description: data.description,
+        ...money,
+        category: data.category,
+        ...resolveTagReference(group.tags, data),
+        splitMethod: data.splitMethod,
+        dayOfMonth: data.dayOfMonth,
+        startsOn: data.startsOn,
+        endsOn: data.endsOn ?? null,
+        isPaused: false,
+        lastGeneratedFor: null,
+        createdBy: userId,
+      }),
+    );
 
     await this.generateDueExpenses(groupId);
 
@@ -208,10 +211,12 @@ export class RecurringExpenseService {
     if (!group) return null;
     assertAdmin(group, userId);
 
-    await RecurringExpense.updateOne(
-      { _id: recurringId, group: groupId, revision: { $exists: false } },
-      { $set: { revision: 0 } },
-      { timestamps: false },
+    await withGroupMutation(groupId, async () =>
+      RecurringExpense.updateOne(
+        { _id: recurringId, group: groupId, revision: { $exists: false } },
+        { $set: { revision: 0 } },
+        { timestamps: false },
+      ),
     );
     const template = await RecurringExpense.findOne({ _id: recurringId, group: groupId });
     if (!template) return null;
@@ -236,19 +241,21 @@ export class RecurringExpenseService {
       // $max prevents a concurrent generator's later marker being overwritten.
       await template.validate();
       const update = template.getChanges();
-      const result = await RecurringExpense.updateOne(
-        { _id: template._id, group: groupId, revision: template.revision ?? 0 },
-        {
-          ...update,
-          $inc: { revision: 1 },
-          $max: { lastGeneratedFor: previousPeriod(toPeriod(new Date())) },
-        },
-        { runValidators: true },
+      const result = await withGroupMutation(groupId, async () =>
+        RecurringExpense.updateOne(
+          { _id: template._id, group: groupId, revision: template.revision ?? 0 },
+          {
+            ...update,
+            $inc: { revision: 1 },
+            $max: { lastGeneratedFor: previousPeriod(toPeriod(new Date())) },
+          },
+          { runValidators: true },
+        ),
       );
       if (!result.matchedCount) throw new Error('STALE_REVISION');
       template.revision = (template.revision ?? 0) + 1;
     } else {
-      await template.save();
+      await withGroupMutation(groupId, async () => template.save());
     }
 
     await this.generateDueExpenses(groupId);
@@ -268,20 +275,24 @@ export class RecurringExpenseService {
     if (!group) return null;
     assertAdmin(group, userId);
 
-    await RecurringExpense.updateOne(
-      { _id: recurringId, group: groupId, revision: { $exists: false } },
-      { $set: { revision: 0 } },
-      { timestamps: false },
+    await withGroupMutation(groupId, async () =>
+      RecurringExpense.updateOne(
+        { _id: recurringId, group: groupId, revision: { $exists: false } },
+        { $set: { revision: 0 } },
+        { timestamps: false },
+      ),
     );
     const template = await RecurringExpense.findOne({ _id: recurringId, group: groupId });
     if (!template) return null;
     assertExpectedRevision(template.revision, expectedRevision);
 
-    const result = await RecurringExpense.deleteOne({
-      _id: template._id,
-      group: groupId,
-      revision: template.revision ?? { $exists: false },
-    });
+    const result = await withGroupMutation(groupId, async () =>
+      RecurringExpense.deleteOne({
+        _id: template._id,
+        group: groupId,
+        revision: template.revision ?? { $exists: false },
+      }),
+    );
     if (!result.deletedCount) throw new Error('STALE_REVISION');
     return template;
   }
@@ -472,20 +483,22 @@ export class RecurringExpenseService {
                 period,
               },
             );
-            const expense = await Expense.create({
-              _id: expenseId,
-              group: new mongoose.Types.ObjectId(groupId),
-              description: template.description,
-              ...money,
-              category: template.category,
-              date: expenseDateForPeriod(period, template.dayOfMonth),
-              splitMethod: template.splitMethod,
-              ...resolveTagReference(group.tags, template),
-              recurringExpense: template._id,
-              period,
-              createdBy: template.createdBy,
-              pendingActivity: [event],
-            });
+            const expense = await withGroupMutation(groupId, async () =>
+              Expense.create({
+                _id: expenseId,
+                group: new mongoose.Types.ObjectId(groupId),
+                description: template.description,
+                ...money,
+                category: template.category,
+                date: expenseDateForPeriod(period, template.dayOfMonth),
+                splitMethod: template.splitMethod,
+                ...resolveTagReference(group.tags, template),
+                recurringExpense: template._id,
+                period,
+                createdBy: template.createdBy,
+                pendingActivity: [event],
+              }),
+            );
             generated += 1;
             materializedThrough = period;
 
@@ -515,10 +528,12 @@ export class RecurringExpenseService {
         }
 
         if (materializedThrough) {
-          await RecurringExpense.updateOne(
-            { _id: template._id },
-            { $max: { lastGeneratedFor: materializedThrough } },
-            { timestamps: false },
+          await withGroupMutation(groupId, async () =>
+            RecurringExpense.updateOne(
+              { _id: template._id },
+              { $max: { lastGeneratedFor: materializedThrough } },
+              { timestamps: false },
+            ),
           );
         }
       }

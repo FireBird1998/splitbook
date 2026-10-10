@@ -87,9 +87,20 @@ export function parseJoinedGroup(value: unknown): string {
 }
 
 /** Whether leaving archived the Group: true when the member was the last one in it. */
-export function parseLeftGroup(value: unknown): { archived: boolean } {
+export function parseLeftGroup(value: unknown): {
+  archived: boolean;
+  deleted?: boolean;
+  deletionPending?: boolean;
+} {
   return z
-    .object({ data: z.object({ archived: z.boolean() }), status: z.literal(200) })
+    .object({
+      data: z.object({
+        archived: z.boolean(),
+        deleted: z.boolean().optional(),
+        deletionPending: z.boolean().optional(),
+      }),
+      status: z.literal(200),
+    })
     .parse(value).data;
 }
 

@@ -175,7 +175,11 @@ function GroupSettingsContent({
               Back to Group
             </Button>
           </Box>
-          <LeaveGroupSection groupId={groupId} groupName={group.name} />
+          <LeaveGroupSection
+            groupId={groupId}
+            groupName={group.name}
+            memberCount={members.length}
+          />
         </Stack>
       </Container>
     );
@@ -1003,7 +1007,7 @@ function GroupSettingsContent({
           )}
         </Paper>
 
-        <LeaveGroupSection groupId={groupId} groupName={group.name} />
+        <LeaveGroupSection groupId={groupId} groupName={group.name} memberCount={members.length} />
 
         {/* ─── Danger Zone ─────────────────────────── */}
         <Paper sx={{ p: 3, border: 2, borderColor: 'error.light' }}>

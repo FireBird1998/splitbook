@@ -1,3 +1,4 @@
+import { withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
 import Invitation from '@/lib/models/Invitation';
 import Group from '@/lib/models/Group';
@@ -35,13 +36,15 @@ export class InvitationService {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 7); // 7 day expiry
 
-    const invitation = await Invitation.create({
-      group: groupId,
-      invitedBy: invitedById,
-      invitedEmail: email.toLowerCase(),
-      token,
-      expiresAt,
-    });
+    const invitation = await withGroupMutation(groupId, async () =>
+      Invitation.create({
+        group: groupId,
+        invitedBy: invitedById,
+        invitedEmail: email.toLowerCase(),
+        token,
+        expiresAt,
+      }),
+    );
 
     return invitation.populate([
       { path: 'group', select: 'name category' },
@@ -82,13 +85,13 @@ export class InvitationService {
 
     if (new Date() > invitation.expiresAt) {
       invitation.status = 'expired';
-      await invitation.save();
+      await withGroupMutation(String(invitation.group), async () => invitation.save());
       throw new Error('INVITATION_EXPIRED');
     }
 
     // Update invitation status
     invitation.status = 'accepted';
-    await invitation.save();
+    await withGroupMutation(String(invitation.group), async () => invitation.save());
 
     // Add user to group
     const group = await Group.findById(invitation.group);
@@ -102,7 +105,7 @@ export class InvitationService {
         role: 'member',
         joinedAt: new Date(),
       });
-      await group.save();
+      await withGroupMutation(String(invitation.group), async () => group.save());
 
       await activityService.log(group._id.toString(), 'member_joined', userId, {
         method: 'invite',
@@ -124,7 +127,7 @@ export class InvitationService {
     if (!invitationEmailMatches(invitation.invitedEmail, userEmail)) return null;
 
     invitation.status = 'declined';
-    await invitation.save();
+    await withGroupMutation(String(invitation.group), async () => invitation.save());
 
     return invitation;
   }

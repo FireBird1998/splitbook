@@ -18,6 +18,7 @@ import { groupTabHref } from './group-tabs';
 interface LeaveGroupSectionProps {
   groupId: string;
   groupName: string;
+  memberCount?: number;
 }
 
 interface Refusal {
@@ -29,8 +30,13 @@ interface Refusal {
  * Lets any member leave the Group. The server decides whether they may:
  * they must be settled up, and the last admin must hand over first.
  */
-export default function LeaveGroupSection({ groupId, groupName }: LeaveGroupSectionProps) {
+export default function LeaveGroupSection({
+  groupId,
+  groupName,
+  memberCount,
+}: LeaveGroupSectionProps) {
   const [open, setOpen] = useState(false);
+  const [deleteIfLastMember, setDeleteIfLastMember] = useState(memberCount === 1);
   const [leaving, setLeaving] = useState(false);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
 
@@ -38,19 +44,29 @@ export default function LeaveGroupSection({ groupId, groupName }: LeaveGroupSect
     if (leaving) return;
     setOpen(false);
     setRefusal(null);
+    setDeleteIfLastMember(memberCount === 1);
   };
 
   const leave = async () => {
     setLeaving(true);
     setRefusal(null);
     try {
-      const res = await apiFetch(`/api/groups/${groupId}/leave`, { method: 'POST' });
+      const res = await apiFetch(`/api/groups/${groupId}/leave`, {
+        method: 'POST',
+        ...(deleteIfLastMember
+          ? {
+              body: JSON.stringify({ deleteIfLastMember: true }),
+              headers: { 'Content-Type': 'application/json' },
+            }
+          : {}),
+      });
       if (res.ok) {
         window.location.href = '/dashboard';
         return;
       }
       const body: unknown = await res.json().catch(() => null);
       const { error, code } = (body ?? {}) as { error?: unknown; code?: unknown };
+      if (code === 'GROUP_DELETION_CONFIRMATION_REQUIRED') setDeleteIfLastMember(true);
       setRefusal({
         message:
           typeof error === 'string' && error ? error : 'Could not leave the Group. Try again.',
@@ -70,8 +86,9 @@ export default function LeaveGroupSection({ groupId, groupName }: LeaveGroupSect
           Leave this Group
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          You can leave once you&apos;re settled up. Its Expenses and Activity stay for everyone
-          else, and you can rejoin with an invite.
+          {memberCount === 1
+            ? 'Leaving will permanently delete this Group and its history. Expenses, Settlements and Activity will be removed.'
+            : 'You can leave once you’re settled up. Its Expenses and Activity stay for everyone else, and you can rejoin with an invite.'}
         </Typography>
         <Button
           variant="outlined"
@@ -87,8 +104,9 @@ export default function LeaveGroupSection({ groupId, groupName }: LeaveGroupSect
         <DialogTitle>Leave &ldquo;{groupName}&rdquo;?</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.primary">
-            You won&apos;t see this Group or its balances any more. If you&apos;re the last member,
-            the Group is archived.
+            {deleteIfLastMember
+              ? 'Leaving will permanently delete this Group and its history. Expenses, Settlements and Activity will be removed. You cannot rejoin this Group.'
+              : 'You won’t see this Group or its balances any more. Its history stays for the remaining members.'}
           </Typography>
           {refusal && (
             <Alert
@@ -111,7 +129,13 @@ export default function LeaveGroupSection({ groupId, groupName }: LeaveGroupSect
             Cancel
           </Button>
           <Button onClick={leave} variant="contained" color="error" disabled={leaving}>
-            {leaving ? <CircularProgress size={20} /> : 'Leave Group'}
+            {leaving ? (
+              <CircularProgress size={20} />
+            ) : deleteIfLastMember ? (
+              'Leave and delete Group'
+            ) : (
+              'Leave Group'
+            )}
           </Button>
         </DialogActions>
       </Dialog>

@@ -257,6 +257,10 @@ const leaveRefusals: Record<string, string> = {
   OPEN_BALANCE: 'Settle up before you leave this Group.',
   LAST_ADMIN: 'Make someone else an admin before you leave.',
   LEAVE_CONFLICT: 'This Group changed while you were leaving. Try again.',
+  GROUP_DELETION_CONFIRMATION_REQUIRED:
+    'Leaving will permanently delete this Group and its history. Confirm deletion to continue.',
+  GROUP_DELETION_UNAVAILABLE:
+    'Permanent Group deletion is unavailable here. You are still a member; no history was deleted.',
 };
 const unconfirmedSaveBeforeLeaving =
   'An Expense save in this Group isn’t confirmed yet. Check it on Expenses first: it may already be recorded and change your balance.';
@@ -4772,7 +4776,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     const owner = generation,
       attempt = ++leaveRequest,
       groupId = group.id;
-    publish({ ...snapshot, leave: { ...closedLeave(), groupId, status: 'checking' } });
+    publish({
+      ...snapshot,
+      leave: {
+        ...closedLeave(),
+        groupId,
+        status: 'checking',
+        ...(group.members.length === 1 ? { deleteIfLastMember: true } : {}),
+      },
+    });
     try {
       const checked = await leaveChecked(groupId);
       if (!current(owner) || attempt !== leaveRequest || snapshot.screen !== 'members') return;
@@ -4817,7 +4829,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       leave: { ...state, status: 'leaving', code: null, message: null, check: null },
     });
     let draft = false,
-      archived = false;
+      archived = false,
+      deleted = false,
+      deletionPending = false;
     try {
       const checked = await leaveChecked(groupId);
       if (!shown()) return;
@@ -4826,13 +4840,24 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         return;
       }
       draft = !!checked.draft;
-      archived = parseLeftGroup(
-        await request(`/api/groups/${groupId}/leave`, owner, { method: 'POST' }).finally(() => {
+      const leftGroup = parseLeftGroup(
+        await request(`/api/groups/${groupId}/leave`, owner, {
+          method: 'POST',
+          ...(state.deleteIfLastMember === true
+            ? {
+                body: JSON.stringify({ deleteIfLastMember: true }),
+                headers: { 'Content-Type': 'application/json' },
+              }
+            : {}),
+        }).finally(() => {
           // Whatever the answer, the membership, Balances and Home may have changed.
           if (current(owner))
             invalidateReads(`group:${groupId}`, `balances:${groupId}`, 'groups', 'home');
         }),
-      ).archived;
+      );
+      archived = leftGroup.archived;
+      deleted = leftGroup.deleted === true;
+      deletionPending = leftGroup.deletionPending === true;
     } catch (error) {
       if (!current(owner) || error instanceof Superseded) return;
       const refusal =
@@ -4847,6 +4872,9 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
               ...snapshot.leave,
               status: 'refused',
               code: error.code,
+              ...(error.code === 'GROUP_DELETION_CONFIRMATION_REQUIRED'
+                ? { deleteIfLastMember: true }
+                : {}),
               message: error.serverMessage?.trim() || refusal,
               check: error.code === 'OPEN_BALANCE' ? 'balances' : null,
             },
@@ -4897,9 +4925,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         financial: emptyFinancial(),
         leave: closedLeave(),
         homeSnackbar: {
-          message: archived
-            ? `You left ${name}. It’s archived because nobody else was in it.`
-            : `You left ${name}.`,
+          message: deleted
+            ? `You left ${name}. The Group and its history were permanently deleted.`
+            : deletionPending
+              ? `You left ${name}. Permanent deletion is still finishing.`
+              : archived
+                ? `You left ${name}. It’s archived because nobody else was in it.`
+                : `You left ${name}.`,
         },
       });
     } else {

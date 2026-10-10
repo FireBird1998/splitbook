@@ -1,4 +1,6 @@
 import { type Db, ObjectId } from 'mongodb';
+import type { mongo } from 'mongoose';
+type InventoryDatabase = Db | mongo.Db;
 
 export const groupOwnedCollections = [
   'expenses',
@@ -27,7 +29,7 @@ export interface OrphanGroupInventory {
   missingParents: Array<{ groupId: string; counts: GroupRecordCounts }>;
 }
 
-async function countsFor(db: Db, group: ObjectId): Promise<GroupRecordCounts> {
+async function countsFor(db: InventoryDatabase, group: ObjectId): Promise<GroupRecordCounts> {
   const counts = await Promise.all(
     groupOwnedCollections.map(
       async (name) => [name, await db.collection(name).countDocuments({ group })] as const,
@@ -38,7 +40,7 @@ async function countsFor(db: Db, group: ObjectId): Promise<GroupRecordCounts> {
 
 /** Raw read-only audit: never registers models, creates indexes, materializes or sweeps. */
 export async function inventoryOrphanGroups(
-  db: Db,
+  db: InventoryDatabase,
   environment: string,
 ): Promise<OrphanGroupInventory> {
   if (!environment.trim()) throw new Error('An explicit environment is required');
@@ -61,12 +63,10 @@ export async function inventoryOrphanGroups(
   }
   const missing = new Map<string, GroupRecordCounts>();
   for (const collection of groupOwnedCollections) {
-    const cursor = db
-      .collection(collection)
-      .aggregate<{
-        _id: ObjectId;
-        count: number;
-      }>([{ $match: { group: { $type: 'objectId' } } }, { $group: { _id: '$group', count: { $sum: 1 } } }, { $lookup: { from: 'groups', localField: '_id', foreignField: '_id', as: 'parent' } }, { $match: { parent: { $size: 0 } } }, { $project: { _id: 1, count: 1 } }]);
+    const cursor = db.collection(collection).aggregate<{
+      _id: ObjectId;
+      count: number;
+    }>([{ $match: { group: { $type: 'objectId' } } }, { $group: { _id: '$group', count: { $sum: 1 } } }, { $lookup: { from: 'groups', localField: '_id', foreignField: '_id', as: 'parent' } }, { $match: { parent: { $size: 0 } } }, { $project: { _id: 1, count: 1 } }]);
     for await (const row of cursor) {
       const id = String(row._id);
       const counts = missing.get(id) ?? {

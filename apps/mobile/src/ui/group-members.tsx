@@ -130,8 +130,11 @@ function GroupDetails({ group }: { group: MobileGroup }) {
 function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGroupActions }) {
   const { state, offline } = leave;
   const leaving = state.status === 'leaving';
+  const deleting = state.deleteIfLastMember === true;
   const retryable =
-    state.status !== 'blocked' && (state.status !== 'refused' || state.code === 'LEAVE_CONFLICT');
+    state.status !== 'blocked' &&
+    (state.status !== 'refused' ||
+      ['LEAVE_CONFLICT', 'GROUP_DELETION_CONFIRMATION_REQUIRED'].includes(state.code ?? ''));
   const ready = ['confirm', 'refused', 'error'].includes(state.status);
   return (
     <BottomSheet
@@ -153,7 +156,7 @@ function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGro
           ) : null}
           {retryable ? (
             <CompactButton
-              label="Leave Group"
+              label={deleting ? 'Leave and delete Group' : 'Leave Group'}
               icon="exit-outline"
               destructive
               block
@@ -177,7 +180,11 @@ function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGro
           />
         </View>
       ) : null}
-      <CompactText>{leaveExplanation}</CompactText>
+      <CompactText>
+        {deleting
+          ? 'Leaving will permanently delete this Group and its history. Expenses, Settlements and Activity will be removed. You cannot rejoin this Group.'
+          : leaveExplanation}
+      </CompactText>
       {state.draft && state.status !== 'blocked' ? (
         <Banner tone="info" message={leaveDiscardsDraft} />
       ) : null}
