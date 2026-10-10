@@ -1,4 +1,4 @@
-import type { APIRequestContext, Page, Request } from '@playwright/test';
+import type { APIRequestContext, Page, Request, Route } from '@playwright/test';
 import { MongoClient, ObjectId } from 'mongodb';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { test, expect, dataOf, joinGroup } from './fixtures';
@@ -226,8 +226,23 @@ test('a sole member confirms cleanup, with safe refusal when deletion is unavail
   });
   const path = leavePath(ledger.groupA);
   let leaveRequests = 0;
+  let forwardedLeaves = 0;
+  const observed: { reply?: { status: number; body: unknown; requestBody: unknown } } = {};
   const observeLeave = (request: Request) => {
     if (request.method() === 'POST' && request.url() === appURL(path)) leaveRequests += 1;
+  };
+  const captureActualLeave = async (route: Route) => {
+    if (route.request().method() !== 'POST') return route.continue();
+    forwardedLeaves += 1;
+    const response = await route.fetch();
+    const body = await response.body();
+    // Read the real backend reply before forwarding it: successful leave hard-navigates.
+    observed.reply = {
+      status: response.status(),
+      body: JSON.parse(body.toString('utf8')),
+      requestBody: route.request().postDataJSON(),
+    };
+    await route.fulfill({ response, body });
   };
   try {
     await client.connect();
@@ -299,18 +314,22 @@ test('a sole member confirms cleanup, with safe refusal when deletion is unavail
     expect(await snapshot()).toEqual(before);
     expect(leaveRequests).toBe(0);
 
+    await page.route(appURL(path), captureActualLeave);
     await page.getByRole('button', { name: 'Leave Group', exact: true }).click();
     const confirmation = page.waitForResponse(
       (response) => response.request().method() === 'POST' && response.url() === appURL(path),
     );
     await dialog.getByRole('button', { name: 'Leave and delete Group', exact: true }).click();
-    const confirmed = await confirmation;
-    expect(confirmed.request().postDataJSON()).toEqual({ deleteIfLastMember: true });
+    await confirmation;
+    const confirmed = observed.reply;
+    if (!confirmed) throw new Error('The real leave response was not captured');
+    expect(confirmed.requestBody).toEqual({ deleteIfLastMember: true });
     expect(leaveRequests).toBe(1);
+    expect(forwardedLeaves).toBe(1);
 
     if (!transactionCapable) {
-      expect(confirmed.status(), await confirmed.text()).toBe(409);
-      expect(await confirmed.json()).toMatchObject({ code: 'GROUP_DELETION_UNAVAILABLE' });
+      expect(confirmed.status, JSON.stringify(confirmed.body)).toBe(409);
+      expect(confirmed.body).toMatchObject({ code: 'GROUP_DELETION_UNAVAILABLE' });
       await expect(
         dialog.getByRole('alert').filter({
           hasText: 'You are still a member; no history was deleted.',
@@ -326,8 +345,8 @@ test('a sole member confirms cleanup, with safe refusal when deletion is unavail
         deleted: true,
         deletionPending: false,
       };
-      expect(confirmed.status(), await confirmed.text()).toBe(200);
-      expect((await confirmed.json()).data).toEqual(deleted);
+      expect(confirmed.status, JSON.stringify(confirmed.body)).toBe(200);
+      expect(confirmed.body).toEqual({ data: deleted, status: 200 });
       await expect(page).toHaveURL(/\/dashboard$/);
       expect((await ledger.alex.get(`/api/groups/${ledger.groupA}`)).status()).toBe(404);
       const groups = await dataOf(await ledger.alex.get('/api/groups'));
@@ -368,8 +387,11 @@ test('a sole member confirms cleanup, with safe refusal when deletion is unavail
         )
       )._id,
     ).toBe(ledger.expenseB);
+    expect(leaveRequests).toBe(1);
+    expect(forwardedLeaves).toBe(1);
   } finally {
     page.off('request', observeLeave);
+    if (!page.isClosed()) await page.unroute(appURL(path), captureActualLeave);
     await client.close();
   }
 });
