@@ -39,3 +39,15 @@ _Avoid_: pending write, queued save, offline save
 **Connected assistant**:
 An external AI assistant a member has authorized to act as them in Splitbook, limited to the access that member granted and revocable at any time. Acts only as that one member.
 _Avoid_: bot, agent, integration
+
+**Balance**:
+A per-currency running position across a Group’s Expenses and recorded Settlements, expressing what a member owes or is owed. A Month does not reset or bound it.
+_Avoid_: monthly balance, month-end balance
+
+**Settlement**:
+A ledger record of a payment that has already happened between members. It changes running Balances but does not transfer money or close a Month.
+_Avoid_: transfer, payment processing, month closure
+
+**Expense draft**:
+An unfinished Expense entry retained for a member in a Group. It is not a saved Expense and has no effect on Balances.
+_Avoid_: pending expense, offline expense
