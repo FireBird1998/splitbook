@@ -110,13 +110,17 @@ const spending = {
   },
   lastChanges: [{ groupId: DEMO_GROUP_ID, at: '2026-09-06T08:40:00.000Z' }],
 };
-export const groupBalances = {
+const inrBalances = {
   balances: [
     { user: alex, balance: -1480 },
     { user: sam, balance: 1480 },
   ],
   debts: [{ from: alex, to: sam, amount: 1480 }],
   currency: 'INR',
+};
+export const groupBalances = {
+  ...inrBalances,
+  byCurrency: [inrBalances],
   hasMixedCurrencies: false,
 };
 
