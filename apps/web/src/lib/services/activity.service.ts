@@ -52,7 +52,7 @@ function activityPayload(event: IPendingActivity) {
 export class ActivityService {
   /**
    * Persist an immutable event once, then acknowledge its embedded intent. The two
-   * writes deliberately remain separately retryable on standalone MongoDB.
+   * writes deliberately remain separately committed and retryable on every topology.
    */
   private async publishOne(
     source: ActivitySource,
@@ -60,14 +60,14 @@ export class ActivityService {
     event: IPendingActivity,
     deadline: number,
   ) {
-    return withGroupMutation(
+    const maxTimeMS = () => {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new Error('Activity publication budget expired');
+      return Math.min(500, remaining);
+    };
+    await withGroupMutation(
       String(event.group),
-      async (session) => {
-        const maxTimeMS = () => {
-          const remaining = deadline - Date.now();
-          if (remaining <= 0) throw new Error('Activity publication budget expired');
-          return Math.min(500, remaining);
-        };
+      async () => {
         const payload = activityPayload(event);
         try {
           await Activity.updateOne(
@@ -98,7 +98,15 @@ export class ActivityService {
             throw err;
           }
         }
+      },
+      { deadline },
+    );
 
+    // Acknowledgement trouble must retain the already committed Activity. Both
+    // commits still conflict with deletion and share the caller's whole deadline.
+    return withGroupMutation(
+      String(event.group),
+      async (session) => {
         const db = mongoose.connection.db;
         if (!db) throw new Error('Activity database is not connected');
         // Raw maintenance update avoids Mongoose timestamps and business-revision changes.

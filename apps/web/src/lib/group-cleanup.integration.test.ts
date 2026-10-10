@@ -563,7 +563,7 @@ it('coordinates a generated recurring Expense and its later marker with final de
   }
 });
 
-it('keeps committed Activity visible if deletion wins before its separately fenced acknowledgement', async () => {
+it('fences acknowledgement independently when deletion wins after Activity publication', async () => {
   const id = await lastMemberGroup();
   const db = mongoose.connection.db!;
   const record = new mongoose.Types.ObjectId();

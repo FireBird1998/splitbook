@@ -109,8 +109,10 @@ for (const writer of ['expenses', 'settlements'] as const) {
       const model = writer === 'expenses' ? Expense : Settlement;
       let arrivals = 0;
       let release!: () => void;
-      const gate = new Promise<void>((resolve) => {
+      let schedulingFailed!: (error: Error) => void;
+      const gate = new Promise<void>((resolve, reject) => {
         release = resolve;
+        schedulingFailed = reject;
       });
       const hello = await mongoose.connection.db!.admin().command({ hello: 1 });
       const replica = !!hello.setName || hello.msg === 'isdbgrid';
@@ -135,7 +137,10 @@ for (const writer of ['expenses', 'settlements'] as const) {
             return insert.apply(model.collection, args);
           });
       // A broken scheduling assertion must not leave a held callback blocking DB teardown.
-      const timeout = setTimeout(release, 1_000);
+      const timeout = setTimeout(
+        () => schedulingFailed(new Error('Both concurrent requests must arrive before writing')),
+        1_000,
+      );
       const fault = vi
         .spyOn(model.prototype, 'populate')
         .mockRejectedValue(new Error('response preparation unavailable'));

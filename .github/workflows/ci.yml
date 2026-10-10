@@ -184,6 +184,11 @@ jobs:
           TEST_MONGODB_URI: mongodb://127.0.0.1:27038/?directConnection=true
           STANDALONE_TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
 
+      - name: Standalone financial collision and Activity acknowledgement recovery
+        run: pnpm exec vitest run src/lib/services/ledger-creation-recovery.integration.test.ts src/lib/services/activity-outbox.integration.test.ts --maxWorkers=1
+        env:
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27017/?directConnection=true
+
       - name: Authenticated Group cleanup and background recovery HTTP
         working-directory: .
         shell: bash
