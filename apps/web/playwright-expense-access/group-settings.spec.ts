@@ -1,4 +1,5 @@
-import type { APIRequestContext, Page } from '@playwright/test';
+import type { APIRequestContext, Page, Request } from '@playwright/test';
+import { MongoClient, ObjectId } from 'mongodb';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { test, expect, dataOf, joinGroup } from './fixtures';
 
@@ -213,13 +214,164 @@ test('leaving waits until the member is settled up and another admin remains', a
   expect((await ledger.sam.get(`/api/groups/${ledger.groupA}`)).status()).toBe(403);
 });
 
-test('the last member leaving archives the Group', async ({ ledger }) => {
-  expect(await dataOf(await ledger.alex.post(leavePath(ledger.groupA)))).toEqual({
-    message: 'Left group',
-    archived: true,
+test('a sole member confirms cleanup, with safe refusal when deletion is unavailable', async ({
+  page,
+  ledger,
+}) => {
+  const name = process.env.EXPENSE_ACCESS_TEST_DB;
+  if (!name || !/^splitbook-test-access-[a-f0-9-]+$/.test(name))
+    throw new Error('Unique isolated test database required');
+  const client = new MongoClient(`mongodb://127.0.0.1:27017/${name}?directConnection=true`, {
+    serverSelectionTimeoutMS: 5_000,
   });
-  const groups = await dataOf(await ledger.alex.get('/api/groups'));
-  expect(groups.map((group: { _id: string }) => group._id)).not.toContain(ledger.groupA);
+  const path = leavePath(ledger.groupA);
+  let leaveRequests = 0;
+  const observeLeave = (request: Request) => {
+    if (request.method() === 'POST' && request.url() === appURL(path)) leaveRequests += 1;
+  };
+  try {
+    await client.connect();
+    const db = client.db(name);
+    const hello = await db.admin().command({ hello: 1 });
+    const transactionCapable = !!hello.setName || hello.msg === 'isdbgrid';
+    const groupId = new ObjectId(ledger.groupA);
+    const groupIds = [groupId, new ObjectId(ledger.groupB)];
+    const children = ['expenses', 'settlements', 'activities', 'recurringexpenses', 'invitations'];
+    const snapshot = async () => ({
+      groups: await db
+        .collection('groups')
+        .find({ _id: { $in: groupIds } })
+        .sort({ _id: 1 })
+        .toArray(),
+      histories: await Promise.all(
+        children.map(async (collection) => ({
+          collection,
+          records: await db
+            .collection(collection)
+            .find({ group: { $in: groupIds } })
+            .sort({ _id: 1 })
+            .toArray(),
+        })),
+      ),
+      accountIds: await db
+        .collection('users')
+        .find({
+          _id: { $in: Object.values(DEMO_PERSONA_IDS).map((id) => new ObjectId(id)) },
+        })
+        .project({ _id: 1 })
+        .sort({ _id: 1 })
+        .toArray(),
+    });
+    await enter(page, ledger.alex, `/groups/${ledger.groupA}/settings`);
+    await expect(page.getByRole('button', { name: 'Leave Group', exact: true })).toBeVisible();
+    const before = await snapshot();
+    expect(before.accountIds).toHaveLength(3);
+    expect(before.groups.find((group) => String(group._id) === ledger.groupA)).toMatchObject({
+      members: [{ user: new ObjectId(DEMO_PERSONA_IDS.alex), role: 'admin' }],
+    });
+    expect(before.histories.find((history) => history.collection === 'expenses')?.records).toEqual(
+      expect.arrayContaining([expect.objectContaining({ _id: new ObjectId(ledger.expenseA) })]),
+    );
+    expect(
+      before.histories
+        .find((history) => history.collection === 'activities')
+        ?.records.some((record) => String(record.group) === ledger.groupA),
+    ).toBe(true);
+
+    // Older clients and an explicit refusal must both retain membership and every history record.
+    for (const data of [undefined, { deleteIfLastMember: false }]) {
+      const refused = await ledger.alex.post(path, data === undefined ? {} : { data });
+      expect(refused.status(), await refused.text()).toBe(409);
+      expect(await refused.json()).toMatchObject({ code: 'GROUP_DELETION_CONFIRMATION_REQUIRED' });
+      expect(await snapshot()).toEqual(before);
+      expect(await db.collection('groupdeletions').countDocuments({ _id: groupId })).toBe(0);
+    }
+
+    page.on('request', observeLeave);
+    const dialog = page.getByRole('dialog', { name: /^Leave/ });
+    await page.getByRole('button', { name: 'Leave Group', exact: true }).click();
+    await expect(
+      dialog.getByText(/Leaving will permanently delete this Group and its history/),
+    ).toBeVisible();
+    await expect(dialog.getByText(/You cannot rejoin this Group/)).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(dialog).toBeHidden();
+    expect(await snapshot()).toEqual(before);
+    expect(leaveRequests).toBe(0);
+
+    await page.getByRole('button', { name: 'Leave Group', exact: true }).click();
+    const confirmation = page.waitForResponse(
+      (response) => response.request().method() === 'POST' && response.url() === appURL(path),
+    );
+    await dialog.getByRole('button', { name: 'Leave and delete Group', exact: true }).click();
+    const confirmed = await confirmation;
+    expect(confirmed.request().postDataJSON()).toEqual({ deleteIfLastMember: true });
+    expect(leaveRequests).toBe(1);
+
+    if (!transactionCapable) {
+      expect(confirmed.status(), await confirmed.text()).toBe(409);
+      expect(await confirmed.json()).toMatchObject({ code: 'GROUP_DELETION_UNAVAILABLE' });
+      await expect(
+        dialog.getByRole('alert').filter({
+          hasText: 'You are still a member; no history was deleted.',
+        }),
+      ).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`/groups/${ledger.groupA}/settings$`));
+      expect(await snapshot()).toEqual(before);
+      expect(await db.collection('groupdeletions').countDocuments({ _id: groupId })).toBe(0);
+    } else {
+      const deleted = {
+        message: 'Left group',
+        archived: true,
+        deleted: true,
+        deletionPending: false,
+      };
+      expect(confirmed.status(), await confirmed.text()).toBe(200);
+      expect((await confirmed.json()).data).toEqual(deleted);
+      await expect(page).toHaveURL(/\/dashboard$/);
+      expect((await ledger.alex.get(`/api/groups/${ledger.groupA}`)).status()).toBe(404);
+      const groups = await dataOf(await ledger.alex.get('/api/groups'));
+      expect(groups.map((group: { _id: string }) => group._id)).not.toContain(ledger.groupA);
+      expect(await db.collection('groups').countDocuments({ _id: groupId })).toBe(0);
+      for (const collection of children)
+        expect(await db.collection(collection).countDocuments({ group: groupId }), collection).toBe(
+          0,
+        );
+      const after = await snapshot();
+      expect(after).toEqual({
+        groups: before.groups.filter((group) => String(group._id) !== ledger.groupA),
+        histories: before.histories.map((history) => ({
+          ...history,
+          records: history.records.filter((record) => String(record.group) !== ledger.groupA),
+        })),
+        accountIds: before.accountIds,
+      });
+      expect((await db.collection('groupdeletions').findOne({ _id: groupId }))?.state).toBe(
+        'complete',
+      );
+      expect(
+        await dataOf(await ledger.alex.post(path, { data: { deleteIfLastMember: true } })),
+      ).toEqual(deleted);
+      expect(await snapshot()).toEqual(after);
+    }
+    // Both topologies retain the user's account and the unrelated Group and its Expense.
+    expect((await (await ledger.alex.get('/api/auth/get-session')).json()).user.id).toBe(
+      DEMO_PERSONA_IDS.alex,
+    );
+    expect((await dataOf(await ledger.priya.get(`/api/groups/${ledger.groupB}`)))._id).toBe(
+      ledger.groupB,
+    );
+    expect(
+      (
+        await dataOf(
+          await ledger.priya.get(`/api/groups/${ledger.groupB}/expenses/${ledger.expenseB}`),
+        )
+      )._id,
+    ).toBe(ledger.expenseB);
+  } finally {
+    page.off('request', observeLeave);
+    await client.close();
+  }
 });
 
 test('a member leaves from Group settings and lands on Home', async ({ page, ledger }) => {
