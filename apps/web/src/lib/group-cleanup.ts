@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { type Db, ObjectId } from 'mongodb';
 import type { mongo } from 'mongoose';
 type InventoryDatabase = Db | mongo.Db;
@@ -91,3 +92,48 @@ export async function inventoryOrphanGroups(
       .map(([groupId, counts]) => ({ groupId, counts })),
   };
 }
+
+const recordCountsSchema = z
+  .object({
+    expenses: z.number().int().nonnegative(),
+    settlements: z.number().int().nonnegative(),
+    activities: z.number().int().nonnegative(),
+    recurringexpenses: z.number().int().nonnegative(),
+    invitations: z.number().int().nonnegative(),
+  })
+  .strict();
+const selectedGroupSchema = z
+  .object({
+    id: z.string().regex(/^[a-f\d]{24}$/),
+    name: z.string(),
+    theme: z.string(),
+    archived: z.boolean(),
+    updatedAt: z.string().datetime().nullable(),
+    revision: z.number().int().nullable(),
+    memberCount: z.literal(0),
+    counts: recordCountsSchema,
+  })
+  .strict();
+export const orphanGroupManifestSchema = z
+  .object({
+    version: z.literal(1),
+    environment: z.string().min(1),
+    database: z.string().min(1),
+    generatedAt: z.string().datetime(),
+    groups: z.array(selectedGroupSchema).max(100),
+    selectedGroupIds: z.array(z.string().regex(/^[a-f\d]{24}$/)).max(100),
+    missingParents: z.array(z.object({ groupId: z.string(), counts: recordCountsSchema }).strict()),
+  })
+  .strict()
+  .superRefine((manifest, context) => {
+    if (
+      manifest.groups.length !== manifest.selectedGroupIds.length ||
+      manifest.groups.some((group, index) => group.id !== manifest.selectedGroupIds[index]) ||
+      new Set(manifest.selectedGroupIds).size !== manifest.selectedGroupIds.length
+    )
+      context.addIssue({
+        code: 'custom',
+        message: 'Selected IDs must exactly match the unique reviewed Group entries, in order',
+      });
+  });
+export type OrphanGroupManifest = z.infer<typeof orphanGroupManifestSchema>;

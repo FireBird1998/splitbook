@@ -1,3 +1,5 @@
+import { after } from 'next/server';
+import { resumeRequestedGroupDeletions } from '@/lib/services/group-cleanup.service';
 import { NextResponse } from 'next/server';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
@@ -40,6 +42,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       body.deleteIfLastMember === true;
     const result = await groupService.leave(id, user.id, acknowledgement);
     if (!result) return notFound('Group');
+    if ('deletionPending' in result && result.deletionPending)
+      after(() =>
+        resumeRequestedGroupDeletions()
+          .then(() => undefined)
+          .catch(() => undefined),
+      );
 
     return success({
       message: 'Left group',
@@ -75,7 +83,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     if (err instanceof Error && err.message === 'GROUP_DELETION_UNAVAILABLE') {
       return error(
-        'Permanent Group deletion requires a MongoDB replica set. You are still a member; no history was deleted.',
+        'Permanent Group deletion is unavailable here. You are still a member; no history was deleted.',
         409,
         'GROUP_DELETION_UNAVAILABLE',
       );

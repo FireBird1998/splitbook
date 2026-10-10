@@ -94,7 +94,10 @@ export default function LeaveGroupSection({
           variant="outlined"
           color="error"
           startIcon={<LogoutIcon />}
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            setDeleteIfLastMember(memberCount === 1);
+            setOpen(true);
+          }}
         >
           Leave Group
         </Button>

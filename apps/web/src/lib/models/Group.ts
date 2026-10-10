@@ -30,6 +30,8 @@ export interface IGroupDocument {
   startDate?: Date | null;
   endDate?: Date | null;
   isArchived: boolean;
+  deletionRequestedAt?: Date;
+  mutationSequence?: number;
   inviteCode?: string | null;
   inviteCodeExpiresAt?: Date | null;
   creationRequest?: ICreationRequest;
@@ -85,6 +87,8 @@ const GroupSchema = new Schema<IGroupDocument>(
     startDate: { type: Date, default: null },
     endDate: { type: Date, default: null },
     isArchived: { type: Boolean, default: false },
+    deletionRequestedAt: { type: Date, select: false },
+    mutationSequence: { type: Number, select: false },
     inviteCode: { type: String, default: null },
     inviteCodeExpiresAt: { type: Date, default: null },
     creationRequest: { type: CreationRequestSchema, default: undefined, select: false },

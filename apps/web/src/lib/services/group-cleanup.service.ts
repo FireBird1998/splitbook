@@ -1,11 +1,12 @@
 import mongoose from 'mongoose';
+import { createHash } from 'node:crypto';
 import connectDB from '@/lib/db';
 import {
   supportsGroupTransactions,
   withGroupMutation,
   groupTransactionOptions,
 } from '@/lib/group-mutation';
-import { groupOwnedCollections } from '@/lib/group-cleanup';
+import { groupOwnedCollections, orphanGroupManifestSchema } from '@/lib/group-cleanup';
 
 interface DeletionRequest {
   _id: mongoose.Types.ObjectId;
@@ -15,6 +16,8 @@ interface DeletionRequest {
   requestedAt: Date;
   completedAt?: Date;
   expiresAt?: Date;
+  manifestFingerprint?: string;
+  lastAttemptAt?: Date;
 }
 export interface GroupDeletionResult {
   archived: true;
@@ -35,14 +38,8 @@ export async function findGroupDeletion(groupId: string, actorId: string) {
     .findOne({ _id: new mongoose.Types.ObjectId(groupId), actorId });
 }
 
-/** Claim and consent are one transaction; ordinary archive/empty Groups are never scanned. */
-export async function requestGroupDeletion(
-  groupId: string,
-  actorId: string,
-): Promise<GroupDeletionResult> {
-  if (!(await supportsGroupTransactions())) throw new Error('GROUP_DELETION_UNAVAILABLE');
+async function ensureGroupDeletionIndexes() {
   const db = mongoose.connection.db!;
-  const id = new mongoose.Types.ObjectId(groupId);
   await db
     .collection('groupdeletions')
     .createIndex(
@@ -51,35 +48,54 @@ export async function requestGroupDeletion(
     );
   await db
     .collection('groupdeletions')
-    .createIndex({ state: 1, requestedAt: 1 }, { name: 'pending_group_deletion_requests' });
-  await withGroupMutation(groupId, async (session) => {
-    const claimed = await db.collection('groups').updateOne(
-      {
-        _id: id,
-        members: { $size: 1 },
-        'members.user': new mongoose.Types.ObjectId(actorId),
-        deletionRequestedAt: null,
-      },
-      {
-        $set: {
-          members: [],
-          isArchived: true,
-          deletionRequestedAt: new Date(),
-          inviteCode: null,
-          inviteCodeExpiresAt: null,
-        },
-        $inc: { __v: 1 },
-      },
-      { session },
+    .createIndex(
+      { state: 1, lastAttemptAt: 1, requestedAt: 1 },
+      { name: 'pending_group_deletion_attempts' },
     );
-    if (!claimed.matchedCount) throw new Error('LEAVE_CONFLICT');
-    await db
-      .collection<DeletionRequest>('groupdeletions')
-      .insertOne(
-        { _id: id, actorId, state: 'pending', collectionIndex: 0, requestedAt: new Date() },
+}
+
+/** Claim and consent are one transaction; ordinary archive/empty Groups are never scanned. */
+export async function requestGroupDeletion(
+  groupId: string,
+  actorId: string,
+): Promise<GroupDeletionResult> {
+  if (!(await supportsGroupTransactions())) throw new Error('GROUP_DELETION_UNAVAILABLE');
+  const db = mongoose.connection.db!;
+  const id = new mongoose.Types.ObjectId(groupId);
+  await ensureGroupDeletionIndexes();
+  try {
+    await withGroupMutation(groupId, async (session) => {
+      const claimed = await db.collection('groups').updateOne(
+        {
+          _id: id,
+          members: { $size: 1 },
+          'members.user': new mongoose.Types.ObjectId(actorId),
+          deletionRequestedAt: null,
+        },
+        {
+          $set: {
+            members: [],
+            isArchived: true,
+            deletionRequestedAt: new Date(),
+            inviteCode: null,
+            inviteCodeExpiresAt: null,
+          },
+          $inc: { __v: 1 },
+        },
         { session },
       );
-  });
+      if (!claimed.matchedCount) throw new Error('LEAVE_CONFLICT');
+      await db
+        .collection<DeletionRequest>('groupdeletions')
+        .insertOne(
+          { _id: id, actorId, state: 'pending', collectionIndex: 0, requestedAt: new Date() },
+          { session },
+        );
+    });
+  } catch (error) {
+    // A simultaneous retry may observe the claim after its original membership read.
+    if (!(await findGroupDeletion(groupId, actorId))) throw error;
+  }
   return resumeGroupDeletion(groupId);
 }
 
@@ -87,13 +103,13 @@ export async function requestGroupDeletion(
 export async function resumeGroupDeletion(
   groupId: string,
   maxBatches = 12,
+  maxDurationMs = 2_000,
 ): Promise<GroupDeletionResult> {
-  await connectDB();
-  if (!(await supportsGroupTransactions())) throw new Error('GROUP_DELETION_UNAVAILABLE');
+  const deadline = Date.now() + Math.min(2_000, Math.max(1, maxDurationMs));
+  if (!(await supportsGroupTransactions(deadline))) throw new Error('GROUP_DELETION_UNAVAILABLE');
   const db = mongoose.connection.db!;
   const id = new mongoose.Types.ObjectId(groupId);
   const requests = db.collection<DeletionRequest>('groupdeletions');
-  const deadline = Date.now() + 2_000;
   for (
     let batch = 0;
     batch < Math.min(20, Math.max(1, maxBatches)) && Date.now() < deadline;
@@ -102,6 +118,7 @@ export async function resumeGroupDeletion(
     const transactionOptions = {
       ...groupTransactionOptions,
       timeoutMS: Math.max(1, deadline - Date.now()),
+      maxCommitTimeMS: Math.max(1, Math.min(1_000, deadline - Date.now())),
     };
     try {
       const complete = await mongoose.connection.transaction(async (session) => {
@@ -143,13 +160,14 @@ export async function resumeGroupDeletion(
             throw new Error('GROUP_DELETION_CHANGED');
         }
         await db.collection('groups').deleteOne({ _id: id, members: { $size: 0 } }, { session });
+        const completedAt = new Date();
         await requests.updateOne(
           { _id: id },
           {
             $set: {
               state: 'complete',
-              completedAt: new Date(),
-              expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1_000),
+              completedAt,
+              expiresAt: new Date(completedAt.getTime() + 7 * 24 * 60 * 60 * 1_000),
             },
           },
           { session },
@@ -172,24 +190,153 @@ export async function resumeGroupDeletion(
 
 /** Only requests carrying explicit consent/maintenance selection enter this queue. */
 export async function resumeRequestedGroupDeletions() {
-  await connectDB();
-  if (!(await supportsGroupTransactions())) return;
+  const deadline = Date.now() + 500;
+  if (!(await supportsGroupTransactions(deadline))) return;
   const pending = await mongoose.connection
     .db!.collection<DeletionRequest>('groupdeletions')
-    .find({ state: 'pending' })
-    .sort({ requestedAt: 1 })
-    .limit(20)
+    .find({ state: 'pending' }, { timeoutMS: Math.max(1, deadline - Date.now()) })
+    .sort({ lastAttemptAt: 1, requestedAt: 1 })
+    .limit(3)
+    .maxTimeMS(Math.max(1, Math.min(100, deadline - Date.now())))
     .toArray();
   const outcomes = [];
   for (const request of pending) {
+    if (Date.now() >= deadline) break;
+    await mongoose.connection.db!.collection('groupdeletions').updateOne(
+      { _id: request._id, state: 'pending' },
+      { $set: { lastAttemptAt: new Date() } },
+      {
+        maxTimeMS: Math.max(1, Math.min(100, deadline - Date.now())),
+        timeoutMS: Math.max(1, deadline - Date.now()),
+      },
+    );
     try {
       outcomes.push({
         groupId: String(request._id),
-        ...(await resumeGroupDeletion(String(request._id), 2)),
+        ...(await resumeGroupDeletion(String(request._id), 2, Math.max(1, deadline - Date.now()))),
       });
     } catch {
       outcomes.push({ groupId: String(request._id), blocked: true });
     }
   }
   return outcomes;
+}
+
+/** Exact reviewed maintenance selection; default remains read-only. No missing-parent sweep. */
+export async function applyOrphanGroupManifest(
+  value: unknown,
+  options: { environment: string; database: string; apply?: boolean },
+) {
+  const manifest = orphanGroupManifestSchema.parse(value);
+  await connectDB();
+  const db = mongoose.connection.db!;
+  if (
+    manifest.environment !== options.environment ||
+    manifest.database !== options.database ||
+    db.databaseName !== options.database
+  )
+    throw new Error('Manifest target does not match the explicit environment/database');
+  if (options.apply && !(await supportsGroupTransactions()))
+    throw new Error('GROUP_DELETION_UNAVAILABLE');
+  const fingerprint = createHash('sha256').update(JSON.stringify(manifest)).digest('hex');
+  const outcomes: Array<{
+    groupId: string;
+    status: 'eligible' | 'changed' | 'complete' | 'pending';
+  }> = [];
+  for (const reviewed of manifest.groups) {
+    const id = new mongoose.Types.ObjectId(reviewed.id);
+    const requests = db.collection<DeletionRequest>('groupdeletions');
+    const previous = await requests.findOne({ _id: id });
+    if (previous) {
+      if (previous.manifestFingerprint !== fingerprint)
+        throw new Error('Deletion request belongs to a different reviewed selection');
+      if (options.apply) {
+        const outcome = await resumeGroupDeletion(reviewed.id);
+        outcomes.push({ groupId: reviewed.id, status: outcome.deleted ? 'complete' : 'pending' });
+      } else
+        outcomes.push({
+          groupId: reviewed.id,
+          status: previous.state === 'complete' ? 'complete' : 'pending',
+        });
+      continue;
+    }
+    const check = async (session?: mongoose.ClientSession) => {
+      const group = await db
+        .collection('groups')
+        .findOne(
+          { _id: id, members: { $type: 'array', $size: 0 }, deletionRequestedAt: null },
+          { session },
+        );
+      if (!group) return false;
+      const counts: Record<string, number> = {};
+      for (const name of groupOwnedCollections)
+        counts[name] = await db.collection(name).countDocuments({ group: id }, { session });
+      const fresh = {
+        id: String(id),
+        name: typeof group.name === 'string' ? group.name : '(unnamed)',
+        theme: typeof group.category === 'string' ? group.category : 'unknown',
+        archived: group.isArchived === true,
+        updatedAt: group.updatedAt instanceof Date ? group.updatedAt.toISOString() : null,
+        revision: typeof group.__v === 'number' ? group.__v : null,
+        memberCount: 0,
+        counts,
+      };
+      return JSON.stringify(fresh) === JSON.stringify(reviewed);
+    };
+    if (!options.apply) {
+      outcomes.push({ groupId: reviewed.id, status: (await check()) ? 'eligible' : 'changed' });
+      continue;
+    }
+    await ensureGroupDeletionIndexes();
+    let claimed = false;
+    try {
+      claimed = await withGroupMutation(reviewed.id, async (session) => {
+        if (!(await check(session))) return false;
+        const claim = await db.collection('groups').updateOne(
+          { _id: id, members: { $type: 'array', $size: 0 }, deletionRequestedAt: null },
+          {
+            $set: {
+              isArchived: true,
+              deletionRequestedAt: new Date(),
+              inviteCode: null,
+              inviteCodeExpiresAt: null,
+            },
+            $inc: { __v: 1 },
+          },
+          { session },
+        );
+        if (!claim.matchedCount) return false;
+        await requests.insertOne(
+          {
+            _id: id,
+            actorId: null,
+            state: 'pending',
+            collectionIndex: 0,
+            requestedAt: new Date(),
+            manifestFingerprint: fingerprint,
+          },
+          { session },
+        );
+        return true;
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== 'FORBIDDEN') throw error;
+    }
+    if (!claimed) {
+      const concurrent = await requests.findOne({ _id: id });
+      if (concurrent?.manifestFingerprint === fingerprint) {
+        const outcome = await resumeGroupDeletion(reviewed.id);
+        outcomes.push({ groupId: reviewed.id, status: outcome.deleted ? 'complete' : 'pending' });
+      } else outcomes.push({ groupId: reviewed.id, status: 'changed' });
+    } else {
+      const outcome = await resumeGroupDeletion(reviewed.id);
+      outcomes.push({ groupId: reviewed.id, status: outcome.deleted ? 'complete' : 'pending' });
+    }
+  }
+  return {
+    dryRun: options.apply !== true,
+    environment: options.environment,
+    database: options.database,
+    results: outcomes,
+  };
 }
