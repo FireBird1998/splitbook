@@ -30,6 +30,30 @@ export interface OrphanGroupInventory {
   missingParents: Array<{ groupId: string; counts: GroupRecordCounts }>;
 }
 
+/** Metadata only: callers separately verify membership and read dependent counts. */
+export function projectOrphanGroup(
+  group: {
+    _id: unknown;
+    name?: unknown;
+    category?: unknown;
+    isArchived?: unknown;
+    updatedAt?: unknown;
+    __v?: unknown;
+  },
+  counts: GroupRecordCounts,
+): OrphanGroupInventory['groups'][number] {
+  return {
+    id: String(group._id),
+    name: typeof group.name === 'string' ? group.name : '(unnamed)',
+    theme: typeof group.category === 'string' ? group.category : 'unknown',
+    archived: group.isArchived === true,
+    updatedAt: group.updatedAt instanceof Date ? group.updatedAt.toISOString() : null,
+    revision: typeof group.__v === 'number' ? group.__v : null,
+    memberCount: 0,
+    counts,
+  };
+}
+
 async function countsFor(db: InventoryDatabase, group: ObjectId): Promise<GroupRecordCounts> {
   const counts = await Promise.all(
     groupOwnedCollections.map(
@@ -51,16 +75,7 @@ export async function inventoryOrphanGroups(
     .collection('groups')
     .find({ members: { $type: 'array', $size: 0 } })
     .sort({ _id: 1 })) {
-    groups.push({
-      id: String(group._id),
-      name: typeof group.name === 'string' ? group.name : '(unnamed)',
-      theme: typeof group.category === 'string' ? group.category : 'unknown',
-      archived: group.isArchived === true,
-      updatedAt: group.updatedAt instanceof Date ? group.updatedAt.toISOString() : null,
-      revision: typeof group.__v === 'number' ? group.__v : null,
-      memberCount: 0,
-      counts: await countsFor(db, group._id),
-    });
+    groups.push(projectOrphanGroup(group, await countsFor(db, group._id)));
   }
   const missing = new Map<string, GroupRecordCounts>();
   for (const collection of groupOwnedCollections) {

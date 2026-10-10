@@ -188,15 +188,13 @@ it('refuses a delayed Activity publication after completed deletion', async () =
 it('defaults a reviewed maintenance selection to read-only and rejects changed membership on apply', async () => {
   const db = mongoose.connection.db!;
   const id = new mongoose.Types.ObjectId('b00000000000000000000071');
-  await db
-    .collection('groups')
-    .insertOne({
-      _id: id,
-      name: 'Fictional old empty Group',
-      category: 'other',
-      members: [],
-      isArchived: true,
-    });
+  await db.collection('groups').insertOne({
+    _id: id,
+    name: 'Fictional old empty Group',
+    category: 'other',
+    members: [],
+    isArchived: true,
+  });
   await db.collection('expenses').insertOne({ group: id });
   const report = await inventoryOrphanGroups(db, 'test');
   const manifest = { ...report, selectedGroupIds: [String(id)] };
@@ -223,14 +221,12 @@ it('defaults a reviewed maintenance selection to read-only and rejects changed m
 it('never sweeps historical empty or archived-with-members Groups during queued recovery', async () => {
   const db = mongoose.connection.db!;
   const historic = new mongoose.Types.ObjectId();
-  await db
-    .collection('groups')
-    .insertOne({
-      _id: historic,
-      name: 'Fictional historical empty Group',
-      members: [],
-      isArchived: true,
-    });
+  await db.collection('groups').insertOne({
+    _id: historic,
+    name: 'Fictional historical empty Group',
+    members: [],
+    isArchived: true,
+  });
   await db.collection('expenses').insertOne({ group: historic });
   const id = await lastMemberGroup();
   await groupService.archive(id, actor);
@@ -309,13 +305,11 @@ it('resumes after a real database failure in a deletion batch without claiming s
   const id = await lastMemberGroup();
   const db = mongoose.connection.db!;
   await db.collection('expenses').insertOne({ group: new mongoose.Types.ObjectId(id) });
-  await db
-    .admin()
-    .command({
-      configureFailPoint: 'failCommand',
-      mode: { times: 1 },
-      data: { appName: testDb.dbName, failCommands: ['delete'], errorCode: 8 },
-    });
+  await db.admin().command({
+    configureFailPoint: 'failCommand',
+    mode: { times: 1 },
+    data: { appName: testDb.dbName, failCommands: ['delete'], errorCode: 8 },
+  });
   try {
     const interrupted = await leave(id, true);
     expect(interrupted.body.data).toMatchObject({ deleted: false, deletionPending: true });
@@ -357,18 +351,16 @@ it.each(['expense', 'recurring template', 'invitation', 'Activity'] as const)(
       tag: 'Rent',
     };
     const params = { params: Promise.resolve({ id }) };
-    const barrier = await db
-      .admin()
-      .command({
-        configureFailPoint: 'failCommand',
-        mode: { times: 1 },
-        data: {
-          appName: testDb.dbName,
-          failCommands: ['insert'],
-          blockConnection: true,
-          blockTimeMS: 500,
-        },
-      });
+    const barrier = await db.admin().command({
+      configureFailPoint: 'failCommand',
+      mode: { times: 1 },
+      data: {
+        appName: testDb.dbName,
+        failCommands: ['insert'],
+        blockConnection: true,
+        blockTimeMS: 500,
+      },
+    });
     try {
       let writing: Promise<Response>;
       if (kind === 'expense') {
@@ -408,13 +400,11 @@ it.each(['expense', 'recurring template', 'invitation', 'Activity'] as const)(
           params,
         );
       }
-      await db
-        .admin()
-        .command({
-          waitForFailPoint: 'failCommand',
-          timesEntered: barrier.count + 1,
-          maxTimeMS: 3_000,
-        });
+      await db.admin().command({
+        waitForFailPoint: 'failCommand',
+        timesEntered: barrier.count + 1,
+        maxTimeMS: 3_000,
+      });
       const deleting = leave(id, true);
       await Promise.all([writing, deleting]);
       const finished = await leave(id, true);
@@ -434,44 +424,38 @@ it.each(['hello', 'update'])(
     const event = makePendingActivity(id, 'expense_added', actor, {
       description: 'Fictional retained event',
     });
-    await mongoose.connection
-      .db!.collection('expenses')
-      .insertOne({
-        _id: record,
-        group: new mongoose.Types.ObjectId(id),
-        amount: 10,
-        pendingActivity: [event],
-      });
+    await mongoose.connection.db!.collection('expenses').insertOne({
+      _id: record,
+      group: new mongoose.Types.ObjectId(id),
+      amount: 10,
+      pendingActivity: [event],
+    });
     // Fresh connection also clears per-Db capability discovery; the real caller budget
     // must include its first hello, not just the Activity upsert.
     await mongoose.disconnect();
     await mongoose.connect(testDb.uri, { appName: testDb.dbName });
     const db = mongoose.connection.db!;
-    const barrier = await db
-      .admin()
-      .command({
-        configureFailPoint: 'failCommand',
-        mode: { times: 1 },
-        data: {
-          appName: testDb.dbName,
-          failCommands: [command],
-          blockConnection: true,
-          blockTimeMS: 800,
-        },
-      });
+    const barrier = await db.admin().command({
+      configureFailPoint: 'failCommand',
+      mode: { times: 1 },
+      data: {
+        appName: testDb.dbName,
+        failCommands: [command],
+        blockConnection: true,
+        blockTimeMS: 800,
+      },
+    });
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
       const started = Date.now();
       const published = activityService.publishPending('expenses', record, [event], {
         maxDurationMs: 100,
       });
-      await db
-        .admin()
-        .command({
-          waitForFailPoint: 'failCommand',
-          timesEntered: barrier.count + 1,
-          maxTimeMS: 3_000,
-        });
+      await db.admin().command({
+        waitForFailPoint: 'failCommand',
+        timesEntered: barrier.count + 1,
+        maxTimeMS: 3_000,
+      });
       expect(await published).toMatchObject({ published: 0, failed: 1, remaining: 1 });
       expect(Date.now() - started).toBeLessThan(450);
       expect(
@@ -489,31 +473,27 @@ it('coordinates a delayed Settlement commit, member removal and final deletion w
   const second = 'a00000000000000000000002';
   await groupService.addMember(id, second);
   const db = mongoose.connection.db!;
-  const barrier = await db
-    .admin()
-    .command({
-      configureFailPoint: 'failCommand',
-      mode: { times: 1 },
-      data: {
-        appName: testDb.dbName,
-        failCommands: ['insert'],
-        blockConnection: true,
-        blockTimeMS: 500,
-      },
-    });
+  const barrier = await db.admin().command({
+    configureFailPoint: 'failCommand',
+    mode: { times: 1 },
+    data: {
+      appName: testDb.dbName,
+      failCommands: ['insert'],
+      blockConnection: true,
+      blockTimeMS: 500,
+    },
+  });
   try {
     const writing = settlementService.create(
       id,
       { paidBy: actor, paidTo: second, amount: 20, currency: 'INR' },
       actor,
     );
-    await db
-      .admin()
-      .command({
-        waitForFailPoint: 'failCommand',
-        timesEntered: barrier.count + 1,
-        maxTimeMS: 3_000,
-      });
+    await db.admin().command({
+      waitForFailPoint: 'failCommand',
+      timesEntered: barrier.count + 1,
+      maxTimeMS: 3_000,
+    });
     // The independent member mutation must wait for the Settlement's shared fence.
     await groupService.removeMember(id, second, actor);
     await leave(id, true);
@@ -554,28 +534,24 @@ it('coordinates a generated recurring Expense and its later marker with final de
     actor,
   );
   const db = mongoose.connection.db!;
-  const barrier = await db
-    .admin()
-    .command({
-      configureFailPoint: 'failCommand',
-      mode: { times: 1 },
-      data: {
-        appName: testDb.dbName,
-        failCommands: ['insert'],
-        blockConnection: true,
-        blockTimeMS: 500,
-      },
-    });
+  const barrier = await db.admin().command({
+    configureFailPoint: 'failCommand',
+    mode: { times: 1 },
+    data: {
+      appName: testDb.dbName,
+      failCommands: ['insert'],
+      blockConnection: true,
+      blockTimeMS: 500,
+    },
+  });
   const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
   try {
     const generating = recurringExpenseService.materializeDueExpenses(id, new Date('2030-01-02'));
-    await db
-      .admin()
-      .command({
-        waitForFailPoint: 'failCommand',
-        timesEntered: barrier.count + 1,
-        maxTimeMS: 3_000,
-      });
+    await db.admin().command({
+      waitForFailPoint: 'failCommand',
+      timesEntered: barrier.count + 1,
+      maxTimeMS: 3_000,
+    });
     await Promise.all([generating, leave(id, true)]);
     expect((await leave(id, true)).body.data.deleted).toBe(true);
     expect(await db.collection('expenses').countDocuments()).toBe(0);
@@ -593,35 +569,29 @@ it('coordinates recovered pending Activity with deletion instead of publishing m
   const event = makePendingActivity(id, 'expense_added', actor, {
     description: 'Fictional interrupted save',
   });
-  await db
-    .collection('expenses')
-    .insertOne({
-      group: new mongoose.Types.ObjectId(id),
-      isDeleted: true,
-      pendingActivity: [event],
-    });
-  const barrier = await db
-    .admin()
-    .command({
-      configureFailPoint: 'failCommand',
-      mode: { times: 1 },
-      data: {
-        appName: testDb.dbName,
-        failCommands: ['update'],
-        blockConnection: true,
-        blockTimeMS: 500,
-      },
-    });
+  await db.collection('expenses').insertOne({
+    group: new mongoose.Types.ObjectId(id),
+    isDeleted: true,
+    pendingActivity: [event],
+  });
+  const barrier = await db.admin().command({
+    configureFailPoint: 'failCommand',
+    mode: { times: 1 },
+    data: {
+      appName: testDb.dbName,
+      failCommands: ['update'],
+      blockConnection: true,
+      blockTimeMS: 500,
+    },
+  });
   const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
   try {
     const recovering = activityService.recoverGroupActivity(id);
-    await db
-      .admin()
-      .command({
-        waitForFailPoint: 'failCommand',
-        timesEntered: barrier.count + 1,
-        maxTimeMS: 3_000,
-      });
+    await db.admin().command({
+      waitForFailPoint: 'failCommand',
+      timesEntered: barrier.count + 1,
+      maxTimeMS: 3_000,
+    });
     await Promise.all([recovering, leave(id, true)]);
     expect((await leave(id, true)).body.data.deleted).toBe(true);
     expect((await inventoryOrphanGroups(db, 'test')).missingParents).toEqual([]);
@@ -653,29 +623,25 @@ it.each(['update', 'insert'])(
     const code = link!.inviteCode;
     const { POST } = await import('@/app/api/join/[code]/route');
     session.userId = second;
-    const barrier = await db
-      .admin()
-      .command({
-        configureFailPoint: 'failCommand',
-        mode: { times: 1 },
-        data: {
-          appName: testDb.dbName,
-          failCommands: [command],
-          blockConnection: true,
-          blockTimeMS: 500,
-        },
-      });
+    const barrier = await db.admin().command({
+      configureFailPoint: 'failCommand',
+      mode: { times: 1 },
+      data: {
+        appName: testDb.dbName,
+        failCommands: [command],
+        blockConnection: true,
+        blockTimeMS: 500,
+      },
+    });
     try {
       const joining = POST(new Request(`http://localhost/api/join/${code}`, { method: 'POST' }), {
         params: Promise.resolve({ code }),
       });
-      await db
-        .admin()
-        .command({
-          waitForFailPoint: 'failCommand',
-          timesEntered: barrier.count + 1,
-          maxTimeMS: 3_000,
-        });
+      await db.admin().command({
+        waitForFailPoint: 'failCommand',
+        timesEntered: barrier.count + 1,
+        maxTimeMS: 3_000,
+      });
       const deleting = await leave(id, true);
       const joined = await joining;
       if (command === 'update') {
@@ -699,33 +665,27 @@ it.each(['update', 'insert'])(
 it('rotates changed pending jobs instead of starving a healthy requested deletion', async () => {
   const id = await lastMemberGroup();
   const db = mongoose.connection.db!;
-  await db
-    .collection('expenses')
-    .insertMany(
-      Array.from({ length: 1_300 }, () => ({
-        group: new mongoose.Types.ObjectId(id),
-        isDeleted: true,
-      })),
-    );
+  await db.collection('expenses').insertMany(
+    Array.from({ length: 1_300 }, () => ({
+      group: new mongoose.Types.ObjectId(id),
+      isDeleted: true,
+    })),
+  );
   expect((await leave(id, true)).body.data.deletionPending).toBe(true);
   for (let index = 0; index < 3; index++) {
     const malformed = new mongoose.Types.ObjectId();
-    await db
-      .collection('groups')
-      .insertOne({
-        _id: malformed,
-        name: 'Fictional changed request',
-        members: [{ user: new mongoose.Types.ObjectId(actor) }],
-      });
-    await db
-      .collection('groupdeletions')
-      .insertOne({
-        _id: malformed,
-        actorId: actor,
-        state: 'pending',
-        collectionIndex: 0,
-        requestedAt: new Date('2020-01-01'),
-      });
+    await db.collection('groups').insertOne({
+      _id: malformed,
+      name: 'Fictional changed request',
+      members: [{ user: new mongoose.Types.ObjectId(actor) }],
+    });
+    await db.collection('groupdeletions').insertOne({
+      _id: malformed,
+      actorId: actor,
+      state: 'pending',
+      collectionIndex: 0,
+      requestedAt: new Date('2020-01-01'),
+    });
   }
   for (let pass = 0; pass < 12; pass++) await resumeRequestedGroupDeletions();
   expect(
@@ -747,13 +707,11 @@ it('retries capability discovery after a temporary hello failure without losing 
   await mongoose.disconnect();
   await mongoose.connect(testDb.uri, { appName: testDb.dbName });
   const db = mongoose.connection.db!;
-  await db
-    .admin()
-    .command({
-      configureFailPoint: 'failCommand',
-      mode: { times: 1 },
-      data: { appName: testDb.dbName, failCommands: ['hello'], errorCode: 8 },
-    });
+  await db.admin().command({
+    configureFailPoint: 'failCommand',
+    mode: { times: 1 },
+    data: { appName: testDb.dbName, failCommands: ['hello'], errorCode: 8 },
+  });
   const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
   try {
     expect(await activityService.publishPending('expenses', record, [event])).toMatchObject({

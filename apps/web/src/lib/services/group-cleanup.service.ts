@@ -6,7 +6,12 @@ import {
   withGroupMutation,
   groupTransactionOptions,
 } from '@/lib/group-mutation';
-import { groupOwnedCollections, orphanGroupManifestSchema } from '@/lib/group-cleanup';
+import {
+  groupOwnedCollections,
+  orphanGroupManifestSchema,
+  projectOrphanGroup,
+  type GroupRecordCounts,
+} from '@/lib/group-cleanup';
 
 interface DeletionRequest {
   _id: mongoose.Types.ObjectId;
@@ -268,19 +273,16 @@ export async function applyOrphanGroupManifest(
           { session },
         );
       if (!group) return false;
-      const counts: Record<string, number> = {};
+      const counts: GroupRecordCounts = {
+        expenses: 0,
+        settlements: 0,
+        activities: 0,
+        recurringexpenses: 0,
+        invitations: 0,
+      };
       for (const name of groupOwnedCollections)
         counts[name] = await db.collection(name).countDocuments({ group: id }, { session });
-      const fresh = {
-        id: String(id),
-        name: typeof group.name === 'string' ? group.name : '(unnamed)',
-        theme: typeof group.category === 'string' ? group.category : 'unknown',
-        archived: group.isArchived === true,
-        updatedAt: group.updatedAt instanceof Date ? group.updatedAt.toISOString() : null,
-        revision: typeof group.__v === 'number' ? group.__v : null,
-        memberCount: 0,
-        counts,
-      };
+      const fresh = projectOrphanGroup(group, counts);
       return JSON.stringify(fresh) === JSON.stringify(reviewed);
     };
     if (!options.apply) {

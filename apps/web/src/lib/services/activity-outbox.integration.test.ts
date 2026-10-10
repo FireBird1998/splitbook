@@ -33,18 +33,16 @@ async function sourceFixture(
 ) {
   // Group-owned publications require a real parent; missing-parent records are
   // reported for maintenance, never republished into new orphan history.
-  await mongoose.connection
-    .db!.collection('groups')
-    .updateOne(
-      { _id: new Types.ObjectId(id) },
-      {
-        $setOnInsert: {
-          name: 'Fictional Activity Group',
-          members: [{ user: new Types.ObjectId(alice), role: 'admin' }],
-        },
+  await mongoose.connection.db!.collection('groups').updateOne(
+    { _id: new Types.ObjectId(id) },
+    {
+      $setOnInsert: {
+        name: 'Fictional Activity Group',
+        members: [{ user: new Types.ObjectId(alice), role: 'admin' }],
       },
-      { upsert: true },
-    );
+    },
+    { upsert: true },
+  );
   const record = {
     _id: new Types.ObjectId(),
     group: new Types.ObjectId(id),

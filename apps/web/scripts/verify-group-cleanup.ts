@@ -114,14 +114,12 @@ async function verify() {
     await request(`/api/groups/${id}`, alexCookie);
     assert.equal((await db.collection('groups').findOne({ _id: id }))?.members.length, 1);
     for (const name of groupOwnedCollections)
-      await db
-        .collection(name)
-        .insertOne({
-          group: id,
-          isDeleted: true,
-          isPaused: true,
-          pendingActivity: [{ metadata: { description: 'Fictional unprojected event' } }],
-        });
+      await db.collection(name).insertOne({
+        group: id,
+        isDeleted: true,
+        isPaused: true,
+        pendingActivity: [{ metadata: { description: 'Fictional unprojected event' } }],
+      });
     const archived = await group(alexCookie, 'archived member');
     assert.equal((await request(`/api/groups/${archived}`, alexCookie, 'DELETE')).status, 200);
     const deleted = await request(path, alexCookie, 'POST', { deleteIfLastMember: true });
@@ -192,14 +190,12 @@ async function verify() {
       .insertMany(Array.from({ length: 2_000 }, () => ({ group: pending, isDeleted: true })));
     const historic = new ObjectId();
     owned.push(historic);
-    await db
-      .collection('groups')
-      .insertOne({
-        _id: historic,
-        name: `Orphan QA unrequested ${run}`,
-        members: [],
-        isArchived: true,
-      });
+    await db.collection('groups').insertOne({
+      _id: historic,
+      name: `Orphan QA unrequested ${run}`,
+      members: [],
+      isArchived: true,
+    });
     await db.collection('expenses').insertOne({ group: historic, isDeleted: true });
     const first = await request(`/api/groups/${pending}/leave`, alexCookie, 'POST', {
       deleteIfLastMember: true,
