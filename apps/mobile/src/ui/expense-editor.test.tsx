@@ -12,7 +12,7 @@ import { savedQueriesIn } from '../test-utils/saved-queries';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
-import { draftFromExpense } from '../data/expense-draft';
+import { draftFromExpense, expenseDraftSchema } from '../data/expense-draft';
 import { expenseRecordSchema } from '../data/expense-record';
 import { ExpenseEditor } from './expense-editor';
 import { ControllerExpenseEditor } from './controller-expense-editor';
@@ -442,6 +442,22 @@ describe('rendered Expense corrections', () => {
 
     await ui.press('Save expense');
     expect(ui.writes).toEqual([`POST /api/groups/${groupId}/expenses`]);
+  });
+
+  it('caps raw Description at the stored-draft limit while keeping entered spaces (#234)', async () => {
+    const ui = await render((controller) => controller.openExpense(groupId));
+    const limit = ui.input('Description, required').props.maxLength;
+    expect(limit).toBe(200);
+    expect(expenseDraftSchema.shape.description.safeParse('x'.repeat(limit)).success).toBe(true);
+    expect(expenseDraftSchema.shape.description.safeParse('x'.repeat(limit + 1)).success).toBe(
+      false,
+    );
+    const entered = 'x'.repeat(195) + '     ';
+    await ui.type('Description, required', entered);
+    expect(ui.input('Description, required').props.value).toBe(entered);
+    expect(await ui.drafts.load(memberId, groupId)).toMatchObject({
+      draft: { description: entered },
+    });
   });
 
   it('shows every correction beside its own control and focuses the first one', async () => {

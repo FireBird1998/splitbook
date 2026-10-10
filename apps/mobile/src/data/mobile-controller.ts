@@ -5350,12 +5350,21 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       endDate: bounded && draft.endDate.trim() ? draft.endDate.trim() : null,
     });
     if (!payload.success) {
+      const schemaErrors: Partial<Record<GroupField, string>> = {};
+      let formMessage: string | undefined;
+      for (const issue of payload.error.issues) {
+        const field = groupFields.find((field) => field === issue.path[0]);
+        if (field) schemaErrors[field] ??= issue.message;
+        else formMessage ??= issue.message;
+      }
+      const validation = rejectFields(groupFields, snapshot.creation.validation, schemaErrors);
       publish({
         ...snapshot,
         creation: {
           ...snapshot.creation,
-          status: 'error',
-          message: payload.error.issues[0].message,
+          status: validation ? 'editing' : 'error',
+          message: formMessage ?? groupCorrectionSummary(schemaErrors),
+          validation: validation ?? snapshot.creation.validation,
         },
       });
       return;

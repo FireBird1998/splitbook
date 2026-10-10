@@ -1,6 +1,6 @@
+import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
 import { describe, expect, it } from 'vitest';
 import { getLocalMonthIsoRange } from '@splitbook/shared/date';
-import { createMobileController } from './mobile-controller';
 import type { ExpenseDraft } from './expense-draft';
 import type { FetchResponse, MobileFetch, MobileSnapshot } from './types';
 import { savedQueriesIn } from '../test-utils/saved-queries';

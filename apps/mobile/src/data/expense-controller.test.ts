@@ -1,9 +1,15 @@
+import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
 import { describe, expect, it, vi } from 'vitest';
 import { toDateParam } from '@splitbook/shared/date';
 import { gatewayReply, hangUntilAborted, manualTimer } from '../test-utils/transport-faults';
 import { savedQueriesIn } from '../test-utils/saved-queries';
-import { resolveDraftReview, type ExpenseDraft, type ExpenseField } from './expense-draft';
-import { createMobileController, type MobileController } from './mobile-controller';
+import {
+  buildExpenseBody,
+  resolveDraftReview,
+  type ExpenseDraft,
+  type ExpenseField,
+} from './expense-draft';
+import { type MobileController } from './mobile-controller';
 import type {
   FetchResponse,
   MobileFetch,
@@ -201,6 +207,57 @@ const savedExpense = {
 };
 
 describe('native Expense creation and editing', () => {
+  it.each(['draft', 'create', 'rejected create', 'edit', 'delete'] as const)(
+    'restores a stored %s without starting a financial write (#234)',
+    async (shape) => {
+      const sent: string[] = [];
+      const f = setup((path, init) => {
+        sent.push(`${init.method ?? 'GET'} ${path}`);
+        if (path.endsWith(`/expenses/${expenseId}`))
+          return Promise.resolve(json({ status: 200, data: savedExpense }));
+      });
+      await f.controller.signIn('alex');
+      const mutation = shape === 'edit' || shape === 'delete';
+      await f.controller.openExpense(groupId, mutation ? expenseId : undefined);
+      if (mutation) f.controller.editExpense();
+      await f.controller.updateExpenseDraft({ amount: '10', description: 'Restart test', tagId });
+      const editor = f.controller.getSnapshot().expense;
+      const attempt = shape.includes('create')
+        ? { key: 'restart-expense-0001', body: buildExpenseBody(editor.draft!, editor.context!) }
+        : null;
+      f.records.set(`${memberIds[0]}:${groupId}`, {
+        version: 1,
+        accountId: memberIds[0],
+        groupId,
+        draft: editor.draft,
+        attempt,
+        attemptRejected: shape === 'rejected create',
+        mutation: mutation
+          ? {
+              kind: shape,
+              revision: savedExpense.revision,
+              body: shape === 'edit' ? JSON.stringify({ description: 'Restart test' }) : '',
+            }
+          : null,
+      });
+      f.controller.dispose();
+      sent.length = 0;
+      const restarted = f.create();
+      await restarted.restore();
+      await restarted.openExpense(groupId, mutation ? expenseId : undefined);
+      const snapshot = restarted.getSnapshot();
+      expect(snapshot.expense.status).toBe('resume');
+      expect(snapshot.expense.attemptRejected).toBe(shape === 'rejected create');
+      expect([
+        snapshot.expense.status,
+        snapshot.settlement.status,
+        snapshot.creation.status,
+      ]).not.toContain('saving');
+      expect(snapshot.leave.status).toBe('closed');
+      expect(sent.filter((call) => /^(POST|PATCH|DELETE) \/api\/groups/.test(call))).toEqual([]);
+    },
+  );
+
   it.each([403, 404, 'missing member'] as const)(
     'blocks retained entries when the held Group check refuses access (%s)',
     async (refusal) => {

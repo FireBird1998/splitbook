@@ -1,8 +1,9 @@
+import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gatewayReply } from '../test-utils/transport-faults';
 import { savedQueriesIn } from '../test-utils/saved-queries';
-import { createMobileController } from './mobile-controller';
 import type { FetchResponse } from './types';
+import { settlementBody } from './settlement';
 const actor = 'a00000000000000000000001',
   recipient = 'a00000000000000000000002',
   other = 'a00000000000000000000003';
@@ -53,6 +54,61 @@ const record = {
   updatedAt: iso,
 };
 const json = (body: unknown, status = 200) => Response.json(body, { status });
+
+it('restores a stored Settlement without sending it (#234)', async () => {
+  const f = setup();
+  await f.controller.signIn('alex');
+  f.records.set(actor + groupId, {
+    version: 1,
+    accountId: actor,
+    groupId,
+    key: 'restart-payment-0001',
+    body: settlementBody({
+      paidBy: actor,
+      paidTo: recipient,
+      currency: 'INR',
+      amount: '10',
+      note: 'Kept payment',
+    }),
+  });
+  f.controller.dispose();
+  f.sent.length = 0;
+  const restarted = f.create();
+  await restarted.restore();
+  await restarted.openSettlements(groupId);
+  await restarted.openPendingPayment();
+  expect(restarted.getSnapshot().settlement.status).toBe('uncertain');
+  expect(restarted.getSnapshot().leave.status).toBe('closed');
+  expect(f.sent.filter((call) => /^(POST|PATCH|DELETE) \/api\/groups/.test(call))).toEqual([]);
+});
+
+it('trims a padded note once and resends the stored body unchanged after restart (#234)', async () => {
+  let posts = 0;
+  const f = setup((path, init) => {
+    if (path.endsWith('/settlements') && init.method === 'POST') {
+      if (++posts === 1) throw new Error('Response lost');
+      return json({ status: 201, data: { ...record, note: 'x'.repeat(500) } }, 201);
+    }
+  });
+  await f.controller.signIn('alex');
+  await f.controller.openSettlements(groupId);
+  f.controller.selectSettlement(actor, recipient, 'INR');
+  f.controller.updateSettlement({ amount: '10', note: 'x'.repeat(500) + '     ' });
+  await f.controller.recordSettlement();
+  expect(f.controller.getSnapshot().settlement.status).toBe('uncertain');
+  expect(JSON.parse(String(f.writes[0].body)).note).toBe('x'.repeat(500));
+  f.controller.dispose();
+  const restarted = f.create();
+  await restarted.restore();
+  await restarted.openSettlements(groupId);
+  expect(posts).toBe(1);
+  await restarted.recordSettlement();
+  expect(f.writes).toHaveLength(2);
+  expect(f.writes[1].body).toBe(f.writes[0].body);
+  expect(new Headers(f.writes[1].headers).get('Idempotency-Key')).toBe(
+    new Headers(f.writes[0].headers).get('Idempotency-Key'),
+  );
+});
 function setup(
   intercept: (
     path: string,

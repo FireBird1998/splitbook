@@ -1,6 +1,6 @@
+import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
 import { describe, expect, it, vi } from 'vitest';
 import { decodeStoredSession } from './cookies';
-import { createMobileController } from './mobile-controller';
 import type { AccountLocalStorage, CredentialStore, FetchResponse, MobileFetch } from './types';
 
 const alex = {
@@ -690,6 +690,44 @@ describe('native session and Group boundary', () => {
     expect(controller.getSnapshot().creation.draft.name).toBe('');
   });
 
+  it.each(['alex', 'sam'] as const)(
+    'recovers a Group whose session expired while saving only for its owner (%s)',
+    async (persona) => {
+      const reply = deferred<FetchResponse>();
+      let posts = 0;
+      const { controller } = setup({
+        intercept: (path, init) => {
+          if (path === '/api/groups' && init.method === 'POST') {
+            posts++;
+            return reply.promise;
+          }
+        },
+      });
+      await controller.signIn('alex');
+      controller.startCreate();
+      controller.updateCreation({
+        name: 'Keep my uncertain Group',
+        description: 'Entered before expiry',
+      });
+      const saving = controller.createGroup();
+      await vi.waitFor(() => expect(posts).toBe(1));
+      expect(controller.getSnapshot().creation.status).toBe('saving');
+      reply.resolve(json({ error: 'Session expired' }, 401));
+      await saving;
+      expect(controller.getSnapshot().auth.status).toBe('signed-out');
+      await controller.signIn(persona);
+      expect(posts).toBe(1);
+      expect(controller.getSnapshot().creation).toMatchObject(
+        persona === 'alex'
+          ? {
+              status: 'uncertain',
+              draft: { name: 'Keep my uncertain Group', description: 'Entered before expiry' },
+            }
+          : { status: 'editing', draft: { name: '', description: '' } },
+      );
+    },
+  );
+
   it('revalidates the session on foreground without leaving an unfinished Group form', async () => {
     const { controller } = setup();
     await controller.signIn('alex');
@@ -1143,6 +1181,23 @@ describe('native session and Group boundary', () => {
       });
       expect(run.device.records.size).toBe(0);
     });
+
+    it.each([false, true])(
+      'restores a Group submission with unreadable=%s without a write (#234)',
+      async (unreadable) => {
+        const run = restartable();
+        await startCabinWeekend(run, 'failed');
+        const before = structuredClone(run.device.records.get(alex.id));
+        if (unreadable) run.device.fail('load');
+        const restarted = run.app();
+        await restarted.restore();
+        restarted.startCreate();
+        expect(restarted.getSnapshot().creation.status).toBe(unreadable ? 'editing' : 'uncertain');
+        expect(restarted.getSnapshot().leave.status).toBe('closed');
+        expect(run.server.posts).toHaveLength(1);
+        expect(run.device.records.get(alex.id)).toEqual(before);
+      },
+    );
 
     it('keeps it for the same account only: Sam signing in on the device removes it', async () => {
       const run = restartable();

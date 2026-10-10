@@ -1,5 +1,5 @@
+import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
 import { describe, expect, it } from 'vitest';
-import { createMobileController } from './mobile-controller';
 import { buildExpenseBody, type ExpenseDraft } from './expense-draft';
 import type { MobileGroup } from './types';
 import { savedQueriesIn } from '../test-utils/saved-queries';

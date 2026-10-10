@@ -143,7 +143,7 @@ export function settlementBody(draft: SettlementDraft) {
   return JSON.stringify(
     createSettlementSchema
       .safeExtend({ paidBy: objectId, paidTo: objectId })
-      .parse({ ...draft, amount }),
+      .parse({ ...draft, amount, note: draft.note.trim() }),
   );
 }
 export function parseSettlementAttempt(value: unknown, accountId: string, groupId: string) {
