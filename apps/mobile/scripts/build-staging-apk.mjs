@@ -10,7 +10,7 @@ const require = createRequire(resolve(root, 'package.json'));
 const env = { ...process.env, EXPO_NO_DOTENV: '1' };
 function requireSetting(name) {
   const value = env[name];
-  if (!value) throw new Error(`Set ${name} before building the staging APK.`);
+  if (!value) throw new Error(`Set ${name} before building the signed APK.`);
   return value;
 }
 function run(command, args, cwd = root) {
@@ -18,9 +18,11 @@ function run(command, args, cwd = root) {
   if (result.error || result.status !== 0) throw new Error(`${command} failed; build stopped.`);
 }
 
+const target = process.argv.includes('--production') ? 'production' : 'staging';
+
 try {
-  if (requireSetting('EXPO_PUBLIC_APP_ENV') !== 'staging')
-    throw new Error('This command only builds the separate staging app.');
+  if (requireSetting('EXPO_PUBLIC_APP_ENV') !== target)
+    throw new Error('The configured environment does not match this build command.');
   const origin = new URL(requireSetting('EXPO_PUBLIC_API_URL'));
   if (
     origin.protocol !== 'https:' ||
@@ -30,7 +32,7 @@ try {
     env.EXPO_PUBLIC_AUTH_ORIGIN !== origin.origin ||
     (env.EXPO_PUBLIC_INVITE_ORIGIN && env.EXPO_PUBLIC_INVITE_ORIGIN !== origin.origin)
   )
-    throw new Error('Use one identical HTTPS origin for the staging API, auth and invitations.');
+    throw new Error('Use one identical HTTPS origin for the API, auth and invitations.');
   const audience = requireSetting('EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID');
   for (const name of ['SPLITBOOK_ANDROID_KEYSTORE', 'SPLITBOOK_ANDROID_PASSWORD_FILE']) {
     const path = requireSetting(name);
@@ -43,8 +45,10 @@ try {
     signal: globalThis.AbortSignal.timeout(15000),
   });
   const server = response.ok ? await response.json() : null;
-  if (server?.environment !== 'staging' || server.googleWebClientId !== audience)
-    throw new Error('The server does not advertise the configured staging Google audience.');
+  if (server?.environment !== target || server.googleWebClientId !== audience)
+    throw new Error(
+      'The server does not advertise the configured Google audience and environment.',
+    );
 
   // Generate from tracked Expo configuration, never reuse a development package identity.
   run(process.execPath, [
@@ -70,13 +74,18 @@ try {
   );
   const output = resolve(root, 'android/app/build/outputs/apk/release');
   const metadata = JSON.parse(await readFile(resolve(output, 'output-metadata.json'), 'utf8'));
-  if (metadata.applicationId !== 'com.splitbook.app.staging')
-    throw new Error('Built package identity does not match staging; do not distribute it.');
-  console.log(`Staging ARM64 APK: ${resolve(output, 'app-release.apk')}`);
+  if (
+    metadata.applicationId !==
+    (target === 'production' ? 'com.splitbook.app' : 'com.splitbook.app.staging')
+  )
+    throw new Error(
+      'Built package identity does not match the requested environment; do not distribute it.',
+    );
+  console.log(`${target} ARM64 APK: ${resolve(output, 'app-release.apk')}`);
   console.log(
     'Verify its signing certificate, Google registration and App Links before distribution.',
   );
 } catch (error) {
-  console.error(error instanceof Error ? error.message : 'Staging build failed.');
+  console.error(error instanceof Error ? error.message : 'Signed APK build failed.');
   process.exitCode = 1;
 }

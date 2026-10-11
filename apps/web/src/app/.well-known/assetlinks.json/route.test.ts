@@ -27,7 +27,7 @@ describe('GET /.well-known/assetlinks.json', () => {
   });
   it('publishes no association without the exact staging opt-in', async () => {
     vi.stubEnv('ANDROID_APP_LINKS_SHA256_CERT_FINGERPRINTS', fingerprint);
-    for (const mode of [undefined, '', 'development', 'production', 'STAGING']) {
+    for (const mode of [undefined, '', 'development', 'unknown', 'STAGING']) {
       vi.stubEnv('ANDROID_APP_LINKS_ENV', mode);
       const response = GET();
       expect(response.status).toBe(404);
@@ -67,4 +67,12 @@ describe('GET /.well-known/assetlinks.json', () => {
       rotated,
     ]);
   });
+});
+
+it('publishes only the production package on production opt-in', async () => {
+  vi.stubEnv('ANDROID_APP_LINKS_ENV', 'production');
+  vi.stubEnv('ANDROID_APP_LINKS_SHA256_CERT_FINGERPRINTS', fingerprint);
+  const response = GET();
+  expect(response.status).toBe(200);
+  expect((await response.json())[0].target.package_name).toBe('com.splitbook.app');
 });

@@ -8,13 +8,13 @@ type InvitationEnvironment = { mode?: string; authOrigin?: string; inviteOrigin?
 export function androidInvitationFilters(
   env: InvitationEnvironment,
 ): NonNullable<NonNullable<ExpoConfig['android']>['intentFilters']> {
-  if (env.mode !== 'development' && env.mode !== 'staging') return [];
+  if (!['development', 'staging', 'production'].includes(env.mode ?? '')) return [];
   const origin = parseWebOrigin(env.inviteOrigin ?? env.authOrigin ?? '');
-  if (!origin || (env.mode === 'staging' && origin.protocol !== 'https:')) return [];
+  if (!origin || (env.mode !== 'development' && origin.protocol !== 'https:')) return [];
   return [
     {
       action: 'VIEW',
-      autoVerify: env.mode === 'staging',
+      autoVerify: env.mode !== 'development',
       data: [
         {
           scheme: origin.protocol.slice(0, -1),
@@ -58,7 +58,7 @@ export function mobileConfig(
   developmentBuild: boolean,
 ): MobileConfig | null {
   if (env.mode === 'development') return developmentConfig(env, developmentBuild);
-  if (env.mode !== 'staging') return null;
+  if (env.mode !== 'staging' && env.mode !== 'production') return null;
   const api = parseWebOrigin(env.apiUrl ?? '');
   const auth = parseWebOrigin(env.authOrigin ?? '');
   const invite = parseWebOrigin(env.inviteOrigin ?? env.authOrigin ?? '');
@@ -76,6 +76,7 @@ export function mobileConfig(
     authOrigin: auth.origin,
     inviteOrigin: invite.origin,
     developmentPersonaEnabled: false,
+    googleEnvironment: env.mode,
     googleWebClientId: env.googleWebClientId,
   };
 }

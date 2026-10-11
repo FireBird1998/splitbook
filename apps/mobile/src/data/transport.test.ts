@@ -423,7 +423,10 @@ describe('a session no session holds any more (#284)', () => {
    * A Google build's transport. Each request's reply waits for `release(path)`, and an abort
    * before then fails it as expo/fetch does. `bootstrap` is what the backend says it is.
    */
-  function held(bootstrap: unknown = { environment: 'staging', googleWebClientId: client }) {
+  function held(
+    bootstrap: unknown = { environment: 'staging', googleWebClientId: client },
+    googleEnvironment: 'staging' | 'production' = 'staging',
+  ) {
     let generation = 1;
     const sent: { path: string; cookie: string | null }[] = [];
     const replies = new Map<string, () => void>();
@@ -435,6 +438,7 @@ describe('a session no session holds any more (#284)', () => {
       secureTransport: true,
       googleEnabled: true,
       googleWebClientId: client,
+      googleEnvironment,
       fetch: (url, init) => {
         const path = new URL(url).pathname;
         sent.push({ path, cookie: new Headers(init.headers).get('Cookie') });
@@ -525,6 +529,23 @@ describe('a session no session holds any more (#284)', () => {
     ]);
     expect(t.saved).toEqual([]);
     expect(t.hooks).toEqual([]);
+  });
+
+  it('production checks its marker before transmitting a cookie', async () => {
+    const t = held({ environment: 'production', googleWebClientId: client }, 'production');
+    const revoking = t.transport.revokeDetached(late);
+    await t.release('/.well-known/splitbook-mobile.json');
+    await t.release('/api/auth/sign-out');
+    expect(await within(revoking)).toBe(true);
+    expect(t.sent[0]?.cookie).toBeNull();
+    expect(t.sent[1]?.cookie).toBe(late);
+  });
+  it('production sends no cookie to a staging backend', async () => {
+    const t = held({ environment: 'staging', googleWebClientId: client }, 'production');
+    const revoking = t.transport.revokeDetached(late);
+    await t.release('/.well-known/splitbook-mobile.json');
+    expect(await within(revoking)).toBe(false);
+    expect(t.sent).toEqual([{ path: '/.well-known/splitbook-mobile.json', cookie: null }]);
   });
 
   it('never sends it to a backend that fails the Google check', async () => {
