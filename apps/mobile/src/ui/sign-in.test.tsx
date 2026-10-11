@@ -174,3 +174,14 @@ describe('Google signing in', () => {
     expect(ofType(root, 'ActivityIndicator')).toEqual([]);
   });
 });
+
+it('identifies production records as live and keeps staging wording separate', async () => {
+  const live = await render(
+    <SignIn busy={false} {...options} onGoogleSignIn={vi.fn()} productionLedger />,
+  );
+  expect(text(live)).toContain('This is your live ledger.');
+  expect(text(live)).not.toContain('separate test ledger');
+  const staging = await render(<SignIn busy={false} {...options} onGoogleSignIn={vi.fn()} />);
+  expect(text(staging)).toContain('separate test ledger');
+  expect(text(staging)).not.toContain('This is your live ledger.');
+});

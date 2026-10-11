@@ -37,6 +37,7 @@ export function SignIn({
   message,
   onSignIn,
   onGoogleSignIn,
+  productionLedger = false,
 }: {
   busy: boolean;
   /** While busy: the option signing in. Ignored otherwise. */
@@ -44,6 +45,7 @@ export function SignIn({
   message: string | null;
   onSignIn: (id: PersonaId) => void;
   onGoogleSignIn?: () => void;
+  productionLedger?: boolean;
 }) {
   const theme = useTheme();
   const chosen = busy ? option : undefined;
@@ -103,8 +105,9 @@ export function SignIn({
                 ) : null}
               </View>
               <CompactText variant="caption" tone="secondary">
-                This beta has a separate test ledger. Entries will not move to your live account
-                automatically.
+                {productionLedger
+                  ? 'This is your live ledger. Saved Expenses and payments are real records shared with your Group.'
+                  : 'This beta has a separate test ledger. Entries will not move to your live account automatically.'}
               </CompactText>
             </View>
           </Card>

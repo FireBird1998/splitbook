@@ -4,7 +4,7 @@ export function GET() {
     .split(',')
     .map((value) => value.trim().toUpperCase());
   if (
-    process.env.ANDROID_APP_LINKS_ENV !== 'staging' ||
+    !['staging', 'production'].includes(process.env.ANDROID_APP_LINKS_ENV ?? '') ||
     fingerprints.some((value) => !/^(?:[\dA-F]{2}:){31}[\dA-F]{2}$/.test(value))
   ) {
     return Response.json([], { status: 404, headers: { 'Cache-Control': 'no-store' } });
@@ -14,7 +14,10 @@ export function GET() {
       relation: ['delegate_permission/common.handle_all_urls'],
       target: {
         namespace: 'android_app',
-        package_name: 'com.splitbook.app.staging',
+        package_name:
+          process.env.ANDROID_APP_LINKS_ENV === 'production'
+            ? 'com.splitbook.app'
+            : 'com.splitbook.app.staging',
         sha256_cert_fingerprints: fingerprints,
       },
     },

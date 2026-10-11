@@ -307,7 +307,9 @@ function AuthenticationScreen() {
               backgroundColor: theme.brand.bg,
             }}
           >
-            <Label>{googleSignInEnabled ? 'STAGING' : 'DEV'}</Label>
+            <Label>
+              {googleSignInEnabled ? (environment.isProduction ? 'LIVE' : 'STAGING') : 'DEV'}
+            </Label>
           </View>
         )}
       </View>
@@ -358,6 +360,7 @@ function AuthenticationScreen() {
           </View>
         ) : !authenticated ? (
           <SignIn
+            productionLedger={environment.isProduction}
             busy={state.auth.status === 'signing-in'}
             option={state.auth.status === 'signing-in' ? state.auth.option : undefined}
             message={
@@ -494,7 +497,11 @@ function TaskScreen() {
             />
           ) : (
             <View style={{ marginRight: 12 }}>
-              <Badge label={googleSignInEnabled ? 'STAGING' : 'DEV'} />
+              <Badge
+                label={
+                  googleSignInEnabled ? (environment.isProduction ? 'LIVE' : 'STAGING') : 'DEV'
+                }
+              />
             </View>
           )
         }

@@ -158,6 +158,7 @@ export interface TransportDependencies {
   /** Google builds check the staging backend, for this client, before any ordinary request. */
   googleEnabled: boolean;
   googleWebClientId?: string;
+  googleEnvironment?: 'staging' | 'production';
   fetch: MobileFetch;
   now: () => number;
   /** Runs the 20-second timeout. Defaults to the platform's own. */
@@ -221,6 +222,7 @@ export function createTransport({
   secureTransport,
   googleEnabled,
   googleWebClientId,
+  googleEnvironment = 'staging',
   fetch,
   now,
   timer = platformTimer,
@@ -471,12 +473,12 @@ export function createTransport({
       !value ||
       typeof value !== 'object' ||
       !('environment' in value) ||
-      value.environment !== 'staging' ||
+      value.environment !== googleEnvironment ||
       !('googleWebClientId' in value) ||
       value.googleWebClientId !== googleWebClientId
     ) {
       throw new RequestError(
-        'This build does not match the staging login configuration. Please contact the beta organizer.',
+        'This build does not match the server login configuration. Please contact the beta organizer.',
       );
     }
     if (detached) return;

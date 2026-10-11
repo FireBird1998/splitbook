@@ -939,6 +939,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     secureTransport,
     googleEnabled,
     googleWebClientId: config.googleWebClientId,
+    googleEnvironment: config.googleEnvironment,
     fetch: dependencies.fetch,
     now,
     timer: dependencies.timer,

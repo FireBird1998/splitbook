@@ -36,8 +36,11 @@ const invitationKey = `splitbook.invitation.${Array.from(controllerConfig.invite
 const cleanupKey = storageKey.replace('splitbook.session.', 'splitbook.cleanup.');
 const ownerKey = storageKey.replace('splitbook.session.', 'splitbook.account-owner.');
 export const environment = {
+  isProduction: config?.googleEnvironment === 'production',
   label: googleSignInEnabled
-    ? 'Private beta · staging ledger'
+    ? config?.googleEnvironment === 'production'
+      ? 'Private beta · production ledger'
+      : 'Private beta · staging ledger'
     : 'Local development · fictional data',
   apiOrigin: new URL(controllerConfig.apiBaseUrl).origin,
   webOrigin: new URL(controllerConfig.inviteOrigin ?? controllerConfig.authOrigin).origin,
