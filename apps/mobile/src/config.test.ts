@@ -92,7 +92,7 @@ describe('native app configuration per environment', () => {
       name: 'SplitBook',
       identifier: 'com.splitbook.app',
       scheme: 'splitbook',
-      intentFilters: [],
+      intentFilters: [invitationFilter('https', 'splitbook.test', true)],
     },
   ])(
     'keeps the $mode identity and shows the brand icon and splash',
@@ -178,7 +178,7 @@ describe('Android invitation link configuration', () => {
     for (const env of [
       {},
       { ...local, mode: undefined },
-      { ...local, mode: 'production', inviteOrigin: 'https://splitbook.test' },
+      { ...local, mode: 'unsupported', inviteOrigin: 'https://splitbook.test' },
       { ...local, mode: 'staging' },
       { ...local, inviteOrigin: '' },
       { ...local, inviteOrigin: 'file:///tmp/data' },
@@ -212,7 +212,7 @@ describe('staging Google build configuration', () => {
   it('fails closed for incomplete, insecure, cross-server, or unsupported settings', () => {
     for (const overrides of [
       { mode: undefined },
-      { mode: 'production' },
+      { mode: 'unsupported' },
       { apiUrl: '' },
       { apiUrl: 'http://staging.splitbook.test' },
       { authOrigin: 'https://different.test' },
@@ -221,5 +221,21 @@ describe('staging Google build configuration', () => {
       { googleWebClientId: 'not-a-client-id' },
     ])
       expect(mobileConfig({ ...staging, ...overrides }, false)).toBeNull();
+  });
+});
+
+describe('production configuration', () => {
+  it('uses a production marker with HTTPS and never enables personas', () => {
+    expect(
+      mobileConfig(
+        {
+          mode: 'production',
+          apiUrl: 'https://splitbook.test',
+          authOrigin: 'https://splitbook.test',
+          googleWebClientId: '123-test.apps.googleusercontent.com',
+        },
+        false,
+      ),
+    ).toMatchObject({ googleEnvironment: 'production', developmentPersonaEnabled: false });
   });
 });

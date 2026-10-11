@@ -467,6 +467,8 @@ export interface MobileConfig {
   developmentPersonaEnabled: boolean;
   /** Public server audience for native Google identity tokens. Staging requires HTTPS. */
   googleWebClientId?: string;
+  /** Expected public backend marker, checked before sending credentials. */
+  googleEnvironment?: 'staging' | 'production';
 }
 
 export interface CredentialStore {
