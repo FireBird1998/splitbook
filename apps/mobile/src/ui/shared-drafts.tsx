@@ -69,6 +69,7 @@ export function SharedDrafts({
       animationType="slide"
     >
       <ScrollView
+        style={{ flex: 1, backgroundColor: theme.bg }}
         contentContainerStyle={{ padding: 24, paddingTop: 48, gap: 16, backgroundColor: theme.bg }}
       >
         <Copy accessibilityRole="header">Your private Drafts</Copy>
