@@ -219,6 +219,10 @@ export function sharedDraftCollection({
         const result = await client.retry();
         if (result?.kind === 'save')
           update({ outcomes: result.outcomes, reviews: [], selected: [] });
+        else if (result?.kind === 'create' && result.localDraftRetained)
+          update({
+            message: 'Your original Draft was uploaded. Newer entries are still on this device.',
+          });
         await refresh();
       }),
   };

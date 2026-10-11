@@ -63,6 +63,7 @@ function setup(
     timer?: MobileTimer;
     pendingInvitation?: CredentialStore;
     savedQueries?: MobileDependencies['savedQueries'];
+    draftRequests?: MobileDependencies['draftRequests'];
   } = {},
 ) {
   let cookie: string | null = null;
@@ -141,6 +142,7 @@ function setup(
           },
         },
         expenseDrafts: drafts,
+        draftRequests: options.draftRequests,
         pendingInvitation: options.pendingInvitation,
         accountLocal: {
           owner: {
@@ -161,7 +163,7 @@ function setup(
               cleanup = false;
             },
           },
-          stores: [drafts],
+          stores: [drafts, ...(options.draftRequests ? [options.draftRequests] : [])],
         },
         now: () => now,
         newSubmissionKey: options.newSubmissionKey ?? (() => 'native-expense-test-0001'),
@@ -3816,3 +3818,278 @@ it.each(['create', 'edit', 'delete'] as const)(
     expect(requests.slice(before).filter((request) => !request.startsWith('GET '))).toEqual([]);
   },
 );
+
+describe('acknowledging an interrupted shared Draft upload', () => {
+  function uploadFixture() {
+    const receipts = new Map<string, unknown>();
+    const requests = {
+      load: async (account: string, id: string) => receipts.get(`${account}:${id}`) ?? null,
+      save: async (account: string, id: string, value: unknown) => {
+        receipts.set(`${account}:${id}`, value);
+      },
+      remove: async (account: string, id: string) => {
+        receipts.delete(`${account}:${id}`);
+      },
+      clear: async () => {
+        receipts.clear();
+      },
+    };
+    const submitted: Array<{ body: string; key: string | null }> = [];
+    const rows: Array<{
+      id: string;
+      groupId: string;
+      revision: number;
+      state: 'active';
+      values: unknown;
+      missingFields: string[];
+      createdAt: string;
+      updatedAt: string;
+    }> = [];
+    let loseReply = true;
+    let delayedReply: (() => Promise<void>) | undefined;
+    let signedIn = people[0];
+    let denyGroup = false;
+    const fixture = setup(
+      (path, init) => {
+        if (path.endsWith('/demo-persona/sign-in')) {
+          signedIn = JSON.parse(String(init.body)).personaId === 'sam' ? people[1] : people[0];
+          return Promise.resolve(
+            json(
+              { user: signedIn },
+              200,
+              'better-auth.session_token=fixture.signature; Max-Age=2592000',
+            ),
+          );
+        }
+        if (path.endsWith('/get-session'))
+          return Promise.resolve(
+            json({
+              user: signedIn,
+              session: { userId: signedIn.id, expiresAt: '2030-01-01T00:00:00Z' },
+            }),
+          );
+        if (denyGroup && path.startsWith(`/api/groups/${groupId}`))
+          return Promise.resolve(json({ error: 'Group access denied', status: 403 }, 403));
+        if (path !== `/api/groups/${groupId}/drafts`) return;
+        if (init.method === 'POST') {
+          submitted.push({
+            body: String(init.body),
+            key: new Headers(init.headers).get('Idempotency-Key'),
+          });
+          if (!rows.length)
+            rows.push({
+              id: 'a00000000000000000000040',
+              groupId,
+              revision: 0,
+              state: 'active',
+              values: JSON.parse(String(init.body)).drafts[0],
+              missingFields: [],
+              createdAt: iso,
+              updatedAt: iso,
+            });
+          if (loseReply) {
+            loseReply = false;
+            return Promise.reject(new Error('Lost upload reply'));
+          }
+        }
+        return init.method === 'POST' && delayedReply
+          ? delayedReply().then(() => json({ data: rows }))
+          : Promise.resolve(json({ data: rows }));
+      },
+      { draftRequests: requests },
+    );
+    return {
+      ...fixture,
+      submitted,
+      requests,
+      rows,
+      denyAccess: () => {
+        denyGroup = true;
+      },
+      delayReply: (wait: () => Promise<void>) => {
+        delayedReply = wait;
+      },
+    };
+  }
+
+  it('acknowledges the original upload after local edits without losing newer entries or blocking collection writes', async () => {
+    const fixture = uploadFixture();
+    const { controller, drafts, submitted } = fixture;
+    try {
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
+      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow();
+      await controller.updateExpenseDraft({ description: 'Newer correction kept on device' });
+      const local = await drafts.load(memberIds[0], groupId);
+      const client = controller.sharedDrafts(groupId);
+      expect(await client.pending()).toBeTruthy();
+      expect(submitted).toHaveLength(1);
+
+      const acknowledgment = await client.retry();
+      expect(acknowledgment).toMatchObject({ kind: 'create', localDraftRetained: true });
+      expect(
+        acknowledgment?.kind === 'create' && acknowledgment.drafts[0].values?.description,
+      ).toBe('Original dinner');
+      expect(submitted[1]).toEqual(submitted[0]);
+      expect(await drafts.load(memberIds[0], groupId)).toEqual(local);
+      expect(controller.getSnapshot().expense.draft?.description).toBe(
+        'Newer correction kept on device',
+      );
+      expect(await client.pending()).toBeNull();
+
+      await expect(
+        client.create({ description: 'A separate incomplete Draft' }),
+      ).resolves.toHaveLength(1);
+      expect(await drafts.load(memberIds[0], groupId)).toEqual(local);
+    } finally {
+      controller.dispose();
+    }
+  });
+
+  it('removes only unchanged local recovery after a confirmed exact retry', async () => {
+    const { controller, drafts, submitted } = uploadFixture();
+    try {
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
+      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow();
+      const client = controller.sharedDrafts(groupId);
+      expect((await client.retry())?.kind).toBe('create');
+      expect(submitted[1]).toEqual(submitted[0]);
+      expect(await drafts.load(memberIds[0], groupId)).toBeNull();
+      expect(await client.pending()).toBeNull();
+    } finally {
+      controller.dispose();
+    }
+  });
+
+  it('keeps the upload receipt when removing unchanged local recovery fails and explicitly retries the same request', async () => {
+    const { controller, drafts, submitted } = uploadFixture();
+    try {
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
+      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow();
+      const remove = drafts.remove;
+      drafts.remove = async () => {
+        throw new Error('Device cleanup failed');
+      };
+      const local = await drafts.load(memberIds[0], groupId);
+      const client = controller.sharedDrafts(groupId);
+      const receipt = await client.pending();
+      await expect(client.retry()).rejects.toThrow('Device cleanup failed');
+      expect(await client.pending()).toBe(receipt);
+      expect(await drafts.load(memberIds[0], groupId)).toEqual(local);
+      drafts.remove = remove;
+      await client.retry();
+      expect(submitted[2]).toEqual(submitted[0]);
+      expect(await drafts.load(memberIds[0], groupId)).toBeNull();
+      expect(await client.pending()).toBeNull();
+    } finally {
+      controller.dispose();
+    }
+  });
+
+  it('retains newer local work and the original receipt when acknowledgment cleanup fails', async () => {
+    const { controller, drafts, requests, submitted } = uploadFixture();
+    try {
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
+      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow();
+      await controller.updateExpenseDraft({ description: 'My newer entries' });
+      const local = await drafts.load(memberIds[0], groupId);
+      const client = controller.sharedDrafts(groupId);
+      const receipt = await client.pending();
+      const remove = requests.remove;
+      requests.remove = async () => {
+        throw new Error('Receipt cleanup failed');
+      };
+      await expect(client.retry()).rejects.toThrow('Receipt cleanup failed');
+      expect(await client.pending()).toBe(receipt);
+      expect(await drafts.load(memberIds[0], groupId)).toEqual(local);
+      requests.remove = remove;
+      expect(await client.retry()).toMatchObject({ localDraftRetained: true });
+      expect(submitted[2]).toEqual(submitted[0]);
+      expect(await drafts.load(memberIds[0], groupId)).toEqual(local);
+      expect(await client.pending()).toBeNull();
+    } finally {
+      controller.dispose();
+    }
+  });
+
+  it('does not treat an unconfirmed ordinary Expense save as a new shared Draft', async () => {
+    const { controller, submitted } = uploadFixture();
+    try {
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
+      await controller.saveExpense();
+      expect(controller.getSnapshot().expense.attempt).toBeTruthy();
+      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow(
+        'Resolve the existing Expense save',
+      );
+      expect(submitted).toEqual([]);
+    } finally {
+      controller.dispose();
+    }
+  });
+
+  it('fences a delayed upload acknowledgment after account switch so the other member’s local work is preserved', async () => {
+    const fixture = uploadFixture();
+    const { controller, drafts } = fixture;
+    let release!: () => void;
+    const wait = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
+      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow();
+      const oldClient = controller.sharedDrafts(groupId);
+      fixture.delayReply(() => wait);
+      const retry = expect(oldClient.retry()).rejects.toThrow();
+      await vi.waitFor(() => expect(fixture.submitted).toHaveLength(2));
+      await controller.signOut();
+      await controller.signIn('sam');
+      expect(controller.getSnapshot().auth.user?.id).toBe(memberIds[1]);
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'New session entries' });
+      const local = await drafts.load(memberIds[1], groupId);
+      release();
+      await retry;
+      expect(await drafts.load(memberIds[1], groupId)).toEqual(local);
+      expect(controller.getSnapshot().expense.draft?.description).toBe('New session entries');
+      expect(await controller.sharedDrafts(groupId).pending()).toBeNull();
+      await expect(oldClient.retry()).rejects.toThrow();
+      expect(fixture.submitted).toHaveLength(2);
+    } finally {
+      release();
+      controller.dispose();
+    }
+  });
+
+  it('removes recovery and upload receipts on authoritative Group loss and never replays the old request', async () => {
+    const fixture = uploadFixture();
+    const { controller, drafts } = fixture;
+    try {
+      await controller.signIn('alex');
+      await controller.openExpense(groupId);
+      await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
+      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow();
+      await controller.updateExpenseDraft({ description: 'Newer local entries' });
+      const oldClient = controller.sharedDrafts(groupId);
+      fixture.denyAccess();
+      await controller.openGroup(groupId, false);
+      expect(await drafts.load(memberIds[0], groupId)).toBeNull();
+      expect(await oldClient.pending()).toBeNull();
+      expect(await oldClient.retry()).toBeNull();
+      expect(fixture.submitted).toHaveLength(1);
+      expect(controller.getSnapshot().sharedDraftCollection.rows).toEqual([]);
+    } finally {
+      controller.dispose();
+    }
+  });
+});

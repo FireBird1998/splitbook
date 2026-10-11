@@ -332,3 +332,123 @@ it.each([
     queryClient.unmount();
   }
 });
+
+it('shows that a retried upload succeeded while newer device entries remain and new collection entry is available', async () => {
+  const groupId = 'c00000000000000000000001';
+  const accountId = 'a00000000000000000000001';
+  const row = {
+    id: 'd00000000000000000000001',
+    groupId,
+    revision: 0,
+    state: 'active',
+    values: { description: 'Originally uploaded dinner' },
+    missingFields: ['amount'],
+    createdAt: '2026-10-11T00:00:00.000Z',
+    updatedAt: '2026-10-11T00:00:00.000Z',
+  };
+  const group: MobileGroup = {
+    id: groupId,
+    name: 'Home',
+    description: '',
+    category: 'home',
+    defaultCurrency: 'INR',
+    members: [],
+    startDate: null,
+    endDate: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  let stored: string | null = null;
+  let writes = 0;
+  const client = draftCollectionClient(
+    groupId,
+    async (_path, init) => {
+      if (init?.method === 'POST' && ++writes === 1) throw new Error('Lost reply');
+      return { data: [row] };
+    },
+    {
+      load: async () => stored,
+      save: async (value) => {
+        stored = value;
+      },
+      clear: async () => {
+        stored = null;
+      },
+    },
+    () => 'retained-request',
+    async () => ({ localDraftRetained: true }),
+  );
+  await expect(client.create(row.values, 'original source')).rejects.toThrow('Lost reply');
+  const queryClient = new QueryClient();
+  queryClient.mount();
+  let state = emptySharedDraftCollection();
+  const listeners = new Set<() => void>();
+  const commands = sharedDraftCollection({
+    client: { ...client, context: async () => ({ group, tags: [] }) },
+    queryClient,
+    groupId,
+    accountId,
+    environment: 'http://localhost:3000',
+    current: () => true,
+    read: () => state,
+    publish: (value) => {
+      state = value;
+      listeners.forEach((notify) => notify());
+    },
+  });
+  let snapshot = { sharedDraftCollection: state };
+  const controller = {
+    draftCollection: () => commands,
+    getSnapshot: () => {
+      if (snapshot.sharedDraftCollection !== state) snapshot = { sharedDraftCollection: state };
+      return snapshot;
+    },
+    subscribe: (notify: () => void) => {
+      listeners.add(notify);
+      return () => {
+        listeners.delete(notify);
+      };
+    },
+  };
+  let tree!: ReactTestRenderer;
+  await act(async () => {
+    tree = create(
+      <SharedDrafts
+        controller={controller}
+        group={group}
+        accountId={accountId}
+        onClose={() => {}}
+      />,
+    );
+  });
+  const button = (label: string) =>
+    tree.root.find(
+      (node) => String(node.type) === 'Pressable' && node.props.accessibilityLabel === label,
+    );
+  try {
+    expect(button('New Draft').props.disabled).toBe(true);
+    await act(async () => {
+      focusManager.setFocused(false);
+      onlineManager.setOnline(false);
+      focusManager.setFocused(true);
+      onlineManager.setOnline(true);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(writes).toBe(1);
+    await act(async () => {
+      await button('Retry original request').props.onPress();
+    });
+    expect(JSON.stringify(tree.toJSON())).toContain(
+      'Your original Draft was uploaded. Newer entries are still on this device.',
+    );
+    expect(stored).toBeNull();
+    expect(writes).toBe(2);
+    expect(button('New Draft').props.disabled).toBe(false);
+    expect(JSON.stringify(tree.toJSON())).not.toContain('Retry original request');
+  } finally {
+    await act(async () => tree.unmount());
+    queryClient.clear();
+    queryClient.unmount();
+    focusManager.setFocused(undefined);
+  }
+});

@@ -19,7 +19,7 @@ export interface DraftAttemptStore {
   clear(): Promise<void>;
 }
 export type DraftRetryResult =
-  | { kind: 'create'; drafts: PersistedExpenseDraft[] }
+  | { kind: 'create'; drafts: PersistedExpenseDraft[]; localDraftRetained?: true }
   | { kind: 'save'; outcomes: DraftSaveOutcome[] };
 /** A saved request is retried verbatim, only after an explicit member action. */
 export function draftCollectionClient(
@@ -27,7 +27,7 @@ export function draftCollectionClient(
   request: DraftTransport,
   store: DraftAttemptStore,
   uuid: () => string,
-  onCreated?: (source: unknown) => Promise<void>,
+  onCreated?: (source: unknown) => Promise<{ localDraftRetained: true } | void>,
 ) {
   const base = expenseDraftsPath(groupId);
   async function sendSaved(serialized: string, firstAttempt = false): Promise<DraftRetryResult> {
@@ -64,9 +64,10 @@ export function draftCollectionClient(
       throw new Error(
         'Draft response not confirmed. Retry the original request before making changes.',
       );
-    if (attempt.source !== undefined) await onCreated?.(attempt.source);
+    const acknowledgment =
+      attempt.source !== undefined ? await onCreated?.(attempt.source) : undefined;
     await store.clear();
-    return { kind: 'create', drafts };
+    return { kind: 'create', drafts, ...acknowledgment };
   }
 
   async function retain(

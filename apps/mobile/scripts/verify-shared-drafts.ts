@@ -141,15 +141,23 @@ async function main() {
     const reopened = controller.sharedDrafts(groupId);
     assert.ok(await reopened.pending());
     assert.equal(submitted.length, 1, 'Reading pending state must never retry automatically');
-    await reopened.retry();
+    await controller.updateExpenseDraft({ description: 'Newer local correction after upload' });
+    const localAfterCorrection = await drafts.load(alexId, groupId);
+    const acknowledgment = await reopened.retry();
+    assert.equal(acknowledgment?.kind, 'create');
+    assert.ok(acknowledgment?.kind === 'create' && acknowledgment.localDraftRetained);
     assert.deepEqual(submitted[1], submitted[0]);
-    assert.equal(
+    assert.deepEqual(
       await drafts.load(alexId, groupId),
-      null,
-      'Local recovery must hand off only after server acknowledgment',
+      localAfterCorrection,
+      'A confirmed upload must preserve newer local recovery',
     );
+    assert.equal(await reopened.pending(), null);
+    const [separateDraft] = await reopened.create({ description: 'Separate incomplete Draft' });
+    await reopened.discard(separateDraft);
     const collection = await reopened.list();
     assert.equal(collection.length, 1);
+    assert.equal(collection[0].values?.description, 'Android recovery upload');
     const reviews = await reopened.review(collection.map((row) => row.id));
     assert.deepEqual(reviews[0].problems, []);
     const outcome = await reopened.save(reviews, []);
@@ -160,7 +168,7 @@ async function main() {
       .parse(await web.request(`/api/groups/${groupId}/expenses`));
     assert.equal(expenses.data.pagination.total, 1);
     console.log(
-      'PASS: web → native visibility; stale protection; permanent discard; local recovery handoff; exact lost-response retry; native review/save produces one Expense.',
+      'PASS: web → native visibility; stale protection; permanent discard; newer local recovery retained without blocking collection; exact lost-response retry; native review/save produces one Expense.',
     );
   } finally {
     await controller.signOut();

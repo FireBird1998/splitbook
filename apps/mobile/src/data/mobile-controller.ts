@@ -5993,19 +5993,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       async (source) => {
         const local = dependencies.expenseDrafts;
         if (!local) throw new Error('Local recovery storage unavailable');
-        await lease.write(async () => {
+        return lease.write(async () => {
           const stored = await local.load(lease.accountId, groupId);
           if (!stored) return;
           const record = parseStoredExpenseDraft(stored, lease.accountId, groupId);
+          if (typeof source !== 'string') throw new Error('Local recovery source unavailable.');
           if (
             record.attempt ||
             record.mutation ||
-            typeof source !== 'string' ||
             !sameExpenseDraft(record.draft, JSON.parse(source))
           )
-            throw new Error(
-              'Draft uploaded, but local entries changed. Resolve the retained request before saving local entries.',
-            );
+            return { localDraftRetained: true as const };
           await local.remove(lease.accountId, groupId);
         });
       },
