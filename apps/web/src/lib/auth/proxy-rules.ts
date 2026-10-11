@@ -34,7 +34,13 @@ export function resolveProxyResponse({
   const isApi = pathname.startsWith('/api');
 
   // 1. Better Auth's own routes (sign-in, callback, session, sign-out) are always reachable.
-  if (isApiAuth) return NextResponse.next();
+  if (
+    isApiAuth ||
+    pathname === '/api/mcp' ||
+    pathname.startsWith('/.well-known/') ||
+    pathname.startsWith('/mcp/')
+  )
+    return NextResponse.next();
 
   // 2. Allow the public invite-preview read so the join page can render its sign-in CTA.
   if (isJoinPreview) return NextResponse.next();

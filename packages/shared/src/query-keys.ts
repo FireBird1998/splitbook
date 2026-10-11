@@ -6,6 +6,7 @@
  */
 import {
   activityPagePath,
+  expenseDraftsPath,
   expenseHistoryPath,
   expensePagePath,
   expenseRecordPath,
@@ -124,6 +125,9 @@ export const searchKey = (account: QueryAccount, query: string) =>
 
 export const groupKey = (account: QueryAccount, groupId: string) =>
   groupScopedKey('group', account, groupId, groupPath(groupId));
+
+export const expenseDraftsKey = (account: QueryAccount, groupId: string) =>
+  groupScopedKey('group', account, groupId, expenseDraftsPath(groupId));
 
 export const groupBalancesKey = (account: QueryAccount, groupId: string) =>
   groupScopedKey('balances', account, groupId, groupBalancesPath(groupId));

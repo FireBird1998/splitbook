@@ -11,6 +11,7 @@ export const GROUP_TABS = [
   // The Month against the Months before it (#314); a Trip's is its Trip summary (#316).
   { slug: 'insights', label: 'Insights' },
   { slug: 'activity', label: 'Activity' },
+  { slug: 'drafts', label: 'Drafts' },
   { slug: 'members', label: 'Members' },
 ] as const;
 

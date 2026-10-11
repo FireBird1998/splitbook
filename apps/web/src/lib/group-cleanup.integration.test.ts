@@ -125,6 +125,7 @@ describe('read-only orphan Group inventory', () => {
           activities: 0,
           recurringexpenses: 0,
           invitations: 0,
+          expensedrafts: 0,
         },
       },
     ]);

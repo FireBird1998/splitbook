@@ -47,6 +47,7 @@ export const appearance = createAppearanceController({
   load: () => SecureStore.getItemAsync('splitbook.appearance'),
   save: (mode) => SecureStore.setItemAsync('splitbook.appearance', mode),
 });
+const draftRequests = createAccountGroupRecordStore(controllerConfig.apiBaseUrl, 'draft-request');
 const expenseDrafts = createExpenseDraftStore(controllerConfig.apiBaseUrl);
 const settlementAttempts = createSettlementAttemptStore(controllerConfig.apiBaseUrl);
 const groupCreations = createGroupCreationStore(controllerConfig.apiBaseUrl);
@@ -89,6 +90,7 @@ export const controller = createMobileController(controllerConfig, {
   savedQueries,
   netInfo: NetInfo,
   offlineIdentity,
+  draftRequests,
   expenseDrafts,
   settlementAttempts,
   groupCreations,
@@ -118,6 +120,7 @@ export const controller = createMobileController(controllerConfig, {
       clear: () => SecureStore.deleteItemAsync(ownerKey),
     },
     stores: [
+      draftRequests,
       expenseDrafts,
       settlementAttempts,
       groupCreations,

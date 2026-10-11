@@ -1,3 +1,4 @@
+import type { SharedDraftCollectionState } from './shared-draft-collection';
 import type { OfflineIdentityStore } from './offline-cache';
 import type { ActivityState } from './activity';
 import type { AccountGroupRecordStore } from './account-record-storage';
@@ -367,6 +368,7 @@ export interface PendingInvitationStore {
 }
 
 export interface MobileSnapshot {
+  sharedDraftCollection: SharedDraftCollectionState;
   offline: { active: boolean; refreshedAt: number | null; message: string | null };
   /**
    * The view (`shownView`) a running pull-to-refresh started on. Only that view shows the pull
@@ -599,6 +601,7 @@ export interface MobileDependencies {
    * it never extends session or access.
    */
   displayFreshnessMs?: number;
+  draftRequests?: AccountGroupRecordStore;
   expenseDrafts?: ExpenseDraftStore;
   settlementAttempts?: AccountGroupRecordStore;
   /** Register it in `accountLocal.stores` too, so sign-out and account change remove it. */

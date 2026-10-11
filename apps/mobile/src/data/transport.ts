@@ -117,7 +117,7 @@ const unreachable = (kind: 'network' | 'timeout') =>
 const gatewayStatuses = [502, 503, 504];
 
 export interface RequestOptions {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   /** Sent as `X-Splitbook-Revision`: the revision an edit or delete was made against. */
   revision?: number;
   body?: unknown;

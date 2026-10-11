@@ -4,7 +4,7 @@ import { CATEGORY_IDS } from '../categories';
 import { normalizeExpenseMoney } from '../exact-money';
 import { calendarDate } from './calendar-date';
 
-const expenseFields = z.object({
+export const expenseFields = z.object({
   description: z.string().trim().min(1, 'Description is required').max(200),
   amount: z.number().positive('Amount must be positive').max(10_000_000),
   currency: z.string().refine((val) => CURRENCY_CODES.includes(val), {

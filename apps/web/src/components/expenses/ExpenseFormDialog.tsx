@@ -1,4 +1,5 @@
 'use client';
+import KeepExpenseDraft from '@/components/drafts/KeepExpenseDraft';
 
 import { useState } from 'react';
 import Dialog from '@mui/material/Dialog';
@@ -256,6 +257,12 @@ function ExpenseDraftDialog({
   };
 
   const handleSubmit = async () => {
+    if (sessionStorage.getItem(`splitbook.draft-request:${userId}:${groupId}`)) {
+      window.alert(
+        'Resolve the unconfirmed request in this Group’s Drafts before saving this Expense.',
+      );
+      return;
+    }
     const outcome = await save(
       draft,
       groupTags.flatMap((option) => (option._id ? [option._id] : [])),
@@ -971,6 +978,9 @@ function ExpenseDraftDialog({
           gap: 1,
         }}
       >
+        {process.env.NEXT_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' && !isEditMode && (
+          <KeepExpenseDraft draft={draft} groupId={groupId} accountId={userId} onKept={onClose} />
+        )}
         <Button onClick={onClose} color="inherit" sx={{ minHeight: 40 }}>
           Cancel
         </Button>
