@@ -131,11 +131,11 @@ async function verify() {
       deletionPending: false,
     });
     assert.equal(await db.collection('groups').countDocuments({ _id: id }), 0);
-    assert.deepEqual(await count(id), [0, 0, 0, 0, 0]);
+    assert.deepEqual(await count(id), groupOwnedCollections.map(() => 0));
     assert.equal(await db.collection('users').countDocuments(), originalUsers);
     assert.equal((await db.collection('groups').findOne({ _id: archived }))?.members.length, 1);
     checks.push(
-      'Six-collection cascade includes soft-deleted/pending history; accounts and archived-with-member Group remain',
+      'Group-owned collection cascade includes soft-deleted/pending history; accounts and archived-with-member Group remain',
     );
     const replay = await request(path, alexCookie, 'POST', { deleteIfLastMember: true });
     assert.equal((await replay.json()).data.deleted, true);
@@ -213,7 +213,7 @@ async function verify() {
       (await db.collection('groupdeletions').findOne({ _id: pending }))?.state,
       'complete',
     );
-    assert.deepEqual(await count(pending), [0, 0, 0, 0, 0]);
+    assert.deepEqual(await count(pending), groupOwnedCollections.map(() => 0));
     assert.equal(await db.collection('groups').countDocuments({ _id: pending }), 0);
     assert.equal(await db.collection('groups').countDocuments({ _id: historic }), 1);
     assert.equal(await db.collection('expenses').countDocuments({ group: historic }), 1);
@@ -230,7 +230,7 @@ async function verify() {
       deleteIfLastMember: true,
     });
     assert.equal((await recovered.json()).data.deleted, true);
-    assert.deepEqual(await count(lost), [0, 0, 0, 0, 0]);
+    assert.deepEqual(await count(lost), groupOwnedCollections.map(() => 0));
     checks.push(
       'Lost completed HTTP response can be replayed explicitly without a second deletion',
     );
