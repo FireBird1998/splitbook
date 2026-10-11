@@ -6,7 +6,12 @@ import connectDB from './db';
 // Mongoose propagates the transaction session through its own AsyncLocalStorage.
 // Raw collection writes must explicitly use the session handed to the callback.
 mongoose.set('transactionAsyncLocalStorage', true);
-const mutations = new AsyncLocalStorage<{ groupId: string; session: ClientSession }>();
+type AfterCommit = () => Promise<unknown>;
+const mutations = new AsyncLocalStorage<{
+  groupId: string;
+  session: ClientSession;
+  afterCommit: AfterCommit[];
+}>();
 export const groupTransactionOptions: mongoose.mongo.TransactionOptions & { timeoutMS: number } = {
   timeoutMS: 2_000,
   maxCommitTimeMS: 1_000,
@@ -56,6 +61,13 @@ export async function supportsGroupTransactions(deadline = Date.now() + 2_000): 
   return withinDeadline(capability, deadline);
 }
 
+/** Auxiliary publication must wait for the outermost financial commit, including nested writes. */
+export async function afterGroupCommit(work: AfterCommit): Promise<void> {
+  const active = mutations.getStore();
+  if (active) active.afterCommit.push(work);
+  else await work();
+}
+
 /** Every Group-owned mutation conflicts with deletion on this shared Mongo document. */
 export async function withGroupMutation<T>(
   groupId: string,
@@ -88,7 +100,7 @@ export async function withGroupMutation<T>(
     timeoutMS: remainingTime(deadline),
     maxCommitTimeMS: Math.min(1_000, remainingTime(deadline)),
   };
-  return mongoose.connection.transaction(async (session) => {
+  const committed = await mongoose.connection.transaction(async (session) => {
     const fenced = await db
       .collection('groups')
       .updateOne(
@@ -98,6 +110,11 @@ export async function withGroupMutation<T>(
       );
     if (!fenced.matchedCount) throw new Error('FORBIDDEN');
     remainingTime(deadline);
-    return mutations.run({ groupId, session }, () => write(session));
+    // Every retried transaction owns a fresh list. Failed attempts never publish.
+    const afterCommit: AfterCommit[] = [];
+    const result = await mutations.run({ groupId, session, afterCommit }, () => write(session));
+    return { result, afterCommit };
   }, transactionOptions);
+  for (const work of committed.afterCommit) await work();
+  return committed.result;
 }

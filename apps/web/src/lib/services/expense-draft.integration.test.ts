@@ -24,6 +24,8 @@ import { POST as reviewRoute } from '@/app/api/groups/[id]/drafts/review/route';
 import { POST as saveRoute } from '@/app/api/groups/[id]/drafts/save/route';
 import { removeAccountDrafts } from './draft-account-cleanup';
 import { DELETE, PUT } from '@/app/api/groups/[id]/drafts/[draftId]/route';
+import { GET as expenseListRoute } from '@/app/api/groups/[id]/expenses/route';
+import { GET as activityRoute } from '@/app/api/groups/[id]/activity/route';
 
 const testDb = integrationTestDb('persistent-drafts');
 const groupId = 'c00000000000000000000001';
@@ -487,5 +489,113 @@ describe('persistent private expense Drafts', () => {
     );
     expect(response.status).toBe(200);
     expect(await drafts.list(alice, groupId)).toEqual([]);
+  });
+  it.each(['projection', 'acknowledgment'] as const)(
+    'keeps a reviewed Expense saved and replayable through an Activity %s outage',
+    async (fault) => {
+      const [row] = await completeDrafts();
+      const reviewed = await drafts.review(alice, groupId, row.id);
+      const command = saveCommand(reviewed);
+      const context = { params: Promise.resolve({ id: groupId }) };
+      const target = fault === 'projection' ? 'activities' : 'expenses';
+      await db()
+        .createCollection(target)
+        .catch((error) => {
+          if (error.code !== 48) throw error;
+        });
+      await db().command({
+        collMod: target,
+        validationLevel: 'strict',
+        validationAction: 'error',
+        validator: {
+          $jsonSchema:
+            fault === 'projection'
+              ? { required: ['testProjectionPermit'] }
+              : { properties: { pendingActivity: { bsonType: 'array', minItems: 1 } } },
+        },
+      });
+      const logs = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const save = async () =>
+        saveRoute(
+          new Request('http://localhost', { method: 'POST', body: JSON.stringify(command) }),
+          context,
+        );
+      const list = async () =>
+        (await (await expenseListRoute(new Request('http://localhost'), context)).json()).data;
+      const activity = async () =>
+        (await (await activityRoute(new Request('http://localhost'), context)).json()).data;
+      try {
+        const response = await save();
+        expect(response.status).toBe(200);
+        const outcomes = (await response.json()).data;
+        expect(outcomes).toMatchObject([{ id: row.id, status: 'saved' }]);
+        expect((await (await save()).json()).data).toEqual(outcomes);
+        const saved = await list();
+        expect(saved.pagination.total).toBe(1);
+        expect(saved.expenses[0]).toMatchObject({
+          _id: outcomes[0].expenseId,
+          description: 'Taxi',
+          amount: 450,
+          currency: 'INR',
+          splitBetween: [{ amount: 225 }, { amount: 225 }],
+        });
+        expect(await drafts.list(alice, groupId)).toEqual([]);
+        expect((await activity()).activities).toHaveLength(fault === 'projection' ? 0 : 1);
+      } finally {
+        await db().command({ collMod: target, validator: {} });
+        logs.mockRestore();
+      }
+      const recovered = (await activity()).activities;
+      expect(recovered).toHaveLength(1);
+      expect(recovered[0]).toMatchObject({ type: 'expense_added', metadata: { amount: 450 } });
+      expect((await activity()).activities).toHaveLength(1);
+      expect((await list()).pagination.total).toBe(1);
+    },
+  );
+  it('publishes nothing from an aborted Draft conversion and resolves its original retry once', async () => {
+    const [row] = await completeDrafts();
+    const reviewed = await drafts.review(alice, groupId, row.id);
+    const command = saveCommand(reviewed);
+    const context = { params: Promise.resolve({ id: groupId }) };
+    await db().command({
+      collMod: 'expensedrafts',
+      validator: { state: 'active' },
+      validationLevel: 'strict',
+      validationAction: 'error',
+    });
+    const save = async () =>
+      (
+        await (
+          await saveRoute(
+            new Request('http://localhost', { method: 'POST', body: JSON.stringify(command) }),
+            context,
+          )
+        ).json()
+      ).data;
+    try {
+      expect(await save()).toMatchObject([{ id: row.id, status: 'unresolved' }]);
+      const expenses = (
+        await (await expenseListRoute(new Request('http://localhost'), context)).json()
+      ).data;
+      const activity = (
+        await (await activityRoute(new Request('http://localhost'), context)).json()
+      ).data;
+      expect(expenses.pagination.total).toBe(0);
+      expect(activity.activities).toEqual([]);
+      expect(await drafts.list(alice, groupId)).toEqual([row]);
+    } finally {
+      await db().command({ collMod: 'expensedrafts', validator: {} });
+    }
+    const outcomes = await save();
+    expect(outcomes).toMatchObject([{ id: row.id, status: 'saved' }]);
+    expect(await save()).toEqual(outcomes);
+    const expenses = (
+      await (await expenseListRoute(new Request('http://localhost'), context)).json()
+    ).data;
+    const activity = (await (await activityRoute(new Request('http://localhost'), context)).json())
+      .data;
+    expect(expenses.pagination.total).toBe(1);
+    expect(activity.activities).toHaveLength(1);
+    expect(activity.activities[0].metadata.expenseId).toBe(outcomes[0].expenseId);
   });
 });

@@ -1,4 +1,4 @@
-import { withGroupMutation } from '@/lib/group-mutation';
+import { afterGroupCommit, withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
 import Expense from '@/lib/models/Expense';
@@ -120,7 +120,9 @@ export class ExpenseService {
     };
     if (existing) {
       assertCreateReplay(existing.creationRequest!, command);
-      await activityService.publishPending('expenses', existing._id, existing.pendingActivity);
+      await afterGroupCommit(() =>
+        activityService.publishPending('expenses', existing._id, existing.pendingActivity),
+      );
       existing.tag = displayTagReference(group.tags, existing).tag;
       return existing.populate([
         { path: 'paidBy.user', select: 'name email image' },
@@ -162,7 +164,9 @@ export class ExpenseService {
         }).select('+creationRequest +pendingActivity');
         if (replay) {
           assertCreateReplay(replay.creationRequest!, command);
-          await activityService.publishPending('expenses', replay._id, replay.pendingActivity);
+          await afterGroupCommit(() =>
+            activityService.publishPending('expenses', replay._id, replay.pendingActivity),
+          );
           return replay.populate([
             { path: 'paidBy.user', select: 'name email image' },
             { path: 'splitBetween.user', select: 'name email image' },
@@ -172,7 +176,9 @@ export class ExpenseService {
       }
       throw error;
     }
-    await activityService.publishPending('expenses', expense._id, expense.pendingActivity);
+    await afterGroupCommit(() =>
+      activityService.publishPending('expenses', expense._id, expense.pendingActivity),
+    );
     return expense.populate([
       { path: 'paidBy.user', select: 'name email image' },
       { path: 'splitBetween.user', select: 'name email image' },
