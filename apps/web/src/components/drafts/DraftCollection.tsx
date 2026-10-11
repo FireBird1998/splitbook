@@ -19,6 +19,7 @@ import { apiFetch } from '@/lib/utils/api-fetch';
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
 import {
   draftEntries,
+  draftEntryChanges,
   draftFields,
   draftValues,
   type DraftEntries,
@@ -205,11 +206,14 @@ export default function DraftCollection({
               <TextField
                 key={field.key}
                 label={field.label}
-                value={entries[field.key] ?? ''}
+                value={field.value ?? entries[field.key] ?? ''}
                 select={!!field.options}
                 disabled={busy}
                 onChange={(event) =>
-                  setEntries((current) => ({ ...current, [field.key]: event.target.value }))
+                  setEntries((current) => ({
+                    ...current,
+                    ...draftEntryChanges(field.key, event.target.value),
+                  }))
                 }
                 slotProps={{ htmlInput: { inputMode: field.numeric ? 'decimal' : 'text' } }}
               >
@@ -218,7 +222,7 @@ export default function DraftCollection({
                     Not specified
                   </MenuItem>,
                   ...field.options.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
+                    <MenuItem key={option.value} value={option.value} disabled={option.disabled}>
                       {option.label}
                     </MenuItem>
                   )),
@@ -334,7 +338,7 @@ export default function DraftCollection({
               Review: {review.draft.values?.description || 'Incomplete Draft'}
             </Typography>
             {draftFields(draftEntries(review.draft.values), context).map((field) => {
-              const value = draftEntries(review.draft.values)[field.key];
+              const value = field.value ?? draftEntries(review.draft.values)[field.key];
               return value ? (
                 <Typography key={field.key}>
                   {field.label}:{' '}

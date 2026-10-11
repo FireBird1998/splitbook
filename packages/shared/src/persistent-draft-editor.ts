@@ -4,7 +4,8 @@ export type DraftEntries = Record<string, string>;
 export interface DraftField {
   key: string;
   label: string;
-  options?: Array<{ value: string; label: string }>;
+  value?: string;
+  options?: Array<{ value: string; label: string; disabled?: boolean }>;
   numeric?: boolean;
 }
 export interface DraftContext {
@@ -37,7 +38,34 @@ export function draftEntries(values: ExpenseDraftValues = {}): DraftEntries {
   if (values.predefinedItem) entries.predefinedItem = values.predefinedItem;
   return entries;
 }
+/** Selecting a Tag replaces either prior representation, including an explicit clear. */
+export function draftEntryChanges(key: string, value: string): DraftEntries {
+  return key === 'tagId' ? { tag: '', tagId: value } : { [key]: value };
+}
 export function draftFields(entries: DraftEntries, context: DraftContext): DraftField[] {
+  const tagOptions: NonNullable<DraftField['options']> = context.tags.map((tag) => ({
+    value: tag.id,
+    label: tag.name,
+  }));
+  let tagValue = entries.tagId ?? '';
+  if (!Object.hasOwn(entries, 'tagId') && entries.tag) {
+    // A name is a supplied fact, not a stable identity. Show it without guessing an ID.
+    tagValue = 'draft-tag-name';
+    const current = context.tags.find(
+      (tag) => tag.name.toLowerCase() === entries.tag.toLowerCase(),
+    );
+    tagOptions.push({
+      value: tagValue,
+      label: current?.name ?? `${entries.tag} (unavailable)`,
+      disabled: true,
+    });
+  } else if (tagValue && !context.tags.some((tag) => tag.id === tagValue)) {
+    tagOptions.push({
+      value: tagValue,
+      label: `Unavailable Tag (${tagValue})`,
+      disabled: true,
+    });
+  }
   const choices = (values: string[]) => values.map((value) => ({ value, label: value }));
   const fields: DraftField[] = [
     { key: 'description', label: 'Description' },
@@ -48,7 +76,8 @@ export function draftFields(entries: DraftEntries, context: DraftContext): Draft
     {
       key: 'tagId',
       label: 'Tag',
-      options: context.tags.map((tag) => ({ value: tag.id, label: tag.name })),
+      value: tagValue,
+      options: tagOptions,
     },
     {
       key: 'splitMethod',
@@ -101,6 +130,7 @@ export function draftValues(entries: DraftEntries): ExpenseDraftValues {
     'splitMethod',
     'predefinedItem',
   ]) {
+    if (key === 'tag' && Object.hasOwn(entries, 'tagId')) continue;
     if (entries[key]?.trim())
       value[key] = key === 'amount' ? Number(entries[key]) : entries[key].trim();
   }

@@ -2,7 +2,11 @@ import { formatCurrency } from '@splitbook/shared/currency';
 import { useEffect, useMemo } from 'react';
 import { useSyncExternalStoreWithSelector } from 'use-sync-external-store/with-selector';
 import { Alert, Modal, ScrollView, TextInput, View } from 'react-native';
-import { draftEntries, draftFields } from '@splitbook/shared/persistent-draft-editor';
+import {
+  draftEntries,
+  draftFields,
+  draftEntryChanges,
+} from '@splitbook/shared/persistent-draft-editor';
 import type { MobileController } from '../data/mobile-controller';
 import type { MobileGroup, MobileSnapshot } from '../data/types';
 import { Button, Copy } from './primitives';
@@ -105,8 +109,9 @@ export function SharedDrafts({
                       secondary
                       disabled={busy}
                       label={
-                        field.options.find((option) => option.value === entries[field.key])
-                          ?.label ?? 'Not specified'
+                        field.options.find(
+                          (option) => option.value === (field.value ?? entries[field.key]),
+                        )?.label ?? 'Not specified'
                       }
                       onPress={() => client.choose(choice === field.key ? null : field.key)}
                     />
@@ -116,8 +121,12 @@ export function SharedDrafts({
                           key={option.value}
                           label={option.label}
                           secondary
+                          disabled={busy || option.disabled}
                           onPress={() => {
-                            client.enter(field.key, option.value);
+                            for (const [key, value] of Object.entries(
+                              draftEntryChanges(field.key, option.value),
+                            ))
+                              client.enter(key, value);
                           }}
                         />
                       ))}
@@ -214,7 +223,7 @@ export function SharedDrafts({
               Review: {review.draft.values?.description || 'Incomplete Draft'}
             </Copy>
             {draftFields(draftEntries(review.draft.values), context).map((field) => {
-              const value = draftEntries(review.draft.values)[field.key];
+              const value = field.value ?? draftEntries(review.draft.values)[field.key];
               return value ? (
                 <Copy key={field.key}>
                   {field.label}:{' '}
