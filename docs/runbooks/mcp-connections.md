@@ -1,6 +1,6 @@
 # MCP connections and persistent Drafts — #384–394
 
-The Next.js app serves connection status, Group discovery/context, Balances and spending tools. Separate Draft permission enables list/create/replace/permanent-discard tools when persistent Drafts are enabled. No assistant save tool exists. See [Draft operations and verification](../qa/mcp-drafts-implementation.md). No hosting or DNS has been provisioned.
+The Next.js app serves connection status, Group discovery/context, Balances and spending tools. Separate Draft permission enables list/create/replace/permanent-discard tools when persistent Drafts are enabled. No assistant save tool exists. See [Draft operations and verification](../qa/mcp-drafts-implementation.md) and [staging connection results](../qa/mcp-staging-2026-10-11.md).
 
 ## Deployment configuration
 
@@ -15,7 +15,7 @@ MCP is disabled by default. Enable it only on the deployment intended for connec
 | `AUTH_ALLOWED_EMAILS` | Explicit staging testers                                     | Approved members                      |
 | `MCP_ALLOW_DCR`       | `false` by default; enable only for a host that requires DCR | Same tested policy                    |
 
-The suggested staging app origin is `https://staging.splitbook.in`; it has not been provisioned by this work. Do not point a staging MCP hostname to the production data environment. Give staging its own MongoDB database, auth secret and Google OAuth callback configuration. Never copy production session or signing-key records into staging. MCP requires an explicit canonical app origin; localhost HTTP is permitted only outside production.
+The current staging app origin is `https://splitbook-staging.vercel.app`, retaining its existing Google callback configuration. The optional `https://staging.splitbook.in` app hostname has not been provisioned. Do not point a staging MCP hostname to the production data environment. Give staging its own MongoDB database, auth secret and Google OAuth callback configuration. Never copy production session or signing-key records into staging. MCP requires an explicit canonical app origin; localhost HTTP is permitted only outside production.
 
 Use the Vercel project's `apps/web` root. Attach the staging MCP hostname to the staging deployment/project and its app hostname to that same environment. Attach the production MCP hostname only to production when ready. A hostname does not select an environment merely because it contains “staging”. Obtain the exact CNAME and any verification TXT values from Vercel for the selected project; do not use a guessed universal DNS target. Add those records at the authoritative DNS provider, wait for verification and TLS, and preserve unrelated records.
 
@@ -50,7 +50,7 @@ The integration suite only drops its isolated `splitbook-test-mcp-connection` da
 
 ## Hosted acceptance still required
 
-Neither requested MCP hostname was configured when implementation began. No public deployment, DNS record or Google OAuth client was changed. Keep #384 open until these checks pass:
+The staging MCP hostname and deployment are now configured; production remains unchanged. Initial ChatGPT and Claude CIMD connection results are recorded in the staging report. Keep #384 open until the remaining checks pass:
 
 1. Provision the staging app/data environment and both staging hostnames with HTTPS, and verify discovery without a Vercel login screen.
 2. From actual ChatGPT and Claude accounts, add the staging MCP URL; record host/account availability and whether each used CIMD or the explicit DCR fallback.

@@ -131,7 +131,10 @@ async function verify() {
       deletionPending: false,
     });
     assert.equal(await db.collection('groups').countDocuments({ _id: id }), 0);
-    assert.deepEqual(await count(id), groupOwnedCollections.map(() => 0));
+    assert.deepEqual(
+      await count(id),
+      groupOwnedCollections.map(() => 0),
+    );
     assert.equal(await db.collection('users').countDocuments(), originalUsers);
     assert.equal((await db.collection('groups').findOne({ _id: archived }))?.members.length, 1);
     checks.push(
@@ -213,7 +216,10 @@ async function verify() {
       (await db.collection('groupdeletions').findOne({ _id: pending }))?.state,
       'complete',
     );
-    assert.deepEqual(await count(pending), groupOwnedCollections.map(() => 0));
+    assert.deepEqual(
+      await count(pending),
+      groupOwnedCollections.map(() => 0),
+    );
     assert.equal(await db.collection('groups').countDocuments({ _id: pending }), 0);
     assert.equal(await db.collection('groups').countDocuments({ _id: historic }), 1);
     assert.equal(await db.collection('expenses').countDocuments({ group: historic }), 1);
@@ -230,7 +236,10 @@ async function verify() {
       deleteIfLastMember: true,
     });
     assert.equal((await recovered.json()).data.deleted, true);
-    assert.deepEqual(await count(lost), groupOwnedCollections.map(() => 0));
+    assert.deepEqual(
+      await count(lost),
+      groupOwnedCollections.map(() => 0),
+    );
     checks.push(
       'Lost completed HTTP response can be replayed explicitly without a second deletion',
     );
