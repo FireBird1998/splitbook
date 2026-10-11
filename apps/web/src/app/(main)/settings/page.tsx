@@ -15,6 +15,7 @@ import Snackbar from '@mui/material/Snackbar';
 import LogoutIcon from '@mui/icons-material/Logout';
 import { CURRENCIES, CURRENCY_CODES } from '@splitbook/shared/currency';
 import { updateProfileSchema } from '@splitbook/shared/validators/profile';
+import ConnectionsSetting from '@/components/mcp/ConnectionsSetting';
 import ShortcutsSetting from '@/components/shortcuts/ShortcutsSetting';
 import { authClient, signOutToHome } from '@/lib/auth-client';
 import { apiFetch } from '@/lib/utils/api-fetch';
@@ -192,6 +193,8 @@ export default function SettingsPage() {
 
       {/* Keyboard shortcuts (#322) */}
       <ShortcutsSetting />
+
+      <ConnectionsSetting accountId={session?.user.id} />
 
       {/* Account */}
       <Paper variant="outlined" sx={{ p: 3 }}>

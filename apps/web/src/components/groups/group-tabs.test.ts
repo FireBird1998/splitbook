@@ -23,12 +23,13 @@ const SAM = 'a00000000000000000000002';
 const PRIYA = 'a00000000000000000000003';
 
 describe('the Group page’s tabs', () => {
-  it('are Expenses, Balances, Insights, Activity and Members, in the canvas’s order', () => {
+  it('are Expenses, Balances, Insights, Activity, Drafts and Members, in the canvas’s order', () => {
     expect(GROUP_TABS.map((tab) => tab.label)).toEqual([
       'Expenses',
       'Balances',
       'Insights',
       'Activity',
+      'Drafts',
       'Members',
     ]);
   });
@@ -39,6 +40,7 @@ describe('the Group page’s tabs', () => {
       `/groups/${GROUP}/balances`,
       `/groups/${GROUP}/insights`,
       `/groups/${GROUP}/activity`,
+      `/groups/${GROUP}/drafts`,
       `/groups/${GROUP}/members`,
     ]);
     expect(groupTabHref(GROUP, 'expenses', new URLSearchParams({ month: '2026-08' }))).toBe(

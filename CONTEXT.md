@@ -29,8 +29,12 @@ Server data stored on a member's device so a Group can be shown offline. It alwa
 _Avoid_: cache (in product copy), offline data, local data
 
 **Draft**:
-What a member has entered in an Expense, Settlement or Group form but not yet sent. A draft never changes the ledger.
+Unfinished information for an Expense, Settlement or Group that has not been applied. An Expense Draft may be prepared by a member or their Connected assistant and retained for later review; a Draft never changes the ledger.
 _Avoid_: pending Expense, unsaved Expense, local Expense
+
+**Draft collection**:
+A member's single private set of separate Expense Drafts for a Group, retained for later review. Drafts may be incomplete; each must be complete and valid before becoming an Expense, independently of the others.
+_Avoid_: stacked drafts, pending Expenses
 
 **Unconfirmed save**:
 A save whose reply never arrived, so it may or may not be recorded. Only the member retries it, and a retry can never record it twice.

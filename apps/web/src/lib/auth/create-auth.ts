@@ -17,6 +17,7 @@ import { nextCookies } from 'better-auth/next-js';
 import { validateAllowedUser } from '@/lib/auth/allowlist';
 import { demoPersonaPluginIfAllowed } from '@/lib/auth/demo-persona-plugin';
 import { isTestIdTokenOverrideEnabled, verifyTestIdToken } from '@/lib/auth/test-id-token';
+import { mcpAuthPlugins } from '@/lib/mcp/auth-plugin';
 import type { AuthModeEnv } from '@/lib/auth-mode';
 
 export const SESSION_EXPIRES_IN_SECONDS = 60 * 60 * 24 * 30;
@@ -142,8 +143,18 @@ export function buildAuthOptions({ database, env = process.env }: CreateAuthInpu
         },
       },
     },
+    databaseHooks: {
+      user: {
+        delete: {
+          before: async (user) => {
+            const { removeAccountDrafts } = await import('@/lib/services/draft-account-cleanup');
+            await removeAccountDrafts(user.id);
+          },
+        },
+      },
+    },
     hooks: { before: endSessionBeforeSignOut },
-    plugins: [...(demoPlugin ? [demoPlugin] : []), nextCookies()],
+    plugins: [...(demoPlugin ? [demoPlugin] : []), ...mcpAuthPlugins(env), nextCookies()],
   } satisfies BetterAuthOptions;
 }
 

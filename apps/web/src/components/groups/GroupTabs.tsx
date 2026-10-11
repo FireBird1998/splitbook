@@ -32,7 +32,10 @@ export default function GroupTabs({ groupId, label }: GroupTabsProps) {
         overflowX: 'auto',
       }}
     >
-      {GROUP_TABS.map((tab) => (
+      {GROUP_TABS.filter(
+        (tab) =>
+          tab.slug !== 'drafts' || process.env.NEXT_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true',
+      ).map((tab) => (
         <Box
           key={tab.slug}
           component={Link}

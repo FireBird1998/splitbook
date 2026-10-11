@@ -1,3 +1,6 @@
+import { emptySharedDraftCollection, sharedDraftCollection } from './shared-draft-collection';
+import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-draft-editor';
+import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
 import { focusManager, onlineManager, QueryClient } from '@tanstack/query-core';
 import { savedCopyBudget } from './saved-copy-budget';
 import { inScope, queryOwner, replaceScopedQueries } from './query-owner';
@@ -274,6 +277,7 @@ const keptWorkUnreadable =
 function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
   return {
     auth,
+    sharedDraftCollection: emptySharedDraftCollection(),
     offline: { active: false, refreshedAt: null, message: null },
     pull: null,
     automatic: null,
@@ -1892,7 +1896,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     try {
       ids = await lease.write(async () => {
         const ids = new Set<string>();
-        for (const records of [dependencies.expenseDrafts, dependencies.settlementAttempts]) {
+        for (const records of [
+          dependencies.expenseDrafts,
+          dependencies.settlementAttempts,
+          dependencies.draftRequests,
+        ]) {
           const keys = records?.keys
             ? await records.keys(lease.accountId)
             : records?.list
@@ -3785,6 +3793,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       if (editor.persistence === 'saving' && !(await draftWritten())) {
         if (current(owner) && view === route && owns())
           publish({ ...snapshot, expense: { ...snapshot.expense, status: editor.status } });
+        return;
+      }
+      if (
+        dependencies.draftRequests &&
+        (await lease.write(() => dependencies.draftRequests!.load(lease.accountId, groupId)))
+      ) {
+        publish({
+          ...snapshot,
+          expense: {
+            ...snapshot.expense,
+            status: 'editing',
+            message: 'Resolve the unconfirmed shared Draft request before saving this Expense.',
+          },
+        });
         return;
       }
       // A successful authorized read is a connection/access check, never proof a write will succeed.
@@ -5913,7 +5935,160 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     navigate(home, { ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
   };
 
+  const sharedDrafts = (groupId: string) => {
+    const owner = generation;
+    const lease = accountStorage();
+    const storage = dependencies.draftRequests;
+    if (!lease || !storage) throw new Error('Draft request storage unavailable.');
+    const ensure = () => {
+      assertCurrent(owner);
+      if (snapshot.offline.active)
+        throw new Error('Your shared Draft collection needs an internet connection.');
+    };
+    const client = draftCollectionClient(
+      groupId,
+      async (path, init) => {
+        ensure();
+        const options: RequestOptions = {
+          method: (init?.method ?? 'GET') as RequestOptions['method'],
+          serializedBody: init?.body,
+          idempotencyKey: init?.headers?.['Idempotency-Key'],
+          ...(init?.headers?.['X-Splitbook-Revision']
+            ? { revision: Number(init.headers['X-Splitbook-Revision']) }
+            : {}),
+        };
+        try {
+          return await (path.endsWith('/save')
+            ? ledgerWrite(groupId, path, owner, options)
+            : request(path, owner, options));
+        } catch (error) {
+          if (
+            error instanceof RequestError &&
+            error.serverMessage &&
+            [
+              'DRAFT_GROUP_LIMIT',
+              'STALE_REVISION',
+              'REVISION_REQUIRED',
+              'IDEMPOTENCY_CONFLICT',
+            ].includes(error.code ?? '')
+          )
+            throw new RequestError(error.serverMessage, error.status, error.code);
+          throw error;
+        }
+      },
+      {
+        load: async () => {
+          const value = await lease.write(() => storage.load(lease.accountId, groupId));
+          return typeof value === 'string' ? value : null;
+        },
+        save: async (value) => {
+          ensure();
+          await lease.write(() => storage.save(lease.accountId, groupId, value));
+        },
+        clear: async () => {
+          await lease.write(() => storage.remove(lease.accountId, groupId));
+        },
+      },
+      () => dependencies.newSubmissionKey!(),
+      async (source) => {
+        const local = dependencies.expenseDrafts;
+        if (!local) throw new Error('Local recovery storage unavailable');
+        return lease.write(async () => {
+          const stored = await local.load(lease.accountId, groupId);
+          if (!stored) return;
+          const record = parseStoredExpenseDraft(stored, lease.accountId, groupId);
+          if (typeof source !== 'string') throw new Error('Local recovery source unavailable.');
+          if (
+            record.attempt ||
+            record.mutation ||
+            !sameExpenseDraft(record.draft, JSON.parse(source))
+          )
+            return { localDraftRetained: true as const };
+          await local.remove(lease.accountId, groupId);
+        });
+      },
+    );
+    return {
+      ...client,
+      context: async () => {
+        ensure();
+        return parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
+      },
+    };
+  };
+  const draftCollection = (groupId: string) => {
+    const owner = generation;
+    return sharedDraftCollection({
+      client: sharedDrafts(groupId),
+      queryClient,
+      groupId,
+      ...account(),
+      current: () => current(owner),
+      read: () => snapshot.sharedDraftCollection,
+      publish: (value) => publish({ ...snapshot, sharedDraftCollection: value }),
+    });
+  };
+  const keepExpenseAsSharedDraft = async () => {
+    const editor = snapshot.expense;
+    if (
+      editor.status !== 'editing' ||
+      !editor.draft ||
+      editor.draft.original ||
+      editor.attempt ||
+      editor.mutation ||
+      !editor.groupId
+    )
+      throw new Error('Resolve the existing Expense save before uploading a Draft.');
+    const uploadOwner = generation;
+    publish({ ...snapshot, expense: { ...editor, status: 'saving' } });
+    try {
+      await draftWrite;
+      const d = editor.draft;
+      const entries: DraftEntries = {
+        description: d.description,
+        amount: d.amount,
+        currency: d.currency,
+        date: d.date,
+        category: d.category,
+        notes: d.notes,
+        tagId: d.tagId,
+        splitMethod: d.splitMethod,
+      };
+      for (const payer of d.multiPayer ? d.payers : [{ user: d.payerId, amount: d.amount }]) {
+        entries[`paidBy.${payer.user}`] = 'yes';
+        entries[`paidBy.${payer.user}.amount`] = payer.amount;
+      }
+      for (const id of d.participantIds) {
+        entries[`splitBetween.${id}`] = 'yes';
+        const field =
+          d.splitMethod === 'percentage'
+            ? 'percentage'
+            : d.splitMethod === 'shares'
+              ? 'shares'
+              : 'amount';
+        if (d.splitMethod !== 'equal')
+          entries[`splitBetween.${id}.${field}`] = d.splitValues[id] ?? '';
+      }
+      const client = sharedDrafts(editor.groupId);
+      if (await client.pending())
+        throw new Error(
+          'Resolve the previous request in this Group’s Drafts before uploading this form.',
+        );
+      await client.create(draftValues(entries), JSON.stringify(d));
+      await openGroup(editor.groupId);
+    } finally {
+      if (
+        current(uploadOwner) &&
+        snapshot.screen === 'expense' &&
+        snapshot.expense.draft === editor.draft
+      )
+        publish({ ...snapshot, expense: { ...snapshot.expense, status: 'editing' } });
+    }
+  };
   return {
+    keepExpenseAsSharedDraft,
+    draftCollection,
+    sharedDrafts,
     openActivity,
     selectDestination,
     selectActivity,

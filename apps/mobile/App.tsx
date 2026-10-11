@@ -1,3 +1,4 @@
+import { SharedDrafts } from './src/ui/shared-drafts';
 import { NotAvailableOffline, OfflineNotice } from './src/ui/offline-notice';
 import {
   memo,
@@ -5,6 +6,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useState,
   useSyncExternalStore,
   type RefObject,
 } from 'react';
@@ -808,6 +810,7 @@ const unlistedGroup = (id: string): MobileGroup => ({
 
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
 function GroupScreen() {
+  const [sharedDraftsOpen, setSharedDraftsOpen] = useState(false);
   const state = useMobileSnapshot(
     controller,
     (snapshot) => ({
@@ -1173,6 +1176,26 @@ function GroupScreen() {
         </>
       }
     >
+      {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' && (
+        <Button
+          label="Your private Drafts"
+          secondary
+          disabled={state.offline.active || !group}
+          onPress={() => setSharedDraftsOpen(true)}
+        />
+      )}
+      {group && sharedDraftsOpen && (
+        <SharedDrafts
+          key={`${userId}:${group.id}`}
+          controller={controller}
+          accountId={userId}
+          group={group}
+          onClose={() => {
+            setSharedDraftsOpen(false);
+            void controller.refresh();
+          }}
+        />
+      )}
       {notice}
       {state.detail.status === 'denied' ? (
         <Notice

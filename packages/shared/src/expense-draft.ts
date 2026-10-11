@@ -194,6 +194,9 @@ export class ExpenseDraft {
   get loading() {
     return this.state.pending !== null;
   }
+  get hasSubmissionAttempt() {
+    return this.state.attempt !== null;
+  }
   get completed() {
     return this.state.completed;
   }

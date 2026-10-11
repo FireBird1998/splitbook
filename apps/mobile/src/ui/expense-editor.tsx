@@ -22,7 +22,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-native';
+import { Alert, AccessibilityInfo, ScrollView, View, type TextInput } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { expenseDifferences } from '@splitbook/shared/expense-review';
@@ -966,6 +966,30 @@ function ExpenseTask({
           />
         ) : null,
       )}
+      {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' &&
+        controller &&
+        !draft.original &&
+        state.status === 'editing' &&
+        !state.attempt &&
+        !state.mutation && (
+          <Button
+            label="Keep as shared Draft"
+            secondary
+            disabled={offline}
+            onPress={() => {
+              void controller
+                .keepExpenseAsSharedDraft()
+                .catch((error) =>
+                  Alert.alert(
+                    'Draft not confirmed',
+                    error instanceof Error
+                      ? error.message
+                      : 'Try again using the original request.',
+                  ),
+                );
+            }}
+          />
+        )}
       {sheet === 'date' ? (
         <DateSheet
           visible={sheet === 'date'}

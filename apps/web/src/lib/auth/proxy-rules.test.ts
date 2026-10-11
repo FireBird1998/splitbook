@@ -18,6 +18,14 @@ function passesThrough(response: Response): boolean {
 }
 
 describe('proxy rules', () => {
+  it('lets MCP verify bearer credentials and preserve authorization queries itself', () => {
+    expect(passesThrough(decide('/api/mcp', false, 'POST'))).toBe(true);
+    expect(passesThrough(decide('/.well-known/oauth-authorization-server/api/auth', false))).toBe(
+      true,
+    );
+    expect(passesThrough(decide('/mcp/consent?state=keep-me', false))).toBe(true);
+    expect(decide('/api/mcp-other', false, 'POST').status).toBe(401);
+  });
   it('always allows Better Auth routes (including the Google callback)', () => {
     expect(passesThrough(decide('/api/auth/callback/google', false))).toBe(true);
     expect(passesThrough(decide('/api/auth/get-session', true))).toBe(true);

@@ -279,6 +279,7 @@ export async function applyOrphanGroupManifest(
         activities: 0,
         recurringexpenses: 0,
         invitations: 0,
+        expensedrafts: 0,
       };
       for (const name of groupOwnedCollections)
         counts[name] = await db.collection(name).countDocuments({ group: id }, { session });

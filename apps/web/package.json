@@ -28,9 +28,14 @@
     "test:group-cleanup-http": "tsx --tsconfig scripts/tsconfig.json scripts/verify-group-cleanup.ts"
   },
   "dependencies": {
+    "@better-auth/cimd": "1.7.7",
+    "@better-auth/mcp": "1.7.7",
+    "@better-auth/oauth-provider": "1.7.7",
+    "@better-auth/utils": "0.4.2",
     "@emotion/cache": "^11.14.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.1",
+    "@modelcontextprotocol/server": "2.3.1",
     "@mui/icons-material": "^7.3.7",
     "@mui/material": "^7.3.7",
     "@mui/material-nextjs": "^7.3.7",
@@ -50,6 +55,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
+    "@modelcontextprotocol/client": "2.3.1",
     "@playwright/test": "^1.62.1",
     "@types/node": "^22",
     "@types/react": "^19",

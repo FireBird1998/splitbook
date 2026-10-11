@@ -24,6 +24,7 @@ export function monitorFlows(controller: MobileController) {
   const violations: string[] = [];
   for (const command of [
     'saveExpense',
+    'keepExpenseAsSharedDraft',
     'deleteExpense',
     'recordSettlement',
     'createGroup',
