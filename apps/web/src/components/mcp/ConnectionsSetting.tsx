@@ -8,6 +8,7 @@ import Paper from '@mui/material/Paper';
 import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { EXPECTED_ACCOUNT_HEADER } from '@/lib/expected-account';
+import Link from 'next/link';
 import { MCP_DRAFT_SCOPE } from '@/lib/mcp/config';
 
 interface Connection {
@@ -89,13 +90,15 @@ export default function ConnectionsSetting({ accountId }: { accountId?: string }
       setBusy(null);
     }
   }
-  if (!data && !error) return null;
   return (
-    <Paper variant="outlined" sx={{ p: 3, mb: 3 }}>
+    <Paper id="connected-assistants" variant="outlined" sx={{ p: 3, mb: 3 }}>
       <Stack spacing={2}>
         <Typography variant="subtitle1" component="h2" fontWeight={600}>
           Connected assistants
         </Typography>
+        <Button component={Link} href="/connect/chatgpt" sx={{ alignSelf: 'flex-start' }}>
+          Connect ChatGPT
+        </Button>
         {error && (
           <Alert
             severity="error"
