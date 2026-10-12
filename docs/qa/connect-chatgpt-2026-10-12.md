@@ -20,4 +20,19 @@ The configuration uses the disposable `splitbook-demo` database on local port 27
 
 ## Hosted acceptance
 
-Pending: deploy the finished guide to staging, then complete setup/consent from the guide, confirm its authorization display, run `connection_status` in ChatGPT, disconnect in existing Settings and refresh to confirm no authorization. Earlier MCP connection evidence does not verify this new guide. Do not close #400 or claim the guide fully verified until this walkthrough is recorded. Claude and production rollout remain outside scope.
+Completed against the existing `splitbook-staging` Vercel project, without changing environment variables, DNS or production:
+
+- Source commit: `68211ee` (clean Git archive; no untracked workspace files uploaded).
+- Deployment: `dpl_CySwYbLdCQ6fxx39Jjy3mSSy1zqC`, READY. Vercel production build and TypeScript checks passed. This is the staging project's primary deployment target, not the separate production project.
+- Guide: https://splitbook-staging.vercel.app/connect/chatgpt
+- MCP: https://mcp.staging.splitbook.in/api/mcp
+- Public guide rendered with a Staging badge and the correct endpoint. Copy URL and copy prompt controls reported success; desktop dark appearance was visually inspected.
+- Reused the already-installed private SplitBook Staging plugin. Verified its configured URL and OAuth setting. The guide displayed the existing exact ChatGPT grant with ledger and continued-access permissions.
+- Disconnected only the ChatGPT grant through existing Settings. Returning to the guide showed “ChatGPT is not authorized for this account.”
+- Reconnected that same account in ChatGPT and completed renewed SplitBook consent for `ledger:read` and `offline_access`; no Draft scope was requested. Explicit status refresh showed “ChatGPT authorized”.
+- Sent the guide's exact connection-only test prompt in the existing test chat on 12 October at approximately 12:30 PM IST. ChatGPT returned `connected: true`, `mode: connection-test`, success. The displayed work summary was “Verified SplitBook connection status”; no ledger data was requested.
+- Finally disconnected ChatGPT through Settings again. Refreshing the still-open guide changed authorized to not authorized. The ChatGPT staging grant is intentionally left revoked after the acceptance test. Claude was not used or modified.
+
+One consent attempt encountered a transient staging MongoDB network/overload failure. The error log reported `MongoServerSelectionError` with `SystemOverloadedError`; restarting the OAuth flow succeeded without a code or configuration change. Reloading an interrupted scrubbed OAuth page correctly instructed the member to restart from the assistant.
+
+The walkthrough reused the installed private plugin rather than creating a duplicate plugin listing. Production rollout and Claude verification remain separate. No credentials, callback parameters or private ledger details are retained in this evidence.
