@@ -83,6 +83,8 @@ export default defineConfig({
     timeout: 180_000,
     env: {
       AUTH_MODE: 'demo',
+      PERSISTENT_DRAFTS_ENABLED: 'true',
+      NEXT_PUBLIC_PERSISTENT_DRAFTS_ENABLED: 'true',
       // CI serves a production build (`next start`), where demo auth fails
       // closed without ALLOW_DEMO_AUTH; `next dev` (local) implies it via
       // NODE_ENV=development.

@@ -16,6 +16,7 @@ import {
   groupPath,
   groupsPath,
   homeBalancesPath,
+  toReviewPath,
   invitationsPath,
   recurringExpensesPath,
   searchPath,
@@ -215,3 +216,5 @@ export const matchScope =
   (scope: QueryScope) =>
   (key: unknown): key is QueryKey =>
     isQueryKey(key) && key[0] === scope;
+
+export const toReviewKey = (account: QueryAccount) => accountKey('home', account, toReviewPath());

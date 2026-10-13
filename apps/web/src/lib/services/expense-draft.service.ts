@@ -6,7 +6,8 @@ import {
   draftAttributionSchema,
   type DraftAttribution,
 } from '@splitbook/shared/draft-attribution';
-import Group from '@/lib/models/Group';
+import Group, { type IGroupDocument } from '@/lib/models/Group';
+import type { ToReviewRead } from '@splitbook/shared/to-review-read';
 import Expense from '@/lib/models/Expense';
 import {
   saveExpenseDraftsSchema,
@@ -216,25 +217,7 @@ async function mutate<T>(
   });
 }
 
-/** Read only the owner's Drafts plus saved Expenses visible to every current Group member. */
-async function reviewDraft(
-  actor: DraftActor,
-  groupId: string,
-  draftId: string,
-  session?: mongoose.ClientSession,
-): Promise<DraftReview> {
-  const scope = access(actor, groupId);
-  const drafts = await collection();
-  await requireMembership(scope, session);
-  const record = await drafts.findOne(
-    { ...scope, _id: new mongoose.Types.ObjectId(draftObjectId.parse(draftId)), state: 'active' },
-    { session },
-  );
-  if (!record) throw new Error('DRAFT_NOT_FOUND');
-  const group = await Group.findById(groupId)
-    .session(session ?? null)
-    .lean();
-  if (!group) throw new Error('FORBIDDEN');
+function reviewValues(record: DraftRecord, group: IGroupDocument) {
   const values = record.values ?? {};
   const { parsed, problems } = draftValidation(values);
   let allocation: DraftReview['allocation'];
@@ -260,6 +243,30 @@ async function reviewDraft(
       problems.push(error instanceof Error ? error.message : 'Invalid Expense');
     }
   }
+  return { problems, allocation };
+}
+
+/** Read only the owner's Drafts plus saved Expenses visible to every current Group member. */
+async function reviewDraft(
+  actor: DraftActor,
+  groupId: string,
+  draftId: string,
+  session?: mongoose.ClientSession,
+): Promise<DraftReview> {
+  const scope = access(actor, groupId);
+  const drafts = await collection();
+  await requireMembership(scope, session);
+  const record = await drafts.findOne(
+    { ...scope, _id: new mongoose.Types.ObjectId(draftObjectId.parse(draftId)), state: 'active' },
+    { session },
+  );
+  if (!record) throw new Error('DRAFT_NOT_FOUND');
+  const group = await Group.findById(groupId)
+    .session(session ?? null)
+    .lean();
+  if (!group) throw new Error('FORBIDDEN');
+  const values = record.values ?? {};
+  const { problems, allocation } = reviewValues(record, group);
   const duplicates: DraftReview['duplicates'] = [];
   const warningVersions: unknown[] = [];
   if (values.description && values.amount && values.date && values.currency) {
@@ -320,6 +327,85 @@ async function reviewDraft(
 
 export const expenseDraftService = {
   review: reviewDraft,
+  /** One read across current Groups. No mutation fence, writes or per-item Expense queries. */
+  async toReview(actor: DraftActor): Promise<ToReviewRead> {
+    const drafts = await collection();
+    const owner = new mongoose.Types.ObjectId(draftObjectId.parse(actor.id));
+    const account = await mongoose.connection.db!.collection('users').findOne(
+      {
+        _id: owner,
+        draftDeletionPending: { $ne: true },
+      },
+      { projection: { _id: 1 } },
+    );
+    if (!account) throw new Error('FORBIDDEN');
+    const groups = await Group.find({ 'members.user': owner, deletionRequestedAt: null })
+      .sort({ name: 1, _id: 1 })
+      .lean();
+    const records = await drafts
+      .find({ owner, state: 'active', group: { $in: groups.map((group) => group._id) } })
+      .sort({ createdAt: 1, _id: 1 })
+      .toArray();
+    const result: ToReviewRead = { groups: [], total: records.length };
+    for (const group of groups) {
+      const own = records.filter((record) => String(record.group) === String(group._id));
+      if (!own.length) continue;
+      // Bound the one Expense query to the dates/amounts/currencies represented in this Group.
+      const comparable = own.flatMap((record) => {
+        const v = record.values;
+        if (!v?.description || !v.amount || !v.currency || !v.date) return [];
+        const start = new Date(`${v.date.slice(0, 10)}T00:00:00.000Z`);
+        return [
+          {
+            currency: v.currency,
+            amount: v.amount,
+            date: { $gte: start, $lt: new Date(start.getTime() + 86400000) },
+          },
+        ];
+      });
+      const expenses = comparable.length
+        ? await Expense.find({ group: group._id, isDeleted: false, $or: comparable })
+            .select('description amount currency date')
+            .lean()
+        : [];
+      const items = own.map((record) => {
+        const values = record.values ?? {};
+        const duplicates: DraftReview['duplicates'] = [];
+        for (const other of own) {
+          if (
+            String(other._id) !== String(record._id) &&
+            other.values &&
+            isPossibleExpenseDuplicate(values, other.values)
+          )
+            duplicates.push({
+              kind: 'draft',
+              id: String(other._id),
+              description: other.values.description!,
+            });
+        }
+        for (const expense of expenses) {
+          if (isPossibleExpenseDuplicate(values, { ...expense, date: expense.date.toISOString() }))
+            duplicates.push({
+              kind: 'expense',
+              id: String(expense._id),
+              description: expense.description,
+            });
+        }
+        return {
+          draft: present(record),
+          problems: reviewValues(record, group).problems,
+          duplicates,
+        };
+      });
+      result.groups.push({
+        groupId: String(group._id),
+        groupName: group.name,
+        count: items.length,
+        items,
+      });
+    }
+    return result;
+  },
   async save(actor: DraftActor, groupId: string, input: unknown): Promise<DraftSaveOutcome[]> {
     // An MCP actor is never permitted to convert a Draft, even if accidentally wired here.
     if (actor.authorize) throw new Error('FORBIDDEN');

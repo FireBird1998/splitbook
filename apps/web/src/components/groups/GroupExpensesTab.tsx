@@ -1,5 +1,6 @@
 'use client';
 
+import ToReviewBanner from '@/components/to-review/ToReviewBanner';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { useSearchParams } from 'next/navigation';
@@ -79,6 +80,7 @@ export default function GroupExpensesTab({
 
   return (
     <Stack spacing={2}>
+      <ToReviewBanner groupId={groupId} />
       {hasMonthCycle && (
         <Box sx={{ animation: 'panel-in 280ms ease-out both' }}>
           <MonthCycleBar

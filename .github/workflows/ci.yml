@@ -499,6 +499,8 @@ jobs:
         run: pnpm build
         env:
           AUTH_SECRET: test
+          PERSISTENT_DRAFTS_ENABLED: true
+          NEXT_PUBLIC_PERSISTENT_DRAFTS_ENABLED: true
           MONGODB_URI: mongodb://127.0.0.1:27017/splitbook-build
           NEXT_PUBLIC_APP_URL: http://localhost:3100
           AUTH_GOOGLE_ID: test

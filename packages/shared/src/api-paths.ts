@@ -189,3 +189,8 @@ export const exportPath = ({ groupIds, from, to, include, format, timeZone }: Ex
     ['format', format],
     ['tz', timeZone],
   ])}`;
+
+export const toReviewPath = () => '/api/user/to-review';
+
+/** Shared web/app-link destination for a Group's To review. */
+export const toReviewHref = (groupId: string) => `/groups/${segment(groupId)}/review`;
