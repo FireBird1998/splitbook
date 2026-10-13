@@ -1,4 +1,5 @@
 import 'server-only';
+import { isPossibleExpenseDuplicate } from '@splitbook/shared/expense-duplicate';
 import mongoose from 'mongoose';
 import {
   cleanAssistantName,
@@ -263,16 +264,11 @@ async function reviewDraft(
   const warningVersions: unknown[] = [];
   if (values.description && values.amount && values.date && values.currency) {
     const day = values.date.slice(0, 10);
-    const same = (candidate: ExpenseDraftValues) =>
-      candidate.description?.trim().toLowerCase() === values.description!.trim().toLowerCase() &&
-      candidate.amount === values.amount &&
-      candidate.currency === values.currency &&
-      candidate.date?.slice(0, 10) === day;
     const otherDrafts = await drafts
       .find({ ...scope, state: 'active', _id: { $ne: record._id } }, { session })
       .toArray();
     for (const other of otherDrafts)
-      if (other.values && same(other.values)) {
+      if (other.values && isPossibleExpenseDuplicate(values, other.values)) {
         duplicates.push({
           kind: 'draft',
           id: String(other._id),
@@ -291,10 +287,10 @@ async function reviewDraft(
       },
     })
       .session(session ?? null)
-      .select('description revision')
+      .select('description revision amount currency date')
       .lean();
     for (const expense of expenses)
-      if (expense.description.trim().toLowerCase() === values.description.trim().toLowerCase()) {
+      if (isPossibleExpenseDuplicate(values, { ...expense, date: expense.date.toISOString() })) {
         duplicates.push({
           kind: 'expense',
           id: String(expense._id),
