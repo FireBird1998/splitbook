@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import KeptInToReview from '@/components/drafts/KeptInToReview';
 import { usePathname } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -118,19 +119,7 @@ export default function AddExpenseLauncher({ userId }: { userId: string }) {
 
       {/* In the page's own layer, so no fixed bar of the page can sit over it. */}
       <Portal>
-        <Snackbar
-          open={keptGroup !== null}
-          message="Kept in To review"
-          autoHideDuration={6000}
-          onClose={(_, reason) => {
-            if (reason !== 'clickaway') setKeptGroup(null);
-          }}
-          action={
-            <Button color="inherit" href={`/groups/${keptGroup}/review`}>
-              View
-            </Button>
-          }
-        />
+        <KeptInToReview groupId={keptGroup} onClose={() => setKeptGroup(null)} />
         <Snackbar
           open={confirmation !== null}
           autoHideDuration={6000}

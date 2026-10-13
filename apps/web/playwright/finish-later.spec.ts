@@ -3,6 +3,15 @@ import { MongoClient, ObjectId } from 'mongodb';
 import { enterAsPersona, openAddExpense, expectNoSeriousA11yViolations } from './fixtures';
 import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-draft';
 
+const ownedGroups = new WeakMap<Page, string>();
+test.afterEach(async ({ page }) => {
+  const id = ownedGroups.get(page);
+  if (id) {
+    const removed = await page.request.delete(`/api/groups/${id}`);
+    expect(removed.ok()).toBe(true);
+  }
+});
+
 const form = (page: Page) => page.getByRole('dialog', { name: /^Add expense/ });
 const closing = (page: Page) => page.getByRole('dialog', { name: 'Finish this expense later?' });
 async function ownGroup(page: Page) {
@@ -16,6 +25,7 @@ async function ownGroup(page: Page) {
   });
   expect(response.status()).toBe(201);
   const { data } = await response.json();
+  ownedGroups.set(page, data._id);
   await page.goto(`/groups/${data._id}/expenses`);
   return data;
 }
@@ -122,7 +132,7 @@ for (const status of [500, 409]) {
     const group = await ownGroup(page);
     await openAddExpense(page);
     await form(page).getByLabel('What was it for?').fill('Fictional groceries');
-    await form(page).getByLabel('Amount', { exact: true }).fill('125');
+    await form(page).getByLabel('Amount').fill('125');
     await page.route(`**/api/groups/${group._id}/drafts`, async (route) => {
       if (route.request().method() !== 'POST') return route.continue();
       await route.fulfill({
@@ -138,7 +148,7 @@ for (const status of [500, 409]) {
       status === 409 ? DRAFT_GROUP_LIMIT_MESSAGE : 'Everything you typed is still here',
     );
     await expect(form(page).getByLabel('What was it for?')).toHaveValue('Fictional groceries');
-    await expect(form(page).getByLabel('Amount', { exact: true })).toHaveValue('125');
+    await expect(form(page).getByLabel('Amount')).toHaveValue('125');
     await expectNoSeriousA11yViolations(page, test.info(), 'finish-later');
   });
 }
@@ -156,7 +166,7 @@ test('saved assistant provenance appears in list, panel and Activity at 130% tex
           description: 'Fictional electricity',
           amount: 125,
           currency: 'INR',
-          category: 'utilities',
+          category: 'housing',
           date: '2026-10-12',
           tagId: group.tags[0]._id,
           paidBy: [{ user: member, amount: 125 }],

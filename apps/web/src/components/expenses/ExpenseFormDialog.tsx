@@ -2,8 +2,7 @@
 import KeepExpenseDraft, { useKeepExpenseDraft } from '@/components/drafts/KeepExpenseDraft';
 
 import { useState } from 'react';
-import Snackbar from '@mui/material/Snackbar';
-import Portal from '@mui/material/Portal';
+import KeptInToReview from '@/components/drafts/KeptInToReview';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -91,21 +90,7 @@ export default function ExpenseFormDialog(props: ExpenseFormDialogProps) {
           }}
         />
       )}
-      <Portal>
-        <Snackbar
-          open={kept}
-          autoHideDuration={6000}
-          onClose={(_, reason) => {
-            if (reason !== 'clickaway') setKept(false);
-          }}
-          message="Kept in To review"
-          action={
-            <Button color="inherit" href={`/groups/${props.groupId}/review`}>
-              View
-            </Button>
-          }
-        />
-      </Portal>
+      <KeptInToReview groupId={kept ? props.groupId : null} onClose={() => setKept(false)} />
     </>
   );
 }
@@ -187,7 +172,7 @@ function ExpenseDraftDialog({
     },
   });
   const requestClose = () => {
-    if (finishEnabled && keep.busy) return;
+    if (finishEnabled && (keep.busy || loading)) return;
     if (finishEnabled && JSON.stringify(draft.values) !== initialValues) setClosing(true);
     else onClose();
   };
@@ -316,7 +301,9 @@ function ExpenseDraftDialog({
   const handleSubmit = async () => {
     if (sessionStorage.getItem(`splitbook.draft-request:${userId}:${groupId}`)) {
       window.alert(
-        'Resolve the unconfirmed request in this Group’s Drafts before saving this Expense.',
+        finishEnabled
+          ? 'Check To review to confirm whether your earlier item was kept before saving this expense. Everything you typed is still here.'
+          : 'Resolve the unconfirmed request in this Group’s Drafts before saving this Expense.',
       );
       return;
     }
@@ -375,295 +362,367 @@ function ExpenseDraftDialog({
   );
 
   // ─── Render ────────────────────────────────────────
-  return (
-    <>
-      <Dialog
-        open={open}
-        onClose={requestClose}
-        maxWidth="sm"
-        fullWidth
-        fullScreen={false}
-        slotProps={{
-          paper: {
-            sx: {
-              m: { xs: 1, sm: 2 },
-              maxHeight: {
-                xs: 'calc(100% - 16px - env(safe-area-inset-bottom, 0px))',
-                sm: 'calc(100% - 64px)',
-              },
+  const form = (
+    <Dialog
+      open={open}
+      onClose={requestClose}
+      maxWidth="sm"
+      fullWidth
+      fullScreen={false}
+      slotProps={{
+        paper: {
+          sx: {
+            m: { xs: 1, sm: 2 },
+            maxHeight: {
+              xs: 'calc(100% - 16px - env(safe-area-inset-bottom, 0px))',
+              sm: 'calc(100% - 64px)',
             },
           },
+        },
+      }}
+    >
+      <DialogTitle
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          pb: 1,
         }}
       >
-        <DialogTitle
-          sx={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            pb: 1,
-          }}
-        >
-          {showGroupName ? (
-            <Box component="span" sx={{ minWidth: 0 }}>
-              {isEditMode ? 'Edit expense' : 'Add expense'}
-              <Typography
-                component="span"
-                variant="body2"
-                color="text.secondary"
-                noWrap
-                sx={{ display: 'block' }}
-              >
-                {group.name}
-              </Typography>
-            </Box>
-          ) : isEditMode ? (
-            'Edit expense'
-          ) : (
-            'Add expense'
-          )}
-          <IconButton onClick={requestClose} size="small" aria-label="Close expense form">
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
+        {showGroupName ? (
+          <Box component="span" sx={{ minWidth: 0 }}>
+            {isEditMode ? 'Edit expense' : 'Add expense'}
+            <Typography
+              component="span"
+              variant="body2"
+              color="text.secondary"
+              noWrap
+              sx={{ display: 'block' }}
+            >
+              {group.name}
+            </Typography>
+          </Box>
+        ) : isEditMode ? (
+          'Edit expense'
+        ) : (
+          'Add expense'
+        )}
+        <IconButton onClick={requestClose} size="small" aria-label="Close expense form">
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
 
-        <DialogContent dividers inert={keep.busy}>
-          <Stack spacing={2.5} sx={{ pt: 1 }}>
-            {error && (
-              <Box
-                role="alert"
-                sx={{
-                  bgcolor: 'tint.negative',
-                  color: 'status.negative',
-                  px: 2,
-                  py: 1.5,
-                  borderRadius: 2,
-                  fontSize: 14,
-                }}
-              >
-                {error}
-                {conflict && <Button onClick={() => void reloadLatest()}>Reload latest</Button>}
-              </Box>
-            )}
-
-            {amount && preview.error && preview.error !== error && (
-              <Box role="status" sx={{ color: 'status.negative' }}>
-                {preview.error}
-              </Box>
-            )}
-
-            {/* ─── Quick Pick ─────────────────────────── */}
-            {!isEditMode && (
-              <Box
-                sx={{
-                  display: 'flex',
-                  gap: 1,
-                  overflowX: 'auto',
-                  pb: 0.5,
-                  '&::-webkit-scrollbar': {
-                    height: 4,
-                  },
-                  '&::-webkit-scrollbar-track': {
-                    bgcolor: 'transparent',
-                  },
-                  '&::-webkit-scrollbar-thumb': {
-                    bgcolor: 'border.strong',
-                    borderRadius: 2,
-                  },
-                  '&::-webkit-scrollbar-thumb:hover': {
-                    bgcolor: 'text.disabled',
-                  },
-                  scrollbarWidth: 'thin',
-                  scrollbarColor: (theme) => `${theme.palette.border.strong} transparent`,
-                }}
-              >
-                {PREDEFINED_ITEMS.slice(0, 8).map((item) => (
-                  <Chip
-                    key={item.id}
-                    label={`${item.icon} ${item.label}`}
-                    variant="outlined"
-                    size="small"
-                    onClick={() => handlePredefinedItem(item.id)}
-                    sx={{ flexShrink: 0, fontSize: 12 }}
-                  />
-                ))}
-              </Box>
-            )}
-
-            {/* ─── Description ────────────────────────── */}
-            <TextField
-              label="What was it for?"
-              value={description}
-              onChange={(e) => edit({ description: e.target.value })}
-              required
-              fullWidth
-              size="small"
-              autoFocus={!isEditMode}
-            />
-
-            {/* ─── Amount + Currency + Date (fast path) ─ */}
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-              <TextField
-                label="Amount"
-                value={amount}
-                onChange={(e) => edit({ amount: e.target.value })}
-                required
-                type="number"
-                size="small"
-                sx={{
-                  flex: 1,
-                  '& input': (theme) => ({
-                    ...(theme.typography.money as React.CSSProperties),
-                    fontSize: '1.25rem',
-                    fontWeight: 600,
-                  }),
-                }}
-                slotProps={{
-                  htmlInput: {
-                    min: 10 ** -getCurrencyPrecision(currency),
-                    step: 10 ** -getCurrencyPrecision(currency),
-                  },
-                }}
-              />
-              <TextField
-                select
-                label="Currency"
-                value={currency}
-                size="small"
-                disabled
-                helperText={isEditMode ? 'Expense currency' : `${groupNounTitle} currency`}
-                sx={{ width: { xs: '100%', sm: 120 } }}
-              >
-                <MenuItem value={currency}>
-                  {getCurrency(currency)?.flag} {currency}
-                </MenuItem>
-              </TextField>
-              <TextField
-                label="Date"
-                type="date"
-                value={date}
-                onChange={(e) => edit({ date: e.target.value })}
-                size="small"
-                sx={{ flex: 1 }}
-                slotProps={{ inputLabel: { shrink: true } }}
-              />
-            </Stack>
-
-            {/* ─── Tag chips (fast path) ─────────────── */}
-            <Box>
-              <Typography
-                component="label"
-                variant="caption"
-                fontWeight={500}
-                color="text.secondary"
-                sx={{ display: 'block', mb: 1 }}
-              >
-                Tag
-              </Typography>
-              <Stack direction="row" flexWrap="wrap" gap={1}>
-                {selectableTags.map((t) => (
-                  <Chip
-                    key={t._id || t.name}
-                    label={t.isArchived ? `${t.name} (archived)` : t.name}
-                    size="small"
-                    clickable
-                    color={tag === tagOptionValue(t) ? 'primary' : 'default'}
-                    variant={tag === tagOptionValue(t) ? 'filled' : 'outlined'}
-                    onClick={() => edit({ tag: tagOptionValue(t) })}
-                    aria-pressed={tag === tagOptionValue(t)}
-                  />
-                ))}
-              </Stack>
-              {selectableTags.length === 0 && (
-                <Typography variant="caption" color="error.main">
-                  No tags available — create tags in {groupNoun} settings
-                </Typography>
-              )}
-            </Box>
-
-            {/* ─── Summary Line + Change Button ────────── */}
+      <DialogContent dividers inert={keep.busy}>
+        <Stack spacing={2.5} sx={{ pt: 1 }}>
+          {error && (
             <Box
+              role="alert"
               sx={{
-                bgcolor: 'surface.muted',
-                borderRadius: 2,
+                bgcolor: 'tint.negative',
+                color: 'status.negative',
                 px: 2,
                 py: 1.5,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
+                borderRadius: 2,
+                fontSize: 14,
               }}
             >
-              <Box component="p" sx={{ fontSize: 14, color: 'text.secondary', m: 0 }}>
-                <Box component="span" sx={{ fontWeight: 600 }}>
-                  {payerSummary}
-                </Box>
-                {' · '}
-                <span>{splitMethodLabel[splitMethod] || 'Split'}</span>
-                {' · '}
-                <span>{memberSummary}</span>
-              </Box>
-              <Button
-                size="small"
-                onClick={() => setShowSplitOptions(!showSplitOptions)}
-                endIcon={showSplitOptions ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-                aria-expanded={showSplitOptions}
-                aria-label="Advanced split options"
-                sx={{
-                  textTransform: 'none',
-                  fontSize: 12,
-                  color: hasNonDefaultSplit ? 'primary.main' : 'text.secondary',
-                  fontWeight: hasNonDefaultSplit ? 600 : 400,
-                  minWidth: 'auto',
-                  ml: 1,
-                }}
-              >
-                {showSplitOptions ? 'Less' : 'Change'}
-              </Button>
+              {error}
+              {conflict && <Button onClick={() => void reloadLatest()}>Reload latest</Button>}
             </Box>
+          )}
 
-            {/* ─── TIER 2: Split Options ─────────────── */}
-            <Collapse in={showSplitOptions}>
-              <Stack
-                spacing={2.5}
-                sx={{
-                  border: 1,
-                  borderColor: 'divider',
-                  borderRadius: '12px',
-                  p: 2.5,
-                  bgcolor: 'background.paper',
-                }}
-              >
-                {/* Paid By */}
-                <Box>
-                  <Box
-                    component="label"
-                    sx={{
-                      display: 'block',
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: 'text.secondary',
-                      mb: 1,
-                    }}
-                  >
-                    Paid by
-                  </Box>
-                  {!multiPayerMode ? (
-                    <Stack spacing={1}>
-                      <TextField
-                        select
-                        value={payers[0]?.user || userId}
-                        onChange={(e) => updatePayer(0, 'user', e.target.value)}
-                        size="small"
-                        fullWidth
+          {amount && preview.error && preview.error !== error && (
+            <Box role="status" sx={{ color: 'status.negative' }}>
+              {preview.error}
+            </Box>
+          )}
+
+          {/* ─── Quick Pick ─────────────────────────── */}
+          {!isEditMode && (
+            <Box
+              sx={{
+                display: 'flex',
+                gap: 1,
+                overflowX: 'auto',
+                pb: 0.5,
+                '&::-webkit-scrollbar': {
+                  height: 4,
+                },
+                '&::-webkit-scrollbar-track': {
+                  bgcolor: 'transparent',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  bgcolor: 'border.strong',
+                  borderRadius: 2,
+                },
+                '&::-webkit-scrollbar-thumb:hover': {
+                  bgcolor: 'text.disabled',
+                },
+                scrollbarWidth: 'thin',
+                scrollbarColor: (theme) => `${theme.palette.border.strong} transparent`,
+              }}
+            >
+              {PREDEFINED_ITEMS.slice(0, 8).map((item) => (
+                <Chip
+                  key={item.id}
+                  label={`${item.icon} ${item.label}`}
+                  variant="outlined"
+                  size="small"
+                  onClick={() => handlePredefinedItem(item.id)}
+                  sx={{ flexShrink: 0, fontSize: 12 }}
+                />
+              ))}
+            </Box>
+          )}
+
+          {/* ─── Description ────────────────────────── */}
+          <TextField
+            label="What was it for?"
+            value={description}
+            onChange={(e) => edit({ description: e.target.value })}
+            required
+            fullWidth
+            size="small"
+            autoFocus={!isEditMode}
+          />
+
+          {/* ─── Amount + Currency + Date (fast path) ─ */}
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+            <TextField
+              label="Amount"
+              value={amount}
+              onChange={(e) => edit({ amount: e.target.value })}
+              required
+              type="number"
+              size="small"
+              sx={{
+                flex: 1,
+                '& input': (theme) => ({
+                  ...(theme.typography.money as React.CSSProperties),
+                  fontSize: '1.25rem',
+                  fontWeight: 600,
+                }),
+              }}
+              slotProps={{
+                htmlInput: {
+                  min: 10 ** -getCurrencyPrecision(currency),
+                  step: 10 ** -getCurrencyPrecision(currency),
+                },
+              }}
+            />
+            <TextField
+              select
+              label="Currency"
+              value={currency}
+              size="small"
+              disabled
+              helperText={isEditMode ? 'Expense currency' : `${groupNounTitle} currency`}
+              sx={{ width: { xs: '100%', sm: 120 } }}
+            >
+              <MenuItem value={currency}>
+                {getCurrency(currency)?.flag} {currency}
+              </MenuItem>
+            </TextField>
+            <TextField
+              label="Date"
+              type="date"
+              value={date}
+              onChange={(e) => edit({ date: e.target.value })}
+              size="small"
+              sx={{ flex: 1 }}
+              slotProps={{ inputLabel: { shrink: true } }}
+            />
+          </Stack>
+
+          {/* ─── Tag chips (fast path) ─────────────── */}
+          <Box>
+            <Typography
+              component="label"
+              variant="caption"
+              fontWeight={500}
+              color="text.secondary"
+              sx={{ display: 'block', mb: 1 }}
+            >
+              Tag
+            </Typography>
+            <Stack direction="row" flexWrap="wrap" gap={1}>
+              {selectableTags.map((t) => (
+                <Chip
+                  key={t._id || t.name}
+                  label={t.isArchived ? `${t.name} (archived)` : t.name}
+                  size="small"
+                  clickable
+                  color={tag === tagOptionValue(t) ? 'primary' : 'default'}
+                  variant={tag === tagOptionValue(t) ? 'filled' : 'outlined'}
+                  onClick={() => edit({ tag: tagOptionValue(t) })}
+                  aria-pressed={tag === tagOptionValue(t)}
+                />
+              ))}
+            </Stack>
+            {selectableTags.length === 0 && (
+              <Typography variant="caption" color="error.main">
+                No tags available — create tags in {groupNoun} settings
+              </Typography>
+            )}
+          </Box>
+
+          {/* ─── Summary Line + Change Button ────────── */}
+          <Box
+            sx={{
+              bgcolor: 'surface.muted',
+              borderRadius: 2,
+              px: 2,
+              py: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
+            <Box component="p" sx={{ fontSize: 14, color: 'text.secondary', m: 0 }}>
+              <Box component="span" sx={{ fontWeight: 600 }}>
+                {payerSummary}
+              </Box>
+              {' · '}
+              <span>{splitMethodLabel[splitMethod] || 'Split'}</span>
+              {' · '}
+              <span>{memberSummary}</span>
+            </Box>
+            <Button
+              size="small"
+              onClick={() => setShowSplitOptions(!showSplitOptions)}
+              endIcon={showSplitOptions ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+              aria-expanded={showSplitOptions}
+              aria-label="Advanced split options"
+              sx={{
+                textTransform: 'none',
+                fontSize: 12,
+                color: hasNonDefaultSplit ? 'primary.main' : 'text.secondary',
+                fontWeight: hasNonDefaultSplit ? 600 : 400,
+                minWidth: 'auto',
+                ml: 1,
+              }}
+            >
+              {showSplitOptions ? 'Less' : 'Change'}
+            </Button>
+          </Box>
+
+          {/* ─── TIER 2: Split Options ─────────────── */}
+          <Collapse in={showSplitOptions}>
+            <Stack
+              spacing={2.5}
+              sx={{
+                border: 1,
+                borderColor: 'divider',
+                borderRadius: '12px',
+                p: 2.5,
+                bgcolor: 'background.paper',
+              }}
+            >
+              {/* Paid By */}
+              <Box>
+                <Box
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: 'text.secondary',
+                    mb: 1,
+                  }}
+                >
+                  Paid by
+                </Box>
+                {!multiPayerMode ? (
+                  <Stack spacing={1}>
+                    <TextField
+                      select
+                      value={payers[0]?.user || userId}
+                      onChange={(e) => updatePayer(0, 'user', e.target.value)}
+                      size="small"
+                      fullWidth
+                    >
+                      {members.map((m) => (
+                        <MenuItem key={m.user._id} value={m.user._id}>
+                          {memberName(m.user._id)}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <Button
+                      size="small"
+                      onClick={() => edit({ multiPayerMode: true })}
+                      sx={{
+                        textTransform: 'none',
+                        fontSize: 12,
+                        color: 'primary.main',
+                      }}
+                      startIcon={<AddIcon sx={{ fontSize: 14 }} />}
+                    >
+                      Split payment between multiple people
+                    </Button>
+                  </Stack>
+                ) : (
+                  <Stack spacing={1.5}>
+                    {payers.map((payer, i) => (
+                      <Stack key={i} direction="row" spacing={1} alignItems="center">
+                        <TextField
+                          select
+                          value={payer.user}
+                          onChange={(e) => updatePayer(i, 'user', e.target.value)}
+                          size="small"
+                          sx={{ flex: 1 }}
+                        >
+                          {members.map((m) => (
+                            <MenuItem key={m.user._id} value={m.user._id}>
+                              {memberName(m.user._id)}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                        <TextField
+                          value={payer.amount}
+                          onChange={(e) => updatePayer(i, 'amount', e.target.value)}
+                          type="number"
+                          size="small"
+                          placeholder="Amount"
+                          sx={{ width: 120 }}
+                          slotProps={{
+                            htmlInput: {
+                              min: 10 ** -getCurrencyPrecision(currency),
+                              step: 10 ** -getCurrencyPrecision(currency),
+                            },
+                          }}
+                        />
+                        <IconButton
+                          size="small"
+                          onClick={() => removePayer(i)}
+                          disabled={payers.length <= 1}
+                          aria-label={`Remove payer ${memberName(payer.user)}`}
+                        >
+                          <RemoveCircleOutlineIcon
+                            fontSize="small"
+                            sx={{
+                              color: payers.length <= 1 ? 'text.disabled' : 'error.main',
+                            }}
+                          />
+                        </IconButton>
+                      </Stack>
+                    ))}
+                    {parsedAmount > 0 && (
+                      <Box
+                        sx={{
+                          fontSize: 12,
+                          color: !payersBalanced ? 'status.negative' : 'status.positive',
+                        }}
                       >
-                        {members.map((m) => (
-                          <MenuItem key={m.user._id} value={m.user._id}>
-                            {memberName(m.user._id)}
-                          </MenuItem>
-                        ))}
-                      </TextField>
+                        Total: {formatCurrency(payerTotal, currency)} /{' '}
+                        {formatCurrency(parsedAmount, currency)}
+                        {payersBalanced && ' ✓'}
+                      </Box>
+                    )}
+                    <Stack direction="row" spacing={1}>
                       <Button
                         size="small"
-                        onClick={() => edit({ multiPayerMode: true })}
+                        onClick={addPayer}
+                        disabled={payers.length >= members.length}
                         sx={{
                           textTransform: 'none',
                           fontSize: 12,
@@ -671,409 +730,334 @@ function ExpenseDraftDialog({
                         }}
                         startIcon={<AddIcon sx={{ fontSize: 14 }} />}
                       >
-                        Split payment between multiple people
+                        Add payer
+                      </Button>
+                      <Button
+                        size="small"
+                        onClick={() => {
+                          edit({
+                            multiPayerMode: false,
+                            payers: [{ user: payers[0].user, amount: '' }],
+                          });
+                        }}
+                        sx={{ textTransform: 'none', fontSize: 12 }}
+                        color="inherit"
+                      >
+                        Single payer
                       </Button>
                     </Stack>
-                  ) : (
-                    <Stack spacing={1.5}>
-                      {payers.map((payer, i) => (
-                        <Stack key={i} direction="row" spacing={1} alignItems="center">
-                          <TextField
-                            select
-                            value={payer.user}
-                            onChange={(e) => updatePayer(i, 'user', e.target.value)}
-                            size="small"
-                            sx={{ flex: 1 }}
-                          >
-                            {members.map((m) => (
-                              <MenuItem key={m.user._id} value={m.user._id}>
-                                {memberName(m.user._id)}
-                              </MenuItem>
-                            ))}
-                          </TextField>
-                          <TextField
-                            value={payer.amount}
-                            onChange={(e) => updatePayer(i, 'amount', e.target.value)}
-                            type="number"
-                            size="small"
-                            placeholder="Amount"
-                            sx={{ width: 120 }}
-                            slotProps={{
-                              htmlInput: {
-                                min: 10 ** -getCurrencyPrecision(currency),
-                                step: 10 ** -getCurrencyPrecision(currency),
-                              },
-                            }}
-                          />
-                          <IconButton
-                            size="small"
-                            onClick={() => removePayer(i)}
-                            disabled={payers.length <= 1}
-                            aria-label={`Remove payer ${memberName(payer.user)}`}
-                          >
-                            <RemoveCircleOutlineIcon
-                              fontSize="small"
-                              sx={{
-                                color: payers.length <= 1 ? 'text.disabled' : 'error.main',
-                              }}
-                            />
-                          </IconButton>
-                        </Stack>
-                      ))}
-                      {parsedAmount > 0 && (
+                  </Stack>
+                )}
+              </Box>
+
+              {/* Split Method */}
+              <Box>
+                <Box
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: 'text.secondary',
+                    mb: 1,
+                  }}
+                >
+                  Split method
+                </Box>
+                <ToggleButtonGroup
+                  value={splitMethod}
+                  exclusive
+                  onChange={handleSplitMethodChange}
+                  size="small"
+                  fullWidth
+                >
+                  <ToggleButton value="equal" sx={{ textTransform: 'none', fontSize: 12 }}>
+                    Equal
+                  </ToggleButton>
+                  <ToggleButton value="unequal" sx={{ textTransform: 'none', fontSize: 12 }}>
+                    Unequal
+                  </ToggleButton>
+                  <ToggleButton value="percentage" sx={{ textTransform: 'none', fontSize: 12 }}>
+                    %
+                  </ToggleButton>
+                  <ToggleButton value="shares" sx={{ textTransform: 'none', fontSize: 12 }}>
+                    Shares
+                  </ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+
+              {/* Split Between */}
+              <Box>
+                <Box
+                  component="label"
+                  sx={{
+                    display: 'block',
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: 'text.secondary',
+                    mb: 1,
+                  }}
+                >
+                  Split between
+                </Box>
+                <Stack spacing={1}>
+                  {members.map((m) => {
+                    const id = m.user._id;
+                    const isSelected = selectedMembers.includes(id);
+
+                    return (
+                      <Stack key={id} direction="row" alignItems="center" spacing={1}>
+                        <Checkbox
+                          checked={isSelected}
+                          onChange={(e) => handleMemberToggle(id, e.target.checked)}
+                          size="small"
+                        />
                         <Box
                           sx={{
-                            fontSize: 12,
-                            color: !payersBalanced ? 'status.negative' : 'status.positive',
+                            fontSize: 14,
+                            flex: 1,
+                            minWidth: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
                           }}
                         >
-                          Total: {formatCurrency(payerTotal, currency)} /{' '}
-                          {formatCurrency(parsedAmount, currency)}
-                          {payersBalanced && ' ✓'}
+                          {memberName(id)}
                         </Box>
-                      )}
-                      <Stack direction="row" spacing={1}>
-                        <Button
-                          size="small"
-                          onClick={addPayer}
-                          disabled={payers.length >= members.length}
-                          sx={{
-                            textTransform: 'none',
-                            fontSize: 12,
-                            color: 'primary.main',
-                          }}
-                          startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-                        >
-                          Add payer
-                        </Button>
-                        <Button
-                          size="small"
-                          onClick={() => {
-                            edit({
-                              multiPayerMode: false,
-                              payers: [{ user: payers[0].user, amount: '' }],
-                            });
-                          }}
-                          sx={{ textTransform: 'none', fontSize: 12 }}
-                          color="inherit"
-                        >
-                          Single payer
-                        </Button>
-                      </Stack>
-                    </Stack>
-                  )}
-                </Box>
 
-                {/* Split Method */}
-                <Box>
-                  <Box
-                    component="label"
-                    sx={{
-                      display: 'block',
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: 'text.secondary',
-                      mb: 1,
-                    }}
-                  >
-                    Split method
-                  </Box>
-                  <ToggleButtonGroup
-                    value={splitMethod}
-                    exclusive
-                    onChange={handleSplitMethodChange}
-                    size="small"
-                    fullWidth
-                  >
-                    <ToggleButton value="equal" sx={{ textTransform: 'none', fontSize: 12 }}>
-                      Equal
-                    </ToggleButton>
-                    <ToggleButton value="unequal" sx={{ textTransform: 'none', fontSize: 12 }}>
-                      Unequal
-                    </ToggleButton>
-                    <ToggleButton value="percentage" sx={{ textTransform: 'none', fontSize: 12 }}>
-                      %
-                    </ToggleButton>
-                    <ToggleButton value="shares" sx={{ textTransform: 'none', fontSize: 12 }}>
-                      Shares
-                    </ToggleButton>
-                  </ToggleButtonGroup>
-                </Box>
-
-                {/* Split Between */}
-                <Box>
-                  <Box
-                    component="label"
-                    sx={{
-                      display: 'block',
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: 'text.secondary',
-                      mb: 1,
-                    }}
-                  >
-                    Split between
-                  </Box>
-                  <Stack spacing={1}>
-                    {members.map((m) => {
-                      const id = m.user._id;
-                      const isSelected = selectedMembers.includes(id);
-
-                      return (
-                        <Stack key={id} direction="row" alignItems="center" spacing={1}>
-                          <Checkbox
-                            checked={isSelected}
-                            onChange={(e) => handleMemberToggle(id, e.target.checked)}
-                            size="small"
-                          />
+                        {splitMethod === 'equal' && isSelected && parsedAmount > 0 && (
                           <Box
                             sx={{
-                              fontSize: 14,
-                              flex: 1,
-                              minWidth: 0,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
+                              fontSize: 12,
+                              color: 'text.disabled',
+                              flexShrink: 0,
                             }}
                           >
-                            {memberName(id)}
+                            {previewAmount(id)}
                           </Box>
+                        )}
 
-                          {splitMethod === 'equal' && isSelected && parsedAmount > 0 && (
-                            <Box
-                              sx={{
-                                fontSize: 12,
-                                color: 'text.disabled',
-                                flexShrink: 0,
-                              }}
-                            >
-                              {previewAmount(id)}
-                            </Box>
-                          )}
+                        {(splitMethod === 'unequal' || splitMethod === 'exact') && isSelected && (
+                          <TextField
+                            value={customAmounts[id] || ''}
+                            onChange={(e) =>
+                              edit({
+                                customAmounts: {
+                                  ...customAmounts,
+                                  [id]: e.target.value,
+                                },
+                              })
+                            }
+                            type="number"
+                            size="small"
+                            placeholder="0.00"
+                            sx={{ width: 110 }}
+                            slotProps={{
+                              htmlInput: { min: 0, step: 10 ** -getCurrencyPrecision(currency) },
+                            }}
+                          />
+                        )}
 
-                          {(splitMethod === 'unequal' || splitMethod === 'exact') && isSelected && (
+                        {splitMethod === 'percentage' && isSelected && (
+                          <Stack
+                            direction="row"
+                            alignItems="center"
+                            spacing={0.5}
+                            sx={{ flexShrink: 0 }}
+                          >
                             <TextField
-                              value={customAmounts[id] || ''}
+                              value={customPercentages[id] || ''}
                               onChange={(e) =>
                                 edit({
-                                  customAmounts: {
-                                    ...customAmounts,
+                                  customPercentages: {
+                                    ...customPercentages,
                                     [id]: e.target.value,
                                   },
                                 })
                               }
                               type="number"
                               size="small"
-                              placeholder="0.00"
-                              sx={{ width: 110 }}
+                              placeholder="0"
+                              sx={{ width: 70 }}
                               slotProps={{
-                                htmlInput: { min: 0, step: 10 ** -getCurrencyPrecision(currency) },
+                                htmlInput: { min: 0, max: 100, step: 0.1 },
                               }}
                             />
-                          )}
+                            <Box sx={{ fontSize: 12, color: 'text.disabled' }}>%</Box>
+                            {parsedAmount > 0 && (customPercentages[id] || 0) && (
+                              <Box sx={{ fontSize: 12, color: 'text.disabled' }}>
+                                = {previewAmount(id)}
+                              </Box>
+                            )}
+                          </Stack>
+                        )}
 
-                          {splitMethod === 'percentage' && isSelected && (
-                            <Stack
-                              direction="row"
-                              alignItems="center"
-                              spacing={0.5}
-                              sx={{ flexShrink: 0 }}
-                            >
-                              <TextField
-                                value={customPercentages[id] || ''}
-                                onChange={(e) =>
-                                  edit({
-                                    customPercentages: {
-                                      ...customPercentages,
-                                      [id]: e.target.value,
-                                    },
-                                  })
-                                }
-                                type="number"
-                                size="small"
-                                placeholder="0"
-                                sx={{ width: 70 }}
-                                slotProps={{
-                                  htmlInput: { min: 0, max: 100, step: 0.1 },
-                                }}
-                              />
-                              <Box sx={{ fontSize: 12, color: 'text.disabled' }}>%</Box>
-                              {parsedAmount > 0 && (customPercentages[id] || 0) && (
-                                <Box sx={{ fontSize: 12, color: 'text.disabled' }}>
-                                  = {previewAmount(id)}
-                                </Box>
-                              )}
-                            </Stack>
-                          )}
+                        {splitMethod === 'shares' && isSelected && (
+                          <Stack
+                            direction="row"
+                            alignItems="center"
+                            spacing={0.5}
+                            sx={{ flexShrink: 0 }}
+                          >
+                            <TextField
+                              value={customShares[id] || ''}
+                              onChange={(e) =>
+                                edit({
+                                  customShares: {
+                                    ...customShares,
+                                    [id]: e.target.value,
+                                  },
+                                })
+                              }
+                              type="number"
+                              size="small"
+                              placeholder="1"
+                              sx={{ width: 70 }}
+                              slotProps={{ htmlInput: { min: 1, step: 1 } }}
+                            />
+                            <Box sx={{ fontSize: 12, color: 'text.disabled' }}>shares</Box>
+                            {parsedAmount > 0 && sharesTotal > 0 && (
+                              <Box sx={{ fontSize: 12, color: 'text.disabled' }}>
+                                = {previewAmount(id)}
+                              </Box>
+                            )}
+                          </Stack>
+                        )}
+                      </Stack>
+                    );
+                  })}
+                </Stack>
 
-                          {splitMethod === 'shares' && isSelected && (
-                            <Stack
-                              direction="row"
-                              alignItems="center"
-                              spacing={0.5}
-                              sx={{ flexShrink: 0 }}
-                            >
-                              <TextField
-                                value={customShares[id] || ''}
-                                onChange={(e) =>
-                                  edit({
-                                    customShares: {
-                                      ...customShares,
-                                      [id]: e.target.value,
-                                    },
-                                  })
-                                }
-                                type="number"
-                                size="small"
-                                placeholder="1"
-                                sx={{ width: 70 }}
-                                slotProps={{ htmlInput: { min: 1, step: 1 } }}
-                              />
-                              <Box sx={{ fontSize: 12, color: 'text.disabled' }}>shares</Box>
-                              {parsedAmount > 0 && sharesTotal > 0 && (
-                                <Box sx={{ fontSize: 12, color: 'text.disabled' }}>
-                                  = {previewAmount(id)}
-                                </Box>
-                              )}
-                            </Stack>
-                          )}
-                        </Stack>
-                      );
-                    })}
-                  </Stack>
+                {/* Split totals / validation feedback */}
+                {parsedAmount > 0 && (
+                  <Box sx={{ mt: 1 }}>
+                    {(splitMethod === 'unequal' || splitMethod === 'exact') && (
+                      <Box
+                        sx={{
+                          fontSize: 12,
+                          color: !splitsBalanced ? 'status.negative' : 'status.positive',
+                        }}
+                      >
+                        Total: {formatCurrency(unequalTotal, currency)} /{' '}
+                        {formatCurrency(parsedAmount, currency)}
+                        {splitsBalanced && ' ✓'}
+                      </Box>
+                    )}
+                    {splitMethod === 'percentage' && (
+                      <Box
+                        sx={{
+                          fontSize: 12,
+                          color: !percentagesBalanced ? 'status.negative' : 'status.positive',
+                        }}
+                      >
+                        Total: {percentageTotal.toFixed(2)}% / 100%
+                        {percentagesBalanced && ' ✓'}
+                      </Box>
+                    )}
+                    {splitMethod === 'shares' && sharesTotal > 0 && (
+                      <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
+                        {sharesTotal} share{sharesTotal !== 1 ? 's' : ''} ·{' '}
+                        {formatCurrency(perShareAmount, currency)}/share
+                      </Box>
+                    )}
+                  </Box>
+                )}
+              </Box>
+            </Stack>
+          </Collapse>
 
-                  {/* Split totals / validation feedback */}
-                  {parsedAmount > 0 && (
-                    <Box sx={{ mt: 1 }}>
-                      {(splitMethod === 'unequal' || splitMethod === 'exact') && (
-                        <Box
-                          sx={{
-                            fontSize: 12,
-                            color: !splitsBalanced ? 'status.negative' : 'status.positive',
-                          }}
-                        >
-                          Total: {formatCurrency(unequalTotal, currency)} /{' '}
-                          {formatCurrency(parsedAmount, currency)}
-                          {splitsBalanced && ' ✓'}
-                        </Box>
-                      )}
-                      {splitMethod === 'percentage' && (
-                        <Box
-                          sx={{
-                            fontSize: 12,
-                            color: !percentagesBalanced ? 'status.negative' : 'status.positive',
-                          }}
-                        >
-                          Total: {percentageTotal.toFixed(2)}% / 100%
-                          {percentagesBalanced && ' ✓'}
-                        </Box>
-                      )}
-                      {splitMethod === 'shares' && sharesTotal > 0 && (
-                        <Box sx={{ fontSize: 12, color: 'text.secondary' }}>
-                          {sharesTotal} share{sharesTotal !== 1 ? 's' : ''} ·{' '}
-                          {formatCurrency(perShareAmount, currency)}/share
-                        </Box>
-                      )}
-                    </Box>
-                  )}
-                </Box>
-              </Stack>
-            </Collapse>
-
-            {/* ─── More Options Toggle ───────────────── */}
-            <Button
-              size="small"
-              onClick={() => setShowMoreOptions(!showMoreOptions)}
-              endIcon={showMoreOptions ? <ExpandLessIcon /> : <ExpandMoreIcon />}
-              aria-expanded={showMoreOptions}
-              sx={{
-                textTransform: 'none',
-                fontSize: 12,
-                color: hasNonDefaultMore ? 'primary.main' : 'text.secondary',
-                fontWeight: hasNonDefaultMore ? 600 : 400,
-                px: 0,
-              }}
-            >
-              {showMoreOptions ? 'Hide options' : 'More options'}
-              {hasNonDefaultMore && !showMoreOptions && ' (modified)'}
-            </Button>
-
-            {/* ─── TIER 2: More Options ──────────────── */}
-            <Collapse in={showMoreOptions}>
-              <Stack
-                spacing={2}
-                sx={{
-                  border: 1,
-                  borderColor: 'divider',
-                  borderRadius: '12px',
-                  p: 2.5,
-                  bgcolor: 'background.paper',
-                }}
-              >
-                <TextField
-                  label="Notes (optional)"
-                  value={notes}
-                  onChange={(e) => edit({ notes: e.target.value })}
-                  fullWidth
-                  size="small"
-                  multiline
-                  rows={2}
-                />
-              </Stack>
-            </Collapse>
-          </Stack>
-        </DialogContent>
-
-        {finishEnabled && (
-          <Box sx={{ px: 3, py: 1 }}>
-            <KeepExpenseDraft state={keep} />
-          </Box>
-        )}
-        <DialogActions
-          sx={{
-            p: 2,
-            pb: { xs: 'calc(16px + env(safe-area-inset-bottom, 0px))', sm: 2 },
-            position: { xs: 'sticky', sm: 'static' },
-            bottom: 0,
-            bgcolor: 'background.paper',
-            borderTop: '1px solid',
-            borderColor: 'divider',
-            gap: 1,
-          }}
-        >
-          <Button onClick={requestClose} color="inherit" sx={{ minHeight: 40 }}>
-            Cancel
-          </Button>
+          {/* ─── More Options Toggle ───────────────── */}
           <Button
-            onClick={handleSubmit}
-            variant="contained"
-            disabled={
-              keep.busy ||
-              keep.pending ||
-              loading ||
-              invalidStoredMoney ||
-              !description.trim() ||
-              !amount ||
-              !tag
-            }
+            size="small"
+            onClick={() => setShowMoreOptions(!showMoreOptions)}
+            endIcon={showMoreOptions ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+            aria-expanded={showMoreOptions}
             sx={{
-              minHeight: 40,
               textTransform: 'none',
-              bgcolor: 'primary.main',
-              color: 'primary.contrastText',
-              '&:hover': { bgcolor: 'primary.dark' },
+              fontSize: 12,
+              color: hasNonDefaultMore ? 'primary.main' : 'text.secondary',
+              fontWeight: hasNonDefaultMore ? 600 : 400,
+              px: 0,
             }}
           >
-            {loading ? (
-              <CircularProgress size={20} />
-            ) : isEditMode ? (
-              'Save changes'
-            ) : (
-              'Save expense'
-            )}
+            {showMoreOptions ? 'Hide options' : 'More options'}
+            {hasNonDefaultMore && !showMoreOptions && ' (modified)'}
           </Button>
-        </DialogActions>
-      </Dialog>
+
+          {/* ─── TIER 2: More Options ──────────────── */}
+          <Collapse in={showMoreOptions}>
+            <Stack
+              spacing={2}
+              sx={{
+                border: 1,
+                borderColor: 'divider',
+                borderRadius: '12px',
+                p: 2.5,
+                bgcolor: 'background.paper',
+              }}
+            >
+              <TextField
+                label="Notes (optional)"
+                value={notes}
+                onChange={(e) => edit({ notes: e.target.value })}
+                fullWidth
+                size="small"
+                multiline
+                rows={2}
+              />
+            </Stack>
+          </Collapse>
+        </Stack>
+      </DialogContent>
+
+      {finishEnabled && (
+        <Box sx={{ px: 3, py: 1 }}>
+          <KeepExpenseDraft state={keep} />
+        </Box>
+      )}
+      <DialogActions
+        sx={{
+          p: 2,
+          pb: { xs: 'calc(16px + env(safe-area-inset-bottom, 0px))', sm: 2 },
+          position: { xs: 'sticky', sm: 'static' },
+          bottom: 0,
+          bgcolor: 'background.paper',
+          borderTop: '1px solid',
+          borderColor: 'divider',
+          gap: 1,
+        }}
+      >
+        <Button onClick={requestClose} color="inherit" sx={{ minHeight: 40 }}>
+          Cancel
+        </Button>
+        <Button
+          onClick={handleSubmit}
+          variant="contained"
+          disabled={
+            keep.busy ||
+            keep.pending ||
+            loading ||
+            invalidStoredMoney ||
+            !description.trim() ||
+            !amount ||
+            !tag
+          }
+          sx={{
+            minHeight: 40,
+            textTransform: 'none',
+            bgcolor: 'primary.main',
+            color: 'primary.contrastText',
+            '&:hover': { bgcolor: 'primary.dark' },
+          }}
+        >
+          {loading ? <CircularProgress size={20} /> : isEditMode ? 'Save changes' : 'Save expense'}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+  return (
+    <>
+      {form}
       <Dialog
         open={closing}
         onClose={() => {
@@ -1088,7 +1072,12 @@ function ExpenseDraftDialog({
           <KeepExpenseDraft state={keep} />
         </DialogContent>
         <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
-          <Button color="error" disabled={keep.busy} onClick={onClose}>
+          <Button
+            color="inherit"
+            sx={{ color: 'status.negative' }}
+            disabled={keep.busy || loading}
+            onClick={onClose}
+          >
             Delete
           </Button>
           <Button disabled={keep.busy} onClick={() => setClosing(false)}>

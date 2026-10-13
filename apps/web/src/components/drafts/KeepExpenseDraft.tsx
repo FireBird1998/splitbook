@@ -11,6 +11,7 @@ import { Alert, Button, Link, Stack, Typography } from '@mui/material';
 import type { ExpenseDraft } from '@splitbook/shared/expense-draft';
 import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-draft-editor';
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
+import { toReviewHref } from '@splitbook/shared/api-paths';
 import { apiFetch } from '@/lib/utils/api-fetch';
 export function useKeepExpenseDraft({
   draft,
@@ -75,10 +76,7 @@ export function useKeepExpenseDraft({
     setError('');
     try {
       if (await client.pending()) {
-        if (!attemptValues.current)
-          throw new Error(
-            'A previous request is still unconfirmed. Open To review before keeping another item. Your form is still here.',
-          );
+        if (!attemptValues.current) throw new Error('Could not confirm the earlier item.');
         const result = await client.retry();
         if (result?.kind !== 'create')
           throw new Error('Could not confirm this item. Your form is still here.');
@@ -135,8 +133,7 @@ export function useKeepExpenseDraft({
       setError(
         code === 'DRAFT_GROUP_LIMIT'
           ? DRAFT_GROUP_LIMIT_MESSAGE
-          : 'Could not confirm Finish later. Everything you typed is still here. ' +
-              (cause instanceof Error ? cause.message : 'Please try again.'),
+          : 'Could not confirm Finish later. Everything you typed is still here. Check again or open To review to confirm the earlier item.',
       );
     } finally {
       inFlight.current = false;
@@ -164,7 +161,7 @@ export default function KeepExpenseDraft({
       {(state.full || state.error) && (
         <Alert severity="warning">
           {state.full ? DRAFT_GROUP_LIMIT_MESSAGE : state.error}{' '}
-          <Link href={`/groups/${state.groupId}/review`}>To review</Link>
+          <Link href={toReviewHref(state.groupId)}>To review</Link>
         </Alert>
       )}
       <Button disabled={state.disabled} onClick={() => void state.keep()}>
