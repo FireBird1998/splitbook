@@ -49,7 +49,13 @@ export default function ToReviewBanner({ groupId }: { groupId: string }) {
           <Typography sx={{ overflowWrap: 'anywhere', minWidth: 0 }}>
             {[`${group.counts.total} to review`, group.bannerSummary].filter(Boolean).join(' · ')}
           </Typography>
-          <Button component={Link} href={toReviewHref(groupId)} variant="outlined" size="small">
+          <Button
+            component={Link}
+            href={toReviewHref(groupId)}
+            variant="outlined"
+            color="inherit"
+            size="small"
+          >
             Review
           </Button>
         </>
