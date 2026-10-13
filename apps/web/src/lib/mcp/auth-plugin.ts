@@ -1,3 +1,4 @@
+import { connectedAssistantName } from './assistant-name';
 import { randomUUID } from 'node:crypto';
 import type { AuthContext, BetterAuthPlugin } from 'better-auth';
 import {
@@ -107,7 +108,12 @@ export function mcpAuthPlugins(env: AuthEnv) {
               ],
             });
             if (consent)
-              connections.push({ id: row.id, clientId: row.clientId, scopes: consent.scopes });
+              connections.push({
+                id: row.id,
+                clientId: row.clientId,
+                name: await connectedAssistantName(ctx.context.adapter, row.clientId),
+                scopes: consent.scopes,
+              });
           }
           ctx.setHeader('Cache-Control', 'no-store');
           return ctx.json({

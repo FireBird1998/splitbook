@@ -49,6 +49,8 @@ Discard is permanent, whether initiated by the member or an authorized Connected
 
 At most 10 Drafts may be created per request and at most 100 active Drafts may exist in a member's private collection for a Group. The latter interprets the user's answer, "100 per group", in the per-member collection scope of the question; final scope confirmation must make this interpretation explicit. These are hard maxima, not the larger adjustable defaults suggested during the interview. Reaching a limit must return a clear error without removing existing work.
 
+#403 confirmed the per-member limit of 100 active Drafts per Group on 14 October 2026.
+
 ## Duplicate handling
 
 A Draft resembling another Draft or saved Expense produces a possible-duplicate warning requiring explicit member acknowledgment before saving. Similar entries are not merged automatically or permanently blocked, because repeated expenses can be legitimate. Exact retries of the same Draft-creation request return the original Draft; this is separate from similarity detection.

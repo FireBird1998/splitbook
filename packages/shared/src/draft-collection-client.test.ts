@@ -6,6 +6,8 @@ const groupId = '000000000000000000000001';
 const draft = {
   id: '000000000000000000000002',
   groupId,
+  preparedBy: { kind: 'member' as const },
+  changedBy: { kind: 'member' as const },
   revision: 0,
   state: 'active' as const,
   values: { amount: 450 },

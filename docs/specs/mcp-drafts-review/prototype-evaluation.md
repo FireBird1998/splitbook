@@ -2,6 +2,8 @@
 
 11 October 2026. Implementation stopped at the user's request. These changes are uncommitted prototype work and have not been deployed, published as a PR, or accepted as completed tickets. Unrelated landing-page changes belong to separate work and are excluded from this assessment.
 
+Quota update (14 October 2026): #403 supersedes the historical Group-wide quota described in this evaluation. The required limit is now 100 active Drafts per member per Group; the prototype evidence below describes the earlier behavior.
+
 ## Evidence already obtained
 
 - Nine persistent-Draft integration tests passed against an isolated replica-set MongoDB: private incomplete entries, Group-wide capacity and races, exact retry identity, permanent content discard, revisions, membership removal/rejoin, Group deletion and authenticated route behavior.
