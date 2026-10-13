@@ -1,3 +1,5 @@
+import { buildToReview } from '@splitbook/shared/to-review';
+import type { ToReviewItem } from '@splitbook/shared/to-review-read';
 import { expenseDraftsKey } from '@splitbook/shared/query-keys';
 import { QueryObserver, type QueryClient } from '@tanstack/query-core';
 import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-draft-editor';
@@ -25,6 +27,8 @@ export interface SharedDraftCollectionState {
   pending: boolean;
   busy: boolean;
   message: string;
+  confirmation: ReturnType<typeof buildToReview>['ready'] | null;
+  resultsVisible: boolean;
 }
 export const emptySharedDraftCollection = (): SharedDraftCollectionState => ({
   groupId: null,
@@ -41,6 +45,8 @@ export const emptySharedDraftCollection = (): SharedDraftCollectionState => ({
   pending: false,
   busy: false,
   message: '',
+  confirmation: null,
+  resultsVisible: false,
 });
 type Client = ReturnType<typeof draftCollectionClient> & { context(): Promise<ExpenseContext> };
 /** Controller-owned online collection. Only reads enter Query; retained writes remain explicit. */
@@ -53,6 +59,9 @@ export function sharedDraftCollection({
   read,
   publish,
   current,
+  online = () => true,
+  now = Date.now,
+  changed = async () => {},
 }: {
   client: Client;
   queryClient: QueryClient;
@@ -62,6 +71,9 @@ export function sharedDraftCollection({
   read(): SharedDraftCollectionState;
   publish(value: SharedDraftCollectionState): void;
   current(): boolean;
+  online?(): boolean;
+  now?(): number;
+  changed?(): Promise<void>;
 }) {
   let stop: (() => void) | undefined;
   let mounted = false;
@@ -70,7 +82,9 @@ export function sharedDraftCollection({
   };
   const observer = new QueryObserver(queryClient, {
     queryKey: expenseDraftsKey({ environment, accountId }, groupId),
+    enabled: online(),
     queryFn: async () => {
+      if (!online()) throw new Error('Connect to load To review.');
       const [rows, context] = await Promise.all([client.list(), client.context()]);
       return { rows, context };
     },
@@ -83,19 +97,25 @@ export function sharedDraftCollection({
     refetchOnWindowFocus: true,
   });
   const refresh = async () => {
+    if (!online()) return;
     const result = await observer.refetch();
     if (result.error) throw result.error;
     update({ pending: !!(await client.pending()) });
+    await changed();
   };
   const run = async (work: () => Promise<void>) => {
     if (!mounted || !current() || read().busy) return;
+    if (!online()) {
+      update({ message: 'Connect to use the items in your account.' });
+      return;
+    }
     update({ busy: true, message: '' });
     try {
       await work();
     } catch (error) {
       update({
         message:
-          error instanceof Error ? error.message : 'Request not confirmed. Reload before retrying.',
+          error instanceof Error ? error.message : 'Could not confirm this action. Check again.',
       });
     } finally {
       try {
@@ -103,7 +123,7 @@ export function sharedDraftCollection({
       } catch {
         update({
           pending: true,
-          message: 'Could not read the retained request. Reload before making changes.',
+          message: 'Could not check the previous action. Reopen To review before making changes.',
         });
       }
       update({ busy: false });
@@ -136,11 +156,27 @@ export function sharedDraftCollection({
       });
       void client
         .pending()
-        .then((value) => update({ pending: !!value }))
+        .then((value) => {
+          update({ pending: !!value });
+          if (value && !read().outcomes.length) {
+            const attempt = JSON.parse(value);
+            if (attempt.path?.endsWith('/save')) {
+              const items = JSON.parse(attempt.body).drafts as { id: string }[];
+              update({
+                resultsVisible: true,
+                outcomes: items.map(({ id }) => ({
+                  id,
+                  status: 'unresolved',
+                  message: "We didn't hear back, so it may already be saved",
+                })),
+              });
+            }
+          }
+        })
         .catch(() =>
           update({
             pending: true,
-            message: 'Could not read the retained request. Reload before making changes.',
+            message: 'Could not check the previous action. Reopen To review before making changes.',
           }),
         );
       return () => {
@@ -200,9 +236,43 @@ export function sharedDraftCollection({
       run(async () => {
         update({ reviews: await client.review(read().selected), ack: [], outcomes: [] });
       }),
+    reviewReady: (items: ToReviewItem[]) =>
+      run(async () => {
+        if (read().pending || !items.length) return;
+        update({ confirmation: null, reviews: [], outcomes: [], resultsVisible: false });
+        const reviews = await client.review(items.map((item) => item.draft.id));
+        const ready = buildToReview(
+          {
+            total: reviews.length,
+            groups: [
+              {
+                groupId,
+                groupName: read().context?.group.name ?? '',
+                count: reviews.length,
+                items: reviews,
+              },
+            ],
+          },
+          [],
+          new Date(now()),
+        ).ready;
+        if (ready.count !== items.length) {
+          update({ message: 'Some items changed. Check their details before saving.' });
+          await refresh();
+          return;
+        }
+        update({ reviews, ack: [], confirmation: ready });
+      }),
+    cancelReview() {
+      if (!read().busy) update({ confirmation: null, reviews: [] });
+    },
+    closeResults() {
+      if (!read().busy) update({ resultsVisible: false });
+    },
     save: () =>
       run(async () => {
         const { reviews, ack } = read();
+        if (read().pending || !reviews.length) return;
         update({
           outcomeNames: Object.fromEntries(
             reviews.map((row) => [
@@ -211,14 +281,36 @@ export function sharedDraftCollection({
             ]),
           ),
         });
-        update({ outcomes: await client.save(reviews, ack), reviews: [], selected: [] });
+        try {
+          update({ outcomes: await client.save(reviews, ack) });
+        } catch (error) {
+          const pending = !!(await client.pending());
+          update({
+            outcomes: reviews.map(({ draft }) => ({
+              id: draft.id,
+              status: pending ? 'unresolved' : 'failed',
+              message: pending
+                ? "We didn't hear back, so it may already be saved"
+                : error instanceof Error
+                  ? error.message
+                  : 'Could not save this item.',
+            })),
+          });
+        }
+        update({ reviews: [], selected: [], confirmation: null, resultsVisible: true });
         await refresh();
       }),
     retry: () =>
       run(async () => {
         const result = await client.retry();
         if (result?.kind === 'save')
-          update({ outcomes: result.outcomes, reviews: [], selected: [] });
+          update({
+            outcomes: result.outcomes,
+            reviews: [],
+            selected: [],
+            confirmation: null,
+            resultsVisible: true,
+          });
         else if (result?.kind === 'create' && result.localDraftRetained)
           update({
             message: 'Your original Draft was uploaded. Newer entries are still on this device.',

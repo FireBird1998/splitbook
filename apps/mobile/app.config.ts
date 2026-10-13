@@ -27,6 +27,7 @@ export default {
     // the app from every screen, even mid-save.
     predictiveBackGestureEnabled: false,
     intentFilters: androidInvitationFilters({
+      reviewEnabled: process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true',
       mode: process.env.EXPO_PUBLIC_APP_ENV,
       inviteOrigin: process.env.EXPO_PUBLIC_INVITE_ORIGIN,
       authOrigin: process.env.EXPO_PUBLIC_AUTH_ORIGIN,

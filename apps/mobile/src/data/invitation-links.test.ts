@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseInvitationLink } from './invitation-links';
+import { parseInvitationLink, parseToReviewLink } from './invitation-links';
 
 describe('invitation link boundary', () => {
   it('reads a canonical invitation at the configured origin and normalizes its code', () => {
@@ -54,4 +54,21 @@ describe('invitation link boundary', () => {
     ])
       expect(parseInvitationLink(link, origin)).toBeNull();
   });
+});
+
+it('accepts only the exact To review link on this environment', () => {
+  const id = 'a00000000000000000000010';
+  const origin = 'https://staging.splitbook.test';
+  expect(parseToReviewLink(`${origin}/groups/${id}/review`, origin)).toBe(id);
+  for (const value of [
+    `${origin}/groups/${id}/review/`,
+    `${origin}/groups/${id}/review?other=1`,
+    `${origin}/groups/${id}/expenses`,
+    `${origin}/groups/../groups/${id}/review`,
+    `${origin}/groups/${id}%2freview`,
+    `https://other.test/groups/${id}/review`,
+    `${origin}/groups/bad/review`,
+    `${origin}/groups/${id}/review#x`,
+  ])
+    expect(parseToReviewLink(value, origin)).toBeNull();
 });

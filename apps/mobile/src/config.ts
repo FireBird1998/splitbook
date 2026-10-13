@@ -2,7 +2,12 @@ import type { MobileConfig } from './data/types';
 import type { ExpoConfig } from 'expo/config';
 import { parseWebOrigin } from './web-origin';
 
-type InvitationEnvironment = { mode?: string; authOrigin?: string; inviteOrigin?: string };
+type InvitationEnvironment = {
+  mode?: string;
+  authOrigin?: string;
+  inviteOrigin?: string;
+  reviewEnabled?: boolean;
+};
 
 /** Build-time registration; incoming links still pass the stricter runtime parser. */
 export function androidInvitationFilters(
@@ -25,6 +30,24 @@ export function androidInvitationFilters(
       ],
       category: ['BROWSABLE', 'DEFAULT'],
     },
+
+    ...(env.reviewEnabled
+      ? [
+          {
+            action: 'VIEW',
+            autoVerify: env.mode !== 'development',
+            data: [
+              {
+                scheme: origin.protocol.slice(0, -1),
+                host: origin.hostname,
+                ...(origin.port ? { port: origin.port } : {}),
+                pathPattern: '/groups/.*/review',
+              },
+            ],
+            category: ['BROWSABLE', 'DEFAULT'],
+          },
+        ]
+      : []),
   ];
 }
 

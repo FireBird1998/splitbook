@@ -343,6 +343,7 @@ describe('Home Expense drafts', () => {
         description: 'Airport taxi',
         amount: '1150',
         currency: 'INR',
+        date: '2026-09-28',
         unconfirmed: true,
       },
       {
@@ -352,6 +353,7 @@ describe('Home Expense drafts', () => {
         description: 'Team dinner',
         amount: '30',
         currency: 'EUR',
+        date: unconfirmedEdit(lisbon).draft.date,
         unconfirmed: true,
       },
       {
@@ -361,6 +363,7 @@ describe('Home Expense drafts', () => {
         description: 'Weekly groceries',
         amount: '1249.5',
         currency: 'INR',
+        date: '2026-09-28',
         unconfirmed: false,
       },
     ]);

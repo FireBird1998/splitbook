@@ -1,4 +1,4 @@
-import { SharedDrafts } from './src/ui/shared-drafts';
+import { ToReviewHomeCard, ToReviewGroupBanner, ToReviewOverlay } from './src/ui/to-review';
 import { NotAvailableOffline, OfflineNotice } from './src/ui/offline-notice';
 import {
   memo,
@@ -6,7 +6,6 @@ import {
   useEffect,
   useMemo,
   useRef,
-  useState,
   useSyncExternalStore,
   type RefObject,
 } from 'react';
@@ -718,6 +717,9 @@ const HomeScreen = memo(function HomeScreen() {
           state={state.offline}
           savedShown={!!(state.groups.restored || state.home.restored)}
         />
+        {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' && (
+          <ToReviewHomeCard controller={controller} disabled={checking} />
+        )}
         <HomeBalances
           state={state.home}
           offline={state.offline.active}
@@ -747,7 +749,9 @@ const HomeScreen = memo(function HomeScreen() {
           />
         )}
         {/* Direct entry: the form returns to that Group's Expenses. */}
-        <ContinueDrafts drafts={state.drafts} disabled={checking} onOpen={openDraft} />
+        {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED !== 'true' && (
+          <ContinueDrafts drafts={state.drafts} disabled={checking} onOpen={openDraft} />
+        )}
         <HomeGroups
           groups={state.groups}
           byGroup={state.home.byGroup}
@@ -763,6 +767,9 @@ const HomeScreen = memo(function HomeScreen() {
           {environment.label}
         </CompactText>
       </ScrollView>
+      {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' && (
+        <ToReviewOverlay controller={controller} />
+      )}
       {state.homeSnackbar ? (
         <HomeSnackbar notice={state.homeSnackbar} onDismiss={controller.dismissSnackbar} />
       ) : null}
@@ -810,7 +817,6 @@ const unlistedGroup = (id: string): MobileGroup => ({
 
 /** A Group: the compact shell around its Expenses, Balances or Activity destination. */
 function GroupScreen() {
-  const [sharedDraftsOpen, setSharedDraftsOpen] = useState(false);
   const state = useMobileSnapshot(
     controller,
     (snapshot) => ({
@@ -1177,24 +1183,12 @@ function GroupScreen() {
       }
     >
       {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' && (
-        <Button
-          label="Your private Drafts"
-          secondary
-          disabled={state.offline.active || !group}
-          onPress={() => setSharedDraftsOpen(true)}
-        />
-      )}
-      {group && sharedDraftsOpen && (
-        <SharedDrafts
-          key={`${userId}:${group.id}`}
-          controller={controller}
-          accountId={userId}
-          group={group}
-          onClose={() => {
-            setSharedDraftsOpen(false);
-            void controller.refresh();
-          }}
-        />
+        <>
+          {group && state.destination === 'expenses' && state.detail.status !== 'denied' && (
+            <ToReviewGroupBanner controller={controller} groupId={group.id} />
+          )}
+          <ToReviewOverlay controller={controller} />
+        </>
       )}
       {notice}
       {state.detail.status === 'denied' ? (

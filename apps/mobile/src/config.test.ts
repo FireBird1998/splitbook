@@ -239,3 +239,13 @@ describe('production configuration', () => {
     ).toMatchObject({ googleEnvironment: 'production', developmentPersonaEnabled: false });
   });
 });
+
+it('adds a separate, narrow review app-link filter only for enabled builds', () => {
+  const filters = androidInvitationFilters({ ...local, reviewEnabled: true });
+  expect(filters).toHaveLength(2);
+  expect(filters[0]).toEqual(androidInvitationFilters(local)[0]);
+  expect(filters[1].data).toEqual([
+    { scheme: 'http', host: '127.0.0.1', port: '4138', pathPattern: '/groups/.*/review' },
+  ]);
+  expect(androidInvitationFilters({ ...local, reviewEnabled: false })).toHaveLength(1);
+});
