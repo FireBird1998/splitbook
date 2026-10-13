@@ -1,11 +1,10 @@
 import { Alert, TextInput, View } from 'react-native';
-import {
-  draftFields,
-  draftEntryChanges,
-  draftEntries,
-} from '@splitbook/shared/persistent-draft-editor';
+import { draftFields, draftEntryChanges } from '@splitbook/shared/persistent-draft-editor';
 import type { MobileController } from '../data/mobile-controller';
-import type { SharedDraftCollectionState } from '../data/shared-draft-collection';
+import {
+  draftEditorChanged,
+  type SharedDraftCollectionState,
+} from '../data/shared-draft-collection';
 import { Button, Copy } from './primitives';
 import { useTheme } from './theme';
 
@@ -97,11 +96,7 @@ export function SharedDraftEditor({
         secondary
         disabled={busy}
         onPress={() => {
-          const initial = draftEntries(editing === 'new' ? undefined : editing.values);
-          const changed = Object.keys({ ...initial, ...entries }).some(
-            (key) => (initial[key] ?? '') !== (entries[key] ?? ''),
-          );
-          if (!changed || pending) return client.closeEditor();
+          if (!draftEditorChanged(state) || pending) return client.closeEditor();
           Alert.alert('Discard your changes?', 'The last kept details will stay in To review.', [
             { text: 'Keep editing', style: 'cancel' },
             { text: 'Discard changes', style: 'destructive', onPress: () => client.closeEditor() },

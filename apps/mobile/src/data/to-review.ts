@@ -118,7 +118,9 @@ export function createToReviewQueries(options: {
     if (disposed) return;
     const snapshot = options.snapshot();
     const next =
-      options.enabled && snapshot.auth.status === 'authenticated'
+      options.enabled &&
+      ['groups', 'group'].includes(snapshot.screen) &&
+      snapshot.auth.status === 'authenticated'
         ? snapshot.auth.user?.id
         : undefined;
     if (!next) {
@@ -139,6 +141,11 @@ export function createToReviewQueries(options: {
     observer = new QueryObserver<ToReviewRead>(options.client, {
       queryKey: toReviewKey({ environment: options.environment, accountId: owner }),
       queryFn: async ({ signal }) => {
+        if (
+          options.snapshot().auth.status !== 'authenticated' ||
+          options.snapshot().auth.user?.id !== owner
+        )
+          throw new Error('The account changed.');
         if (!options.online.isOnline() || options.snapshot().offline.active)
           throw new Error('Connect to load To review.');
         return parseToReviewResponse(await options.read(toReviewPath(), signal));
@@ -180,6 +187,24 @@ export function createToReviewQueries(options: {
   const stopOnline = options.online.subscribe(bindLater);
   return {
     bindLater,
+    lose(groupId: string) {
+      const owner = options.snapshot().auth.user?.id;
+      if (!owner) return;
+      const key = toReviewKey({ environment: options.environment, accountId: owner });
+      void options.client.cancelQueries({ queryKey: key, exact: true });
+      const withoutGroup = (read: ToReviewRead) => {
+        const groups = read.groups.filter((group) => group.groupId !== groupId);
+        return { total: groups.reduce((total, group) => total + group.count, 0), groups };
+      };
+      const state = options.snapshot().toReview;
+      const read = withoutGroup(state.read);
+      options.client.setQueryData(key, read);
+      options.publish({
+        ...options.snapshot().toReview,
+        read,
+        recoveries: state.recoveries.filter((item) => item.groupId !== groupId),
+      });
+    },
     async refresh() {
       if (!options.enabled) return;
       await loadRecoveries();

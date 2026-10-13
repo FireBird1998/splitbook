@@ -1,10 +1,10 @@
+import { draftEditorChanged } from '../data/shared-draft-collection';
 import { useEffect, useMemo } from 'react';
 import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { formatDate } from '@splitbook/shared/date';
 import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
-import { draftEntries } from '@splitbook/shared/persistent-draft-editor';
 import { summarizeReviewRun, type ReviewItemModel } from '@splitbook/shared/to-review';
 import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
 import type { MobileController } from '../data/mobile-controller';
@@ -186,7 +186,7 @@ export function ToReviewHomeCard({
     !state.toReview.recoveryMessage
   )
     return null;
-  const firstGroup = model.items[0]?.groupId;
+  const firstGroup = model.groups[0]?.groupId;
   return (
     <Card padded>
       <View style={{ gap: 12 }}>
@@ -338,11 +338,10 @@ export function ToReviewList({
   const collection = useMobileSnapshot(controller, (snapshot) => snapshot.sharedDraftCollection);
   const client = useMemo(
     () => controller.draftCollection(groupId),
-    [controller, groupId, state.auth.user?.id, state.offline],
+    [controller, groupId, state.auth.user?.id],
   );
-  useEffect(() => {
-    if (!state.offline) return client.open();
-  }, [client, state.offline]);
+  useEffect(() => client.open(), [client]);
+  useEffect(() => client.connectivityChanged(), [client, state.offline]);
   const model = controller.toReviewModel(groupId);
   const own = model.groups[0];
   const unavailable = state.detail.id === groupId && state.detail.status === 'denied';
@@ -361,15 +360,7 @@ export function ToReviewList({
   const results = summarizeReviewRun(collection.outcomes);
   const close = () => {
     if (collection.busy) return;
-    const initial = draftEntries(
-      collection.editing && collection.editing !== 'new' ? collection.editing.values : undefined,
-    );
-    const changed =
-      collection.editing &&
-      Object.keys({ ...initial, ...collection.entries }).some(
-        (key) => (initial[key] ?? '') !== (collection.entries[key] ?? ''),
-      );
-    if (!changed || collection.pending) return controller.closeToReview();
+    if (!draftEditorChanged(collection) || collection.pending) return controller.closeToReview();
     Alert.alert(
       'Keep editing?',
       'Your changes have not been kept yet. Leaving replaces them with the last kept details.',

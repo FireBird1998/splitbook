@@ -23,6 +23,7 @@ const user = {
   image: null,
 };
 const groupId = 'b00000000000000000000001';
+const otherGroupId = 'b00000000000000000000002';
 const tagId = 'c00000000000000000000001';
 const iso = '2026-10-14T12:00:00.000Z';
 const group = {
@@ -108,7 +109,9 @@ afterEach(async () => {
 function fixture(
   options: {
     empty?: boolean;
+    laterReadyGroup?: boolean;
     held?: Promise<void>;
+    saveHeld?: Promise<void>;
     lost?: boolean;
     lostExpense?: boolean;
     mixed?: boolean;
@@ -132,6 +135,8 @@ function fixture(
   let items: DraftReview[] = options.empty
     ? []
     : [review(first), review(second), review(incomplete), duplicate];
+  if (options.laterReadyGroup)
+    items = [review(incomplete), review({ ...first, groupId: otherGroupId })];
   let cookie: string | null = null,
     owner: string | null = null;
   let offline = false,
@@ -158,15 +163,33 @@ function fixture(
         status: 200,
         data: {
           total: items.length,
-          groups: items.length
-            ? [{ groupId, groupName: group.name, count: items.length, items }]
-            : [],
+          groups: [groupId, otherGroupId].flatMap((id) => {
+            const own = items.filter((item) => item.draft.groupId === id);
+            return own.length
+              ? [
+                  {
+                    groupId: id,
+                    groupName: id === groupId ? group.name : 'Later trip',
+                    count: own.length,
+                    items: own,
+                  },
+                ]
+              : [];
+          }),
         },
       });
     }
     if (path === '/api/user/balances')
       return json({ status: 200, data: { buckets: [], groups: [{ groupId, balances: [] }] } });
-    if (path === '/api/groups') return json({ status: 200, data: [group] });
+    if (path === '/api/groups')
+      return json({
+        status: 200,
+        data: options.laterReadyGroup
+          ? [group, { ...group, _id: otherGroupId, name: 'Later trip' }]
+          : [group],
+      });
+    if (path === `/api/groups/${otherGroupId}`)
+      return json({ status: 200, data: { ...group, _id: otherGroupId, name: 'Later trip' } });
     if (path === `/api/groups/${groupId}`)
       return denied
         ? json({ error: 'Forbidden', status: 403 }, 403)
@@ -188,6 +211,7 @@ function fixture(
         return { id, status: 'saved', expenseId: `e${id.slice(1)}` };
       });
       items = items.filter((item) => !committed.has(item.draft.id));
+      await options.saveHeld;
       if (options.lost && saves.length === 1) throw new Error('Lost committed reply');
       return json({ data: outcomes });
     }
@@ -411,6 +435,70 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     expect(f.requests.values.size).toBe(0);
     expect(text(list)).toContain('Saved 2');
   });
+  it('settles a held Save reply across disconnection, closes offline, and reconnects without replay', async () => {
+    let release!: () => void;
+    const f = fixture({
+      saveHeld: new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.openToReview(groupId);
+    });
+    const overlay = await render(<ToReviewOverlay controller={f.controller} />, mode);
+    await tap(overlay, 'Save 2 ready');
+    await tap(overlay, 'Confirm save 2 ready');
+    expect(f.controller.getSnapshot().sharedDraftCollection.busy).toBe(true);
+    expect(f.saves).toHaveLength(1);
+    await act(async () => {
+      onlineManager.setOnline(false);
+      await Promise.resolve();
+    });
+    try {
+      await act(async () => {
+        release();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(f.controller.getSnapshot().sharedDraftCollection).toMatchObject({
+        busy: false,
+        pending: false,
+        resultsVisible: true,
+      });
+      expect(text(overlay)).toContain('Saved 2');
+      expect(f.saves).toHaveLength(1);
+      expect(button(overlay, 'Close To review').props.disabled).toBe(false);
+      await tap(overlay, 'Close To review');
+      expect(f.controller.getSnapshot().toReview.groupId).toBeNull();
+      expect(overlay.toJSON()).toBeNull();
+      const beforeReconnect = f.calls.length;
+      await act(async () => {
+        onlineManager.setOnline(true);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(f.calls.slice(beforeReconnect).every((call) => call.startsWith('GET '))).toBe(true);
+      expect(f.saves).toHaveLength(1);
+      expect(f.committed.size).toBe(2);
+    } finally {
+      release();
+    }
+  });
+  it('keeps an empty Home recovery error and explicit local retry visible until storage recovers', async () => {
+    const f = fixture({ empty: true });
+    const listing = vi.spyOn(f.requests, 'list').mockRejectedValue(new Error('SQLITE_IOERR'));
+    await signIn(f);
+    const home = await render(<ToReviewHomeCard controller={f.controller} />, mode);
+    expect(f.controller.getSnapshot().toReview.read.total).toBe(0);
+    expect(text(home)).toContain('Could not check this phone for unfinished saves');
+    expect(button(home, 'Check this phone again')).toBeDefined();
+    await tap(home, 'Check this phone again');
+    expect(text(home)).toContain('Could not check this phone for unfinished saves');
+    listing.mockResolvedValue([]);
+    await tap(home, 'Check this phone again');
+    expect(f.controller.getSnapshot().toReview.recoveryMessage).toBeNull();
+    expect(home.toJSON()).toBeNull();
+    expect(f.saves).toHaveLength(0);
+  });
   it('keeps a committed lost-reply save reachable from Home after restart when the account list is empty', async () => {
     const f = fixture({ lost: true });
     await signIn(f);
@@ -505,6 +593,55 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
       await f.controller.refreshToReview();
     });
     expect(f.calls).toHaveLength(reads);
+  });
+  it('removes inaccessible Group account items from Home after an authoritative denial', async () => {
+    const f = fixture();
+    await signIn(f);
+    const home = await render(<ToReviewHomeCard controller={f.controller} />, mode);
+    expect(text(home)).toContain('4 from Claude');
+    f.deny();
+    await act(async () => {
+      await f.controller.openGroup(groupId);
+      await f.controller.back();
+    });
+    expect(f.controller.toReviewModel().groups.some((entry) => entry.groupId === groupId)).toBe(
+      false,
+    );
+    expect(text(home)).not.toContain('4 from Claude');
+    expect(button(home, 'Maple House, 4 to review')).toBeUndefined();
+  });
+  it('defers account review refresh while an Expense form is foregrounded', async () => {
+    const f = fixture();
+    await signIn(f);
+    await act(async () => {
+      await f.controller.openExpense(groupId);
+    });
+    const before = f.calls.filter((call) => call === 'GET /api/user/to-review').length;
+    await act(async () => {
+      focusManager.setFocused(false);
+      onlineManager.setOnline(false);
+      focusManager.setFocused(true);
+      onlineManager.setOnline(true);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(f.calls.filter((call) => call === 'GET /api/user/to-review')).toHaveLength(before);
+    await act(async () => {
+      await f.controller.closeExpense();
+      await f.controller.refreshToReview();
+    });
+    expect(f.calls.filter((call) => call === 'GET /api/user/to-review').length).toBeGreaterThan(
+      before,
+    );
+  });
+  it('opens the first displayed Group even when a later Group has the first ready item', async () => {
+    const f = fixture({ laterReadyGroup: true });
+    await signIn(f);
+    const model = f.controller.toReviewModel();
+    expect(model.groups[0].groupId).toBe(groupId);
+    expect(model.items[0].groupId).toBe(otherGroupId);
+    const home = await render(<ToReviewHomeCard controller={f.controller} />, mode);
+    await tap(home, 'Review 2, one at a time');
+    expect(f.controller.getSnapshot().toReview.groupId).toBe(groupId);
   });
   it('lands a signed-out app link in its Group list after sign-in', async () => {
     const f = fixture();

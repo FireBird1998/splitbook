@@ -185,6 +185,9 @@ export function sharedDraftCollection({
         observer.destroy();
       };
     },
+    connectivityChanged() {
+      observer.setOptions({ ...observer.options, enabled: online() });
+    },
     refresh: () => run(refresh),
     newDraft() {
       if (!read().busy) update({ editing: 'new', entries: {}, choice: null });
@@ -318,4 +321,13 @@ export function sharedDraftCollection({
         await refresh();
       }),
   };
+}
+
+/** Both editor exit paths ask before replacing unsent details. */
+export function draftEditorChanged(state: SharedDraftCollectionState): boolean {
+  if (!state.editing) return false;
+  const initial = draftEntries(state.editing === 'new' ? undefined : state.editing.values);
+  return Object.keys({ ...initial, ...state.entries }).some(
+    (key) => (initial[key] ?? '') !== (state.entries[key] ?? ''),
+  );
 }

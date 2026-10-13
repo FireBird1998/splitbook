@@ -1160,7 +1160,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       const expenseList = dependencies.expenseDrafts?.list;
       if (expenseList) {
         const drafts = draftSummaries(
-          await lease.write(() => expenseList(lease.accountId)),
+          (await lease.write(() => expenseList(lease.accountId))).filter(
+            ({ groupId }) =>
+              !lostGroups.has(groupId) && !financialCleanup.blocked(lease.accountId, groupId),
+          ),
           lease.accountId,
           groups,
         );
@@ -1168,7 +1171,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           publish({ ...snapshot, drafts });
       }
       if (!list) return [];
-      return draftRequestRecoveries(await lease.write(() => list(lease.accountId)), groups);
+      return draftRequestRecoveries(
+        (await lease.write(() => list(lease.accountId))).filter(
+          ({ groupId }) =>
+            !lostGroups.has(groupId) && !financialCleanup.blocked(lease.accountId, groupId),
+        ),
+        groups,
+      );
     },
   });
   const listening = [
@@ -1844,6 +1853,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const evictGroupContent = (id: string, status: number) => {
+    if (persistentDrafts) toReviewQueries.lose(id);
     const message = groupRefused(status);
     const expense =
       snapshot.expense.groupId === id
@@ -2077,6 +2087,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const dropDeniedGroup = (id: string, error: unknown): boolean => {
     if (!(error instanceof RequestError) || ![403, 404].includes(error.status)) return false;
+    if (persistentDrafts) toReviewQueries.lose(id);
     groupQueries.lose(id);
     expenseQueries.lose(id);
     activityQueries.lose(id);
@@ -6032,8 +6043,6 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           const result = await (path.endsWith('/save')
             ? ledgerWrite(groupId, path, owner, options)
             : request(path, owner, options));
-          if (init?.method && init.method !== 'GET' && !path.endsWith('/review'))
-            void toReviewQueries.refresh();
           return result;
         } catch (error) {
           if (
@@ -6165,6 +6174,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           'Resolve the previous request in this Group’s Drafts before uploading this form.',
         );
       await client.create(draftValues(entries), JSON.stringify(d));
+      await toReviewQueries.refresh();
       await openGroup(editor.groupId);
     } finally {
       if (
