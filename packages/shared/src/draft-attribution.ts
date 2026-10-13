@@ -10,10 +10,13 @@ export function cleanAssistantName(name: string): string {
   return Array.from(cleaned).slice(0, 40).join('').trim() || 'Assistant';
 }
 
+export const assistantAttributionSchema = z.object({
+  kind: z.literal('assistant'),
+  name: z.string(),
+});
+export type AssistantAttribution = z.infer<typeof assistantAttributionSchema>;
+
 export const draftAttributionSchema = z
-  .discriminatedUnion('kind', [
-    z.object({ kind: z.literal('member') }),
-    z.object({ kind: z.literal('assistant'), name: z.string() }),
-  ])
+  .discriminatedUnion('kind', [z.object({ kind: z.literal('member') }), assistantAttributionSchema])
   .default({ kind: 'member' });
 export type DraftAttribution = z.infer<typeof draftAttributionSchema>;

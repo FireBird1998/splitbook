@@ -1,3 +1,4 @@
+import { assistantAttributionSchema } from './draft-attribution';
 /**
  * The Expense page read contract (#210), returned in wire shape. Fields it doesn't declare,
  * such as the summary's `totalAmount` the web shows, pass through unchecked.
@@ -24,6 +25,7 @@ const allocation = z.looseObject({
   amountMinor: z.number().int().optional(),
 });
 const expense = z.looseObject({
+  preparedBy: assistantAttributionSchema.optional(),
   _id: identity,
   group: identity,
   description: z.string(),

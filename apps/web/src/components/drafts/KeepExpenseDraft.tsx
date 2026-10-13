@@ -1,61 +1,97 @@
 'use client';
-import { useState } from 'react';
-import { Alert, Button, Stack } from '@mui/material';
-import { useRouter } from 'next/navigation';
+import { useMemo, useRef, useState } from 'react';
+import useSWR from 'swr';
+import { expenseDraftsKey } from '@splitbook/shared/query-keys';
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
+import {
+  ACTIVE_DRAFTS_PER_MEMBER,
+  DRAFT_GROUP_LIMIT_MESSAGE,
+} from '@splitbook/shared/validators/expense-draft';
+import { Alert, Button, Link, Stack, Typography } from '@mui/material';
 import type { ExpenseDraft } from '@splitbook/shared/expense-draft';
 import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-draft-editor';
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
 import { apiFetch } from '@/lib/utils/api-fetch';
-export default function KeepExpenseDraft({
+export function useKeepExpenseDraft({
   draft,
   groupId,
   accountId,
   onKept,
+  enabled,
 }: {
   draft: ExpenseDraft;
   groupId: string;
   accountId: string;
   onKept: () => void;
+  enabled: boolean;
 }) {
-  const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const inFlight = useRef(false);
+  const attemptValues = useRef<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const client = useMemo(() => {
+    const key = `splitbook.draft-request:${accountId}:${groupId}`;
+    return draftCollectionClient(
+      groupId,
+      async (path, init) => {
+        const response = await apiFetch(path, {
+          ...init,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Expected-Account': accountId,
+            ...init?.headers,
+          },
+        });
+        const value = await response.json();
+        if (!response.ok)
+          throw Object.assign(new Error(value.error), {
+            status: response.status,
+            code: value.code,
+          });
+        return value;
+      },
+      {
+        load: async () => sessionStorage.getItem(key),
+        save: async (value) => {
+          sessionStorage.setItem(key, value);
+        },
+        clear: async () => {
+          sessionStorage.removeItem(key);
+        },
+      },
+      () => crypto.randomUUID(),
+    );
+  }, [accountId, groupId]);
+  const { data: rows = [], mutate } = useSWR(
+    enabled ? expenseDraftsKey({ ...WEB_QUERY_ACCOUNT, accountId }, groupId) : null,
+    () => client.list(),
+  );
+  const full = rows.length >= ACTIVE_DRAFTS_PER_MEMBER;
   async function keep() {
+    if (inFlight.current || !enabled || draft.loading || draft.hasSubmissionAttempt) return;
+    inFlight.current = true;
     setBusy(true);
     setError('');
     try {
-      const key = `splitbook.draft-request:${accountId}:${groupId}`;
-      const client = draftCollectionClient(
-        groupId,
-        async (path, init) => {
-          const response = await apiFetch(path, {
-            ...init,
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Expected-Account': accountId,
-              ...init?.headers,
-            },
-          });
-          const value = await response.json();
-          if (!response.ok)
-            throw Object.assign(new Error(value.error), { status: response.status });
-          return value;
-        },
-        {
-          load: async () => sessionStorage.getItem(key),
-          save: async (value) => {
-            sessionStorage.setItem(key, value);
-          },
-          clear: async () => {
-            sessionStorage.removeItem(key);
-          },
-        },
-        () => crypto.randomUUID(),
-      );
-      if (await client.pending())
-        throw new Error(
-          'Resolve the previous request in this Group’s Drafts before uploading this form.',
-        );
+      if (await client.pending()) {
+        if (!attemptValues.current)
+          throw new Error(
+            'A previous request is still unconfirmed. Open To review before keeping another item. Your form is still here.',
+          );
+        const result = await client.retry();
+        if (result?.kind !== 'create')
+          throw new Error('Could not confirm this item. Your form is still here.');
+        setPending(false);
+        void mutate();
+        if (attemptValues.current === JSON.stringify(draft.values)) onKept();
+        else
+          setError(
+            'The earlier version was kept in To review. Your newer changes are still in this form.',
+          );
+        attemptValues.current = null;
+        return;
+      }
       const v = draft.values;
       const entries: DraftEntries = {
         description: v.description,
@@ -88,28 +124,55 @@ export default function KeepExpenseDraft({
                 : v.customAmounts)[id] ?? '';
         }
       }
+      attemptValues.current = JSON.stringify(draft.values);
       await client.create(draftValues(entries));
+      attemptValues.current = null;
+      void mutate();
       onKept();
-      router.push(`/groups/${groupId}/drafts`);
     } catch (cause) {
+      setPending(Boolean(await client.pending()));
+      const code = (cause as { code?: string }).code;
       setError(
-        cause instanceof Error
-          ? cause.message
-          : 'Draft upload not confirmed. Open Drafts to retry the original request.',
+        code === 'DRAFT_GROUP_LIMIT'
+          ? DRAFT_GROUP_LIMIT_MESSAGE
+          : 'Could not confirm Finish later. Everything you typed is still here. ' +
+              (cause instanceof Error ? cause.message : 'Please try again.'),
       );
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
+  return {
+    keep,
+    busy,
+    pending,
+    full,
+    error,
+    disabled: busy || draft.loading || draft.hasSubmissionAttempt || (full && !pending),
+    groupId,
+  };
+}
+
+export default function KeepExpenseDraft({
+  state,
+}: {
+  state: ReturnType<typeof useKeepExpenseDraft>;
+}) {
   return (
-    <Stack>
-      {error && <Alert severity="warning">{error}</Alert>}
-      <Button
-        disabled={busy || draft.loading || draft.hasSubmissionAttempt}
-        onClick={() => void keep()}
-      >
-        Keep as Draft
+    <Stack spacing={1} sx={{ minWidth: 0 }}>
+      {(state.full || state.error) && (
+        <Alert severity="warning">
+          {state.full ? DRAFT_GROUP_LIMIT_MESSAGE : state.error}{' '}
+          <Link href={`/groups/${state.groupId}/review`}>To review</Link>
+        </Alert>
+      )}
+      <Button disabled={state.disabled} onClick={() => void state.keep()}>
+        {state.pending ? 'Check again' : 'Finish later'}
       </Button>
+      <Typography variant="caption" color="text.secondary">
+        Keeps it in To review. Only you can see it.
+      </Typography>
     </Stack>
   );
 }

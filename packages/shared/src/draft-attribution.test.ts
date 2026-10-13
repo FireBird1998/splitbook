@@ -1,7 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { cleanAssistantName, draftAttributionSchema } from './draft-attribution';
+import {
+  assistantAttributionSchema,
+  cleanAssistantName,
+  draftAttributionSchema,
+} from './draft-attribution';
 
 describe('Draft attribution', () => {
+  it('only accepts assistant provenance on Expenses', () => {
+    expect(assistantAttributionSchema.safeParse({ kind: 'member' }).success).toBe(false);
+    expect(assistantAttributionSchema.safeParse(undefined).success).toBe(false);
+    expect(assistantAttributionSchema.parse({ kind: 'assistant', name: 'Claude' })).toEqual({
+      kind: 'assistant',
+      name: 'Claude',
+    });
+  });
   it('reads legacy missing attribution as the member', () => {
     expect(draftAttributionSchema.parse(undefined)).toEqual({ kind: 'member' });
     expect(draftAttributionSchema.parse({ kind: 'assistant', name: 'ChatGPT' })).toEqual({

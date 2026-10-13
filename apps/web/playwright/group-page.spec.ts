@@ -82,6 +82,7 @@ test('the header shows the Group’s icon, name, Theme, members, currency, Invit
     'Activity',
     'Drafts', // Demo journeys enable persistent Drafts; #406 replaces this tab.
     'Members',
+    ...(process.env.NEXT_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' ? ['Drafts'] : []),
   ]);
   await reviewScreenshot(page, testInfo, 'group-header');
 });

@@ -1,3 +1,4 @@
+import { assistantAttributionSchema } from './draft-attribution';
 /** The Activity page read contract (#210), returned in wire shape. */
 import { z } from 'zod';
 import {
@@ -11,6 +12,7 @@ import {
 } from './wire-fields';
 
 const metadata = z.looseObject({
+  preparedBy: assistantAttributionSchema.optional(),
   userId: identity.optional(),
   method: z.string().optional(),
   expenseId: identity.optional(),

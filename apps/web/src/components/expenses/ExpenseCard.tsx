@@ -1,4 +1,5 @@
 'use client';
+import PreparedBy from './PreparedBy';
 
 import type { ReactNode } from 'react';
 import Box from '@mui/material/Box';
@@ -100,8 +101,8 @@ export default function ExpenseCard({
               component="span"
               sx={{ display: 'block', fontSize: '0.75rem', color: 'text.secondary', mt: 0.25 }}
             >
-              {payer.label === 'You' ? 'You paid' : `${payer.label} paid`} ·{' '}
-              {expenseSplitSummary(expense)}
+              {payer.label === 'You' ? 'You paid' : `${payer.label} paid`}
+              <PreparedBy value={expense.preparedBy} inline /> · {expenseSplitSummary(expense)}
             </Box>
             {expense.tag && (
               <Box component="span" sx={{ display: 'block', mt: 0.75 }}>

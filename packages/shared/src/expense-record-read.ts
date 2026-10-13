@@ -1,3 +1,4 @@
+import { assistantAttributionSchema } from './draft-attribution';
 /** One Expense's read contract (#210), returned in wire shape. */
 import { z } from 'zod';
 import {
@@ -19,6 +20,7 @@ const allocation = z.looseObject({
   shares: z.number().optional(),
 });
 const expenseRecord = z.looseObject({
+  preparedBy: assistantAttributionSchema.optional(),
   _id: identity,
   group: identity,
   revision: z.number().int().nonnegative(),

@@ -1,3 +1,13 @@
+import {
+  GET as expenseRecordRoute,
+  PATCH as editExpenseRoute,
+} from '@/app/api/groups/[id]/expenses/[expenseId]/route';
+import { POST as createExpenseRoute } from '@/app/api/groups/[id]/expenses/route';
+import { GET as userActivityRoute } from '@/app/api/user/activity/route';
+import { parseExpensePageResponse } from '@splitbook/shared/expense-page-read';
+import { parseExpenseRecordResponse } from '@splitbook/shared/expense-record-read';
+import { parseActivityPageResponse } from '@splitbook/shared/activity-page-read';
+import { parseUserActivityResponse } from '@splitbook/shared/user-activity-read';
 import mongoose from 'mongoose';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
@@ -66,6 +76,7 @@ beforeEach(async () => {
     .insertOne({
       _id: group,
       name: 'Test Group',
+      isArchived: false,
       defaultCurrency: 'INR',
       members: [alice, bob].map(({ id }) => ({
         user: new mongoose.Types.ObjectId(id),
@@ -365,6 +376,87 @@ describe('persistent private expense Drafts', () => {
       },
     ],
   });
+
+  it.each(['assistant', 'member'] as const)(
+    'carries only %s provenance through conversion and all four reads',
+    async (kind) => {
+      const [row] = await completeDrafts();
+      const preparedBy = { kind: 'assistant', name: 'Claude' };
+      if (kind === 'assistant')
+        await db()
+          .collection('expensedrafts')
+          .updateOne({ _id: new mongoose.Types.ObjectId(row.id) }, { $set: { preparedBy } });
+      const review = await drafts.review(alice, groupId, row.id);
+      const outcomes = await drafts.save(alice, groupId, saveCommand(review));
+      expect(outcomes[0].status).toBe('saved');
+      const stored = await db().collection('expenses').findOne({ group });
+      expect(stored).not.toBeNull();
+      const expected = kind === 'assistant' ? preparedBy : undefined;
+      expect(stored?.preparedBy).toEqual(expected);
+      expect(String(stored?.createdBy)).toBe(alice.id);
+      const expenseId = String(stored!._id);
+      const item = { params: Promise.resolve({ id: groupId, expenseId }) };
+      const request = () => new Request('http://localhost');
+      const list = parseExpensePageResponse(
+        await (await expenseListRoute(request(), context)).json(),
+      );
+      expect(list.expenses[0].preparedBy).toEqual(expected);
+      const record = parseExpenseRecordResponse(
+        await (await expenseRecordRoute(request(), item)).json(),
+      );
+      expect(record.preparedBy).toEqual(expected);
+      const activity = parseActivityPageResponse(
+        await (await activityRoute(request(), context)).json(),
+      );
+      expect(
+        activity.activities.find((event) => event.type === 'expense_added')?.metadata?.preparedBy,
+      ).toEqual(expected);
+      const latest = parseUserActivityResponse(await (await userActivityRoute(request())).json());
+      expect(
+        latest.activities.find((event) => event.type === 'expense_added')?.metadata.preparedBy,
+      ).toEqual(expected);
+      const edited = await editExpenseRoute(
+        new Request('http://localhost', {
+          method: 'PATCH',
+          headers: { 'X-Splitbook-Revision': String(record.revision) },
+          body: JSON.stringify({
+            description: 'Edited taxi',
+            preparedBy: { kind: 'assistant', name: 'Forged' },
+          }),
+        }),
+        item,
+      );
+      expect(edited.status).toBe(200);
+      expect((await edited.json()).data.preparedBy).toEqual(expected);
+      // The event keeps its own snapshot even if the source record is removed.
+      await db().collection('expenses').deleteOne({ _id: stored!._id });
+      const snapshot = parseUserActivityResponse(await (await userActivityRoute(request())).json());
+      expect(
+        snapshot.activities.find((event) => event.type === 'expense_added')?.metadata.preparedBy,
+      ).toEqual(expected);
+    },
+  );
+
+  it.each([false, true])(
+    'form/API creation ignores forged attribution (forged: %s)',
+    async (forged) => {
+      const [row] = await completeDrafts();
+      const response = await createExpenseRoute(
+        new Request('http://localhost', {
+          method: 'POST',
+          headers: { 'Idempotency-Key': 'form-request' },
+          body: JSON.stringify({
+            ...row.values,
+            ...(forged ? { preparedBy: { kind: 'assistant', name: 'Forged' } } : {}),
+          }),
+        }),
+        context,
+      );
+      expect(response.status).toBe(201);
+      expect((await response.json()).data).not.toHaveProperty('preparedBy');
+      expect(await db().collection('expenses').findOne({ group })).not.toHaveProperty('preparedBy');
+    },
+  );
 
   it('does not count saved or deleted items toward the HTTP member limit', async () => {
     const [row] = await completeDrafts();

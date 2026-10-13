@@ -1,3 +1,4 @@
+import type { AssistantAttribution } from '@splitbook/shared/draft-attribution';
 import { afterGroupCommit, withGroupMutation } from '@/lib/group-mutation';
 import connectDB from '@/lib/db';
 import { ensureLedgerWriteIndexes } from '@/lib/ledger-indexes';
@@ -92,7 +93,13 @@ export class ExpenseService {
   /**
    * Create a new expense.
    */
-  async create(groupId: string, data: CreateExpenseInput, userId: string, requestKey?: string) {
+  async create(
+    groupId: string,
+    data: CreateExpenseInput,
+    userId: string,
+    requestKey?: string,
+    options?: { preparedBy?: AssistantAttribution },
+  ) {
     await connectDB();
     await ensureLedgerWriteIndexes();
     const group = await Group.findOne({ _id: groupId, 'members.user': userId });
@@ -136,6 +143,7 @@ export class ExpenseService {
     await lockLedgerCurrency(groupId, data.currency);
     const id = new mongoose.Types.ObjectId();
     const event = makePendingActivity(groupId, 'expense_added', userId, {
+      ...(options?.preparedBy ? { preparedBy: options.preparedBy } : {}),
       expenseId: String(id),
       description: data.description,
       amount: money.amount,
@@ -146,6 +154,7 @@ export class ExpenseService {
       expense = await withGroupMutation(groupId, async () =>
         Expense.create({
           ...command,
+          preparedBy: options?.preparedBy,
           _id: id,
           group: groupId,
           createdBy: userId,
