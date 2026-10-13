@@ -302,7 +302,7 @@ jobs:
   #
   # The mobile verify:* scripts drive the real mobile controller over HTTP against a
   # fictional backend of this run's own (#228). tools/swarm starts it on the job's Mongo
-  # service, with a fresh splitbook_mobile_swarm_* database and the fictional seed, and
+  # replica set, with a fresh splitbook_mobile_swarm_* database and the fictional seed, and
   # serves a production build, so no route compiles while a verifier waits. verify:all
   # runs every verifier one after another, never two at once: several assume they are
   # the only ones using Sam on their backend. Their order doesn't matter.
@@ -318,12 +318,6 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
-
-    services:
-      mongo:
-        image: mongo:7
-        ports:
-          - 27017:27017
 
     steps:
       - uses: actions/checkout@v4
@@ -386,6 +380,25 @@ jobs:
         env:
           TZ: UTC
 
+      - name: Start mobile verifier replica set
+        id: mongo
+        if: steps.changes.outputs.docs_only != 'true'
+        shell: bash
+        run: |
+          docker run --name splitbook-mobile-ci --detach --publish 127.0.0.1:27039:27039 \
+            mongo:7.0.39 mongod --replSet mobileTest --bind_ip_all --port 27039
+          for attempt in $(seq 1 30); do
+            if docker exec splitbook-mobile-ci mongosh --port 27039 --quiet --eval 'db.adminCommand({ping:1})' > /dev/null; then break; fi
+            sleep 1
+          done
+          docker exec splitbook-mobile-ci mongosh --port 27039 --quiet --eval 'rs.initiate({_id:"mobileTest",members:[{_id:0,host:"127.0.0.1:27039"}]})'
+          for attempt in $(seq 1 30); do
+            if docker exec splitbook-mobile-ci mongosh --port 27039 --quiet --eval 'if (!db.hello().isWritablePrimary) quit(1)' > /dev/null; then exit 0; fi
+            sleep 1
+          done
+          docker logs splitbook-mobile-ci
+          exit 1
+
       # up prints MOBILE_VERIFY_URL and the backend's SPLITBOOK_NATIVE_* variables as
       # NAME=value lines; the later steps get them through GITHUB_ENV.
       - name: Start this run's backend (tools/swarm, production build)
@@ -394,7 +407,7 @@ jobs:
         shell: bash
         timeout-minutes: 15
         run: |
-          pnpm swarm up --mongo-port 27017 --server production --ready-timeout 600 | tee "$RUNNER_TEMP/swarm-up.log"
+          pnpm swarm up --mongo-port 27039 --server production --ready-timeout 600 | tee "$RUNNER_TEMP/swarm-up.log"
           grep -E '^(MOBILE_VERIFY_URL|SPLITBOOK_NATIVE_[A-Z_]+)=' "$RUNNER_TEMP/swarm-up.log" >> "$GITHUB_ENV"
 
       # verify:all runs each verifier even after one fails, then prints a PASS or FAIL
@@ -423,7 +436,11 @@ jobs:
 
       - name: Stop the backend and drop its database
         if: always() && steps.backend.outcome != 'skipped'
-        run: pnpm swarm down --mongo-port 27017
+        run: pnpm swarm down --mongo-port 27039
+
+      - name: Stop mobile verifier replica set
+        if: always() && steps.mongo.outcome != 'skipped'
+        run: docker rm --force --volumes splitbook-mobile-ci 2>/dev/null || true
 
       # #206's ratchet, last, so a pull request that raises a ceiling still shows every other
       # result before an approver labels it. It compares apps/mobile's

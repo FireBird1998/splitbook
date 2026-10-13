@@ -1,6 +1,8 @@
 /** Local, synthetic cross-client Draft journey. No remote origin or database resets. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { createMobileController } from '../src/data';
 import { FixtureActor, alexId } from './financial-view-fixtures';
 import { localOrigin } from './verification-origin';
@@ -13,6 +15,29 @@ import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-dr
 
 async function main() {
   const origin = localOrigin();
+  const environment = await import(
+    pathToFileURL(resolve(import.meta.dirname, 'dev-backend/environment.mjs')).href
+  );
+  assert.equal(origin, environment.origin, 'Use the backend variables printed by pnpm swarm up.');
+  const { withIsolatedDatabase } = (await import(
+    pathToFileURL(resolve(import.meta.dirname, 'dev-backend/database.mjs')).href
+  )) as {
+    withIsolatedDatabase: <T>(
+      action: (database: {
+        admin(): { command(value: { hello: 1 }): Promise<unknown> };
+      }) => Promise<T>,
+    ) => Promise<T>;
+  };
+  const hello = z
+    .object({ setName: z.string().optional(), msg: z.string().optional() })
+    .parse(await withIsolatedDatabase((database) => database.admin().command({ hello: 1 })));
+  if (!hello.setName && hello.msg !== 'isdbgrid') {
+    console.error(
+      'This verifier needs a replica-set MongoDB, because saving Drafts uses transactions.',
+    );
+    process.exitCode = 1;
+    return;
+  }
   const web = new FixtureActor(origin);
   const memory = () => {
     const rows = new Map<string, unknown>();
