@@ -5,6 +5,7 @@ import {
   enterAsPersona,
   expectThemeApplied,
   expectNoSeriousA11yViolations,
+  reviewScreenshot,
 } from './fixtures';
 import { seedToReview } from './to-review-seed';
 
@@ -29,6 +30,7 @@ test('To review card and Group banner share counts, sources and links; empty hid
     document.documentElement.style.fontSize = '130%';
   });
   await expectNoSeriousA11yViolations(page, testInfo, 'to-review-home');
+  await reviewScreenshot(page, testInfo, 'to-review-home');
   await page.goto(`/groups/${DEMO_GROUP_ID}/expenses`);
   const banner = page.getByRole('region', { name: 'To review', exact: true });
   await expect(banner).toContainText('2 to review · 2 from Claude today · 2 needs details');
@@ -40,6 +42,7 @@ test('To review card and Group banner share counts, sources and links; empty hid
     document.documentElement.style.fontSize = '130%';
   });
   await expectNoSeriousA11yViolations(page, testInfo, 'to-review-group');
+  await reviewScreenshot(page, testInfo, 'to-review-group');
   await seedToReview(0);
   await page.reload();
   await expect(banner).toHaveCount(0);
