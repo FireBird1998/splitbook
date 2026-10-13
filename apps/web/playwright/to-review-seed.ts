@@ -5,10 +5,11 @@ import { DEMO_GROUP_ID, DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 export async function seedToReview(count: number) {
   const uri =
     process.env.TO_REVIEW_TEST_MONGODB_URI ??
+    process.env.PLAYWRIGHT_DEMO_MONGODB_URI ??
     'mongodb://127.0.0.1:27017/splitbook-demo?directConnection=true';
   const url = new URL(uri);
   if (
-    !['/splitbook-demo', '/splitbook_w405'].includes(url.pathname) ||
+    !['/splitbook-demo', '/splitbook_w405', '/splitbook_w407'].includes(url.pathname) ||
     !['localhost', '127.0.0.1', 'host.docker.internal'].includes(url.hostname)
   )
     throw new Error('To review fixtures require an isolated demo database.');
