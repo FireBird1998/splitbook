@@ -80,6 +80,7 @@ test('the header shows the Group’s icon, name, Theme, members, currency, Invit
     'Balances',
     'Insights',
     'Activity',
+    'Drafts', // Demo journeys enable persistent Drafts; #406 replaces this tab.
     'Members',
   ]);
   await reviewScreenshot(page, testInfo, 'group-header');
