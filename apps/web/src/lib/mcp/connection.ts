@@ -24,7 +24,8 @@ export function createMcpConnectionHandler(
     subject: string,
     scopes: string[],
     authorize: () => Promise<void>,
-  ) => void,
+    clientId: string,
+  ) => void | Promise<void>,
   requestCheck?: (subject: string) => Promise<Response | null>,
 ) {
   const canonical = new URL(resource);
@@ -48,7 +49,7 @@ export function createMcpConnectionHandler(
       const refused = await requestCheck?.(claims.sub);
       if (refused) return refused;
       const handler = createMcpHandler(
-        () => {
+        async () => {
           const server = new McpServer({ name: 'splitbook-connection-test', version: '0.1.0' });
           server.registerTool(
             'connection_status',
@@ -70,7 +71,7 @@ export function createMcpConnectionHandler(
               structuredContent: { connected: true, mode: 'connection-test' },
             }),
           );
-          register?.(
+          await register?.(
             server,
             claims.sub!,
             typeof claims.scope === 'string' ? claims.scope.split(' ') : [],
@@ -85,6 +86,7 @@ export function createMcpConnectionHandler(
               )
                 throw new Error('FORBIDDEN');
             },
+            String(claims.client_id),
           );
           return server;
         },

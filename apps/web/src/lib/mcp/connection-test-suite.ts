@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { connectedAssistantName } from './assistant-name';
 import { registerSplitbookTools } from './tools';
 import { createServer, type Server } from 'node:http';
 import { randomBytes, createHash } from 'node:crypto';
@@ -206,8 +207,20 @@ export function connectionTests(mongo = false) {
       resource,
       async (subject, client, generation, scopes) =>
         currentMcpGrant((await auth.$context).adapter, env, subject, client, generation, scopes),
-      (server, id, scopes, authorize) => {
-        if (exposeTools) registerSplitbookTools(server, { id, authorize }, scopes, origin);
+      async (server, id, scopes, authorize, clientId) => {
+        if (exposeTools)
+          registerSplitbookTools(
+            server,
+            {
+              id,
+              authorize,
+              assistant: {
+                name: await connectedAssistantName((await auth.$context).adapter, clientId),
+              },
+            },
+            scopes,
+            origin,
+          );
       },
     );
     route = (request) =>
@@ -530,6 +543,21 @@ export function connectionTests(mongo = false) {
           };
           const created = await draftClient.callTool({ name: 'create_drafts', arguments: args });
           expect(created.isError).not.toBe(true);
+          const creation = JSON.parse((created.content as Array<{ text: string }>)[0].text);
+          expect(creation).toMatchObject({
+            summary: 'Added 2 to To review in Splitbook',
+            reviewUrl: `${origin}/groups/${groupId}/review`,
+            drafts: [
+              {
+                preparedBy: { kind: 'assistant', name: 'Synthetic MCP Client' },
+                changedBy: { kind: 'assistant', name: 'Synthetic MCP Client' },
+              },
+              {
+                preparedBy: { kind: 'assistant', name: 'Synthetic MCP Client' },
+                changedBy: { kind: 'assistant', name: 'Synthetic MCP Client' },
+              },
+            ],
+          });
           expect(await draftClient.callTool({ name: 'create_drafts', arguments: args })).toEqual(
             created,
           );
@@ -576,6 +604,203 @@ export function connectionTests(mongo = false) {
           exposeTools = false;
           await ledgerClient.close();
           await draftClient.close();
+        }
+      });
+
+    if (mongo)
+      it('enforces To review attribution, quotas and revocation through the MCP boundary', async () => {
+        exposeTools = true;
+        const db = mongoClient!.db();
+        const user = await db.collection('users').findOne({ email: 'connection@example.test' });
+        const group = new mongoose.Types.ObjectId();
+        const other = new mongoose.Types.ObjectId();
+        await db.collection('groups').insertOne({
+          _id: group,
+          name: 'To review Group',
+          defaultCurrency: 'INR',
+          tags: [],
+          members: [{ user: user!._id }, { user: other }],
+        });
+        const adapter = (await auth.$context).adapter;
+        await adapter.update({
+          model: 'oauthClient',
+          where: [{ field: 'clientId', value: clientId }],
+          update: { name: '  Synthetic\n Assistant\u0000  ' },
+        });
+        const grant = await authorizeClient(true, true);
+        const client = new Client({ name: 'to-review-test', version: '1' });
+        const payload = (result: Awaited<ReturnType<Client['callTool']>>) =>
+          JSON.parse((result.content as Array<{ text: string }>)[0].text);
+        const call = (name: string, args: Record<string, unknown> = {}) =>
+          client.callTool({ name, arguments: { groupId: String(group), ...args } });
+        const create = (count: number, requestKey: string) =>
+          call('create_drafts', {
+            requestKey,
+            drafts: Array.from({ length: count }, () => ({})),
+          });
+        const list = async () => payload(await call('list_drafts')).drafts;
+        try {
+          await client.connect(
+            new StreamableHTTPClientTransport(new URL(resource), {
+              requestInit: { headers: { Authorization: `Bearer ${grant.access_token}` } },
+            }),
+          );
+          const tools = (await client.listTools()).tools;
+          // An exhaustive tool allowlist makes any new ledger-writing tool an explicit review.
+          expect(tools.map((tool) => tool.name).sort()).toEqual([
+            'connection_status',
+            'create_drafts',
+            'discard_draft',
+            'group_balances',
+            'group_context',
+            'group_spending',
+            'list_drafts',
+            'list_groups',
+            'replace_draft',
+          ]);
+          for (const tool of tools.filter((tool) => /draft/.test(tool.name))) {
+            expect(tool.description).toContain('To review');
+            expect(tool.description).toContain('100 per member per Group');
+            expect(tool.description).toContain('only the member can save');
+            expect(tool.description).not.toMatch(/private drafts|collection/i);
+          }
+          const connections = (
+            await (
+              await fetch(`${origin}/api/auth/mcp/connections`, {
+                headers: { cookie },
+              })
+            ).json()
+          ).connections;
+          expect(connections[0].name).toBe('Synthetic Assistant');
+          const assistant = { kind: 'assistant', name: connections[0].name };
+          const one = await create(1, 'to-review-single');
+          expect(payload(one)).toMatchObject({
+            summary: 'Added 1 to To review in Splitbook',
+            reviewUrl: `${origin}/groups/${group}/review`,
+            drafts: [{ preparedBy: assistant, changedBy: assistant }],
+          });
+          expect(await create(1, 'to-review-single')).toEqual(one);
+          const row = payload(one).drafts[0];
+          // The existing schema refuses attribution supplied either outside or inside values.
+          for (const forged of [{ kind: 'member' }, { kind: 'assistant', name: 'Forged name' }]) {
+            for (const args of [
+              {
+                preparedBy: forged,
+                changedBy: forged,
+                assistant: { name: 'Forged name' },
+                drafts: [{}],
+              },
+              { drafts: [{ preparedBy: forged, changedBy: forged }] },
+            ]) {
+              const result = await call('create_drafts', {
+                requestKey: 'forged-attribution',
+                ...args,
+              }).catch(() => null);
+              if (result) expect(result.isError).toBe(true);
+              expect(await list()).toEqual([row]);
+              expect(await db.collection('expensedrafts').find({ group }).toArray()).toMatchObject([
+                { preparedBy: assistant, changedBy: assistant },
+              ]);
+            }
+            for (const args of [
+              { changedBy: forged, values: {} },
+              { values: { preparedBy: forged, changedBy: forged } },
+            ]) {
+              const result = await call('replace_draft', {
+                draftId: row.id,
+                revision: 0,
+                ...args,
+              }).catch(() => null);
+              if (result) expect(result.isError).toBe(true);
+              expect(await list()).toEqual([row]);
+            }
+          }
+          // A pre-existing member Draft remains member-prepared when the assistant edits it.
+          await db.collection('expensedrafts').updateOne(
+            { _id: new mongoose.Types.ObjectId(row.id) },
+            {
+              $set: { preparedBy: { kind: 'member' }, changedBy: { kind: 'member' } },
+            },
+          );
+          const edited = payload(
+            await call('replace_draft', {
+              draftId: row.id,
+              revision: 0,
+              values: { description: 'Member correction' },
+            }),
+          );
+          expect(edited).toMatchObject({
+            preparedBy: { kind: 'member' },
+            changedBy: assistant,
+            revision: 1,
+          });
+          expect(await list()).toEqual([edited]);
+          const discarded = payload(await call('discard_draft', { draftId: row.id, revision: 1 }));
+          expect(discarded).toMatchObject({
+            state: 'discarded',
+            preparedBy: { kind: 'member' },
+            changedBy: assistant,
+          });
+          // Seed old records and another member's full allocation; neither uses this member's capacity.
+          await db.collection('expensedrafts').insertMany(
+            Array.from({ length: 100 }, (_, itemIndex) => ({
+              group,
+              owner: other,
+              state: 'active',
+              revision: 0,
+              values: {},
+              requestKey: 'other-member',
+              itemIndex,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            })),
+          );
+          await db.collection('expensedrafts').insertOne({
+            group,
+            owner: user!._id,
+            state: 'saved',
+            revision: 1,
+            expenseId: String(new mongoose.Types.ObjectId()),
+            requestKey: 'already-saved',
+            itemIndex: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+          for (let i = 0; i < 9; i++)
+            expect((await create(10, `quota-fill-${i}`)).isError).not.toBe(true);
+          await create(5, 'quota-fill-five');
+          expect(await list()).toHaveLength(95);
+          const over = await create(6, 'quota-over-batch');
+          expect(over.isError).toBe(true);
+          expect((over.content as Array<{ text: string }>)[0].text).toBe(
+            'You have 100 items waiting in this Group. Save or delete some before keeping more.',
+          );
+          expect(await list()).toHaveLength(95);
+          const raced = await Promise.all([
+            create(5, 'quota-race-one'),
+            create(5, 'quota-race-two'),
+          ]);
+          expect(raced.filter((result) => result.isError)).toHaveLength(1);
+          expect(await list()).toHaveLength(100);
+          expect((await create(1, 'quota-at-limit')).isError).toBe(true);
+          expect(await list()).toHaveLength(100);
+          expect(await db.collection('expenses').countDocuments({ group })).toBe(0);
+          expect(await db.collection('activities').countDocuments({ group })).toBe(0);
+          expect((await post('/mcp/revoke', { id: connections[0].id }, true)).status).toBe(200);
+          await expect(call('list_drafts')).rejects.toThrow();
+          await expect(create(1, 'revoked-create')).rejects.toThrow();
+        } finally {
+          exposeTools = false;
+          await client.close();
+          await adapter.update({
+            model: 'oauthClient',
+            where: [{ field: 'clientId', value: clientId }],
+            update: { name: 'Synthetic MCP Client' },
+          });
+          // Later connection tests start from a fresh, ledger-only grant.
+          const restored = await authorizeClient();
+          token = restored.access_token;
+          refreshToken = restored.refresh_token;
         }
       });
 

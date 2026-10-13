@@ -1,11 +1,11 @@
 import { z } from 'zod/v4';
+import { draftAttributionSchema } from '../draft-attribution';
 import { createExpenseSchema, expenseFields } from './expense';
 
 export const DRAFTS_PER_REQUEST = 10;
-/** Shared by every member's private collection in the Group. */
-export const ACTIVE_DRAFTS_PER_GROUP = 100;
-export const DRAFT_GROUP_LIMIT_MESSAGE =
-  'This Group has reached its limit of 100 active Drafts. Please clear some Drafts before adding more.';
+/** Active Drafts for one member in one Group. */
+export const ACTIVE_DRAFTS_PER_MEMBER = 100;
+export const DRAFT_GROUP_LIMIT_MESSAGE = `You have ${ACTIVE_DRAFTS_PER_MEMBER} items waiting in this Group. Save or delete some before keeping more.`;
 
 export const draftObjectId = z.string().regex(/^[a-fA-F0-9]{24}$/, 'Invalid identity');
 export const draftRequestKey = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/);
@@ -67,6 +67,8 @@ export const persistedExpenseDraftSchema = z
   .object({
     id: draftObjectId,
     groupId: draftObjectId,
+    preparedBy: draftAttributionSchema,
+    changedBy: draftAttributionSchema,
     revision: z.number().int().nonnegative(),
     state: z.enum(['active', 'discarded', 'saved']),
     expenseId: draftObjectId.optional(),

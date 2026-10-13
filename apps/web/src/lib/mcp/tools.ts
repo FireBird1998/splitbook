@@ -7,6 +7,7 @@ import {
   createExpenseDraftsSchema,
   expenseDraftValuesSchema,
   DRAFT_GROUP_LIMIT_MESSAGE,
+  ACTIVE_DRAFTS_PER_MEMBER,
 } from '@splitbook/shared/validators/expense-draft';
 import { assistantLedgerService } from '@/lib/services/assistant-ledger.service';
 import { expenseDraftService, type DraftActor } from '@/lib/services/expense-draft.service';
@@ -99,12 +100,12 @@ export function registerSplitbookTools(
     (input) => run(() => assistantLedgerService.spending(actor.id, input)),
   );
   if (!scopes.includes(MCP_DRAFT_SCOPE) || process.env.PERSISTENT_DRAFTS_ENABLED !== 'true') return;
-  const link = (groupId: string) => new URL(`/groups/${groupId}/drafts`, appUrl).href;
+  const reviewDescription = `Items wait in the member's To review in Splitbook, where only the member can save them as Expenses. Limit: ${ACTIVE_DRAFTS_PER_MEMBER} per member per Group.`;
+  const link = (groupId: string) => new URL(`/groups/${groupId}/review`, appUrl).href;
   server.registerTool(
     'list_drafts',
     {
-      description:
-        'List your private incomplete Drafts, including manually prepared Drafts. Drafts never affect Balances. Save only after member review in SplitBook.',
+      description: `List unfinished items, including those prepared by the member. They never affect Balances. ${reviewDescription}`,
       inputSchema: z.object({ groupId: draftObjectId }).strict(),
       annotations: read,
     },
@@ -117,8 +118,7 @@ export function registerSplitbookTools(
   server.registerTool(
     'create_drafts',
     {
-      description:
-        'Prepare 1–10 private Drafts. Omit unknown facts and ask the member; never invent payers, dates, participants or amounts. Persist the same requestKey for exact retries. Group-wide limit: 100 active Drafts across all members. Saving requires member review in SplitBook.',
+      description: `Prepare 1–10 items. Omit unknown facts and ask the member; never invent payers, dates, participants or amounts. Persist the same requestKey for exact retries. ${reviewDescription}`,
       inputSchema: z
         .object({
           groupId: draftObjectId,
@@ -136,14 +136,14 @@ export function registerSplitbookTools(
           { drafts: input.drafts },
           input.requestKey,
         ),
+        summary: `Added ${input.drafts.length} to To review in Splitbook`,
         reviewUrl: link(input.groupId),
       })),
   );
   server.registerTool(
     'replace_draft',
     {
-      description:
-        'Replace an unsaved private Draft using its current revision. Include all facts to keep; omitted fields are cleared. If stale, fetch again and ask before overwriting a correction.',
+      description: `Replace an unfinished item using its current revision. Include all facts to keep; omitted fields are cleared. If stale, fetch again and ask before overwriting a correction. ${reviewDescription}`,
       inputSchema: z
         .object({
           groupId: draftObjectId,
@@ -168,8 +168,7 @@ export function registerSplitbookTools(
   server.registerTool(
     'discard_draft',
     {
-      description:
-        'PERMANENTLY discard one private Draft at the reviewed revision. Content cannot be recovered. Never discards a saved Expense. Use only when the member requests removal.',
+      description: `PERMANENTLY delete one unfinished item at the reviewed revision. Content cannot be recovered. Never deletes a saved Expense. Use only when the member requests removal. ${reviewDescription}`,
       inputSchema: z
         .object({
           groupId: draftObjectId,

@@ -1,5 +1,10 @@
 import 'server-only';
 import mongoose from 'mongoose';
+import {
+  cleanAssistantName,
+  draftAttributionSchema,
+  type DraftAttribution,
+} from '@splitbook/shared/draft-attribution';
 import Group from '@/lib/models/Group';
 import Expense from '@/lib/models/Expense';
 import {
@@ -17,7 +22,7 @@ import {
 } from '@splitbook/shared/expense-validation';
 import { resolveTagReference } from '@splitbook/shared/tag-identity';
 import {
-  ACTIVE_DRAFTS_PER_GROUP,
+  ACTIVE_DRAFTS_PER_MEMBER,
   createExpenseDraftsSchema,
   draftObjectId,
   draftRequestKey,
@@ -41,6 +46,8 @@ interface DraftRecord {
   state: 'active' | 'discarded' | 'saved';
   expenseId?: string;
   savedReview?: string;
+  preparedBy?: DraftAttribution;
+  changedBy?: DraftAttribution;
   values?: ExpenseDraftValues;
   createdAt: Date;
   updatedAt: Date;
@@ -49,8 +56,16 @@ interface DraftRecord {
 export interface DraftActor {
   /** Trusted session/token subject, never taken from submitted tool or HTTP arguments. */
   id: string;
+  /** Set only by the MCP boundary from authenticated client metadata. */
+  assistant?: { name: string };
   /** Recheck a connected assistant at each write authorization. */
   authorize?: () => Promise<void>;
+}
+
+function attribution(actor: DraftActor): DraftAttribution {
+  return actor.assistant
+    ? { kind: 'assistant', name: cleanAssistantName(actor.assistant.name) }
+    : { kind: 'member' };
 }
 
 const indexes = new WeakMap<object, Promise<unknown>>();
@@ -154,6 +169,8 @@ function present(record: DraftRecord): PersistedExpenseDraft {
     groupId: String(record.group),
     revision: record.revision,
     state: record.state,
+    preparedBy: draftAttributionSchema.parse(record.preparedBy),
+    changedBy: draftAttributionSchema.parse(record.changedBy),
     ...(record.expenseId ? { expenseId: record.expenseId } : {}),
     ...(record.state === 'active'
       ? {
@@ -180,7 +197,7 @@ async function mutate<T>(
   const drafts = await collection();
   await actor.authorize?.();
   await requireMembership(scope);
-  // No count-then-insert fallback: it would violate the Group-wide cap under concurrency.
+  // No count-then-insert fallback: it would violate the per-member cap under concurrency.
   if (!(await supportsGroupTransactions())) throw new Error('DRAFT_TRANSACTIONS_REQUIRED');
   return withGroupMutation(String(scope.group), async (session) => {
     if (!session) throw new Error('DRAFT_TRANSACTIONS_REQUIRED');
@@ -347,7 +364,13 @@ export const expenseDraftService = {
             { ...scope, _id: record._id },
             {
               $unset: { values: '' },
-              $set: { state: 'saved', expenseId, savedReview: item.review, updatedAt: new Date() },
+              $set: {
+                state: 'saved',
+                expenseId,
+                savedReview: item.review,
+                updatedAt: new Date(),
+                changedBy: attribution(actor),
+              },
               $inc: { revision: 1 },
             },
             { session },
@@ -382,12 +405,12 @@ export const expenseDraftService = {
     const scope = access(actor, groupId);
     const drafts = await collection();
     await requireMembership(scope);
-    // The collection's entire active population is bounded by 100, not 100 per owner.
+    // Each owner's active Drafts in this Group are bounded by the per-member limit.
     return (
       await drafts
         .find({ ...scope, state: 'active' })
         .sort({ createdAt: 1, _id: 1 })
-        .limit(ACTIVE_DRAFTS_PER_GROUP)
+        .limit(ACTIVE_DRAFTS_PER_MEMBER)
         .toArray()
     ).map(present);
   },
@@ -410,11 +433,8 @@ export const expenseDraftService = {
         // A discarded item's content is gone; its minimal receipt prevents resurrection.
         return replay.map(present);
       }
-      const count = await drafts.countDocuments(
-        { group: scope.group, state: 'active' },
-        { session },
-      );
-      if (count + command.drafts.length > ACTIVE_DRAFTS_PER_GROUP)
+      const count = await drafts.countDocuments({ ...scope, state: 'active' }, { session });
+      if (count + command.drafts.length > ACTIVE_DRAFTS_PER_MEMBER)
         throw new Error('DRAFT_GROUP_LIMIT');
       const now = new Date();
       const records: DraftRecord[] = command.drafts.map((values, itemIndex) => ({
@@ -425,6 +445,8 @@ export const expenseDraftService = {
         itemIndex,
         revision: 0,
         state: 'active',
+        preparedBy: attribution(actor),
+        changedBy: attribution(actor),
         values,
         createdAt: now,
         updatedAt: now,
@@ -450,15 +472,16 @@ export const expenseDraftService = {
       // Unlike older trusted service calls, Draft mutations always require a revision.
       if (revision === undefined) throw new Error('REVISION_REQUIRED');
       const updatedAt = new Date();
+      const changedBy = attribution(actor);
       await drafts.updateOne(
         { ...scope, _id, revision },
         {
-          $set: { values, updatedAt },
+          $set: { values, updatedAt, changedBy },
           $inc: { revision: 1 },
         },
         { session },
       );
-      return present({ ...record, values, updatedAt, revision: revision + 1 });
+      return present({ ...record, values, updatedAt, changedBy, revision: revision + 1 });
     });
   },
 
@@ -475,11 +498,12 @@ export const expenseDraftService = {
       if (record.state !== 'active') throw new Error('STALE_REVISION');
       assertExpectedRevision(record.revision, revision);
       const updatedAt = new Date();
+      const changedBy = attribution(actor);
       await drafts.updateOne(
         { ...scope, _id, revision },
         {
           $unset: { values: '' },
-          $set: { state: 'discarded', updatedAt },
+          $set: { state: 'discarded', updatedAt, changedBy },
           $inc: { revision: 1 },
         },
         { session },
@@ -489,6 +513,7 @@ export const expenseDraftService = {
         values: undefined,
         state: 'discarded',
         updatedAt,
+        changedBy,
         revision: revision + 1,
       });
     });

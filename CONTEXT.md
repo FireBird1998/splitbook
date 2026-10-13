@@ -36,6 +36,14 @@ _Avoid_: pending Expense, unsaved Expense, local Expense
 A member's single private set of separate Expense Drafts for a Group, retained for later review. Drafts may be incomplete; each must be complete and valid before becoming an Expense, independently of the others.
 _Avoid_: stacked drafts, pending Expenses
 
+**To review**:
+Where a member sees every Draft waiting for them, across all their Groups, together with any Expense left unfinished on that device. The name members see; Draft stays the term for each item.
+_Avoid_: inbox, drafts, private drafts (in product copy)
+
+**Finish later**:
+The member's explicit choice to keep an unfinished Expense as a Draft in To review instead of saving it.
+_Avoid_: keep as draft, save draft
+
 **Unconfirmed save**:
 A save whose reply never arrived, so it may or may not be recorded. Only the member retries it, and a retry can never record it twice.
 _Avoid_: pending write, queued save, offline save

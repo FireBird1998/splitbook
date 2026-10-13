@@ -3,7 +3,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { expenseDraftService as drafts } from './expense-draft.service';
 import { requestGroupDeletion } from './group-cleanup.service';
-import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-draft';
 
 const identity = vi.hoisted(() => ({ id: null as string | null }));
 vi.mock('next/headers', () => ({ headers: async () => new Headers() }));
@@ -102,40 +101,91 @@ describe('persistent private expense Drafts', () => {
     expect(JSON.stringify(created)).not.toMatch(/owner|requestKey|requestFingerprint/);
   });
 
-  it('caps the entire Group at 100 across different owners and emits the actionable API error', async () => {
-    for (let i = 0; i < 10; i++)
-      await drafts.create(i % 2 ? alice : bob, groupId, batch(10), `request-${i}`);
-    expect(await drafts.list(alice, groupId)).toHaveLength(50);
-    expect(await drafts.list(bob, groupId)).toHaveLength(50);
-    const response = await POST(
+  const context = { params: Promise.resolve({ id: groupId }) };
+  const httpCreate = (count: number, key: string) =>
+    POST(
       new Request('http://localhost', {
         method: 'POST',
-        headers: { 'Idempotency-Key': 'request-over-limit' },
-        body: JSON.stringify(batch(1)),
+        headers: { 'Idempotency-Key': key },
+        body: JSON.stringify(batch(count)),
       }),
-      { params: Promise.resolve({ id: groupId }) },
+      context,
     );
+  const httpList = async () =>
+    (await (await GET(new Request('http://localhost'), context)).json()).data;
+
+  it('caps each member at 100 without blocking another member in the same Group', async () => {
+    for (let i = 0; i < 10; i++) expect((await httpCreate(10, `request-${i}`)).status).toBe(201);
+    const response = await httpCreate(1, 'request-over-limit');
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({
       code: 'DRAFT_GROUP_LIMIT',
-      error: DRAFT_GROUP_LIMIT_MESSAGE,
+      error: 'You have 100 items waiting in this Group. Save or delete some before keeping more.',
     });
     expect(response.headers.get('Cache-Control')).toBe('private, no-store');
-    expect(await db().collection('expensedrafts').countDocuments({ state: 'active' })).toBe(100);
+    expect(await httpList()).toHaveLength(100);
+    identity.id = bob.id;
+    expect((await httpCreate(1, 'request-bob')).status).toBe(201);
+    expect(await httpList()).toHaveLength(1);
   });
 
-  it('serializes competing owners at capacity and rejects an over-capacity batch in full', async () => {
-    for (let i = 0; i < 9; i++) await drafts.create(alice, groupId, batch(10), `request-${i}`);
-    await drafts.create(bob, groupId, batch(5), 'request-last-five');
-    const results = await Promise.allSettled([
-      drafts.create(alice, groupId, batch(5), 'request-racing-alice'),
-      drafts.create(bob, groupId, batch(5), 'request-racing-bob'),
+  it('rejects an over-capacity HTTP batch in full and serializes concurrent creations at 95', async () => {
+    for (let i = 0; i < 9; i++) await httpCreate(10, `request-${i}`);
+    await httpCreate(5, 'request-last-five');
+    expect((await httpCreate(6, 'request-over-batch')).status).toBe(409);
+    expect(await httpList()).toHaveLength(95);
+    const results = await Promise.all([
+      httpCreate(5, 'request-racing-one'),
+      httpCreate(5, 'request-racing-two'),
     ]);
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter((r) => r.status === 'rejected')).toMatchObject([
-      { reason: new Error('DRAFT_GROUP_LIMIT') },
+    expect(results.map((result) => result.status).sort()).toEqual([201, 409]);
+    expect(await httpList()).toHaveLength(100);
+  });
+
+  it('returns member attribution for HTTP creation, edits and legacy records', async () => {
+    const response = await httpCreate(1, 'request-attribution');
+    const [created] = (await response.json()).data;
+    expect(created).toMatchObject({
+      preparedBy: { kind: 'member' },
+      changedBy: { kind: 'member' },
+    });
+    const edited = await PUT(
+      new Request('http://localhost', {
+        method: 'PUT',
+        headers: { 'X-Splitbook-Revision': '0' },
+        body: JSON.stringify({ values: { amount: 99 } }),
+      }),
+      { params: Promise.resolve({ id: groupId, draftId: created.id }) },
+    );
+    expect((await edited.json()).data).toMatchObject({
+      preparedBy: { kind: 'member' },
+      changedBy: { kind: 'member' },
+      revision: 1,
+    });
+    // Simulate a record written before attribution existed; reads need no migration.
+    await db()
+      .collection('expensedrafts')
+      .updateOne(
+        { _id: new mongoose.Types.ObjectId(created.id) },
+        { $unset: { preparedBy: '', changedBy: '' } },
+      );
+    expect(await httpList()).toMatchObject([
+      {
+        preparedBy: { kind: 'member' },
+        changedBy: { kind: 'member' },
+      },
     ]);
-    expect(await db().collection('expensedrafts').countDocuments({ state: 'active' })).toBe(100);
+    const reviewed = await reviewRoute(
+      new Request('http://localhost', {
+        method: 'POST',
+        body: JSON.stringify({ ids: [created.id] }),
+      }),
+      context,
+    );
+    expect((await reviewed.json()).data[0].draft).toMatchObject({
+      preparedBy: { kind: 'member' },
+      changedBy: { kind: 'member' },
+    });
   });
 
   it('replays concurrent creations exactly once and detects changed payloads under a key', async () => {
@@ -314,6 +364,74 @@ describe('persistent private expense Drafts', () => {
         acknowledgeDuplicates,
       },
     ],
+  });
+
+  it('does not count saved or deleted items toward the HTTP member limit', async () => {
+    const [row] = await completeDrafts();
+    const reviewed = await reviewRoute(
+      new Request('http://localhost', {
+        method: 'POST',
+        body: JSON.stringify({ ids: [row.id] }),
+      }),
+      context,
+    );
+    const saved = await saveRoute(
+      new Request('http://localhost', {
+        method: 'POST',
+        body: JSON.stringify(saveCommand((await reviewed.json()).data[0])),
+      }),
+      context,
+    );
+    expect((await saved.json()).data[0].status).toBe('saved');
+    const [discarded] = (await (await httpCreate(1, 'request-delete-capacity')).json()).data;
+    expect(
+      (
+        await DELETE(
+          new Request('http://localhost', {
+            method: 'DELETE',
+            headers: { 'X-Splitbook-Revision': '0' },
+          }),
+          { params: Promise.resolve({ id: groupId, draftId: discarded.id }) },
+        )
+      ).status,
+    ).toBe(200);
+    for (let i = 0; i < 10; i++)
+      expect((await httpCreate(10, `request-refill-${i}`)).status).toBe(201);
+    expect(await httpList()).toHaveLength(100);
+  });
+
+  it('keeps the assistant preparer while recording HTTP edits and deletion as the member', async () => {
+    const [row] = await drafts.create(
+      { ...alice, assistant: { name: 'Synthetic Assistant' } },
+      groupId,
+      batch(1),
+      'assistant-prepared',
+    );
+    const item = { params: Promise.resolve({ id: groupId, draftId: row.id }) };
+    const edited = await PUT(
+      new Request('http://localhost', {
+        method: 'PUT',
+        headers: { 'X-Splitbook-Revision': '0' },
+        body: JSON.stringify({ values: { amount: 123 } }),
+      }),
+      item,
+    );
+    expect((await edited.json()).data).toMatchObject({
+      preparedBy: { kind: 'assistant', name: 'Synthetic Assistant' },
+      changedBy: { kind: 'member' },
+    });
+    const removed = await DELETE(
+      new Request('http://localhost', {
+        method: 'DELETE',
+        headers: { 'X-Splitbook-Revision': '1' },
+      }),
+      item,
+    );
+    expect((await removed.json()).data).toMatchObject({
+      state: 'discarded',
+      preparedBy: { kind: 'assistant', name: 'Synthetic Assistant' },
+      changedBy: { kind: 'member' },
+    });
   });
 
   it('keeps an unspecified Category unresolved until it is explicitly reviewed', async () => {
