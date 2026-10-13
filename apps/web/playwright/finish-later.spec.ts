@@ -9,6 +9,10 @@ test.afterEach(async ({ page }) => {
   if (id) {
     const removed = await page.request.delete(`/api/groups/${id}`);
     expect(removed.ok()).toBe(true);
+    // Archiving keeps private items by design; erase only this test’s waiting items too.
+    await withDemoDb(async (db) => {
+      await db.collection('expensedrafts').deleteMany({ group: new ObjectId(id) });
+    });
   }
 });
 
