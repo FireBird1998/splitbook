@@ -16,9 +16,11 @@ describe('Draft attribution', () => {
     ['\u202eClaude\u202c', 'Claude'],
     [' \t\u0000\u200b ', 'Assistant'],
     ['', 'Assistant'],
+    ['A \u200b B', 'A B'],
     ['a'.repeat(45), 'a'.repeat(40)],
     ['🤖'.repeat(45), '🤖'.repeat(40)],
   ])('cleans client-controlled display names: %j', (input, expected) => {
     expect(cleanAssistantName(input)).toBe(expected);
+    expect(cleanAssistantName(cleanAssistantName(input))).toBe(expected);
   });
 });

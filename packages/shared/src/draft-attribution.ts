@@ -5,6 +5,7 @@ export function cleanAssistantName(name: string): string {
   const cleaned = name
     .replace(/\s+/gu, ' ')
     .replace(/[\p{Cc}\p{Cf}]/gu, '')
+    .replace(/\s+/gu, ' ')
     .trim();
   return Array.from(cleaned).slice(0, 40).join('').trim() || 'Assistant';
 }
