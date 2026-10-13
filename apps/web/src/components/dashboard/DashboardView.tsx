@@ -1,5 +1,6 @@
 'use client';
 
+import ToReviewCard from '@/components/to-review/ToReviewCard';
 import Stack from '@mui/material/Stack';
 import BalancesCard from '@/components/dashboard/BalancesCard';
 import GroupsTableCard from '@/components/dashboard/GroupsTableCard';
@@ -24,6 +25,7 @@ export default function DashboardView({ userId, userName }: DashboardViewProps) 
   return (
     <Stack spacing={2.5}>
       <HomeHeader userId={userId} />
+      <ToReviewCard />
       <HomeRow>
         <BalancesCard />
         <NeedsYouCard memberName={userName} />
