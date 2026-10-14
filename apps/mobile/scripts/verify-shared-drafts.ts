@@ -459,6 +459,44 @@ async function main() {
     const after = parseToReviewResponse(await web.request(toReviewPath()));
     assert.ok(!after.groups.some((row) => row.groupId === secondGroupId));
     assert.equal(after.groups.find((row) => row.groupId === groupId)?.count, 4);
+    // Guided native review uses the shared client's exact version and replay identity.
+    await controller.refreshToReview();
+    await controller.startReviewRun(claude.draft.groupId);
+    const run = controller.getSnapshot().toReview.run;
+    assert.ok(run);
+    assert.ok(
+      run.items.some(
+        (row) =>
+          row.item.draft.preparedBy.kind === 'assistant' &&
+          row.item.draft.preparedBy.name === 'Claude',
+      ),
+    );
+    while (
+      controller.getSnapshot().toReview.run?.items[controller.getSnapshot().toReview.run!.index]
+        ?.item.draft.id !== claude.draft.id
+    ) {
+      const before = controller.getSnapshot().toReview.run!.index;
+      await controller.reviewRun()!.skip();
+      assert.equal(controller.getSnapshot().toReview.run!.index, before + 1);
+    }
+    const beforeRun = await countExpenses(claude.draft.groupId);
+    loseSaveResponse = true;
+    await controller.reviewRun()!.save();
+    assert.equal(controller.getSnapshot().toReview.run!.pending, true);
+    assert.equal(await countExpenses(claude.draft.groupId), beforeRun + 1);
+    await controller.reviewRun()!.retry();
+    assert.equal(
+      await countExpenses(claude.draft.groupId),
+      beforeRun + 1,
+      'Guided Check again creates exactly one Expense',
+    );
+    assert.equal(savedSubmissions.at(-1), savedSubmissions.at(-2));
+    assert.ok(
+      controller
+        .getSnapshot()
+        .toReview.run!.outcomes.some((row) => row.id === claude.draft.id && row.status === 'saved'),
+    );
+    await controller.closeReviewRun();
     console.log(
       'PASS: web → native visibility; stale protection; permanent discard; newer local recovery retained without blocking collection; exact upload retry; cross-Group Claude attribution; shared ready selection and exact currency totals; mixed stale result; lost Save reply and Check again produce exactly one Expense.',
     );

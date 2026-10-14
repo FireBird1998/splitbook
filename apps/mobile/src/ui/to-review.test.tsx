@@ -374,7 +374,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     expect(text(banner)).toContain('4 to review');
     expect(text(banner)).toContain('4 from Claude today');
     await tap(home, 'Review 4, one at a time');
-    expect(f.controller.getSnapshot().toReview.groupId).toBe(groupId);
+    expect(f.controller.getSnapshot().toReview.run?.items[0].groupId).toBe(groupId);
   });
   it('hides an empty Home card and renders the empty list', async () => {
     const f = fixture({ empty: true });
@@ -641,7 +641,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     expect(model.items[0].groupId).toBe(otherGroupId);
     const home = await render(<ToReviewHomeCard controller={f.controller} />, mode);
     await tap(home, 'Review 2, one at a time');
-    expect(f.controller.getSnapshot().toReview.groupId).toBe(groupId);
+    expect(f.controller.getSnapshot().toReview.run?.items[0].groupId).toBe(groupId);
   });
   it('lands a signed-out app link in its Group list after sign-in', async () => {
     const f = fixture();

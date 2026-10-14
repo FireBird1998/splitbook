@@ -12,6 +12,7 @@ import { parseAmountMinor, toMajorAmount } from '@splitbook/shared/exact-money';
 import type { MobileSnapshot } from './types';
 
 export interface ToReviewState {
+  run: import('./review-run').ReviewRunState | null;
   status: 'idle' | 'loading' | 'ready' | 'error';
   read: ToReviewRead;
   message: string | null;
@@ -21,6 +22,7 @@ export interface ToReviewState {
   recoveryMessage: string | null;
 }
 export const emptyToReview = (): ToReviewState => ({
+  run: null,
   status: 'idle',
   read: { total: 0, groups: [] },
   message: null,
