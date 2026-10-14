@@ -271,10 +271,13 @@ export function describeDraftChange(
   const changed = fields.filter(([, , , a, b]) => JSON.stringify(a) !== JSON.stringify(b));
   const author =
     after.changedBy.kind === 'assistant' ? after.changedBy.name : 'You on another device';
-  if (!changed.length)
-    return `${author} changed this item a moment ago. You are looking at the latest version.`;
-  const changes = changed.map(([field, a, b]) =>
-    a === b ? `the ${field} details` : `the ${field}: ${a} → ${b}`,
-  );
-  return `${author} changed ${changes.join('; ')} a moment ago.`;
+  const latest = "You're seeing the latest version.";
+  if (!changed.length) return `${author} changed this item a moment ago. ${latest}`;
+  // The design's wording: "Claude changed the amount a moment ago: ₹2,350.00 → ₹2,400.00."
+  const changes = changed.map(([field, a, b], index) => {
+    const label = a === b ? `the ${field} details` : `the ${field}`;
+    const when = index === 0 ? ' a moment ago' : '';
+    return a === b ? `${label}${when}` : `${label}${when}: ${a} → ${b}`;
+  });
+  return `${author} changed ${changes.join('; ')}. ${latest}`;
 }

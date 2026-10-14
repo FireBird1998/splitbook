@@ -223,14 +223,14 @@ describe('changes while an item is open', () => {
     const { before, after } = changed();
     after.values!.amount = 2400;
     expect(describeDraftChange(before, after, names)).toBe(
-      'Claude changed the amount: ₹2,350.00 → ₹2,400.00 a moment ago.',
+      "Claude changed the amount a moment ago: ₹2,350.00 → ₹2,400.00. You're seeing the latest version.",
     );
   });
   it('formats date facts as calendar days in every host time zone', () => {
     const { before, after } = changed();
     after.values!.date = '2026-10-15';
     expect(describeDraftChange(before, after)).toBe(
-      `Claude changed the date: ${reviewDate('2026-10-14')} → ${reviewDate('2026-10-15')} a moment ago.`,
+      `Claude changed the date a moment ago: ${reviewDate('2026-10-14')} → ${reviewDate('2026-10-15')}. You're seeing the latest version.`,
     );
     expect(reviewDate('2000-01-01')).toBe('Jan 1, 2000');
   });
@@ -238,14 +238,14 @@ describe('changes while an item is open', () => {
     const { before, after } = changed();
     after.values!.paidBy = [{ user: 'c00000000000000000000001', amount: 2350 }];
     expect(describeDraftChange(before, after, names)).toContain(
-      'the payer: Alex ₹2,350.00 → Sam ₹2,350.00',
+      'the payer a moment ago: Alex ₹2,350.00 → Sam ₹2,350.00',
     );
   });
   it('describes a changed split, including participants when the method stays equal', () => {
     const { before, after } = changed();
     after.values!.splitBetween = [{ user: 'c00000000000000000000001' }];
     expect(describeDraftChange(before, after, names)).toContain(
-      'the split: equal · Alex → equal · Sam',
+      'the split a moment ago: equal · Alex → equal · Sam',
     );
     after.values!.splitMethod = 'percentage';
     after.values!.splitBetween[0].percentage = 100;
@@ -257,8 +257,15 @@ describe('changes while an item is open', () => {
     after.values!.amount = 2400;
     after.values!.date = '2026-10-15';
     const note = describeDraftChange(before, after, names);
-    expect(note).toContain('You on another device changed the amount');
+    expect(note).toContain('You on another device changed the amount a moment ago: ');
     expect(note).toContain('; the date:');
+    expect(note).toMatch(/You're seeing the latest version\.$/);
     expect(note).not.toMatch(/draft|revision|request|collection/i);
+  });
+  it('still says who changed it when no listed fact differs', () => {
+    const { before, after } = changed();
+    expect(describeDraftChange(before, after)).toBe(
+      "Claude changed this item a moment ago. You're seeing the latest version.",
+    );
   });
 });

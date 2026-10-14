@@ -141,7 +141,7 @@ test('a newer read and a stale edit both show the changed facts and author', asy
   });
   await expect(review.getByLabel('Amount', { exact: true })).toHaveValue('15', { timeout: 40_000 });
   await expect(review.getByRole('status').first()).toContainText(
-    'You on another device changed the amount: ₹12.34 → ₹15.00',
+    'You on another device changed the amount a moment ago: ₹12.34 → ₹15.00',
   );
   const next = (await rows(page))[0];
   await page.request.put(`/api/groups/${DEMO_GROUP_ID}/drafts/${next.id}`, {
@@ -155,7 +155,7 @@ test('a newer read and a stale edit both show the changed facts and author', asy
   await expect(review.getByLabel('Description', { exact: true })).toHaveValue(
     'Review corrected meal',
   );
-  await expect(review).toContainText('You on another device changed the description:');
+  await expect(review).toContainText('You on another device changed the description a moment ago:');
   expect((await rows(page))[0].values.description).toBe('Review corrected meal');
 });
 
@@ -337,7 +337,7 @@ test('an external version delivered by the post-edit refresh appears immediately
     'Review another device edit',
     { timeout: 10_000 },
   );
-  await expect(review).toContainText('You on another device changed the description:');
+  await expect(review).toContainText('You on another device changed the description a moment ago:');
 });
 
 test('opening and closing an item carries keyboard focus between its row and panel', async ({
