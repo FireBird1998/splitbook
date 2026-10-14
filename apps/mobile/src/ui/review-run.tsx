@@ -21,6 +21,7 @@ import { PayerSheet, paidBySummary } from './payer-sheet';
 import { SplitSheet } from './split-sheet';
 import { TagSheet } from './tag-sheet';
 import { useTheme } from './theme';
+import { reviewedItemsLine } from './review-run-copy';
 
 function money(amount: number | undefined, currency: string | undefined) {
   if (amount === undefined || !currency) return 'Amount needed';
@@ -105,8 +106,9 @@ function ReviewRunContent({
           Done for now
         </CompactText>
         <Copy>
-          You went through {state.items.length} items in{' '}
-          {[...new Set(state.items.map((row) => row.groupName))].join(' and ')}
+          {reviewedItemsLine(state.items.length, [
+            ...new Set(state.items.map((row) => row.groupName)),
+          ])}
         </Copy>
         <Copy>Saved {summary.saved}</Copy>
         <Copy>Deleted {summary.deleted}</Copy>
