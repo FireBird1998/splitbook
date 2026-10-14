@@ -38,6 +38,7 @@ export const leaveDiscardsDraft =
 export interface LeaveGroupActions {
   state: LeaveGroupState;
   offline: boolean;
+  toReviewCount?: number;
   onOpen: () => void;
   onConfirm: () => void;
   onCancel: () => void;
@@ -185,6 +186,12 @@ function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGro
           ? 'Leaving will permanently delete this Group and its history. Expenses, Settlements and Activity will be removed. You cannot rejoin this Group.'
           : leaveExplanation}
       </CompactText>
+      {!!leave.toReviewCount && (
+        <CompactText>
+          You have {leave.toReviewCount} items in To review for {group.name}. They're kept but
+          hidden while you're not a member.
+        </CompactText>
+      )}
       {state.draft && state.status !== 'blocked' ? (
         <Banner tone="info" message={leaveDiscardsDraft} />
       ) : null}

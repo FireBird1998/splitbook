@@ -1,3 +1,5 @@
+import { expenseRecoveryWords } from './expense-recovery-copy';
+import { FinishLater } from './finish-later';
 import type { MobileController } from '../data/mobile-controller';
 import { DraftStatus } from './draft-status';
 import { SelectedDraftStatus } from './draft-status-selection';
@@ -22,7 +24,7 @@ import {
   type ReactNode,
   type RefObject,
 } from 'react';
-import { Alert, AccessibilityInfo, ScrollView, View, type TextInput } from 'react-native';
+import { AccessibilityInfo, ScrollView, View, type TextInput } from 'react-native';
 import { formatCurrency } from '@splitbook/shared/currency';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import { expenseDifferences } from '@splitbook/shared/expense-review';
@@ -209,25 +211,34 @@ function ExpenseProblem({
           onKeep
             ? {
                 kind: 'close',
-                label: draft ? 'Back to Group, keeping your draft' : 'Back to Group',
+                label: draft
+                  ? expenseRecoveryWords('Back to Group, keeping your draft')
+                  : 'Back to Group',
                 onPress: onKeep,
               }
             : undefined
         }
       />
       <View style={{ paddingHorizontal: 16, paddingTop: 4 }}>
-        <Banner tone="error" title="Something went wrong" message={message}>
+        <Banner tone="error" title="Something went wrong" message={expenseRecoveryWords(message)}>
           {onKeep ? (
             <CompactButton
-              label={draft ? 'Keep draft' : 'Back to Group'}
-              accessibilityLabel={draft ? 'Keep draft and return to the Group' : 'Back to Group'}
+              label={draft ? expenseRecoveryWords('Keep draft') : 'Back to Group'}
+              accessibilityLabel={
+                draft ? expenseRecoveryWords('Keep draft and return to the Group') : 'Back to Group'
+              }
               variant="tonal"
               dense
               onPress={onKeep}
             />
           ) : null}
           {onDiscard ? (
-            <CompactButton label="Discard draft" variant="text" dense onPress={onDiscard} />
+            <CompactButton
+              label={expenseRecoveryWords('Discard draft')}
+              variant="text"
+              dense
+              onPress={onDiscard}
+            />
           ) : null}
         </Banner>
       </View>
@@ -459,7 +470,11 @@ function ExpenseTask({
         leading={
           onClose
             ? form
-              ? { kind: 'close', label: 'Back to Group, keeping your draft', onPress: onClose }
+              ? {
+                  kind: 'close',
+                  label: expenseRecoveryWords('Back to Group, keeping your draft'),
+                  onPress: onClose,
+                }
               : { kind: 'back', label: 'Back to Group', onPress: onClose }
             : undefined
         }
@@ -500,7 +515,9 @@ function ExpenseTask({
         {state.waitingInvitation ? (
           <Notice
             title="Invitation waiting"
-            message="Your invitation will open after you keep or discard this draft, or finish saving it."
+            message={expenseRecoveryWords(
+              'Your invitation will open after you keep or discard this draft, or finish saving it.',
+            )}
           />
         ) : null}
         {body}
@@ -515,16 +532,20 @@ function ExpenseTask({
       opening ? (
         <ExpenseRecordSkeleton label="Opening this Expense…" outline={outline} />
       ) : !newTask ? (
-        <Loading label={requested ? 'Opening this Expense…' : 'Opening your draft…'} />
+        <Loading
+          label={requested ? 'Opening this Expense…' : expenseRecoveryWords('Opening your draft…')}
+        />
       ) : (
         <View
-          accessibilityLabel={draft || kept ? 'Opening your draft…' : 'Opening a new Expense…'}
+          accessibilityLabel={
+            draft || kept ? expenseRecoveryWords('Opening your draft…') : 'Opening a new Expense…'
+          }
           accessibilityState={{ busy: true }}
           accessibilityLiveRegion="polite"
           style={{ gap: 12 }}
         >
           <CompactText variant="small" tone="secondary">
-            {draft || kept ? 'Opening your draft…' : 'Opening a new Expense…'}
+            {draft || kept ? expenseRecoveryWords('Opening your draft…') : 'Opening a new Expense…'}
           </CompactText>
           <Card padded>
             <CompactText variant="small" tone="secondary">
@@ -556,10 +577,10 @@ function ExpenseTask({
           requested
             ? 'Couldn’t open this Expense'
             : kept
-              ? 'Couldn’t open this draft'
+              ? expenseRecoveryWords('Couldn’t open this draft')
               : 'Couldn’t open a new Expense'
         }
-        message={state.message ?? 'Please try again.'}
+        message={(state.message && expenseRecoveryWords(state.message)) ?? 'Please try again.'}
         retry={onRetry}
       />,
     );
@@ -620,7 +641,9 @@ function ExpenseTask({
         : checking
           ? 'Save waits for current Group verification.'
           : state.persistence === 'error'
-            ? 'Save is unavailable until this draft is stored on this device. Retry saving the draft first.'
+            ? expenseRecoveryWords(
+                'Save is unavailable until this draft is stored on this device. Retry saving the draft first.',
+              )
             : draft.review?.length
               ? 'Choose which version to keep for each change in What’s different first.'
               : null;
@@ -668,11 +691,11 @@ function ExpenseTask({
               }
               message={
                 state.accessLost
-                  ? `${state.message ? `${state.message} ` : ''}This save or change may already be recorded. Its retry will be removed from this device when you leave. If access returns, check the Group’s Expenses before saving again.`
-                  : (state.message ??
+                  ? `${state.message ? `${expenseRecoveryWords(state.message)} ` : ''}This save or change may already be recorded. Its retry will be removed from this device when you leave. If access returns, check the Group’s Expenses before saving again.`
+                  : ((state.message && expenseRecoveryWords(state.message)) ??
                     (state.attempt
                       ? state.attemptRejected
-                        ? `SplitBook refused a retry of this save. ${refusedRetryNotice}`
+                        ? `SplitBook refused a retry of this save. ${expenseRecoveryWords(refusedRetryNotice)}`
                         : `This Expense may already be in ${context?.group.name ?? 'the Group'}. Checking reuses the same submission, so it can’t be recorded twice.`
                       : `${state.mutation?.kind === 'delete' ? 'This Expense may already be deleted.' : 'This change may already be saved.'} Checking reads the saved Expense first, so nothing is sent twice.`))
               }
@@ -691,21 +714,42 @@ function ExpenseTask({
             <Banner
               tone="warning"
               title="Group access lost"
-              message="This draft will be removed from this device when you leave. Nothing has been sent. If access returns, check the Group’s Expenses before saving again."
+              message={expenseRecoveryWords(
+                'This draft will be removed from this device when you leave. Nothing has been sent. If access returns, check the Group’s Expenses before saving again.',
+              )}
             >
-              <CompactButton label="Discard draft" variant="text" dense onPress={onDiscard} />
+              <CompactButton
+                label={expenseRecoveryWords('Discard draft')}
+                variant="text"
+                dense
+                onPress={onDiscard}
+              />
             </Banner>
           ) : state.status === 'resume' ? (
             <Banner
               tone="info"
-              title="Unfinished draft"
+              title={expenseRecoveryWords('Unfinished draft')}
               message={
-                state.message ??
+                (state.message && expenseRecoveryWords(state.message)) ??
                 'Nothing has been sent. Resume your entries or discard them to start again.'
               }
             >
-              <CompactButton label="Resume draft" variant="tonal" dense onPress={onResume} />
-              <CompactButton label="Discard draft" variant="text" dense onPress={onDiscard} />
+              <CompactButton
+                label={
+                  process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true'
+                    ? 'Continue editing'
+                    : expenseRecoveryWords('Resume draft')
+                }
+                variant="tonal"
+                dense
+                onPress={onResume}
+              />
+              <CompactButton
+                label={expenseRecoveryWords('Discard draft')}
+                variant="text"
+                dense
+                onPress={onDiscard}
+              />
             </Banner>
           ) : null}
           {conflict ? (
@@ -718,7 +762,7 @@ function ExpenseTask({
                     : 'Your change isn’t in the saved Expense'
                 }
                 message={
-                  state.message ??
+                  (state.message && expenseRecoveryWords(state.message)) ??
                   'Compare your version with the saved one, then choose which to keep. Nothing is sent until you save again.'
                 }
               />
@@ -745,7 +789,7 @@ function ExpenseTask({
             <Banner
               tone="error"
               title={`${invalid.length === 1 ? 'One thing' : `${invalid.length} things`} to fix before saving`}
-              message="Your draft is kept. Go to each one:"
+              message={expenseRecoveryWords('Your draft is kept. Go to each one:')}
             >
               {invalid.map((field) => (
                 <CompactButton
@@ -843,7 +887,9 @@ function ExpenseTask({
                   standing
                   message={
                     state.status === 'blocked'
-                      ? 'You no longer have access to this Group’s members and Tags. Your draft is kept.'
+                      ? expenseRecoveryWords(
+                          'You no longer have access to this Group’s members and Tags. Your draft is kept.',
+                        )
                       : 'Couldn’t check the current members and Tags. You can still edit your saved text.'
                   }
                 />
@@ -855,9 +901,12 @@ function ExpenseTask({
               <View style={{ gap: 6 }}>
                 {!errors.amount && (
                   <CompactText variant="small" tone="warning" accessibilityRole="alert">
-                    This draft uses {draft.currency}; the Group now uses{' '}
-                    {context.group.defaultCurrency}. Review the amount before choosing the new
-                    currency.
+                    This{' '}
+                    {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true'
+                      ? 'item'
+                      : 'draft'}{' '}
+                    uses {draft.currency}; the Group now uses {context.group.defaultCurrency}.
+                    Review the amount before choosing the new currency.
                   </CompactText>
                 )}
                 <CompactButton
@@ -914,11 +963,15 @@ function ExpenseTask({
                   accessibilityRole="alert"
                   accessibilityLiveRegion="polite"
                 >
-                  {state.message}
+                  {expenseRecoveryWords(state.message)}
                 </CompactText>
               )}
             {state.persistence === 'error' && !state.attempt && (
-              <Button label="Retry saving draft" secondary onPress={() => onChange({})} />
+              <Button
+                label={expenseRecoveryWords('Retry saving draft')}
+                secondary
+                onPress={() => onChange({})}
+              />
             )}
             {draft.original && !unconfirmed && ['uncertain', 'blocked'].includes(state.status) && (
               <Button label="Check current Expense" onPress={onReconcile} />
@@ -968,28 +1021,7 @@ function ExpenseTask({
       )}
       {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' &&
         controller &&
-        !draft.original &&
-        state.status === 'editing' &&
-        !state.attempt &&
-        !state.mutation && (
-          <Button
-            label="Keep as shared Draft"
-            secondary
-            disabled={offline}
-            onPress={() => {
-              void controller
-                .keepExpenseAsSharedDraft()
-                .catch((error) =>
-                  Alert.alert(
-                    'Draft not confirmed',
-                    error instanceof Error
-                      ? error.message
-                      : 'Try again using the original request.',
-                  ),
-                );
-            }}
-          />
-        )}
+        !draft.original && <FinishLater controller={controller} />}
       {sheet === 'date' ? (
         <DateSheet
           visible={sheet === 'date'}
@@ -1047,7 +1079,7 @@ function ExpenseTask({
           <Card>
             <ListRow
               leading={<IconTile icon="trash-outline" tone="warning" />}
-              title="Discard draft"
+              title={expenseRecoveryWords('Discard draft')}
               meta="Removes these entries from this device"
               onPress={() => {
                 setSheet(null);

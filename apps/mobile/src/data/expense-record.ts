@@ -1,3 +1,4 @@
+import { assistantAttributionSchema } from '@splitbook/shared/draft-attribution';
 import { z } from 'zod';
 import { readExpenseMoney } from '@splitbook/shared/expense-money-edit';
 import { parseExpenseRecordResponse } from '@splitbook/shared/expense-record-read';
@@ -28,6 +29,7 @@ export const expenseRecordSchema = z.object({
   _id: objectId,
   group: objectId,
   revision: z.number().int().nonnegative(),
+  preparedBy: assistantAttributionSchema.optional(),
   description: z.string(),
   amount: z.number().finite(),
   currency: z.string(),

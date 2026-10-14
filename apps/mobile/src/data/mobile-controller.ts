@@ -1,3 +1,4 @@
+import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-draft';
 import {
   createToReviewQueries,
   draftRequestRecoveries,
@@ -2654,6 +2655,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ? recovered.stored
         : await lease.write(() => dependencies.expenseDrafts!.load(accountId, groupId));
       let record = stored === null ? null : parseStoredExpenseDraft(stored, accountId, groupId);
+      const retained = dependencies.draftRequests
+        ? await lease.write(() => dependencies.draftRequests!.load(accountId, groupId))
+        : null;
+      let finishLaterPending = false;
+      if (typeof retained === 'string') {
+        try {
+          const attempt = JSON.parse(retained);
+          finishLaterPending =
+            attempt.path === `/api/groups/${groupId}/drafts` && typeof attempt.source === 'string';
+        } catch {
+          /* To review's recovery shortcut explains unreadable actions. */
+        }
+      }
+
       if (!showing()) return;
       if (!expenseId && !record?.draft.original) {
         if (
@@ -2678,7 +2693,16 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             context,
             draft,
             blank: record ? record.blank : blank,
-            status: record ? 'resume' : draft ? 'editing' : 'loading',
+            finishLaterPending,
+            status: record
+              ? persistentDrafts
+                ? record.attempt
+                  ? 'uncertain'
+                  : 'editing'
+                : 'resume'
+              : draft
+                ? 'editing'
+                : 'loading',
             attempt: record?.attempt ?? null,
             attemptRejected: !!record?.attempt && record.attemptRejected,
             mutation: record?.mutation ?? null,
@@ -2781,10 +2805,20 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         ...snapshot,
         expense: {
           groupId,
+          finishLaterPending,
           context,
           draft,
           preview: previewExpense(draft),
-          status: record === null || held ? (original ? 'detail' : 'editing') : 'resume',
+          status:
+            record === null || held
+              ? original
+                ? 'detail'
+                : 'editing'
+              : persistentDrafts && !draft.original
+                ? record.attempt
+                  ? 'uncertain'
+                  : 'editing'
+                : 'resume',
           attempt: record?.attempt ?? null,
           attemptRejected: !!record?.attempt && record.attemptRejected,
           mutation: record?.mutation ?? null,
@@ -3319,9 +3353,22 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   /** Android Back and close keep the draft on this device and return where the task began. */
-  const closeExpense = async () => {
+  const closeExpense = async (confirmed = false) => {
     if (route.screen !== 'expense' || expenseNavigationBlocked()) return;
     if (snapshot.expense.status === 'delete-review') return cancelExpenseDeletion();
+    const editor = snapshot.expense;
+    if (
+      persistentDrafts &&
+      !confirmed &&
+      editor.draft &&
+      !editor.draft.original &&
+      !editor.attempt &&
+      !editor.mutation &&
+      expenseDraftChanged(editor.draft, editor.blank)
+    ) {
+      publish({ ...snapshot, expense: { ...editor, closePrompt: true } });
+      return;
+    }
     // Leaving waits for the latest entries to be stored; if that fails, the form stays open.
     if (snapshot.expense.persistence === 'saving') {
       const view = route,
@@ -3354,6 +3401,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const viewSnackbarMonth = async () => {
+    if (snapshot.snackbar?.viewToReview) return openToReview(snapshot.snackbar.groupId);
     const month = snapshot.snackbar?.viewMonth;
     if (month) await selectMonth(month);
   };
@@ -6127,21 +6175,133 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (!snapshot.sharedDraftCollection.busy)
       publish({ ...snapshot, toReview: { ...snapshot.toReview, groupId: null } });
   };
+  const cancelExpenseClose = () =>
+    publish({ ...snapshot, expense: { ...snapshot.expense, closePrompt: false } });
+  const deleteExpenseAndClose = async () => {
+    const editor = snapshot.expense;
+    if (
+      !editor.closePrompt ||
+      editor.attempt ||
+      editor.mutation ||
+      editor.finishLaterPending ||
+      editor.draft?.original
+    )
+      return;
+    const lease = accountStorage();
+    if (!lease || !editor.groupId || !dependencies.expenseDrafts || expenseNavigationBlocked())
+      return;
+    const owner = generation,
+      view = route;
+    const showing = () => current(owner) && route === view;
+    publish({ ...snapshot, expense: { ...editor, status: 'saving' } });
+    try {
+      if (!(await draftWritten()) || !showing()) {
+        if (showing())
+          publish({ ...snapshot, expense: { ...snapshot.expense, status: editor.status } });
+        return;
+      }
+      await lease.write(() => dependencies.expenseDrafts!.remove(lease.accountId, editor.groupId!));
+      if (!showing()) return;
+      publish({
+        ...snapshot,
+        expense: { ...snapshot.expense, status: editor.status, draft: null, closePrompt: false },
+      });
+      await closeExpense(true);
+    } catch {
+      if (showing())
+        publish({
+          ...snapshot,
+          expense: {
+            ...snapshot.expense,
+            status: editor.status,
+            message: 'Could not delete this item. Try again.',
+          },
+        });
+    }
+  };
   const keepExpenseAsSharedDraft = async () => {
     const editor = snapshot.expense;
     if (
-      editor.status !== 'editing' ||
+      !persistentDrafts ||
       !editor.draft ||
       editor.draft.original ||
-      editor.attempt ||
       editor.mutation ||
-      !editor.groupId
+      !editor.groupId ||
+      editor.status === 'saving'
     )
-      throw new Error('Resolve the existing Expense save before uploading a Draft.');
+      return;
+    // Resolve an earlier financial submission before any account upload, using its exact
+    // identity. Offline keeps that same recovery; reconnect never sends it.
+    const keepOnPhone = snapshot.offline.active || !onlineManager.isOnline();
+    if (editor.attempt && !keepOnPhone) return saveExpense();
     const uploadOwner = generation;
-    publish({ ...snapshot, expense: { ...editor, status: 'saving' } });
+    const view = route;
+    const showing = () => current(uploadOwner) && view === route;
+    // Claim the action before the first await. Another tap or Save cannot start alongside it.
+    publish({
+      ...snapshot,
+      expense: { ...editor, closePrompt: false, status: 'saving', message: null },
+    });
+    if (!(await draftWritten()) || !showing()) {
+      if (showing())
+        publish({ ...snapshot, expense: { ...snapshot.expense, status: editor.status } });
+      return;
+    }
+    if (keepOnPhone || snapshot.offline.active || !onlineManager.isOnline()) {
+      const lease = accountStorage();
+      try {
+        if (!lease || !dependencies.expenseDrafts) throw new Error('Recovery unavailable');
+        // An explicit Finish later keeps even a blank, incomplete form. Null baseline marks
+        // it as deliberately retained, while all entries and immutable submissions stay intact.
+        await lease.write(() =>
+          dependencies.expenseDrafts!.save(lease.accountId, editor.groupId!, {
+            version: 1,
+            accountId: lease.accountId,
+            groupId: editor.groupId,
+            draft: editor.draft,
+            blank: null,
+            attempt: editor.attempt,
+            attemptRejected: editor.attemptRejected,
+            mutation: editor.mutation,
+          }),
+        );
+        if (!showing()) return;
+        publish({
+          ...snapshot,
+          expense: { ...snapshot.expense, status: editor.status, blank: null },
+        });
+        await closeExpense(true);
+        if (
+          !current(uploadOwner) ||
+          snapshot.screen !== 'group' ||
+          snapshot.detail.id !== editor.groupId
+        )
+          return;
+        publish({
+          ...snapshot,
+          snackbar: {
+            groupId: editor.groupId,
+            viewMonth: null,
+            viewToReview: true,
+            message:
+              "You're offline, so it stays on this phone. It shows in To review as 'On this phone'.",
+          },
+        });
+        await toReviewQueries.refresh();
+      } catch {
+        if (showing())
+          publish({
+            ...snapshot,
+            expense: {
+              ...snapshot.expense,
+              status: editor.status,
+              message: 'Could not keep this item on this phone. Keep editing and try again.',
+            },
+          });
+      }
+      return;
+    }
     try {
-      await draftWrite;
       const d = editor.draft;
       const entries: DraftEntries = {
         description: d.description,
@@ -6169,28 +6329,83 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           entries[`splitBetween.${id}.${field}`] = d.splitValues[id] ?? '';
       }
       const client = sharedDrafts(editor.groupId);
-      if (await client.pending())
-        throw new Error(
-          'Resolve the previous request in this Group’s Drafts before uploading this form.',
-        );
-      await client.create(draftValues(entries), JSON.stringify(d));
-      await toReviewQueries.refresh();
+      const pending = await client.pending();
+      if (pending) {
+        const retained = JSON.parse(pending);
+        if (
+          retained.path !== `/api/groups/${editor.groupId}/drafts` ||
+          retained.source === undefined
+        )
+          throw new Error('Check the earlier save in To review before keeping this item.');
+        const result = await client.retry();
+        if (!showing()) return;
+        if (result?.kind !== 'create') throw new Error('Could not confirm the item. Check again.');
+        if (result.localDraftRetained) {
+          publish({
+            ...snapshot,
+            expense: {
+              ...snapshot.expense,
+              status: 'editing',
+              finishLaterPending: false,
+              message:
+                'The earlier version is in To review. Your newer changes are still on this phone.',
+            },
+          });
+          await toReviewQueries.refresh();
+          return;
+        }
+      } else await client.create(draftValues(entries), JSON.stringify(d));
+      if (!current(uploadOwner) || route !== view) return;
       await openGroup(editor.groupId);
-    } finally {
       if (
-        current(uploadOwner) &&
-        snapshot.screen === 'expense' &&
-        snapshot.expense.draft === editor.draft
+        !current(uploadOwner) ||
+        snapshot.screen !== 'group' ||
+        snapshot.detail.id !== editor.groupId
       )
-        publish({ ...snapshot, expense: { ...snapshot.expense, status: 'editing' } });
+        return;
+      publish({
+        ...snapshot,
+        snackbar: {
+          groupId: editor.groupId,
+          message: 'Kept in To review',
+          viewMonth: null,
+          viewToReview: true,
+        },
+      });
+      await toReviewQueries.refresh();
+    } catch (error) {
+      if (!current(uploadOwner) || route !== view) return;
+      const limit = error instanceof RequestError && error.code === 'DRAFT_GROUP_LIMIT';
+      const pending = await sharedDrafts(editor.groupId)
+        .pending()
+        .then(Boolean)
+        .catch(() => true);
+      if (!showing()) return;
+      publish({
+        ...snapshot,
+        expense: {
+          ...snapshot.expense,
+          status: 'editing',
+          finishLaterPending: pending,
+          finishLaterLimit: limit,
+          message: limit
+            ? DRAFT_GROUP_LIMIT_MESSAGE
+            : pending
+              ? 'We could not confirm it. Your item is kept on this phone. Check again.'
+              : 'Could not keep this item in To review. Your item is still on this phone. Try again.',
+        },
+      });
     }
   };
+
   return {
     openToReview,
     closeToReview,
     toReviewModel: (groupId?: string) => mobileToReview(snapshot, now(), groupId),
     refreshToReview: () => toReviewQueries.refresh(),
     keepExpenseAsSharedDraft,
+    cancelExpenseClose,
+    deleteExpenseAndClose,
     draftCollection,
     sharedDrafts,
     openActivity,

@@ -1,5 +1,6 @@
 /** Local, synthetic cross-client Draft journey. No remote origin or database resets. */
 import assert from 'node:assert/strict';
+import { onlineManager } from '@tanstack/query-core';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -14,6 +15,7 @@ import { parseToReviewResponse } from '@splitbook/shared/to-review-read';
 import type { ExpenseDraftValues } from '@splitbook/shared/validators/expense-draft';
 
 async function main() {
+  process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED = 'true';
   const origin = localOrigin();
   const environment = await import(
     pathToFileURL(resolve(import.meta.dirname, 'dev-backend/environment.mjs')).href
@@ -60,7 +62,8 @@ async function main() {
     account: string | null = null,
     cleanup = false,
     loseDraftResponse = false,
-    loseSaveResponse = false;
+    loseSaveResponse = false,
+    loseExpenseResponse = false;
   const submitted: Array<{ key: string | null; body: string }> = [];
   const savedSubmissions: string[] = [];
   const controller = createMobileController(
@@ -77,6 +80,17 @@ async function main() {
         const saving = init.method === 'POST' && new URL(url).pathname.endsWith('/drafts/save');
         if (saving) savedSubmissions.push(String(init.body));
         const response = await fetch(url, { ...init, redirect: 'error' });
+        if (
+          init.method === 'POST' &&
+          new URL(url).pathname.endsWith('/expenses') &&
+          loseExpenseResponse
+        ) {
+          loseExpenseResponse = false;
+          assert.equal(response.status, 201);
+          await response.arrayBuffer();
+          throw new Error('Controlled loss of committed Expense reply');
+        }
+
         if (saving && loseSaveResponse) {
           loseSaveResponse = false;
           assert.equal(response.status, 200);
@@ -175,7 +189,8 @@ async function main() {
       tagId: group.tags[0]._id,
     });
     loseDraftResponse = true;
-    await assert.rejects(() => controller.keepExpenseAsSharedDraft());
+    await controller.keepExpenseAsSharedDraft();
+    assert.equal(controller.getSnapshot().expense.finishLaterPending, true);
     assert.ok(await requests.load(alexId, groupId));
     assert.ok(await drafts.load(alexId, groupId));
     assert.equal(submitted.length, 1);
@@ -208,6 +223,60 @@ async function main() {
       .object({ data: z.object({ pagination: z.object({ total: z.number() }) }) })
       .parse(await web.request(`/api/groups/${groupId}/expenses`));
     assert.equal(expenses.data.pagination.total, 1);
+    // Explicit offline Finish later never uploads on reconnect. Moving the phone item
+    // keeps its local copy through a lost create reply, then acknowledges the same operation.
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({
+      description: 'Phone-only groceries',
+      amount: '17',
+      tagId: group.tags[0]._id,
+    });
+    onlineManager.setOnline(false);
+    const beforeOffline = submitted.length;
+    await controller.keepExpenseAsSharedDraft();
+    assert.ok(await drafts.load(alexId, groupId));
+    onlineManager.setOnline(true);
+    await controller.refreshToReview();
+    assert.equal(submitted.length, beforeOffline, 'Reconnecting never uploads phone entries');
+    await controller.openExpense(groupId);
+    loseDraftResponse = true;
+    await controller.keepExpenseAsSharedDraft();
+    assert.ok(await drafts.load(alexId, groupId));
+    assert.ok(await requests.load(alexId, groupId));
+    await controller.keepExpenseAsSharedDraft();
+    assert.deepEqual(submitted.at(-1), submitted.at(-2));
+    assert.equal(await drafts.load(alexId, groupId), null);
+    const phoneDraft = (await reopened.list()).find(
+      (item) => item.values?.description === 'Phone-only groceries',
+    );
+    assert.ok(phoneDraft);
+    assert.deepEqual(phoneDraft.preparedBy, { kind: 'member' });
+    await reopened.discard(phoneDraft);
+
+    // An uncertain financial save resolves first; Finish later cannot manufacture another
+    // Draft or Expense for the same member action after its committed reply was lost.
+    await controller.openExpense(groupId);
+    await controller.updateExpenseDraft({
+      description: 'Unconfirmed phone fare',
+      amount: '18',
+      tagId: group.tags[0]._id,
+    });
+    loseExpenseResponse = true;
+    await controller.saveExpense();
+    assert.ok(controller.getSnapshot().expense.attempt);
+    const beforeResolve = submitted.length;
+    await controller.keepExpenseAsSharedDraft();
+    assert.equal(submitted.length, beforeResolve);
+    assert.equal(await drafts.load(alexId, groupId), null);
+    const afterResolve = z
+      .object({ data: z.object({ pagination: z.object({ total: z.number() }) }) })
+      .parse(await web.request(`/api/groups/${groupId}/expenses`));
+    assert.equal(
+      afterResolve.data.pagination.total,
+      2,
+      'One earlier Expense and exactly one recovered Expense',
+    );
+
     const secondGroup = z
       .object({ data: z.object({ _id: z.string(), tags: z.array(z.object({ _id: z.string() })) }) })
       .parse(
@@ -386,7 +455,7 @@ async function main() {
       1,
       'Check again must not create a second Expense',
     );
-    assert.equal(await countExpenses(groupId), 2, 'Only the ready unchanged item was added');
+    assert.equal(await countExpenses(groupId), 3, 'Only the ready unchanged item was added');
     const after = parseToReviewResponse(await web.request(toReviewPath()));
     assert.ok(!after.groups.some((row) => row.groupId === secondGroupId));
     assert.equal(after.groups.find((row) => row.groupId === groupId)?.count, 4);

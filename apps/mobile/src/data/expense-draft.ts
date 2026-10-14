@@ -80,6 +80,9 @@ export const expenseMutationSchema = z.object({
 });
 export type ExpenseMutation = z.infer<typeof expenseMutationSchema>;
 export interface ExpenseEditor {
+  closePrompt?: boolean;
+  finishLaterPending?: boolean;
+  finishLaterLimit?: boolean;
   groupId: string | null;
   context: ExpenseContext | null;
   draft: ExpenseDraft | null;

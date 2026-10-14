@@ -23,14 +23,27 @@ export function DraftStatus({
       setSlow(false);
     };
   }, [persistence]);
+  const onPhone = process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true';
   const saving = persistence === 'saving' && slow;
   if (persistence !== 'error' && !saving && (persistence !== 'saved' || !kept)) return null;
   const [icon, text, color] =
     persistence === 'error'
-      ? (['alert-circle-outline', 'Draft not saved', theme.status.negative] as const)
+      ? ([
+          'alert-circle-outline',
+          onPhone ? 'Could not keep on this phone' : 'Draft not saved',
+          theme.status.negative,
+        ] as const)
       : saving
-        ? (['sync-outline', 'Saving draft…', theme.textSecondary] as const)
-        : (['checkmark', 'Draft saved', theme.textSecondary] as const);
+        ? ([
+            'sync-outline',
+            onPhone ? 'Keeping on this phone…' : 'Saving draft…',
+            theme.textSecondary,
+          ] as const)
+        : ([
+            'checkmark',
+            onPhone ? 'Kept on this phone' : 'Draft saved',
+            theme.textSecondary,
+          ] as const);
   return (
     <View
       accessible

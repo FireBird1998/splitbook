@@ -110,7 +110,9 @@ const ExpenseRow = memo(function ExpenseRow({
     <ListRow
       leading={<IconTile icon={categoryIcons[expense.category] ?? 'receipt-outline'} />}
       title={expense.description}
-      meta={[paid, expense.tag].filter(Boolean).join(' · ')}
+      meta={[paid, expense.preparedBy && `prepared by ${expense.preparedBy.name}`, expense.tag]
+        .filter(Boolean)
+        .join(' · ')}
       trailing={
         <RowAmount
           amount={total}
@@ -123,6 +125,7 @@ const ExpenseRow = memo(function ExpenseRow({
         expense.description,
         total,
         paid,
+        expense.preparedBy && `prepared by ${expense.preparedBy.name}`,
         expense.tag,
         effect,
         saved ? 'just saved' : undefined,
@@ -604,7 +607,8 @@ export const GroupExpensesView = memo(
             onRetry={onRefreshExpenses}
           />
         ) : null}
-        {kept?.groupId === group.id ? (
+        {process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED !== 'true' &&
+        kept?.groupId === group.id ? (
           <KeptDraftNotice kept={kept} onResume={onResumeDraft} onDiscard={onDiscardDraft} />
         ) : null}
         {newer

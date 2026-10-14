@@ -170,7 +170,8 @@ export function createToReviewQueries(options: {
             : result.data
               ? 'ready'
               : 'idle',
-        read: result.data ?? { total: 0, groups: [] },
+        read:
+          result.data ?? (!available ? options.snapshot().toReview.read : { total: 0, groups: [] }),
         message: result.isError ? 'Could not load To review. Try again when connected.' : null,
       });
     };

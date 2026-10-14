@@ -993,7 +993,11 @@ function GroupScreen() {
       void controller.openExpense(groupId, expenseId, origin()),
     [origin],
   );
-  const kept = state.keptDraft?.groupId === known?.id ? state.keptDraft : null;
+  const kept =
+    process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED !== 'true' &&
+    state.keptDraft?.groupId === known?.id
+      ? state.keptDraft
+      : null;
   // Both open the kept record; a save that may already be recorded is checked, not resumed.
   const keptAction = kept?.unconfirmed
     ? { label: 'Check save', icon: 'alert-circle-outline' as const }
@@ -1310,13 +1314,14 @@ function GroupScreen() {
 function MembersScreen() {
   const state = useMobileSnapshot(
     controller,
-    ({ auth, detail, groups, share, offline, leave }) => ({
+    ({ auth, detail, groups, share, offline, leave, toReview }) => ({
       auth,
       detail,
       groups,
       share,
       offline,
       leave,
+      toReview,
     }),
     sameSelection,
   );
@@ -1333,6 +1338,10 @@ function MembersScreen() {
       }}
       leave={{
         state: state.leave,
+        toReviewCount:
+          process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true'
+            ? state.toReview.read.groups.find((entry) => entry.groupId === group?.id)?.count
+            : undefined,
         offline: state.offline.active,
         onOpen: () => void controller.reviewLeaveGroup(),
         onConfirm: () => void controller.leaveGroup(),
