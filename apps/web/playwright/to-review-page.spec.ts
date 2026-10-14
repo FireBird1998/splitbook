@@ -6,7 +6,7 @@ import {
   reviewScreenshot,
   expectThemeApplied,
 } from './fixtures';
-import { seedToReview, seedReviewPage } from './to-review-seed';
+import { cleanupReviewPage, seedReviewPage } from './to-review-seed';
 const root = `/groups/${DEMO_GROUP_ID}`;
 const panel = (page: Page) => page.getByRole('region', { name: 'Review expense', exact: true });
 async function open(page: Page, kinds: Parameters<typeof seedReviewPage>[0]) {
@@ -19,21 +19,8 @@ async function rows(page: Page) {
   expect(response.ok()).toBe(true);
   return (await response.json()).data;
 }
-async function removeTestExpenses(page: Page) {
-  const response = await page.request.get(`/api/groups/${DEMO_GROUP_ID}/expenses?limit=100`);
-  if (!response.ok()) return;
-  const data = (await response.json()).data;
-  for (const item of data.expenses ?? []) {
-    if (/^Review (meal|matching meal|corrected meal)/.test(item.description)) {
-      await page.request.delete(`/api/groups/${DEMO_GROUP_ID}/expenses/${item._id}`, {
-        headers: { 'X-Splitbook-Revision': String(item.revision) },
-      });
-    }
-  }
-}
-test.afterEach(async ({ page }) => {
-  await seedToReview(0);
-  await removeTestExpenses(page);
+test.afterEach(async () => {
+  await cleanupReviewPage();
 });
 
 test('fix a missing payer; edits are kept; Save records exactly the version shown', async ({

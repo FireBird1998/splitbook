@@ -95,3 +95,41 @@ export async function seedReviewPage(kinds: Array<'ready' | 'missing-payer' | 'd
     await client.close();
   }
 }
+
+/** Remove this suite's fictional saved records and their Activity, so later projects keep the seed's timeline. */
+export async function cleanupReviewPage() {
+  await seedToReview(0); // The same loopback/database guard precedes every write.
+  const uri =
+    process.env.TO_REVIEW_TEST_MONGODB_URI ??
+    process.env.PLAYWRIGHT_DEMO_MONGODB_URI ??
+    'mongodb://127.0.0.1:27017/splitbook-demo?directConnection=true';
+  const client = await MongoClient.connect(uri);
+  try {
+    const scope = {
+      group: new ObjectId(DEMO_GROUP_ID),
+      createdBy: new ObjectId(DEMO_PERSONA_IDS.alex),
+      description: /^Review (meal|matching meal|corrected meal)/,
+    };
+    const expenses = await client
+      .db()
+      .collection('expenses')
+      .find(scope, { projection: { _id: 1 } })
+      .toArray();
+    if (expenses.length) {
+      await client
+        .db()
+        .collection('activities')
+        .deleteMany({
+          group: scope.group,
+          actor: scope.createdBy,
+          'metadata.expenseId': { $in: expenses.map((expense) => String(expense._id)) },
+        });
+      await client
+        .db()
+        .collection('expenses')
+        .deleteMany({ ...scope, _id: { $in: expenses.map((expense) => expense._id) } });
+    }
+  } finally {
+    await client.close();
+  }
+}
