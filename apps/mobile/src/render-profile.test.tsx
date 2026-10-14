@@ -119,6 +119,7 @@ vi.mock('./ui/expense-allocation-selection', async (load) => counting.wrap(await
 vi.mock('./ui/expense-sheet-selection', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/date-sheet', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/error-boundary', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/finish-later', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/expense-editor', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/expense-form', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/expense-record-view', async (load) => counting.wrap(await load<Module>()));

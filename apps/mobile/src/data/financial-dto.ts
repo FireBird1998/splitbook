@@ -115,6 +115,7 @@ export function parseExpensePage(value: unknown, groupId: string, defaultCurrenc
       updatedAt: new Date(row.updatedAt),
       category: row.category,
       tag: row.tag ?? '',
+      ...(row.preparedBy ? { preparedBy: row.preparedBy } : {}),
       tagId: row.tagId ?? null,
       paidBy: row.paidBy.map(normalize),
       splitBetween: row.splitBetween.map(normalize),

@@ -292,6 +292,7 @@ export function describeActivity(
   switch (event.type) {
     case 'expense_added':
       return line('added', subject ?? 'an Expense', [
+        meta.preparedBy?.kind === 'assistant' ? `prepared by ${meta.preparedBy.name}` : null,
         meta.recurring === true ? 'Recurring' : null,
         amount,
       ]);

@@ -1,5 +1,5 @@
 import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { toDateParam } from '@splitbook/shared/date';
 import { gatewayReply, hangUntilAborted, manualTimer } from '../test-utils/transport-faults';
 import { savedQueriesIn } from '../test-utils/saved-queries';
@@ -3820,6 +3820,8 @@ it.each(['create', 'edit', 'delete'] as const)(
 );
 
 describe('acknowledging an interrupted shared Draft upload', () => {
+  beforeEach(() => vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true'));
+  afterEach(() => vi.unstubAllEnvs());
   function uploadFixture() {
     const receipts = new Map<string, unknown>();
     const requests = {
@@ -3919,7 +3921,8 @@ describe('acknowledging an interrupted shared Draft upload', () => {
       await controller.signIn('alex');
       await controller.openExpense(groupId);
       await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
-      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow();
+      await controller.keepExpenseAsSharedDraft();
+      expect(controller.getSnapshot().expense.finishLaterPending).toBe(true);
       await controller.updateExpenseDraft({ description: 'Newer correction kept on device' });
       const local = await drafts.load(memberIds[0], groupId);
       const client = controller.sharedDrafts(groupId);
@@ -3953,7 +3956,8 @@ describe('acknowledging an interrupted shared Draft upload', () => {
       await controller.signIn('alex');
       await controller.openExpense(groupId);
       await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
-      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow();
+      await controller.keepExpenseAsSharedDraft();
+      expect(controller.getSnapshot().expense.finishLaterPending).toBe(true);
       const client = controller.sharedDrafts(groupId);
       expect((await client.retry())?.kind).toBe('create');
       expect(submitted[1]).toEqual(submitted[0]);
@@ -3970,7 +3974,8 @@ describe('acknowledging an interrupted shared Draft upload', () => {
       await controller.signIn('alex');
       await controller.openExpense(groupId);
       await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
-      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow();
+      await controller.keepExpenseAsSharedDraft();
+      expect(controller.getSnapshot().expense.finishLaterPending).toBe(true);
       const remove = drafts.remove;
       drafts.remove = async () => {
         throw new Error('Device cleanup failed');
@@ -3997,7 +4002,8 @@ describe('acknowledging an interrupted shared Draft upload', () => {
       await controller.signIn('alex');
       await controller.openExpense(groupId);
       await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
-      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow();
+      await controller.keepExpenseAsSharedDraft();
+      expect(controller.getSnapshot().expense.finishLaterPending).toBe(true);
       await controller.updateExpenseDraft({ description: 'My newer entries' });
       const local = await drafts.load(memberIds[0], groupId);
       const client = controller.sharedDrafts(groupId);
@@ -4027,9 +4033,8 @@ describe('acknowledging an interrupted shared Draft upload', () => {
       await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
       await controller.saveExpense();
       expect(controller.getSnapshot().expense.attempt).toBeTruthy();
-      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow(
-        'Resolve the existing Expense save',
-      );
+      await controller.keepExpenseAsSharedDraft();
+      expect(controller.getSnapshot().expense.attempt).toBeTruthy();
       expect(submitted).toEqual([]);
     } finally {
       controller.dispose();
@@ -4047,7 +4052,8 @@ describe('acknowledging an interrupted shared Draft upload', () => {
       await controller.signIn('alex');
       await controller.openExpense(groupId);
       await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
-      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow();
+      await controller.keepExpenseAsSharedDraft();
+      expect(controller.getSnapshot().expense.finishLaterPending).toBe(true);
       const oldClient = controller.sharedDrafts(groupId);
       fixture.delayReply(() => wait);
       const retry = expect(oldClient.retry()).rejects.toThrow();
@@ -4078,7 +4084,8 @@ describe('acknowledging an interrupted shared Draft upload', () => {
       await controller.signIn('alex');
       await controller.openExpense(groupId);
       await controller.updateExpenseDraft({ description: 'Original dinner', amount: '25', tagId });
-      await expect(controller.keepExpenseAsSharedDraft()).rejects.toThrow();
+      await controller.keepExpenseAsSharedDraft();
+      expect(controller.getSnapshot().expense.finishLaterPending).toBe(true);
       await controller.updateExpenseDraft({ description: 'Newer local entries' });
       const oldClient = controller.sharedDrafts(groupId);
       fixture.denyAccess();

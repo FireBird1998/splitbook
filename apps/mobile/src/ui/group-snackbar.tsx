@@ -48,9 +48,11 @@ export function GroupSnackbar({
     <Snackbar
       message={notice.message}
       action={
-        notice.viewMonth
-          ? { label: viewMonthLabel(notice.viewMonth, shownMonth), onPress: onView }
-          : undefined
+        notice.viewToReview
+          ? { label: 'View', onPress: onView }
+          : notice.viewMonth
+            ? { label: viewMonthLabel(notice.viewMonth, shownMonth), onPress: onView }
+            : undefined
       }
     />
   );

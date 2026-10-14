@@ -1,3 +1,4 @@
+import { assistantAttributionSchema } from '@splitbook/shared/draft-attribution';
 import { z } from 'zod';
 import { parseActivityPageResponse } from '@splitbook/shared/activity-page-read';
 import { getCurrency } from '@splitbook/shared/currency';
@@ -6,6 +7,7 @@ import { objectId } from './dto';
 import type { LoadStatus, ScrollAnchor } from './types';
 
 const metadata = z.object({
+  preparedBy: assistantAttributionSchema.optional(),
   userId: objectId.optional(),
   method: z.string().optional(),
   expenseId: objectId.optional(),

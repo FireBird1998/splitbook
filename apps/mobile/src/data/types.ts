@@ -108,6 +108,7 @@ export interface GroupCurrencyBalance {
 }
 
 export interface MobileExpense {
+  preparedBy?: { kind: 'assistant'; name: string };
   id: string;
   groupId: string;
   description: string;
@@ -286,6 +287,7 @@ export interface GroupSnackbar {
   viewMonth: string | null;
   /** The saved Expense, highlighted on Expenses while this shows. */
   expenseId?: string;
+  viewToReview?: boolean;
 }
 
 /**

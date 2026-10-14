@@ -1,3 +1,4 @@
+import { expenseRecoveryWords } from './expense-recovery-copy';
 import {
   memo,
   useCallback,
@@ -281,7 +282,9 @@ export function ExpenseRecordScreen({
   const category = record.category !== 'other' ? getCategory(record.category)?.label : undefined;
   const editable = canEditExpense(record);
   // The Group's draft holds Edit and Delete; the record itself stays readable.
-  const held = state.groupDraft ? 'Finish or discard the draft in this Group first.' : undefined;
+  const held = state.groupDraft
+    ? expenseRecoveryWords('Finish or discard the draft in this Group first.')
+    : undefined;
   // What is said above the record: the Group's draft, a message, and when the record shown was
   // read, if it wasn't in this open.
   // Said whenever the record shown wasn't read in this open: a copy kept here can be hours old.
@@ -297,14 +300,25 @@ export function ExpenseRecordScreen({
         {state.groupDraft ? (
           <Banner
             tone="info"
-            message="This Group has an unfinished draft. Finish or discard it to edit or delete this Expense."
+            message={expenseRecoveryWords(
+              'This Group has an unfinished draft. Finish or discard it to edit or delete this Expense.',
+            )}
           >
-            <CompactButton label="Resume draft" variant="text" dense onPress={onResume} />
+            <CompactButton
+              label={
+                process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true'
+                  ? 'View On this phone item'
+                  : expenseRecoveryWords('Resume draft')
+              }
+              variant="text"
+              dense
+              onPress={onResume}
+            />
           </Banner>
         ) : null}
         {state.message && state.status !== 'delete-review' ? (
           <CompactText variant="small" accessibilityRole="alert">
-            {state.message}
+            {expenseRecoveryWords(state.message)}
           </CompactText>
         ) : null}
         {readTime}
@@ -319,6 +333,11 @@ export function ExpenseRecordScreen({
           <CompactText variant="heading" accessibilityRole="header">
             {record.description}
           </CompactText>
+          {record.preparedBy && (
+            <CompactText variant="small" tone="secondary">
+              Prepared by {record.preparedBy.name}
+            </CompactText>
+          )}
           <CompactText variant="small" tone="secondary" accessibilityLabel={`${date}, Tag ${tag}`}>
             {date} · {tag}
           </CompactText>
@@ -515,7 +534,7 @@ export function ExpenseRecordScreen({
           </CompactText>
           {state.message ? (
             <CompactText variant="small" tone="negative" accessibilityRole="alert">
-              {state.message}
+              {expenseRecoveryWords(state.message)}
             </CompactText>
           ) : null}
           <CompactButton
@@ -688,6 +707,7 @@ export function ExpenseRecordSkeleton({
           <Skeleton width={40} height={40} rounded={12} />
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
             {known(<CompactText variant="heading">{record.description}</CompactText>)}
+
             {known(
               <CompactText variant="small" tone="secondary">
                 {record.meta}

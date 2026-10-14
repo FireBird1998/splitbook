@@ -344,7 +344,7 @@ async function phoneItem(f: ReturnType<typeof fixture>) {
   await act(async () => {
     await f.controller.openExpense(groupId);
     await f.controller.updateExpenseDraft({ description: 'Phone groceries', amount: '9', tagId });
-    await f.controller.closeExpense();
+    await f.controller.closeExpense(true);
     await f.controller.back();
   });
   expect(f.controller.getSnapshot().drafts).toHaveLength(1);
@@ -562,7 +562,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
         tagId,
       });
       await f.controller.saveExpense();
-      await f.controller.closeExpense();
+      await f.controller.closeExpense(true);
       await f.controller.back();
     });
     expect(f.controller.getSnapshot().drafts[0]?.unconfirmed).toBe(true);
@@ -626,7 +626,7 @@ describe.each(['light', 'dark'] as const)('To review at 130 percent text in %s',
     });
     expect(f.calls.filter((call) => call === 'GET /api/user/to-review')).toHaveLength(before);
     await act(async () => {
-      await f.controller.closeExpense();
+      await f.controller.closeExpense(true);
       await f.controller.refreshToReview();
     });
     expect(f.calls.filter((call) => call === 'GET /api/user/to-review').length).toBeGreaterThan(
