@@ -6,6 +6,7 @@ import {
   summarizeReviewRun,
   type DeviceToReviewItem,
 } from './to-review';
+import { persistedExpenseDraftSchema } from './validators/expense-draft';
 import { parseToReviewResponse } from './to-review-read';
 import type { ToReviewItem, ToReviewRead } from './to-review-read';
 import { toReviewHref, toReviewPath } from './api-paths';
@@ -213,7 +214,7 @@ describe('changes while an item is open', () => {
     before.values!.currency = 'INR';
     before.values!.amount = 2350;
     before.values!.paidBy![0].amount = 2350;
-    const after = structuredClone(before);
+    const after = persistedExpenseDraftSchema.parse(JSON.parse(JSON.stringify(before)));
     after.revision++;
     after.changedBy = { kind: 'assistant', name: 'Claude' };
     return { before, after };

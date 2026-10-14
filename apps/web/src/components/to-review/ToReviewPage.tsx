@@ -60,6 +60,10 @@ export default function ToReviewPage({
   const [summary, setSummary] = useState('');
   const [online, setOnline] = useState(true);
   const lock = useRef(false);
+  const openedFrom = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (!opened && openedFrom.current?.isConnected) openedFrom.current.focus();
+  }, [opened]);
   const namesKey = `splitbook.review-names:${accountId}:${groupId}`;
   const refresh = useCallback(async () => {
     await Promise.all([
@@ -201,6 +205,13 @@ export default function ToReviewPage({
           'This item changed while you were looking. Review the latest version before saving.',
         );
       }
+      const seenMatches = selected?.accountItem?.duplicates ?? [];
+      const matchIds = (matches: typeof seenMatches) =>
+        matches.map((match) => `${match.kind}:${match.id}`).sort();
+      if (JSON.stringify(matchIds(review.duplicates)) !== JSON.stringify(matchIds(seenMatches))) {
+        await refresh();
+        throw new Error('The possible matches changed. Check them before saving this expense.');
+      }
       if (review.problems.length || (review.duplicates.length && !acknowledged)) {
         await refresh();
         throw new Error(
@@ -333,7 +344,8 @@ export default function ToReviewPage({
                 <Button
                   variant="outlined"
                   disabled={busy || pending || !available || !!selected || !!run}
-                  onClick={() => {
+                  onClick={(event) => {
+                    openedFrom.current = event.currentTarget;
                     setRun({ ids: items.map((item) => item.id), index: 0, outcomes: [] });
                     setOpened(items[0]);
                     setSummary('');
@@ -399,8 +411,15 @@ export default function ToReviewPage({
                             type="button"
                             key={item.id}
                             disabled={busy || !!run || !!selected}
+                            aria-expanded={selected?.id === item.id}
+                            aria-controls={
+                              selected?.id === item.id ? 'to-review-expense-panel' : undefined
+                            }
                             aria-label={`Review ${item.accountItem?.draft.values?.description || 'expense'}`}
-                            onClick={() => setOpened(item)}
+                            onClick={(event) => {
+                              openedFrom.current = event.currentTarget;
+                              setOpened(item);
+                            }}
                             sx={{
                               textAlign: 'left',
                               font: 'inherit',

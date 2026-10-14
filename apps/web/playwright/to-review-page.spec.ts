@@ -352,3 +352,43 @@ test('an external version delivered by the post-edit refresh appears immediately
   );
   await expect(review).toContainText('You on another device changed the description:');
 });
+
+test('opening and closing an item carries keyboard focus between its row and panel', async ({
+  page,
+}) => {
+  await open(page, ['ready']);
+  const row = page.getByRole('button', { name: 'Review Review meal 1', exact: true });
+  await row.focus();
+  await page.keyboard.press('Enter');
+  await expect(panel(page)).toBeFocused();
+  await panel(page).getByRole('button', { name: 'Close review', exact: true }).click();
+  await expect(row).toBeFocused();
+});
+
+test('a new possible match invalidates the earlier duplicate tick before saving', async ({
+  page,
+}) => {
+  await open(page, ['duplicate']);
+  const draft = (await rows(page))[0];
+  const body = { ...draft.values, date: `${draft.values.date}T12:00:00.000Z` };
+  expect(
+    (await page.request.post(`/api/groups/${DEMO_GROUP_ID}/expenses`, { data: body })).status(),
+  ).toBe(201);
+  await page.reload();
+  await page.getByRole('button', { name: 'Review Review matching meal', exact: true }).click();
+  const review = panel(page);
+  await review.getByLabel("It's a different expense, save it anyway").check();
+  expect(
+    (await page.request.post(`/api/groups/${DEMO_GROUP_ID}/expenses`, { data: body })).status(),
+  ).toBe(201);
+  await review.getByRole('button', { name: 'Save expense', exact: true }).click();
+  await expect(
+    page.getByRole('alert').filter({ hasText: 'The possible matches changed' }),
+  ).toBeVisible();
+  await expect(review.getByLabel("It's a different expense, save it anyway")).not.toBeChecked();
+  expect(await rows(page)).toHaveLength(1);
+  await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeDisabled();
+  await review.getByLabel("It's a different expense, save it anyway").check();
+  await review.getByRole('button', { name: 'Save expense', exact: true }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
+});

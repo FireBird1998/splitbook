@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -55,12 +55,21 @@ export default function ToReviewPanel({
   onSave: (draft: PersistedExpenseDraft, acknowledged: boolean) => Promise<void>;
   onDelete: (draft: PersistedExpenseDraft) => Promise<void>;
 }) {
+  const surface = useRef<HTMLElement>(null);
+  useEffect(() => {
+    surface.current?.focus({ preventScroll: true });
+    surface.current?.scrollIntoView({ block: 'start' });
+  }, []);
   const editor = useReviewEditor(item.accountItem!.draft, client, refresh, names);
-  const [ackRevision, setAckRevision] = useState<number | null>(null);
+  const [acknowledgedVersion, setAcknowledgedVersion] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
-  const acknowledged = ackRevision === editor.draft.revision;
+  const duplicateVersion = JSON.stringify([
+    editor.draft.revision,
+    item.accountItem!.duplicates.map((match) => `${match.kind}:${match.id}`).sort(),
+  ]);
+  const acknowledged = acknowledgedVersion === duplicateVersion;
   const incomplete = item.missingFacts.length > 0 || item.accountItem!.problems.length > 0;
   const duplicate = item.accountItem!.duplicates.length > 0;
   const unsent = editor.status !== 'kept';
@@ -89,7 +98,10 @@ export default function ToReviewPanel({
   return (
     <Box
       component="section"
+      id="to-review-expense-panel"
       aria-label="Review expense"
+      tabIndex={-1}
+      ref={surface}
       sx={{
         minWidth: 0,
         bgcolor: 'background.paper',
@@ -154,7 +166,7 @@ export default function ToReviewPanel({
             select={!!field.options}
             disabled={busy || !available}
             onChange={(event) => {
-              setAckRevision(null);
+              setAcknowledgedVersion(null);
               editor.change(field.key, event.target.value);
             }}
             slotProps={{ htmlInput: { inputMode: field.numeric ? 'decimal' : 'text' } }}
@@ -191,7 +203,9 @@ export default function ToReviewPanel({
                 <Checkbox
                   checked={acknowledged}
                   disabled={busy || !available || unsent}
-                  onChange={(_, checked) => setAckRevision(checked ? editor.draft.revision : null)}
+                  onChange={(_, checked) =>
+                    setAcknowledgedVersion(checked ? duplicateVersion : null)
+                  }
                 />
               }
               label="It's a different expense, save it anyway"
