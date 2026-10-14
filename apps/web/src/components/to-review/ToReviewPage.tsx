@@ -121,7 +121,10 @@ export default function ToReviewPage({
       return;
     }
     const nextOutcomes = [...run.outcomes.filter((outcome) => outcome.id !== id), { id, status }];
-    const next = run.index + 1;
+    let next = run.index + 1;
+    // The run keeps its original order, but another device may finish an upcoming item.
+    // Omit unavailable items from our outcomes rather than strand the panel or claim a save.
+    while (next < run.ids.length && !items.some((item) => item.id === run.ids[next])) next++;
     if (next >= run.ids.length) {
       setSummary(`Done for now · ${summarizeReviewRun(nextOutcomes).label}`);
       setRun(null);
@@ -459,7 +462,10 @@ export default function ToReviewPage({
                   if (run) {
                     const all = [
                       ...run.outcomes,
-                      ...run.ids.slice(run.index).map((id) => ({ id, status: 'skipped' as const })),
+                      ...run.ids
+                        .slice(run.index)
+                        .filter((id) => items.some((item) => item.id === id))
+                        .map((id) => ({ id, status: 'skipped' as const })),
                     ];
                     setSummary(`Done for now · ${summarizeReviewRun(all).label}`);
                     setRun(null);

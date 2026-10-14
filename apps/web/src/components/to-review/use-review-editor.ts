@@ -27,6 +27,7 @@ export function useReviewEditor(
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlight = useRef<Promise<boolean> | null>(null);
   const live = useRef(true);
+  const deferred = useRef<PersistedExpenseDraft | null>(null);
   const namesRef = useRef(names);
   useEffect(() => {
     namesRef.current = names;
@@ -44,7 +45,13 @@ export function useReviewEditor(
   }
   // The cross-Group read owns freshness. An external change replaces unsent text with a visible note.
   useEffect(() => {
-    if (initial.revision > current.current.revision) adopt(initial, true);
+    if (initial.revision <= current.current.revision) return;
+    // A poll can see this tab's committed write before its reply arrives. Preserve typing
+    // made after that submission until the reply tells us whether this version is ours.
+    if (inFlight.current) {
+      if (!deferred.current || initial.revision > deferred.current.revision)
+        deferred.current = initial;
+    } else adopt(initial, true);
   }, [initial]);
   useEffect(() => {
     live.current = true;
@@ -75,12 +82,19 @@ export function useReviewEditor(
         const kept = await client.replace(before, draftValues(submitted));
         if (current.current.revision > kept.revision) return false;
         current.current = kept;
+        const observed = deferred.current;
+        deferred.current = null;
+        if (observed && observed.revision > kept.revision) {
+          adopt(observed, true);
+          return false;
+        }
         if (live.current) setDraft(kept);
         dirty.current = input.current !== submitted;
         if (live.current) setStatus(dirty.current ? 'changed' : 'kept');
         await refresh();
         return true;
       } catch (cause) {
+        deferred.current = null;
         if ((cause as { status?: number }).status === 409) {
           try {
             await reloadChanged();

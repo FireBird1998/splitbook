@@ -9,12 +9,16 @@ import { RADIUS } from '@/lib/theme/tokens';
 import { toReviewEnabled, useToReview } from './use-to-review';
 
 export default function ToReviewBanner({ groupId }: { groupId: string }) {
-  const { read, retry } = useToReview();
+  const { read, retry, failed } = useToReview();
   const group =
     read.status === 'ready'
       ? read.value.groups.find((group) => group.groupId === groupId)
       : undefined;
-  if (!toReviewEnabled || read.status === 'loading' || (read.status === 'ready' && !group))
+  if (
+    !toReviewEnabled ||
+    read.status === 'loading' ||
+    (read.status === 'ready' && !group && !failed)
+  )
     return null;
   return (
     <Box
@@ -33,13 +37,13 @@ export default function ToReviewBanner({ groupId }: { groupId: string }) {
         bgcolor: 'tint.info',
       }}
     >
-      {read.status === 'error' && (
+      {(read.status === 'error' || failed) && (
         <>
           <Typography role="status">Unable to load To review.</Typography>
           <Button onClick={retry}>Try again</Button>
         </>
       )}
-      {group && (
+      {group && !failed && (
         <>
           <Typography sx={{ overflowWrap: 'anywhere', minWidth: 0 }}>
             {[`${group.counts.total} to review`, group.bannerSummary].filter(Boolean).join(' · ')}

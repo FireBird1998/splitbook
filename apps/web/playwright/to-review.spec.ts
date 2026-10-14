@@ -81,9 +81,10 @@ test('Home loads visibly; the Group banner stays hidden while loading and offers
     })
     .toBe(false);
   fail = true;
+  const requested = page.waitForRequest('**/api/user/to-review');
   await page.goto(`/groups/${DEMO_GROUP_ID}/expenses`);
+  await requested;
   await expect(page.getByRole('status', { name: 'Loading To review' })).toHaveCount(0);
-  await expect.poll(() => typeof release).toBe('function');
   release();
   const banner = page.getByRole('region', { name: 'To review', exact: true });
   await expect(banner).toContainText('Unable to load To review.');

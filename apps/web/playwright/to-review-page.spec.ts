@@ -138,7 +138,6 @@ test('delete asks first, removes only the unsaved item and leaves the ledger unc
 });
 
 test('a newer read and a stale edit both show the changed facts and author', async ({ page }) => {
-  await page.clock.install();
   await open(page, ['ready']);
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   const review = panel(page);
@@ -153,12 +152,7 @@ test('a newer read and a stale edit both show the changed facts and author', asy
       },
     },
   });
-  await expect
-    .poll(async () => {
-      await page.clock.fastForward(31_000);
-      return review.getByLabel('Amount', { exact: true }).inputValue();
-    })
-    .toBe('15');
+  await expect(review.getByLabel('Amount', { exact: true })).toHaveValue('15', { timeout: 40_000 });
   await expect(review.getByRole('status').first()).toContainText(
     'You on another device changed the amount: ₹12.34 → ₹15.00',
   );
@@ -168,7 +162,9 @@ test('a newer read and a stale edit both show the changed facts and author', asy
     data: { values: { ...next.values, description: 'Review corrected meal' } },
   });
   await review.getByLabel('Description', { exact: true }).fill('Unsent older edit');
-  await page.clock.fastForward(600);
+  await expect(
+    review.getByRole('status').filter({ hasText: 'Changes kept in To review' }),
+  ).toBeVisible();
   await expect(review.getByLabel('Description', { exact: true })).toHaveValue(
     'Review corrected meal',
   );
@@ -216,6 +212,10 @@ test('list and side panel are accessible in light/dark at 130% text', async ({
   page,
 }, testInfo) => {
   await open(page, ['ready', 'missing-payer']);
+  await expect(
+    page.getByRole('button', { name: 'Review Review meal 1', exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText('Trip · 3 members · INR', { exact: true })).toBeVisible();
   await expectThemeApplied(page, testInfo);
   await page.evaluate(() => {
     document.documentElement.style.fontSize = '130%';
@@ -227,4 +227,99 @@ test('list and side panel are accessible in light/dark at 130% text', async ({
   await expectNoSeriousA11yViolations(page, testInfo, 'to-review-panel');
   await reviewScreenshot(page, testInfo, 'to-review-panel');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('the last member is told To review items are deleted with the Group', async ({ page }) => {
+  await enterAsPersona(page, 'alex');
+  const created = await page.request.post('/api/groups', {
+    data: { name: 'Review deletion example', category: 'home', defaultCurrency: 'INR' },
+  });
+  expect(created.status()).toBe(201);
+  const group = (await created.json()).data;
+  const kept = await page.request.post(`/api/groups/${group._id}/drafts`, {
+    headers: { 'Idempotency-Key': 'to-review-last-member-fixture' },
+    data: { drafts: [{ description: 'Waiting example' }] },
+  });
+  expect(kept.status()).toBe(201);
+  await page.goto(`/groups/${group._id}/settings`);
+  await page.getByRole('button', { name: 'Leave Group', exact: true }).click();
+  const confirm = page.getByRole('dialog');
+  await expect(confirm).toContainText(
+    'Your 1 item in To review will be permanently deleted with Review deletion example.',
+  );
+  await expect(confirm).not.toContainText('kept but hidden');
+  await confirm.getByRole('button', { name: 'Leave and delete Group', exact: true }).click();
+  await page.waitForURL('**/dashboard');
+  expect((await page.request.get(`/api/groups/${group._id}`)).status()).toBe(404);
+});
+
+test('polling an in-flight autosave keeps typing entered after that submission', async ({
+  page,
+}) => {
+  await open(page, ['ready']);
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const draft = (await rows(page))[0];
+  let release: () => void = () => {};
+  let committed: () => void = () => {};
+  const applied = new Promise<void>((resolve) => {
+    committed = resolve;
+  });
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let updates = 0;
+  await page.route(`**/api/groups/${DEMO_GROUP_ID}/drafts/${draft.id}`, async (route) => {
+    if (route.request().method() !== 'PUT' || ++updates !== 1) return route.continue();
+    const result = await route.fetch();
+    expect(result.status()).toBe(200);
+    committed();
+    await held;
+    await route.fulfill({ response: result });
+  });
+  const review = panel(page);
+  await review.getByLabel('Description', { exact: true }).fill('Review first edit');
+  await applied;
+  try {
+    await review.getByLabel('Description', { exact: true }).fill('Review newer typing');
+    const polled = page.waitForResponse(
+      (response) => new URL(response.url()).pathname === '/api/user/to-review' && response.ok(),
+      { timeout: 40_000 },
+    );
+    await polled;
+    await expect(review.getByLabel('Description', { exact: true })).toHaveValue(
+      'Review newer typing',
+    );
+    await expect(review).not.toContainText('You on another device');
+  } finally {
+    release();
+  }
+  await expect(
+    review.getByRole('status').filter({ hasText: 'Changes kept in To review' }),
+  ).toBeVisible();
+  expect((await rows(page))[0].values.description).toBe('Review newer typing');
+});
+
+test('a run advances past an item removed on another device and still reaches its summary', async ({
+  page,
+}) => {
+  await open(page, ['ready', 'ready', 'ready']);
+  await page.getByRole('button', { name: 'Review one at a time' }).click();
+  const upcoming = (await rows(page)).find(
+    (row: { values: { description: string } }) => row.values.description === 'Review meal 2',
+  );
+  const removed = await page.request.delete(`/api/groups/${DEMO_GROUP_ID}/drafts/${upcoming.id}`, {
+    headers: { 'X-Splitbook-Revision': String(upcoming.revision) },
+  });
+  expect(removed.status()).toBe(200);
+  await expect(page.getByRole('button', { name: 'Review Review meal 2', exact: true })).toHaveCount(
+    0,
+    { timeout: 40_000 },
+  );
+  await panel(page).getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(panel(page).getByLabel('Description', { exact: true })).toHaveValue('Review meal 3');
+  await panel(page).getByRole('button', { name: 'Skip for now', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Done for now' })).toContainText(
+    '2 left for later',
+  );
+  await expect(page.getByRole('button', { name: 'Review one at a time' })).toBeEnabled();
 });

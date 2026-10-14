@@ -117,8 +117,9 @@ export default function LeaveGroupSection({
           </Typography>
           {waiting > 0 && (
             <Typography sx={{ mt: 2 }}>
-              You have {waiting} {waiting === 1 ? 'item' : 'items'} in To review for {groupName}.
-              They&apos;re kept but hidden while you&apos;re not a member.
+              {deleteIfLastMember
+                ? `Your ${waiting} ${waiting === 1 ? 'item' : 'items'} in To review will be permanently deleted with ${groupName}.`
+                : `You have ${waiting} ${waiting === 1 ? 'item' : 'items'} in To review for ${groupName}. They're kept but hidden while you're not a member.`}
             </Typography>
           )}
           {refusal && (
