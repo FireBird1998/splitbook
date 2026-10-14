@@ -154,6 +154,8 @@ function fixture(
     reviews: string[][] = [],
     calls: string[] = [];
   const committed = new Set<string>();
+  let putReply: Promise<void> | null = null;
+  let nextRead: Promise<void> | null = null;
   const fetch: MobileFetch = async (url, init) => {
     const path = new URL(url).pathname;
     calls.push(`${init.method ?? 'GET'} ${path}`);
@@ -163,6 +165,11 @@ function fixture(
     if (path.endsWith('/get-session'))
       return json({ user, session: { userId: user.id, expiresAt: '2030-01-01T00:00:00Z' } });
     if (path === '/api/user/to-review') {
+      if (nextRead) {
+        const held = nextRead;
+        nextRead = null;
+        await held;
+      }
       await options.held;
       return json({
         status: 200,
@@ -208,6 +215,11 @@ function fixture(
         values: JSON.parse(String(init.body)).values,
         missingFields: [],
       };
+      if (putReply) {
+        const held = putReply;
+        putReply = null;
+        await held;
+      }
       return json({ data: editing.draft });
     }
     if (editing && init.method === 'DELETE') {
@@ -331,6 +343,12 @@ function fixture(
     committed,
     requests,
     items: () => items,
+    holdPut: (held: Promise<void>) => {
+      putReply = held;
+    },
+    holdRead: (held: Promise<void>) => {
+      nextRead = held;
+    },
     deny: () => {
       denied = true;
     },
@@ -612,5 +630,103 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     const tree = await render(<Members />, mode);
     expect(text(tree)).toContain('You have 1 item in To review for Maple House');
     expect(text(tree)).not.toContain('1 items');
+  });
+  it('keeps typing entered during its own delayed post-write read', async () => {
+    const f = fixture({ one: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    let release!: () => void;
+    f.holdRead(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const input = () =>
+      tree.root.findAll(
+        (node) =>
+          String(node.type) === 'TextInput' && node.props.accessibilityLabel === 'Description',
+      )[0];
+    try {
+      await act(async () => {
+        input().props.onChangeText('First correction');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      await act(async () => {
+        input().props.onChangeText('Later correction');
+        release();
+        await f.controller.reviewRun()!.finishEditing();
+      });
+      expect(f.items()[0].draft.values!.description).toBe('Later correction');
+      expect(input().props.value).toBe('Later correction');
+    } finally {
+      release();
+    }
+  });
+  it('shows and acknowledges a newly found duplicate even when the version has not changed', async () => {
+    const f = fixture({ one: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    f.items()[0].duplicates = [
+      { kind: 'expense', id: 'e00000000000000000000001', description: 'Earlier dinner' },
+    ];
+    await tap(tree, 'Save expense');
+    expect(f.saves).toHaveLength(0);
+    expect(text(tree)).toContain('Earlier dinner');
+    expect(text(tree)).toContain('₹30.00');
+    expect(text(tree)).toContain('Added by Alex');
+    expect(button(tree, 'Save expense').props.disabled).toBe(true);
+    await tap(tree, "It's a different expense, save it anyway");
+    await tap(tree, 'Save expense');
+    expect(f.saves).toHaveLength(1);
+  });
+  it('keeps an offline-interrupted queued correction for an explicit retry only', async () => {
+    const f = fixture({ one: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    let release!: () => void;
+    f.holdPut(
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+    );
+    const input = () =>
+      tree.root.findAll(
+        (node) =>
+          String(node.type) === 'TextInput' && node.props.accessibilityLabel === 'Description',
+      )[0];
+    try {
+      await act(async () => {
+        input().props.onChangeText('First correction');
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      await act(async () => {
+        input().props.onChangeText('Queued correction');
+        onlineManager.setOnline(false);
+        release();
+        await f.controller.reviewRun()!.finishEditing();
+      });
+      expect(text(tree)).toContain('Your latest changes have not been kept');
+      expect(f.items()[0].draft.values!.description).toBe('First correction');
+      const puts = f.calls.filter((call) => call.startsWith('PUT')).length;
+      await act(async () => {
+        onlineManager.setOnline(true);
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
+      expect(f.calls.filter((call) => call.startsWith('PUT'))).toHaveLength(puts);
+      expect(input().props.value).toBe('Queued correction');
+      await tap(tree, 'Keep my changes');
+      expect(f.items()[0].draft.values!.description).toBe('Queued correction');
+    } finally {
+      release();
+    }
   });
 });

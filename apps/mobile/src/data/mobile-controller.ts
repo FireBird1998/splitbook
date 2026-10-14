@@ -6157,7 +6157,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       expense: async (id: string) => {
         ensure();
         return parseExpenseRecord(
-          await request(`/api/groups/${groupId}/expenses/${id}`, owner),
+          await expenseQueries.recordOf(groupId, id, owner, () => current(owner)),
           groupId,
           id,
         );
@@ -6225,6 +6225,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           context: null,
           busy: false,
           editing: false,
+          unkept: null,
           pending: false,
           acknowledged: false,
           deletePrompt: false,

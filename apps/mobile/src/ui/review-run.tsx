@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   buildToReview,
@@ -47,8 +47,19 @@ export function ReviewRunOverlay({ controller }: { controller: MobileController 
     process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED !== 'true'
   )
     return null;
+  const close = () => {
+    if (!controller.getSnapshot().toReview.run?.unkept) return void controller.closeReviewRun();
+    Alert.alert(
+      'Leave without your latest changes?',
+      'These changes have not been kept. The last kept details stay in To review.',
+      [
+        { text: 'Keep editing', style: 'cancel' },
+        { text: 'Leave without changes', onPress: () => void controller.closeReviewRun() },
+      ],
+    );
+  };
   return (
-    <Modal visible animationType="slide" onRequestClose={controller.closeReviewRun}>
+    <Modal visible animationType="slide" onRequestClose={close}>
       <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
         <ScrollView
           keyboardShouldPersistTaps="handled"
@@ -60,6 +71,7 @@ export function ReviewRunOverlay({ controller }: { controller: MobileController 
             state={snapshot.run}
             offline={snapshot.offline}
             userId={snapshot.user.id}
+            close={close}
           />
         </ScrollView>
       </SafeAreaView>
@@ -71,11 +83,13 @@ function ReviewRunContent({
   state,
   offline,
   userId,
+  close,
 }: {
   controller: MobileController;
   state: NonNullable<ReturnType<MobileController['getSnapshot']>['toReview']['run']>;
   offline: boolean;
   userId: string;
+  close(): void;
 }) {
   const theme = useTheme();
   const machine = controller.reviewRun()!;
@@ -97,7 +111,7 @@ function ReviewRunContent({
         <Copy>Saved {summary.saved}</Copy>
         <Copy>Deleted {summary.deleted}</Copy>
         <Copy>Left for later {summary.left}</Copy>
-        <Button label="Done" onPress={controller.closeReviewRun} />
+        <Button label="Done" onPress={close} />
       </>
     );
   }
@@ -117,9 +131,13 @@ function ReviewRunContent({
       ? "We didn't hear back, so it may already be saved"
       : missing.length
         ? `${missing.length === 1 ? 'One thing' : `${missing.length} things`} left before you can save: ${missing.join(', ')}`
-        : model.state === 'duplicate' && !state.acknowledged
-          ? 'Confirm it is a different expense before saving'
-          : null;
+        : item.duplicates.some(
+              (d) => d.kind === 'expense' && !state.matches.some((expense) => expense._id === d.id),
+            )
+          ? 'Check the matching expense before saving'
+          : model.state === 'duplicate' && !state.acknowledged
+            ? 'Confirm it is a different expense before saving'
+            : null;
   const form = reviewForm(values, state.context?.group.defaultCurrency ?? 'INR');
   const members =
     state.context?.group.members.map((row) => ({ id: row.user.id, name: row.user.name })) ?? null;
@@ -170,7 +188,7 @@ function ReviewRunContent({
         <View style={{ flex: 1, backgroundColor: theme.brand.main }} />
         <View style={{ flex: state.items.length - state.index - 1 }} />
       </View>
-      <Button label="Close review" secondary onPress={controller.closeReviewRun} />
+      <Button label="Close review" secondary onPress={close} />
       {offline && <Copy accessibilityRole="alert">Connect to change or save this</Copy>}
       <Card padded>
         <View style={{ gap: 12 }}>
@@ -297,6 +315,13 @@ function ReviewRunContent({
               </Pressable>
             </>
           )}
+          {state.unkept && (
+            <Button
+              label="Keep my changes"
+              disabled={offline || state.busy || state.pending}
+              onPress={() => void machine.retryChange()}
+            />
+          )}
           {state.pending ? (
             <Button
               label="Check again"
@@ -307,7 +332,7 @@ function ReviewRunContent({
             <Button
               label="Save expense"
               hint={reason ?? undefined}
-              disabled={locked || state.busy || !!reason || !!invalid}
+              disabled={locked || state.busy || !!reason || !!invalid || !!state.unkept}
               onPress={() => void machine.save()}
             />
           )}
@@ -315,13 +340,13 @@ function ReviewRunContent({
           <Button
             label="Delete"
             secondary
-            disabled={locked || state.busy}
+            disabled={locked || state.busy || !!state.unkept}
             onPress={() => machine.deletePrompt(true)}
           />
           <Button
             label="Skip for now"
             secondary
-            disabled={offline || state.busy || state.pending}
+            disabled={offline || state.busy || state.pending || !!state.unkept}
             onPress={() => void machine.skip()}
           />
           {!offline && (

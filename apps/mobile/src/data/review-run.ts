@@ -16,6 +16,7 @@ export interface ReviewRunState {
   context: ExpenseContext | null;
   busy: boolean;
   editing: boolean;
+  unkept: ExpenseDraftValues | null;
   pending: boolean;
   acknowledged: boolean;
   deletePrompt: boolean;
@@ -45,22 +46,52 @@ export function createReviewRun(options: {
     const state = options.read();
     return state?.items[state.index];
   };
+  const sameDuplicates = (a: ToReviewItem, b: ToReviewItem) =>
+    JSON.stringify(a.duplicates) === JSON.stringify(b.duplicates);
+  let matchRead = 0;
+  const matchingExpenses = async (latest: ToReviewItem) => {
+    const selected = item();
+    if (!selected || !options.current() || !options.online()) return;
+    const sequence = ++matchRead;
+    update({ matches: [] });
+    try {
+      const matches = await Promise.all(
+        latest.duplicates
+          .filter((d) => d.kind === 'expense')
+          .map((d) => options.client(selected.groupId).expense(d.id)),
+      );
+      if (options.current() && sequence === matchRead && item()?.item.draft.id === latest.draft.id)
+        update({ matches });
+    } catch {
+      if (options.current() && sequence === matchRead)
+        update({
+          message: 'Could not check the matching expense. Check latest details before saving.',
+        });
+    }
+  };
   const receive = (read: ToReviewRead) => {
     const state = options.read(),
       selected = item();
-    if (!state || !selected || state.busy || state.pending) return;
+    if (!state || !selected || state.busy || state.pending || state.unkept) return;
     const latest = read.groups
       .find((g) => g.groupId === selected.groupId)
       ?.items.find((i) => i.draft.id === selected.item.draft.id);
-    if (latest && latest.draft.revision > selected.item.draft.revision) {
+    if (
+      latest &&
+      (latest.draft.revision > selected.item.draft.revision ||
+        !sameDuplicates(selected.item, latest))
+    ) {
       update({
         items: state.items.map((row, index) =>
           index === state.index ? { ...row, item: latest } : row,
         ),
-        changed: { before: selected.item.draft, after: latest.draft },
+        ...(latest.draft.revision > selected.item.draft.revision
+          ? { changed: { before: selected.item.draft, after: latest.draft } }
+          : {}),
         acknowledged: false,
         allocation: null,
       });
+      void matchingExpenses(latest);
     }
   };
   const load = async () => {
@@ -84,10 +115,7 @@ export function createReviewRun(options: {
         ? { changed: { before: selected.item.draft, after: latest.draft }, acknowledged: false }
         : {}),
     });
-    const matches = await Promise.all(
-      selected.item.duplicates.filter((d) => d.kind === 'expense').map((d) => client.expense(d.id)),
-    );
-    if (options.current() && item()?.item.draft.id === selected.item.draft.id) update({ matches });
+    await matchingExpenses(latest);
   };
   const run = async (work: () => Promise<void>) => {
     if (!options.current() || !options.read() || options.read()!.busy || !options.online()) return;
@@ -138,7 +166,7 @@ export function createReviewRun(options: {
     const reviews = await options.client(selected.groupId).review([selected.item.draft.id]);
     if (!options.current()) return;
     const latest = reviews[0];
-    if (latest) {
+    if (latest && !queued) {
       const state = options.read()!;
       update({
         items: state.items.map((row, i) => (i === state.index ? { ...row, item: latest } : row)),
@@ -148,6 +176,7 @@ export function createReviewRun(options: {
           ? { changed: { before: selected.item.draft, after: latest.draft } }
           : {}),
       });
+      await matchingExpenses(latest);
     }
   };
   return {
@@ -169,7 +198,7 @@ export function createReviewRun(options: {
     },
     skip: () =>
       run(async () => {
-        if (!options.read()?.pending) await advance('skipped');
+        if (!options.read()?.pending && !options.read()?.unkept) await advance('skipped');
       }),
     change(values: ExpenseDraftValues) {
       const selected = item(),
@@ -191,6 +220,7 @@ export function createReviewRun(options: {
             : row,
         ),
         acknowledged: false,
+        unkept: null,
       });
       if (state.editing) return writing;
       const confirmed = selected.item.draft;
@@ -198,27 +228,51 @@ export function createReviewRun(options: {
         update({ editing: true });
         let version = confirmed;
         try {
-          while (queued && options.current() && options.online()) {
-            const next = queued;
-            queued = null;
-            version = await options.client(selected.groupId).replace(version, next);
-            if (!options.current()) return;
-            if (!queued) {
-              const state = options.read()!;
-              update({
-                items: state.items.map((row, i) =>
-                  i === state.index ? { ...row, item: { ...row.item, draft: version } } : row,
-                ),
-              });
+          do {
+            while (queued && options.current() && options.online()) {
+              const next = queued;
+              queued = null;
+              version = await options.client(selected.groupId).replace(version, next);
+              if (!options.current()) return;
+              if (!queued) {
+                const state = options.read()!;
+                update({
+                  items: state.items.map((row, i) =>
+                    i === state.index ? { ...row, item: { ...row.item, draft: version } } : row,
+                  ),
+                });
+              }
             }
+            await refresh();
+          } while (queued && options.current() && options.online());
+          if (queued) {
+            const latestEntries = queued;
+            const state = options.read()!;
+            update({
+              unkept: latestEntries,
+              items: state.items.map((row, i) =>
+                i === state.index
+                  ? { ...row, item: { ...row.item, draft: { ...version, values: latestEntries } } }
+                  : row,
+              ),
+              message:
+                'Your latest changes have not been kept. Connect and choose Keep my changes to try again.',
+            });
           }
           queued = null;
-          await refresh();
         } catch {
+          const latestEntries =
+            queued ?? options.read()?.items[options.read()!.index]?.item.draft.values ?? null;
           queued = null;
-          await refresh();
+          try {
+            await refresh();
+          } catch {
+            /* Keep the unsent correction visible when reads also fail. */
+          }
           update({
-            message: 'Your change was not confirmed. Check the latest details before trying again.',
+            unkept: latestEntries,
+            message:
+              'Your latest changes have not been kept. Check the latest details, then choose Keep my changes to try again.',
           });
         } finally {
           update({ editing: false });
@@ -226,23 +280,33 @@ export function createReviewRun(options: {
       });
       return writing;
     },
+    retryChange() {
+      const unkept = options.read()?.unkept;
+      if (unkept) return this.change(unkept);
+    },
     save: () =>
       run(async () => {
         const selected = item(),
           state = options.read();
-        if (!selected || !state || state.pending) return;
+        if (!selected || !state || state.pending || state.unkept) return;
         const client = options.client(selected.groupId);
         const reviews = await client.review([selected.item.draft.id]);
         if (!options.current()) return;
         const latest = reviews[0];
-        if (latest.draft.revision !== selected.item.draft.revision) {
+        if (
+          latest.draft.revision !== selected.item.draft.revision ||
+          !sameDuplicates(selected.item, latest)
+        ) {
           update({
             items: state.items.map((row, i) =>
               i === state.index ? { ...row, item: latest } : row,
             ),
-            changed: { before: selected.item.draft, after: latest.draft },
+            ...(latest.draft.revision !== selected.item.draft.revision
+              ? { changed: { before: selected.item.draft, after: latest.draft } }
+              : {}),
             acknowledged: false,
           });
+          await matchingExpenses(latest);
           return;
         }
         const model = buildToReview(
@@ -262,7 +326,10 @@ export function createReviewRun(options: {
         );
         if (
           model.items[0].state === 'needs-details' ||
-          (latest.duplicates.length && !state.acknowledged)
+          (latest.duplicates.length && !state.acknowledged) ||
+          latest.duplicates.some(
+            (d) => d.kind === 'expense' && !state.matches.some((expense) => expense._id === d.id),
+          )
         ) {
           update({
             items: state.items.map((row, i) =>
@@ -314,7 +381,13 @@ export function createReviewRun(options: {
     delete: () =>
       run(async () => {
         const selected = item();
-        if (!selected || !options.read()?.deletePrompt || options.read()?.pending) return;
+        if (
+          !selected ||
+          !options.read()?.deletePrompt ||
+          options.read()?.pending ||
+          options.read()?.unkept
+        )
+          return;
         try {
           await options.client(selected.groupId).discard(selected.item.draft);
         } catch {
