@@ -435,11 +435,13 @@ export const expenseDraftService = {
             throw new Error('Invalid Draft: ' + current.problems.join('; '));
           if (current.duplicates.length && !item.acknowledgeDuplicates)
             throw new Error('Review and acknowledge the possible duplicates before saving.');
+          const preparedBy = draftAttributionSchema.parse(record.preparedBy);
           const expense = await expenseService.create(
             groupId,
             completeExpenseDraftSchema.parse(record.values),
             actor.id,
             `draft:${item.id}`,
+            preparedBy.kind === 'assistant' ? { preparedBy } : undefined,
           );
           const expenseId = String(expense._id);
           await drafts.updateOne(

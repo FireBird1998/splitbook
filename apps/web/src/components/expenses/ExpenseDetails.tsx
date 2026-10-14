@@ -1,4 +1,5 @@
 'use client';
+import PreparedBy from './PreparedBy';
 
 import { useState } from 'react';
 import Avatar from '@mui/material/Avatar';
@@ -25,6 +26,7 @@ interface Person {
 
 /** An Expense as the list or its own read returns it; the history comes from its own read. */
 export interface ExpenseDetailsRecord {
+  preparedBy?: unknown;
   _id: string;
   description: string;
   currency: string;
@@ -145,6 +147,7 @@ export default function ExpenseDetails({
         )}
       </Stack>
 
+      <PreparedBy value={expense.preparedBy} />
       <Box>
         <Typography variant="caption" sx={sectionTitle}>
           Paid by

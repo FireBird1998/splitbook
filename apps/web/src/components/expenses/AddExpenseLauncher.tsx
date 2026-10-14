@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import KeptInToReview from '@/components/drafts/KeptInToReview';
 import { usePathname } from 'next/navigation';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -55,6 +56,7 @@ export default function AddExpenseLauncher({ userId }: { userId: string }) {
   const pathname = usePathname();
   const [step, setStep] = useState<Step>({ kind: 'closed' });
   const [confirmation, setConfirmation] = useState<string | null>(null);
+  const [keptGroup, setKeptGroup] = useState<string | null>(null);
   const close = () => setStep({ kind: 'closed' });
 
   const open = () => {
@@ -110,12 +112,14 @@ export default function AddExpenseLauncher({ userId }: { userId: string }) {
           groupId={step.groupId}
           chosen={step.chosen}
           onClose={close}
+          onKept={() => setKeptGroup(step.groupId)}
           onSaved={(group) => setConfirmation(expenseAddedMessage(group.name))}
         />
       ) : null}
 
       {/* In the page's own layer, so no fixed bar of the page can sit over it. */}
       <Portal>
+        <KeptInToReview groupId={keptGroup} onClose={() => setKeptGroup(null)} />
         <Snackbar
           open={confirmation !== null}
           autoHideDuration={6000}
@@ -135,6 +139,7 @@ interface GroupExpenseFormProps {
   chosen: GroupRead | null;
   onClose: () => void;
   onSaved: (group: GroupRead) => void;
+  onKept: () => void;
 }
 
 /**
@@ -142,7 +147,14 @@ interface GroupExpenseFormProps {
  * so on the Group's page it is already loaded). A Group the member can no longer read closes
  * the form, as the Group page closes its own.
  */
-function GroupExpenseForm({ userId, groupId, chosen, onClose, onSaved }: GroupExpenseFormProps) {
+function GroupExpenseForm({
+  userId,
+  groupId,
+  chosen,
+  onClose,
+  onSaved,
+  onKept,
+}: GroupExpenseFormProps) {
   const read = useGroup(userId, groupId);
   // A refused read leaves no data, and the chooser's copy no longer counts either. An outage
   // keeps the form on the chooser's copy, so a draft already begun isn't lost; the save
@@ -164,6 +176,7 @@ function GroupExpenseForm({ userId, groupId, chosen, onClose, onSaved }: GroupEx
         defaultDate={addExpenseDefaultDate(group, monthParam)}
         showGroupName
         onSaved={() => onSaved(group)}
+        onKept={onKept}
       />
     );
 

@@ -1,7 +1,8 @@
 'use client';
-import KeepExpenseDraft from '@/components/drafts/KeepExpenseDraft';
+import KeepExpenseDraft, { useKeepExpenseDraft } from '@/components/drafts/KeepExpenseDraft';
 
 import { useState } from 'react';
+import KeptInToReview from '@/components/drafts/KeptInToReview';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -65,6 +66,7 @@ interface ExpenseFormDialogProps {
   showGroupName?: boolean;
   /** Called once the save is confirmed, just before the form closes. */
   onSaved?: () => void;
+  onKept?: () => void;
   /**
    * A new Expense's draft begun elsewhere, such as Quick add's "More options" (#320). The form
    * opens with its values, and an unconfirmed save in it stays the same request, so sending it
@@ -75,13 +77,22 @@ interface ExpenseFormDialogProps {
 
 // ─── Component ─────────────────────────────────────────
 export default function ExpenseFormDialog(props: ExpenseFormDialogProps) {
-  // The existing dialog lifetime is also the lifetime of its account/Group/Expense draft.
-  return props.open ? (
-    <ExpenseDraftDialog
-      key={JSON.stringify([props.groupId, props.userId, props.expense?._id ?? null])}
-      {...props}
-    />
-  ) : null;
+  const [kept, setKept] = useState(false);
+  return (
+    <>
+      {props.open && (
+        <ExpenseDraftDialog
+          key={JSON.stringify([props.groupId, props.userId, props.expense?._id ?? null])}
+          {...props}
+          onKept={() => {
+            if (props.onKept) props.onKept();
+            else setKept(true);
+          }}
+        />
+      )}
+      <KeptInToReview groupId={kept ? props.groupId : null} onClose={() => setKept(false)} />
+    </>
+  );
 }
 
 function ExpenseDraftDialog({
@@ -94,6 +105,7 @@ function ExpenseDraftDialog({
   defaultDate = null,
   showGroupName = false,
   onSaved,
+  onKept,
   initialDraft = null,
 }: ExpenseFormDialogProps) {
   const members = group.members;
@@ -135,6 +147,36 @@ function ExpenseDraftDialog({
   const { error, conflict, loading, invalidStoredMoney } = draft;
   const expense = draft.base;
   const isEditMode = !!expense;
+  const finishEnabled = process.env.NEXT_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' && !isEditMode;
+  const [initialValues] = useState(() =>
+    JSON.stringify(
+      ExpenseDraft.open({
+        groupId,
+        accountId: userId,
+        memberIds: members.map((member) => member.user._id),
+        currency: defaultCurrency,
+        defaultTag: getDefaultExpenseTag(groupTags),
+        date: defaultDate ?? toDateParam(new Date()),
+      }).values,
+    ),
+  );
+  const [closing, setClosing] = useState(false);
+  const keep = useKeepExpenseDraft({
+    draft,
+    groupId,
+    accountId: userId,
+    enabled: finishEnabled,
+    onKept: () => {
+      onKept?.();
+      onClose();
+    },
+  });
+  const requestClose = () => {
+    if (finishEnabled && (keep.busy || loading)) return;
+    if (finishEnabled && JSON.stringify(draft.values) !== initialValues) setClosing(true);
+    else onClose();
+  };
+
   const edit = (change: Partial<ExpenseDraftValues>) => setDraft((current) => current.edit(change));
   const [showSplitOptions, setShowSplitOptions] = useState(isEditMode);
   const [showMoreOptions, setShowMoreOptions] = useState(isEditMode);
@@ -259,7 +301,9 @@ function ExpenseDraftDialog({
   const handleSubmit = async () => {
     if (sessionStorage.getItem(`splitbook.draft-request:${userId}:${groupId}`)) {
       window.alert(
-        'Resolve the unconfirmed request in this Group’s Drafts before saving this Expense.',
+        finishEnabled
+          ? 'Check To review to confirm whether your earlier item was kept before saving this expense. Everything you typed is still here.'
+          : 'Resolve the unconfirmed request in this Group’s Drafts before saving this Expense.',
       );
       return;
     }
@@ -318,10 +362,10 @@ function ExpenseDraftDialog({
   );
 
   // ─── Render ────────────────────────────────────────
-  return (
+  const form = (
     <Dialog
       open={open}
-      onClose={onClose}
+      onClose={requestClose}
       maxWidth="sm"
       fullWidth
       fullScreen={false}
@@ -363,12 +407,12 @@ function ExpenseDraftDialog({
         ) : (
           'Add expense'
         )}
-        <IconButton onClick={onClose} size="small" aria-label="Close expense form">
+        <IconButton onClick={requestClose} size="small" aria-label="Close expense form">
           <CloseIcon />
         </IconButton>
       </DialogTitle>
 
-      <DialogContent dividers>
+      <DialogContent dividers inert={keep.busy}>
         <Stack spacing={2.5} sx={{ pt: 1 }}>
           {error && (
             <Box
@@ -966,6 +1010,11 @@ function ExpenseDraftDialog({
         </Stack>
       </DialogContent>
 
+      {finishEnabled && (
+        <Box sx={{ px: 3, py: 1 }}>
+          <KeepExpenseDraft state={keep} />
+        </Box>
+      )}
       <DialogActions
         sx={{
           p: 2,
@@ -978,16 +1027,21 @@ function ExpenseDraftDialog({
           gap: 1,
         }}
       >
-        {process.env.NEXT_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true' && !isEditMode && (
-          <KeepExpenseDraft draft={draft} groupId={groupId} accountId={userId} onKept={onClose} />
-        )}
-        <Button onClick={onClose} color="inherit" sx={{ minHeight: 40 }}>
+        <Button onClick={requestClose} color="inherit" sx={{ minHeight: 40 }}>
           Cancel
         </Button>
         <Button
           onClick={handleSubmit}
           variant="contained"
-          disabled={loading || invalidStoredMoney || !description.trim() || !amount || !tag}
+          disabled={
+            keep.busy ||
+            keep.pending ||
+            loading ||
+            invalidStoredMoney ||
+            !description.trim() ||
+            !amount ||
+            !tag
+          }
           sx={{
             minHeight: 40,
             textTransform: 'none',
@@ -1000,5 +1054,37 @@ function ExpenseDraftDialog({
         </Button>
       </DialogActions>
     </Dialog>
+  );
+  return (
+    <>
+      {form}
+      <Dialog
+        open={closing}
+        onClose={() => {
+          if (!keep.busy) setClosing(false);
+        }}
+        maxWidth="xs"
+        fullWidth
+        aria-labelledby="finish-later-title"
+      >
+        <DialogTitle id="finish-later-title">Finish this expense later?</DialogTitle>
+        <DialogContent>
+          <KeepExpenseDraft state={keep} />
+        </DialogContent>
+        <DialogActions sx={{ flexWrap: 'wrap', gap: 1 }}>
+          <Button
+            color="inherit"
+            sx={{ color: 'status.negative' }}
+            disabled={keep.busy || loading}
+            onClick={onClose}
+          >
+            Delete
+          </Button>
+          <Button disabled={keep.busy} onClick={() => setClosing(false)}>
+            Keep editing
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }

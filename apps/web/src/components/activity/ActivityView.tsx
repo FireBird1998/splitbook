@@ -1,4 +1,5 @@
 'use client';
+import PreparedBy from '@/components/expenses/PreparedBy';
 
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { activityPageKey } from '@splitbook/shared/query-keys';
@@ -112,6 +113,7 @@ export default function ActivityView({ groupId }: ActivityViewProps) {
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography variant="body2" color="text.primary">
                       {formatActivityHeadline(activity)}
+                      <PreparedBy value={activity.metadata?.preparedBy} inline />
                     </Typography>
                     {detail && (
                       <Typography

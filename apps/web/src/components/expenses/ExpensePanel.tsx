@@ -1,4 +1,5 @@
 'use client';
+import PreparedBy from './PreparedBy';
 
 import { useId, type ReactNode } from 'react';
 import Avatar from '@mui/material/Avatar';
@@ -45,6 +46,7 @@ export interface PanelExpense extends StoredExpenseSplit {
   receiptUrl?: string | null;
   recurringExpense?: string | null;
   createdBy?: unknown;
+  preparedBy?: unknown;
   editHistory?: RecordedEdit[];
 }
 
@@ -366,6 +368,7 @@ function OpenExpense({
             <Typography component="p" sx={caption}>
               {meta}
             </Typography>
+            <PreparedBy value={expense.preparedBy} />
           </Box>
         </Box>
 

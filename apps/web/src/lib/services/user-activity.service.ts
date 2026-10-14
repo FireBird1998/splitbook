@@ -1,3 +1,4 @@
+import { assistantAttributionSchema } from '@splitbook/shared/draft-attribution';
 import { Types } from 'mongoose';
 import connectDB from '@/lib/db';
 import Activity from '@/lib/models/Activity';
@@ -47,6 +48,8 @@ const MONEY_CHANGES = ['amount', 'amountMinor', 'currency'];
 function publicMetadata(type: string, metadata: unknown): Fields {
   const source = isRecord(metadata) ? metadata : {};
   const sent: Fields = {};
+  const attribution = assistantAttributionSchema.safeParse(source.preparedBy);
+  if (attribution.success) sent.preparedBy = attribution.data;
   for (const key of IDS) {
     const id = objectId(source[key]);
     if (id) sent[key] = id;

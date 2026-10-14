@@ -1,4 +1,5 @@
 'use client';
+import PreparedBy from './PreparedBy';
 
 import { Fragment } from 'react';
 import Box from '@mui/material/Box';
@@ -225,6 +226,7 @@ export default function ExpenseTable({
                     </Box>
                     <Box component="td" sx={cell}>
                       <PayerLabel payer={expensePayerSummary(expense, userId)} />
+                      <PreparedBy value={expense.preparedBy} inline />
                     </Box>
                     <Box
                       component="td"

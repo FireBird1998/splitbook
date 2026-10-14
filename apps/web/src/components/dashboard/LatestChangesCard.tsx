@@ -1,4 +1,5 @@
 'use client';
+import PreparedBy from '@/components/expenses/PreparedBy';
 
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import Link from 'next/link';
@@ -218,6 +219,7 @@ function LatestChangeRow({ event, viewerId }: { event: UserActivityEventRead; vi
                 {' '}
                 <Box component="strong" sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>
                   {subject}
+                  <PreparedBy value={event.metadata.preparedBy} inline />
                 </Box>
               </>
             ) : null}

@@ -1,3 +1,4 @@
+import type { AssistantAttribution } from '@splitbook/shared/draft-attribution';
 import mongoose, { Schema, Model } from 'mongoose';
 import { readStoredAmountMinor, sumMinorAmounts } from '@splitbook/shared/exact-money';
 import {
@@ -52,6 +53,7 @@ export interface IExpenseDocument {
   recurringExpense?: mongoose.Types.ObjectId | null;
   /** The template period (`YYYY-MM`) this expense was generated for. */
   period?: string | null;
+  preparedBy?: AssistantAttribution;
   createdBy: mongoose.Types.ObjectId;
   isDeleted: boolean;
   deletedAt?: Date | null;
@@ -141,6 +143,17 @@ const ExpenseSchema = new Schema<IExpenseDocument>(
     notes: { type: String, trim: true, maxlength: 500 },
     recurringExpense: { type: Schema.Types.ObjectId, ref: 'RecurringExpense', default: null },
     period: { type: String, default: null },
+    preparedBy: {
+      type: new Schema(
+        {
+          kind: { type: String, enum: ['assistant'], required: true },
+          name: { type: String, required: true },
+        },
+        { _id: false },
+      ),
+      default: undefined,
+      immutable: true,
+    },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     isDeleted: { type: Boolean, default: false },
     deletedAt: { type: Date, default: null },
