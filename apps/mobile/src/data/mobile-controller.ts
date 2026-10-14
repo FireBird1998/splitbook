@@ -1,3 +1,9 @@
+import {
+  createToReviewQueries,
+  draftRequestRecoveries,
+  emptyToReview,
+  mobileToReview,
+} from './to-review';
 import { emptySharedDraftCollection, sharedDraftCollection } from './shared-draft-collection';
 import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-draft-editor';
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
@@ -85,9 +91,15 @@ import {
   parseSession,
   parseSignIn,
 } from './dto';
-import { parseInvitationLink } from './invitation-links';
+import { parseInvitationLink, parseToReviewLink } from './invitation-links';
 import { parseGroupBalances } from './financial-dto';
-import { createHomeQueries, emptyHome, homePath, type Envelope } from './home-queries';
+import {
+  createHomeQueries,
+  draftSummaries,
+  emptyHome,
+  homePath,
+  type Envelope,
+} from './home-queries';
 import { createGroupQueries, emptyExpenses } from './group-queries';
 import { createExpenseQueries } from './expense-queries';
 import { createActivityQueries } from './activity-queries';
@@ -278,6 +290,7 @@ function cleanSnapshot(auth: MobileSnapshot['auth']): FreshSnapshot {
   return {
     auth,
     sharedDraftCollection: emptySharedDraftCollection(),
+    toReview: emptyToReview(),
     offline: { active: false, refreshedAt: null, message: null },
     pull: null,
     automatic: null,
@@ -371,6 +384,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * replaced, it finishes its reply, and any revoke, without holding up the next.
    */
   let googleAttempt: { owner: number; choosing: boolean } | null = null;
+  const persistentDrafts = process.env.EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true';
+  let pendingReviewGroup: string | null = null;
   const now = dependencies.now ?? Date.now;
   const listeners = new Set<() => void>();
   let snapshot: MobileSnapshot = cleanSnapshot({ status: 'restoring', user: null, message: null });
@@ -539,6 +554,11 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (next.homeSnackbar && next.screen !== 'groups') next = { ...next, homeSnackbar: null };
     if (next.leave.status !== 'closed' && next.screen !== 'members')
       next = { ...next, leave: closedLeave() };
+    if (
+      next.toReview.groupId &&
+      (next.screen !== 'group' || next.detail.id !== next.toReview.groupId)
+    )
+      next = { ...next, toReview: { ...next.toReview, groupId: null } };
     next = projectFreshness(next);
     snapshot = next;
     listeners.forEach((listener) => listener());
@@ -546,6 +566,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     groupQueries.bindLater();
     expenseQueries.bindLater();
     activityQueries.bindLater();
+    toReviewQueries.bindLater();
   };
   /**
    * The route's one writer (ADR 0006, M8-2): moves the member to `to` and publishes it, with
@@ -1118,6 +1139,47 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     refused: (groupId, error) => void dropDeniedGroup(groupId, error),
     missingLedger: (groupId, owner) => missingLedger(groupId, owner),
   });
+  const toReviewQueries = createToReviewQueries({
+    client: queryClient,
+    online: onlineManager,
+    environment: apiBase,
+    enabled: persistentDrafts,
+    snapshot: () => snapshot,
+    publish: (toReview) => publish({ ...snapshot, toReview }),
+    read: (path, signal) => request(path, generation, { signal }),
+    recoveries: async () => {
+      const lease = accountStorage();
+      const list = dependencies.draftRequests?.list;
+      if (!lease) return [];
+      const groups =
+        snapshot.detail.data &&
+        snapshot.detail.status !== 'denied' &&
+        !snapshot.groups.data.some((group) => group.id === snapshot.detail.id)
+          ? [...snapshot.groups.data, snapshot.detail.data]
+          : snapshot.groups.data;
+      const expenseList = dependencies.expenseDrafts?.list;
+      if (expenseList) {
+        const drafts = draftSummaries(
+          (await lease.write(() => expenseList(lease.accountId))).filter(
+            ({ groupId }) =>
+              !lostGroups.has(groupId) && !financialCleanup.blocked(lease.accountId, groupId),
+          ),
+          lease.accountId,
+          groups,
+        );
+        if (JSON.stringify(drafts) !== JSON.stringify(snapshot.drafts))
+          publish({ ...snapshot, drafts });
+      }
+      if (!list) return [];
+      return draftRequestRecoveries(
+        (await lease.write(() => list(lease.accountId))).filter(
+          ({ groupId }) =>
+            !lostGroups.has(groupId) && !financialCleanup.blocked(lease.accountId, groupId),
+        ),
+        groups,
+      );
+    },
+  });
   const listening = [
     homeQueries.listen(focusManager, onlineManager, dependencies.netInfo),
     groupQueries.listen(focusManager, onlineManager),
@@ -1127,6 +1189,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const disconnect = () => {
     listening.forEach((stop) => stop());
     stopSavedUsage();
+    toReviewQueries.stop();
     provenance.stop();
   };
 
@@ -1464,10 +1527,15 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
     creationRecovery = null;
     if (current(owner) && pendingCode) await previewInvitation(pendingCode);
+    else if (current(owner) && pendingReviewGroup) {
+      const groupId = pendingReviewGroup;
+      pendingReviewGroup = null;
+      await openToReview(groupId);
+    }
   };
 
   /** Refresh and Retry always read again. */
-  const refreshHome = () => homeQueries.refresh();
+  const refreshHome = () => Promise.all([homeQueries.refresh(), toReviewQueries.refresh()]);
 
   /**
    * `quiet`: a return to the foreground after Continue. It retries a pending revoke but stays on
@@ -1785,6 +1853,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const evictGroupContent = (id: string, status: number) => {
+    if (persistentDrafts) toReviewQueries.lose(id);
     const message = groupRefused(status);
     const expense =
       snapshot.expense.groupId === id
@@ -2018,6 +2087,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
 
   const dropDeniedGroup = (id: string, error: unknown): boolean => {
     if (!(error instanceof RequestError) || ![403, 404].includes(error.status)) return false;
+    if (persistentDrafts) toReviewQueries.lose(id);
     groupQueries.lose(id);
     expenseQueries.lose(id);
     activityQueries.lose(id);
@@ -5157,6 +5227,17 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   const openInvitation = async (url: string) => {
+    const reviewGroup = persistentDrafts ? parseToReviewLink(url, inviteOrigin) : null;
+    if (reviewGroup) {
+      const owner = generation;
+      if (await holdInvitationForDraft(url, owner)) return;
+      if (!current(owner)) return;
+      if (snapshot.auth.status !== 'authenticated') {
+        pendingReviewGroup = reviewGroup;
+        navigate(home);
+      } else await openToReview(reviewGroup);
+      return;
+    }
     const code = parseInvitationLink(url, inviteOrigin);
     const owner = generation;
     const view = route;
@@ -5662,6 +5743,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * delete review is cancelled first (`closeExpense`).
    */
   const back = () => {
+    if (snapshot.toReview.groupId) return closeToReview();
     if (showingActivity() && snapshot.activity.selected) return closeActivityDetail();
     if (route.screen === 'invite') {
       void cancelInvitation();
@@ -5942,8 +6024,8 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     if (!lease || !storage) throw new Error('Draft request storage unavailable.');
     const ensure = () => {
       assertCurrent(owner);
-      if (snapshot.offline.active)
-        throw new Error('Your shared Draft collection needs an internet connection.');
+      if (snapshot.offline.active || !onlineManager.isOnline())
+        throw new Error('Connect to use the items in your account.');
     };
     const client = draftCollectionClient(
       groupId,
@@ -5958,9 +6040,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
             : {}),
         };
         try {
-          return await (path.endsWith('/save')
+          const result = await (path.endsWith('/save')
             ? ledgerWrite(groupId, path, owner, options)
             : request(path, owner, options));
+          return result;
         } catch (error) {
           if (
             error instanceof RequestError &&
@@ -6024,9 +6107,25 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       groupId,
       ...account(),
       current: () => current(owner),
+      online: () => !snapshot.offline.active && onlineManager.isOnline(),
+      now,
+      changed: () => toReviewQueries.refresh(),
       read: () => snapshot.sharedDraftCollection,
       publish: (value) => publish({ ...snapshot, sharedDraftCollection: value }),
     });
+  };
+  const openToReview = async (groupId: string) => {
+    if (!persistentDrafts || snapshot.auth.status !== 'authenticated') return;
+    const owner = generation;
+    await openGroup(groupId);
+    if (!current(owner) || snapshot.detail.id !== groupId || snapshot.detail.status === 'denied')
+      return;
+    publish({ ...snapshot, toReview: { ...snapshot.toReview, groupId } });
+    await toReviewQueries.refresh();
+  };
+  const closeToReview = () => {
+    if (!snapshot.sharedDraftCollection.busy)
+      publish({ ...snapshot, toReview: { ...snapshot.toReview, groupId: null } });
   };
   const keepExpenseAsSharedDraft = async () => {
     const editor = snapshot.expense;
@@ -6075,6 +6174,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
           'Resolve the previous request in this Group’s Drafts before uploading this form.',
         );
       await client.create(draftValues(entries), JSON.stringify(d));
+      await toReviewQueries.refresh();
       await openGroup(editor.groupId);
     } finally {
       if (
@@ -6086,6 +6186,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     }
   };
   return {
+    openToReview,
+    closeToReview,
+    toReviewModel: (groupId?: string) => mobileToReview(snapshot, now(), groupId),
+    refreshToReview: () => toReviewQueries.refresh(),
     keepExpenseAsSharedDraft,
     draftCollection,
     sharedDrafts,

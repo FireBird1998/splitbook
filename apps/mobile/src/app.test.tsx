@@ -12,7 +12,7 @@ import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import { createMobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
-import { backListenerCount, emitAppState, pressBack } from './test-utils/native';
+import { backListenerCount, emitAppState, pressBack, setWindow } from './test-utils/native';
 import { GroupExpensesView } from './ui/group-expenses';
 import { GroupActivity } from './ui/group-activity';
 
@@ -1950,6 +1950,40 @@ describe('App Home', () => {
     expect(app.text()).toContain('September groceries');
     expect(app.pressable('Back to Home')).toBeTruthy();
   });
+
+  it.each(['light', 'dark'])(
+    'keeps Continue rows with the review flag off at 130%% in %s',
+    async (mode) => {
+      const previous = runtime.appearance;
+      vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'false');
+      runtime.appearance = { ...previous, mode };
+      setWindow({ width: 360, height: 640, fontScale: 1.3 });
+      try {
+        const app = await renderApp();
+        const calls: string[] = [];
+        app.use((path) => {
+          calls.push(path);
+          return undefined;
+        });
+        await app.press('Open Maple House');
+        await app.press('Add expense');
+        await app.type('Amount, required', '12.50');
+        await app.type('Description, required', 'Phone-only groceries');
+        expect(await app.androidBack()).toBe(true);
+        expect(await app.androidBack()).toBe(true);
+        expect(app.text()).toContain('Continue where you left off');
+        expect(app.text()).not.toContain('To review');
+        expect(calls.some((path) => path.includes('/to-review'))).toBe(false);
+        await app.press('Draft, Phone-only groceries, ₹12.50, Maple House');
+        expect(app.controller.getSnapshot().expense.draft?.description).toBe(
+          'Phone-only groceries',
+        );
+      } finally {
+        vi.unstubAllEnvs();
+        runtime.appearance = previous;
+      }
+    },
+  );
 
   it('leaves Back on Home to Android, so the app closes', async () => {
     const app = await renderApp();

@@ -15,3 +15,13 @@ export function parseInvitationLink(value: string, origin: string): string | nul
     return null;
   }
 }
+
+/** Only the exact review destination in this environment may open account items. */
+export function parseToReviewLink(value: string, origin: string): string | null {
+  const expected = parseWebOrigin(origin);
+  if (!expected) return null;
+  const prefix = `${expected.origin}/groups/`;
+  if (!value.startsWith(prefix)) return null;
+  const match = /^([a-f\d]{24})\/review$/.exec(value.slice(prefix.length));
+  return match?.[1] ?? null;
+}

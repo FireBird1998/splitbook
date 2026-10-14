@@ -1,3 +1,4 @@
+import type { ToReviewState } from './to-review';
 import type { SharedDraftCollectionState } from './shared-draft-collection';
 import type { OfflineIdentityStore } from './offline-cache';
 import type { ActivityState } from './activity';
@@ -95,6 +96,7 @@ export interface ExpenseDraftSummary {
   /** As typed, so it may not be a valid amount yet. */
   amount: string;
   currency: string;
+  date?: string;
   /** A save or change was sent without a confirmed result, so it may already be recorded. */
   unconfirmed: boolean;
 }
@@ -369,6 +371,7 @@ export interface PendingInvitationStore {
 
 export interface MobileSnapshot {
   sharedDraftCollection: SharedDraftCollectionState;
+  toReview: ToReviewState;
   offline: { active: boolean; refreshedAt: number | null; message: string | null };
   /**
    * The view (`shownView`) a running pull-to-refresh started on. Only that view shows the pull

@@ -105,6 +105,7 @@ export function draftSummaries(
             description: draft.description,
             amount: draft.amount,
             currency: draft.currency,
+            date: draft.date,
             unconfirmed: attempt !== null || mutation !== null,
           },
         ];

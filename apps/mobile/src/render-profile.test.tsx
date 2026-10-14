@@ -105,6 +105,7 @@ vi.mock('./ui/compact/layout', async (load) => counting.wrap(await load<Module>(
 vi.mock('./ui/compact/navigation', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/compact/sheet', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/compact/text', async (load) => counting.wrap(await load<Module>()));
+vi.mock('./ui/to-review', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/shared-drafts', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/controller-expense-editor', async (load) => counting.wrap(await load<Module>()));
 vi.mock('./ui/draft-status-selection', async (load) => counting.wrap(await load<Module>()));

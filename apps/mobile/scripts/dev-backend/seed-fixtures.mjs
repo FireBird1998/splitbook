@@ -47,6 +47,42 @@ async function main() {
         tags: buildDefaultGroupTags(group.theme),
       });
     }
+    const { supportsGroupTransactions } = await import(
+      pathToFileURL(resolve(repository, 'apps/web/src/lib/group-mutation.ts')).href
+    );
+    if (await supportsGroupTransactions()) {
+      // Fixed, fictional assistant attribution for the public HTTP To review verifier.
+      // The database ownership guard above runs before importing or writing app models.
+      const { expenseDraftService } = await import(
+        pathToFileURL(resolve(repository, 'apps/web/src/lib/services/expense-draft.service.ts'))
+          .href
+      );
+      const privateGroup = await Group.findById(groups.private).lean();
+      if (!privateGroup?.tags[0])
+        throw new Error('Fictional Claude fixture needs its private Group');
+      await expenseDraftService.create(
+        { id: identities.alex, assistant: { name: 'Claude' } },
+        groups.private,
+        {
+          drafts: [
+            {
+              description: 'Fictional Claude prepared lunch',
+              amount: 19.25,
+              currency: 'INR',
+              category: 'other',
+              date: '2026-01-15',
+              tagId: String(privateGroup.tags[0]._id),
+              paidBy: [{ user: identities.alex, amount: 19.25 }],
+              splitMethod: 'equal',
+              splitBetween: [{ user: identities.alex }],
+            },
+          ],
+        },
+        'native-to-review-claude-fixture-v1',
+      );
+    } else {
+      console.log('Skipping the fictional Claude Draft: MongoDB does not support transactions.');
+    }
     console.log(
       JSON.stringify(
         { database: databaseName, fictional: true, seed: result, personas: identities, groups },
