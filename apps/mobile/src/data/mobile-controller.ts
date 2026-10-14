@@ -1,3 +1,4 @@
+import { createReviewRun } from './review-run';
 import { DRAFT_GROUP_LIMIT_MESSAGE } from '@splitbook/shared/validators/expense-draft';
 import {
   createToReviewQueries,
@@ -547,6 +548,13 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     );
     // Return feedback belongs to the Group view it was made for; leaving that view ends it.
     const showing = (groupId: string) => next.screen === 'group' && next.detail.id === groupId;
+    if (
+      next.toReview.run &&
+      (next.screen !== snapshot.screen ||
+        next.detail.id !== snapshot.detail.id ||
+        next.auth.user?.id !== snapshot.auth.user?.id)
+    )
+      next = { ...next, toReview: { ...next.toReview, run: null } };
     if (next.snackbar && !showing(next.snackbar.groupId)) next = { ...next, snackbar: null };
     // A confirmed change's message ends once another replaces it, or it is dismissed or left.
     if (confirmation && next.snackbar !== confirmation.shown) confirmation = null;
@@ -1146,7 +1154,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     environment: apiBase,
     enabled: persistentDrafts,
     snapshot: () => snapshot,
-    publish: (toReview) => publish({ ...snapshot, toReview }),
+    publish: (toReview) => {
+      publish({ ...snapshot, toReview });
+      reviewRun?.receive(toReview.read);
+    },
     read: (path, signal) => request(path, generation, { signal }),
     recoveries: async () => {
       const lease = accountStorage();
@@ -5791,6 +5802,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
    * delete review is cancelled first (`closeExpense`).
    */
   const back = () => {
+    if (snapshot.toReview.run) return closeReviewRun();
     if (snapshot.toReview.groupId) return closeToReview();
     if (showingActivity() && snapshot.activity.selected) return closeActivityDetail();
     if (route.screen === 'invite') {
@@ -6065,6 +6077,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     navigate(home, { ...cleared, invitation: { ...cleared.invitation, code: pendingCode } });
   };
 
+  let reviewRun: ReturnType<typeof createReviewRun> | null = null;
   const sharedDrafts = (groupId: string) => {
     const owner = generation;
     const lease = accountStorage();
@@ -6141,6 +6154,14 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     );
     return {
       ...client,
+      expense: async (id: string) => {
+        ensure();
+        return parseExpenseRecord(
+          await request(`/api/groups/${groupId}/expenses/${id}`, owner),
+          groupId,
+          id,
+        );
+      },
       context: async () => {
         ensure();
         return parseExpenseContext(await request(`/api/groups/${groupId}`, owner));
@@ -6161,6 +6182,69 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       read: () => snapshot.sharedDraftCollection,
       publish: (value) => publish({ ...snapshot, sharedDraftCollection: value }),
     });
+  };
+  const startReviewRun = async (groupId?: string) => {
+    if (
+      !persistentDrafts ||
+      snapshot.auth.status !== 'authenticated' ||
+      snapshot.offline.active ||
+      !onlineManager.isOnline() ||
+      snapshot.sharedDraftCollection.busy ||
+      snapshot.toReview.run
+    )
+      return;
+    const model = mobileToReview(snapshot, now(), groupId);
+    const items = model.groups.flatMap((group) =>
+      group.items.flatMap((item) =>
+        item.accountItem
+          ? [{ groupId: group.groupId, groupName: group.groupName, item: item.accountItem }]
+          : [],
+      ),
+    );
+    if (!items.length) return;
+    const owner = generation,
+      view = route;
+    const machine = createReviewRun({
+      read: () => snapshot.toReview.run,
+      publish: (run) => publish({ ...snapshot, toReview: { ...snapshot.toReview, run } }),
+      current: () =>
+        current(owner) && route === view && reviewRun === machine && !!snapshot.toReview.run,
+      online: () => !snapshot.offline.active && onlineManager.isOnline(),
+      client: sharedDrafts,
+      refresh: () => toReviewQueries.refresh(),
+    });
+    reviewRun = machine;
+    publish({
+      ...snapshot,
+      toReview: {
+        ...snapshot.toReview,
+        run: {
+          items,
+          index: 0,
+          outcomes: [],
+          context: null,
+          busy: false,
+          editing: false,
+          pending: false,
+          acknowledged: false,
+          deletePrompt: false,
+          message: null,
+          changed: null,
+          matches: [],
+          allocation: null,
+        },
+      },
+    });
+    await machine.start();
+  };
+  const closeReviewRun = async () => {
+    const closing = reviewRun;
+    if (snapshot.toReview.run?.editing && !snapshot.offline.active && onlineManager.isOnline()) {
+      await reviewRun?.finishEditing();
+    }
+    if (closing !== reviewRun) return;
+    reviewRun = null;
+    publish({ ...snapshot, toReview: { ...snapshot.toReview, run: null } });
   };
   const openToReview = async (groupId: string) => {
     if (!persistentDrafts || snapshot.auth.status !== 'authenticated') return;
@@ -6399,6 +6483,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   };
 
   return {
+    startReviewRun,
+    closeReviewRun,
+    reviewRun: () => reviewRun,
+    reviewNow: now,
     openToReview,
     closeToReview,
     toReviewModel: (groupId?: string) => mobileToReview(snapshot, now(), groupId),

@@ -1,3 +1,4 @@
+import { ReviewRunOverlay } from './review-run';
 import { draftEditorChanged } from '../data/shared-draft-collection';
 import { useEffect, useMemo } from 'react';
 import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
@@ -186,7 +187,6 @@ export function ToReviewHomeCard({
     !state.toReview.recoveryMessage
   )
     return null;
-  const firstGroup = model.groups[0]?.groupId;
   return (
     <Card padded>
       <View style={{ gap: 12 }}>
@@ -277,11 +277,11 @@ export function ToReviewHomeCard({
           .map((item) => (
             <PhoneItem key={item.id} item={item} controller={controller} disabled={disabled} />
           ))}
-        {!!firstGroup && !state.offline && (
+        {model.items.some((item) => item.accountItem) && !state.offline && (
           <Button
-            label={`Review ${model.counts.total}, one at a time`}
+            label={`Review ${model.items.filter((item) => item.accountItem).length}, one at a time`}
             disabled={disabled}
-            onPress={() => void controller.openToReview(firstGroup)}
+            onPress={() => void controller.startReviewRun()}
           />
         )}
       </View>
@@ -317,6 +317,7 @@ export function ToReviewGroupBanner({
 /** Mounted by the existing Home and Group shells; deep links select the same controller state. */
 export function ToReviewOverlay({ controller }: { controller: MobileController }) {
   const state = useReviewSnapshot(controller);
+  if (state.toReview.run) return <ReviewRunOverlay controller={controller} />;
   return state.toReview.groupId && state.auth.user ? (
     <ToReviewList
       key={`${state.auth.user.id}:${state.toReview.groupId}`}
@@ -444,10 +445,7 @@ export function ToReviewList({
                 label="Review one at a time"
                 secondary
                 disabled={disabled || !model.items.some((item) => item.accountItem)}
-                onPress={() => {
-                  const first = model.items.find((item) => item.accountItem);
-                  if (first) openItem(first);
-                }}
+                onPress={() => void controller.startReviewRun(groupId)}
               />
               <Button
                 label="Refresh items"

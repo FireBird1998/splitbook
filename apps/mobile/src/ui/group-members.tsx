@@ -188,8 +188,8 @@ function LeaveGroupSheet({ group, leave }: { group: MobileGroup; leave: LeaveGro
       </CompactText>
       {!!leave.toReviewCount && (
         <CompactText>
-          You have {leave.toReviewCount} items in To review for {group.name}. They're kept but
-          hidden while you're not a member.
+          You have {leave.toReviewCount} {leave.toReviewCount === 1 ? 'item' : 'items'} in To review
+          for {group.name}. They're kept but hidden while you're not a member.
         </CompactText>
       )}
       {state.draft && state.status !== 'blocked' ? (
