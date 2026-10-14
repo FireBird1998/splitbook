@@ -5,6 +5,9 @@ import { checkStyles } from '../src/lib/theme/style-policy';
 // new violations. Dynamic styles still require theme and browser verification.
 const adoptedFiles = [
   'src/lib/theme/createAppTheme.ts',
+  'src/components/to-review/ToReviewPage.tsx',
+  'src/components/to-review/ToReviewPanel.tsx',
+  'src/components/to-review/ReviewDetails.tsx',
   'src/components/common/MoneyText.tsx',
   'src/components/common/StatusLabel.tsx',
   'src/components/common/ErrorState.tsx',

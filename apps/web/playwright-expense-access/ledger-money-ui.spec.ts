@@ -13,6 +13,7 @@ import {
   expenseInList,
 } from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
+import { expenseAccessMongoUri } from './mongo-target';
 
 const { sam, priya } = DEMO_PERSONA_IDS;
 
@@ -188,7 +189,7 @@ test('legacy currencies are individually visible and never combined into one bal
     }),
     201,
   );
-  const database = new MongoClient(`mongodb://127.0.0.1:27017/${dbName}?directConnection=true`, {
+  const database = new MongoClient(expenseAccessMongoUri(dbName), {
     serverSelectionTimeoutMS: 5000,
   });
   try {
@@ -301,7 +302,7 @@ test('legacy binary-tail amounts remain editable without changing their exact al
   const dbName = process.env.EXPENSE_ACCESS_TEST_DB;
   if (!dbName || !/^splitbook-test-access-[a-f0-9-]+$/.test(dbName))
     throw new Error('Unique isolated test database required');
-  const database = new MongoClient(`mongodb://127.0.0.1:27017/${dbName}?directConnection=true`, {
+  const database = new MongoClient(expenseAccessMongoUri(dbName), {
     serverSelectionTimeoutMS: 5000,
   });
   const id = new ObjectId();
@@ -383,7 +384,7 @@ test('manual historical equal preview survives participant reorder and agrees wi
   const dbName = process.env.EXPENSE_ACCESS_TEST_DB;
   if (!dbName || !/^splitbook-test-access-[a-f0-9-]+$/.test(dbName))
     throw new Error('Isolated database required');
-  const client = new MongoClient(`mongodb://127.0.0.1:27017/${dbName}?directConnection=true`);
+  const client = new MongoClient(expenseAccessMongoUri(dbName));
   const id = new ObjectId();
   try {
     await client.connect();

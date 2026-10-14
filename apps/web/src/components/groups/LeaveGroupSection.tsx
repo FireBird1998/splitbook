@@ -1,5 +1,6 @@
 'use client';
 
+import { useToReview } from '@/components/to-review/use-to-review';
 import { useState } from 'react';
 import Link from 'next/link';
 import Alert from '@mui/material/Alert';
@@ -36,6 +37,8 @@ export default function LeaveGroupSection({
   groupName,
   memberCount,
 }: LeaveGroupSectionProps) {
+  const { read } = useToReview(groupId);
+  const waiting = read.status === 'ready' ? read.value.counts.total : 0;
   const [open, setOpen] = useState(false);
   const [deleteIfLastMember, setDeleteIfLastMember] = useState(memberCount === 1);
   const [leaving, setLeaving] = useState(false);
@@ -112,6 +115,13 @@ export default function LeaveGroupSection({
               ? 'Leaving will permanently delete this Group and its history. Expenses, Settlements and Activity will be removed. You cannot rejoin this Group.'
               : 'You won’t see this Group or its balances any more. Its history stays for the remaining members.'}
           </Typography>
+          {waiting > 0 && (
+            <Typography sx={{ mt: 2 }}>
+              {deleteIfLastMember
+                ? `Your ${waiting} ${waiting === 1 ? 'item' : 'items'} in To review will be permanently deleted with ${groupName}.`
+                : `You have ${waiting} ${waiting === 1 ? 'item' : 'items'} in To review for ${groupName}. They're kept but hidden while you're not a member.`}
+            </Typography>
+          )}
           {refusal && (
             <Alert
               severity="warning"

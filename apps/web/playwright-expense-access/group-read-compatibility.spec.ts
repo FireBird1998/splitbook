@@ -2,6 +2,7 @@ import { test, expect } from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { readWebGroupListResponse } from '../src/lib/group-read';
 import { parseGroups } from '../../mobile/src/data/dto';
+import { expenseAccessMongoUri } from './mongo-target';
 
 test('authenticated Group list has the same meaning through web and native adapters', async ({
   ledger,
@@ -58,7 +59,7 @@ test('authenticated Group list has the same meaning through web and native adapt
 async function withDatabase<T>(run: (db: import('mongodb').Db) => Promise<T>) {
   const name = process.env.EXPENSE_ACCESS_TEST_DB;
   if (!name?.startsWith('splitbook-test-access-')) throw new Error('Isolated database required');
-  const client = new MongoClient(`mongodb://127.0.0.1:27017/${name}?directConnection=true`);
+  const client = new MongoClient(expenseAccessMongoUri(name));
   try {
     return await run(client.db(name));
   } finally {

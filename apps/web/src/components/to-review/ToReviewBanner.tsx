@@ -3,19 +3,23 @@
 import Link from 'next/link';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
-import Skeleton from '@mui/material/Skeleton';
 import Typography from '@mui/material/Typography';
 import { toReviewHref } from '@splitbook/shared/api-paths';
 import { RADIUS } from '@/lib/theme/tokens';
 import { toReviewEnabled, useToReview } from './use-to-review';
 
 export default function ToReviewBanner({ groupId }: { groupId: string }) {
-  const { read, retry } = useToReview();
+  const { read, retry, failed } = useToReview();
   const group =
     read.status === 'ready'
       ? read.value.groups.find((group) => group.groupId === groupId)
       : undefined;
-  if (!toReviewEnabled || (read.status === 'ready' && !group)) return null;
+  if (
+    !toReviewEnabled ||
+    read.status === 'loading' ||
+    (read.status === 'ready' && !group && !failed)
+  )
+    return null;
   return (
     <Box
       component="section"
@@ -33,18 +37,13 @@ export default function ToReviewBanner({ groupId }: { groupId: string }) {
         bgcolor: 'tint.info',
       }}
     >
-      {read.status === 'loading' && (
-        <Box role="status" aria-label="Loading To review" aria-busy="true" sx={{ width: '100%' }}>
-          <Skeleton height={36} />
-        </Box>
-      )}
-      {read.status === 'error' && (
+      {(read.status === 'error' || failed) && (
         <>
           <Typography role="status">Unable to load To review.</Typography>
           <Button onClick={retry}>Try again</Button>
         </>
       )}
-      {group && (
+      {group && !failed && (
         <>
           <Typography sx={{ overflowWrap: 'anywhere', minWidth: 0 }}>
             {[`${group.counts.total} to review`, group.bannerSummary].filter(Boolean).join(' · ')}

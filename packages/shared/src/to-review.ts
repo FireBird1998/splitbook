@@ -1,3 +1,5 @@
+import type { PersistedExpenseDraft } from './validators/expense-draft';
+import { formatDate } from './date';
 import { toDateParam } from './date';
 import { formatCurrency } from './currency';
 import { parseAmountMinor, sumMinorAmounts, toMajorAmount } from './exact-money';
@@ -182,4 +184,100 @@ export function summarizeReviewRun(outcomes: readonly ReviewRunOutcome[]) {
     left ? `${left} left for later` : '',
   ].filter(Boolean);
   return { saved, deleted, left, label: parts.join(' · ') };
+}
+
+/** A date-only Expense fact is a calendar day, not a UTC instant. */
+export function reviewDate(date?: string): string {
+  return date ? formatDate(`${date}T12:00:00`) : 'Date missing';
+}
+
+/** Shared member wording for a newer version; callers supply names, never guess identities. */
+export function describeDraftChange(
+  before: PersistedExpenseDraft,
+  after: PersistedExpenseDraft,
+  names: Readonly<Record<string, string>> = {},
+): string {
+  const prior = before.values ?? {};
+  const next = after.values ?? {};
+  const currency = (values: ExpenseDraftValues) =>
+    values.amount === undefined || !values.currency
+      ? 'not specified'
+      : formatCurrency(values.amount, values.currency);
+  const people = (
+    rows: ExpenseDraftValues['paidBy'] | ExpenseDraftValues['splitBetween'],
+    money: string | undefined,
+  ) =>
+    rows
+      ?.map((row) => {
+        const part =
+          row.amount !== undefined && money
+            ? formatCurrency(row.amount, money)
+            : 'percentage' in row
+              ? `${row.percentage}%`
+              : 'shares' in row
+                ? `${row.shares} shares`
+                : '';
+        return [names[row.user] ?? 'a member', part].filter(Boolean).join(' ');
+      })
+      .join(', ') || 'not specified';
+  const split = (values: ExpenseDraftValues) =>
+    `${values.splitMethod ?? 'not specified'} · ${people(values.splitBetween, values.currency)}`;
+  const fields = [
+    [
+      'amount',
+      currency(prior),
+      currency(next),
+      [prior.amount, prior.currency],
+      [next.amount, next.currency],
+    ],
+    ['date', reviewDate(prior.date), reviewDate(next.date), prior.date, next.date],
+    [
+      'payer',
+      people(prior.paidBy, prior.currency),
+      people(next.paidBy, next.currency),
+      prior.paidBy,
+      next.paidBy,
+    ],
+    [
+      'split',
+      split(prior),
+      split(next),
+      [prior.splitMethod, prior.splitBetween],
+      [next.splitMethod, next.splitBetween],
+    ],
+    [
+      'description',
+      prior.description ?? 'not specified',
+      next.description ?? 'not specified',
+      prior.description,
+      next.description,
+    ],
+    [
+      'category',
+      prior.category ?? 'not specified',
+      next.category ?? 'not specified',
+      prior.category,
+      next.category,
+    ],
+    [
+      'Tag',
+      prior.tag ?? names[prior.tagId ?? ''] ?? 'not specified',
+      next.tag ?? names[next.tagId ?? ''] ?? 'not specified',
+      [prior.tagId, prior.tag],
+      [next.tagId, next.tag],
+    ],
+    ['notes', prior.notes || 'empty', next.notes || 'empty', prior.notes, next.notes],
+  ] as const;
+  const changed = fields.filter(([, , , a, b]) => JSON.stringify(a) !== JSON.stringify(b));
+  const author =
+    after.changedBy.kind === 'assistant' ? after.changedBy.name : 'You on another device';
+  const latest = "You're seeing the latest version.";
+  if (!changed.length) return `${author} changed this item a moment ago. ${latest}`;
+  // The design's wording: "Claude changed the amount a moment ago: ₹2,350.00 → ₹2,400.00."
+  const changes = changed.map(([field, a, b], index) => {
+    const label = a === b ? `the ${field} details` : `the ${field}`;
+    const when = index === 0 ? ' a moment ago' : '';
+    return a === b ? `${label}${when}` : `${label}${when}: ${a} → ${b}`;
+  });
+  return `${author} changed ${changes.join('; ')}. ${latest}`;
 }

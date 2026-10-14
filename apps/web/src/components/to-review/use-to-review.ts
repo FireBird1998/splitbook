@@ -10,7 +10,7 @@ import type { CardRead } from '@/components/dashboard/home-reads';
 
 export const TO_REVIEW_KEY = toReviewKey(WEB_QUERY_ACCOUNT);
 export const toReviewEnabled = process.env.NEXT_PUBLIC_PERSISTENT_DRAFTS_ENABLED === 'true';
-export function useToReview() {
+export function useToReview(groupId?: string) {
   const { data, error, mutate } = useSWR(toReviewEnabled ? TO_REVIEW_KEY : null, fetchWebRead, {
     refreshInterval: 30_000,
   });
@@ -18,10 +18,21 @@ export function useToReview() {
   if (data === undefined) read = { status: error ? 'error' : 'loading' };
   else {
     try {
-      read = { status: 'ready', value: buildToReview(parseToReviewResponse(data), [], new Date()) };
+      const decoded = parseToReviewResponse(data);
+      const groups = groupId
+        ? decoded.groups.filter((group) => group.groupId === groupId)
+        : decoded.groups;
+      read = {
+        status: 'ready',
+        value: buildToReview(
+          { groups, total: groups.reduce((n, group) => n + group.count, 0) },
+          [],
+          new Date(),
+        ),
+      };
     } catch {
       read = { status: 'error' };
     }
   }
-  return { read, retry: () => void mutate() };
+  return { read, failed: !!error, retry: () => void mutate() };
 }

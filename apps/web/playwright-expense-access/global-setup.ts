@@ -7,6 +7,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { MongoClient, ObjectId } from 'mongodb';
 import { DEMO_PERSONAS } from '../src/lib/demo-personas';
+import { expenseAccessMongoUri } from './mongo-target';
 
 async function unusedPort(): Promise<number> {
   const listener = createServer();
@@ -37,12 +38,15 @@ export async function startIsolatedApp(
   googleTestIdentity?: { email: string; idTokenSecret: string },
   production = false,
   /** Turn recurring Expenses on (off by default, #289) for a suite that covers them. */
-  { recurringExpenses = false }: { recurringExpenses?: boolean } = {},
+  {
+    recurringExpenses = false,
+    persistentDrafts = false,
+  }: { recurringExpenses?: boolean; persistentDrafts?: boolean } = {},
 ) {
   // Never accept a caller's Mongo URI or app URL. Match the integration suite's
   // splitbook-test-* convention, but use a unique, loopback-only DB per run.
   const dbName = `splitbook-test-access-${randomUUID()}`;
-  const uri = `mongodb://127.0.0.1:27017/${dbName}?directConnection=true`;
+  const uri = expenseAccessMongoUri(dbName);
   const client = new MongoClient(uri, { serverSelectionTimeoutMS: 5_000 });
   const appDir = await mkdtemp(path.join(tmpdir(), 'splitbook-expense-access-'));
   const repo = path.resolve(__dirname, '..');
@@ -112,6 +116,10 @@ export async function startIsolatedApp(
       MONGODB_URI: uri,
       NEXT_PUBLIC_APP_URL: baseURL,
       ...(recurringExpenses ? { RECURRING_EXPENSES_ENABLED: 'true' } : {}),
+      // Both flags, so the production build also includes the To review screens.
+      ...(persistentDrafts
+        ? { PERSISTENT_DRAFTS_ENABLED: 'true', NEXT_PUBLIC_PERSISTENT_DRAFTS_ENABLED: 'true' }
+        : {}),
     };
     if (production) {
       // Build only the temporary snapshot. The user's .next and environment
@@ -185,6 +193,10 @@ export async function startIsolatedApp(
 export default async function globalSetup() {
   // CI verifies the production server without paying route compilation costs
   // during browser assertions. Local runs keep the faster development startup.
-  // The expense-access journeys cover recurring Expenses, which are off by default (#289).
-  return startIsolatedApp('demo', undefined, Boolean(process.env.CI), { recurringExpenses: true });
+  // The expense-access journeys cover recurring Expenses, which are off by default (#289),
+  // and To review's lost-reply recovery (#406), which needs a replica set.
+  return startIsolatedApp('demo', undefined, Boolean(process.env.CI), {
+    recurringExpenses: true,
+    persistentDrafts: true,
+  });
 }
