@@ -116,6 +116,13 @@ export function useReviewEditor(
     inFlight.current = work;
     const ok = await work;
     inFlight.current = null;
+    // refresh() may deliver an external version while this operation is still settling.
+    const observed = deferred.current;
+    deferred.current = null;
+    if (observed && observed.revision > current.current.revision) {
+      adopt(observed, true);
+      return false;
+    }
     if (ok && dirty.current) return flush();
     return ok;
   }

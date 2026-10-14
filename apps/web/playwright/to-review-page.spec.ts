@@ -323,3 +323,32 @@ test('a run advances past an item removed on another device and still reaches it
   );
   await expect(page.getByRole('button', { name: 'Review one at a time' })).toBeEnabled();
 });
+
+test('an external version delivered by the post-edit refresh appears immediately', async ({
+  page,
+}) => {
+  await open(page, ['ready']);
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const draft = (await rows(page))[0];
+  let intercepted = false;
+  await page.route(`**/api/groups/${DEMO_GROUP_ID}/drafts/${draft.id}`, async (route) => {
+    if (route.request().method() !== 'PUT' || intercepted) return route.continue();
+    intercepted = true;
+    const response = await route.fetch();
+    expect(response.status()).toBe(200);
+    const kept = (await response.json()).data;
+    const external = await page.request.put(`/api/groups/${DEMO_GROUP_ID}/drafts/${draft.id}`, {
+      headers: { 'X-Splitbook-Revision': String(kept.revision) },
+      data: { values: { ...kept.values, description: 'Review another device edit' } },
+    });
+    expect(external.status()).toBe(200);
+    await route.fulfill({ response });
+  });
+  const review = panel(page);
+  await review.getByLabel('Description', { exact: true }).fill('Review this device edit');
+  await expect(review.getByLabel('Description', { exact: true })).toHaveValue(
+    'Review another device edit',
+    { timeout: 10_000 },
+  );
+  await expect(review).toContainText('You on another device changed the description:');
+});
