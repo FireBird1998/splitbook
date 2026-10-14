@@ -11,6 +11,7 @@ import {
   expenseAction,
   expenseInList,
 } from './fixtures';
+import { expenseAccessMongoUri } from './mongo-target';
 
 async function enterGroup(page: Page, ledger: Ledger) {
   const origin = process.env.EXPENSE_ACCESS_BASE_URL;
@@ -126,7 +127,7 @@ test('editing a historical JPY expense preserves its currency and whole-unit pre
   const dbName = process.env.EXPENSE_ACCESS_TEST_DB;
   if (!dbName || !/^splitbook-test-access-[a-f0-9-]+$/.test(dbName))
     throw new Error('Unique isolated test database required');
-  const client = new MongoClient(`mongodb://127.0.0.1:27017/${dbName}?directConnection=true`, {
+  const client = new MongoClient(expenseAccessMongoUri(dbName), {
     serverSelectionTimeoutMS: 5000,
   });
   try {

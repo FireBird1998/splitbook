@@ -2,6 +2,7 @@ import type { APIRequestContext, Page, Request, Route } from '@playwright/test';
 import { MongoClient, ObjectId } from 'mongodb';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { test, expect, dataOf, joinGroup } from './fixtures';
+import { expenseAccessMongoUri } from './mongo-target';
 
 function appURL(path: string) {
   const origin = process.env.EXPENSE_ACCESS_BASE_URL;
@@ -221,7 +222,7 @@ test('a sole member confirms cleanup, with safe refusal when deletion is unavail
   const name = process.env.EXPENSE_ACCESS_TEST_DB;
   if (!name || !/^splitbook-test-access-[a-f0-9-]+$/.test(name))
     throw new Error('Unique isolated test database required');
-  const client = new MongoClient(`mongodb://127.0.0.1:27017/${name}?directConnection=true`, {
+  const client = new MongoClient(expenseAccessMongoUri(name), {
     serverSelectionTimeoutMS: 5_000,
   });
   const path = leavePath(ledger.groupA);

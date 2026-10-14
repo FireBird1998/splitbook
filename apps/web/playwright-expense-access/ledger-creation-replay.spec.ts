@@ -3,6 +3,7 @@ import { MongoClient, ObjectId } from 'mongodb';
 import type { APIRequestContext } from '@playwright/test';
 import { test, expect, dataOf, expensePath, joinGroup } from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
+import { expenseAccessMongoUri } from './mongo-target';
 
 const { priya, sam } = DEMO_PERSONA_IDS;
 const expenseInput = () => ({
@@ -228,7 +229,7 @@ test('Settlement replay returns the current stored record without another financ
   const first = await dataOf(await ledger.priya.post(path, { data: body, headers }), 201);
   const name = process.env.EXPENSE_ACCESS_TEST_DB;
   if (!name?.startsWith('splitbook-test-access-')) throw new Error('Isolated database required');
-  const client = new MongoClient(`mongodb://127.0.0.1:27017/${name}?directConnection=true`);
+  const client = new MongoClient(expenseAccessMongoUri(name));
   try {
     // Settlement has no edit endpoint: amend only this isolated fixture's display metadata.
     const amended = await client
@@ -277,7 +278,7 @@ for (const kind of ['expenses', 'settlements'] as const) {
     );
     const name = process.env.EXPENSE_ACCESS_TEST_DB;
     if (!name?.startsWith('splitbook-test-access-')) throw new Error('Isolated database required');
-    const client = new MongoClient(`mongodb://127.0.0.1:27017/${name}?directConnection=true`);
+    const client = new MongoClient(expenseAccessMongoUri(name));
     try {
       // Simulate historical currency drift, which current Group mutations correctly forbid.
       const groups = client.db(name).collection('groups');

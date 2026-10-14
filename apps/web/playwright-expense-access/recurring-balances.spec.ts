@@ -3,6 +3,7 @@ import type { Page, Response } from '@playwright/test';
 import { test, expect, dataOf, type Ledger } from './fixtures';
 import { DEMO_PERSONA_IDS } from '../src/lib/demo-personas';
 import { toPeriod } from '@splitbook/shared/recurring-due-periods';
+import { expenseAccessMongoUri } from './mongo-target';
 
 // #240: the Group page starts its Group, Expense count and Balances reads together. The first
 // two materialize due recurring Expenses; Balances must too, or the page shows last month's
@@ -36,7 +37,7 @@ async function rentDueThisMonth(ledger: Ledger) {
   const dbName = process.env.EXPENSE_ACCESS_TEST_DB;
   if (!dbName || !/^splitbook-test-access-[a-f0-9-]+$/.test(dbName))
     throw new Error('Unique isolated test database required');
-  const client = new MongoClient(`mongodb://127.0.0.1:27017/${dbName}?directConnection=true`, {
+  const client = new MongoClient(expenseAccessMongoUri(dbName), {
     serverSelectionTimeoutMS: 5000,
   });
   try {
