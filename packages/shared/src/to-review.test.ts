@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildToReview, summarizeReviewRun, type DeviceToReviewItem } from './to-review';
+import {
+  buildToReview,
+  describeDraftChange,
+  reviewDate,
+  summarizeReviewRun,
+  type DeviceToReviewItem,
+} from './to-review';
 import { parseToReviewResponse } from './to-review-read';
 import type { ToReviewItem, ToReviewRead } from './to-review-read';
 import { toReviewHref, toReviewPath } from './api-paths';
@@ -197,5 +203,61 @@ describe('To review read contract', () => {
     );
     expect(toReviewHref('a/b')).toBe('/groups/a%2Fb/review');
     expect(() => toReviewHref('..')).toThrow();
+  });
+});
+
+describe('changes while an item is open', () => {
+  const names = { [member]: 'Alex', c00000000000000000000001: 'Sam' };
+  function changed() {
+    const before = item(1).draft;
+    before.values!.currency = 'INR';
+    before.values!.amount = 2350;
+    before.values!.paidBy![0].amount = 2350;
+    const after = structuredClone(before);
+    after.revision++;
+    after.changedBy = { kind: 'assistant', name: 'Claude' };
+    return { before, after };
+  }
+  it('describes exact money and names the assistant that last changed it', () => {
+    const { before, after } = changed();
+    after.values!.amount = 2400;
+    expect(describeDraftChange(before, after, names)).toBe(
+      'Claude changed the amount: ₹2,350.00 → ₹2,400.00 a moment ago.',
+    );
+  });
+  it('formats date facts as calendar days in every host time zone', () => {
+    const { before, after } = changed();
+    after.values!.date = '2026-10-15';
+    expect(describeDraftChange(before, after)).toBe(
+      `Claude changed the date: ${reviewDate('2026-10-14')} → ${reviewDate('2026-10-15')} a moment ago.`,
+    );
+    expect(reviewDate('2000-01-01')).toBe('Jan 1, 2000');
+  });
+  it('names changed payers and amounts without exposing identities', () => {
+    const { before, after } = changed();
+    after.values!.paidBy = [{ user: 'c00000000000000000000001', amount: 2350 }];
+    expect(describeDraftChange(before, after, names)).toContain(
+      'the payer: Alex ₹2,350.00 → Sam ₹2,350.00',
+    );
+  });
+  it('describes a changed split, including participants when the method stays equal', () => {
+    const { before, after } = changed();
+    after.values!.splitBetween = [{ user: 'c00000000000000000000001' }];
+    expect(describeDraftChange(before, after, names)).toContain(
+      'the split: equal · Alex → equal · Sam',
+    );
+    after.values!.splitMethod = 'percentage';
+    after.values!.splitBetween[0].percentage = 100;
+    expect(describeDraftChange(before, after, names)).toContain('percentage · Sam 100%');
+  });
+  it('describes multiple changed facts and the member on another device', () => {
+    const { before, after } = changed();
+    after.changedBy = { kind: 'member' };
+    after.values!.amount = 2400;
+    after.values!.date = '2026-10-15';
+    const note = describeDraftChange(before, after, names);
+    expect(note).toContain('You on another device changed the amount');
+    expect(note).toContain('; the date:');
+    expect(note).not.toMatch(/draft|revision|request|collection/i);
   });
 });

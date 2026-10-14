@@ -1,6 +1,7 @@
 'use client';
 import { useMemo, useRef, useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
+import { TO_REVIEW_KEY } from '@/components/to-review/use-to-review';
 import { expenseDraftsKey } from '@splitbook/shared/query-keys';
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import {
@@ -26,6 +27,7 @@ export function useKeepExpenseDraft({
   onKept: () => void;
   enabled: boolean;
 }) {
+  const { mutate: refresh } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const inFlight = useRef(false);
@@ -82,6 +84,7 @@ export function useKeepExpenseDraft({
           throw new Error('Could not confirm this item. Your form is still here.');
         setPending(false);
         void mutate();
+        void refresh(TO_REVIEW_KEY);
         if (attemptValues.current === JSON.stringify(draft.values)) onKept();
         else
           setError(
@@ -126,6 +129,7 @@ export function useKeepExpenseDraft({
       await client.create(draftValues(entries));
       attemptValues.current = null;
       void mutate();
+      void refresh(TO_REVIEW_KEY);
       onKept();
     } catch (cause) {
       setPending(Boolean(await client.pending()));

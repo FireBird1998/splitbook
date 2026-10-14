@@ -50,7 +50,9 @@ test('To review card and Group banner share counts, sources and links; empty hid
   await expect(page.getByRole('heading', { name: /^To review/ })).toHaveCount(0);
 });
 
-test('To review loading and failure states offer retry in both views', async ({ page }) => {
+test('Home loads visibly; the Group banner stays hidden while loading and offers retry on failure', async ({
+  page,
+}) => {
   let release: () => void = () => {};
   let fail = true;
   await page.route('**/api/user/to-review', async (route) => {
@@ -80,7 +82,8 @@ test('To review loading and failure states offer retry in both views', async ({ 
     .toBe(false);
   fail = true;
   await page.goto(`/groups/${DEMO_GROUP_ID}/expenses`);
-  await expect(page.getByRole('status', { name: 'Loading To review' })).toBeVisible();
+  await expect(page.getByRole('status', { name: 'Loading To review' })).toHaveCount(0);
+  await expect.poll(() => typeof release).toBe('function');
   release();
   const banner = page.getByRole('region', { name: 'To review', exact: true });
   await expect(banner).toContainText('Unable to load To review.');

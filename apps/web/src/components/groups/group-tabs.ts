@@ -11,7 +11,7 @@ export const GROUP_TABS = [
   // The Month against the Months before it (#314); a Trip's is its Trip summary (#316).
   { slug: 'insights', label: 'Insights' },
   { slug: 'activity', label: 'Activity' },
-  { slug: 'drafts', label: 'Drafts' },
+  { slug: 'review', label: 'To review' },
   { slug: 'members', label: 'Members' },
 ] as const;
 
@@ -76,7 +76,8 @@ export function groupLandingHref(groupId: string, searchParams: SearchParamsReco
     if (raw === undefined) continue;
     const values = Array.isArray(raw) ? raw : [raw];
     if (key === 'tab') {
-      if (isGroupTab(values[0])) tab = values[0];
+      if (values[0] === 'drafts') tab = 'review';
+      else if (isGroupTab(values[0])) tab = values[0];
       continue;
     }
     for (const value of values) query.append(key, value);

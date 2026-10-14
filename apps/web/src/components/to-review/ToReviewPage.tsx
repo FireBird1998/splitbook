@@ -1,0 +1,522 @@
+'use client';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import Alert from '@mui/material/Alert';
+import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+import Paper from '@mui/material/Paper';
+import Stack from '@mui/material/Stack';
+import Typography from '@mui/material/Typography';
+import { useSWRConfig } from 'swr';
+import { expenseDraftsKey } from '@splitbook/shared/query-keys';
+import {
+  summarizeReviewRun,
+  type ReviewItemModel,
+  type ReviewRunOutcome,
+} from '@splitbook/shared/to-review';
+import type {
+  DraftReview,
+  DraftSaveOutcome,
+  PersistedExpenseDraft,
+} from '@splitbook/shared/validators/expense-draft';
+import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
+import { useGroup } from '@/lib/hooks/use-groups';
+import { FONT_MONO, RADIUS } from '@/lib/theme/tokens';
+import { TO_REVIEW_KEY, useToReview } from './use-to-review';
+import { webReviewClient, reviewProblem } from './review-client';
+import { ReviewFacts, reviewAmount, reviewSource } from './ReviewDetails';
+import { reviewDate } from '@splitbook/shared/to-review';
+import ToReviewPanel from './ToReviewPanel';
+
+type Confirmation = {
+  reviews: DraftReview[];
+  totals: Array<{ currency: string; formatted: string }>;
+};
+type Run = { ids: string[]; index: number; outcomes: ReviewRunOutcome[] };
+export default function ToReviewPage({
+  accountId,
+  groupId,
+}: {
+  accountId: string;
+  groupId: string;
+}) {
+  const { read, retry, failed } = useToReview(groupId);
+  const { data: group, error: groupError } = useGroup(accountId, groupId);
+  const { mutate } = useSWRConfig();
+  const client = useMemo(() => webReviewClient(accountId, groupId), [accountId, groupId]);
+  const [opened, setOpened] = useState<ReviewItemModel | null>(null);
+  const [pending, setPending] = useState(false);
+  const [checked, setChecked] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [outcomes, setOutcomes] = useState<DraftSaveOutcome[]>([]);
+  const [outcomeNames, setOutcomeNames] = useState<Record<string, string>>({});
+  const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
+  const [run, setRun] = useState<Run | null>(null);
+  const [summary, setSummary] = useState('');
+  const [online, setOnline] = useState(true);
+  const lock = useRef(false);
+  const namesKey = `splitbook.review-names:${accountId}:${groupId}`;
+  const refresh = useCallback(async () => {
+    await Promise.all([
+      mutate(TO_REVIEW_KEY),
+      mutate(expenseDraftsKey({ ...WEB_QUERY_ACCOUNT, accountId }, groupId)),
+    ]);
+  }, [accountId, groupId, mutate]);
+  useEffect(() => {
+    let active = true;
+    client
+      .pending()
+      .then((value) => {
+        if (!active) return;
+        setPending(!!value);
+        setChecked(true);
+        if (value) {
+          const names: unknown = JSON.parse(sessionStorage.getItem(namesKey) || '{}');
+          if (names && typeof names === 'object')
+            setOutcomeNames(
+              Object.fromEntries(
+                Object.entries(names).filter((entry) => typeof entry[1] === 'string'),
+              ),
+            );
+        }
+      })
+      .catch(() => {
+        if (active) setError('Could not check the earlier save. Reload before saving.');
+      });
+    return () => {
+      active = false;
+    };
+  }, [client, namesKey]);
+  useEffect(() => {
+    const update = () => setOnline(navigator.onLine);
+    update();
+    window.addEventListener('online', update);
+    window.addEventListener('offline', update);
+    return () => {
+      window.removeEventListener('online', update);
+      window.removeEventListener('offline', update);
+    };
+  }, []);
+  const model = read.status === 'ready' ? read.value : null;
+  const items = model?.items ?? [];
+  const selected = opened ? (items.find((item) => item.id === opened.id) ?? opened) : null;
+  const available =
+    checked && online && !!group && !groupError && !failed && read.status === 'ready';
+  const names = Object.fromEntries(group?.members.map(({ user }) => [user._id, user.name]) ?? []);
+  const context = {
+    members: group?.members.map(({ user }) => ({ id: user._id, name: user.name })) ?? [],
+    tags:
+      group?.tags
+        .filter((tag) => !tag.isArchived && !tag.isDeleted)
+        .map((tag) => ({ id: tag._id, name: tag.name })) ?? [],
+  };
+  function finishItem(id: string, status: ReviewRunOutcome['status']) {
+    if (!run) {
+      if (status === 'saved' || status === 'deleted') setOpened(null);
+      return;
+    }
+    const nextOutcomes = [...run.outcomes.filter((outcome) => outcome.id !== id), { id, status }];
+    const next = run.index + 1;
+    if (next >= run.ids.length) {
+      setSummary(`Done for now · ${summarizeReviewRun(nextOutcomes).label}`);
+      setRun(null);
+      setOpened(null);
+    } else {
+      setRun({ ...run, index: next, outcomes: nextOutcomes });
+      const following = items.find((item) => item.id === run.ids[next]);
+      setOpened(following ?? null);
+    }
+  }
+  async function action(work: () => Promise<void>) {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      await work();
+    } catch (cause) {
+      setError(
+        reviewProblem(
+          cause instanceof Error
+            ? cause.message
+            : 'Could not confirm this action. Check your connection and try again.',
+        ),
+      );
+    } finally {
+      try {
+        setPending(!!(await client.pending()));
+      } catch {
+        setPending(true);
+        setError('Could not check the earlier save. Reload before saving.');
+      }
+      lock.current = false;
+      setBusy(false);
+    }
+  }
+  async function save(reviews: DraftReview[], acknowledged: string[]) {
+    const labels = Object.fromEntries(
+      reviews.map((row) => [row.draft.id, row.draft.values?.description || 'Expense to review']),
+    );
+    sessionStorage.setItem(namesKey, JSON.stringify(labels));
+    setOutcomeNames(labels);
+    let results: DraftSaveOutcome[];
+    try {
+      results = await client.save(reviews, acknowledged);
+    } catch (cause) {
+      const uncertain = !!(await client.pending());
+      results = reviews.map((row) =>
+        uncertain
+          ? { id: row.draft.id, status: 'unresolved', message: 'Unconfirmed' }
+          : {
+              id: row.draft.id,
+              status: 'failed',
+              message: cause instanceof Error ? cause.message : 'Could not save this expense.',
+            },
+      );
+    }
+    setOutcomes(results);
+    setConfirmation(null);
+    if (!(await client.pending())) sessionStorage.removeItem(namesKey);
+    await refresh();
+    await mutate(() => true);
+    for (const outcome of results)
+      if (run && outcome.status === 'saved') finishItem(outcome.id, 'saved');
+    if (!run && reviews.length === 1 && results[0]?.status === 'saved') setOpened(null);
+  }
+  async function saveOne(draft: PersistedExpenseDraft, acknowledged: boolean) {
+    await action(async () => {
+      const reviewed = await client.review([draft.id]);
+      const review = reviewed[0];
+      if (review.draft.revision !== draft.revision) {
+        await refresh();
+        throw new Error(
+          'This item changed while you were looking. Review the latest version before saving.',
+        );
+      }
+      if (review.problems.length || (review.duplicates.length && !acknowledged)) {
+        await refresh();
+        throw new Error(
+          'This item needs another look before saving. Check the details and any possible duplicate.',
+        );
+      }
+      await save(reviewed, acknowledged ? [draft.id] : []);
+    });
+  }
+  async function saveReady() {
+    if (!model) return;
+    const chosen = model.ready;
+    await action(async () => {
+      const reviews = await client.review(chosen.items.map((item) => item.draft.id));
+      if (
+        reviews.some(
+          (review) =>
+            review.draft.revision !==
+              chosen.items.find((item) => item.draft.id === review.draft.id)?.draft.revision ||
+            review.problems.length ||
+            review.duplicates.length,
+        )
+      ) {
+        await refresh();
+        throw new Error('Some items changed or need another look. Review them before saving.');
+      }
+      setConfirmation({ reviews, totals: chosen.totals });
+      setOutcomes([]);
+    });
+  }
+  return (
+    <Stack spacing={2.5} sx={{ py: 2, minWidth: 0 }}>
+      <Typography component="h2" variant="h5">
+        To review
+      </Typography>
+      <Typography color="text.secondary">
+        Only you can see these. Nothing here changes Balances until you save it.
+      </Typography>
+      {error && <Alert severity="warning">{error}</Alert>}
+      {(groupError || read.status === 'error' || failed) && (
+        <Alert severity="warning" action={<Button onClick={retry}>Try again</Button>}>
+          Could not verify To review. Connect to the internet and try again.
+        </Alert>
+      )}
+      {!online && (
+        <Alert severity="info">Connect to the internet to change items in your account.</Alert>
+      )}
+      {pending && (
+        <Alert
+          severity="warning"
+          action={
+            <Button
+              disabled={busy || !available}
+              onClick={() =>
+                void action(async () => {
+                  const result = await client.retry();
+                  if (result?.kind === 'save') {
+                    setOutcomes(result.outcomes);
+                    if (
+                      run &&
+                      selected &&
+                      result.outcomes.find((outcome) => outcome.id === selected.id)?.status ===
+                        'saved'
+                    )
+                      finishItem(selected.id, 'saved');
+                  }
+                  if (!(await client.pending())) sessionStorage.removeItem(namesKey);
+                  await refresh();
+                  await mutate(() => true);
+                })
+              }
+            >
+              Check again
+            </Button>
+          }
+        >
+          We didn&apos;t hear back, so it may already be saved. Check again before saving another
+          item.
+        </Alert>
+      )}
+      {summary && (
+        <Alert severity="success" role="status">
+          {summary}
+        </Alert>
+      )}
+      {outcomes.map((outcome) => (
+        <Alert key={outcome.id} severity={outcome.status === 'saved' ? 'success' : 'warning'}>
+          <Typography fontWeight={600}>
+            {outcomeNames[outcome.id] || 'Expense to review'}
+          </Typography>
+          {outcome.status === 'saved'
+            ? 'Expense saved'
+            : outcome.status === 'unresolved'
+              ? "We didn't hear back, so it may already be saved"
+              : `Couldn't save: ${reviewProblem(outcome.message)}`}
+          {outcome.status === 'failed' && items.find((item) => item.id === outcome.id) && (
+            <Button
+              disabled={busy}
+              onClick={() => setOpened(items.find((item) => item.id === outcome.id)!)}
+            >
+              Fix this item
+            </Button>
+          )}
+        </Alert>
+      ))}
+      {!model && !groupError && <Typography role="status">Loading To review…</Typography>}
+      {model && (
+        <>
+          {!!model.counts.total && (
+            <>
+              <Typography>
+                {model.counts.ready} ready · {model.counts.duplicate} to check ·{' '}
+                {model.counts.needsDetails} needs details
+              </Typography>
+              {model.sourceSummary && (
+                <Typography variant="body2" color="text.secondary">
+                  {model.sourceSummary}
+                </Typography>
+              )}
+              <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
+                <Button
+                  variant="contained"
+                  disabled={
+                    busy || pending || !available || !model.ready.count || !!selected || !!run
+                  }
+                  onClick={() => void saveReady()}
+                >
+                  {model.ready.label}
+                </Button>
+                <Button
+                  variant="outlined"
+                  disabled={busy || pending || !available || !!selected || !!run}
+                  onClick={() => {
+                    setRun({ ids: items.map((item) => item.id), index: 0, outcomes: [] });
+                    setOpened(items[0]);
+                    setSummary('');
+                  }}
+                >
+                  Review one at a time
+                </Button>
+              </Stack>
+            </>
+          )}
+          {!model.counts.total && (
+            <Paper variant="outlined" sx={{ p: 3 }}>
+              <Typography component="h3" variant="h6">
+                All caught up
+              </Typography>
+              <Button component={Link} href={`/groups/${groupId}/expenses`}>
+                Back to Expenses
+              </Button>
+            </Paper>
+          )}
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: selected
+                ? { xs: 'minmax(0, 1fr)', lg: 'minmax(0, 1fr) minmax(320px, 1fr)' }
+                : 'minmax(0, 1fr)',
+              gap: 2.5,
+              alignItems: 'start',
+            }}
+          >
+            <Stack spacing={2}>
+              {(['ready', 'duplicate', 'needs-details'] as const).map((state) => {
+                const section = items.filter((item) => item.state === state);
+                return (
+                  !!section.length && (
+                    <Box
+                      component="section"
+                      key={state}
+                      aria-label={
+                        state === 'ready'
+                          ? 'Ready'
+                          : state === 'duplicate'
+                            ? 'Check before saving'
+                            : 'Needs details'
+                      }
+                    >
+                      <Typography
+                        component="h3"
+                        variant="subtitle1"
+                        fontWeight={600}
+                        sx={{ mb: 1 }}
+                      >
+                        {state === 'ready'
+                          ? 'Ready'
+                          : state === 'duplicate'
+                            ? 'Check before saving'
+                            : 'Needs details'}
+                      </Typography>
+                      <Stack spacing={1}>
+                        {section.map((item) => (
+                          <Box
+                            component="button"
+                            type="button"
+                            key={item.id}
+                            disabled={busy || !!run || !!selected}
+                            aria-label={`Review ${item.accountItem?.draft.values?.description || 'expense'}`}
+                            onClick={() => setOpened(item)}
+                            sx={{
+                              textAlign: 'left',
+                              font: 'inherit',
+                              cursor: 'pointer',
+                              width: '100%',
+                              minWidth: 0,
+                              color: 'text.primary',
+                              bgcolor: 'background.paper',
+                              border: 1,
+                              borderColor: selected?.id === item.id ? 'primary.main' : 'divider',
+                              borderRadius: `${RADIUS.md}px`,
+                              p: 2,
+                              overflowWrap: 'anywhere',
+                              '&:disabled': { cursor: 'default' },
+                              '&:focus-visible': {
+                                outline: '2px solid',
+                                outlineColor: 'primary.main',
+                              },
+                            }}
+                          >
+                            <Typography fontWeight={600}>
+                              {item.accountItem?.draft.values?.description || 'Description missing'}
+                            </Typography>
+                            <Typography sx={{ fontFamily: FONT_MONO }}>
+                              {reviewAmount(item.accountItem?.draft.values)}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                              {reviewDate(item.accountItem?.draft.values?.date)} ·{' '}
+                              {reviewSource(item.accountItem!)}
+                            </Typography>
+                            {item.missingFacts.map((fact) => (
+                              <Typography key={fact} variant="body2" color="text.secondary">
+                                {fact.charAt(0).toUpperCase() + fact.slice(1)}?
+                              </Typography>
+                            ))}
+                          </Box>
+                        ))}
+                      </Stack>
+                    </Box>
+                  )
+                );
+              })}
+            </Stack>
+            {selected && (
+              <ToReviewPanel
+                key={selected.id}
+                item={selected}
+                items={items.flatMap((item) => (item.accountItem ? [item.accountItem] : []))}
+                context={context}
+                names={names}
+                groupName={group?.name || 'this Group'}
+                client={client}
+                refresh={refresh}
+                available={available && items.some((item) => item.id === selected.id) && !pending}
+                savingBlocked={pending || busy}
+                run={run ? `${run.index + 1} of ${run.ids.length}` : undefined}
+                onClose={() => {
+                  setOpened(null);
+                  if (run) {
+                    const all = [
+                      ...run.outcomes,
+                      ...run.ids.slice(run.index).map((id) => ({ id, status: 'skipped' as const })),
+                    ];
+                    setSummary(`Done for now · ${summarizeReviewRun(all).label}`);
+                    setRun(null);
+                  }
+                }}
+                onNext={() => finishItem(selected.id, 'skipped')}
+                onSave={saveOne}
+                onDelete={(draft) =>
+                  action(async () => {
+                    await client.discard(draft);
+                    await refresh();
+                    finishItem(draft.id, 'deleted');
+                  })
+                }
+              />
+            )}
+          </Box>
+        </>
+      )}
+      <Dialog
+        open={!!confirmation}
+        onClose={() => !busy && setConfirmation(null)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {confirmation ? `Save ${confirmation.reviews.length} ready?` : 'Save ready expenses?'}
+        </DialogTitle>
+        <DialogContent>
+          <Stack spacing={2}>
+            {confirmation?.reviews.map((item) => (
+              <ReviewFacts key={item.draft.id} item={item} names={names} />
+            ))}
+            {confirmation?.totals.map((total) => (
+              <Typography key={total.currency} fontWeight={600}>
+                Total · {total.formatted}
+              </Typography>
+            ))}
+            <Typography>
+              They&apos;ll be added to {group?.name || 'this Group'}, and Balances there will change
+              for everyone.
+            </Typography>
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button disabled={busy} onClick={() => setConfirmation(null)}>
+            Keep reviewing
+          </Button>
+          <Button
+            variant="contained"
+            disabled={busy || !available || pending}
+            onClick={() => confirmation && void action(() => save(confirmation.reviews, []))}
+          >
+            Confirm save
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Stack>
+  );
+}
