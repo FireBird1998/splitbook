@@ -273,6 +273,116 @@ export function connectionTests(mongo = false) {
       expect(response.headers.get('WWW-Authenticate')).toContain('resource_metadata=');
     });
 
+    it.each([
+      { enabled: true, allowDrafts: true },
+      { enabled: true, allowDrafts: false },
+      { enabled: false, allowDrafts: false },
+    ])(
+      'follows the challenge through consent and tools (enabled=$enabled, opted in=$allowDrafts)',
+      async ({ enabled, allowDrafts }) => {
+        const previousRoute = route;
+        vi.stubEnv('PERSISTENT_DRAFTS_ENABLED', String(enabled));
+        const handler = createMcpConnectionHandler(
+          auth,
+          resource,
+          async (subject, client, generation, scopes) =>
+            currentMcpGrant(
+              (await auth.$context).adapter,
+              env,
+              subject,
+              client,
+              generation,
+              scopes,
+            ),
+          (server, id, scopes, authorize) =>
+            registerSplitbookTools(server, { id, authorize }, scopes, origin),
+        );
+        route = (request) =>
+          new URL(request.url).pathname === '/api/mcp' ? handler(request) : auth.handler(request);
+        const client = new Client({ name: 'challenge-client', version: '1' });
+        try {
+          const challenge = await fetch(resource, { method: 'POST' });
+          expect(challenge.status).toBe(401);
+          const scopes = challenge.headers.get('WWW-Authenticate')?.match(/\bscope="([^"]+)"/)?.[1];
+          expect(scopes?.split(' ')).toEqual(
+            enabled ? [MCP_LEDGER_SCOPE, MCP_DRAFT_SCOPE] : [MCP_LEDGER_SCOPE],
+          );
+          if (!scopes) throw new Error('Missing challenge scopes');
+          const verifier = randomBytes(32).toString('base64url');
+          // Like a real assistant, request only the scopes advertised by the server.
+          const query = new URLSearchParams({
+            client_id: clientId,
+            redirect_uri: 'https://mcp-client.example.test/callback',
+            response_type: 'code',
+            prompt: 'consent',
+            scope: scopes,
+            resource,
+            state: 'challenge-state',
+            code_challenge_method: 'S256',
+            code_challenge: createHash('sha256').update(verifier).digest('base64url'),
+          });
+          const authorization = await fetch(`${origin}/api/auth/oauth2/authorize?${query}`, {
+            headers: { cookie },
+            redirect: 'manual',
+          });
+          const location =
+            authorization.headers.get('location') ?? (await authorization.json()).url;
+          const consentURL = new URL(location, origin);
+          expect(consentURL.pathname).toBe('/mcp/consent');
+          const details = await fetch(
+            `${origin}/api/auth/mcp/consent-details?${new URLSearchParams({ oauth_query: consentURL.search.slice(1) })}`,
+            { headers: { cookie } },
+          );
+          expect(details.status).toBe(200);
+          const offered = (await details.json()).scopes as string[];
+          expect(offered).toEqual(scopes.split(' '));
+          expect(offered.includes(MCP_DRAFT_SCOPE)).toBe(enabled);
+          const consent = await post(
+            '/oauth2/consent',
+            {
+              accept: true,
+              oauth_query: consentURL.search.slice(1),
+              scope: offered.filter((scope) => scope !== MCP_DRAFT_SCOPE || allowDrafts).join(' '),
+            },
+            true,
+          );
+          expect(consent.status).toBe(200);
+          const accepted = await consent.json();
+          const callback = new URL(accepted.url ?? accepted.redirect_uri);
+          expect(callback.searchParams.get('state')).toBe('challenge-state');
+          const exchange = await exchangeCode({
+            code: callback.searchParams.get('code')!,
+            verifier,
+          });
+          expect(exchange.status).toBe(200);
+          const issued = await exchange.json();
+          expect(issued.scope.split(' ').includes(MCP_DRAFT_SCOPE)).toBe(allowDrafts);
+          await client.connect(
+            new StreamableHTTPClientTransport(new URL(resource), {
+              requestInit: { headers: { Authorization: `Bearer ${issued.access_token}` } },
+            }),
+          );
+          expect((await client.listTools()).tools.map((tool) => tool.name).sort()).toEqual(
+            [
+              'connection_status',
+              'group_balances',
+              'group_context',
+              'group_spending',
+              'list_groups',
+              ...(allowDrafts
+                ? ['create_drafts', 'discard_draft', 'list_drafts', 'replace_draft']
+                : []),
+            ].sort(),
+          );
+        } finally {
+          await client.close();
+          route = previousRoute;
+          vi.stubEnv('PERSISTENT_DRAFTS_ENABLED', 'true');
+          await authorizeClient();
+        }
+      },
+    );
+
     it.each(['modern', 'legacy'] as const)(
       'connects using %s transport and calls an authenticated tool',
       async (era) => {

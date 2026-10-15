@@ -10,9 +10,13 @@ export async function seedToReview(count: number) {
     'mongodb://127.0.0.1:27017/splitbook-demo?directConnection=true';
   const url = new URL(uri);
   if (
-    !['/splitbook-demo', '/splitbook_w405', '/splitbook_w407', '/splitbook_w406'].includes(
-      url.pathname,
-    ) ||
+    ![
+      '/splitbook-demo',
+      '/splitbook_w405',
+      '/splitbook_w407',
+      '/splitbook_w406',
+      '/splitbook_w419',
+    ].includes(url.pathname) ||
     !['localhost', '127.0.0.1', 'host.docker.internal'].includes(url.hostname)
   )
     throw new Error('To review fixtures require an isolated demo database.');
