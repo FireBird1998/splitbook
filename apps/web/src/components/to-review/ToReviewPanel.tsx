@@ -1,4 +1,5 @@
 'use client';
+import ReviewExpenseFields from './ReviewExpenseFields';
 import { useEffect, useRef, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
@@ -10,12 +11,10 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import IconButton from '@mui/material/IconButton';
-import MenuItem from '@mui/material/MenuItem';
 import Stack from '@mui/material/Stack';
-import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
 import CloseIcon from '@mui/icons-material/Close';
-import { draftFields, type DraftContext } from '@splitbook/shared/persistent-draft-editor';
+import { type DraftContext } from '@splitbook/shared/persistent-draft-editor';
 import type { PersistedExpenseDraft } from '@splitbook/shared/validators/expense-draft';
 import type { ReviewItemModel } from '@splitbook/shared/to-review';
 import type { ToReviewItem } from '@splitbook/shared/to-review-read';
@@ -158,31 +157,21 @@ export default function ToReviewPanel({
               didn&apos;t know {fact}, so it left that to you.
             </Typography>
           ))}
-        {draftFields(editor.entries, context).map((field) => (
-          <TextField
-            key={field.key}
-            label={field.label}
-            value={field.value ?? editor.entries[field.key] ?? ''}
-            select={!!field.options}
-            disabled={busy || !available}
-            onChange={(event) => {
+        <Box
+          component="fieldset"
+          disabled={busy || !available}
+          inert={busy || !available}
+          sx={{ border: 0, p: 0, m: 0, minWidth: 0 }}
+        >
+          <ReviewExpenseFields
+            entries={editor.entries}
+            context={context}
+            onChange={(changes) => {
               setAcknowledgedVersion(null);
-              editor.change(field.key, event.target.value);
+              editor.change(changes);
             }}
-            slotProps={{ htmlInput: { inputMode: field.numeric ? 'decimal' : 'text' } }}
-          >
-            {field.options && [
-              <MenuItem key="empty" value="">
-                Not specified
-              </MenuItem>,
-              ...field.options.map((option) => (
-                <MenuItem key={option.value} value={option.value} disabled={option.disabled}>
-                  {option.label}
-                </MenuItem>
-              )),
-            ]}
-          </TextField>
-        ))}
+          />
+        </Box>
         <Typography role="status" variant="caption" color="text.secondary">
           {editor.status === 'kept'
             ? 'Changes kept in To review'
@@ -192,7 +181,7 @@ export default function ToReviewPanel({
         </Typography>
         {item.accountItem!.problems.map((problem, index) => (
           <Typography key={index} variant="body2" color="text.secondary">
-            {reviewProblem(problem)}
+            {reviewProblem(problem, editor.draft.values, names)}
           </Typography>
         ))}
         {duplicate && (

@@ -16,6 +16,7 @@ export async function seedToReview(count: number) {
       '/splitbook_w407',
       '/splitbook_w406',
       '/splitbook_w419',
+      '/splitbook_w420',
     ].includes(url.pathname) ||
     !['localhost', '127.0.0.1', 'host.docker.internal'].includes(url.hostname)
   )

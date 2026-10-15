@@ -34,10 +34,17 @@ test('fix a missing payer; edits are kept; Save records exactly the version show
   const review = panel(page);
   await expect(review).toContainText("Claude didn't know who paid, so it left that to you");
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeDisabled();
-  await review.getByLabel('Paid by Alex Rivera', { exact: true }).click();
-  await page.getByRole('option', { name: 'Included', exact: true }).click();
-  await review.getByLabel('Alex Rivera — amount', { exact: true }).fill('12.34');
+  await review.getByLabel('Paid by', { exact: true }).click();
+  await page.getByRole('option', { name: 'Alex Rivera', exact: true }).click();
+  await review.getByLabel('Date', { exact: true }).fill('2026-10-15');
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
+  expect((await rows(page))[0].values.date).toBe('2026-10-15');
+  await expect(page.getByRole('region', { name: 'Ready', exact: true })).toContainText(
+    'Review meal 1',
+  );
+  await expect(page.locator('body')).not.toContainText(
+    /\(e.g. INR\)|\(YYYY-MM-DD\)|\bequal\b|\bother\b|paidBy\.|splitBetween\./,
+  );
   expect((await rows(page))[0].values.paidBy).toEqual([
     { user: 'a00000000000000000000001', amount: 12.34 },
   ]);
@@ -82,7 +89,7 @@ test('Save N ready confirms only ready versions and gives mixed per-item outcome
   await expect(confirm).toContainText('Review meal 2');
   await expect(confirm).not.toContainText('Review meal 3');
   await expect(confirm).toContainText('Total · ₹24.68');
-  await expect(confirm).toContainText('Paid by Alex Rivera · equal between Alex Rivera');
+  await expect(confirm).toContainText('Paid by Alex Rivera · Split equally between Alex Rivera');
   await expect(confirm).toContainText(
     "They'll be added to Goa Friends Trip, and Balances there will change for everyone",
   );
@@ -139,7 +146,9 @@ test('a newer read and a stale edit both show the changed facts and author', asy
       },
     },
   });
-  await expect(review.getByLabel('Amount', { exact: true })).toHaveValue('15', { timeout: 40_000 });
+  await expect(review.getByRole('spinbutton', { name: /^Amount/ })).toHaveValue('15', {
+    timeout: 40_000,
+  });
   await expect(review.getByRole('status').first()).toContainText(
     'You on another device changed the amount a moment ago: ₹12.34 → ₹15.00',
   );
@@ -148,13 +157,11 @@ test('a newer read and a stale edit both show the changed facts and author', asy
     headers: { 'X-Splitbook-Revision': String(next.revision) },
     data: { values: { ...next.values, description: 'Review corrected meal' } },
   });
-  await review.getByLabel('Description', { exact: true }).fill('Unsent older edit');
+  await review.getByLabel('What was it for?').fill('Unsent older edit');
   await expect(
     review.getByRole('status').filter({ hasText: 'Changes kept in To review' }),
   ).toBeVisible();
-  await expect(review.getByLabel('Description', { exact: true })).toHaveValue(
-    'Review corrected meal',
-  );
+  await expect(review.getByLabel('What was it for?')).toHaveValue('Review corrected meal');
   await expect(review).toContainText('You on another device changed the description a moment ago:');
   expect((await rows(page))[0].values.description).toBe('Review corrected meal');
 });
@@ -166,7 +173,7 @@ test('one-at-a-time uses ready first, then missing details and summarizes saved/
   await page.getByRole('button', { name: 'Review one at a time' }).click();
   const review = panel(page);
   await expect(review.getByRole('heading', { name: '1 of 3' })).toBeVisible();
-  await expect(review.getByLabel('Description', { exact: true })).toHaveValue('Review meal 2');
+  await expect(review.getByLabel('What was it for?')).toHaveValue('Review meal 2');
   await review.getByRole('button', { name: 'Save expense', exact: true }).click();
   await expect(review.getByRole('heading', { name: '2 of 3' })).toBeVisible();
   await review.getByRole('button', { name: 'Delete', exact: true }).click();
@@ -264,18 +271,16 @@ test('polling an in-flight autosave keeps typing entered after that submission',
     await route.fulfill({ response: result });
   });
   const review = panel(page);
-  await review.getByLabel('Description', { exact: true }).fill('Review first edit');
+  await review.getByLabel('What was it for?').fill('Review first edit');
   await applied;
   try {
-    await review.getByLabel('Description', { exact: true }).fill('Review newer typing');
+    await review.getByLabel('What was it for?').fill('Review newer typing');
     const polled = page.waitForResponse(
       (response) => new URL(response.url()).pathname === '/api/user/to-review' && response.ok(),
       { timeout: 40_000 },
     );
     await polled;
-    await expect(review.getByLabel('Description', { exact: true })).toHaveValue(
-      'Review newer typing',
-    );
+    await expect(review.getByLabel('What was it for?')).toHaveValue('Review newer typing');
     await expect(review).not.toContainText('You on another device');
   } finally {
     release();
@@ -303,7 +308,7 @@ test('a run advances past an item removed on another device and still reaches it
     { timeout: 40_000 },
   );
   await panel(page).getByRole('button', { name: 'Next', exact: true }).click();
-  await expect(panel(page).getByLabel('Description', { exact: true })).toHaveValue('Review meal 3');
+  await expect(panel(page).getByLabel('What was it for?')).toHaveValue('Review meal 3');
   await panel(page).getByRole('button', { name: 'Skip for now', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Done for now' })).toContainText(
     '2 left for later',
@@ -332,11 +337,10 @@ test('an external version delivered by the post-edit refresh appears immediately
     await route.fulfill({ response });
   });
   const review = panel(page);
-  await review.getByLabel('Description', { exact: true }).fill('Review this device edit');
-  await expect(review.getByLabel('Description', { exact: true })).toHaveValue(
-    'Review another device edit',
-    { timeout: 10_000 },
-  );
+  await review.getByLabel('What was it for?').fill('Review this device edit');
+  await expect(review.getByLabel('What was it for?')).toHaveValue('Review another device edit', {
+    timeout: 10_000,
+  });
   await expect(review).toContainText('You on another device changed the description a moment ago:');
 });
 
@@ -378,4 +382,44 @@ test('a new possible match invalidates the earlier duplicate tick before saving'
   await review.getByLabel("It's a different expense, save it anyway").check();
   await review.getByRole('button', { name: 'Save expense', exact: true }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
+});
+
+test('payer problems use names; split, Tag and optional detail pickers keep their changes', async ({
+  page,
+}) => {
+  await open(page, ['ready']);
+  const current = (await rows(page))[0];
+  const values = { ...current.values, paidBy: [{ user: 'a00000000000000000000001' }] };
+  const changed = await page.request.put(`/api/groups/${DEMO_GROUP_ID}/drafts/${current.id}`, {
+    headers: { 'X-Splitbook-Revision': String(current.revision) },
+    data: { values },
+  });
+  expect(changed.ok(), await changed.text()).toBe(true);
+  await page.reload();
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const review = panel(page);
+  await expect(review).toContainText('The amount paid by Alex Rivera?');
+  await expect(page.locator('body')).not.toContainText(
+    /paidBy\.|splitBetween\.|\(YYYY-MM-DD\)|\(e.g. INR\)/,
+  );
+  await review.getByLabel('Paid by Alex Rivera', { exact: true }).fill('12.34');
+  await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
+  await review.getByRole('button', { name: '%', exact: true }).click();
+  await review.getByLabel('Percentage for Alex Rivera', { exact: true }).fill('100');
+  await review.getByLabel('Notes (optional)').fill('A fictional shared lunch');
+  const group = (await (await page.request.get(`/api/groups/${DEMO_GROUP_ID}`)).json()).data;
+  const tag = group.tags.find(
+    (option: { _id: string; isArchived: boolean; isDeleted: boolean }) =>
+      option._id !== current.values.tagId && !option.isArchived && !option.isDeleted,
+  );
+  await review.getByRole('button', { name: tag.name, exact: true }).click();
+  await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
+  const kept = (await rows(page))[0];
+  expect(kept.values.splitMethod).toBe('percentage');
+  expect(kept.values.splitBetween).toEqual([{ user: 'a00000000000000000000001', percentage: 100 }]);
+  expect(kept.values.notes).toBe('A fictional shared lunch');
+  expect(kept.values.tagId).toBe(tag._id);
+  await review.getByRole('button', { name: 'Close review' }).click();
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  await expect(panel(page).getByLabel('Notes (optional)')).toHaveValue('A fictional shared lunch');
 });

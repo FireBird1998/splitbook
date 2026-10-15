@@ -1,3 +1,4 @@
+import { getCategory } from './categories';
 import type { PersistedExpenseDraft } from './validators/expense-draft';
 import { formatDate } from './date';
 import { toDateParam } from './date';
@@ -221,7 +222,7 @@ export function describeDraftChange(
       })
       .join(', ') || 'not specified';
   const split = (values: ExpenseDraftValues) =>
-    `${values.splitMethod ?? 'not specified'} · ${people(values.splitBetween, values.currency)}`;
+    `${reviewSplitMethod(values.splitMethod)} · ${people(values.splitBetween, values.currency)}`;
   const fields = [
     [
       'amount',
@@ -254,8 +255,8 @@ export function describeDraftChange(
     ],
     [
       'category',
-      prior.category ?? 'not specified',
-      next.category ?? 'not specified',
+      getCategory(prior.category ?? '')?.label ?? 'not specified',
+      getCategory(next.category ?? '')?.label ?? 'not specified',
       prior.category,
       next.category,
     ],
@@ -280,4 +281,58 @@ export function describeDraftChange(
     return a === b ? `${label}${when}` : `${label}${when}: ${a} → ${b}`;
   });
   return `${author} changed ${changes.join('; ')}. ${latest}`;
+}
+
+/** Display labels shared by review cards, confirmations and change notes. */
+export function reviewSplitMethod(method?: string): string {
+  return (
+    (
+      {
+        equal: 'Split equally',
+        exact: 'Split by amounts',
+        unequal: 'Split by amounts',
+        percentage: 'Split by percentage',
+        shares: 'Split by shares',
+      } as Record<string, string>
+    )[method ?? ''] ?? 'Split missing'
+  );
+}
+
+/** Interpret known validation paths; never forward server prose or unknown paths to members. */
+export function reviewProblem(
+  message: string,
+  values: ExpenseDraftValues = {},
+  names: Readonly<Record<string, string>> = {},
+): string {
+  const memberMessages = [
+    'This item changed while you were looking. Review the latest version before saving.',
+    'The possible matches changed. Check them before saving this expense.',
+    'This item needs another look before saving. Check the details and any possible duplicate.',
+    'Some items changed or need another look. Review them before saving.',
+    'Could not confirm this action. Check your connection and try again.',
+  ];
+  if (memberMessages.includes(message)) return message;
+  const known: Record<string, string> = {
+    INVALID_MEMBERS: 'Choose current Group members for who paid and who shared it.',
+    INVALID_TAG: 'Choose an available Tag.',
+    CURRENCY_MISMATCH: 'Choose the Group currency.',
+    STALE_REVISION: 'This item changed. Check the latest version before saving.',
+    'Each person can appear only once': 'Choose each member only once.',
+    'Percentages must add up to 100': 'The percentages must add up to 100%.',
+  };
+  if (Object.hasOwn(known, message)) return known[message];
+  const path = message.match(/^(?:Invalid Draft: )?([a-zA-Z]+)(?:\.(\d+)\.([a-zA-Z]+))?:/);
+  if (path) {
+    const [, field, index, part] = path;
+    if ((field === 'paidBy' || field === 'splitBetween') && index !== undefined) {
+      const row = values[field]?.[Number(index)];
+      const name = row ? (names[row.user] ?? 'this member') : 'this member';
+      if (field === 'paidBy' && part === 'amount') return `The amount paid by ${name}?`;
+      if (field === 'splitBetween' && ['amount', 'percentage', 'shares'].includes(part))
+        return `The ${part} for ${name}?`;
+    }
+    const fact = facts[field];
+    if (fact) return `${fact.charAt(0).toUpperCase()}${fact.slice(1)}?`;
+  }
+  return 'Check the expense details and try again.';
 }

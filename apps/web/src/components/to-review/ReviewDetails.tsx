@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import { expenseRecordKey } from '@splitbook/shared/query-keys';
 import { formatDate } from '@splitbook/shared/date';
 import { formatCurrency } from '@splitbook/shared/currency';
-import { reviewDate } from '@splitbook/shared/to-review';
+import { reviewDate, reviewSplitMethod } from '@splitbook/shared/to-review';
 import type { ExpenseDraftValues, DraftReview } from '@splitbook/shared/validators/expense-draft';
 import type { ToReviewItem } from '@splitbook/shared/to-review-read';
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
@@ -38,7 +38,7 @@ export function ReviewFacts({
       </Typography>
       <Typography variant="body2">
         Paid by {v.paidBy?.map((p) => names[p.user] ?? 'a member').join(', ') || 'not specified'} ·{' '}
-        {v.splitMethod || 'Split missing'}
+        {reviewSplitMethod(v.splitMethod)}
         {v.splitBetween?.length
           ? ` between ${v.splitBetween.map((p) => names[p.user] ?? 'a member').join(', ')}`
           : ''}

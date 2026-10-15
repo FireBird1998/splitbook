@@ -3,6 +3,8 @@ import {
   buildToReview,
   describeDraftChange,
   reviewDate,
+  reviewProblem,
+  reviewSplitMethod,
   summarizeReviewRun,
   type DeviceToReviewItem,
 } from './to-review';
@@ -245,7 +247,7 @@ describe('changes while an item is open', () => {
     const { before, after } = changed();
     after.values!.splitBetween = [{ user: 'c00000000000000000000001' }];
     expect(describeDraftChange(before, after, names)).toContain(
-      'the split a moment ago: equal · Alex → equal · Sam',
+      'the split a moment ago: Split equally · Alex → Split equally · Sam',
     );
     after.values!.splitMethod = 'percentage';
     after.values!.splitBetween[0].percentage = 100;
@@ -267,5 +269,61 @@ describe('changes while an item is open', () => {
     expect(describeDraftChange(before, after)).toBe(
       "Claude changed this item a moment ago. You're seeing the latest version.",
     );
+  });
+});
+
+describe('review member wording', () => {
+  it('names missing facts and payer amounts without exposing validation paths', () => {
+    const values = { paidBy: [{ user: member }] };
+    expect(reviewProblem('paidBy: Choose who paid.')).toBe('Who paid?');
+    expect(
+      reviewProblem('paidBy.0.amount: Enter the amount paid by this member.', values, {
+        [member]: 'Alex Rivera',
+      }),
+    ).toBe('The amount paid by Alex Rivera?');
+    expect(reviewProblem('paidBy.0.amount: invalid', values)).toBe(
+      'The amount paid by this member?',
+    );
+    expect(
+      reviewProblem(
+        'splitBetween.0.percentage: invalid',
+        { splitBetween: [{ user: member }] },
+        { [member]: 'Sam Chen' },
+      ),
+    ).toBe('The percentage for Sam Chen?');
+    expect(reviewProblem('tagId: Invalid identity')).toBe('The tag?');
+    expect(reviewProblem('INVALID_MEMBERS')).toBe(
+      'Choose current Group members for who paid and who shared it.',
+    );
+  });
+  it('preserves the explanations that block stale saves and changed duplicate matches', () => {
+    for (const message of [
+      'This item changed while you were looking. Review the latest version before saving.',
+      'The possible matches changed. Check them before saving this expense.',
+      'This item needs another look before saving. Check the details and any possible duplicate.',
+      'Some items changed or need another look. Review them before saving.',
+    ])
+      expect(reviewProblem(message)).toBe(message);
+  });
+  it('never forwards unrecognized server prose or code terms', () => {
+    for (const message of [
+      'values.paidBy.0.amount: broken',
+      'request collection Draft revision',
+      'An internal server failure',
+    ])
+      expect(reviewProblem(message)).toBe('Check the expense details and try again.');
+  });
+  it('uses display names for split changes and categories', () => {
+    expect(reviewSplitMethod('equal')).toBe('Split equally');
+    expect(reviewSplitMethod('exact')).toBe('Split by amounts');
+    const before = item(1).draft;
+    const after = item(1).draft;
+    after.values!.splitMethod = 'shares';
+    after.values!.category = 'other';
+    const note = describeDraftChange(before, after);
+    expect(note).toContain('Split equally');
+    expect(note).toContain('Split by shares');
+    expect(note).toContain('Other');
+    expect(note).not.toMatch(/\bequal\b|\bother\b/);
   });
 });
