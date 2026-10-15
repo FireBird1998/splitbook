@@ -18,21 +18,28 @@ export function useToReview(groupId?: string) {
   if (data === undefined) read = { status: error ? 'error' : 'loading' };
   else {
     try {
-      const decoded = parseToReviewResponse(data);
-      const groups = groupId
-        ? decoded.groups.filter((group) => group.groupId === groupId)
-        : decoded.groups;
-      read = {
-        status: 'ready',
-        value: buildToReview(
-          { groups, total: groups.reduce((n, group) => n + group.count, 0) },
-          [],
-          new Date(),
-        ),
-      };
+      read = { status: 'ready', value: modelFromResponse(data, groupId) };
     } catch {
       read = { status: 'error' };
     }
   }
-  return { read, failed: !!error, retry: () => void mutate() };
+  async function reload() {
+    const response = await fetchWebRead(TO_REVIEW_KEY);
+    const model = modelFromResponse(response, groupId);
+    await mutate(response, { revalidate: false });
+    return model;
+  }
+  return { read, failed: !!error, retry: () => void mutate(), reload };
+}
+
+function modelFromResponse(data: unknown, groupId?: string) {
+  const decoded = parseToReviewResponse(data);
+  const groups = groupId
+    ? decoded.groups.filter((group) => group.groupId === groupId)
+    : decoded.groups;
+  return buildToReview(
+    { groups, total: groups.reduce((n, group) => n + group.count, 0) },
+    [],
+    new Date(),
+  );
 }

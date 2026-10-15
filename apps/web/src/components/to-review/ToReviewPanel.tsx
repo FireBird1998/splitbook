@@ -1,6 +1,6 @@
 'use client';
 import ReviewExpenseFields from './ReviewExpenseFields';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -23,7 +23,10 @@ import { useReviewEditor } from './use-review-editor';
 import { ReviewMatches, reviewSource } from './ReviewDetails';
 import { reviewProblem, type WebReviewClient } from './review-client';
 
+export type ReviewPanelHandle = { flush: () => Promise<boolean>; focus: () => void };
+
 export default function ToReviewPanel({
+  ref,
   item,
   items,
   context,
@@ -39,6 +42,7 @@ export default function ToReviewPanel({
   onSave,
   onDelete,
 }: {
+  ref?: Ref<ReviewPanelHandle>;
   item: ReviewItemModel;
   items: ToReviewItem[];
   context: DraftContext;
@@ -64,6 +68,11 @@ export default function ToReviewPanel({
   const [deleting, setDeleting] = useState(false);
   const [busy, setBusy] = useState(false);
   const inFlight = useRef(false);
+  useImperativeHandle(ref, () => ({
+    flush: () => (inFlight.current ? Promise.resolve(false) : editor.flush()),
+    focus: () => surface.current?.focus(),
+  }));
+  const blocked = busy || savingBlocked;
   const duplicateVersion = JSON.stringify([
     editor.draft.revision,
     item.accountItem!.duplicates.map((match) => `${match.kind}:${match.id}`).sort(),
@@ -117,7 +126,7 @@ export default function ToReviewPanel({
           </Typography>
           <IconButton
             aria-label="Close review"
-            disabled={busy || (!available && unsent)}
+            disabled={blocked || (!available && unsent)}
             onClick={() => void action(async () => onClose())}
           >
             <CloseIcon />
@@ -135,7 +144,7 @@ export default function ToReviewPanel({
           <Alert
             severity="warning"
             action={
-              <Button disabled={busy || !available} onClick={() => void editor.flush()}>
+              <Button disabled={blocked || !available} onClick={() => void editor.flush()}>
                 Try again
               </Button>
             }
@@ -159,8 +168,8 @@ export default function ToReviewPanel({
           ))}
         <Box
           component="fieldset"
-          disabled={busy || !available}
-          inert={busy || !available}
+          disabled={blocked || !available}
+          inert={blocked || !available}
           sx={{ border: 0, p: 0, m: 0, minWidth: 0 }}
         >
           <ReviewExpenseFields
@@ -191,7 +200,7 @@ export default function ToReviewPanel({
               control={
                 <Checkbox
                   checked={acknowledged}
-                  disabled={busy || !available || unsent}
+                  disabled={blocked || !available || unsent}
                   onChange={(_, checked) =>
                     setAcknowledgedVersion(checked ? duplicateVersion : null)
                   }
@@ -208,7 +217,7 @@ export default function ToReviewPanel({
         )}
         <Button
           variant="contained"
-          disabled={busy || !!reason}
+          disabled={blocked || !!reason}
           aria-describedby={reason ? 'review-save-reason' : undefined}
           onClick={() => void action(async () => onSave(editor.latest(), acknowledged))}
         >
@@ -217,13 +226,13 @@ export default function ToReviewPanel({
         {run && (
           <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap' }}>
             <Button
-              disabled={busy || (!available && unsent)}
+              disabled={blocked || (!available && unsent)}
               onClick={() => void action(async () => onNext?.())}
             >
               Next
             </Button>
             <Button
-              disabled={busy || (!available && unsent)}
+              disabled={blocked || (!available && unsent)}
               onClick={() => void action(async () => onNext?.())}
             >
               Skip for now
@@ -233,7 +242,7 @@ export default function ToReviewPanel({
         <Button
           color="inherit"
           sx={{ color: 'status.negative' }}
-          disabled={busy || !available || savingBlocked}
+          disabled={blocked || !available}
           onClick={() => void action(async () => setDeleting(true))}
         >
           Delete
@@ -245,13 +254,13 @@ export default function ToReviewPanel({
           It was never saved, so nothing in {groupName} changes. You can&apos;t undo this.
         </DialogContent>
         <DialogActions>
-          <Button disabled={busy} onClick={() => setDeleting(false)}>
+          <Button disabled={blocked} onClick={() => setDeleting(false)}>
             Keep item
           </Button>
           <Button
             color="inherit"
             sx={{ color: 'status.negative' }}
-            disabled={busy || !available}
+            disabled={blocked || !available}
             onClick={() =>
               void action(async () => {
                 await onDelete(editor.latest());

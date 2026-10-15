@@ -66,7 +66,7 @@ test('possible duplicate shows the matching Expense and requires the explicit ti
   await expect(
     page.getByRole('region', { name: 'Check before saving', exact: true }),
   ).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Save 0 ready' })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Save 0 ready' })).toHaveCount(0);
   await page.getByRole('button', { name: 'Review Review matching meal', exact: true }).click();
   const review = panel(page);
   await expect(review.getByRole('region', { name: 'Possible duplicates' })).toContainText(
@@ -422,4 +422,164 @@ test('payer problems use names; split, Tag and optional detail pickers keep thei
   await review.getByRole('button', { name: 'Close review' }).click();
   await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
   await expect(panel(page).getByLabel('Notes (optional)')).toHaveValue('A fictional shared lunch');
+});
+
+test('Save ready waits for the open edit and confirms exactly the kept version', async ({
+  page,
+}, testInfo) => {
+  await open(page, ['ready', 'ready']);
+  await expectThemeApplied(page, testInfo);
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '130%';
+  });
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**${root}/drafts/*`, async (route) => {
+    if (route.request().method() === 'PUT') await held;
+    await route.continue();
+  });
+  await panel(page).getByLabel('What was it for?').fill('Review corrected meal just typed');
+  const saveReady = page.getByRole('button', { name: 'Save 2 ready', exact: true });
+  await expect(saveReady).toBeEnabled();
+  await saveReady.click();
+  await expect(saveReady).toBeDisabled();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  release();
+  const confirm = page.getByRole('dialog', { name: 'Save 2 ready?' });
+  await expect(confirm).toContainText('Review corrected meal just typed');
+  await expect(confirm).not.toContainText('Review meal 1');
+  const kept = (await rows(page)).find(
+    (row: { values: { description: string } }) =>
+      row.values.description === 'Review corrected meal just typed',
+  );
+  await expectNoSeriousA11yViolations(page, testInfo, 'to-review-kept-confirmation');
+  await confirm.getByRole('button', { name: 'Keep reviewing' }).click();
+  await expect(panel(page)).toBeVisible();
+  await expect(saveReady).toBeFocused();
+  await saveReady.click();
+  await expect(confirm).toBeVisible();
+  const sent = page.waitForRequest(
+    (request) => request.url().endsWith(`${root}/drafts/save`) && request.method() === 'POST',
+  );
+  await confirm.getByRole('button', { name: 'Confirm save' }).click();
+  expect((await sent).postDataJSON().drafts).toEqual(
+    expect.arrayContaining([expect.objectContaining({ id: kept.id, revision: kept.revision })]),
+  );
+  await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toHaveCount(2);
+  await expect(panel(page)).toHaveCount(0);
+  expect(await rows(page)).toHaveLength(0);
+});
+
+test('Save ready stops at the open editor error when keeping changes fails', async ({
+  page,
+}, testInfo) => {
+  await open(page, ['ready']);
+  await expectThemeApplied(page, testInfo);
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '130%';
+  });
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  let reviews = 0;
+  await page.route(`**${root}/drafts/*`, async (route) => {
+    if (route.request().method() === 'PUT')
+      return route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Unavailable' }),
+      });
+    if (route.request().url().endsWith('/review')) reviews++;
+    await route.continue();
+  });
+  await panel(page).getByLabel('What was it for?').fill('Keep this wording');
+  await page.getByRole('button', { name: 'Save 1 ready', exact: true }).click();
+  await expect(panel(page)).toContainText('This change is not kept yet.');
+  await expect(panel(page).getByLabel('What was it for?')).toHaveValue('Keep this wording');
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  expect(reviews).toBe(0);
+  await expectNoSeriousA11yViolations(page, testInfo, 'to-review-keep-failed');
+  await page.unroute(`**${root}/drafts/*`);
+  await page.getByRole('button', { name: 'Save 1 ready', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('Keep this wording');
+});
+
+test('nothing ready hides bulk save, counts appear once, and one-at-a-time still works', async ({
+  page,
+}, testInfo) => {
+  await open(page, ['missing-payer']);
+  await expectThemeApplied(page, testInfo);
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '130%';
+  });
+  await expect(page.getByRole('button', { name: /^Save \d+ ready$/ })).toHaveCount(0);
+  await expect(page.getByText(/1 needs details/)).toHaveCount(1);
+  await expectNoSeriousA11yViolations(page, testInfo, 'to-review-none-ready');
+  await page.getByRole('button', { name: 'Review one at a time' }).click();
+  await expect(panel(page)).toContainText('1 of 1');
+  await expect(page.getByRole('button', { name: /^Save \d+ ready$/ })).toHaveCount(0);
+  await panel(page).getByRole('button', { name: 'Next', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Done for now' })).toBeVisible();
+});
+
+test('bulk confirmation excludes an open item made incomplete by its pending edit', async ({
+  page,
+}) => {
+  await open(page, ['ready', 'ready']);
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  await panel(page).getByLabel('What was it for?').fill('');
+  await page.getByRole('button', { name: /^Save \d+ ready$/ }).click();
+  const confirm = page.getByRole('dialog', { name: 'Save 1 ready?' });
+  await expect(confirm).toContainText('Review meal 2');
+  await expect(confirm).not.toContainText('Review meal 1');
+  await confirm.getByRole('button', { name: 'Confirm save' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toHaveCount(1);
+  await expect(panel(page).getByLabel('What was it for?')).toHaveValue('');
+  await expect(page.getByRole('button', { name: /^Save \d+ ready$/ })).toHaveCount(0);
+  expect(await rows(page)).toHaveLength(1);
+});
+
+for (const reply of ['confirmed', 'lost reply']) {
+  test(`bulk saving during one-at-a-time counts every saved item once (${reply})`, async ({
+    page,
+  }) => {
+    await open(page, ['ready', 'ready', 'missing-payer']);
+    if (reply === 'lost reply') {
+      let first = true;
+      await page.route(`**${root}/drafts/save`, async (route) => {
+        if (!first) return route.continue();
+        first = false;
+        const applied = await route.fetch();
+        expect(applied.ok()).toBe(true);
+        await route.abort('failed');
+      });
+    }
+    await page.getByRole('button', { name: 'Review one at a time' }).click();
+    await panel(page).getByLabel('What was it for?').fill('Review corrected meal in this run');
+    await page.getByRole('button', { name: 'Save 2 ready', exact: true }).click();
+    const confirm = page.getByRole('dialog', { name: 'Save 2 ready?' });
+    await expect(confirm).toContainText('Review corrected meal in this run');
+    await confirm.getByRole('button', { name: 'Confirm save' }).click();
+    if (reply === 'lost reply')
+      await page.getByRole('button', { name: 'Check again', exact: true }).click();
+    await expect(panel(page)).toContainText('3 of 3');
+    await panel(page).getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Done for now' })).toContainText(
+      'Saved 2',
+    );
+  });
+}
+
+test('when keeping the last ready item makes it incomplete, focus returns to its panel', async ({
+  page,
+}) => {
+  await open(page, ['ready']);
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  await panel(page).getByLabel('What was it for?').fill('');
+  await page.getByRole('button', { name: 'Save 1 ready', exact: true }).click();
+  await expect(page.getByRole('button', { name: /^Save \d+ ready$/ })).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(panel(page)).toBeFocused();
+  await expect(panel(page).getByLabel('What was it for?')).toHaveValue('');
 });

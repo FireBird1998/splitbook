@@ -9,7 +9,6 @@ import {
   HomeRow,
   HomeCardBody,
   HomeCardError,
-  HomeCardLoading,
   HomeList,
   homeRowSx,
 } from '@/components/dashboard/HomeCard';
@@ -17,16 +16,18 @@ import { toReviewEnabled, useToReview } from './use-to-review';
 
 export default function ToReviewCard() {
   const { read, retry } = useToReview();
-  if (!toReviewEnabled || (read.status === 'ready' && read.value.counts.total === 0)) return null;
+  if (
+    !toReviewEnabled ||
+    read.status === 'loading' ||
+    (read.status === 'ready' && read.value.counts.total === 0)
+  )
+    return null;
   return (
     <HomeRow>
       <HomeCard
         id="to-review"
         title={read.status === 'ready' ? `To review · ${read.value.counts.total}` : 'To review'}
       >
-        {read.status === 'loading' && (
-          <HomeCardLoading label="Loading To review" blocks={1} height={60} />
-        )}
         {read.status === 'error' && (
           <HomeCardError message="Unable to load To review." onRetry={retry} />
         )}
