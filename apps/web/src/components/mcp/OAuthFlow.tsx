@@ -116,14 +116,13 @@ export default function OAuthFlow({
                           disabled={busy}
                         />
                       }
-                      label="Also allow private Draft access"
+                      label="Also let it prepare expenses for your To review"
                     />
                   )}
                   {details.scopes.includes(MCP_DRAFT_SCOPE) && (
                     <Typography variant="body2">
-                      Draft access allows reading, creating, editing and permanently discarding your
-                      manual and assistant-prepared Drafts. Discard cannot be undone. Only you can
-                      save an Expense after review in SplitBook.
+                      It can add, change and delete items in your To review. Only you can save them
+                      as expenses, in Splitbook.
                     </Typography>
                   )}
                   {details.scopes.includes('offline_access') && (
@@ -134,11 +133,11 @@ export default function OAuthFlow({
                 </>
               )}
               <Alert severity="info">
-                Prepared Drafts do not change Balances. Review and save Expenses in SplitBook.
+                Prepared items don&apos;t change Balances until you save them.
               </Alert>
               <Typography variant="body2">
-                Disconnect at any time in Settings. Your Drafts remain yours; disconnecting cannot
-                erase information already shared with the assistant.
+                Disconnect at any time in Settings. Your To review items stay yours; disconnecting
+                cannot erase information already shared with the assistant.
               </Typography>
               <Stack direction="row" spacing={2}>
                 <Button

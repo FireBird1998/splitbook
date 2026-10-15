@@ -40,7 +40,7 @@ async function withDemoDb(run: (db: ReturnType<MongoClient['db']>) => Promise<vo
     process.env.PLAYWRIGHT_DEMO_MONGODB_URI ??
     'mongodb://127.0.0.1:27017/splitbook-demo?directConnection=true';
   const name = new URL(uri).pathname.slice(1);
-  if (!['splitbook-demo', 'splitbook_w407', 'splitbook_w406'].includes(name))
+  if (!['splitbook-demo', 'splitbook_w407', 'splitbook_w406', 'splitbook_w419'].includes(name))
     throw new Error('Expected fictional demo database');
   const client = await MongoClient.connect(uri);
   try {

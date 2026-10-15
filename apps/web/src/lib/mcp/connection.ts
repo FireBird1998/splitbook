@@ -2,7 +2,7 @@ import { createMcpHandler, McpServer } from '@modelcontextprotocol/server';
 import { requireMcpAuth } from '@better-auth/mcp';
 import { z } from 'zod/v4';
 
-import { MCP_LEDGER_SCOPE } from './config';
+import { MCP_DRAFT_SCOPE, MCP_LEDGER_SCOPE } from './config';
 export { MCP_LEDGER_SCOPE } from './config';
 
 /**
@@ -96,7 +96,14 @@ export function createMcpConnectionHandler(
       response.headers.set('Cache-Control', 'no-store');
       return response;
     },
-    { resource, requiredScopes: [MCP_LEDGER_SCOPE] },
+    {
+      resource,
+      requiredScopes: [MCP_LEDGER_SCOPE],
+      challengeScopes:
+        process.env.PERSISTENT_DRAFTS_ENABLED === 'true'
+          ? [MCP_LEDGER_SCOPE, MCP_DRAFT_SCOPE]
+          : [MCP_LEDGER_SCOPE],
+    },
   );
   return async (request: Request) => {
     const response = await protectedHandler(request);
