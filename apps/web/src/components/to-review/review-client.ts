@@ -37,15 +37,4 @@ export function webReviewClient(accountId: string, groupId: string) {
   );
 }
 export type WebReviewClient = ReturnType<typeof webReviewClient>;
-/** Older server messages still use code terms. Keep those out of the member's result. */
-export function reviewProblem(message: string) {
-  return message
-    .replace(/paidBy/g, 'Who paid?')
-    .replace(/splitBetween/g, 'Who shared it?')
-    .replace(/splitMethod/g, 'How should it be split?')
-    .replace(/tagId/g, 'Tag')
-    .replace(/Drafts?/gi, 'item')
-    .replace(/revision/gi, 'version')
-    .replace(/collection/gi, 'To review')
-    .replace(/request/gi, 'action');
-}
+export { reviewProblem } from '@splitbook/shared/to-review';

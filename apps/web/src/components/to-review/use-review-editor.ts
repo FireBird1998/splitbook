@@ -1,11 +1,7 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
 import { describeDraftChange } from '@splitbook/shared/to-review';
-import {
-  draftEntries,
-  draftEntryChanges,
-  draftValues,
-} from '@splitbook/shared/persistent-draft-editor';
+import { draftEntries, draftValues } from '@splitbook/shared/persistent-draft-editor';
 import type { PersistedExpenseDraft } from '@splitbook/shared/validators/expense-draft';
 import type { WebReviewClient } from './review-client';
 
@@ -157,8 +153,8 @@ export function useReviewEditor(
       document.removeEventListener('click', navigate, true);
     };
   });
-  function change(key: string, value: string) {
-    input.current = { ...input.current, ...draftEntryChanges(key, value) };
+  function change(changes: Record<string, string>) {
+    input.current = { ...input.current, ...changes };
     dirty.current = true;
     setEntries(input.current);
     setStatus('changed');
