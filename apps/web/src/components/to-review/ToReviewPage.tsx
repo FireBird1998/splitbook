@@ -30,7 +30,7 @@ import { TO_REVIEW_KEY, useToReview } from './use-to-review';
 import { webReviewClient, reviewProblem } from './review-client';
 import { ReviewFacts, reviewAmount, reviewSource } from './ReviewDetails';
 import { reviewDate } from '@splitbook/shared/to-review';
-import ToReviewPanel from './ToReviewPanel';
+import ToReviewPanel, { type ReviewPanelHandle } from './ToReviewPanel';
 
 type Confirmation = {
   reviews: DraftReview[];
@@ -44,7 +44,7 @@ export default function ToReviewPage({
   accountId: string;
   groupId: string;
 }) {
-  const { read, retry, failed } = useToReview(groupId);
+  const { read, retry, failed, reload } = useToReview(groupId);
   const { data: group, error: groupError } = useGroup(accountId, groupId);
   const { mutate } = useSWRConfig();
   const client = useMemo(() => webReviewClient(accountId, groupId), [accountId, groupId]);
@@ -60,6 +60,9 @@ export default function ToReviewPage({
   const [summary, setSummary] = useState('');
   const [online, setOnline] = useState(true);
   const lock = useRef(false);
+  const panel = useRef<ReviewPanelHandle>(null);
+  const saveReadyButton = useRef<HTMLButtonElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const openedFrom = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (!opened && openedFrom.current?.isConnected) openedFrom.current.focus();
@@ -191,9 +194,32 @@ export default function ToReviewPage({
     if (!(await client.pending())) sessionStorage.removeItem(namesKey);
     await refresh();
     await mutate(() => true);
-    for (const outcome of results)
-      if (run && outcome.status === 'saved') finishItem(outcome.id, 'saved');
-    if (!run && reviews.length === 1 && results[0]?.status === 'saved') setOpened(null);
+    finishSaved(results);
+  }
+  function finishSaved(results: DraftSaveOutcome[]) {
+    const saved = new Set(
+      results.filter((outcome) => outcome.status === 'saved').map(({ id }) => id),
+    );
+    if (run) {
+      const nextOutcomes = [
+        ...run.outcomes.filter((outcome) => !saved.has(outcome.id)),
+        ...run.ids.filter((id) => saved.has(id)).map((id) => ({ id, status: 'saved' as const })),
+      ];
+      let next = run.index;
+      while (
+        next < run.ids.length &&
+        (saved.has(run.ids[next]) || !items.some((item) => item.id === run.ids[next]))
+      )
+        next++;
+      if (next >= run.ids.length) {
+        setSummary(`Done for now · ${summarizeReviewRun(nextOutcomes).label}`);
+        setRun(null);
+        setOpened(null);
+      } else {
+        setRun({ ...run, index: next, outcomes: nextOutcomes });
+        setOpened(items.find((item) => item.id === run.ids[next]) ?? null);
+      }
+    } else if (selected && saved.has(selected.id)) setOpened(null);
   }
   async function saveOne(draft: PersistedExpenseDraft, acknowledged: boolean) {
     await action(async () => {
@@ -223,8 +249,16 @@ export default function ToReviewPage({
   }
   async function saveReady() {
     if (!model) return;
-    const chosen = model.ready;
     await action(async () => {
+      if (selected && !(await panel.current?.flush())) {
+        panel.current?.focus();
+        return;
+      }
+      const chosen = (await reload()).ready;
+      if (!chosen.count) {
+        panel.current?.focus();
+        return;
+      }
       const reviews = await client.review(chosen.items.map((item) => item.draft.id));
       if (
         reviews.some(
@@ -244,7 +278,7 @@ export default function ToReviewPage({
   }
   return (
     <Stack spacing={2.5} sx={{ py: 2, minWidth: 0 }}>
-      <Typography component="h2" variant="h5">
+      <Typography component="h2" variant="h5" ref={heading} tabIndex={-1}>
         To review
       </Typography>
       <Typography color="text.secondary">
@@ -270,13 +304,7 @@ export default function ToReviewPage({
                   const result = await client.retry();
                   if (result?.kind === 'save') {
                     setOutcomes(result.outcomes);
-                    if (
-                      run &&
-                      selected &&
-                      result.outcomes.find((outcome) => outcome.id === selected.id)?.status ===
-                        'saved'
-                    )
-                      finishItem(selected.id, 'saved');
+                    finishSaved(result.outcomes);
                   }
                   if (!(await client.pending())) sessionStorage.removeItem(namesKey);
                   await refresh();
@@ -323,8 +351,7 @@ export default function ToReviewPage({
           {!!model.counts.total && (
             <>
               <Typography>
-                {model.counts.ready} ready · {model.counts.duplicate} to check ·{' '}
-                {model.counts.needsDetails} needs details
+                {model.counts.ready} ready · {model.counts.duplicate} to check
               </Typography>
               {model.sourceSummary && (
                 <Typography variant="body2" color="text.secondary">
@@ -332,15 +359,16 @@ export default function ToReviewPage({
                 </Typography>
               )}
               <Stack direction="row" spacing={1} sx={{ flexWrap: 'wrap', gap: 1 }}>
-                <Button
-                  variant="contained"
-                  disabled={
-                    busy || pending || !available || !model.ready.count || !!selected || !!run
-                  }
-                  onClick={() => void saveReady()}
-                >
-                  {model.ready.label}
-                </Button>
+                {model.ready.count > 0 && (
+                  <Button
+                    ref={saveReadyButton}
+                    variant="contained"
+                    disabled={busy || pending || !available}
+                    onClick={() => void saveReady()}
+                  >
+                    {model.ready.label}
+                  </Button>
+                )}
                 <Button
                   variant="outlined"
                   disabled={busy || pending || !available || !!selected || !!run}
@@ -466,6 +494,7 @@ export default function ToReviewPage({
             {selected && (
               <ToReviewPanel
                 key={selected.id}
+                ref={panel}
                 item={selected}
                 items={items.flatMap((item) => (item.accountItem ? [item.accountItem] : []))}
                 context={context}
@@ -506,6 +535,17 @@ export default function ToReviewPage({
       )}
       <Dialog
         open={!!confirmation}
+        disableRestoreFocus
+        slotProps={{
+          transition: {
+            onExited: () => {
+              if (saveReadyButton.current && !saveReadyButton.current.disabled)
+                saveReadyButton.current.focus();
+              else if (panel.current) panel.current.focus();
+              else heading.current?.focus();
+            },
+          },
+        }}
         onClose={() => !busy && setConfirmation(null)}
         maxWidth="sm"
         fullWidth

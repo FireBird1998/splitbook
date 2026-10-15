@@ -50,7 +50,7 @@ test('To review card and Group banner share counts, sources and links; empty hid
   await expect(page.getByRole('heading', { name: /^To review/ })).toHaveCount(0);
 });
 
-test('Home loads visibly; the Group banner stays hidden while loading and offers retry on failure', async ({
+test('Home and the Group banner stay hidden while loading and offer retry on failure', async ({
   page,
 }) => {
   let release: () => void = () => {};
@@ -67,8 +67,11 @@ test('Home loads visibly; the Group banner stays hidden while loading and offers
       ),
     });
   });
+  const homeRequested = page.waitForRequest('**/api/user/to-review');
   await enterAsPersona(page, 'alex');
-  await expect(page.getByRole('status', { name: 'Loading To review' })).toBeVisible();
+  await homeRequested;
+  await expect(page.getByRole('region', { name: /^To review/ })).toHaveCount(0);
+  await expect(page.getByRole('status', { name: 'Loading To review' })).toHaveCount(0);
   release();
   const card = page.getByRole('region', { name: 'To review', exact: true });
   await expect(card).toContainText('Unable to load To review.');
@@ -96,4 +99,42 @@ test('Home loads visibly; the Group banner stays hidden while loading and offers
       return banner.isVisible();
     })
     .toBe(false);
+});
+
+test('empty Home never mounts a To review card while the read is pending', async ({
+  page,
+}, testInfo) => {
+  await seedToReview(0);
+  await page.addInitScript(() => {
+    const seen = { card: false };
+    Object.assign(window, { toReviewSeen: seen });
+    const observer = new MutationObserver(() => {
+      if (document.querySelector('[aria-labelledby="to-review-heading"]')) seen.card = true;
+    });
+    observer.observe(document, { childList: true, subtree: true });
+  });
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route('**/api/user/to-review', async (route) => {
+    await held;
+    await route.continue();
+  });
+  const requested = page.waitForRequest('**/api/user/to-review');
+  await enterAsPersona(page, 'alex');
+  await requested;
+  await expectThemeApplied(page, testInfo);
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '130%';
+  });
+  await expect(page.getByRole('region', { name: /^To review/ })).toHaveCount(0);
+  await expect(page.getByRole('status', { name: 'Loading To review' })).toHaveCount(0);
+  await expectNoSeriousA11yViolations(page, testInfo, 'to-review-empty-home-loading');
+  const response = page.waitForResponse('**/api/user/to-review');
+  release();
+  expect((await (await response).json()).data.total).toBe(0);
+  await expect(page.getByRole('region', { name: /^To review/ })).toHaveCount(0);
+  expect(await page.evaluate(() => Reflect.get(window, 'toReviewSeen').card)).toBe(false);
+  await expectNoSeriousA11yViolations(page, testInfo, 'to-review-empty-home-loaded');
 });
