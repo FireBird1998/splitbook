@@ -437,7 +437,7 @@ export default function ExpenseFields({
               <Stack spacing={1}>
                 <TextField
                   select
-                  label="Paid by"
+                  label={review ? 'Paid by' : undefined}
                   value={payers[0]?.user || userId}
                   onChange={(e) => updatePayer(0, 'user', e.target.value)}
                   size="small"
@@ -468,7 +468,7 @@ export default function ExpenseFields({
                   <Stack key={i} direction="row" spacing={1} alignItems="center">
                     <TextField
                       select
-                      label="Paid by"
+                      label={review ? 'Paid by' : undefined}
                       value={payer.user}
                       onChange={(e) => updatePayer(i, 'user', e.target.value)}
                       size="small"
@@ -485,10 +485,11 @@ export default function ExpenseFields({
                       onChange={(e) => updatePayer(i, 'amount', e.target.value)}
                       type="number"
                       size="small"
-                      label={`Amount paid by ${memberName(payer.user)}`}
+                      placeholder="Amount"
                       sx={{ width: 120 }}
                       slotProps={{
                         htmlInput: {
+                          'aria-label': review ? `Paid by ${memberName(payer.user)}` : undefined,
                           min: 10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
                           step: 10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
                         },
@@ -614,7 +615,11 @@ export default function ExpenseFields({
                 return (
                   <Stack key={id} direction="row" alignItems="center" spacing={1}>
                     <Checkbox
-                      slotProps={{ input: { 'aria-label': `Share with ${memberName(id)}` } }}
+                      slotProps={
+                        review
+                          ? { input: { 'aria-label': `Share with ${memberName(id)}` } }
+                          : undefined
+                      }
                       checked={isSelected}
                       onChange={(e) => handleMemberToggle(id, e.target.checked)}
                       size="small"
@@ -657,10 +662,11 @@ export default function ExpenseFields({
                         }
                         type="number"
                         size="small"
-                        label={`Amount for ${memberName(id)}`}
+                        placeholder="0.00"
                         sx={{ width: 110 }}
                         slotProps={{
                           htmlInput: {
+                            'aria-label': review ? `${memberName(id)}'s share` : undefined,
                             min: 0,
                             step:
                               10 ** -(getCurrency(currency) ? getCurrencyPrecision(currency) : 2),
@@ -688,10 +694,15 @@ export default function ExpenseFields({
                           }
                           type="number"
                           size="small"
-                          label={`Percentage for ${memberName(id)}`}
+                          placeholder="0"
                           sx={{ width: 70 }}
                           slotProps={{
-                            htmlInput: { min: 0, max: 100, step: 0.1 },
+                            htmlInput: {
+                              min: 0,
+                              max: 100,
+                              step: 0.1,
+                              'aria-label': review ? `Percentage for ${memberName(id)}` : undefined,
+                            },
                           }}
                         />
                         <Box sx={{ fontSize: 12, color: 'text.disabled' }}>%</Box>
@@ -722,9 +733,15 @@ export default function ExpenseFields({
                           }
                           type="number"
                           size="small"
-                          label={`Shares for ${memberName(id)}`}
+                          placeholder="1"
                           sx={{ width: 70 }}
-                          slotProps={{ htmlInput: { min: 1, step: 1 } }}
+                          slotProps={{
+                            htmlInput: {
+                              min: 1,
+                              step: 1,
+                              'aria-label': review ? `Shares for ${memberName(id)}` : undefined,
+                            },
+                          }}
                         />
                         <Box sx={{ fontSize: 12, color: 'text.disabled' }}>shares</Box>
                         {parsedAmount > 0 && sharesTotal > 0 && (

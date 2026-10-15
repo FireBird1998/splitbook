@@ -157,7 +157,12 @@ export default function ToReviewPanel({
               didn&apos;t know {fact}, so it left that to you.
             </Typography>
           ))}
-        <Box inert={busy || !available}>
+        <Box
+          component="fieldset"
+          disabled={busy || !available}
+          inert={busy || !available}
+          sx={{ border: 0, p: 0, m: 0, minWidth: 0 }}
+        >
           <ReviewExpenseFields
             entries={editor.entries}
             context={context}

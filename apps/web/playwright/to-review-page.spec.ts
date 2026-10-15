@@ -402,7 +402,7 @@ test('payer problems use names; split, Tag and optional detail pickers keep thei
   await expect(page.locator('body')).not.toContainText(
     /paidBy\.|splitBetween\.|\(YYYY-MM-DD\)|\(e.g. INR\)/,
   );
-  await review.getByLabel('Amount paid by Alex Rivera', { exact: true }).fill('12.34');
+  await review.getByLabel('Paid by Alex Rivera', { exact: true }).fill('12.34');
   await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
   await review.getByRole('button', { name: '%', exact: true }).click();
   await review.getByLabel('Percentage for Alex Rivera', { exact: true }).fill('100');

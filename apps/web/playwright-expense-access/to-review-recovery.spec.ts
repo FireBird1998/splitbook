@@ -100,7 +100,7 @@ test('Next flushes recent typing; offline account items cannot be edited or save
   const draft = await setup(page, ledger);
   await page.getByRole('button', { name: 'Review one at a time' }).click();
   const panel = page.getByRole('region', { name: 'Review expense' });
-  await panel.getByLabel('Description', { exact: true }).fill('Review just typed');
+  await panel.getByLabel('What was it for?').fill('Review just typed');
   await panel.getByRole('button', { name: 'Next', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Done for now' })).toBeVisible();
   const kept = (await dataOf(await ledger.priya.get(`/api/groups/${ledger.groupB}/drafts`)))[0];
@@ -108,7 +108,7 @@ test('Next flushes recent typing; offline account items cannot be edited or save
   expect(kept.values.description).toBe('Review just typed');
   await page.getByRole('button', { name: 'Review Review just typed', exact: true }).click();
   await page.context().setOffline(true);
-  await expect(panel.getByLabel('Description', { exact: true })).toBeDisabled();
+  await expect(panel.getByLabel('What was it for?')).toBeDisabled();
   await expect(panel.getByRole('button', { name: 'Save expense', exact: true })).toBeDisabled();
   await expect(panel).toContainText('read-only');
   await page.context().setOffline(false);
