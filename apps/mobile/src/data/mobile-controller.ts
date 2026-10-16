@@ -6,20 +6,18 @@ import {
   emptyToReview,
   mobileToReview,
 } from './to-review';
-import { emptySharedDraftCollection, sharedDraftCollection } from './shared-draft-collection';
+import {
+  emptySharedDraftCollection,
+  refetchDraftCollection,
+  sharedDraftCollection,
+} from './shared-draft-collection';
 import { draftValues, type DraftEntries } from '@splitbook/shared/persistent-draft-editor';
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
 import { focusManager, onlineManager, QueryClient } from '@tanstack/query-core';
 import { savedCopyBudget } from './saved-copy-budget';
 import { inScope, queryOwner, replaceScopedQueries } from './query-owner';
 import { readProvenance } from './read-provenance';
-import {
-  expenseDraftsKey,
-  groupKey,
-  groupsKey,
-  homeBalancesKey,
-  type QueryKey,
-} from '@splitbook/shared/query-keys';
+import { groupKey, groupsKey, homeBalancesKey, type QueryKey } from '@splitbook/shared/query-keys';
 import { activityExpenseId, emptyActivity, emptyExpenseHistory } from './activity';
 import {
   emptySettlement,
@@ -6186,11 +6184,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     await Promise.all([
       toReviewQueries.refresh(),
       groupId && snapshot.auth.user && !snapshot.offline.active && onlineManager.isOnline()
-        ? queryClient.refetchQueries({
-            queryKey: expenseDraftsKey(account(), groupId),
-            exact: true,
-            type: 'active',
-          })
+        ? refetchDraftCollection(queryClient, account(), groupId)
         : undefined,
     ]);
   };

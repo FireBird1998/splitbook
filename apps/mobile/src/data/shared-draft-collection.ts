@@ -60,12 +60,20 @@ const withoutGoneEditor = (
 ): Partial<SharedDraftCollectionState> => {
   const { editing } = state;
   if (!editing || editing === 'new' || rows.some((row) => row.id === editing.id)) return {};
-  return {
-    editing: null,
-    choice: null,
-    ...(draftEditorChanged(state) ? { message: draftGoneMessage } : {}),
-  };
+  return { ...closedEditor, ...(draftEditorChanged(state) ? { message: draftGoneMessage } : {}) };
 };
+const closedEditor = { editing: null, choice: null } as const;
+/** Reads one Group's items again where its collection is open (Refresh items, the guided review). */
+export const refetchDraftCollection = (
+  queryClient: QueryClient,
+  account: { environment: string; accountId: string },
+  groupId: string,
+) =>
+  queryClient.refetchQueries({
+    queryKey: expenseDraftsKey(account, groupId),
+    exact: true,
+    type: 'active',
+  });
 type Client = ReturnType<typeof draftCollectionClient> & { context(): Promise<ExpenseContext> };
 /** Controller-owned online collection. Only reads enter Query; retained writes remain explicit. */
 export function sharedDraftCollection({
@@ -216,7 +224,7 @@ export function sharedDraftCollection({
         update({ editing: draft, entries: draftEntries(draft.values), choice: null });
     },
     closeEditor() {
-      if (!read().busy) update({ editing: null, choice: null });
+      if (!read().busy) update(closedEditor);
     },
     choose(key: string | null) {
       if (!read().busy) update({ choice: key });
@@ -248,9 +256,9 @@ export function sharedDraftCollection({
           try {
             await client.replace(editing, draftValues(entries));
           } catch (error) {
-            if ((error as { status?: number }).status !== 404) throw error;
+            if ((error as { code?: string | null }).code !== 'DRAFT_NOT_FOUND') throw error;
             // Saved or deleted meanwhile: there is nothing left to keep these changes in.
-            update({ editing: null, choice: null, reviews: [] });
+            update({ ...closedEditor, reviews: [] });
             await refresh();
             update({ message: draftGoneMessage });
             return;
@@ -261,7 +269,13 @@ export function sharedDraftCollection({
     discard: (draft: PersistedExpenseDraft) =>
       run(async () => {
         await client.discard(draft);
-        update({ reviews: [], selected: read().selected.filter((id) => id !== draft.id) });
+        const { editing } = read();
+        update({
+          reviews: [],
+          selected: read().selected.filter((id) => id !== draft.id),
+          // Deleted by the member from its own editor: nothing to explain.
+          ...(editing && editing !== 'new' && editing.id === draft.id ? closedEditor : {}),
+        });
         await refresh();
       }),
     review: () =>

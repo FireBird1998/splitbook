@@ -1,7 +1,11 @@
 import { act, create, type ReactTestRenderer } from 'react-test-renderer';
 import { expect, it } from 'vitest';
 import { QueryClient } from '@tanstack/query-core';
-import { emptySharedDraftCollection, sharedDraftCollection } from '../data/shared-draft-collection';
+import {
+  draftGoneMessage,
+  emptySharedDraftCollection,
+  sharedDraftCollection,
+} from '../data/shared-draft-collection';
 import { SharedDraftEditor } from './shared-drafts';
 import { useEffect, useSyncExternalStore } from 'react';
 import { draftCollectionClient } from '@splitbook/shared/draft-collection-client';
@@ -147,4 +151,22 @@ it.each([
     queryClient.clear();
     queryClient.unmount();
   }
+});
+
+it('says where its editor was that the item was saved or deleted (#436)', async () => {
+  let tree!: ReactTestRenderer;
+  await act(async () => {
+    tree = create(
+      <SharedDraftEditor
+        client={{} as Parameters<typeof SharedDraftEditor>[0]['client']}
+        state={{ ...emptySharedDraftCollection(), message: draftGoneMessage }}
+        offline={false}
+      />,
+    );
+  });
+  const alert = tree.root.findAll(
+    (node) => String(node.type) === 'Text' && node.props.accessibilityRole === 'alert',
+  );
+  expect(alert.map((node) => node.props.children)).toContain(draftGoneMessage);
+  await act(async () => tree.unmount());
 });

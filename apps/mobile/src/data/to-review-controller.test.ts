@@ -4,6 +4,7 @@ import type {
   PersistedExpenseDraft,
 } from '@splitbook/shared/validators/expense-draft';
 import { createMobileController, type MobileController } from './mobile-controller';
+import { draftGoneMessage } from './shared-draft-collection';
 import type { MobileFetch } from './types';
 import { savedQueriesIn } from '../test-utils/saved-queries';
 
@@ -33,7 +34,18 @@ const json = (value: unknown, status = 200, cookie?: string) =>
     status,
     headers: { 'Content-Type': 'application/json', ...(cookie ? { 'Set-Cookie': cookie } : {}) },
   });
-const item = (index: number): DraftReview => {
+const ready = (index: number) => ({
+  description: `Item ${index}`,
+  amount: 10,
+  currency: 'INR',
+  date: '2026-10-16',
+  category: 'other',
+  tagId,
+  paidBy: [{ user: user.id, amount: 10 }],
+  splitMethod: 'equal',
+  splitBetween: [{ user: user.id }],
+});
+const item = (index: number, complete = false): DraftReview => {
   const draft: PersistedExpenseDraft = {
     id: `d${String(index).padStart(23, '0')}`,
     groupId,
@@ -43,8 +55,8 @@ const item = (index: number): DraftReview => {
     changedBy: { kind: 'assistant', name: 'Claude' },
     createdAt: iso,
     updatedAt: iso,
-    missingFields: ['amount'],
-    values: { description: `Item ${index}` },
+    missingFields: complete ? [] : ['amount'],
+    values: complete ? ready(index) : { description: `Item ${index}` },
   } as PersistedExpenseDraft;
   return { draft, review: 'a'.repeat(64), problems: [], duplicates: [] };
 };
@@ -78,6 +90,7 @@ function fixture(options: { groups?: boolean } = {}) {
   let owner: string | null = null;
   let denied = false;
   let failing = false;
+  let draftsOff = false;
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
   let items: DraftReview[] = [];
   let groups = options.groups === false ? [] : [group];
@@ -116,6 +129,35 @@ function fixture(options: { groups?: boolean } = {}) {
       return denied
         ? json({ error: 'Forbidden', status: 403 }, 403)
         : json({ status: 200, data: group });
+    if (path.endsWith('/drafts/review')) {
+      const ids: string[] = JSON.parse(String(init.body)).ids;
+      return json({ data: items.filter((entry) => ids.includes(entry.draft.id)) });
+    }
+    if (path.endsWith('/drafts/save')) {
+      const ids = (JSON.parse(String(init.body)).drafts as { id: string }[]).map(({ id }) => id);
+      items = items.filter((entry) => !ids.includes(entry.draft.id));
+      return json({
+        data: ids.map((id) => ({ id, status: 'saved', expenseId: `e${id.slice(1)}` })),
+      });
+    }
+    const one = items.find((entry) => path.endsWith(`/drafts/${entry.draft.id}`));
+    if (path.includes('/drafts/') && ['PUT', 'DELETE'].includes(init.method ?? '')) {
+      if (draftsOff)
+        return json({ error: 'Drafts are not enabled', status: 404, code: 'DRAFTS_DISABLED' }, 404);
+      if (!one)
+        return json({ error: 'Draft not found', status: 404, code: 'DRAFT_NOT_FOUND' }, 404);
+      if (init.method === 'DELETE') {
+        items = items.filter((entry) => entry !== one);
+        return json({ data: { id: one.draft.id } });
+      }
+      const draft = {
+        ...one.draft,
+        revision: one.draft.revision + 1,
+        values: JSON.parse(String(init.body)).values,
+      };
+      items = items.map((entry) => (entry === one ? { ...entry, draft } : entry));
+      return json({ data: draft });
+    }
     if (path.endsWith('/drafts')) return json({ data: items.map((entry) => entry.draft) });
     if (path.endsWith('/activity'))
       return json({
@@ -194,6 +236,9 @@ function fixture(options: { groups?: boolean } = {}) {
       deviceHeld = gate.held;
       return gate.release;
     },
+    disableDrafts: () => {
+      draftsOff = true;
+    },
     fail: (next: boolean) => {
       failing = next;
     },
@@ -210,8 +255,12 @@ function fixture(options: { groups?: boolean } = {}) {
       held = gate.held;
       return gate.release;
     },
-    prepare: (count: number) => {
-      items = Array.from({ length: count }, (_, index) => item(index + 1));
+    prepare: (count: number, complete = false) => {
+      items = Array.from({ length: count }, (_, index) => item(index + 1, complete));
+    },
+    /** Saved or deleted on another screen or device. */
+    removeElsewhere: (id: string) => {
+      items = items.filter((entry) => entry.draft.id !== id);
     },
   };
 }
@@ -417,28 +466,104 @@ describe('To review stays current (#433)', () => {
 });
 
 describe("an open item's editor in To review (#436)", () => {
-  it('closes after Refresh items finds the item saved elsewhere', async () => {
+  /** Signed in, on a Group's To review with its items read and the first one's editor open. */
+  async function editing(options: { complete?: boolean } = {}) {
     const f = fixture();
-    f.prepare(2);
+    f.prepare(2, options.complete);
     await f.controller.signIn('alex');
     await settle();
     await f.controller.openToReview(groupId);
     const items = f.controller.draftCollection(groupId);
     const close = items.open();
-    try {
-      await settle();
-      const second = f.controller.getSnapshot().sharedDraftCollection.rows[1];
-      items.edit(second);
-      expect(f.controller.getSnapshot().sharedDraftCollection.editing).toMatchObject({
-        id: second.id,
-      });
-      // Saved by the guided review, or on another device: the server no longer lists it.
-      f.prepare(1);
-      await f.controller.refreshToReview();
-      await settle();
-      expect(f.controller.getSnapshot().sharedDraftCollection.editing).toBeNull();
-    } finally {
-      close();
-    }
+    closers.push(close);
+    await settle();
+    const first = f.controller.getSnapshot().sharedDraftCollection.rows[0];
+    items.edit(first);
+    expect(f.controller.getSnapshot().sharedDraftCollection.editing).toMatchObject({
+      id: first.id,
+    });
+    return {
+      f,
+      items,
+      close,
+      first,
+      collection: () => f.controller.getSnapshot().sharedDraftCollection,
+    };
+  }
+  const closers: (() => void)[] = [];
+  afterEach(() => {
+    for (const close of closers.splice(0)) close();
+  });
+
+  it('closes after the guided review saves the item and Done returns to To review', async () => {
+    const { f, close, first, collection } = await editing({ complete: true });
+    // The guided review shows over the list, which closes its items until Done.
+    close();
+    await f.controller.startReviewRun(groupId);
+    await f.controller.reviewRun()!.save();
+    await settle();
+    await f.controller.closeReviewRun();
+    closers.push(f.controller.draftCollection(groupId).open());
+    await settle();
+    expect(collection().editing).toBeNull();
+    expect(collection().rows.map((row) => row.id)).not.toContain(first.id);
+    expect(collection().message).toBe('');
+  });
+
+  it('closes after Refresh items finds the item saved elsewhere', async () => {
+    const { f, first, collection } = await editing();
+    f.removeElsewhere(first.id);
+    await f.controller.refreshToReview();
+    await settle();
+    expect(collection()).toMatchObject({ editing: null, message: '' });
+  });
+
+  it('says unsent changes were not kept when the item was saved or deleted elsewhere', async () => {
+    const { f, items, first, collection } = await editing();
+    items.enter('description', 'Dinner at the station');
+    f.removeElsewhere(first.id);
+    await f.controller.refreshToReview();
+    await settle();
+    expect(collection()).toMatchObject({ editing: null, message: draftGoneMessage });
+  });
+
+  it('closes, with nothing to explain, when the member deletes the item from its editor', async () => {
+    const { items, first, collection } = await editing();
+    items.enter('description', 'Dinner at the station');
+    await items.discard(first);
+    expect(collection()).toMatchObject({ editing: null, message: '' });
+    expect(collection().rows.map((row) => row.id)).not.toContain(first.id);
+  });
+
+  it('closes and says so when Keep changes for later finds the item gone', async () => {
+    const { f, items, first, collection } = await editing();
+    items.enter('description', 'Dinner at the station');
+    f.removeElsewhere(first.id);
+    await items.keep();
+    expect(collection()).toMatchObject({ editing: null, busy: false, message: draftGoneMessage });
+  });
+
+  it('keeps the editor and its changes open when Keep is refused for another reason', async () => {
+    const { f, items, collection } = await editing();
+    items.enter('description', 'Dinner at the station');
+    f.disableDrafts();
+    await items.keep();
+    expect(collection().editing).not.toBeNull();
+    expect(collection().entries.description).toBe('Dinner at the station');
+  });
+
+  it("keeps a new item's editor, and another item's, open when an item goes", async () => {
+    const { f, items, collection } = await editing();
+    const second = collection().rows[1];
+    items.edit(second);
+    f.removeElsewhere(collection().rows[0].id);
+    await f.controller.refreshToReview();
+    await settle();
+    expect(collection().editing).toMatchObject({ id: second.id });
+    items.closeEditor();
+    items.newDraft();
+    await f.controller.refreshToReview();
+    await settle();
+    expect(collection().editing).toBe('new');
   });
 });

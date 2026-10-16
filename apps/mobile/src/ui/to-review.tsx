@@ -1,5 +1,5 @@
 import { ReviewRunOverlay } from './review-run';
-import { draftEditorChanged } from '../data/shared-draft-collection';
+import { draftEditorChanged, draftGoneMessage } from '../data/shared-draft-collection';
 import { useEffect, useMemo } from 'react';
 import { Alert, Modal, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -411,7 +411,7 @@ export function ToReviewList({
                   />
                 </>
               )}
-              {!!collection.message && (
+              {!!collection.message && collection.message !== draftGoneMessage && (
                 <Copy accessibilityRole="alert">{memberMessage(collection.message)}</Copy>
               )}
               {collection.pending && (

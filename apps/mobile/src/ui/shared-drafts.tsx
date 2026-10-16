@@ -3,6 +3,7 @@ import { draftFields, draftEntryChanges } from '@splitbook/shared/persistent-dra
 import type { MobileController } from '../data/mobile-controller';
 import {
   draftEditorChanged,
+  draftGoneMessage,
   type SharedDraftCollectionState,
 } from '../data/shared-draft-collection';
 import { Button, Copy } from './primitives';
@@ -20,7 +21,11 @@ export function SharedDraftEditor({
 }) {
   const theme = useTheme();
   const { editing, entries, choice, busy, pending, context } = state;
-  if (!editing) return null;
+  // Where the editor was, it says why it closed: its item was saved or deleted (#436).
+  if (!editing)
+    return state.message === draftGoneMessage ? (
+      <Copy accessibilityRole="alert">{draftGoneMessage}</Copy>
+    ) : null;
   if (!context) return <Copy>Connect to load the people and Tags for this item.</Copy>;
   const disabled = busy || offline;
   const choices = {
