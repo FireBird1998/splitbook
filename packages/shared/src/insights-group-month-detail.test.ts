@@ -301,10 +301,9 @@ describe('spending by Tag', () => {
     expect(result.tags.map((row) => row.name)).toEqual(['Utilities', 'Dining', 'Groceries']);
   });
 
-  it('buckets Months in the viewer’s zone, and counts only the Group’s currency', () => {
-    // 20:00 UTC on 31 August: September in Kolkata and Kiritimati, August in Pago Pago.
+  it('counts an Expense in the Month it is dated in every zone, and only the Group’s currency (#437)', () => {
     const expenses = [
-      expense('2026-08-31T20:00:00Z', { [alex]: 4200 }, { tag: groceries }),
+      expense('2026-09-01T00:00:00.000Z', { [alex]: 4200 }, { tag: groceries }),
       expense('2026-09-10T06:00:00Z', { [alex]: 999 }, { tag: groceries, currency: 'EUR' }),
       // Outside the Months compared.
       expense('2026-10-02T06:00:00Z', { [alex]: 777 }, { tag: groceries }),
@@ -313,7 +312,7 @@ describe('spending by Tag', () => {
       table(byTag(expenses, { timeZone, compare: 1 })).map((row) => row.slice(1, 4));
     expect(spent('Asia/Kolkata')).toEqual([[4200, 1, 0]]);
     expect(spent('Pacific/Kiritimati')).toEqual([[4200, 1, 0]]);
-    expect(spent('Pacific/Pago_Pago')).toEqual([[0, 0, 4200]]);
+    expect(spent('Pacific/Pago_Pago')).toEqual([[4200, 1, 0]]);
   });
 
   it('is empty with nothing spent in these Months', () => {
@@ -407,14 +406,14 @@ describe('who paid in a Month', () => {
     expect(rows.reduce((sum, row) => sum + row.shareMinor, 0)).toBe(700);
   });
 
-  it('counts only the Month in the viewer’s zone, and only the Group’s currency', () => {
+  it('counts only the Month an Expense is dated in, and only the Group’s currency (#437)', () => {
     const expenses = [
-      expense('2026-08-31T20:00:00Z', { [alex]: 4200 }),
+      expense('2026-09-01T00:00:00.000Z', { [alex]: 4200 }),
       expense('2026-09-10T06:00:00Z', { [sam]: 999 }, { currency: 'EUR' }),
     ];
     expect(paidAndShares(expenses)[0]).toMatchObject({ memberId: alex, paidMinor: 4200 });
     expect(paidAndShares(expenses, { timeZone: 'Pacific/Pago_Pago' })[0]).toMatchObject({
-      paidMinor: 0,
+      paidMinor: 4200,
     });
   });
 

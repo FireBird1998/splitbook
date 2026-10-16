@@ -19,6 +19,7 @@ import {
 import { splitLeftover } from './expense-split';
 import { expenseDateForPeriod, nextPeriod, toPeriod } from './recurring-due-periods';
 import type { ExpenseSplitMethod } from './split-calculation';
+import { expenseLocalDate } from './expense-day';
 
 /** A payer or share row as the Expense reads return it. */
 export interface StoredAllocationRow {
@@ -358,8 +359,8 @@ export function ordinal(day: number): string {
   return `${day}${['th', 'st', 'nd', 'rd'][day % 10] ?? 'th'}`;
 }
 
-/** "2 Nov": an Expense's day as the viewer's own calendar shows it, like the Expense table. */
-const shortDay = (date: Date) => format(date, 'd MMM');
+/** "2 Nov": the day an Expense is dated, like the Expense table shows it (#437). */
+const shortDay = (date: Date) => format(expenseLocalDate(date), 'd MMM');
 
 /**
  * The next date the recurring Expense adds an Expense on, or null when it has ended. Months are

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getLocalMonthIsoRange } from '@splitbook/shared/date';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse } from './types';
 import { hangUntilAborted } from '../test-utils/transport-faults';
@@ -43,7 +43,7 @@ const expensesPath = `/api/groups/${groupId}/expenses?`;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const monthOf = (path: string) => {
   const from = new URL(path, 'http://local').searchParams.get('dateFrom');
-  return ['2026-08', '2026-09'].find((month) => getLocalMonthIsoRange(month).dateFrom === from);
+  return ['2026-08', '2026-09'].find((month) => expenseMonthRange(month).dateFrom === from);
 };
 
 /** Hold matching requests until released, to observe overlapping and late reads. */

@@ -5,11 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { ThemeProvider, getContrastRatio } from '@mui/material/styles';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { formatDateTime } from '@splitbook/shared/date';
-import {
-  expenseDateForPeriod,
-  nextPeriod,
-  toPeriod,
-} from '@splitbook/shared/recurring-due-periods';
+import { nextPeriod, toPeriod } from '@splitbook/shared/recurring-due-periods';
 import { format } from 'date-fns';
 import type { ExpenseRead } from '@splitbook/shared/expense-page-read';
 import type { GroupRead } from '@splitbook/shared/group-read';
@@ -17,6 +13,7 @@ import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { darkTokens, lightTokens } from '@/lib/theme/tokens';
 import { HttpResponseError } from '@/lib/utils/fetcher';
 import { text } from '@/lib/test-utils/markup';
+import { inTimeZone } from '@/lib/test-utils/time-zone';
 
 /*
  * #311: the Expense side panel as the server renders it. Its sections, the leftover explanation,
@@ -179,6 +176,11 @@ beforeEach(() => {
 });
 
 describe('the side panel with an Expense open', () => {
+  it('dates it by the day it is dated, in a zone behind UTC (#437)', () =>
+    inTimeZone('Pacific/Pago_Pago', () => {
+      expect(panelDay('2026-09-29T00:00:00.000Z')).toBe('Tue 29 Sep 2026');
+    }));
+
   it('is a named region with the amount, the member’s position, Edit and Duplicate, then every section, and Delete last', () => {
     const html = panel(opened());
     expect(html).toMatch(
@@ -443,7 +445,9 @@ describe('the Expenses tab with an Expense open', () => {
         ],
       ]),
     });
-    const next = format(expenseDateForPeriod(nextPeriod(toPeriod(now)), 28), 'd MMM');
+    // The calendar day the next Expense is dated, in every zone (#437).
+    const [year, month] = nextPeriod(toPeriod(now)).split('-').map(Number);
+    const next = format(new Date(year, month - 1, 28), 'd MMM');
     expect(text(tab(true))).toContain(`Repeats Monthly on the 28th · next ${next}`);
     expect(text(tab(false))).not.toMatch(/Repeats|Monthly/);
   });

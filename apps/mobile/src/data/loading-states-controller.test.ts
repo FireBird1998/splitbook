@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { currentMonthKey, getLocalMonthIsoRange, shiftMonthKey } from '@splitbook/shared/date';
+import { currentMonthKey, shiftMonthKey } from '@splitbook/shared/date';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { refreshFeedback } from '../ui/refresh-feedback';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse, MobileSnapshot } from './types';
@@ -1689,7 +1690,7 @@ describe('a new Group opens ready (#189)', () => {
       .filter((call) => call.startsWith(`GET /api/groups/${created}/expenses?`));
     expect(reads).toHaveLength(1);
     const query = new URL(reads[0].slice('GET '.length), 'http://localhost').searchParams;
-    const { dateFrom, dateTo } = getLocalMonthIsoRange(month);
+    const { dateFrom, dateTo } = expenseMonthRange(month);
     expect([query.get('dateFrom'), query.get('dateTo')]).toEqual([dateFrom, dateTo]);
   });
 

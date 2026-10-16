@@ -59,6 +59,7 @@ import {
   CLEARED_FILTERS,
   type ExpenseListQuery,
 } from './expense-list-query';
+import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
 /** Expenses on one page of the list, on a computer or a phone. */
 export const EXPENSE_LIST_PAGE_SIZE = 50;
@@ -705,7 +706,7 @@ function ExpenseCards({
       else days.at(-1)!.expenses.push(expense);
       continue;
     }
-    const day = byDay ? formatDate(expense.date) : '';
+    const day = byDay ? formatDate(expenseLocalDate(expense.date)) : '';
     const last = days.at(-1);
     if (last && last.day === day) last.expenses.push(expense);
     else days.push({ day, expenses: [expense] });

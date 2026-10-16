@@ -4,6 +4,7 @@ import { formatDateTime } from '@splitbook/shared/date';
 import { toMajorAmount } from '@splitbook/shared/exact-money';
 import type { ActivityEvent } from './activity';
 import type { ExpenseRecord } from './expense-record';
+import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
 /** One changed value. Values are absent when only the change itself can be described. */
 export interface ExpenseHistoryChange {
@@ -87,11 +88,16 @@ function money(row: Row, currency: string): string | null {
     : null;
 }
 
+/** The day an Expense is dated, as every viewer sees it (#437). */
 function day(value: unknown) {
   const date = new Date(text(value));
   return Number.isNaN(date.getTime())
     ? 'Unknown date'
-    : date.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' });
+    : expenseLocalDate(date).toLocaleDateString('en', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
 }
 
 function list(items: string[]) {

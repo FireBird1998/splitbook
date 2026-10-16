@@ -12,6 +12,7 @@
  */
 import { getCategory } from './categories';
 import { getCurrencyPrecision } from './currency';
+import { expenseDay } from './expense-day';
 import { assertSafeMinorAmount, moneyParticipantId, readLegacyAmountMinor } from './exact-money';
 import type { SplitMethod } from './types';
 
@@ -58,13 +59,7 @@ export function formatMinorAmount(amountMinor: number, currency: string): string
 
 const pad = (value: number) => String(value).padStart(2, '0');
 
-/**
- * An Expense's date. Expenses are dated by calendar day, stored at midnight UTC, so the day is
- * read in UTC and is the day the member picked, whatever the viewer's zone.
- */
-export function expenseDay(date: Date | string): string {
-  return new Date(date).toISOString().slice(0, 10);
-}
+export { expenseDay };
 
 const zoneFormats = new Map<string, Intl.DateTimeFormat>();
 

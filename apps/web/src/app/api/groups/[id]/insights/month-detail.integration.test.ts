@@ -531,11 +531,10 @@ describe('spending by Tag', () => {
     });
   });
 
-  it('buckets the Month in the zone sent', async () => {
+  it('counts an Expense in the Month it is dated, whatever the zone sent (#437)', async () => {
     const maple = await createGroup('Maple House', [alice, bob]);
     await createdIn(maple, '2026-03-02T10:00:00Z');
-    // 20:00 UTC on 31 August: September in Kolkata, August in New York.
-    await insertExpense(maple, '2026-08-31T20:00:00Z', { [alice]: 4200 });
+    await insertExpense(maple, '2026-09-01T00:00:00Z', { [alice]: 4200 });
 
     const spent = async (tz: string) =>
       (await decoded(maple, `month=2026-09&compare=1&tz=${tz}`)).byTag;
@@ -543,7 +542,7 @@ describe('spending by Tag', () => {
       value: { tags: [{ spentMinor: 4200, averageMinor: 0 }] },
     });
     expect(await spent('America%2FNew_York')).toMatchObject({
-      value: { tags: [{ spentMinor: 0, averageMinor: 4200 }] },
+      value: { tags: [{ spentMinor: 4200, averageMinor: 0 }] },
     });
   });
 });

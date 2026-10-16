@@ -18,7 +18,6 @@ import { moneyParticipantId, readStoredAmountMinor, sumMinorAmounts } from './ex
 import {
   addMonths,
   dayKeyInZone,
-  monthKeyInZone,
   monthsBetween,
   monthsWindow,
   readTimeZone,
@@ -26,6 +25,7 @@ import {
   type Instant,
   type MonthKey,
 } from './zoned-calendar';
+import { expenseMonth } from './expense-day';
 import { MoneyValidationError } from './exact-money';
 import { nextOccurrenceDay } from './recurring-due-periods';
 import { findReferencedTag, type IdentityTag } from './tag-identity';
@@ -171,7 +171,7 @@ export function memberSpendingByMonth({
   >();
   for (const expense of expenses) {
     if (!covered.has(expense.groupId)) continue;
-    const index = monthIndex.get(monthKeyInZone(expense.date, zone));
+    const index = monthIndex.get(expenseMonth(expense.date));
     if (index === undefined) continue;
     const share = memberShareMinor(expense, memberId);
     if (share === 0) continue;
@@ -616,7 +616,7 @@ export function groupMonthInsights({
   let biggest: Candidate | null = null;
 
   for (const expense of expenses) {
-    const at = index.get(monthKeyInZone(expense.date, zone));
+    const at = index.get(expenseMonth(expense.date));
     if (at === undefined) continue;
     const totalMinor = expenseTotalMinor(expense);
     if (expense.currency !== currency) {
@@ -785,7 +785,8 @@ export function spendingInMonth({
   groups: readonly Pick<SpendingGroup, 'groupId'>[];
   expenses: Iterable<MonthDetailExpense>;
 }): MonthDetail {
-  const zone = readTimeZone(timeZone);
+  // Refuses an unknown zone; an Expense's Month is the one it is dated in (#437).
+  readTimeZone(timeZone);
   // Refuses a malformed Month before anything is counted.
   monthsWindow([month]);
   const spentByGroup = new Map(
@@ -798,7 +799,7 @@ export function spendingInMonth({
 
   for (const expense of expenses) {
     const spent = spentByGroup.get(expense.groupId);
-    if (!spent || monthKeyInZone(expense.date, zone) !== month) continue;
+    if (!spent || expenseMonth(expense.date) !== month) continue;
     const before = spent.get(expense.currency) ?? { totalMinor: 0, expenseCount: 0 };
     spent.set(expense.currency, {
       totalMinor: sumMinorAmounts([before.totalMinor, expenseTotalMinor(expense)]),
@@ -925,7 +926,8 @@ export function groupSpendingByTag({
   tags: readonly IdentityTag[];
   expenses: Iterable<GroupMonthDetailExpense>;
 }): GroupTagSpending {
-  const zone = readTimeZone(timeZone);
+  // Refuses an unknown zone; an Expense's Month is the one it is dated in (#437).
+  readTimeZone(timeZone);
   const earlier = earlierMonths(month, { previousMonths: compare, since: firstMonth });
   const counted = new Set([...earlier, month]);
   const groupTags = [...tags];
@@ -934,7 +936,7 @@ export function groupSpendingByTag({
 
   for (const expense of expenses) {
     if (expense.currency !== currency) continue;
-    const at = monthKeyInZone(expense.date, zone);
+    const at = expenseMonth(expense.date);
     if (!counted.has(at)) continue;
     const tag = findReferencedTag(groupTags, {
       tagId: expense.tagId ?? undefined,
@@ -1014,7 +1016,8 @@ export function groupMonthPaidAndShares({
   memberIds: readonly string[];
   expenses: Iterable<GroupInsightExpense>;
 }): MemberPaidAndShare[] {
-  const zone = readTimeZone(timeZone);
+  // Refuses an unknown zone; an Expense's Month is the one it is dated in (#437).
+  readTimeZone(timeZone);
   const members = new Set(memberIds);
   const people = new Map<string, { paid: number[]; share: number[] }>();
   const person = (id: string) => {
@@ -1029,7 +1032,7 @@ export function groupMonthPaidAndShares({
 
   for (const expense of expenses) {
     if (expense.currency !== currency) continue;
-    if (monthKeyInZone(expense.date, zone) !== month) continue;
+    if (expenseMonth(expense.date) !== month) continue;
     for (const row of expense.paidBy)
       person(moneyParticipantId(row.user)).paid.push(rowMinor(row, expense));
     for (const row of expense.splitBetween)
@@ -1129,7 +1132,7 @@ export function groupRecurringMonth({
   const addedOn = new Map<string, { time: number; day: DayKey }>();
   for (const expense of expenses) {
     if (expense.currency !== currency || !expense.recurring) continue;
-    if (monthKeyInZone(expense.date, zone) !== month) continue;
+    if (expenseMonth(expense.date) !== month) continue;
     added.push(expenseTotalMinor(expense));
     if (!expense.recurringExpenseId) continue;
     // One a month; were there two, the later one.

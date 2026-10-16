@@ -25,6 +25,7 @@ import {
 import { buildDemoGroupsPlan } from '@/lib/demo/groups-plan';
 import { seedDemoGroup, type DemoGroupSeedResult } from '@/lib/demo/seed-groups';
 import { recurringExpensesEnabled } from '@/lib/recurring-expenses-switch';
+import { onExpenseDay } from '@splitbook/shared/expense-day';
 
 export interface SeedResult {
   usersUpserted: number;
@@ -81,8 +82,9 @@ async function ensureGroup(plan: DemoSeedPlan): Promise<{ created: boolean }> {
     category: 'trip',
     defaultCurrency: plan.currency,
     alternateCurrencies: [],
-    startDate: daysAgoDate(10),
-    endDate: daysAgoDate(7),
+    // A Trip's and an Expense's dates are calendar days, stored at midnight UTC (#437).
+    startDate: onExpenseDay(daysAgoDate(10)),
+    endDate: onExpenseDay(daysAgoDate(7)),
     isArchived: false,
     members: [
       {
@@ -174,7 +176,7 @@ async function insertTripTransactions(plan: DemoSeedPlan): Promise<{
         amount: expense.amount,
         currency: expense.currency,
         category: expense.category,
-        date: daysAgoDate(expense.daysAgo),
+        date: onExpenseDay(daysAgoDate(expense.daysAgo)),
         paidBy: expense.paidBy,
         splitMethod: expense.splitMethod,
         splitBetween: expense.splitBetween,

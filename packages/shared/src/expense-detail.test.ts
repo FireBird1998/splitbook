@@ -12,7 +12,6 @@ import {
   type ExpenseLeftover,
   type StoredExpenseSplit,
 } from './expense-detail';
-import { expenseDateForPeriod } from './recurring-due-periods';
 import type { ExpenseSplitMethod } from './split-calculation';
 
 // Fictional members and figures only. Ids order the members: you, then Sam, then Priya.
@@ -316,10 +315,9 @@ describe('an Expense’s history', () => {
 });
 
 describe('how a recurring Expense repeats', () => {
-  // The recurring rules work in UTC Months; the next day is shown in the viewer's own zone,
-  // as the Expense table shows the Expense it adds, so the expected label uses that formatter.
+  // The next day is the calendar day the Expense it adds is dated, in every zone (#437).
   const day = (period: string, dayOfMonth: number) =>
-    format(expenseDateForPeriod(period, dayOfMonth), 'd MMM');
+    format(new Date(Number(period.slice(0, 4)), Number(period.slice(5)) - 1, dayOfMonth), 'd MMM');
   const now = new Date(Date.UTC(2026, 8, 30, 12));
   const wifi = {
     dayOfMonth: 28,

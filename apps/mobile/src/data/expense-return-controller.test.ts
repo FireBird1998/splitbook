@@ -1,6 +1,6 @@
 import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
 import { describe, expect, it } from 'vitest';
-import { getLocalMonthIsoRange } from '@splitbook/shared/date';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import type { ExpenseDraft } from './expense-draft';
 import type { FetchResponse, MobileFetch, MobileSnapshot } from './types';
 import { savedQueriesIn } from '../test-utils/saved-queries';
@@ -46,7 +46,7 @@ const json = (data: unknown, status = 200, cookie?: string) =>
   }) as FetchResponse;
 const monthOf = (from: string | null) =>
   ['2026-07', '2026-08', '2026-09', '2026-10'].find(
-    (month) => getLocalMonthIsoRange(month).dateFrom === from,
+    (month) => expenseMonthRange(month).dateFrom === from,
   ) ?? 'all';
 const expenseId = 'b00000000000000000000001';
 
@@ -208,8 +208,9 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
           (row) =>
             row.group === target._id &&
             !row.isDeleted &&
-            (month === 'all' || String(row.date) >= getLocalMonthIsoRange(month).dateFrom) &&
-            (month === 'all' || String(row.date) <= getLocalMonthIsoRange(month).dateTo),
+            (month === 'all' ||
+              String(row.date).slice(0, 10) >= expenseMonthRange(month).dateFrom) &&
+            (month === 'all' || String(row.date).slice(0, 10) <= expenseMonthRange(month).dateTo),
         )
         .sort((a, b) => String(b.date).localeCompare(String(a.date)));
       return json({
@@ -393,12 +394,8 @@ function ledger({ savedCopies = false }: { savedCopies?: boolean } = {}) {
             amount: 3,
             currency: 'INR',
             category: 'food',
-            date: new Date(
-              Number(month.slice(0, 4)),
-              Number(month.slice(5)) - 1,
-              day,
-              12,
-            ).toISOString(),
+            // Dated by calendar day, stored at midnight UTC (#437).
+            date: `${month}-${String(day).padStart(2, '0')}T00:00:00.000Z`,
             paidBy: [{ user: people[0].id, amount: 3 }],
             splitBetween: people.map(({ id: user }) => ({ user, amount: 1 })),
             splitMethod: 'equal',

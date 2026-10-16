@@ -45,6 +45,7 @@ import {
   findReferencedTag,
   resolveTagReference,
 } from '@splitbook/shared/tag-identity';
+import { expenseDate, expenseDay } from '@splitbook/shared/expense-day';
 
 /**
  * The stored-amount bounds for an Expense list's amount range (#310), or null without one.
@@ -540,10 +541,10 @@ export class ExpenseService {
   ) {
     await connectDB();
 
-    const startOfDay = new Date(date);
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date(date);
-    endOfDay.setHours(23, 59, 59, 999);
+    // The day the Expense is dated, in UTC as it is stored (#437).
+    const day = expenseDay(date);
+    const startOfDay = expenseDate(day);
+    const endOfDay = new Date(`${day}T23:59:59.999Z`);
 
     const query: Record<string, unknown> = {
       group: new mongoose.Types.ObjectId(groupId),

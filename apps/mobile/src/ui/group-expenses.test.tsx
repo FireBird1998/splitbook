@@ -7,7 +7,8 @@ import type {
   MobileExpense,
   MobileGroup,
 } from '../data/types';
-import { GroupExpensesView } from './group-expenses';
+import { GroupExpensesView, expenseDays } from './group-expenses';
+import { inTimeZone } from '../test-utils/time-zone';
 import { refreshedLabel } from './refresh-feedback';
 
 // #116: the Expenses destination's summary, rows, pagination and draft states, rendered.
@@ -64,7 +65,8 @@ const expense = (
     currency: 'INR',
     amount: amountMinor / 100,
     amountMinor,
-    date: new Date(2026, 8, day, 12),
+    // Dated by calendar day, stored at midnight UTC (#437).
+    date: new Date(Date.UTC(2026, 8, day)),
     createdAt: new Date(at),
     updatedAt: new Date(at),
     category: 'food',
@@ -301,6 +303,20 @@ describe('Expense rows', () => {
     press(root, 'Electricity bill, ₹2,860.00, Sam Chen paid, Utilities, you owe ₹953.33');
     expect(onOpenExpense).toHaveBeenCalledWith(electricity.id);
   });
+
+  it('sit under the day they are dated, in a zone behind UTC (#437)', () =>
+    inTimeZone('Pacific/Pago_Pago', () => {
+      const stored = { ...groceries, date: new Date('2026-09-28T00:00:00.000Z') };
+      const [day] = expenseDays([stored], now);
+      expect(day.key).toBe('2026-09-28');
+      expect(day.label).toBe(
+        new Date(2026, 8, 28).toLocaleDateString([], {
+          weekday: 'short',
+          day: 'numeric',
+          month: 'short',
+        }),
+      );
+    }));
 
   it('marks the Expense just saved', () => {
     const { root } = view({ savedExpenseId: groceries.id });

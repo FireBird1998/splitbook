@@ -1,6 +1,6 @@
 import { createCheckedMobileController as createMobileController } from '../test-utils/flow-monitor';
 import { describe, expect, it, vi } from 'vitest';
-import { getLocalMonthIsoRange } from '@splitbook/shared/date';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { DISPLAY_FRESHNESS_MS } from './mobile-controller';
 import type { FetchResponse, PendingInvitationStore } from './types';
 import { refreshFeedback } from '../ui/refresh-feedback';
@@ -36,7 +36,7 @@ const group = {
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const monthOf = (path: string) => {
   const from = new URL(path, 'http://local').searchParams.get('dateFrom');
-  return ['2026-08', '2026-09'].find((month) => getLocalMonthIsoRange(month).dateFrom === from);
+  return ['2026-08', '2026-09'].find((month) => expenseMonthRange(month).dateFrom === from);
 };
 
 /** Hold matching requests until released, to observe overlapping and late reads. */

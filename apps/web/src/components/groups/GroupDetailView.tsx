@@ -19,7 +19,6 @@ import InviteDialog from '@/components/groups/InviteDialog';
 import { useGroup } from '@/lib/hooks/use-groups';
 import ErrorState from '@/components/common/ErrorState';
 import { fetchWebExpensePage, fetchWebBalances } from '@/lib/web-read';
-import { formatDate } from '@splitbook/shared/date';
 import { buildTripChecklist, shouldShowTripChecklist } from '@splitbook/shared/trip-setup';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { GroupRead } from '@splitbook/shared/group-read';
@@ -33,6 +32,7 @@ import {
 } from './group-page-context';
 import { groupSettingsHref, groupTabHref } from './group-tabs';
 import { groupExportHref } from '@/components/layout/shell-nav';
+import { groupDatesLabel } from './group-dates';
 
 interface GroupDetailViewProps {
   groupId: string;
@@ -184,16 +184,7 @@ function GroupDetailContent({
   const theme = getGroupTheme(group.category);
   const startDate = group.startDate;
   const endDate = group.endDate;
-  const dateLabel =
-    theme.dates === 'bounded'
-      ? startDate && endDate
-        ? `${formatDate(startDate)} – ${formatDate(endDate)}`
-        : startDate
-          ? `Starts ${formatDate(startDate)}`
-          : null
-      : theme.signature === 'monthCycle' && startDate
-        ? `Tracking since ${formatDate(startDate)}`
-        : null;
+  const dateLabel = groupDatesLabel(theme, startDate, endDate, { tracking: true });
   const currency = group.defaultCurrency;
   const userBalance = (balancesData?.data?.balances || []).find(
     (balance) => balance.user._id === userId,

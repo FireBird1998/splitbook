@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { focusManager } from '@tanstack/query-core';
-import { getLocalMonthIsoRange } from '@splitbook/shared/date';
 import type { AccountGroupRecordStore, FindableRecordStore } from './account-record-storage';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse, MobileSnapshot } from './types';
@@ -44,7 +43,8 @@ const balancesPath = `${maplePath}/balances`;
 const json = (body: unknown, status = 200) => Response.json(body, { status });
 const monthOf = (path: string) => {
   const from = new URL(path, 'http://local').searchParams.get('dateFrom');
-  return ['2026-08', '2026-09'].find((month) => getLocalMonthIsoRange(month).dateFrom === from);
+  // A Month's Expenses are those dated in it: its first and last calendar days (#437).
+  return ({ '2026-08-01': '2026-08', '2026-09-01': '2026-09' } as Record<string, string>)[from!];
 };
 const pageOf = (path: string) => Number(new URL(path, 'http://local').searchParams.get('page'));
 const hex = (prefix: string, index: number) => `${prefix}${String(index).padStart(23, '0')}`;
@@ -816,9 +816,7 @@ describe('saved copies on the persister (#219, M3-1)', () => {
     // A Month's list is saved page by page, each page with its own time.
     expect(f.savedRows(`${maplePath}/expenses?`)).toEqual([
       expect.objectContaining({
-        path:
-          septemberPath(1) +
-          `&dateFrom=${encodeURIComponent(getLocalMonthIsoRange('2026-09').dateFrom)}&dateTo=${encodeURIComponent(getLocalMonthIsoRange('2026-09').dateTo)}`,
+        path: septemberPath(1) + `&dateFrom=2026-09-01&dateTo=2026-09-30`,
         refreshedAt: first,
       }),
       expect.objectContaining({ refreshedAt: first + 1_000 }),

@@ -69,6 +69,7 @@ import { savingNeedsConnection } from './offline-notice';
 import { refreshedLabel } from './refresh-feedback';
 import { Copy, Icon, Label, Panel, type IconName } from './primitives';
 import { fonts, useTheme } from './theme';
+import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
 const categoryIcons: Record<string, IconName> = {
   food: 'restaurant-outline',
@@ -82,9 +83,9 @@ const categoryIcons: Record<string, IconName> = {
   education: 'school-outline',
 };
 
-/** "Tue, Sep 29, 2026", as the record's second line starts. */
+/** "Tue, Sep 29, 2026", as the record's second line starts: the day it is dated (#437). */
 const recordDay = (date: string | Date) =>
-  new Date(date).toLocaleDateString([], {
+  expenseLocalDate(date).toLocaleDateString([], {
     weekday: 'short',
     day: 'numeric',
     month: 'short',
@@ -1381,7 +1382,7 @@ export function ExpenseRecordView({
         {amount(money.amount)} · {record.currency}
       </Copy>
       <Copy>
-        {new Date(record.date).toLocaleDateString()} · {record.category}
+        {expenseLocalDate(record.date).toLocaleDateString()} · {record.category}
       </Copy>
       <Copy>Tag: {record.tag || 'Historical Tag'}</Copy>
       {record.notes ? <Copy>Notes: {record.notes}</Copy> : null}

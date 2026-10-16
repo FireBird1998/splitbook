@@ -109,6 +109,14 @@ describe("the member's spending by Month", () => {
     expect(result.currencies[0].months[0].byGroup).toEqual([]);
   });
 
+  it('counts an Expense in the Month it is dated, in a zone behind UTC (#437)', () => {
+    const result = spending(
+      [expense(maple, '2026-10-01T00:00:00.000Z', { [alex]: 1000 })],
+      'America/Los_Angeles',
+    );
+    expect(shares(result.currencies[0].months)).toEqual([0, 0, 0, 0, 0, 1000]);
+  });
+
   it('adds shares exactly, in minor units', () => {
     // Three thirds of ₹1,000.00 and a ₹0.01 share: no floating-point drift.
     const result = spending([
@@ -195,32 +203,27 @@ describe("the member's spending by Month", () => {
     expect(spending([]).groups).toEqual(groups);
   });
 
-  it('buckets by Month in the viewer’s zone, never the runtime’s', () => {
-    // 21:00 on 30 September in New York is already 1 October in Kolkata and Kiritimati.
-    const late = expense(maple, '2026-10-01T01:00:00Z', { [alex]: 4200 });
-    const months = ['2026-09', '2026-10'];
-    expect(shares(spending([late], 'America/New_York', months).currencies[0].months)).toEqual([
-      4200, 0,
-    ]);
-    expect(shares(spending([late], 'Asia/Kolkata', months).currencies[0].months)).toEqual([
-      0, 4200,
-    ]);
-    expect(shares(spending([late], 'Pacific/Kiritimati', months).currencies[0].months)).toEqual([
-      0, 4200,
-    ]);
-    expect(shares(spending([late], 'Pacific/Pago_Pago', months).currencies[0].months)).toEqual([
-      4200, 0,
-    ]);
-  });
+  it.each(['America/New_York', 'Asia/Kolkata', 'Pacific/Kiritimati', 'Pacific/Pago_Pago'])(
+    'counts an Expense in the Month it is dated in %s, never a shifted one (#437)',
+    (timeZone) => {
+      const months = ['2026-09', '2026-10'];
+      // Dated 1 October; and 30 September, stored at local noon in India before #437.
+      const first = expense(maple, '2026-10-01T00:00:00.000Z', { [alex]: 4200 });
+      const last = expense(maple, '2026-09-30T06:30:00.000Z', { [alex]: 100 });
+      expect(shares(spending([first, last], timeZone, months).currencies[0].months)).toEqual([
+        100, 4200,
+      ]);
+    },
+  );
 
-  it('buckets across a daylight-saving change at a Month edge', () => {
+  it('keeps each Month edge’s Expenses in their own Month across a daylight-saving change', () => {
     const months = ['2026-10', '2026-11'];
-    // New York: 23:30 on 31 October (summer time) and 01:30 on 1 November, twice.
+    // New York leaves summer time on 1 November.
     const result = spending(
       [
-        expense(maple, '2026-11-01T03:30:00Z', { [alex]: 100 }),
-        expense(maple, '2026-11-01T05:30:00Z', { [alex]: 200 }),
-        expense(maple, '2026-11-01T06:30:00Z', { [alex]: 400 }),
+        expense(maple, '2026-10-31T00:00:00.000Z', { [alex]: 100 }),
+        expense(maple, '2026-11-01T00:00:00.000Z', { [alex]: 200 }),
+        expense(maple, '2026-11-01T00:00:00.000Z', { [alex]: 400 }),
       ],
       'America/New_York',
       months,
@@ -229,9 +232,10 @@ describe("the member's spending by Month", () => {
   });
 
   it('follows the Months the read asks for, as `lastMonths` gives them', () => {
+    // Already 1 October in Kolkata.
     const now = '2026-09-30T20:00:00Z';
     const result = spending(
-      [expense(maple, '2026-09-30T19:00:00Z', { [alex]: 700 })],
+      [expense(maple, '2026-10-01T00:00:00.000Z', { [alex]: 700 })],
       'Asia/Kolkata',
       lastMonths(6, { now, timeZone: 'Asia/Kolkata' }),
     );
@@ -545,20 +549,21 @@ describe('the Month in detail', () => {
     expect(result.groups.every((group) => group.spent.length === 0)).toBe(true);
   });
 
-  it('puts an Expense in the Month of the viewer’s zone, never the runtime’s', () => {
-    // 01:00 UTC on 1 October: 30 September in New York and Pago Pago, 1 October in Kolkata,
-    // Tongatapu and Kiritimati.
-    const late = [categorised(maple, '2026-10-01T01:00:00Z', 'food', { [alex]: 4200 })];
-    const inOctober = (timeZone: string) => october(late, timeZone).byCategory.length === 1;
-    expect(inOctober('America/New_York')).toBe(false);
-    expect(inOctober('Pacific/Pago_Pago')).toBe(false);
-    expect(inOctober('Asia/Kolkata')).toBe(true);
-    expect(inOctober('Pacific/Tongatapu')).toBe(true);
-    expect(inOctober('Pacific/Kiritimati')).toBe(true);
-    // And the Group's spending follows the same Month.
-    expect(october(late, 'Pacific/Pago_Pago', '2026-09').groups[0].spent).toEqual([
-      { currency: 'INR', totalMinor: 4200, expenseCount: 1 },
-    ]);
+  it('puts an Expense in the Month it is dated, in every zone (#437)', () => {
+    const first = [categorised(maple, '2026-10-01T00:00:00.000Z', 'food', { [alex]: 4200 })];
+    for (const timeZone of [
+      'America/New_York',
+      'Pacific/Pago_Pago',
+      'Asia/Kolkata',
+      'Pacific/Tongatapu',
+      'Pacific/Kiritimati',
+    ]) {
+      expect(october(first, timeZone).byCategory).toHaveLength(1);
+      // And the Group's spending follows the same Month.
+      expect(october(first, timeZone).groups[0].spent).toEqual([
+        { currency: 'INR', totalMinor: 4200, expenseCount: 1 },
+      ]);
+    }
   });
 
   it('agrees with the Months’ figures for the same Month', () => {

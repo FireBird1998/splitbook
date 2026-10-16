@@ -5,6 +5,7 @@ import { z } from 'zod';
 import { readSessionCookie } from '../src/data/cookies';
 import { localOrigin } from './verification-origin';
 import { tagActionResultSchema, tagSnapshotSchema } from '@splitbook/shared/tag-management';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 
 type FixtureTagAction =
   | { action: 'create'; name: string }
@@ -215,14 +216,20 @@ export async function createFinancialFixtures(
   assert.ok(process.env.TZ === 'Asia/Kolkata', 'Run this fixture command with TZ=Asia/Kolkata.');
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const next = new Date(start.getFullYear(), start.getMonth() + 1, 1);
-  const end = new Date(next.getTime() - 1);
   assert.equal(
     start.getTimezoneOffset(),
     -330,
     'The fixture runtime did not apply the non-UTC timezone.',
   );
   const month = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`;
+  // An Expense's date is a calendar day (#437): the Month holds the Expenses dated from its first
+  // to its last day, whatever the zone, so its edges are the days either side.
+  const days = expenseMonthRange(month);
+  const dayAfter = (day: string, offset: number) => {
+    const date = new Date(`${day}T00:00:00.000Z`);
+    date.setUTCDate(date.getUTCDate() + offset);
+    return date.toISOString().slice(0, 10);
+  };
   const runId = randomUUID();
   const groups: Partial<Record<GroupKey, string>> = {};
   try {
@@ -239,7 +246,7 @@ export async function createFinancialFixtures(
             defaultCurrency: definition.currency,
             alternateCurrencies: [],
             ...(definition.category === 'trip'
-              ? { startDate: start.toISOString(), endDate: end.toISOString() }
+              ? { startDate: days.dateFrom, endDate: days.dateTo }
               : {}),
           },
           201,
@@ -261,7 +268,7 @@ export async function createFinancialFixtures(
       key: GroupKey,
       description: string,
       amount: number,
-      date: Date,
+      date: string,
       payer: 'alex' | 'sam',
     ) => {
       const actor = payer === 'alex' ? alex : sam;
@@ -277,7 +284,7 @@ export async function createFinancialFixtures(
             currency: definitions[key].currency,
             category: 'other',
             ...(key === 'household' ? { tagId: boundaryTag.receipt.tagId } : { tag: 'General' }),
-            date: date.toISOString(),
+            date,
             paidBy: [{ user: paidBy, amount }],
             splitMethod: 'equal',
             splitBetween: [{ user: owedBy }],
@@ -288,12 +295,18 @@ export async function createFinancialFixtures(
     };
     const before = await expense(
       'household',
-      'Just before Month: excluded',
+      'The day before the Month: excluded',
       1,
-      new Date(start.getTime() - 1),
+      dayAfter(days.dateFrom, -1),
       'alex',
     );
-    const first = await expense('household', 'At local Month start: included', 2, start, 'alex');
+    const first = await expense(
+      'household',
+      'On the Month’s first day: included',
+      2,
+      days.dateFrom,
+      'alex',
+    );
     const middle: string[] = [];
     for (let index = 0; index < 20; index += 1) {
       middle.push(
@@ -301,16 +314,28 @@ export async function createFinancialFixtures(
           'household',
           `Monthly groceries ${String(index + 1).padStart(2, '0')}`,
           1,
-          new Date(start.getFullYear(), start.getMonth(), 15, 12, index),
+          `${month}-15`,
           'alex',
         ),
       );
     }
-    const last = await expense('household', 'At local Month end: included', 3, end, 'alex');
-    const after = await expense('household', 'At next Month start: excluded', 4, next, 'alex');
-    await expense('inrReceivable', 'Trip booking paid by Sam', 50, start, 'sam');
-    await expense('eurPayable', 'Museum tickets paid by Alex', 12.34, start, 'alex');
-    await expense('eurReceivable', 'Cafe paid by Sam', 5.67, start, 'sam');
+    const last = await expense(
+      'household',
+      'On the Month’s last day: included',
+      3,
+      days.dateTo,
+      'alex',
+    );
+    const after = await expense(
+      'household',
+      'The day after the Month: excluded',
+      4,
+      dayAfter(days.dateTo, 1),
+      'alex',
+    );
+    await expense('inrReceivable', 'Trip booking paid by Sam', 50, days.dateFrom, 'sam');
+    await expense('eurPayable', 'Museum tickets paid by Alex', 12.34, days.dateFrom, 'alex');
+    await expense('eurReceivable', 'Cafe paid by Sam', 5.67, days.dateFrom, 'sam');
     return {
       kind: 'splitbook-native-51-fictional-v1',
       runId,

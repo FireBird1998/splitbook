@@ -9,6 +9,7 @@ import type { GroupRead } from '@splitbook/shared/group-read';
 import { createAppTheme } from '@/lib/theme/createAppTheme';
 import { darkTokens, lightTokens } from '@/lib/theme/tokens';
 import { text } from '@/lib/test-utils/markup';
+import { inTimeZone } from '@/lib/test-utils/time-zone';
 
 /*
  * #310: the Expenses tab as the server renders it. The table, the phone cards, the list's
@@ -43,7 +44,7 @@ vi.mock('swr', async (original) => {
   };
 });
 
-const { default: ExpenseTable, expenseDay } = await import('./ExpenseTable');
+const { default: ExpenseTable, expenseDayLabel } = await import('./ExpenseTable');
 const { default: ExpenseCard } = await import('./ExpenseCard');
 const { default: ExpenseDetails } = await import('./ExpenseDetails');
 const { default: ExpenseListView } = await import('./ExpenseListView');
@@ -231,7 +232,7 @@ describe('the Expense table', () => {
   it('shows each Expense’s date, description and Tag, who paid, the split, the amount and an exact position', () => {
     expect(rows(table(false))).toEqual([
       [
-        expenseDay(EXPENSES[0].date),
+        expenseDayLabel(EXPENSES[0].date),
         'Weekly groceries Groceries',
         'AR You',
         'Equally · 3',
@@ -239,7 +240,7 @@ describe('the Expense table', () => {
         'you lent ₹833.00',
       ],
       [
-        expenseDay(EXPENSES[1].date),
+        expenseDayLabel(EXPENSES[1].date),
         'Electricity bill Utilities',
         'SC Sam Chen',
         'Equally · 3',
@@ -247,7 +248,7 @@ describe('the Expense table', () => {
         'you owe ₹953.33',
       ],
       [
-        expenseDay(EXPENSES[2].date),
+        expenseDayLabel(EXPENSES[2].date),
         'Wi-Fi Utilities',
         'PS Priya Shah',
         'Equally · 3',
@@ -255,7 +256,7 @@ describe('the Expense table', () => {
         'you owe ₹333.00',
       ],
       [
-        expenseDay(EXPENSES[3].date),
+        expenseDayLabel(EXPENSES[3].date),
         'Takeaway pizza Dining',
         'PS Priya Shah',
         'Equally · 2',
@@ -266,16 +267,13 @@ describe('the Expense table', () => {
   });
 
   it('dates a row as "Wed 30 Sep", with the year only when it isn’t this year', () => {
-    // Noon on the day in the zone the tests run in, sent as the API sends dates: the table shows
-    // the viewer's own day, as the rest of the app does, so these hold in every zone CI runs
-    // (#227), from UTC−11 to UTC+14.
-    const localNoon = (year: number, month: number, day: number) =>
-      new Date(year, month - 1, day, 12).toISOString();
-    const now = new Date(localNoon(2026, 10, 7));
-    expect(expenseDay(localNoon(2026, 9, 30), now)).toBe('Wed 30 Sep');
-    expect(expenseDay(localNoon(2025, 9, 30), now)).toBe('Tue 30 Sep 2025');
-    expect(expenseDay(localNoon(2026, 1, 1), now)).toBe('Thu 1 Jan');
-    expect(expenseDay(localNoon(2025, 12, 31), now)).toBe('Wed 31 Dec 2025');
+    // As the API sends an Expense's date: the day it is dated, at midnight UTC. Every zone CI runs
+    // (#227), from UTC−11 to UTC+14, shows that day (#437).
+    const now = new Date(2026, 9, 7, 12);
+    expect(expenseDayLabel('2026-09-30T00:00:00.000Z', now)).toBe('Wed 30 Sep');
+    expect(expenseDayLabel('2025-09-30T00:00:00.000Z', now)).toBe('Tue 30 Sep 2025');
+    expect(expenseDayLabel('2026-01-01T00:00:00.000Z', now)).toBe('Thu 1 Jan');
+    expect(expenseDayLabel('2025-12-31T00:00:00.000Z', now)).toBe('Wed 31 Dec 2025');
   });
 
   it('shows a repeat icon only on an Expense a recurring Expense added, and only while the switch is on', () => {
@@ -492,6 +490,15 @@ describe('the Expense list', () => {
     expect(cards.match(/<button\b[^>]*aria-expanded="false"/g)).toHaveLength(4);
     expect(controlsInsideButtons(html)).toEqual([]);
   });
+
+  it('heads each day of cards with the day its Expenses are dated, in a zone behind UTC (#437)', () =>
+    inTimeZone('Pacific/Pago_Pago', () => {
+      reads.set(LIST, { data: page(EXPENSES) });
+      const year = new Date().getFullYear();
+      // Dated 29 to 26 September, never the evening before there.
+      expect(text(list())).toContain(`Sep 26, ${year}`);
+      expect(text(list())).not.toContain(`Sep 25, ${year}`);
+    }));
 
   it('shows a summary outside a Household, with "You owe" and "You get back"', () => {
     reads.set(LIST, { data: page(EXPENSES) });

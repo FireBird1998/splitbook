@@ -34,6 +34,7 @@ import { ReadTime, RetainedNotice } from './financial-views';
 import { NotAvailableOffline } from './offline-notice';
 import type { IconName } from './primitives';
 import { useTheme } from './theme';
+import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
 const categoryIcons: Record<string, IconName> = {
   food: 'restaurant-outline',
@@ -69,14 +70,15 @@ export function expenseDayLabel(date: Date, now: number) {
   return localDayKey(date) === localDayKey(today) ? `Today · ${label}` : label;
 }
 
-/** Expenses keep the server's newest-first order, grouped under their local day. */
+/** Expenses keep the server's newest-first order, grouped under the day they are dated (#437). */
 export function expenseDays(expenses: MobileExpense[], now: number) {
   const days: { key: string; label: string; expenses: MobileExpense[] }[] = [];
   for (const expense of expenses) {
-    const key = localDayKey(expense.date);
+    const date = expenseLocalDate(expense.date);
+    const key = localDayKey(date);
     const last = days[days.length - 1];
     if (last?.key === key) last.expenses.push(expense);
-    else days.push({ key, label: expenseDayLabel(expense.date, now), expenses: [expense] });
+    else days.push({ key, label: expenseDayLabel(date, now), expenses: [expense] });
   }
   return days;
 }
