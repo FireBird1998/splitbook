@@ -450,6 +450,25 @@ describe('To review stays current (#433)', () => {
     },
   );
 
+  it.each(['retry', 'pull'] as const)(
+    'a Group view refresh (%s) reads To review again, so its banner shows new items',
+    async (origin) => {
+      const f = fixture();
+      await f.controller.signIn('alex');
+      await settle();
+      await f.controller.openGroup(groupId);
+      await settle();
+      f.prepare(2);
+      await f.controller.refresh(origin);
+      await settle();
+      expect(f.controller.getSnapshot().screen).toBe('group');
+      expect(f.controller.getSnapshot().toReview).toMatchObject({
+        status: 'ready',
+        read: { total: 2 },
+      });
+    },
+  );
+
   it('opens a Group To review with its items without a manual refresh', async () => {
     const f = fixture();
     await f.controller.signIn('alex');

@@ -628,6 +628,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     unlistedGroups = new Set();
     confirmation = null;
     lostGroups.clear();
+    toReviewQueries.reset();
     // Nothing read for the session that ended is reused, joined, shown or saved (M10-2).
     homeQueries.reset();
     groupQueries.reset();

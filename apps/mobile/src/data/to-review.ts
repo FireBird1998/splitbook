@@ -267,8 +267,13 @@ export function createToReviewQueries(options: {
       if (connected) bind();
       await Promise.all([loadRecoveries(), connected ? observer?.refetch() : undefined]);
     },
+    /** The session ended: nothing about its account's Groups is kept. */
+    reset() {
+      denied.clear();
+    },
     stop() {
       disposed = true;
+      denied.clear();
       unbind();
       stopOnline();
     },
