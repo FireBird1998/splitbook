@@ -672,6 +672,7 @@ function ExpenseTask({
                 title="Current saved record"
                 people={members}
                 tags={context?.tags}
+                currentUserId={currentUserId}
               />
               <Button label="Use the saved version" secondary onPress={onAcceptCurrent} />
             </>

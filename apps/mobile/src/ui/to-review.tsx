@@ -364,8 +364,12 @@ export function ToReviewList({
   const openItem = (item: ReviewItemModel) => {
     if (item.accountItem) void controller.startReviewRun(groupId, item.accountItem.draft.id);
   };
+  // Problems ask about the signed-in member as "you" (#434).
   const names = Object.fromEntries(
-    (collection.context?.group.members ?? []).map((member) => [member.user.id, member.user.name]),
+    (collection.context?.group.members ?? []).map((member) => [
+      member.user.id,
+      member.user.id === state.auth.user?.id ? 'you' : member.user.name,
+    ]),
   );
   const sections = [
     ['ready', 'Ready'],
@@ -552,9 +556,13 @@ export function ToReviewList({
                     const allocation = collection.reviews.find(
                       (review) => review.draft.id === item.draft.id,
                     )!.allocation!;
+                    // The signed-in member is "You", as on Add expense (#434).
+                    const isYou = (id: string) => id === state.auth.user?.id;
                     const name = (id: string) =>
-                      collection.context?.group.members.find((member) => member.user.id === id)
-                        ?.user.name ?? 'Group member';
+                      isYou(id)
+                        ? 'You'
+                        : (collection.context?.group.members.find((member) => member.user.id === id)
+                            ?.user.name ?? 'Group member');
                     return (
                       <View style={{ gap: 4 }}>
                         {allocation.paidBy.map((row) => (
@@ -564,7 +572,7 @@ export function ToReviewList({
                         ))}
                         {allocation.splitBetween.map((row) => (
                           <Copy key={`shared:${row.user}`}>
-                            {name(row.user)} shares{' '}
+                            {name(row.user)} {isYou(row.user) ? 'share' : 'shares'}{' '}
                             {formatCurrency(row.amount, allocation.currency)}
                           </Copy>
                         ))}

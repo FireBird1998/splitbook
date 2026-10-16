@@ -103,18 +103,24 @@ function changeDetail({
 
 /**
  * What an Expense edit changed, one detail per change: "Amount ₹899.00 → ₹999.00", or
- * "Sam Chen’s share Not included → ₹350.00". Uses the same wording as the Expense's history.
- * Amounts are mono runs; words such as "Not included" are not.
+ * "Sam Chen’s share Not included → ₹350.00", and "Your share" for the signed-in member. Uses the
+ * same wording as the Expense's history. Amounts are mono runs; words such as "Not included" are
+ * not.
  */
 export function describeChanges(
   changes: Record<string, { old?: unknown; new?: unknown }> | undefined,
-  { currency, members = [] }: { currency: string; members?: { id: string; name: string }[] },
+  {
+    currency,
+    members = [],
+    currentUserId,
+  }: { currency: string; members?: { id: string; name: string }[]; currentUserId?: string },
 ): ActivityDetail[] {
   if (!changes) return [];
   const after = text(changes.currency?.new) ?? currency;
   return describeExpenseChanges(changes, {
     currencies: { before: text(changes.currency?.old) ?? after, after },
     person: memberNamer(new Map(members.map((member) => [member.id, member.name]))),
+    viewer: currentUserId,
   }).map(changeDetail);
 }
 
@@ -303,6 +309,7 @@ export function describeActivity(
       const changes = describeChanges(meta.changes, {
         currency: meta.currency ?? currency,
         members,
+        currentUserId,
       });
       return {
         ...line('edited', subject ?? 'an Expense', [
@@ -312,15 +319,14 @@ export function describeActivity(
         changes,
       };
     }
-    case 'settlement_recorded':
+    case 'settlement_recorded': {
+      const paidBy = meta.paidBy === currentUserId ? 'You' : text(meta.paidByName);
+      const paidTo = meta.paidTo === currentUserId ? 'You' : text(meta.paidToName);
       return line('recorded a payment', null, [
-        text(meta.paidByName) && text(meta.paidToName)
-          ? `${text(meta.paidByName)} → ${text(meta.paidToName)}`
-          : text(meta.paidToName)
-            ? `To ${text(meta.paidToName)}`
-            : null,
+        paidBy && paidTo ? `${paidBy} → ${paidTo}` : paidTo ? `To ${paidTo}` : null,
         amount,
       ]);
+    }
     case 'member_joined':
       return line('joined the Group', null, []);
     case 'member_left':

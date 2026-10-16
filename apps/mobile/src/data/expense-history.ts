@@ -104,21 +104,71 @@ function list(items: string[]) {
 
 const changedFields = (changes: Record<string, unknown>) =>
   Object.keys(changes).filter((field) => field !== 'moneyVersion');
+type Changes = Record<string, { old?: unknown; new?: unknown }>;
+/** A row's amount in minor units where recorded, else its major amount. */
+const rowAmount = (row: Row) =>
+  typeof row.amountMinor === 'number'
+    ? row.amountMinor
+    : typeof row.amount === 'number'
+      ? row.amount
+      : null;
+/**
+ * The same payers each paid the same part of a changed total, so only the amount changed: a
+ * lone payer's payment follows the total (#434). Rounding may move a payment by under one unit.
+ */
+function paymentsFollowedAmount(changes: Changes) {
+  const minor = typeof changes.amountMinor?.old === 'number';
+  const total = minor ? changes.amountMinor : changes.amount;
+  const was = total?.old,
+    now = total?.new;
+  if (typeof was !== 'number' || typeof now !== 'number' || was <= 0) return false;
+  const payments = (value: unknown) =>
+    new Map(
+      rows(value).map((row) => [
+        identity(row.user),
+        minor && typeof row.amountMinor !== 'number' ? null : rowAmount(row),
+      ]),
+    );
+  const before = payments(changes.paidBy?.old),
+    after = payments(changes.paidBy?.new);
+  return (
+    before.size > 0 &&
+    before.size === after.size &&
+    [...before].every(([user, paid]) => {
+      const paying = after.get(user);
+      return (
+        user !== null &&
+        paid != null &&
+        paying != null &&
+        Math.abs(paying * was - paid * now) < (minor ? was : was / 100)
+      );
+    })
+  );
+}
 /** "the amount and the date": what an edit changed, as a member would say it. */
-const changedWhat = (changes: Record<string, unknown>) =>
-  list(changedFields(changes).map((field) => nouns[field] ?? 'other details'));
+const changedWhat = (changes: Changes) =>
+  list(
+    changedFields(changes)
+      .filter((field) => field !== 'paidBy' || !paymentsFollowedAmount(changes))
+      .map((field) => nouns[field] ?? 'other details'),
+  );
 
 function allocation(
   field: 'paidBy' | 'splitBetween',
   change: { old?: unknown; new?: unknown },
   currencies: { before: string; after: string },
   person: (value: unknown) => string,
+  viewer?: string,
 ): ExpenseHistoryChange[] {
   const amounts = (value: unknown, currency: string) =>
     new Map(
       rows(value).map((row, index) => [
         identity(row.user) ?? `former:${index}`,
-        { who: person(row.user), amount: money(row, currency) },
+        {
+          // The signed-in member is "Your", even beside someone of the same name (#434).
+          whose: viewer && identity(row.user) === viewer ? 'Your' : `${person(row.user)}’s`,
+          amount: money(row, currency),
+        },
       ]),
     );
   const before = amounts(change.old, currencies.before);
@@ -129,10 +179,10 @@ function allocation(
     const was = before.get(key)?.amount ?? absent(currencies.before);
     const now = after.get(key)?.amount ?? absent(currencies.after);
     if (was === now) return [];
-    const who = (after.get(key) ?? before.get(key))!.who;
+    const { whose } = (after.get(key) ?? before.get(key))!;
     return [
       {
-        label: field === 'paidBy' ? `${who}’s payment` : `${who}’s share`,
+        label: field === 'paidBy' ? `${whose} payment` : `${whose} share`,
         before: was ?? 'Not included',
         after: now ?? 'Not included',
         money: { before: was !== null, after: now !== null },
@@ -151,12 +201,15 @@ export function describeExpenseChanges(
     currencies,
     person,
     tagName = () => undefined,
+    viewer,
   }: {
     /** The currency before and after this edit. */
     currencies: { before: string; after: string };
     /** Names a member reference, or "Former member". */
     person: (value: unknown) => string;
     tagName?: (value: unknown) => string | undefined;
+    /** The signed-in member, whose payment and share are "Your". */
+    viewer?: string;
   },
 ): ExpenseHistoryChange[] {
   return Object.entries(changes).flatMap(([field, change]): ExpenseHistoryChange[] => {
@@ -230,7 +283,7 @@ export function describeExpenseChanges(
         ];
       case 'paidBy':
       case 'splitBetween':
-        return allocation(field, change, currencies, person);
+        return allocation(field, change, currencies, person, viewer);
       case 'receiptUrl':
         return [
           {
@@ -279,6 +332,7 @@ export function describeExpenseHistory(
   record: ExpenseRecord,
   people: { id: string; name: string }[] = [],
   tags: { id: string; name: string }[] = [],
+  currentUserId?: string,
 ): ExpenseHistoryEntry[] {
   const names = knownNames(record, people);
   for (const entry of record.editHistory) {
@@ -298,8 +352,14 @@ export function describeExpenseHistory(
       before: text(changes.currency?.old) || currencyAfter,
     };
     currencyAfter = currencies.before;
-    const described = describeExpenseChanges(changes, { currencies, person, tagName });
-    const editor = person(entry.editedBy);
+    const described = describeExpenseChanges(changes, {
+      currencies,
+      person,
+      tagName,
+      viewer: currentUserId,
+    });
+    const editor =
+      currentUserId && identity(entry.editedBy) === currentUserId ? 'You' : person(entry.editedBy);
     return {
       key: `${entry.editedAt}:${index}`,
       editor,
@@ -378,7 +438,12 @@ export function describeExpenseEvents(
         if (action === 'restored') return { ...base, action: 'restored this Expense' };
         const after = text(changes.currency?.new) || currencyAfter(event.createdAt);
         const currencies = { after, before: text(changes.currency?.old) || after };
-        const described = describeExpenseChanges(changes, { currencies, person, tagName });
+        const described = describeExpenseChanges(changes, {
+          currencies,
+          person,
+          tagName,
+          viewer: currentUserId,
+        });
         const [only] = described;
         const fields = changedFields(changes);
         return {

@@ -583,13 +583,14 @@ describe('compact Expense record', () => {
   it('names people who are no longer in the Group or on the Expense as former members', async () => {
     const ui = await render(open(ids.historical));
     expect(ui.labels()).toContain(
-      `Former member changed the split, Alex Rao’s share from ₹100.00 to ₹150.00, Former member’s share from ₹200.00 to ₹150.00, ${when('2026-09-29T15:00:00.000Z')}`,
+      `Former member changed the split, Your share from ₹100.00 to ₹150.00, Former member’s share from ₹200.00 to ₹150.00, ${when('2026-09-29T15:00:00.000Z')}`,
     );
     const shown = lines(ui.root());
     expect(shown).toEqual(
       expect.arrayContaining([
         'Former member changed the split',
-        'Alex Rao’s share ₹100.00 → ₹150.00',
+        // The signed-in member (#434).
+        'Your share ₹100.00 → ₹150.00',
         'Former member’s share ₹200.00 → ₹150.00',
         when('2026-09-29T15:00:00.000Z'),
       ]),

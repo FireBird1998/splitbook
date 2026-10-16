@@ -145,6 +145,8 @@ function ReviewRunContent({
   const members =
     state.context?.group.members.map((row) => ({ id: row.user.id, name: row.user.name })) ?? null;
   const name = (id: string) => members?.find((row) => row.id === id)?.name ?? 'Group member';
+  // The signed-in member is "You", as on Add expense (#434).
+  const person = (id: string) => (id === userId ? 'You' : name(id));
   const change = (patch: Partial<ExpenseDraft>) => {
     if (locked) return;
     try {
@@ -201,7 +203,7 @@ function ReviewRunContent({
                 state.changed.before,
                 state.changed.after,
                 Object.fromEntries([
-                  ...(members ?? []).map((member) => [member.id, member.name]),
+                  ...(members ?? []).map((member) => [member.id, person(member.id)]),
                   ...(state.context?.tags ?? []).map((tag) => [tag.id, tag.name]),
                 ]),
               )}
@@ -251,7 +253,7 @@ function ReviewRunContent({
             }}
             values={{
               date: expenseDateLabel(form.date, controller.reviewNow()),
-              payers: values.paidBy?.length ? paidBySummary(form, name) : 'Choose',
+              payers: values.paidBy?.length ? paidBySummary(form, person) : 'Choose',
               split: values.splitMethod ? splitSummary(form) : 'Choose',
               tag:
                 state.context?.tags.find((tag) => tag.id === form.tagId)?.name ??
@@ -264,7 +266,8 @@ function ReviewRunContent({
           />
           {state.allocation?.splitBetween.map((row) => (
             <Copy key={row.user}>
-              {name(row.user)} shares {money(row.amount, state.allocation!.currency)}
+              {person(row.user)} {row.user === userId ? 'share' : 'shares'}{' '}
+              {money(row.amount, state.allocation!.currency)}
             </Copy>
           ))}
           {!!missing.length && <Copy accessibilityRole="alert">{reason}</Copy>}

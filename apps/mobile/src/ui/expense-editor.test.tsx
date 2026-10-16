@@ -1133,6 +1133,26 @@ describe('rendered edit history', () => {
     expect(shown).not.toMatch(/[{}"[\]]|moneyVersion|amountMinor|internalState/);
     expect(labels.join(' ')).not.toMatch(/[a-f\d]{24}/);
   });
+
+  it('names the signed-in member "You" in the saved record’s history (#434)', async () => {
+    await act(async () => {
+      screen = create(
+        <ExpenseRecordView
+          record={expenseRecordSchema.parse(withHistory)}
+          title="Current saved record"
+          people={[{ id: memberId, name: 'Alex' }]}
+          tags={[{ id: tagId, name: 'Groceries' }]}
+          currentUserId={memberId}
+        />,
+      );
+    });
+    const root = screen!.root;
+    const labels = root
+      .findAll((node) => isHost(node, 'Text') && typeof node.props.accessibilityLabel === 'string')
+      .map((node) => node.props.accessibilityLabel as string);
+    expect(text(root)).toContain('You changed the amount and who paid');
+    expect(labels).toContain('Your payment changed from ₹0.00 to ₹10.00');
+  });
 });
 
 describe('compact Expense form', () => {

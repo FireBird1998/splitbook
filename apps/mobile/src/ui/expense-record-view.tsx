@@ -1351,15 +1351,18 @@ export function ExpenseRecordView({
   title = 'Saved Expense',
   people,
   tags,
+  currentUserId,
 }: {
   record: ExpenseRecord;
   title?: string;
   /** The Group's current members and Tags, so history can name them. */
   people?: { id: string; name: string }[];
   tags?: { id: string; name: string }[];
+  /** The signed-in member, who is "You" in its history. */
+  currentUserId?: string;
 }) {
   const theme = useTheme();
-  const history = describeExpenseHistory(record, people, tags);
+  const history = describeExpenseHistory(record, people, tags, currentUserId);
   const money = readExpenseMoney(storedExpenseMoney(record));
   const amount = (value: number) => formatCurrency(value, record.currency);
   const name = (id: string) =>

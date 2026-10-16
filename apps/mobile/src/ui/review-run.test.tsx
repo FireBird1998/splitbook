@@ -531,6 +531,45 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     expect(f.saves).toHaveLength(1);
     expect(text(tree)).toContain('Saved 1');
   });
+  it('shows "Paid by: You" when the signed-in member paid, as Add expense does (#434)', async () => {
+    const f = fixture({ one: true });
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    const tile = tree.root.findAll(
+      (node) =>
+        String(node.type) === 'Pressable' &&
+        String(node.props.accessibilityLabel).startsWith('Paid by'),
+    )[0];
+    expect(tile.props.accessibilityLabel).toBe('Paid by: You');
+  });
+  it('names the signed-in member "You" in its split and in a newer version’s note (#434)', async () => {
+    const f = fixture({ one: true });
+    f.items()[0].allocation = {
+      currency: 'INR',
+      paidBy: [{ user: user.id, amount: 12.34 }],
+      splitBetween: [{ user: user.id, amount: 12.34 }],
+    };
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    expect(text(tree)).toContain('You share ₹12.34');
+    const original = f.items()[0].draft;
+    f.items()[0].draft = {
+      ...original,
+      revision: 1,
+      values: { ...original.values, splitBetween: [{ user: user.id, amount: 12.34 }] },
+    };
+    await act(async () => {
+      await f.controller.refreshToReview();
+    });
+    expect(text(tree)).toContain('You ₹12.34');
+    expect(text(tree)).not.toMatch(/Alex (shares|₹)/);
+  });
   it('keeps a correction with the existing payer sheet and labels every control', async () => {
     const f = fixture({ one: true });
     delete f.items()[0].draft.values!.paidBy;

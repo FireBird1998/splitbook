@@ -18,6 +18,9 @@ const metadata = z.object({
     .string()
     .refine((value) => !!getCurrency(value))
     .optional(),
+  /** A payment's people, so the signed-in member reads as "You" (#434). */
+  paidBy: objectId.optional(),
+  paidTo: objectId.optional(),
   paidByName: z.string().optional(),
   paidToName: z.string().optional(),
   recurring: z.boolean().optional(),
