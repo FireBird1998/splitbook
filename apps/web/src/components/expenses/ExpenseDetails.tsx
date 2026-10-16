@@ -18,7 +18,7 @@ import MoneyText from '@/components/common/MoneyText';
 import { formatDateTime } from '@splitbook/shared/date';
 import { getCategory } from '@splitbook/shared/categories';
 import { moneyParticipantId } from '@splitbook/shared/exact-money';
-import { expenseHistory } from '@splitbook/shared/expense-detail';
+import { expenseEdits } from '@splitbook/shared/expense-detail';
 
 interface Person {
   _id: string;
@@ -104,17 +104,16 @@ export default function ExpenseDetails({
   const memberName = (person: unknown) => {
     const personId = moneyParticipantId(person);
     if (personId && personId === userId) return 'You';
-    const name = (person as { name?: unknown } | null)?.name;
-    return typeof person === 'object' && typeof name === 'string' ? name : 'Former member';
+    return typeof person === 'object' &&
+      person &&
+      'name' in person &&
+      typeof person.name === 'string'
+      ? person.name
+      : 'Former member';
   };
   const category = getCategory(expense.category);
-  // Each edit as the computer panel words it (#454); the shared history ends with who added it,
-  // which this card shows above.
-  const edits = expenseHistory({
-    currency: expense.currency,
-    createdAt: expense.createdAt ?? '',
-    editHistory: expense.editHistory,
-  }).slice(0, -1);
+  // Each edit as the side panel words it (#454).
+  const edits = expenseEdits(expense);
 
   return (
     <Stack
@@ -145,7 +144,7 @@ export default function ExpenseDetails({
           {expense.paidBy.map((row, index) => (
             <PersonAmount
               key={index}
-              name={memberName(row.user as Person)}
+              name={memberName(row.user)}
               image={typeof row.user === 'object' ? row.user?.image : null}
               amount={row.amount}
               currency={expense.currency}
@@ -162,7 +161,7 @@ export default function ExpenseDetails({
           {expense.splitBetween.map((row, index) => (
             <PersonAmount
               key={index}
-              name={memberName(row.user as Person)}
+              name={memberName(row.user)}
               image={typeof row.user === 'object' ? row.user?.image : null}
               amount={row.amount}
               currency={expense.currency}

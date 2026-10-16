@@ -428,6 +428,10 @@ describe('an opened Expense’s details', () => {
     expect(history).toContain('You changed the notes');
     expect(history).toContain(`${ALEX.name} changed the amount, who paid and split`);
     expect(history).toContain('₹999.00 → ₹1,200.00');
+    // Newest first, as the side panel lists them.
+    expect(history.indexOf('You changed the notes')).toBeLessThan(
+      history.indexOf(`${ALEX.name} changed the amount`),
+    );
     // Never a stored row, a minor-unit amount or a field label.
     expect(history).not.toMatch(/\[object Object\]|99900|120000|Amount:|Paid by:|Split between:/);
   });

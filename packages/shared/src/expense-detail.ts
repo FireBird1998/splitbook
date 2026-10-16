@@ -295,10 +295,12 @@ function changedAction(fields: string[]): string {
 const quoted = (value: unknown) => (typeof value === 'string' ? `“${value}”` : null);
 
 /**
- * An Expense's history, newest first: each recorded edit, with what it changed and, for the
- * amount or description, what it was before and after, then who added it.
+ * An Expense's recorded edits, newest first, each with what it changed and, for the amount or
+ * description, what it was before and after.
  */
-export function expenseHistory(expense: ExpenseHistorySource): ExpenseHistoryEntry[] {
+export function expenseEdits(
+  expense: Pick<ExpenseHistorySource, 'currency' | 'editHistory'>,
+): ExpenseHistoryEntry[] {
   const edits = (expense.editHistory ?? []).map((edit): ExpenseHistoryEntry => {
     const fields = changedFields(edit.changes);
     const amount = formatActivityAmount(
@@ -324,8 +326,13 @@ export function expenseHistory(expense: ExpenseHistorySource): ExpenseHistoryEnt
           : null,
     };
   });
+  return edits.reverse();
+}
+
+/** An Expense's history, newest first: its recorded edits, then who added it. */
+export function expenseHistory(expense: ExpenseHistorySource): ExpenseHistoryEntry[] {
   return [
-    ...edits.reverse(),
+    ...expenseEdits(expense),
     {
       by: expense.createdBy ?? null,
       at: expense.createdAt,
