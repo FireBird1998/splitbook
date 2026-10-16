@@ -18,8 +18,8 @@ export function GroupBalancesTab() {
 }
 
 export function GroupActivityTab() {
-  const { groupId } = useGroupPage();
-  return <ActivityView groupId={groupId} />;
+  const { groupId, userId } = useGroupPage();
+  return <ActivityView groupId={groupId} viewerId={userId} />;
 }
 
 export function GroupMembersTab() {

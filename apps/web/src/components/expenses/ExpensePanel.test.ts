@@ -281,6 +281,22 @@ describe('the side panel with an Expense open', () => {
     expect(text(panel(opened(wifi(), 'ready', null)))).not.toMatch(/Repeats|Monthly/);
   });
 
+  it('calls the viewer "You" in the history by id, beside a member with the same name (#442)', () => {
+    const namesake = { ...ALEX, _id: 'a00000000000000000000009' };
+    const history = text(
+      panel(
+        opened(
+          electricity({
+            createdBy: namesake,
+            editHistory: [{ ...electricity().editHistory[0], editedBy: ALEX }],
+          }),
+        ),
+      ),
+    );
+    expect(history).toContain('AR You changed the amount ₹2,680.00 → ₹2,860.00');
+    expect(history).toContain('AR Alex Rivera added this Expense');
+  });
+
   it('says while its history loads, and offers Try again when it can’t be loaded', () => {
     expect(text(panel(opened(electricity(), 'loading')))).toContain(
       'History Edits keep a record Loading its history…',
