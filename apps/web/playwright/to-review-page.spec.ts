@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import {
   enterAsPersona,
+  openNavigation,
   DEMO_GROUP_ID,
   expectNoSeriousA11yViolations,
   reviewScreenshot,
@@ -278,10 +279,11 @@ test('overlapping autosave and navigation share conflict recovery without sendin
     await review.getByLabel('What was it for?').fill('Older edit');
     await page.clock.fastForward(600);
     await writeSeen;
-    await page
-      .getByRole('navigation', { name: 'Main', exact: true })
-      .getByRole('link', { name: 'Home', exact: true })
-      .click();
+    const navigation = await openNavigation(page);
+    await navigation.getByRole('link', { name: 'Home', exact: true }).click();
+    if (page.viewportSize()!.width < 1200) {
+      await navigation.getByRole('button', { name: 'Close navigation menu' }).click();
+    }
     releaseWrite();
     await readSeen;
     await review.getByLabel('What was it for?').fill('Typing during recovery');
