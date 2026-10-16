@@ -88,25 +88,13 @@ describe('trip day headings', () => {
     expect([...headings.values()].map((heading) => heading.expenseCount)).toEqual([1, 3, 1]);
   });
 
-  it('follow the viewer’s time zone: a late dinner is the next day in Kolkata', () => {
-    const headings = tripDayHeadings(EXPENSES, { ...TRIP, timeZone: 'Asia/Kolkata' });
-    expect(headingsOf(headings)).toEqual([
-      ['Beach shack lunch', `Day 4 · ${tripDayLabel('2026-09-20', 2026)}`, [186000]],
-      ['Late dinner', `Day 3 · ${tripDayLabel('2026-09-19', 2026)}`, [9000]],
-      ['Villa stay', `Day 2 · ${tripDayLabel('2026-09-18', 2026)}`, [318000]],
-      ['Airport cab', `Day 1 · ${tripDayLabel('2026-09-17', 2026)}`, [64000]],
-    ]);
-  });
-
-  it('read the Trip’s dates in the same zone, so its first day’s Expense is on Day 1', () => {
-    // UTC midnight is the evening before in New York.
-    const headings = tripDayHeadings(EXPENSES, { ...TRIP, timeZone: 'America/New_York' });
-    expect(headingsOf(headings).at(-1)).toEqual([
-      'Airport cab',
-      `Day 1 · ${tripDayLabel('2026-09-16', 2026)}`,
-      [64000],
-    ]);
-  });
+  it.each(['Asia/Kolkata', 'America/New_York', 'Pacific/Pago_Pago', 'Pacific/Kiritimati'])(
+    'put each Expense on the Trip day it is dated in %s, as in UTC (#437)',
+    (timeZone) => {
+      const utc = headingsOf(tripDayHeadings(EXPENSES, { ...TRIP, timeZone: 'UTC' }));
+      expect(headingsOf(tripDayHeadings(EXPENSES, { ...TRIP, timeZone }))).toEqual(utc);
+    },
+  );
 
   it('name days outside the Trip’s dates, and number none without a first day', () => {
     const outside = [
@@ -181,15 +169,15 @@ describe('the Expenses table by trip day', () => {
     const html = render(tripDayHeadings(EXPENSES, { ...TRIP, timeZone: 'Asia/Kolkata' }));
     const headings = bodyRows(html).filter((cells) => cells.length === 3);
     expect(headings).toEqual([
+      // The late dinner is dated 18 September, in Kolkata too (#437).
       [`Day 4 · ${tripDayLabel('2026-09-20', 2026)}`, 'Day total ₹1,860.00', ''],
-      [`Day 3 · ${tripDayLabel('2026-09-19', 2026)}`, 'Day total ₹90.00', ''],
-      [`Day 2 · ${tripDayLabel('2026-09-18', 2026)}`, 'Day total ₹3,180.00', ''],
+      [`Day 2 · ${tripDayLabel('2026-09-18', 2026)}`, 'Day total ₹3,270.00', ''],
       [`Day 1 · ${tripDayLabel('2026-09-17', 2026)}`, 'Day total ₹640.00', ''],
     ]);
     // Each heading names its row and spans the columns before Amount.
     expect(
       html.match(/<th[^>]*scope="row"[^>]*colSpan="4"|<th[^>]*colSpan="4"[^>]*scope="row"/gi),
-    ).toHaveLength(4);
+    ).toHaveLength(3);
     expect(html.match(/data-expense-id=/g)).toHaveLength(5);
     // The heading rows are not Expenses: nothing to open.
     expect(html.match(/data-trip-day="2026-09-18"/g)).toHaveLength(1);

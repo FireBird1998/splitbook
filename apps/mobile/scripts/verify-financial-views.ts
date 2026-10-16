@@ -171,7 +171,7 @@ async function verifyController(
         expenses.pagination?.total === 22 &&
         expenses.pagination.totalPages === 2 &&
         expenses.data.length === 20,
-      'The selected local Month did not paginate its 22 matching expenses.',
+      'The selected Month did not paginate its 22 matching expenses.',
     );
     assert.ok(
       expenses.summary?.count === 22 &&
@@ -192,7 +192,7 @@ async function verifyController(
         !expenses.data.some((expense) =>
           [fixtures.expenses.before, fixtures.expenses.after].includes(expense.id),
         ),
-      'Pagination duplicated rows or local Month boundaries included the wrong records.',
+      'Pagination duplicated rows or the Month’s calendar days included the wrong records.',
     );
     assert.ok(
       expenses.data.every(
@@ -314,7 +314,7 @@ async function verifyController(
       'The next account received the prior account’s open ledger.',
     );
     console.log(
-      'PASS: separate INR/EUR Home obligations, exact expense reads, local Month boundaries, pagination, empty Month, unchanged running balances, Trip dates, refresh, denied access, late-response logout, restart, and account isolation.',
+      'PASS: separate INR/EUR Home obligations, exact expense reads, calendar-day Month boundaries, pagination, empty Month, unchanged running balances, Trip dates, refresh, denied access, late-response logout, restart, and account isolation.',
     );
   } finally {
     release.resolve();

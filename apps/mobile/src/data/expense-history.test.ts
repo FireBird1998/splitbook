@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ActivityEvent } from './activity';
 import { describeExpenseEvents, describeExpenseHistory } from './expense-history';
+import { inTimeZone } from '../test-utils/time-zone';
 import { expenseRecordSchema, type ExpenseRecord } from './expense-record';
 
 const alex = 'a00000000000000000000001';
@@ -264,15 +265,22 @@ describe('describeExpenseHistory', () => {
     ]);
   });
 
+  it('shows a changed date as the day it is dated, in a zone behind UTC (#437)', () =>
+    inTimeZone('Pacific/Pago_Pago', () => {
+      const [entry] = describeExpenseHistory(
+        record([
+          edit({ date: { old: '2026-08-31T00:00:00.000Z', new: '2026-09-01T00:00:00.000Z' } }),
+        ]),
+      );
+      expect(flat([entry])).toEqual(['Date | Aug 31, 2026 | Sep 1, 2026']);
+    }));
+
   it('uses labels for dates, categories and Tags, never stored values or references', () => {
     const [entry] = describeExpenseHistory(
       record([
         edit({
-          // Stored at local noon, as the app saves dates.
-          date: {
-            old: new Date(2026, 7, 31, 12).toISOString(),
-            new: new Date(2026, 8, 1, 12).toISOString(),
-          },
+          // Stored at midnight UTC, as every Expense date is (#437).
+          date: { old: '2026-08-31T00:00:00.000Z', new: '2026-09-01T00:00:00.000Z' },
           category: { old: 'food', new: 'transport' },
           tagId: { old: 'c00000000000000000000001', new: 'c00000000000000000000002' },
           receiptUrl: { old: null, new: 'https://example.test/receipt.png' },

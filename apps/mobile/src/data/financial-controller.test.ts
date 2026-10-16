@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getLocalMonthIsoRange } from '@splitbook/shared/date';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { createMobileController } from './mobile-controller';
 import type { FetchResponse } from './types';
 
@@ -527,7 +527,7 @@ describe('native financial views', () => {
     expect(calls).toHaveLength(readCount);
   });
 
-  it('uses local Month boundaries across DST and preserves the selected Month on refresh', async () => {
+  it('reads a Month by its calendar days across DST, and preserves the selected Month on refresh (#437)', async () => {
     vi.stubEnv('TZ', 'America/New_York');
     try {
       const { controller, calls } = setup();
@@ -539,8 +539,9 @@ describe('native financial views', () => {
         calls.filter((path) => path.includes('/expenses?')).at(-1)!,
         'http://local',
       ).searchParams;
-      expect(query.get('dateFrom')).toBe('2026-03-01T05:00:00.000Z');
-      expect(query.get('dateTo')).toBe('2026-04-01T03:59:59.999Z');
+      // The Expenses dated 1 to 31 March, in New York as everywhere.
+      expect(query.get('dateFrom')).toBe('2026-03-01');
+      expect(query.get('dateTo')).toBe('2026-03-31');
       expect(query.get('quickFilter')).toBeNull();
       expect(query.get('includeMemberBreakdown')).toBe('1');
       await controller.refresh();
@@ -878,7 +879,7 @@ describe('stable financial refresh', () => {
       if (!path.includes('/expenses?')) return;
       const from = new URL(path, 'http://local').searchParams.get('dateFrom');
       return json(
-        expensePage(from === getLocalMonthIsoRange('2026-08').dateFrom ? [august] : [expense]),
+        expensePage(from === expenseMonthRange('2026-08').dateFrom ? [august] : [expense]),
       );
     });
     const monthOf = { [expense.description]: '2026-09', [august.description]: '2026-08' };

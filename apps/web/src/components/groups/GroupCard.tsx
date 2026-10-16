@@ -2,6 +2,7 @@
 
 import { WEB_QUERY_ACCOUNT } from '@/lib/web-query-keys';
 import { expensePageKey } from '@splitbook/shared/query-keys';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import Link from 'next/link';
 import useSWR from 'swr';
 import Box from '@mui/material/Box';
@@ -17,15 +18,16 @@ import AddIcon from '@mui/icons-material/Add';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import PaymentsIcon from '@mui/icons-material/Payments';
 import SettingsIcon from '@mui/icons-material/Settings';
-import { endOfMonth, format, startOfMonth } from 'date-fns';
+import { format } from 'date-fns';
 import TripStrip from '@/components/trip/TripStrip';
 import GroupHeader from '@/components/groups/GroupHeader';
 import MoneyText from '@/components/common/MoneyText';
 import { fetchWebExpensePage } from '@/lib/web-read';
-import { formatDate, formatRelativeTime } from '@splitbook/shared/date';
+import { formatRelativeTime } from '@splitbook/shared/date';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
 import type { DashboardBalanceAmount } from '@splitbook/shared/types';
 import type { GroupRead } from '@splitbook/shared/group-read';
+import { groupDatesLabel } from './group-dates';
 
 interface GroupCardProps {
   group: GroupRead;
@@ -38,14 +40,13 @@ interface GroupCardProps {
 
 /**
  * This month's spend for a Household card — one extra date-ranged summary
- * request, only mounted for `monthCycle` themes. Viewer-local month bounds,
- * full ISO so the service respects them as-is.
+ * request, only mounted for `monthCycle` themes: the Expenses dated in the
+ * viewer's current Month (#437).
  */
 function HouseholdMonthSpend({ groupId, currency }: { groupId: string; currency: string }) {
   const now = new Date();
   const key = expensePageKey(WEB_QUERY_ACCOUNT, groupId, {
-    dateFrom: startOfMonth(now).toISOString(),
-    dateTo: endOfMonth(now).toISOString(),
+    ...expenseMonthRange(format(now, 'yyyy-MM')),
     page: 1,
     limit: 1,
   });
@@ -90,14 +91,7 @@ export default function GroupCard({
       !current || Math.abs(item.balance) > Math.abs(current.balance) ? item : current,
     null,
   );
-  const dateLabel =
-    theme.dates === 'bounded'
-      ? startDate && endDate
-        ? `${formatDate(startDate)} – ${formatDate(endDate)}`
-        : startDate
-          ? `Starts ${formatDate(startDate)}`
-          : null
-      : null;
+  const dateLabel = groupDatesLabel(theme, startDate, endDate);
 
   if (mode === 'dashboard') {
     return (

@@ -41,7 +41,8 @@ import {
   type OtherCurrencySpending,
 } from './insights';
 import type { GroupCategory } from './types';
-import { dayKeyInZone, readTimeZone, type DayKey, type Instant } from './zoned-calendar';
+import { expenseDay } from './expense-day';
+import { readTimeZone, type DayKey, type Instant } from './zoned-calendar';
 
 /** The most days a Trip summary lists one by one; about four months. */
 export const TRIP_SUMMARY_MAX_DAYS = 120;
@@ -310,8 +311,9 @@ export function tripSummary({
   settlements?: Iterable<TripSettlement>;
 }): TripSummary {
   const zone = readTimeZone(timeZone);
-  const startDay = startDate === null ? null : dayKeyInZone(startDate, zone);
-  const endDay = endDate === null ? null : dayKeyInZone(endDate, zone);
+  // A Trip's dates and its Expenses' are calendar days, the same in every zone (#437).
+  const startDay = startDate === null ? null : expenseDay(startDate);
+  const endDay = endDate === null ? null : expenseDay(endDate);
   // The forms never save a start after the end; were one stored, it is read as one span.
   const [start, end] =
     startDay && endDay && endDay < startDay ? [endDay, startDay] : [startDay, endDay];
@@ -333,7 +335,7 @@ export function tripSummary({
     }
     counted.push({
       expense,
-      day: dayKeyInZone(expense.date, zone),
+      day: expenseDay(expense.date),
       totalMinor,
       shareMinor: memberShareMinor(expense, memberId),
     });

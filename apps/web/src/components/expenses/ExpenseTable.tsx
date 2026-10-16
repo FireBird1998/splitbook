@@ -17,6 +17,7 @@ import { ExpenseTag, PayerLabel, PositionText, RepeatsIcon } from './expense-row
 import TripDayRow from './TripDayRow';
 import { useExpenseTableKeys } from './expense-table-keys';
 import type { TripDayHeading } from './expense-trip-days';
+import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
 /** The table's columns, as the design canvas ("GroupExpenses") lays them out. */
 export const EXPENSE_TABLE_COLUMNS = [
@@ -28,9 +29,9 @@ export const EXPENSE_TABLE_COLUMNS = [
   'You',
 ] as const;
 
-/** "Wed 30 Sep", with the year when it isn't this year's, in the viewer's own time zone. */
-export function expenseDay(date: string, now: Date = new Date()): string {
-  const day = new Date(date);
+/** "Wed 30 Sep", with the year when it isn't this year's: the day it is dated, in every zone (#437). */
+export function expenseDayLabel(date: string, now: Date = new Date()): string {
+  const day = expenseLocalDate(date);
   return format(day, day.getFullYear() === now.getFullYear() ? 'EEE d MMM' : 'EEE d MMM yyyy');
 }
 
@@ -181,7 +182,7 @@ export default function ExpenseTable({
                         color: 'text.secondary',
                       }}
                     >
-                      {expenseDay(expense.date, now)}
+                      {expenseDayLabel(expense.date, now)}
                     </Box>
                     <Box component="td" sx={cell}>
                       {/* The row's click opens it; the button is how a keyboard does. */}

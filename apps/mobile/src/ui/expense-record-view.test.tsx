@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { act, create, type ReactTestInstance, type ReactTestRenderer } from 'react-test-renderer';
 import { afterEach, describe, expect, it } from 'vitest';
+import { inTimeZone } from '../test-utils/time-zone';
 import { emptyExpenseEditor } from '../data/expense-draft';
 import { createMobileController, type MobileController } from '../data/mobile-controller';
 import type { FetchResponse, MobileFetch } from '../data/types';
@@ -519,6 +520,18 @@ describe('compact Expense record', () => {
       if (amount.props.numberOfLines) expect(amount.props.adjustsFontSizeToFit).toBe(true);
     expect(ui.writes).toEqual([]);
   });
+
+  it('shows the day it is dated, in a zone behind UTC (#437)', () =>
+    inTimeZone('Pacific/Pago_Pago', async () => {
+      const ui = await render(open(ids.bill));
+      const day = new Date(2026, 8, 29).toLocaleDateString([], {
+        weekday: 'short',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+      });
+      expect(text(ui.root())).toContain(day);
+    }));
 
   it('shows when it was added and last changed while its changes load', async () => {
     let release: () => void = () => undefined;

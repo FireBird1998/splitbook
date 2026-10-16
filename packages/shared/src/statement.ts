@@ -3,7 +3,8 @@ import type { BackupGroupInput } from './export-backup';
 import { calculateNetBalancesMinor, simplifyDebtsMinor } from './debt-simplifier';
 import { sumMinorAmounts, toMajorAmount } from './exact-money';
 import { memberPaidMinor, memberShareMinor } from './insights';
-import { expenseDay, zonedDay } from './export-csv';
+import { expenseDay } from './expense-day';
+import { zonedDay } from './export-csv';
 import { dayKeyInZone, type DayKey } from './zoned-calendar';
 
 export interface StatementWindow {
@@ -17,9 +18,10 @@ export interface StatementWindow {
 export type OutsideTrip = 'before' | 'after';
 
 /** A Trip's first and last days in a zone, read as the Trip summary (#316) reads them. */
-function tripDays(group: BackupGroupInput, timeZone: string) {
-  const start: DayKey | null = group.startDate ? dayKeyInZone(group.startDate, timeZone) : null;
-  const end: DayKey | null = group.endDate ? dayKeyInZone(group.endDate, timeZone) : null;
+function tripDays(group: BackupGroupInput) {
+  // A Trip's dates are calendar days, the same in every zone (#437).
+  const start: DayKey | null = group.startDate ? expenseDay(group.startDate) : null;
+  const end: DayKey | null = group.endDate ? expenseDay(group.endDate) : null;
   // A start stored after the end is read as one span, as the Trip summary reads it.
   return start && end && end < start ? { start: end, end: start } : { start, end };
 }
@@ -43,10 +45,10 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
   // day or after its last are named "Before the trip" and "After the trip". Days are read in the
   // statement's time zone, by instant, exactly as the Trip summary reads them, so a statement
   // opened from Share wrap-up names the same Expenses as the Insights tab it was opened from.
-  const trip = window.wholeTrip ? tripDays(group, timeZone) : null;
-  const outsideTrip = (date: Date | string): OutsideTrip | null => {
+  const trip = window.wholeTrip ? tripDays(group) : null;
+  // An Expense's day is the day it is dated (#437); a Payment's is the viewer's day it was made.
+  const outsideTrip = (day: DayKey): OutsideTrip | null => {
     if (!trip) return null;
-    const day = dayKeyInZone(date, timeZone);
     if (trip.start && day < trip.start) return 'before';
     if (trip.end && day > trip.end) return 'after';
     return null;
@@ -154,17 +156,21 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
         }),
         suggestedPayments: simplifyDebtsMinor(balances),
         // Already counted in Spent; null without any, and outside a whole-trip statement.
-        beforeTrip: outsideTotal(expenses.filter((row) => outsideTrip(row.date) === 'before')),
-        afterTrip: outsideTotal(expenses.filter((row) => outsideTrip(row.date) === 'after')),
+        beforeTrip: outsideTotal(
+          expenses.filter((row) => outsideTrip(expenseDay(row.date)) === 'before'),
+        ),
+        afterTrip: outsideTotal(
+          expenses.filter((row) => outsideTrip(expenseDay(row.date)) === 'after'),
+        ),
         expenses: expenses.map((row) => ({
           ...row,
           date: expenseDay(row.date),
-          outsideTrip: outsideTrip(row.date),
+          outsideTrip: outsideTrip(expenseDay(row.date)),
         })),
         payments: payments.map((row) => ({
           ...row,
           at: new Date(row.at).toISOString(),
-          outsideTrip: outsideTrip(row.at),
+          outsideTrip: outsideTrip(dayKeyInZone(row.at, timeZone)),
         })),
       };
     }),

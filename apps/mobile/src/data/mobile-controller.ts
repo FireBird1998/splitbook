@@ -95,7 +95,8 @@ import {
 } from './group-draft';
 import { createGroupSchema } from '@splitbook/shared/validators/group';
 import { getGroupTheme } from '@splitbook/shared/group-themes';
-import { currentMonthKey, getLocalMonthIsoRange, toDateParam } from '@splitbook/shared/date';
+import { currentMonthKey, toDateParam } from '@splitbook/shared/date';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 
 import {
   objectId,
@@ -2231,7 +2232,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
       snapshot.detail.data?.category !== 'home'
     )
       return;
-    if (month !== null) getLocalMonthIsoRange(month);
+    if (month !== null) expenseMonthRange(month);
     const { financial } = snapshot;
     // A return's pages of the Month being left, still being read, go with that read: they were
     // never shown, and that Month is read from its first page when it shows again.
@@ -2491,11 +2492,10 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     amount: '',
     currency: context.group.defaultCurrency,
     description: '',
-    date: toDateParam(
+    date:
       month && month < currentMonthKey(new Date(now()))
-        ? new Date(getLocalMonthIsoRange(month).dateTo)
-        : new Date(now()),
-    ),
+        ? expenseMonthRange(month).dateTo
+        : toDateParam(new Date(now())),
     payerId: accountId,
     multiPayer: false,
     payers: [],

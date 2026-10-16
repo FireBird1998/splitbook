@@ -248,8 +248,7 @@ describe('ExpenseService integration', () => {
       alice,
     );
 
-    // The service compares server-local calendar days; 12:00Z and 13:00Z fall
-    // on the same local date in every timezone (max ±14h offset).
+    // The service compares the day an Expense is dated, in UTC (#437).
     const duplicate = await expenseService.checkDuplicate(
       groupId,
       'dinner', // case-insensitive

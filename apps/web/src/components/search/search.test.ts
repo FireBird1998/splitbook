@@ -74,7 +74,11 @@ const READ: SearchRead = {
  * An Expense's date as the dialog shows it: the Expense list's formatter, in the zone the tests
  * run in, so the expected labels hold in every zone the CI matrix runs (#227).
  */
-const shownDate = (index: number) => formatDate(READ.expenses[index].date);
+// The calendar day an Expense is dated, in every zone (#437).
+const shownDate = (index: number) => {
+  const [year, month, day] = READ.expenses[index].date.slice(0, 10).split('-').map(Number);
+  return formatDate(new Date(year, month - 1, day));
+};
 
 const ids: SearchPanelProps['ids'] = {
   title: 'search-title',

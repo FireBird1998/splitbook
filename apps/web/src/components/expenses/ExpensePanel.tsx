@@ -33,6 +33,7 @@ import {
 } from '@splitbook/shared/expense-detail';
 import { expensePosition, expenseRecordPosition } from '@splitbook/shared/expense-position';
 import { expenseSplitSummary } from '@splitbook/shared/expense-row';
+import { expenseLocalDate } from '@splitbook/shared/expense-day';
 
 /** An Expense as the list or its own read returns it; history comes from its own read. */
 export interface PanelExpense extends StoredExpenseSplit {
@@ -117,9 +118,9 @@ const tile = {
 
 const divider = <Box aria-hidden sx={{ height: '1px', bgcolor: 'divider' }} />;
 
-/** "Tue 29 Sep 2026": the Expense's day in the viewer's own time zone, as the table shows it. */
+/** "Tue 29 Sep 2026": the day the Expense is dated, as the table shows it (#437). */
 export function panelDay(date: string): string {
-  return format(new Date(date), 'EEE d MMM yyyy');
+  return format(expenseLocalDate(date), 'EEE d MMM yyyy');
 }
 
 /**

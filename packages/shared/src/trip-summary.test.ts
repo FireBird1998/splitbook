@@ -311,68 +311,40 @@ describe('day by day', () => {
   });
 });
 
-describe('days in the viewer’s time zone', () => {
-  // 20:00 UTC on 18 September: still the 18th in UTC, already the 19th in Kolkata.
-  const lateDinner = expense(
-    '2026-09-18T20:00:00Z',
-    'Late dinner',
-    { [alex]: 9000 },
-    each(3000),
-    DINING,
+describe('days are calendar days, the same in every zone (#437)', () => {
+  it.each(['UTC', 'America/New_York', 'Pacific/Pago_Pago', 'Asia/Kolkata', 'Pacific/Kiritimati'])(
+    'puts each Expense on the Trip day it is dated in %s',
+    (timeZone) => {
+      const summary = goa({ timeZone });
+      expect(summary.tripDates).toEqual({ start: '2026-09-17', end: '2026-09-20' });
+      expect(days(summary)).toEqual(['2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20']);
+      expect(spentByDay(summary)).toEqual(spentByDay(goa({ timeZone: 'UTC' })));
+      expect(summary).toMatchObject({ beforeTrip: null, afterTrip: null });
+    },
   );
 
-  it('puts an Expense late at night on the day the viewer lives it', () => {
-    expect(spentByDay(goa({ timeZone: 'UTC', expenses: [lateDinner] }))).toEqual([0, 9000, 0, 0]);
-    expect(spentByDay(goa({ timeZone: 'Asia/Kolkata', expenses: [lateDinner] }))).toEqual([
-      0, 0, 9000, 0,
-    ]);
-  });
-
-  it('reads the Trip’s dates in the same zone, so a first day’s Expense is always on Day 1', () => {
-    // UTC midnight is the evening before in New York: the Trip runs 16 to 19 September there.
-    const newYork = goa({ timeZone: 'America/New_York', expenses: [...GOA, lateDinner] });
-    expect(newYork.tripDates).toEqual({ start: '2026-09-16', end: '2026-09-19' });
-    expect(days(newYork)).toEqual(['2026-09-16', '2026-09-17', '2026-09-18', '2026-09-19']);
-    expect(spentByDay(newYork)).toEqual([172000, 318000, 275000, 228000]);
-    expect(newYork).toMatchObject({ beforeTrip: null, afterTrip: null, spentMinor: 993000 });
-
-    const kiritimati = goa({ timeZone: 'Pacific/Kiritimati' });
-    expect(days(kiritimati)).toEqual(['2026-09-17', '2026-09-18', '2026-09-19', '2026-09-20']);
-    expect(spentByDay(kiritimati)).toEqual(spentByDay(goa()));
+  it('keeps an Expense stored at local noon before #437 on the day it shows', () => {
+    // 18 September at noon in India.
+    const lunch = expense('2026-09-18T06:30:00Z', 'Lunch', { [alex]: 9000 }, each(3000), DINING);
+    for (const timeZone of ['America/New_York', 'Pacific/Kiritimati'])
+      expect(spentByDay(goa({ timeZone, expenses: [lunch] }))).toEqual([0, 9000, 0, 0]);
   });
 
   it('keeps four days across New York’s change back from summer time', () => {
-    // Noon on 30 October (EDT) to noon on 2 November (EST); the clocks go back on 1 November.
+    // 30 October to 2 November; the clocks go back on 1 November.
+    const usd = (date: string, description: string, minor: number) =>
+      expense(date, description, { [alex]: minor }, { [alex]: minor }, DINING, { currency: 'USD' });
     const summary = tripSummary({
       memberId: alex,
       timeZone: 'America/New_York',
       currency: 'USD',
-      startDate: '2026-10-30T16:00:00Z',
-      endDate: '2026-11-02T17:00:00Z',
+      startDate: '2026-10-30T00:00:00Z',
+      endDate: '2026-11-02T00:00:00Z',
       expenses: [
-        // 23:30 EDT on 31 October.
-        expense(
-          '2026-11-01T03:30:00Z',
-          'Halloween party',
-          { [alex]: 3000 },
-          { [alex]: 3000 },
-          DINING,
-          {
-            currency: 'USD',
-          },
-        ),
-        // 01:30 EDT on 1 November, before the clocks go back.
-        expense('2026-11-01T05:30:00Z', 'Late cab', { [alex]: 2000 }, { [alex]: 2000 }, TRANSPORT, {
-          currency: 'USD',
-        }),
-        // 23:30 EST on 1 November.
-        expense('2026-11-02T04:30:00Z', 'Diner', { [alex]: 1500 }, { [alex]: 1500 }, DINING, {
-          currency: 'USD',
-        }),
-        // 00:30 EST on 2 November.
-        expense('2026-11-02T05:30:00Z', 'Bagels', { [alex]: 700 }, { [alex]: 700 }, DINING, {
-          currency: 'USD',
-        }),
+        usd('2026-10-31T00:00:00Z', 'Halloween party', 3000),
+        usd('2026-11-01T00:00:00Z', 'Late cab', 2000),
+        usd('2026-11-01T00:00:00Z', 'Diner', 1500),
+        usd('2026-11-02T00:00:00Z', 'Bagels', 700),
       ],
     });
     expect(days(summary)).toEqual(['2026-10-30', '2026-10-31', '2026-11-01', '2026-11-02']);
@@ -381,31 +353,21 @@ describe('days in the viewer’s time zone', () => {
   });
 
   it('keeps three days across Sydney’s change to summer time', () => {
-    // Noon on 3 October (AEST) to noon on 5 October (AEDT); the clocks go forward on the 4th.
+    // 3 to 5 October; the clocks go forward on the 4th.
+    const aud = (date: string, description: string, minor: number) =>
+      expense(date, description, { [alex]: minor }, { [alex]: minor }, TRANSPORT, {
+        currency: 'AUD',
+      });
     const summary = tripSummary({
       memberId: alex,
       timeZone: 'Australia/Sydney',
       currency: 'AUD',
-      startDate: '2026-10-03T02:00:00Z',
-      endDate: '2026-10-05T01:00:00Z',
+      startDate: '2026-10-03T00:00:00Z',
+      endDate: '2026-10-05T00:00:00Z',
       expenses: [
-        // 23:30 AEST on 3 October, then 00:30 AEST on the 4th, then 00:30 AEDT on the 5th.
-        expense(
-          '2026-10-03T13:30:00Z',
-          'Fish and chips',
-          { [alex]: 2400 },
-          { [alex]: 2400 },
-          DINING,
-          {
-            currency: 'AUD',
-          },
-        ),
-        expense('2026-10-03T14:30:00Z', 'Night bus', { [alex]: 600 }, { [alex]: 600 }, TRANSPORT, {
-          currency: 'AUD',
-        }),
-        expense('2026-10-04T13:30:00Z', 'Ferry', { [alex]: 900 }, { [alex]: 900 }, TRANSPORT, {
-          currency: 'AUD',
-        }),
+        aud('2026-10-03T00:00:00Z', 'Fish and chips', 2400),
+        aud('2026-10-04T00:00:00Z', 'Night bus', 600),
+        aud('2026-10-05T00:00:00Z', 'Ferry', 900),
       ],
     });
     expect(days(summary)).toEqual(['2026-10-03', '2026-10-04', '2026-10-05']);

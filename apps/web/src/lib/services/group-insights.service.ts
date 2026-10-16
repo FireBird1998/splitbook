@@ -25,6 +25,7 @@ import {
   readTimeZone,
   type MonthKey,
 } from '@splitbook/shared/zoned-calendar';
+import { expenseMonth } from '@splitbook/shared/expense-day';
 
 /** Someone the read names: by name and id, never by email. */
 interface NamedPerson {
@@ -96,10 +97,15 @@ export async function getGroupInsights(
     .sort({ date: 1 })
     .select('date')
     .lean();
-  const starts = [group.createdAt, earliest?.date]
-    .filter((date): date is Date => date instanceof Date && Number.isFinite(date.getTime()))
-    .map((date) => date.getTime());
-  const firstMonth = starts.length ? monthKeyInZone(Math.min(...starts), zone) : null;
+  // The Group started in the viewer's Month it was created, or the Month its first Expense is
+  // dated if that is earlier: an Expense's Month is the same for everyone (#437).
+  const valid = (date: unknown): date is Date =>
+    date instanceof Date && Number.isFinite(date.getTime());
+  const starts = [
+    valid(group.createdAt) ? monthKeyInZone(group.createdAt, zone) : null,
+    valid(earliest?.date) ? expenseMonth(earliest.date) : null,
+  ].filter((month): month is string => month !== null);
+  const firstMonth = starts.length ? starts.sort()[0] : null;
 
   const months = [...earlierMonths(month, { previousMonths: compare, since: firstMonth }), month];
   const range = monthsQueryRange(months);
