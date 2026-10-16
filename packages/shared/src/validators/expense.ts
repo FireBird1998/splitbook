@@ -2,6 +2,7 @@ import { z } from 'zod/v4';
 import { CURRENCY_CODES } from '../currency';
 import { CATEGORY_IDS } from '../categories';
 import { normalizeExpenseMoney } from '../exact-money';
+import { onExpenseDay } from '../expense-day';
 import { calendarDate } from './calendar-date';
 
 export const expenseFields = z.object({
@@ -14,7 +15,8 @@ export const expenseFields = z.object({
     .string()
     .refine((val) => CATEGORY_IDS.includes(val), { message: 'Invalid category' })
     .default('other'),
-  date: calendarDate,
+  // A calendar day, stored at midnight UTC on the day it falls on in UTC (#437).
+  date: calendarDate.transform(onExpenseDay),
   paidBy: z
     .array(
       z.object({
