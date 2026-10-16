@@ -1,0 +1,4 @@
+# Gradle output from building the app's generated android project.
+android/build/
+android/.gradle/
+android/.cxx/

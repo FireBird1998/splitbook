@@ -19,6 +19,8 @@ vi.mock('expo-secure-store', () => ({
 }));
 vi.mock('expo-crypto', () => ({ randomUUID: vi.fn(), getRandomBytes: vi.fn() }));
 vi.mock('expo/fetch', () => ({ fetch: vi.fn() }));
+vi.mock('expo-image-picker', () => ({ launchImageLibraryAsync: vi.fn() }));
+vi.mock('../modules/receipt-text-recognition', () => ({ ReceiptTextRecognition: null }));
 
 await import('./runtime');
 

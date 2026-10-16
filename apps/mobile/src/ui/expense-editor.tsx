@@ -8,6 +8,7 @@ import { SelectedWhoOwesWhat } from './expense-allocation-selection';
 import { SelectedSaveBar } from './expense-save-selection';
 import { SelectedSplitSheet, SelectedPayerSheet } from './expense-sheet-selection';
 import { SelectedOptionalDetails } from './expense-optional-details';
+import { ReceiptScanPanel } from './receipt-scan-panel';
 import { canEditExpense } from '../data/expense-record';
 import {
   ExpenseRecordScreen,
@@ -816,6 +817,8 @@ function ExpenseTask({
             onLeave={onLeaveField}
             onAmountDone={amountDone}
           ></AmountDescriptionCard>
+          {/* The receipt-scanning experiment only ever fills this draft's amount (#90). */}
+          {controller?.receiptScanEnabled ? <ReceiptScanPanel controller={controller} /> : null}
           {controller ? (
             <SelectedExpenseTiles
               controller={controller}

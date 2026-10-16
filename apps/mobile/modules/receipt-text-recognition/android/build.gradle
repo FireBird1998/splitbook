@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.splitbook.app'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.receipttextrecognition"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // Bundled Latin model: packaged in the app, never downloaded through Google Play services.
+  implementation "com.google.mlkit:text-recognition:16.0.1"
+  implementation "androidx.exifinterface:exifinterface:1.4.1"
+  implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2"
+}

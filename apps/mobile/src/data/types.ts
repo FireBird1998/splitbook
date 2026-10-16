@@ -7,6 +7,7 @@ import type { SavedQueryRecords } from './saved-copy-budget';
 import type { PendingPayment, SettlementState } from './settlement';
 import type { ExpenseDraftStore, ExpenseEditor } from './expense-draft';
 import type { GroupValidation } from './group-draft';
+import type { ReceiptScanner } from './receipt-scan';
 import type { GroupCategory } from '@splitbook/shared/types';
 
 /** A development persona the local backend seeds. */
@@ -476,6 +477,8 @@ export interface MobileConfig {
   googleWebClientId?: string;
   /** Expected public backend marker, checked before sending credentials. */
   googleEnvironment?: 'staging' | 'production';
+  /** On-device receipt scanning for new INR drafts; development and staging builds only. */
+  receiptScanEnabled?: boolean;
 }
 
 export interface CredentialStore {
@@ -614,4 +617,5 @@ export interface MobileDependencies {
   /** Register it in `accountLocal.stores` too, so sign-out and account change remove it. */
   groupCreations?: GroupCreationStore;
   newSubmissionKey?: () => string;
+  receiptScanner?: ReceiptScanner;
 }

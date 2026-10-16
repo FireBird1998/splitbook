@@ -43,6 +43,8 @@ export default {
   plugins: [
     'expo-secure-store',
     'expo-font',
+    // Receipt scanning uses Android's photo picker only; no camera or microphone access.
+    ['expo-image-picker', { cameraPermission: false, microphonePermission: false }],
     ['expo-build-properties', { android: { usesCleartextTraffic: development } }],
     // Each image is the whole 288 dp splash icon canvas, padded for Android's circular mask.
     [
