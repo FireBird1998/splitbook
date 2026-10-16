@@ -113,6 +113,8 @@ test.describe('google auth mode', () => {
     // The documented still: Groceries partway through its sort, Sam's ₹1,000 on Sam's counter.
     await expect(counters(page)).toHaveText(['+900', '+100', '+500', '−500']);
     await expect(fig1(page)).toContainText('Groceries: each chip to the bin it belongs to');
+    // Nothing moves by itself, so there is nothing to pause.
+    await expect(fig1(page).getByRole('button', { name: /^(Pause|Play)$/ })).toHaveCount(0);
 
     const tour = fig1(page).getByRole('group', { name: /^Live tour\./ });
     await tour.press('ArrowRight');
@@ -150,6 +152,24 @@ test.describe('google auth mode', () => {
 
     await fig1(page).scrollIntoViewIfNeeded();
     await expect.poll(drawing).not.toBe(left);
+  });
+
+  test('Fig 1 pauses from its Pause button and plays on from where it held', async ({ page }) => {
+    await page.clock.install();
+    await page.goto('/');
+    await expect(fig1(page)).toContainText('Dinner ₹1,200 · You paid', { timeout: 10_000 });
+
+    const drawing = () => fig1Drawing(page).evaluate((svg) => svg.innerHTML);
+    await fig1(page).getByRole('button', { name: 'Pause' }).click();
+    const play = fig1(page).getByRole('button', { name: 'Play' });
+    await expect(play).toBeVisible();
+    const held = await drawing();
+    await page.clock.runFor(3_000);
+    expect(await drawing()).toBe(held);
+
+    await play.click();
+    await expect(fig1(page).getByRole('button', { name: 'Pause' })).toBeVisible();
+    await expect.poll(drawing).not.toBe(held);
   });
 
   test('/login shows the Google sign-in button, not the demo picker', async ({ page }) => {
@@ -283,5 +303,6 @@ test.describe('google auth mode without JavaScript', () => {
       'Line idle · 3 Expenses waiting',
     );
     await expect(page.getByRole('group', { name: /^Live tour/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^(Pause|Play)$/ })).toHaveCount(0);
   });
 });

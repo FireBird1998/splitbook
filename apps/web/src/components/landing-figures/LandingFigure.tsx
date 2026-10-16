@@ -41,22 +41,56 @@ export default function LandingFigure({ figure }: { figure: Figure }) {
           boxShadow: 2,
         }}
       >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1.5, px: 2.5, pt: 2 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 1.5,
+            px: 2.5,
+            pt: 2,
+          }}
+        >
           <Typography component="span" sx={{ ...PLATE_LABEL, color: 'var(--anatomy-text)' }}>
             Fig {figure.number}
           </Typography>
-          <Typography
-            component="span"
-            id={titleId}
-            sx={{
-              ...PLATE_LABEL,
-              color: 'var(--anatomy-text)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-            }}
-          >
-            {figure.title}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography
+              component="span"
+              id={titleId}
+              sx={{
+                ...PLATE_LABEL,
+                color: 'var(--anatomy-text)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+              }}
+            >
+              {figure.title}
+            </Typography>
+            {/* The tour shows it while the line moves by itself (WCAG 2.2.2). */}
+            <Box
+              component="button"
+              type="button"
+              data-pause=""
+              hidden
+              sx={{
+                ...PLATE_LABEL,
+                minHeight: 24,
+                px: 1,
+                mr: -1,
+                border: 0,
+                borderRadius: 1,
+                bgcolor: 'transparent',
+                color: 'text.primary',
+                textDecoration: 'underline',
+                textUnderlineOffset: '3px',
+                cursor: 'pointer',
+                '&:focus-visible': { outline: '2px solid', outlineColor: 'focus.main' },
+              }}
+            >
+              Pause
+            </Box>
+          </Box>
         </Box>
         <Box
           className="ln-stage"

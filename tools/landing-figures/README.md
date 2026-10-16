@@ -41,7 +41,7 @@ Each figure module exports a function of the story that returns its SVG at rest,
 - Home starts it over;
 - it runs only while the figure is on screen.
 
-It plays on by itself until the visitor steps; from then on each step plays and holds. Under reduced motion it opens on the figure's still and moves only when stepped, and it draws a frame only when something changes. The generator bundles it with the kit functions it uses (esbuild, pinned) and its data: as an ES module for the web app, and as a script for the preview, check and still pages. Every one of them runs the same code.
+It plays on by itself, so it shows the plate's Pause button (`[data-pause]`, WCAG 2.2.2): Pause holds the line where it is, and steps then show settled; Play goes on from there. Under reduced motion it opens on the figure's still, moves only when stepped and leaves the button hidden. It draws a frame only when something changes. The generator bundles it with the kit functions it uses (esbuild, pinned) and its data: as an ES module for the web app, and as a script for the preview, check and still pages. Every one of them runs the same code.
 
 ## Generated output
 

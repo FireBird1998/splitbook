@@ -111,7 +111,8 @@ function playTour(root, D) {
   let fill = D.xs.map(() => 0);
   let beltTravel = 0;
   let phase = "idle";
-  let stepping = false;
+  let paused = false;
+  const held = () => still.matches || paused;
   let e = -1;
   let clock = 0;
   let bar = { x: D.mag, onBelt: false };
@@ -385,7 +386,6 @@ function playTour(root, D) {
       line.forEach((c) => {
         if (c.state !== "landed") c.el.setAttribute("transform", T(c.x, c.y - D.chip.y, c.z));
       });
-    } else if (stepping) {
     } else if (phase === "hold" && clock > 1.4) {
       begin(e + 1);
     } else if (phase === "done" && clock > 4.5) {
@@ -450,11 +450,11 @@ function playTour(root, D) {
   let frame = 0;
   let last = 0;
   let visible = false;
-  const settled = () => (still.matches || stepping && ["hold", "idle", "done"].includes(phase)) && shown.every((n, i) => n.at === target[i] && n.rate === 0);
+  const settled = () => held() && shown.every((n, i) => n.at === target[i] && n.rate === 0);
   function tick(now) {
     const dt = last ? Math.min((now - last) / 1e3, 1 / 30) : 1 / 60;
     last = now;
-    update(still.matches ? 0 : dt, still.matches);
+    update(held() ? 0 : dt, held());
     draw();
     frame = visible && !settled() ? requestAnimationFrame(tick) : 0;
   }
@@ -465,12 +465,11 @@ function playTour(root, D) {
     }
   };
   function next() {
-    stepping = true;
     if (phase === "done") restart();
     else {
       finishInstantly();
       begin(e + 1);
-      if (still.matches && e < D.steps.length) {
+      if (held() && e < D.steps.length) {
         finishInstantly();
         phase = "hold";
         update(0, true);
@@ -481,7 +480,6 @@ function playTour(root, D) {
   function onKey(event) {
     if (event.key === "ArrowRight" || event.key === " " || event.key === "Enter") next();
     else if (event.key === "Home") {
-      stepping = true;
       restart();
       run();
     } else return;
@@ -497,6 +495,16 @@ function playTour(root, D) {
   observer.observe(stage);
   stage.addEventListener("click", next);
   stage.addEventListener("keydown", onKey);
+  const pause = root.querySelector("[data-pause]");
+  function togglePause() {
+    paused = !paused;
+    pause.textContent = paused ? "Play" : "Pause";
+    run();
+  }
+  if (pause && !still.matches) {
+    pause.hidden = false;
+    pause.addEventListener("click", togglePause);
+  }
   const KEYS = "Click, or press → or Space, for the next step; Home starts over.";
   stage.tabIndex = 0;
   stage.setAttribute("role", "group");
@@ -512,6 +520,11 @@ function playTour(root, D) {
     observer.disconnect();
     stage.removeEventListener("click", next);
     stage.removeEventListener("keydown", onKey);
+    if (pause) {
+      pause.removeEventListener("click", togglePause);
+      pause.hidden = true;
+      pause.textContent = "Pause";
+    }
     stage.removeAttribute("tabindex");
     stage.removeAttribute("role");
     stage.removeAttribute("aria-label");

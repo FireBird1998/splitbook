@@ -57,8 +57,9 @@ export function playTour(root, D) {
   let fill = D.xs.map(() => 0);
   let beltTravel = 0;
   let phase = 'idle';
-  // Once the visitor steps, the line stops moving on by itself: each step plays and holds.
-  let stepping = false;
+  // The Pause button holds the line where it is; under reduced motion it is always held.
+  let paused = false;
+  const held = () => still.matches || paused;
   let e = -1;
   let clock = 0;
   let bar = { x: D.mag, onBelt: false };
@@ -345,8 +346,6 @@ export function playTour(root, D) {
       line.forEach((c) => {
         if (c.state !== 'landed') c.el.setAttribute('transform', T(c.x, c.y - D.chip.y, c.z));
       });
-    } else if (stepping) {
-      // held: the next step waits for the visitor
     } else if (phase === 'hold' && clock > 1.4) {
       begin(e + 1);
     } else if (phase === 'done' && clock > 4.5) {
@@ -422,14 +421,12 @@ export function playTour(root, D) {
   let last = 0;
   let visible = false;
   /** Whether a frame would change nothing: the line is held and every counter has settled. */
-  const settled = () =>
-    (still.matches || (stepping && ['hold', 'idle', 'done'].includes(phase))) &&
-    shown.every((n, i) => n.at === target[i] && n.rate === 0);
+  const settled = () => held() && shown.every((n, i) => n.at === target[i] && n.rate === 0);
   function tick(now) {
     const dt = last ? Math.min((now - last) / 1000, 1 / 30) : 1 / 60;
     last = now;
-    // Under reduced motion nothing moves on its own: each step is shown settled when asked for.
-    update(still.matches ? 0 : dt, still.matches);
+    // Held, nothing moves on its own: each step is shown settled when asked for.
+    update(held() ? 0 : dt, held());
     draw();
     frame = visible && !settled() ? requestAnimationFrame(tick) : 0;
   }
@@ -440,12 +437,11 @@ export function playTour(root, D) {
     }
   };
   function next() {
-    stepping = true;
     if (phase === 'done') restart();
     else {
       finishInstantly();
       begin(e + 1);
-      if (still.matches && e < D.steps.length) {
+      if (held() && e < D.steps.length) {
         finishInstantly();
         phase = 'hold';
         update(0, true);
@@ -456,7 +452,6 @@ export function playTour(root, D) {
   function onKey(event) {
     if (event.key === 'ArrowRight' || event.key === ' ' || event.key === 'Enter') next();
     else if (event.key === 'Home') {
-      stepping = true;
       restart();
       run();
     } else return;
@@ -473,6 +468,18 @@ export function playTour(root, D) {
   observer.observe(stage);
   stage.addEventListener('click', next);
   stage.addEventListener('keydown', onKey);
+  // The line moves by itself, so it shows a Pause button (WCAG 2.2.2); under reduced motion it
+  // never does, and the button stays hidden.
+  const pause = root.querySelector('[data-pause]');
+  function togglePause() {
+    paused = !paused;
+    pause.textContent = paused ? 'Play' : 'Pause';
+    run();
+  }
+  if (pause && !still.matches) {
+    pause.hidden = false;
+    pause.addEventListener('click', togglePause);
+  }
   // The stage takes focus and keys only while the tour runs, so a page without it has no dead stop.
   const KEYS = 'Click, or press → or Space, for the next step; Home starts over.';
   stage.tabIndex = 0;
@@ -490,6 +497,11 @@ export function playTour(root, D) {
     observer.disconnect();
     stage.removeEventListener('click', next);
     stage.removeEventListener('keydown', onKey);
+    if (pause) {
+      pause.removeEventListener('click', togglePause);
+      pause.hidden = true;
+      pause.textContent = 'Pause';
+    }
     stage.removeAttribute('tabindex');
     stage.removeAttribute('role');
     stage.removeAttribute('aria-label');

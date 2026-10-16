@@ -8,8 +8,10 @@ import { STILL_SIZE, tourScript, type Figure } from './generate.ts';
 const DRIVE = resolve(import.meta.dirname, '../vendor/anatomy/scripts/drive.mjs');
 export const THEMES = ['light', 'dark'] as const;
 export type Theme = (typeof THEMES)[number];
-/** The pages' stand-in for the web app's visually hidden live region. */
-const SR_CSS = '.fg-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}';
+/** The pages' stand-ins for the web app's visually hidden live region and Pause button. */
+const SR_CSS =
+  '.fg-sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}' +
+  '.fg-pause{position:absolute;top:44px;right:24px;font:12px var(--anatomy-mono);color:var(--anatomy-text);background:none;border:0;cursor:pointer}';
 
 /** Runs actions on a page in headless Chrome with reduced motion, and returns what it printed. */
 export function drive(file: string, actions: unknown[]): string {
@@ -57,7 +59,7 @@ export function livePage(figure: Figure, theme: Theme) {
     title: figure.title,
     hint: 'Click or → for the next step',
     readout: figure.readout,
-    body: stage(figure),
+    body: `<button type="button" class="fg-pause" data-pause hidden>Pause</button>${stage(figure)}`,
   });
   return page(figure, theme, plate, tourScript(figure, 'iife'));
 }
