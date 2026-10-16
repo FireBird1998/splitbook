@@ -49,7 +49,7 @@ It plays on by itself, so it shows the plate's Pause button (`[data-pause]`, WCA
 
 - `figure.ts`: the `LandingFigure` type and `figureCss`, the kit's styles. A wrapper with class `iso` gives the dark theme; add `data-theme="light"` for light.
 - `<id>.ts`: one figure's `svg`, `css`, `label` (for `role="img"`), size, plate words and still. It imports `server-only`, so it can never reach a client bundle (Fig 1's is about 360 KB).
-- `<id>-tour.js`: the figure's live tour with its data, about 20 KB, under the kit's MIT notice. The web app loads it as its own chunk, near the screen.
+- `<id>-tour.js`: the figure's live tour with its data, about 20 KB. The web app loads it as its own chunk, near the screen. Next's minifier drops every comment, so the chunk carries the kit's MIT notice as `play.license`, and the Google suite checks the shipped script holds it.
 - `tours.ts`: the loaders for those chunks, the only figure code in the client bundle.
 - `index.ts`: re-exports for the server.
 

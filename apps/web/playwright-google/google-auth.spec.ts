@@ -172,6 +172,23 @@ test.describe('google auth mode', () => {
     await expect.poll(drawing).not.toBe(held);
   });
 
+  test('Fig 1’s tour ships with the Anatomy kit’s licence', async ({ page }) => {
+    await page.goto('/');
+    await expect(fig1(page).getByRole('button', { name: 'Pause' })).toBeVisible();
+    // The script that brought the tour, as the browser loaded it (minified in a production build).
+    const notice = await page.evaluate(async () => {
+      for (const entry of performance.getEntriesByType('resource')) {
+        if (!entry.name.split('?')[0].endsWith('.js')) continue;
+        const source = await (await fetch(entry.name)).text();
+        if (source.includes('Live tour.')) return source;
+      }
+      return '';
+    });
+    expect(notice).toContain('Anatomy kit (https://github.com/wheresryan22/anatomy)');
+    expect(notice).toContain('Copyright (c) 2026 Ryan');
+    expect(notice).toContain('Permission is hereby granted, free of charge');
+  });
+
   test('/login shows the Google sign-in button, not the demo picker', async ({ page }) => {
     await page.goto('/login');
 
