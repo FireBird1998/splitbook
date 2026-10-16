@@ -133,7 +133,6 @@ function draftValidation(values: ExpenseDraftValues = {}) {
     ['description', values.description, 'Enter a description.'],
     ['amount', values.amount, 'Enter the Expense amount.'],
     ['currency', values.currency, 'Choose a currency.'],
-    ['category', values.category, 'Choose a Category.'],
     ['date', values.date, 'Choose the Expense date.'],
     ['paidBy', values.paidBy?.length, 'Choose who paid.'],
     ['splitMethod', values.splitMethod, 'Choose a split method.'],

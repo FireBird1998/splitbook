@@ -504,6 +504,23 @@ describe.each(['light', 'dark'] as const)('Review run at 130 percent in %s', (mo
     });
     expect(f.calls.filter((call) => !call.startsWith('GET'))).toHaveLength(writes);
   });
+  it("saves Claude's one-payer item without a Category straight away", async () => {
+    const f = fixture({ one: true });
+    const values = f.items()[0].draft.values!;
+    delete values.category;
+    values.paidBy = [{ user: user.id }];
+    await signIn(f);
+    await act(async () => {
+      await f.controller.startReviewRun();
+    });
+    const tree = await render(<ReviewRunOverlay controller={f.controller} />, mode);
+    expect(text(tree)).not.toContain('before you can save');
+    expect(text(tree)).not.toContain("didn't know who paid");
+    expect(button(tree, 'Save expense').props.disabled).toBe(false);
+    await tap(tree, 'Save expense');
+    expect(f.saves).toHaveLength(1);
+    expect(text(tree)).toContain('Saved 1');
+  });
   it('keeps a correction with the existing payer sheet and labels every control', async () => {
     const f = fixture({ one: true });
     delete f.items()[0].draft.values!.paidBy;

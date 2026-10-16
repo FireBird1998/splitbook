@@ -27,10 +27,12 @@ export default function ReviewExpenseFields({
       .map((key) => key.split('.')[1]);
   const payerIds = selected('paidBy');
   const [multiple, setMultiple] = useState(false);
+  // A lone payer without their own amount paid the whole Expense, as in Add expense.
+  const loneAmount = entries[`paidBy.${payerIds[0]}.amount`];
   const multiPayerMode =
     multiple ||
     payerIds.length > 1 ||
-    (payerIds.length === 1 && entries[`paidBy.${payerIds[0]}.amount`] !== entries.amount);
+    (payerIds.length === 1 && Boolean(loneAmount) && loneAmount !== entries.amount);
   const parts = (part: string) =>
     Object.fromEntries(
       selected('splitBetween').map((id) => [id, entries[`splitBetween.${id}.${part}`] ?? '']),
@@ -39,7 +41,8 @@ export default function ReviewExpenseFields({
     description: entries.description ?? '',
     amount: entries.amount ?? '',
     currency: entries.currency ?? '',
-    category: entries.category ?? '',
+    // Shown as Other, which saving applies, but stored only once the member chooses.
+    category: entries.category || 'other',
     date: entries.date ?? '',
     tag:
       entries.tagId ||

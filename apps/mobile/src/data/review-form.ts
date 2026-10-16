@@ -16,7 +16,8 @@ export function reviewForm(values: ExpenseDraftValues, currency: string): Expens
     currency: values.currency ?? currency,
     description: values.description ?? '',
     date: values.date ?? '',
-    category: values.category ?? '',
+    // Shown as Other, which saving applies, but stored only once the member chooses.
+    category: values.category ?? 'other',
     tagId: values.tagId ?? '',
     notes: values.notes ?? '',
     payerId: values.paidBy?.[0]?.user ?? '',

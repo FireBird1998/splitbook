@@ -53,6 +53,33 @@ test('fix a missing payer; edits are kept; Save records exactly the version show
   expect(await rows(page)).toHaveLength(0);
 });
 
+test("Claude's one-payer item without a Category is Ready, shows who paid and Other, and saves", async ({
+  page,
+}, testInfo) => {
+  await open(page, ['one-payer-no-category']);
+  await expect(page.getByRole('region', { name: 'Ready', exact: true })).toContainText(
+    'Review meal 1',
+  );
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const review = panel(page);
+  await expect(review.getByLabel('Paid by', { exact: true })).toHaveText('Alex Rivera');
+  await expect(review.getByLabel('Paid by Alex Rivera', { exact: true })).toHaveCount(0);
+  await expect(review.getByLabel('Category', { exact: true })).toHaveText('Other');
+  await expect(review.getByRole('button', { name: 'Save expense', exact: true })).toBeEnabled();
+  await page.evaluate(() => {
+    document.documentElement.style.fontSize = '130%';
+  });
+  await expectNoSeriousA11yViolations(page, testInfo, 'to-review-one-payer');
+  expect((await rows(page))[0].values).not.toHaveProperty('category');
+  await page.getByRole('button', { name: 'Save 1 ready', exact: true }).click();
+  const confirm = page.getByRole('dialog', { name: 'Save 1 ready?' });
+  await expect(confirm).toContainText('Paid by Alex Rivera');
+  await expect(confirm).toContainText('Total · ₹12.34');
+  await confirm.getByRole('button', { name: 'Confirm save' }).click();
+  await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
+  expect(await rows(page)).toHaveLength(0);
+});
+
 test('possible duplicate shows the matching Expense and requires the explicit tick', async ({
   page,
 }) => {

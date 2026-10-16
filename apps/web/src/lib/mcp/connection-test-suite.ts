@@ -15,6 +15,7 @@ import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { currentMcpGrant } from './grants';
 import { MCP_DRAFT_SCOPE } from './config';
+import { expenseDraftService } from '@/lib/services/expense-draft.service';
 
 /** Real HTTP + real OAuth/PKCE + real SDK. Synthetic users and ephemeral in-memory auth only. */
 export function connectionTests(mongo = false) {
@@ -908,6 +909,79 @@ export function connectionTests(mongo = false) {
             update: { name: 'Synthetic MCP Client' },
           });
           // Later connection tests start from a fresh, ledger-only grant.
+          const restored = await authorizeClient();
+          token = restored.access_token;
+          refreshToken = restored.refresh_token;
+        }
+      });
+
+    if (mongo)
+      it("makes Claude's staging item ready and saves it with the payer paying the whole amount", async () => {
+        exposeTools = true;
+        const db = mongoClient!.db();
+        const user = await db.collection('users').findOne({ email: 'connection@example.test' });
+        const groupId = new mongoose.Types.ObjectId();
+        const tagId = new mongoose.Types.ObjectId();
+        await db.collection('groups').insertOne({
+          _id: groupId,
+          name: 'Staging replay',
+          defaultCurrency: 'INR',
+          tags: [{ _id: tagId, name: 'Food', isArchived: false, isDeleted: false }],
+          members: [{ user: user!._id, joinedAt: new Date() }],
+        });
+        const grant = await authorizeClient(true, true);
+        const client = new Client({ name: 'staging-replay-test', version: '1' });
+        try {
+          await client.connect(
+            new StreamableHTTPClientTransport(new URL(resource), {
+              requestInit: { headers: { Authorization: `Bearer ${grant.access_token}` } },
+            }),
+          );
+          // What Claude sent on staging: one payer without an amount, and no Category.
+          const created = await client.callTool({
+            name: 'create_drafts',
+            arguments: {
+              groupId: String(groupId),
+              requestKey: 'staging-replay-dinner',
+              drafts: [
+                {
+                  description: 'Dinner',
+                  amount: 1200,
+                  currency: 'INR',
+                  date: '2026-10-16',
+                  tagId: String(tagId),
+                  paidBy: [{ user: String(user!._id) }],
+                  splitMethod: 'equal',
+                  splitBetween: [{ user: String(user!._id) }],
+                },
+              ],
+            },
+          });
+          expect(created.isError).not.toBe(true);
+          const member = { id: String(user!._id) };
+          const read = await expenseDraftService.toReview(member);
+          const [item] = read.groups.find((group) => group.groupId === String(groupId))!.items;
+          expect(item).toMatchObject({ problems: [], draft: { missingFields: [] } });
+          const { review } = await expenseDraftService.review(
+            member,
+            String(groupId),
+            item.draft.id,
+          );
+          const [outcome] = await expenseDraftService.save(member, String(groupId), {
+            drafts: [{ id: item.draft.id, revision: item.draft.revision, review }],
+          });
+          expect(outcome.status).toBe('saved');
+          const expense = await db.collection('expenses').findOne({ group: groupId });
+          expect(expense).toMatchObject({
+            description: 'Dinner',
+            amount: 1200,
+            category: 'other',
+            paidBy: [{ user: user!._id, amount: 1200 }],
+            preparedBy: { kind: 'assistant', name: 'Synthetic MCP Client' },
+          });
+        } finally {
+          exposeTools = false;
+          await client.close();
           const restored = await authorizeClient();
           token = restored.access_token;
           refreshToken = restored.refresh_token;
