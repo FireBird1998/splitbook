@@ -101,7 +101,7 @@ export function registerSplitbookTools(
   );
   if (!scopes.includes(MCP_DRAFT_SCOPE) || process.env.PERSISTENT_DRAFTS_ENABLED !== 'true') return;
   const reviewDescription = `These are items in the member's To review in Splitbook, where only the member can save them as Expenses; never call them drafts. Limit: ${ACTIVE_DRAFTS_PER_MEMBER} per member per Group.`;
-  const preparing =
+  const preparationGuidance =
     "For one payer, give who paid; they paid the whole amount. For several payers, give each amount. Choose a Category only when the member's words make it clear; otherwise omit it, and it's saved as Other.";
   const link = (groupId: string) => new URL(`/groups/${groupId}/review`, appUrl).href;
   server.registerTool(
@@ -120,7 +120,7 @@ export function registerSplitbookTools(
   server.registerTool(
     'create_drafts',
     {
-      description: `Prepare 1–10 items. Omit unknown facts and ask the member; never invent payers, dates, participants or amounts. ${preparing} Persist the same requestKey for exact retries. ${reviewDescription}`,
+      description: `Prepare 1–10 items. Omit unknown facts and ask the member; never invent payers, dates, participants or amounts. ${preparationGuidance} Persist the same requestKey for exact retries. ${reviewDescription}`,
       inputSchema: z
         .object({
           groupId: draftObjectId,
@@ -145,7 +145,7 @@ export function registerSplitbookTools(
   server.registerTool(
     'replace_draft',
     {
-      description: `Replace an unfinished item using its current revision. Include all facts to keep; omitted fields are cleared. If stale, fetch again and ask before overwriting a correction. ${preparing} ${reviewDescription}`,
+      description: `Replace an unfinished item using its current revision. Include all facts to keep; omitted fields are cleared. If stale, fetch again and ask before overwriting a correction. ${preparationGuidance} ${reviewDescription}`,
       inputSchema: z
         .object({
           groupId: draftObjectId,

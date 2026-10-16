@@ -29,10 +29,10 @@ export default function ReviewExpenseFields({
   const [multiple, setMultiple] = useState(false);
   // A lone payer without their own amount paid the whole Expense, as in Add expense.
   const loneAmount = entries[`paidBy.${payerIds[0]}.amount`];
-  const multiPayerMode =
-    multiple ||
-    payerIds.length > 1 ||
-    (payerIds.length === 1 && Boolean(loneAmount) && loneAmount !== entries.amount);
+  const mismatched = payerIds.length === 1 && Boolean(loneAmount) && loneAmount !== entries.amount;
+  // Once shown, keep several payers while the member clears an amount to retype it.
+  if (mismatched && !multiple) setMultiple(true);
+  const multiPayerMode = multiple || mismatched || payerIds.length > 1;
   const parts = (part: string) =>
     Object.fromEntries(
       selected('splitBetween').map((id) => [id, entries[`splitBetween.${id}.${part}`] ?? '']),

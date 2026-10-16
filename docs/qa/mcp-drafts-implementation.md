@@ -71,7 +71,7 @@ The duplication heuristic was addressed at the protocol boundary with common dec
 
 Six behavioral gaps were fixed:
 
-1. **Unknown Category:** Complete Expense validation formerly defaulted an omitted Draft Category to Other. Draft review/conversion now requires explicit Category; ordinary Expense behavior is unchanged.
+1. **Unknown Category:** Complete Expense validation formerly defaulted an omitted Draft Category to Other. Draft review/conversion now requires explicit Category; ordinary Expense behavior is unchanged. _Reversed by #425 (2026-10-16): an omitted Category is saved as Other again, as in Add expense, because requiring it held back every assistant-prepared item._
 2. **Currency labeling:** Assistant spending responses no longer expose unlabeled legacy scalar totals calculated only in the Group's default currency. They return full-range per-currency totals and count alongside paginated Expenses.
 3. **Retry outcomes:** Both clients display saved/failed/unresolved outcomes returned by an explicit retry, including after a lost reply and reopened collection. Missing display names fall back to stable Draft identities.
 4. **Explicit write intent:** Native Keep as Draft no longer retries an unrelated retained operation, which could have been an earlier Expense conversion. It directs the member to the collection's explicit retry action.

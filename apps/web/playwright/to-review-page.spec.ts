@@ -70,14 +70,45 @@ test("Claude's one-payer item without a Category is Ready, shows who paid and Ot
     document.documentElement.style.fontSize = '130%';
   });
   await expectNoSeriousA11yViolations(page, testInfo, 'to-review-one-payer');
+  await review.getByRole('spinbutton', { name: 'Amount', exact: true }).fill('15');
+  await expect
+    .poll(async () => (await rows(page))[0].values.paidBy)
+    .toEqual([{ user: 'a00000000000000000000001', amount: 15 }]);
   expect((await rows(page))[0].values).not.toHaveProperty('category');
   await page.getByRole('button', { name: 'Save 1 ready', exact: true }).click();
   const confirm = page.getByRole('dialog', { name: 'Save 1 ready?' });
   await expect(confirm).toContainText('Paid by Alex Rivera');
-  await expect(confirm).toContainText('Total · ₹12.34');
+  await expect(confirm).toContainText('Total · ₹15.00');
   await confirm.getByRole('button', { name: 'Confirm save' }).click();
   await expect(page.getByRole('alert').filter({ hasText: 'Expense saved' })).toBeVisible();
   expect(await rows(page)).toHaveLength(0);
+});
+
+test("a lone payer's mismatched amount stays editable while it is cleared and retyped", async ({
+  page,
+}) => {
+  await open(page, ['ready']);
+  const [draft] = await rows(page);
+  expect(
+    (
+      await page.request.put(`/api/groups/${DEMO_GROUP_ID}/drafts/${draft.id}`, {
+        headers: { 'X-Splitbook-Revision': String(draft.revision) },
+        data: {
+          values: { ...draft.values, paidBy: [{ user: draft.values.paidBy[0].user, amount: 10 }] },
+        },
+      })
+    ).status(),
+  ).toBe(200);
+  await page.reload();
+  await page.getByRole('button', { name: 'Review Review meal 1', exact: true }).click();
+  const paid = panel(page).getByLabel('Paid by Alex Rivera', { exact: true });
+  await expect(paid).toHaveValue('10');
+  await paid.fill('');
+  await expect(paid).toBeVisible();
+  await paid.fill('12.34');
+  await expect(page.getByRole('region', { name: 'Ready', exact: true })).toContainText(
+    'Review meal 1',
+  );
 });
 
 test('possible duplicate shows the matching Expense and requires the explicit tick', async ({
