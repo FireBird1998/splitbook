@@ -321,6 +321,12 @@ The full suite runs nightly, on a manual run, and on a pull request labelled
   **Unit tests (Pacific/Kiritimati)** and **Unit tests (Pacific/Pago_Pago)**.
   No database.
 
+**Landing figures** (`verify-figures`, `.github/workflows/landing-figures.yml`)
+runs on pull requests and pushes to `main` that touch `tools/landing-figures`,
+its generated output, the shared money modules its story uses or the lockfile.
+It runs `pnpm --filter @splitbook/landing-figures check`
+([tools/landing-figures](../tools/landing-figures/README.md)). No database.
+
 Because the Playwright webServer runs a **production** build, its env must set
 `ALLOW_DEMO_AUTH=true` (demo auth fails closed in production),
 `AUTH_RATE_LIMIT_ENABLED=false` (Better Auth rate-limits production builds per

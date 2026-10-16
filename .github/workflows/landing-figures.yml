@@ -1,0 +1,44 @@
+name: Landing figures
+
+on:
+  pull_request:
+    paths:
+      - 'tools/landing-figures/**'
+      - 'apps/web/src/components/landing-figures/generated/**'
+      # The shared modules the story model runs on.
+      - 'packages/shared/src/currency.ts'
+      - 'packages/shared/src/debt-simplifier.ts'
+      - 'packages/shared/src/exact-money.ts'
+      - 'packages/shared/src/split-calculation.ts'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/landing-figures.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/landing-figures/**'
+      - 'apps/web/src/components/landing-figures/generated/**'
+      - 'packages/shared/src/currency.ts'
+      - 'packages/shared/src/debt-simplifier.ts'
+      - 'packages/shared/src/exact-money.ts'
+      - 'packages/shared/src/split-calculation.ts'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/landing-figures.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  verify-figures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # Regenerates every figure and fails on stale output, a story that doesn't balance, an edited
+      # vendored kit, or any anatomy audit or line-end problem. The line-end check runs the
+      # runner's Google Chrome.
+      - run: pnpm --filter @splitbook/landing-figures check

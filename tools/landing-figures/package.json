@@ -1,0 +1,30 @@
+{
+  "name": "@splitbook/landing-figures",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "tsx src/cli.ts build",
+    "check": "tsx src/cli.ts check",
+    "preview": "tsx src/cli.ts preview",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run"
+  },
+  "dependencies": {
+    "@splitbook/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/node": "^22.20.1",
+    "eslint": "^9.39.2",
+    "tsx": "^4.23.1",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.55.0",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,1 +1,4 @@
 pnpm-lock.yaml
+# Third-party code kept exactly as published, and output written by tools/landing-figures
+tools/landing-figures/vendor/
+apps/web/src/components/landing-figures/generated/
