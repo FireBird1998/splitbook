@@ -3,7 +3,12 @@ import {
   saveExpenseDraftsSchema,
 } from '@splitbook/shared/validators/expense-draft';
 import { expenseDraftsPath } from '@splitbook/shared/api-paths';
-import { QueryObserver, type QueryClient, type onlineManager } from '@tanstack/query-core';
+import {
+  QueryObserver,
+  type QueryClient,
+  type QueryObserverOptions,
+  type onlineManager,
+} from '@tanstack/query-core';
 import { toReviewPath } from '@splitbook/shared/api-paths';
 import { toReviewKey } from '@splitbook/shared/query-keys';
 import { buildToReview, type DeviceToReviewItem } from '@splitbook/shared/to-review';
@@ -81,8 +86,11 @@ export function createToReviewQueries(options: {
   publish(state: ToReviewState): void;
   read(path: string, signal: AbortSignal): Promise<unknown>;
   recoveries(): Promise<DeviceToReviewItem[]>;
+  /** A Group this member has lost: no read, however late, shows its items again. */
+  lost(groupId: string): boolean;
 }) {
   let observer: QueryObserver<ToReviewRead> | undefined;
+  let observed: QueryObserverOptions<ToReviewRead> | undefined;
   let stop: (() => void) | undefined;
   let accountId: string | undefined;
   let online = false;
@@ -108,11 +116,21 @@ export function createToReviewQueries(options: {
         });
     }
   };
+  /** Groups denied to an account this session, until it joins or creates them again. */
+  const dropped = new Set<string>();
+  const lost = (groupId: string) =>
+    options.lost(groupId) || dropped.has(`${options.snapshot().auth.user?.id}:${groupId}`);
+  const withoutLost = (read: ToReviewRead): ToReviewRead => {
+    if (!read.groups.some((group) => lost(group.groupId))) return read;
+    const groups = read.groups.filter((group) => !lost(group.groupId));
+    return { total: groups.reduce((total, group) => total + group.count, 0), groups };
+  };
   const unbind = () => {
     stop?.();
     observer?.destroy();
     stop = undefined;
     observer = undefined;
+    observed = undefined;
     accountId = undefined;
   };
   const bind = () => {
@@ -140,7 +158,7 @@ export function createToReviewQueries(options: {
     accountId = next;
     online = available;
     const owner = next;
-    observer = new QueryObserver<ToReviewRead>(options.client, {
+    observed = {
       queryKey: toReviewKey({ environment: options.environment, accountId: owner }),
       queryFn: async ({ signal }) => {
         if (
@@ -158,10 +176,21 @@ export function createToReviewQueries(options: {
       gcTime: 0,
       refetchOnReconnect: true,
       refetchOnWindowFocus: true,
-    });
+    };
+    observer = new QueryObserver<ToReviewRead>(options.client, observed);
+    /** What this observer last showed: a successor query re-reading starts empty (#433). */
+    let shown: ToReviewRead | undefined;
     const project = () => {
       if (accountId !== owner || options.snapshot().auth.user?.id !== owner) return;
       const result = observer!.getCurrentResult();
+      const read =
+        (result.data && withoutLost(result.data)) ??
+        (!available
+          ? options.snapshot().toReview.read
+          : result.isFetching && shown
+            ? shown
+            : { total: 0, groups: [] });
+      shown = read;
       options.publish({
         ...options.snapshot().toReview,
         offline: !available,
@@ -172,8 +201,7 @@ export function createToReviewQueries(options: {
             : result.data
               ? 'ready'
               : 'idle',
-        read:
-          result.data ?? (!available ? options.snapshot().toReview.read : { total: 0, groups: [] }),
+        read,
         message: result.isError ? 'Could not load To review. Try again when connected.' : null,
       });
     };
@@ -190,9 +218,17 @@ export function createToReviewQueries(options: {
   const stopOnline = options.online.subscribe(bindLater);
   return {
     bindLater,
+    /**
+     * Home's scope was outdated: its read shares that scope, so its query was replaced. The
+     * observer moves to the successor, which reads again, as Home's own reads do (#433).
+     */
+    rebind() {
+      if (observer && observed) observer.setOptions(observed);
+    },
     lose(groupId: string) {
       const owner = options.snapshot().auth.user?.id;
       if (!owner) return;
+      dropped.add(`${owner}:${groupId}`);
       const key = toReviewKey({ environment: options.environment, accountId: owner });
       void options.client.cancelQueries({ queryKey: key, exact: true });
       const withoutGroup = (read: ToReviewRead) => {
@@ -208,13 +244,16 @@ export function createToReviewQueries(options: {
         recoveries: state.recoveries.filter((item) => item.groupId !== groupId),
       });
     },
+    /** The member joined or created this Group: its items show again. */
+    gain(groupId: string) {
+      dropped.delete(`${options.snapshot().auth.user?.id}:${groupId}`);
+    },
+    /** Reads To review again beside this phone's check, never after it: storage can be busy. */
     async refresh() {
       if (!options.enabled) return;
-      await loadRecoveries();
-      if (!options.enabled || !options.online.isOnline() || options.snapshot().offline.active)
-        return;
-      bind();
-      await observer?.refetch();
+      const online = options.online.isOnline() && !options.snapshot().offline.active;
+      if (online) bind();
+      await Promise.all([loadRecoveries(), online ? observer?.refetch() : undefined]);
     },
     stop() {
       disposed = true;

@@ -1191,6 +1191,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
         groups,
       );
     },
+    lost: (groupId) => lostGroups.has(groupId),
   });
   const listening = [
     homeQueries.listen(focusManager, onlineManager, dependencies.netInfo),
@@ -1321,6 +1322,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
     groupQueries.rebind();
     expenseQueries.rebind();
     activityQueries.rebind();
+    toReviewQueries.rebind();
   };
   /** A confirmed Expense or Settlement change affects every page, Month, Balance, Home and Activity view. */
   const ledgerChanged = (groupId: string) =>
@@ -1922,6 +1924,7 @@ export function createMobileController(config: MobileConfig, dependencies: Mobil
   const lostGroups = new Set<string>();
   const gainedGroup = (groupId: string) => {
     lostGroups.delete(groupId);
+    toReviewQueries.gain(groupId);
     invalidateReads(
       `group:${groupId}`,
       `ledger:${groupId}`,
