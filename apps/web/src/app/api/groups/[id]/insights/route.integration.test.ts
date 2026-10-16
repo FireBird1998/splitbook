@@ -290,6 +290,16 @@ describe('a member', () => {
     expect(column(body.data.months, 'spentMinor')).toEqual([700, 0, 0, 0, 0]);
   });
 
+  it('starts at the Month its first Expense is dated, whatever the zone sent (#437)', async () => {
+    const backdated = await createGroup('Goa Friends Trip', [alice, bob], { category: 'trip' });
+    await insertExpense(backdated, '2026-05-01T00:00:00Z', { [alice]: 700 });
+
+    const { body } = await read(backdated, 'month=2026-09&compare=12&tz=America%2FNew_York');
+
+    expect(body.data.firstMonth).toBe('2026-05');
+    expect(column(body.data.months, 'spentMinor')).toEqual([700, 0, 0, 0, 0]);
+  });
+
   it('counts an Expense in the Month it is dated, whatever the zone sent (#437)', async () => {
     const maple = await createGroup('Maple House', [alice, bob]);
     await createdIn(maple, '2026-03-02T10:00:00Z');

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { expenseDate, expenseDay, expenseLocalDate, onExpenseDay } from './expense-day';
+import {
+  expenseDate,
+  expenseDay,
+  expenseLocalDate,
+  expenseMonthRange,
+  onExpenseDay,
+} from './expense-day';
 import { createExpenseSchema, updateExpenseSchema } from './validators/expense';
 
 describe('an Expense is dated by calendar day (#437)', () => {
@@ -17,6 +23,12 @@ describe('an Expense is dated by calendar day (#437)', () => {
     expect(onExpenseDay(new Date('2026-10-16T23:59:59.999Z')).toISOString()).toBe(
       '2026-10-16T00:00:00.000Z',
     );
+  });
+
+  it('bounds a Month by its first and last calendar days (#437)', () => {
+    expect(expenseMonthRange('2026-09')).toEqual({ dateFrom: '2026-09-01', dateTo: '2026-09-30' });
+    expect(expenseMonthRange('2028-02')).toEqual({ dateFrom: '2028-02-01', dateTo: '2028-02-29' });
+    expect(expenseMonthRange('2026-12')).toEqual({ dateFrom: '2026-12-01', dateTo: '2026-12-31' });
   });
 
   it('gives local formatters the same calendar day', () => {

@@ -9,6 +9,7 @@ import Typography from '@mui/material/Typography';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { addMonths, endOfMonth, format, isSameMonth, startOfMonth } from 'date-fns';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import MoneyText from '@/components/common/MoneyText';
 import ExpenseStats, { StatCount } from '@/components/expenses/ExpenseStats';
 import { RADIUS } from '@/lib/theme/tokens';
@@ -64,12 +65,11 @@ export function parseMonthParam(
   const anchor = new Date(year, month - 1, 1);
   if (Number.isNaN(anchor.getTime())) return null;
 
-  const start = startOfMonth(anchor);
   const end = endOfMonth(anchor);
   return {
     key: raw,
-    dateFrom: start.toISOString(),
-    dateTo: end.toISOString(),
+    // The Expenses dated in the Month, the same for every viewer (#437).
+    ...expenseMonthRange(raw),
     label: format(anchor, 'MMMM yyyy'),
     monthName: format(anchor, 'MMMM'),
     isCurrentMonth: isSameMonth(anchor, now),

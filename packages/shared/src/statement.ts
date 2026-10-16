@@ -3,7 +3,8 @@ import type { BackupGroupInput } from './export-backup';
 import { calculateNetBalancesMinor, simplifyDebtsMinor } from './debt-simplifier';
 import { sumMinorAmounts, toMajorAmount } from './exact-money';
 import { memberPaidMinor, memberShareMinor } from './insights';
-import { expenseDay, zonedDay } from './export-csv';
+import { expenseDay } from './expense-day';
+import { zonedDay } from './export-csv';
 import { dayKeyInZone, type DayKey } from './zoned-calendar';
 
 export interface StatementWindow {
@@ -155,8 +156,12 @@ export function buildStatement(group: BackupGroupInput, window: StatementWindow 
         }),
         suggestedPayments: simplifyDebtsMinor(balances),
         // Already counted in Spent; null without any, and outside a whole-trip statement.
-        beforeTrip: outsideTotal(expenses.filter((row) => outsideTrip(expenseDay(row.date)) === 'before')),
-        afterTrip: outsideTotal(expenses.filter((row) => outsideTrip(expenseDay(row.date)) === 'after')),
+        beforeTrip: outsideTotal(
+          expenses.filter((row) => outsideTrip(expenseDay(row.date)) === 'before'),
+        ),
+        afterTrip: outsideTotal(
+          expenses.filter((row) => outsideTrip(expenseDay(row.date)) === 'after'),
+        ),
         expenses: expenses.map((row) => ({
           ...row,
           date: expenseDay(row.date),

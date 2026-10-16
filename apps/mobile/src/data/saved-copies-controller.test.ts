@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getLocalMonthIsoRange } from '@splitbook/shared/date';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { createMobileController } from './mobile-controller';
 import { createAccountGroupRecordStore } from './account-record-storage';
 import type { FetchResponse } from './types';
@@ -82,7 +82,7 @@ const recordNotSaved = 'This Expense isn’t saved on this phone. Connect to loa
 const pageOf = (path: string) => {
   const params = new URL(path, 'http://local').searchParams;
   const month = ['2026-08', '2026-09'].find(
-    (key) => getLocalMonthIsoRange(key).dateFrom === params.get('dateFrom'),
+    (key) => expenseMonthRange(key).dateFrom === params.get('dateFrom'),
   );
   return { month: month ?? null, page: Number(params.get('page')) };
 };

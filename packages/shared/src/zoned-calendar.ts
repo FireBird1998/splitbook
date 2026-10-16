@@ -1,15 +1,14 @@
 /**
  * Calendar Months and days in a named IANA time zone, for insights (#307, PR #242).
  *
- * A Month is the viewer's own calendar month, so the zone always comes from the client and is
- * never the server's or the runtime's. Everything here reads the zone through
+ * Which Month is the current one, and the day a moment such as a Payment or a Group's creation
+ * falls on, follow the viewer's own calendar, so the zone always comes from the client and is
+ * never the server's or the runtime's. An Expense's date is a calendar day instead, the same in
+ * every zone (#437, `expense-day`). Everything here reads the zone through
  * `Intl.DateTimeFormat#formatToParts` with an explicit `timeZone`, which Node, browsers and
  * Hermes on Android provide; Month arithmetic is plain integers. Nothing reads the process
  * time zone (the unit tests also run in Tongatapu, Kiritimati and Pago Pago, #227), and no
  * date library is needed (ADR 0002).
- *
- * Bucketing is by instant: an Expense stored at `2026-10-01T00:00:00Z` falls in September for
- * a viewer in New York, exactly as the Household Month lens filters it today.
  */
 
 /** A calendar Month, `YYYY-MM`. */

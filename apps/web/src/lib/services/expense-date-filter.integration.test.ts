@@ -10,6 +10,7 @@ import { groupService } from '@/lib/services/group.service';
 import { expenseService } from '@/lib/services/expense.service';
 import { integrationTestDb } from '@/lib/test-utils/integration-db';
 import { createTestUsers, TEST_USER_IDS } from '@/lib/test-utils/fixtures';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 
 const db = integrationTestDb('expense-date-filter');
 const { alice, bob } = TEST_USER_IDS;
@@ -75,6 +76,45 @@ describe('expense date-range filter', () => {
     expect(descriptions).not.toContain('Just after range');
     expect(result.summary.count).toBe(3);
     expect(result.summary.totalAmount).toBe(300);
+  });
+
+  it('holds a Month’s Expenses, dated from its first to its last day (#437)', async () => {
+    const groupId = await createGroup();
+    await groupService.addMember(groupId, bob);
+
+    await addExpense(groupId, '2026-08-31T00:00:00.000Z', 'Last of August');
+    await addExpense(groupId, '2026-09-01T00:00:00.000Z', 'First of September');
+    await addExpense(groupId, '2026-09-30T00:00:00.000Z', 'Last of September');
+    await addExpense(groupId, '2026-10-01T00:00:00.000Z', 'First of October');
+
+    const result = await expenseService.getGroupExpenses(
+      groupId,
+      expenseMonthRange('2026-09'),
+      alice,
+    );
+
+    expect(result.expenses.map((expense) => expense.description).sort()).toEqual([
+      'First of September',
+      'Last of September',
+    ]);
+  });
+
+  it('lists a day’s Expenses newest added first (#437)', async () => {
+    const groupId = await createGroup();
+    await groupService.addMember(groupId, bob);
+
+    await addExpense(groupId, '2026-09-10T00:00:00.000Z', 'Added first');
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    await addExpense(groupId, '2026-09-10T00:00:00.000Z', 'Added second');
+    await addExpense(groupId, '2026-09-09T00:00:00.000Z', 'The day before, added last');
+
+    const result = await expenseService.getGroupExpenses(groupId, {}, alice);
+
+    expect(result.expenses.map((expense) => expense.description)).toEqual([
+      'Added second',
+      'Added first',
+      'The day before, added last',
+    ]);
   });
 
   it('does not widen a full ISO timestamp dateTo', async () => {

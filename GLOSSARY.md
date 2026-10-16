@@ -21,11 +21,11 @@ A Tag unavailable for new Expense assignments whose identity and historical asso
 _Avoid_: deleted Tag, removed Tag
 
 **Month**:
-One calendar month in the viewer's own time zone, in a Group of any Theme. It is a read-only way of looking at that month's Expenses, never a line drawn in the ledger: it answers "what did August cost us", never "what is owed". An Expense late on 31 August can fall in September for a member in another time zone. When a Month is compared with the months before it, it is never part of its own average.
+One calendar month, in a Group of any Theme. It is a read-only way of looking at that month's Expenses, never a line drawn in the ledger: it answers "what did August cost us", never "what is owed". It holds the Expenses dated in it, the same for every member wherever they are, because an Expense's date is a calendar day (#437); which Month is the current one follows the member's own today. When a Month is compared with the months before it, it is never part of its own average.
 _Avoid_: cycle, period, billing month
 
 **Trip day**:
-One calendar day of a Trip in the viewer's own time zone, numbered from the Trip's first day ("Day 2 · Fri 18 Sep"). The Trip's dates and its Expenses' dates are read in the same zone, so an Expense on the first day is always on Day 1. An Expense dated before the first day or after the last still counts toward the whole trip, but is never on a Trip day.
+One calendar day of a Trip, numbered from the Trip's first day ("Day 2 · Fri 18 Sep"). The Trip's dates and its Expenses' dates are calendar days, the same for every member wherever they are (#437), so an Expense on the first day is always on Day 1. An Expense dated before the first day or after the last still counts toward the whole trip, but is never on a Trip day.
 _Avoid_: trip date, itinerary day
 
 **Saved copy**:

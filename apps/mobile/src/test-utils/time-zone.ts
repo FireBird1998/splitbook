@@ -5,6 +5,7 @@ export async function inTimeZone<T>(zone: string, run: () => T | Promise<T>): Pr
   try {
     return await run();
   } finally {
-    process.env.TZ = before;
+    if (before === undefined) delete process.env.TZ;
+    else process.env.TZ = before;
   }
 }

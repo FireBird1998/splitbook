@@ -8,7 +8,7 @@ import {
 import { findHosts, flatten, layoutHeight } from './test-utils/layout';
 import { Alert } from 'react-native';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getLocalMonthIsoRange } from '@splitbook/shared/date';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import { createMobileController } from './data/mobile-controller';
 import type { FetchResponse } from './data/types';
 import { refreshedLabel } from './ui/refresh-feedback';
@@ -255,7 +255,7 @@ function backend() {
           if (path.includes('/expenses?')) {
             const from = new URL(path, 'http://local').searchParams.get('dateFrom');
             return json(
-              page(from === getLocalMonthIsoRange('2026-08').dateFrom ? [august] : [september]),
+              page(from === expenseMonthRange('2026-08').dateFrom ? [august] : [september]),
             );
           }
           if (path.startsWith(`/api/groups/${groupId}/activity?`)) return json(activityPage);

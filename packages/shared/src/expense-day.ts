@@ -16,6 +16,18 @@ export function expenseMonth(date: Instant): MonthKey {
   return expenseDay(date).slice(0, 7);
 }
 
+/**
+ * A Month's Expenses read: those dated from its first to its last calendar day. The list reads
+ * `dateFrom` from that day's start and `dateTo` to its end, in UTC as Expenses are stored, so a
+ * Month holds the same Expenses for every viewer.
+ */
+export function expenseMonthRange(month: MonthKey): { dateFrom: DayKey; dateTo: DayKey } {
+  const match = /^([1-9]\d{3})-(0[1-9]|1[0-2])$/.exec(month);
+  if (!match) throw new Error('Choose a valid Month.');
+  const lastDay = new Date(Date.UTC(Number(match[1]), Number(match[2]), 0)).getUTCDate();
+  return { dateFrom: `${month}-01`, dateTo: `${month}-${String(lastDay).padStart(2, '0')}` };
+}
+
 /** The stored form of a day (`YYYY-MM-DD`): midnight UTC. */
 export function expenseDate(day: string): Date {
   return new Date(`${day}T00:00:00.000Z`);

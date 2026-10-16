@@ -12,7 +12,8 @@ import {
   type QueryFunctionContext,
   type QueryState,
 } from '@tanstack/query-core';
-import { currentMonthKey, getLocalMonthIsoRange } from '@splitbook/shared/date';
+import { currentMonthKey } from '@splitbook/shared/date';
+import { expenseMonthRange } from '@splitbook/shared/expense-day';
 import {
   expensePageKey,
   groupBalancesKey,
@@ -354,7 +355,8 @@ export function createGroupQueries(session: GroupSession) {
       limit: PAGE_SIZE,
       // Every Theme's summary shows the member's own share and paid amount.
       includeMemberBreakdown: true,
-      ...(household && month ? getLocalMonthIsoRange(month) : {}),
+      // The Expenses dated in the Month, the same for every viewer (#437).
+      ...(household && month ? expenseMonthRange(month) : {}),
     });
   /** A page of it, with the page first, as Android has always sent it. */
   const pagePath = (key: QueryKey, page: number) =>

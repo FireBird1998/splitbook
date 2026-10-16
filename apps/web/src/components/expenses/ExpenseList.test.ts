@@ -44,7 +44,7 @@ vi.mock('swr', async (original) => {
   };
 });
 
-const { default: ExpenseTable, expenseDay } = await import('./ExpenseTable');
+const { default: ExpenseTable, expenseDayLabel } = await import('./ExpenseTable');
 const { default: ExpenseCard } = await import('./ExpenseCard');
 const { default: ExpenseDetails } = await import('./ExpenseDetails');
 const { default: ExpenseListView } = await import('./ExpenseListView');
@@ -232,7 +232,7 @@ describe('the Expense table', () => {
   it('shows each Expense’s date, description and Tag, who paid, the split, the amount and an exact position', () => {
     expect(rows(table(false))).toEqual([
       [
-        expenseDay(EXPENSES[0].date),
+        expenseDayLabel(EXPENSES[0].date),
         'Weekly groceries Groceries',
         'AR You',
         'Equally · 3',
@@ -240,7 +240,7 @@ describe('the Expense table', () => {
         'you lent ₹833.00',
       ],
       [
-        expenseDay(EXPENSES[1].date),
+        expenseDayLabel(EXPENSES[1].date),
         'Electricity bill Utilities',
         'SC Sam Chen',
         'Equally · 3',
@@ -248,7 +248,7 @@ describe('the Expense table', () => {
         'you owe ₹953.33',
       ],
       [
-        expenseDay(EXPENSES[2].date),
+        expenseDayLabel(EXPENSES[2].date),
         'Wi-Fi Utilities',
         'PS Priya Shah',
         'Equally · 3',
@@ -256,7 +256,7 @@ describe('the Expense table', () => {
         'you owe ₹333.00',
       ],
       [
-        expenseDay(EXPENSES[3].date),
+        expenseDayLabel(EXPENSES[3].date),
         'Takeaway pizza Dining',
         'PS Priya Shah',
         'Equally · 2',
@@ -270,10 +270,10 @@ describe('the Expense table', () => {
     // As the API sends an Expense's date: the day it is dated, at midnight UTC. Every zone CI runs
     // (#227), from UTC−11 to UTC+14, shows that day (#437).
     const now = new Date(2026, 9, 7, 12);
-    expect(expenseDay('2026-09-30T00:00:00.000Z', now)).toBe('Wed 30 Sep');
-    expect(expenseDay('2025-09-30T00:00:00.000Z', now)).toBe('Tue 30 Sep 2025');
-    expect(expenseDay('2026-01-01T00:00:00.000Z', now)).toBe('Thu 1 Jan');
-    expect(expenseDay('2025-12-31T00:00:00.000Z', now)).toBe('Wed 31 Dec 2025');
+    expect(expenseDayLabel('2026-09-30T00:00:00.000Z', now)).toBe('Wed 30 Sep');
+    expect(expenseDayLabel('2025-09-30T00:00:00.000Z', now)).toBe('Tue 30 Sep 2025');
+    expect(expenseDayLabel('2026-01-01T00:00:00.000Z', now)).toBe('Thu 1 Jan');
+    expect(expenseDayLabel('2025-12-31T00:00:00.000Z', now)).toBe('Wed 31 Dec 2025');
   });
 
   it('shows a repeat icon only on an Expense a recurring Expense added, and only while the switch is on', () => {

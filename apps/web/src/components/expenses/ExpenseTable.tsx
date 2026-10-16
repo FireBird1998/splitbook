@@ -30,7 +30,7 @@ export const EXPENSE_TABLE_COLUMNS = [
 ] as const;
 
 /** "Wed 30 Sep", with the year when it isn't this year's: the day it is dated, in every zone (#437). */
-export function expenseDay(date: string, now: Date = new Date()): string {
+export function expenseDayLabel(date: string, now: Date = new Date()): string {
   const day = expenseLocalDate(date);
   return format(day, day.getFullYear() === now.getFullYear() ? 'EEE d MMM' : 'EEE d MMM yyyy');
 }
@@ -182,7 +182,7 @@ export default function ExpenseTable({
                         color: 'text.secondary',
                       }}
                     >
-                      {expenseDay(expense.date, now)}
+                      {expenseDayLabel(expense.date, now)}
                     </Box>
                     <Box component="td" sx={cell}>
                       {/* The row's click opens it; the button is how a keyboard does. */}
