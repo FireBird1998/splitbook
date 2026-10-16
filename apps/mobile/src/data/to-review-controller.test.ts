@@ -77,6 +77,7 @@ function fixture(options: { groups?: boolean } = {}) {
   let creation: unknown = null;
   let owner: string | null = null;
   let denied = false;
+  let failing = false;
   vi.stubEnv('EXPO_PUBLIC_PERSISTENT_DRAFTS_ENABLED', 'true');
   let items: DraftReview[] = [];
   let groups = options.groups === false ? [] : [group];
@@ -98,6 +99,7 @@ function fixture(options: { groups?: boolean } = {}) {
         },
       };
       await held;
+      if (failing) return json({ error: 'Unavailable', status: 500 }, 500);
       return json(reply);
     }
     if (path === '/api/user/balances')
@@ -191,6 +193,9 @@ function fixture(options: { groups?: boolean } = {}) {
       const gate = latch();
       deviceHeld = gate.held;
       return gate.release;
+    },
+    fail: (next: boolean) => {
+      failing = next;
     },
     deny: () => {
       denied = true;
@@ -319,6 +324,27 @@ describe('To review stays current (#433)', () => {
     release();
     await settle();
     expect(restarted.getSnapshot().toReview).toMatchObject({ status: 'ready', read: { total: 2 } });
+  });
+
+  it('shows Try again after a failed first read as checking until it answers', async () => {
+    const f = fixture();
+    f.prepare(2);
+    f.fail(true);
+    await f.controller.signIn('alex');
+    await settle();
+    expect(f.controller.getSnapshot().toReview.status).toBe('error');
+    f.fail(false);
+    const release = f.hold();
+    const retrying = f.controller.refreshToReview();
+    await settle();
+    expect(f.controller.getSnapshot().toReview).toMatchObject({ status: 'loading', message: null });
+    release();
+    await retrying;
+    await settle();
+    expect(f.controller.getSnapshot().toReview).toMatchObject({
+      status: 'ready',
+      read: { total: 2 },
+    });
   });
 
   it("Refresh Home reads To review without waiting for this phone's storage", async () => {

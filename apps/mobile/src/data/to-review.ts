@@ -190,7 +190,7 @@ export function createToReviewQueries(options: {
       refetchOnWindowFocus: true,
     };
     observer = new QueryObserver<ToReviewRead>(options.client, observerOptions);
-    /** What this observer last showed. A successor query starts empty: while it reads again,
+    /** The read this observer last showed. A successor query starts empty: while it reads again,
      * that stays, as it was, instead of an empty "Checking" (#433). */
     let shown: Pick<ToReviewState, 'status' | 'read' | 'message'> | undefined;
     const project = () => {
@@ -213,7 +213,8 @@ export function createToReviewQueries(options: {
             ? 'ready'
             : 'idle';
       const message = result.isError ? 'Could not load To review. Try again when connected.' : null;
-      if (status !== 'loading') shown = { status, read, message };
+      // Only a read that answered is kept; an error or a first read shows that it's checking.
+      shown = status === 'ready' ? { status, read, message } : undefined;
       options.publish({
         ...options.snapshot().toReview,
         offline: !available,
